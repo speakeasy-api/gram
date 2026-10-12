@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/emaissuer"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -420,6 +421,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	emaissuer.Attach(mux, db, logger, callbackOrigins.Outbound)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	xmcp.Attach(mux, runtime.XMCP, runtime.Metadata)
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)

@@ -12,6 +12,22 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// RotateOrganizationEnterpriseIssuerRequestBody is the type of the
+// "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint HTTP
+// request body.
+type RotateOrganizationEnterpriseIssuerRequestBody struct {
+	// The key ID currently active, as last read.
+	ActiveKid *string `form:"active_kid,omitempty" json:"active_kid,omitempty" xml:"active_kid,omitempty"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyRequestBody is the type of the
+// "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey" endpoint
+// HTTP request body.
+type ReplaceOrganizationEnterpriseIssuerKeyRequestBody struct {
+	// The key ID to revoke.
+	Kid *string `form:"kid,omitempty" json:"kid,omitempty" xml:"kid,omitempty"`
+}
+
 // CreateSetRequestBody is the type of the "jsonWebKeySets" service "createSet"
 // endpoint HTTP request body.
 type CreateSetRequestBody struct {
@@ -35,6 +51,111 @@ type UpdateSetRequestBody struct {
 	// Already-published keys are unaffected: each keeps signing with the external
 	// key it was minted from.
 	ExternalKeyID *string `form:"external_key_id,omitempty" json:"external_key_id,omitempty" xml:"external_key_id,omitempty"`
+}
+
+// GetOrganizationEnterpriseIssuerResponseBody is the type of the
+// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body.
+type GetOrganizationEnterpriseIssuerResponseBody struct {
+	// Whether issuer provisioning is available for this organization.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// Whether the organization's issuer is provisioned.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether Speakeasy is currently allowed to sign with the issuer on this
+	// deployment.
+	SigningEnabled bool `form:"signing_enabled" json:"signing_enabled" xml:"signing_enabled"`
+	// Issuer URI to register with supported services. It never changes.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Public verification keys.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// Published keys, newest first.
+	Keys []*OrganizationEnterpriseIssuerKeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+	// When a pending rotation can be activated.
+	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+}
+
+// EnableOrganizationEnterpriseIssuerResponseBody is the type of the
+// "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body.
+type EnableOrganizationEnterpriseIssuerResponseBody struct {
+	// Whether issuer provisioning is available for this organization.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// Whether the organization's issuer is provisioned.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether Speakeasy is currently allowed to sign with the issuer on this
+	// deployment.
+	SigningEnabled bool `form:"signing_enabled" json:"signing_enabled" xml:"signing_enabled"`
+	// Issuer URI to register with supported services. It never changes.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Public verification keys.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// Published keys, newest first.
+	Keys []*OrganizationEnterpriseIssuerKeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+	// When a pending rotation can be activated.
+	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+}
+
+// DisableOrganizationEnterpriseIssuerResponseBody is the type of the
+// "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body.
+type DisableOrganizationEnterpriseIssuerResponseBody struct {
+	// Whether issuer provisioning is available for this organization.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// Whether the organization's issuer is provisioned.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether Speakeasy is currently allowed to sign with the issuer on this
+	// deployment.
+	SigningEnabled bool `form:"signing_enabled" json:"signing_enabled" xml:"signing_enabled"`
+	// Issuer URI to register with supported services. It never changes.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Public verification keys.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// Published keys, newest first.
+	Keys []*OrganizationEnterpriseIssuerKeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+	// When a pending rotation can be activated.
+	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+}
+
+// RotateOrganizationEnterpriseIssuerResponseBody is the type of the
+// "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint HTTP
+// response body.
+type RotateOrganizationEnterpriseIssuerResponseBody struct {
+	// Whether issuer provisioning is available for this organization.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// Whether the organization's issuer is provisioned.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether Speakeasy is currently allowed to sign with the issuer on this
+	// deployment.
+	SigningEnabled bool `form:"signing_enabled" json:"signing_enabled" xml:"signing_enabled"`
+	// Issuer URI to register with supported services. It never changes.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Public verification keys.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// Published keys, newest first.
+	Keys []*OrganizationEnterpriseIssuerKeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+	// When a pending rotation can be activated.
+	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyResponseBody is the type of the
+// "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey" endpoint
+// HTTP response body.
+type ReplaceOrganizationEnterpriseIssuerKeyResponseBody struct {
+	// Whether issuer provisioning is available for this organization.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// Whether the organization's issuer is provisioned.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether Speakeasy is currently allowed to sign with the issuer on this
+	// deployment.
+	SigningEnabled bool `form:"signing_enabled" json:"signing_enabled" xml:"signing_enabled"`
+	// Issuer URI to register with supported services. It never changes.
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+	// Public verification keys.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// Published keys, newest first.
+	Keys []*OrganizationEnterpriseIssuerKeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+	// When a pending rotation can be activated.
+	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
 }
 
 // CreateSetResponseBody is the type of the "jsonWebKeySets" service
@@ -261,6 +382,958 @@ type RevokeKeyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// GetOrganizationEnterpriseIssuerUnauthorizedResponseBody is the type of the
+// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetOrganizationEnterpriseIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEnterpriseIssuerForbiddenResponseBody is the type of the
+// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type GetOrganizationEnterpriseIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEnterpriseIssuerBadRequestResponseBody is the type of the
+// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type GetOrganizationEnterpriseIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEnterpriseIssuerNotFoundResponseBody is the type of the
+// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type GetOrganizationEnterpriseIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEnterpriseIssuerConflictResponseBody is the type of the
+// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type GetOrganizationEnterpriseIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEnterpriseIssuerUnsupportedMediaResponseBody is the type of
+// the "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetOrganizationEnterpriseIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEnterpriseIssuerInvalidResponseBody is the type of the
+// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type GetOrganizationEnterpriseIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEnterpriseIssuerInvariantViolationResponseBody is the type of
+// the "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetOrganizationEnterpriseIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEnterpriseIssuerUnexpectedResponseBody is the type of the
+// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type GetOrganizationEnterpriseIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationEnterpriseIssuerGatewayErrorResponseBody is the type of the
+// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetOrganizationEnterpriseIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerUnauthorizedResponseBody is the type of
+// the "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint
+// HTTP response body for the "unauthorized" error.
+type EnableOrganizationEnterpriseIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerForbiddenResponseBody is the type of the
+// "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type EnableOrganizationEnterpriseIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerBadRequestResponseBody is the type of the
+// "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type EnableOrganizationEnterpriseIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerNotFoundResponseBody is the type of the
+// "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type EnableOrganizationEnterpriseIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerConflictResponseBody is the type of the
+// "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type EnableOrganizationEnterpriseIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody is the type
+// of the "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer"
+// endpoint HTTP response body for the "unsupported_media" error.
+type EnableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerInvalidResponseBody is the type of the
+// "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type EnableOrganizationEnterpriseIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerInvariantViolationResponseBody is the type
+// of the "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer"
+// endpoint HTTP response body for the "invariant_violation" error.
+type EnableOrganizationEnterpriseIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerUnexpectedResponseBody is the type of the
+// "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type EnableOrganizationEnterpriseIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnableOrganizationEnterpriseIssuerGatewayErrorResponseBody is the type of
+// the "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint
+// HTTP response body for the "gateway_error" error.
+type EnableOrganizationEnterpriseIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerUnauthorizedResponseBody is the type of
+// the "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint
+// HTTP response body for the "unauthorized" error.
+type DisableOrganizationEnterpriseIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerForbiddenResponseBody is the type of the
+// "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type DisableOrganizationEnterpriseIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerBadRequestResponseBody is the type of the
+// "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type DisableOrganizationEnterpriseIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerNotFoundResponseBody is the type of the
+// "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type DisableOrganizationEnterpriseIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerConflictResponseBody is the type of the
+// "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type DisableOrganizationEnterpriseIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody is the type
+// of the "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer"
+// endpoint HTTP response body for the "unsupported_media" error.
+type DisableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerInvalidResponseBody is the type of the
+// "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type DisableOrganizationEnterpriseIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerInvariantViolationResponseBody is the
+// type of the "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer"
+// endpoint HTTP response body for the "invariant_violation" error.
+type DisableOrganizationEnterpriseIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerUnexpectedResponseBody is the type of the
+// "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type DisableOrganizationEnterpriseIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DisableOrganizationEnterpriseIssuerGatewayErrorResponseBody is the type of
+// the "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint
+// HTTP response body for the "gateway_error" error.
+type DisableOrganizationEnterpriseIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerUnauthorizedResponseBody is the type of
+// the "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint
+// HTTP response body for the "unauthorized" error.
+type RotateOrganizationEnterpriseIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerForbiddenResponseBody is the type of the
+// "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type RotateOrganizationEnterpriseIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerBadRequestResponseBody is the type of the
+// "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type RotateOrganizationEnterpriseIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerNotFoundResponseBody is the type of the
+// "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type RotateOrganizationEnterpriseIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerConflictResponseBody is the type of the
+// "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type RotateOrganizationEnterpriseIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerUnsupportedMediaResponseBody is the type
+// of the "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer"
+// endpoint HTTP response body for the "unsupported_media" error.
+type RotateOrganizationEnterpriseIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerInvalidResponseBody is the type of the
+// "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type RotateOrganizationEnterpriseIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerInvariantViolationResponseBody is the type
+// of the "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer"
+// endpoint HTTP response body for the "invariant_violation" error.
+type RotateOrganizationEnterpriseIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerUnexpectedResponseBody is the type of the
+// "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type RotateOrganizationEnterpriseIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateOrganizationEnterpriseIssuerGatewayErrorResponseBody is the type of
+// the "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint
+// HTTP response body for the "gateway_error" error.
+type RotateOrganizationEnterpriseIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyUnauthorizedResponseBody is the type
+// of the "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey"
+// endpoint HTTP response body for the "unauthorized" error.
+type ReplaceOrganizationEnterpriseIssuerKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyForbiddenResponseBody is the type of
+// the "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey"
+// endpoint HTTP response body for the "forbidden" error.
+type ReplaceOrganizationEnterpriseIssuerKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyBadRequestResponseBody is the type of
+// the "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey"
+// endpoint HTTP response body for the "bad_request" error.
+type ReplaceOrganizationEnterpriseIssuerKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyNotFoundResponseBody is the type of
+// the "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey"
+// endpoint HTTP response body for the "not_found" error.
+type ReplaceOrganizationEnterpriseIssuerKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyConflictResponseBody is the type of
+// the "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey"
+// endpoint HTTP response body for the "conflict" error.
+type ReplaceOrganizationEnterpriseIssuerKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyUnsupportedMediaResponseBody is the
+// type of the "jsonWebKeySets" service
+// "replaceOrganizationEnterpriseIssuerKey" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ReplaceOrganizationEnterpriseIssuerKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyInvalidResponseBody is the type of the
+// "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey" endpoint
+// HTTP response body for the "invalid" error.
+type ReplaceOrganizationEnterpriseIssuerKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyInvariantViolationResponseBody is the
+// type of the "jsonWebKeySets" service
+// "replaceOrganizationEnterpriseIssuerKey" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ReplaceOrganizationEnterpriseIssuerKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyUnexpectedResponseBody is the type of
+// the "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey"
+// endpoint HTTP response body for the "unexpected" error.
+type ReplaceOrganizationEnterpriseIssuerKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyGatewayErrorResponseBody is the type
+// of the "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey"
+// endpoint HTTP response body for the "gateway_error" error.
+type ReplaceOrganizationEnterpriseIssuerKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // CreateSetRateLimitExceededResponseBody is the type of the "jsonWebKeySets"
@@ -2321,6 +3394,15 @@ type RevokeKeyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// OrganizationEnterpriseIssuerKeyResponseBody is used to define fields on
+// response body types.
+type OrganizationEnterpriseIssuerKeyResponseBody struct {
+	// Key ID.
+	Kid string `form:"kid" json:"kid" xml:"kid"`
+	// Lifecycle state.
+	State string `form:"state" json:"state" xml:"state"`
+}
+
 // JSONWebKeySetResponseBody is used to define fields on response body types.
 type JSONWebKeySetResponseBody struct {
 	// The ID of the key set.
@@ -2372,6 +3454,142 @@ type JSONWebKeyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// NewGetOrganizationEnterpriseIssuerResponseBody builds the HTTP response body
+// from the result of the "getOrganizationEnterpriseIssuer" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerResponseBody(res *jsonwebkeysets.OrganizationEnterpriseIssuer) *GetOrganizationEnterpriseIssuerResponseBody {
+	body := &GetOrganizationEnterpriseIssuerResponseBody{
+		Available:       res.Available,
+		Enabled:         res.Enabled,
+		SigningEnabled:  res.SigningEnabled,
+		Issuer:          res.Issuer,
+		JwksURI:         res.JwksURI,
+		RotationReadyAt: res.RotationReadyAt,
+	}
+	if res.Keys != nil {
+		body.Keys = make([]*OrganizationEnterpriseIssuerKeyResponseBody, len(res.Keys))
+		for i, val := range res.Keys {
+			if val == nil {
+				body.Keys[i] = nil
+				continue
+			}
+			body.Keys[i] = marshalJsonwebkeysetsOrganizationEnterpriseIssuerKeyToOrganizationEnterpriseIssuerKeyResponseBody(val)
+		}
+	} else {
+		body.Keys = []*OrganizationEnterpriseIssuerKeyResponseBody{}
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerResponseBody builds the HTTP response
+// body from the result of the "enableOrganizationEnterpriseIssuer" endpoint of
+// the "jsonWebKeySets" service.
+func NewEnableOrganizationEnterpriseIssuerResponseBody(res *jsonwebkeysets.OrganizationEnterpriseIssuer) *EnableOrganizationEnterpriseIssuerResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerResponseBody{
+		Available:       res.Available,
+		Enabled:         res.Enabled,
+		SigningEnabled:  res.SigningEnabled,
+		Issuer:          res.Issuer,
+		JwksURI:         res.JwksURI,
+		RotationReadyAt: res.RotationReadyAt,
+	}
+	if res.Keys != nil {
+		body.Keys = make([]*OrganizationEnterpriseIssuerKeyResponseBody, len(res.Keys))
+		for i, val := range res.Keys {
+			if val == nil {
+				body.Keys[i] = nil
+				continue
+			}
+			body.Keys[i] = marshalJsonwebkeysetsOrganizationEnterpriseIssuerKeyToOrganizationEnterpriseIssuerKeyResponseBody(val)
+		}
+	} else {
+		body.Keys = []*OrganizationEnterpriseIssuerKeyResponseBody{}
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerResponseBody builds the HTTP response
+// body from the result of the "disableOrganizationEnterpriseIssuer" endpoint
+// of the "jsonWebKeySets" service.
+func NewDisableOrganizationEnterpriseIssuerResponseBody(res *jsonwebkeysets.OrganizationEnterpriseIssuer) *DisableOrganizationEnterpriseIssuerResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerResponseBody{
+		Available:       res.Available,
+		Enabled:         res.Enabled,
+		SigningEnabled:  res.SigningEnabled,
+		Issuer:          res.Issuer,
+		JwksURI:         res.JwksURI,
+		RotationReadyAt: res.RotationReadyAt,
+	}
+	if res.Keys != nil {
+		body.Keys = make([]*OrganizationEnterpriseIssuerKeyResponseBody, len(res.Keys))
+		for i, val := range res.Keys {
+			if val == nil {
+				body.Keys[i] = nil
+				continue
+			}
+			body.Keys[i] = marshalJsonwebkeysetsOrganizationEnterpriseIssuerKeyToOrganizationEnterpriseIssuerKeyResponseBody(val)
+		}
+	} else {
+		body.Keys = []*OrganizationEnterpriseIssuerKeyResponseBody{}
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerResponseBody builds the HTTP response
+// body from the result of the "rotateOrganizationEnterpriseIssuer" endpoint of
+// the "jsonWebKeySets" service.
+func NewRotateOrganizationEnterpriseIssuerResponseBody(res *jsonwebkeysets.OrganizationEnterpriseIssuer) *RotateOrganizationEnterpriseIssuerResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerResponseBody{
+		Available:       res.Available,
+		Enabled:         res.Enabled,
+		SigningEnabled:  res.SigningEnabled,
+		Issuer:          res.Issuer,
+		JwksURI:         res.JwksURI,
+		RotationReadyAt: res.RotationReadyAt,
+	}
+	if res.Keys != nil {
+		body.Keys = make([]*OrganizationEnterpriseIssuerKeyResponseBody, len(res.Keys))
+		for i, val := range res.Keys {
+			if val == nil {
+				body.Keys[i] = nil
+				continue
+			}
+			body.Keys[i] = marshalJsonwebkeysetsOrganizationEnterpriseIssuerKeyToOrganizationEnterpriseIssuerKeyResponseBody(val)
+		}
+	} else {
+		body.Keys = []*OrganizationEnterpriseIssuerKeyResponseBody{}
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyResponseBody builds the HTTP
+// response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyResponseBody(res *jsonwebkeysets.OrganizationEnterpriseIssuer) *ReplaceOrganizationEnterpriseIssuerKeyResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyResponseBody{
+		Available:       res.Available,
+		Enabled:         res.Enabled,
+		SigningEnabled:  res.SigningEnabled,
+		Issuer:          res.Issuer,
+		JwksURI:         res.JwksURI,
+		RotationReadyAt: res.RotationReadyAt,
+	}
+	if res.Keys != nil {
+		body.Keys = make([]*OrganizationEnterpriseIssuerKeyResponseBody, len(res.Keys))
+		for i, val := range res.Keys {
+			if val == nil {
+				body.Keys[i] = nil
+				continue
+			}
+			body.Keys[i] = marshalJsonwebkeysetsOrganizationEnterpriseIssuerKeyToOrganizationEnterpriseIssuerKeyResponseBody(val)
+		}
+	} else {
+		body.Keys = []*OrganizationEnterpriseIssuerKeyResponseBody{}
+	}
+	return body
 }
 
 // NewCreateSetResponseBody builds the HTTP response body from the result of
@@ -2548,6 +3766,778 @@ func NewRevokeKeyResponseBody(res *jsonwebkeysets.JSONWebKey) *RevokeKeyResponse
 		RevokedAt:       res.RevokedAt,
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerUnauthorizedResponseBody {
+	body := &GetOrganizationEnterpriseIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerForbiddenResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerForbiddenResponseBody {
+	body := &GetOrganizationEnterpriseIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerBadRequestResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerBadRequestResponseBody {
+	body := &GetOrganizationEnterpriseIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerNotFoundResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerNotFoundResponseBody {
+	body := &GetOrganizationEnterpriseIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerConflictResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerConflictResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerConflictResponseBody {
+	body := &GetOrganizationEnterpriseIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerUnsupportedMediaResponseBody {
+	body := &GetOrganizationEnterpriseIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerInvalidResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerInvalidResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerInvalidResponseBody {
+	body := &GetOrganizationEnterpriseIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerInvariantViolationResponseBody {
+	body := &GetOrganizationEnterpriseIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerUnexpectedResponseBody {
+	body := &GetOrganizationEnterpriseIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationEnterpriseIssuerGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewGetOrganizationEnterpriseIssuerGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationEnterpriseIssuerGatewayErrorResponseBody {
+	body := &GetOrganizationEnterpriseIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "enableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewEnableOrganizationEnterpriseIssuerUnauthorizedResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerUnauthorizedResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerForbiddenResponseBody builds the HTTP
+// response body from the result of the "enableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewEnableOrganizationEnterpriseIssuerForbiddenResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerForbiddenResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerBadRequestResponseBody builds the HTTP
+// response body from the result of the "enableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewEnableOrganizationEnterpriseIssuerBadRequestResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerBadRequestResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerNotFoundResponseBody builds the HTTP
+// response body from the result of the "enableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewEnableOrganizationEnterpriseIssuerNotFoundResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerNotFoundResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerConflictResponseBody builds the HTTP
+// response body from the result of the "enableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewEnableOrganizationEnterpriseIssuerConflictResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerConflictResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "enableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewEnableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerInvalidResponseBody builds the HTTP
+// response body from the result of the "enableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewEnableOrganizationEnterpriseIssuerInvalidResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerInvalidResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "enableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewEnableOrganizationEnterpriseIssuerInvariantViolationResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerInvariantViolationResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerUnexpectedResponseBody builds the HTTP
+// response body from the result of the "enableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewEnableOrganizationEnterpriseIssuerUnexpectedResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerUnexpectedResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnableOrganizationEnterpriseIssuerGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "enableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewEnableOrganizationEnterpriseIssuerGatewayErrorResponseBody(res *goa.ServiceError) *EnableOrganizationEnterpriseIssuerGatewayErrorResponseBody {
+	body := &EnableOrganizationEnterpriseIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "disableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewDisableOrganizationEnterpriseIssuerUnauthorizedResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerUnauthorizedResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerForbiddenResponseBody builds the HTTP
+// response body from the result of the "disableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewDisableOrganizationEnterpriseIssuerForbiddenResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerForbiddenResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerBadRequestResponseBody builds the HTTP
+// response body from the result of the "disableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewDisableOrganizationEnterpriseIssuerBadRequestResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerBadRequestResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerNotFoundResponseBody builds the HTTP
+// response body from the result of the "disableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewDisableOrganizationEnterpriseIssuerNotFoundResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerNotFoundResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerConflictResponseBody builds the HTTP
+// response body from the result of the "disableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewDisableOrganizationEnterpriseIssuerConflictResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerConflictResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody builds
+// the HTTP response body from the result of the
+// "disableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewDisableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerInvalidResponseBody builds the HTTP
+// response body from the result of the "disableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewDisableOrganizationEnterpriseIssuerInvalidResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerInvalidResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "disableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewDisableOrganizationEnterpriseIssuerInvariantViolationResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerInvariantViolationResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerUnexpectedResponseBody builds the HTTP
+// response body from the result of the "disableOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewDisableOrganizationEnterpriseIssuerUnexpectedResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerUnexpectedResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDisableOrganizationEnterpriseIssuerGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "disableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewDisableOrganizationEnterpriseIssuerGatewayErrorResponseBody(res *goa.ServiceError) *DisableOrganizationEnterpriseIssuerGatewayErrorResponseBody {
+	body := &DisableOrganizationEnterpriseIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "rotateOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewRotateOrganizationEnterpriseIssuerUnauthorizedResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerUnauthorizedResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerForbiddenResponseBody builds the HTTP
+// response body from the result of the "rotateOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewRotateOrganizationEnterpriseIssuerForbiddenResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerForbiddenResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerBadRequestResponseBody builds the HTTP
+// response body from the result of the "rotateOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewRotateOrganizationEnterpriseIssuerBadRequestResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerBadRequestResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerNotFoundResponseBody builds the HTTP
+// response body from the result of the "rotateOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewRotateOrganizationEnterpriseIssuerNotFoundResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerNotFoundResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerConflictResponseBody builds the HTTP
+// response body from the result of the "rotateOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewRotateOrganizationEnterpriseIssuerConflictResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerConflictResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "rotateOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewRotateOrganizationEnterpriseIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerUnsupportedMediaResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerInvalidResponseBody builds the HTTP
+// response body from the result of the "rotateOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewRotateOrganizationEnterpriseIssuerInvalidResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerInvalidResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "rotateOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewRotateOrganizationEnterpriseIssuerInvariantViolationResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerInvariantViolationResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerUnexpectedResponseBody builds the HTTP
+// response body from the result of the "rotateOrganizationEnterpriseIssuer"
+// endpoint of the "jsonWebKeySets" service.
+func NewRotateOrganizationEnterpriseIssuerUnexpectedResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerUnexpectedResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateOrganizationEnterpriseIssuerGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "rotateOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
+// service.
+func NewRotateOrganizationEnterpriseIssuerGatewayErrorResponseBody(res *goa.ServiceError) *RotateOrganizationEnterpriseIssuerGatewayErrorResponseBody {
+	body := &RotateOrganizationEnterpriseIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyUnauthorizedResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyUnauthorizedResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyForbiddenResponseBody builds the
+// HTTP response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyForbiddenResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyForbiddenResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyBadRequestResponseBody builds the
+// HTTP response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyBadRequestResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyBadRequestResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyNotFoundResponseBody builds the
+// HTTP response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyNotFoundResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyNotFoundResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyConflictResponseBody builds the
+// HTTP response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyConflictResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyConflictResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyUnsupportedMediaResponseBody builds
+// the HTTP response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyUnsupportedMediaResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyInvalidResponseBody builds the HTTP
+// response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyInvalidResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyInvalidResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyInvariantViolationResponseBody
+// builds the HTTP response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyInvariantViolationResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyInvariantViolationResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyUnexpectedResponseBody builds the
+// HTTP response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyUnexpectedResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyUnexpectedResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
+// service.
+func NewReplaceOrganizationEnterpriseIssuerKeyGatewayErrorResponseBody(res *goa.ServiceError) *ReplaceOrganizationEnterpriseIssuerKeyGatewayErrorResponseBody {
+	body := &ReplaceOrganizationEnterpriseIssuerKeyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -4132,6 +6122,55 @@ func NewRevokeKeyGatewayErrorResponseBody(res *goa.ServiceError) *RevokeKeyGatew
 	return body
 }
 
+// NewGetOrganizationEnterpriseIssuerPayload builds a jsonWebKeySets service
+// getOrganizationEnterpriseIssuer endpoint payload.
+func NewGetOrganizationEnterpriseIssuerPayload(sessionToken *string) *jsonwebkeysets.GetOrganizationEnterpriseIssuerPayload {
+	v := &jsonwebkeysets.GetOrganizationEnterpriseIssuerPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewEnableOrganizationEnterpriseIssuerPayload builds a jsonWebKeySets service
+// enableOrganizationEnterpriseIssuer endpoint payload.
+func NewEnableOrganizationEnterpriseIssuerPayload(sessionToken *string) *jsonwebkeysets.EnableOrganizationEnterpriseIssuerPayload {
+	v := &jsonwebkeysets.EnableOrganizationEnterpriseIssuerPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDisableOrganizationEnterpriseIssuerPayload builds a jsonWebKeySets
+// service disableOrganizationEnterpriseIssuer endpoint payload.
+func NewDisableOrganizationEnterpriseIssuerPayload(sessionToken *string) *jsonwebkeysets.DisableOrganizationEnterpriseIssuerPayload {
+	v := &jsonwebkeysets.DisableOrganizationEnterpriseIssuerPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRotateOrganizationEnterpriseIssuerPayload builds a jsonWebKeySets service
+// rotateOrganizationEnterpriseIssuer endpoint payload.
+func NewRotateOrganizationEnterpriseIssuerPayload(body *RotateOrganizationEnterpriseIssuerRequestBody, sessionToken *string) *jsonwebkeysets.RotateOrganizationEnterpriseIssuerPayload {
+	v := &jsonwebkeysets.RotateOrganizationEnterpriseIssuerPayload{
+		ActiveKid: *body.ActiveKid,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyPayload builds a jsonWebKeySets
+// service replaceOrganizationEnterpriseIssuerKey endpoint payload.
+func NewReplaceOrganizationEnterpriseIssuerKeyPayload(body *ReplaceOrganizationEnterpriseIssuerKeyRequestBody, sessionToken *string) *jsonwebkeysets.ReplaceOrganizationEnterpriseIssuerKeyPayload {
+	v := &jsonwebkeysets.ReplaceOrganizationEnterpriseIssuerKeyPayload{
+		Kid: *body.Kid,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewCreateSetPayload builds a jsonWebKeySets service createSet endpoint
 // payload.
 func NewCreateSetPayload(body *CreateSetRequestBody, sessionToken *string) *jsonwebkeysets.CreateSetPayload {
@@ -4242,6 +6281,24 @@ func NewRevokeKeyPayload(id string, sessionToken *string) *jsonwebkeysets.Revoke
 	v.SessionToken = sessionToken
 
 	return v
+}
+
+// ValidateRotateOrganizationEnterpriseIssuerRequestBody runs the validations
+// defined on RotateOrganizationEnterpriseIssuerRequestBody
+func ValidateRotateOrganizationEnterpriseIssuerRequestBody(body *RotateOrganizationEnterpriseIssuerRequestBody) (err error) {
+	if body.ActiveKid == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_kid", "body"))
+	}
+	return
+}
+
+// ValidateReplaceOrganizationEnterpriseIssuerKeyRequestBody runs the
+// validations defined on ReplaceOrganizationEnterpriseIssuerKeyRequestBody
+func ValidateReplaceOrganizationEnterpriseIssuerKeyRequestBody(body *ReplaceOrganizationEnterpriseIssuerKeyRequestBody) (err error) {
+	if body.Kid == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kid", "body"))
+	}
+	return
 }
 
 // ValidateCreateSetRequestBody runs the validations defined on

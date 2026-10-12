@@ -150,7 +150,7 @@ func UsageCommands() []string {
 		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"instances get-instance",
 		"integrations (get|list)",
-		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
+		"json-web-key-sets (get-organization-enterprise-issuer|enable-organization-enterprise-issuer|disable-organization-enterprise-issuer|rotate-organization-enterprise-issuer|replace-organization-enterprise-issuer-key|create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|rotate-key|list-keys|revoke-key|verify-key)",
 		"launcher judge",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
@@ -1609,6 +1609,23 @@ func ParseEndpoint(
 		integrationsListProjectSlugInputFlag = integrationsListFlags.String("project-slug-input", "", "")
 
 		jsonWebKeySetsFlags = flag.NewFlagSet("json-web-key-sets", flag.ContinueOnError)
+
+		jsonWebKeySetsGetOrganizationEnterpriseIssuerFlags            = flag.NewFlagSet("get-organization-enterprise-issuer", flag.ExitOnError)
+		jsonWebKeySetsGetOrganizationEnterpriseIssuerSessionTokenFlag = jsonWebKeySetsGetOrganizationEnterpriseIssuerFlags.String("session-token", "", "")
+
+		jsonWebKeySetsEnableOrganizationEnterpriseIssuerFlags            = flag.NewFlagSet("enable-organization-enterprise-issuer", flag.ExitOnError)
+		jsonWebKeySetsEnableOrganizationEnterpriseIssuerSessionTokenFlag = jsonWebKeySetsEnableOrganizationEnterpriseIssuerFlags.String("session-token", "", "")
+
+		jsonWebKeySetsDisableOrganizationEnterpriseIssuerFlags            = flag.NewFlagSet("disable-organization-enterprise-issuer", flag.ExitOnError)
+		jsonWebKeySetsDisableOrganizationEnterpriseIssuerSessionTokenFlag = jsonWebKeySetsDisableOrganizationEnterpriseIssuerFlags.String("session-token", "", "")
+
+		jsonWebKeySetsRotateOrganizationEnterpriseIssuerFlags            = flag.NewFlagSet("rotate-organization-enterprise-issuer", flag.ExitOnError)
+		jsonWebKeySetsRotateOrganizationEnterpriseIssuerBodyFlag         = jsonWebKeySetsRotateOrganizationEnterpriseIssuerFlags.String("body", "REQUIRED", "")
+		jsonWebKeySetsRotateOrganizationEnterpriseIssuerSessionTokenFlag = jsonWebKeySetsRotateOrganizationEnterpriseIssuerFlags.String("session-token", "", "")
+
+		jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyFlags            = flag.NewFlagSet("replace-organization-enterprise-issuer-key", flag.ExitOnError)
+		jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyBodyFlag         = jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyFlags.String("body", "REQUIRED", "")
+		jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeySessionTokenFlag = jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyFlags.String("session-token", "", "")
 
 		jsonWebKeySetsCreateSetFlags            = flag.NewFlagSet("create-set", flag.ExitOnError)
 		jsonWebKeySetsCreateSetBodyFlag         = jsonWebKeySetsCreateSetFlags.String("body", "REQUIRED", "")
@@ -5300,6 +5317,11 @@ func ParseEndpoint(
 	integrationsListFlags.Usage = integrationsListUsage
 
 	jsonWebKeySetsFlags.Usage = jsonWebKeySetsUsage
+	jsonWebKeySetsGetOrganizationEnterpriseIssuerFlags.Usage = jsonWebKeySetsGetOrganizationEnterpriseIssuerUsage
+	jsonWebKeySetsEnableOrganizationEnterpriseIssuerFlags.Usage = jsonWebKeySetsEnableOrganizationEnterpriseIssuerUsage
+	jsonWebKeySetsDisableOrganizationEnterpriseIssuerFlags.Usage = jsonWebKeySetsDisableOrganizationEnterpriseIssuerUsage
+	jsonWebKeySetsRotateOrganizationEnterpriseIssuerFlags.Usage = jsonWebKeySetsRotateOrganizationEnterpriseIssuerUsage
+	jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyFlags.Usage = jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyUsage
 	jsonWebKeySetsCreateSetFlags.Usage = jsonWebKeySetsCreateSetUsage
 	jsonWebKeySetsUpdateSetFlags.Usage = jsonWebKeySetsUpdateSetUsage
 	jsonWebKeySetsListSetsFlags.Usage = jsonWebKeySetsListSetsUsage
@@ -7156,6 +7178,21 @@ func ParseEndpoint(
 
 		case "json-web-key-sets":
 			switch epn {
+			case "get-organization-enterprise-issuer":
+				epf = jsonWebKeySetsGetOrganizationEnterpriseIssuerFlags
+
+			case "enable-organization-enterprise-issuer":
+				epf = jsonWebKeySetsEnableOrganizationEnterpriseIssuerFlags
+
+			case "disable-organization-enterprise-issuer":
+				epf = jsonWebKeySetsDisableOrganizationEnterpriseIssuerFlags
+
+			case "rotate-organization-enterprise-issuer":
+				epf = jsonWebKeySetsRotateOrganizationEnterpriseIssuerFlags
+
+			case "replace-organization-enterprise-issuer-key":
+				epf = jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyFlags
+
 			case "create-set":
 				epf = jsonWebKeySetsCreateSetFlags
 
@@ -10171,6 +10208,21 @@ func ParseEndpoint(
 		case "json-web-key-sets":
 			c := jsonwebkeysetsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "get-organization-enterprise-issuer":
+				endpoint = c.GetOrganizationEnterpriseIssuer()
+				data, err = jsonwebkeysetsc.BuildGetOrganizationEnterpriseIssuerPayload(*jsonWebKeySetsGetOrganizationEnterpriseIssuerSessionTokenFlag)
+			case "enable-organization-enterprise-issuer":
+				endpoint = c.EnableOrganizationEnterpriseIssuer()
+				data, err = jsonwebkeysetsc.BuildEnableOrganizationEnterpriseIssuerPayload(*jsonWebKeySetsEnableOrganizationEnterpriseIssuerSessionTokenFlag)
+			case "disable-organization-enterprise-issuer":
+				endpoint = c.DisableOrganizationEnterpriseIssuer()
+				data, err = jsonwebkeysetsc.BuildDisableOrganizationEnterpriseIssuerPayload(*jsonWebKeySetsDisableOrganizationEnterpriseIssuerSessionTokenFlag)
+			case "rotate-organization-enterprise-issuer":
+				endpoint = c.RotateOrganizationEnterpriseIssuer()
+				data, err = jsonwebkeysetsc.BuildRotateOrganizationEnterpriseIssuerPayload(*jsonWebKeySetsRotateOrganizationEnterpriseIssuerBodyFlag, *jsonWebKeySetsRotateOrganizationEnterpriseIssuerSessionTokenFlag)
+			case "replace-organization-enterprise-issuer-key":
+				endpoint = c.ReplaceOrganizationEnterpriseIssuerKey()
+				data, err = jsonwebkeysetsc.BuildReplaceOrganizationEnterpriseIssuerKeyPayload(*jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyBodyFlag, *jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeySessionTokenFlag)
 			case "create-set":
 				endpoint = c.CreateSet()
 				data, err = jsonwebkeysetsc.BuildCreateSetPayload(*jsonWebKeySetsCreateSetBodyFlag, *jsonWebKeySetsCreateSetSessionTokenFlag)
@@ -18550,6 +18602,11 @@ func jsonWebKeySetsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] json-web-key-sets COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-organization-enterprise-issuer: Read the organization's enterprise authorization issuer: the permanent issuer URI to register with supported services, its published keys and whether signing is available. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    enable-organization-enterprise-issuer: Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.`)
+	fmt.Fprintln(os.Stderr, `    disable-organization-enterprise-issuer: Withdraw the organization's enterprise authorization issuer: every key is revoked, signing stops and cached service tokens are discarded. Enabling again keeps the same issuer URI with a new key. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    rotate-organization-enterprise-issuer: Rotate the issuer's signing key without changing its URI. The first call publishes a new key and returns rotation_ready_at; call again with the same active_kid after that time to activate it. The previous key stays published briefly so services can still verify it. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    replace-organization-enterprise-issuer-key: Compromise response: revoke one issuer key immediately and, if it was active, activate a fresh key at once. The issuer URI does not change; services stop accepting the revoked key once their key cache refreshes. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    create-set: Create a JSON Web Key Set backed by an organization external key, minting and publishing the set's first key straight to active. Reads the backing key's public half from the customer's KMS and refuses when the key's real algorithm disagrees with the one recorded against it. Rate limited per organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    update-set: Update a JSON Web Key Set's name and backing external key. Requires org:admin. Both fields are replaced, not patched. Re-pointing the backing key is how rotation begins: point the set at the new external key, then publish a key from it. Already-published keys are unaffected — each keeps signing with the external key it was minted from.`)
 	fmt.Fprintln(os.Stderr, `    list-sets: List the organization's JSON Web Key Sets. Requires org:read.`)
@@ -18565,6 +18622,100 @@ func jsonWebKeySetsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s json-web-key-sets COMMAND --help\n", os.Args[0])
 }
+func jsonWebKeySetsGetOrganizationEnterpriseIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets get-organization-enterprise-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the organization's enterprise authorization issuer: the permanent issuer URI to register with supported services, its published keys and whether signing is available. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets get-organization-enterprise-issuer --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsEnableOrganizationEnterpriseIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets enable-organization-enterprise-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets enable-organization-enterprise-issuer --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsDisableOrganizationEnterpriseIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets disable-organization-enterprise-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Withdraw the organization's enterprise authorization issuer: every key is revoked, signing stops and cached service tokens are discarded. Enabling again keeps the same issuer URI with a new key. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets disable-organization-enterprise-issuer --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsRotateOrganizationEnterpriseIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets rotate-organization-enterprise-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rotate the issuer's signing key without changing its URI. The first call publishes a new key and returns rotation_ready_at; call again with the same active_kid after that time to activate it. The previous key stays published briefly so services can still verify it. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets rotate-organization-enterprise-issuer --body '{\n      \"active_kid\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets replace-organization-enterprise-issuer-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Compromise response: revoke one issuer key immediately and, if it was active, activate a fresh key at once. The issuer URI does not change; services stop accepting the revoked key once their key cache refreshes. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "json-web-key-sets replace-organization-enterprise-issuer-key --body '{\n      \"kid\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
 func jsonWebKeySetsCreateSetUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] json-web-key-sets create-set", os.Args[0])

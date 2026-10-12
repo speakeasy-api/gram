@@ -18,6 +18,28 @@ import (
 // by customer KMS keys — and the publish/activate/retire/revoke lifecycle of
 // their keys.
 type Service interface {
+	// Read the organization's enterprise authorization issuer: the permanent
+	// issuer URI to register with supported services, its published keys and
+	// whether signing is available. Requires org:read.
+	GetOrganizationEnterpriseIssuer(context.Context, *GetOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error)
+	// Provision the organization's enterprise authorization issuer with a
+	// dedicated Speakeasy-managed signing key. Idempotent. Requires org:admin and
+	// the SSO entitlement. Does not configure trust at any service or grant access.
+	EnableOrganizationEnterpriseIssuer(context.Context, *EnableOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error)
+	// Withdraw the organization's enterprise authorization issuer: every key is
+	// revoked, signing stops and cached service tokens are discarded. Enabling
+	// again keeps the same issuer URI with a new key. Requires org:admin.
+	DisableOrganizationEnterpriseIssuer(context.Context, *DisableOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error)
+	// Rotate the issuer's signing key without changing its URI. The first call
+	// publishes a new key and returns rotation_ready_at; call again with the same
+	// active_kid after that time to activate it. The previous key stays published
+	// briefly so services can still verify it. Requires org:admin.
+	RotateOrganizationEnterpriseIssuer(context.Context, *RotateOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error)
+	// Compromise response: revoke one issuer key immediately and, if it was
+	// active, activate a fresh key at once. The issuer URI does not change;
+	// services stop accepting the revoked key once their key cache refreshes.
+	// Requires org:admin.
+	ReplaceOrganizationEnterpriseIssuerKey(context.Context, *ReplaceOrganizationEnterpriseIssuerKeyPayload) (res *OrganizationEnterpriseIssuer, err error)
 	// Create a JSON Web Key Set backed by an organization external key, minting
 	// and publishing the set's first key straight to active. Reads the backing
 	// key's public half from the customer's KMS and refuses when the key's real
@@ -93,7 +115,7 @@ const ServiceName = "jsonWebKeySets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"createSet", "updateSet", "listSets", "getSet", "getSetDeletePreflight", "deleteSet", "listKeys", "publishKey", "activateKey", "retireKey", "revokeKey"}
+var MethodNames = [16]string{"getOrganizationEnterpriseIssuer", "enableOrganizationEnterpriseIssuer", "disableOrganizationEnterpriseIssuer", "rotateOrganizationEnterpriseIssuer", "replaceOrganizationEnterpriseIssuerKey", "createSet", "updateSet", "listSets", "getSet", "getSetDeletePreflight", "deleteSet", "listKeys", "publishKey", "activateKey", "retireKey", "revokeKey"}
 
 // ActivateKeyPayload is the payload type of the jsonWebKeySets service
 // activateKey method.
@@ -120,6 +142,24 @@ type CreateSetPayload struct {
 type DeleteSetPayload struct {
 	// The ID of the key set to delete.
 	ID           string
+	SessionToken *string
+}
+
+// DisableOrganizationEnterpriseIssuerPayload is the payload type of the
+// jsonWebKeySets service disableOrganizationEnterpriseIssuer method.
+type DisableOrganizationEnterpriseIssuerPayload struct {
+	SessionToken *string
+}
+
+// EnableOrganizationEnterpriseIssuerPayload is the payload type of the
+// jsonWebKeySets service enableOrganizationEnterpriseIssuer method.
+type EnableOrganizationEnterpriseIssuerPayload struct {
+	SessionToken *string
+}
+
+// GetOrganizationEnterpriseIssuerPayload is the payload type of the
+// jsonWebKeySets service getOrganizationEnterpriseIssuer method.
+type GetOrganizationEnterpriseIssuerPayload struct {
 	SessionToken *string
 }
 
@@ -235,11 +275,46 @@ type ListSetsPayload struct {
 	SessionToken *string
 }
 
+// OrganizationEnterpriseIssuer is the result type of the jsonWebKeySets
+// service getOrganizationEnterpriseIssuer method.
+type OrganizationEnterpriseIssuer struct {
+	// Whether issuer provisioning is available for this organization.
+	Available bool
+	// Whether the organization's issuer is provisioned.
+	Enabled bool
+	// Whether Speakeasy is currently allowed to sign with the issuer on this
+	// deployment.
+	SigningEnabled bool
+	// Issuer URI to register with supported services. It never changes.
+	Issuer *string
+	// Public verification keys.
+	JwksURI *string
+	// Published keys, newest first.
+	Keys []*OrganizationEnterpriseIssuerKey
+	// When a pending rotation can be activated.
+	RotationReadyAt *string
+}
+
+type OrganizationEnterpriseIssuerKey struct {
+	// Key ID.
+	Kid string
+	// Lifecycle state.
+	State string
+}
+
 // PublishKeyPayload is the payload type of the jsonWebKeySets service
 // publishKey method.
 type PublishKeyPayload struct {
 	// The ID of the key set to publish into.
 	SetID        string
+	SessionToken *string
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyPayload is the payload type of the
+// jsonWebKeySets service replaceOrganizationEnterpriseIssuerKey method.
+type ReplaceOrganizationEnterpriseIssuerKeyPayload struct {
+	// The key ID to revoke.
+	Kid          string
 	SessionToken *string
 }
 
@@ -256,6 +331,14 @@ type RetireKeyPayload struct {
 type RevokeKeyPayload struct {
 	// The ID of the key to revoke.
 	ID           string
+	SessionToken *string
+}
+
+// RotateOrganizationEnterpriseIssuerPayload is the payload type of the
+// jsonWebKeySets service rotateOrganizationEnterpriseIssuer method.
+type RotateOrganizationEnterpriseIssuerPayload struct {
+	// The key ID currently active, as last read.
+	ActiveKid    string
 	SessionToken *string
 }
 

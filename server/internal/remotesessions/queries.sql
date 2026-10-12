@@ -1302,6 +1302,7 @@ FROM json_web_key_sets
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE
 FOR SHARE;
 
@@ -4507,6 +4508,7 @@ FROM json_web_key_sets
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE;
 -- Trusted delegation credentials are organization-scoped, never project-scoped.
 -- name: GetTrustedDelegationCredential :one

@@ -111,6 +111,8 @@ type Provisioner struct {
 	kmsClients  gcpkms.ProvisioningClientFactory
 	audit       *audit.Logger
 	cfg         Config
+	// emaTokenPurger drops vendor tokens obtained with a disabled issuer.
+	emaTokenPurger EMAIssuerTokenPurger
 }
 
 // NewProvisioner wires a provisioner over the shared identity resolver, KMS
@@ -140,6 +142,7 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.
 		kmsClients:  kmsClients,
 		audit:       auditLogger,
 		cfg:         cfg,
+		emaTokenPurger: nil,
 	}, nil
 }
 
@@ -1672,10 +1675,9 @@ func (p *Provisioner) retireKeyMaterial(ctx context.Context, logger *slog.Logger
 	}
 	defer o11y.LogDefer(ctx, logger, "failed to close gcp kms client", func() error { return kms.Close() })
 
-	eq := extkeysrepo.New(p.db)
 	q := repo.New(p.db)
 	for _, key := range revoked {
-		row, err := eq.GetGcpKmsKey(cleanupCtx, extkeysrepo.GetGcpKmsKeyParams{
+		row, err := q.GetManagedKeyResource(cleanupCtx, repo.GetManagedKeyResourceParams{
 			ID:             key.ExternalKeyID,
 			OrganizationID: conv.ToPGText(organizationID),
 		})
@@ -1683,19 +1685,19 @@ func (p *Provisioner) retireKeyMaterial(ctx context.Context, logger *slog.Logger
 			logger.ErrorContext(ctx, "failed to load revoked key resource; disable its kms version by hand", attr.SlogError(err))
 			continue
 		}
-		attrs := []any{attr.SlogGcpKmsKeyVersion(row.GcpKmsKey.ResourceName)}
+		attrs := []any{attr.SlogGcpKmsKeyVersion(row.ResourceName)}
 
-		if err := kms.DisableKeyVersion(cleanupCtx, row.GcpKmsKey.ResourceName); err != nil {
+		if err := kms.DisableKeyVersion(cleanupCtx, row.ResourceName); err != nil {
 			logger.ErrorContext(ctx, "failed to disable revoked kms key version; disable it by hand", append(attrs, attr.SlogError(err))...)
 		}
 
-		keyName, err := gcpkms.KeyNameForVersion(row.GcpKmsKey.ResourceName)
+		keyName, err := gcpkms.KeyNameForVersion(row.ResourceName)
 		if err != nil {
 			logger.ErrorContext(ctx, "failed to derive revoked kms key name; remove the signer grant by hand", append(attrs, attr.SlogError(err))...)
 			continue
 		}
 		// The signer is the platform credential the key was minted under.
-		signer, err := q.GetPlatformGcpIamCredentialForProvisioning(cleanupCtx, row.ExternalKey.ExternalCredentialID)
+		signer, err := q.GetPlatformGcpIamCredentialForProvisioning(cleanupCtx, row.ExternalCredentialID)
 		if err != nil || signer.GcpIamCredential.ImpersonateServiceAccount.String == "" {
 			logger.ErrorContext(ctx, "revoked key has no live signing credential; remove the signer grant by hand", append(attrs, attr.SlogError(err))...)
 			continue

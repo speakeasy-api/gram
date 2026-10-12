@@ -69,6 +69,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
+	"github.com/speakeasy-api/gram/server/internal/emaissuer"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -1772,4 +1773,13 @@ func preserveLegacyLocalSigningKey(sourcePath, targetPath string) error {
 // capacity.
 func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
 	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
+}
+
+// newEMAIssuerSigner signs as organizations' enterprise authorization issuers,
+// pinned to the provisioning service account and honoring the kill switch.
+func newEMAIssuerSigner(logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, origin *url.URL, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory) *emaissuer.Signer {
+	return emaissuer.NewSigner(logger, db, origin, gcpIdentity, kmsSigningClients, emaissuer.SignerConfig{
+		Disabled:      c.Bool(emaIssuerSigningDisabledFlag),
+		ManagedSigner: c.String(identityProviderSigningServiceAccount),
+	})
 }

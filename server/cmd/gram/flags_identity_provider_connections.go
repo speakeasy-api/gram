@@ -7,6 +7,7 @@ const (
 	identityProviderSigningCredentialIDFlag = "identity-provider-signing-credential-id"
 	identityProviderSigningServiceAccount   = "identity-provider-signing-service-account"
 	identityProviderKMSKeyRingLocalDefault  = "projects/gram-local/locations/global/keyRings/identity-provider-connections"
+	emaIssuerSigningDisabledFlag            = "ema-issuer-signing-disabled"
 )
 
 func identityProviderConnectionFlags() []cli.Flag {
@@ -25,6 +26,11 @@ func identityProviderConnectionFlags() []cli.Flag {
 			Name:    identityProviderSigningServiceAccount,
 			Usage:   "Service account the signing credential must impersonate; any other target is refused.",
 			EnvVars: []string{"GRAM_IDENTITY_PROVIDER_SIGNING_SERVICE_ACCOUNT"},
+		},
+		&cli.BoolFlag{
+			Name:    emaIssuerSigningDisabledFlag,
+			Usage:   "Kill switch: refuse every enterprise authorization issuer signature. Discovery keeps serving.",
+			EnvVars: []string{"GRAM_EMA_ISSUER_SIGNING_DISABLED"},
 		},
 	}
 }

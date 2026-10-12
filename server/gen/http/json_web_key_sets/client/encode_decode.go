@@ -19,6 +19,1183 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildGetOrganizationEnterpriseIssuerRequest instantiates a HTTP request
+// object with method and path set to call the "jsonWebKeySets" service
+// "getOrganizationEnterpriseIssuer" endpoint
+func (c *Client) BuildGetOrganizationEnterpriseIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationEnterpriseIssuerJSONWebKeySetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("jsonWebKeySets", "getOrganizationEnterpriseIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrganizationEnterpriseIssuerRequest returns an encoder for requests
+// sent to the jsonWebKeySets getOrganizationEnterpriseIssuer server.
+func EncodeGetOrganizationEnterpriseIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*jsonwebkeysets.GetOrganizationEnterpriseIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("jsonWebKeySets", "getOrganizationEnterpriseIssuer", "*jsonwebkeysets.GetOrganizationEnterpriseIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetOrganizationEnterpriseIssuerResponse returns a decoder for
+// responses returned by the jsonWebKeySets getOrganizationEnterpriseIssuer
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeGetOrganizationEnterpriseIssuerResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrganizationEnterpriseIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrganizationEnterpriseIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateGetOrganizationEnterpriseIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			res := NewGetOrganizationEnterpriseIssuerOrganizationEnterpriseIssuerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOrganizationEnterpriseIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateGetOrganizationEnterpriseIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewGetOrganizationEnterpriseIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrganizationEnterpriseIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateGetOrganizationEnterpriseIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewGetOrganizationEnterpriseIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrganizationEnterpriseIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateGetOrganizationEnterpriseIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewGetOrganizationEnterpriseIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrganizationEnterpriseIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateGetOrganizationEnterpriseIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewGetOrganizationEnterpriseIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrganizationEnterpriseIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateGetOrganizationEnterpriseIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewGetOrganizationEnterpriseIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrganizationEnterpriseIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateGetOrganizationEnterpriseIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewGetOrganizationEnterpriseIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrganizationEnterpriseIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateGetOrganizationEnterpriseIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewGetOrganizationEnterpriseIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrganizationEnterpriseIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+				}
+				err = ValidateGetOrganizationEnterpriseIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+				}
+				return nil, NewGetOrganizationEnterpriseIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrganizationEnterpriseIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+				}
+				err = ValidateGetOrganizationEnterpriseIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+				}
+				return nil, NewGetOrganizationEnterpriseIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "getOrganizationEnterpriseIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrganizationEnterpriseIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateGetOrganizationEnterpriseIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewGetOrganizationEnterpriseIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "getOrganizationEnterpriseIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildEnableOrganizationEnterpriseIssuerRequest instantiates a HTTP request
+// object with method and path set to call the "jsonWebKeySets" service
+// "enableOrganizationEnterpriseIssuer" endpoint
+func (c *Client) BuildEnableOrganizationEnterpriseIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: EnableOrganizationEnterpriseIssuerJSONWebKeySetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeEnableOrganizationEnterpriseIssuerRequest returns an encoder for
+// requests sent to the jsonWebKeySets enableOrganizationEnterpriseIssuer
+// server.
+func EncodeEnableOrganizationEnterpriseIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*jsonwebkeysets.EnableOrganizationEnterpriseIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", "*jsonwebkeysets.EnableOrganizationEnterpriseIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeEnableOrganizationEnterpriseIssuerResponse returns a decoder for
+// responses returned by the jsonWebKeySets enableOrganizationEnterpriseIssuer
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeEnableOrganizationEnterpriseIssuerResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeEnableOrganizationEnterpriseIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body EnableOrganizationEnterpriseIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateEnableOrganizationEnterpriseIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			res := NewEnableOrganizationEnterpriseIssuerOrganizationEnterpriseIssuerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body EnableOrganizationEnterpriseIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateEnableOrganizationEnterpriseIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewEnableOrganizationEnterpriseIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body EnableOrganizationEnterpriseIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateEnableOrganizationEnterpriseIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewEnableOrganizationEnterpriseIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body EnableOrganizationEnterpriseIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateEnableOrganizationEnterpriseIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewEnableOrganizationEnterpriseIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body EnableOrganizationEnterpriseIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateEnableOrganizationEnterpriseIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewEnableOrganizationEnterpriseIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body EnableOrganizationEnterpriseIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateEnableOrganizationEnterpriseIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewEnableOrganizationEnterpriseIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body EnableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateEnableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewEnableOrganizationEnterpriseIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body EnableOrganizationEnterpriseIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateEnableOrganizationEnterpriseIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewEnableOrganizationEnterpriseIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body EnableOrganizationEnterpriseIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+				}
+				err = ValidateEnableOrganizationEnterpriseIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+				}
+				return nil, NewEnableOrganizationEnterpriseIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body EnableOrganizationEnterpriseIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+				}
+				err = ValidateEnableOrganizationEnterpriseIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+				}
+				return nil, NewEnableOrganizationEnterpriseIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body EnableOrganizationEnterpriseIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateEnableOrganizationEnterpriseIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewEnableOrganizationEnterpriseIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDisableOrganizationEnterpriseIssuerRequest instantiates a HTTP request
+// object with method and path set to call the "jsonWebKeySets" service
+// "disableOrganizationEnterpriseIssuer" endpoint
+func (c *Client) BuildDisableOrganizationEnterpriseIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DisableOrganizationEnterpriseIssuerJSONWebKeySetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDisableOrganizationEnterpriseIssuerRequest returns an encoder for
+// requests sent to the jsonWebKeySets disableOrganizationEnterpriseIssuer
+// server.
+func EncodeDisableOrganizationEnterpriseIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*jsonwebkeysets.DisableOrganizationEnterpriseIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", "*jsonwebkeysets.DisableOrganizationEnterpriseIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeDisableOrganizationEnterpriseIssuerResponse returns a decoder for
+// responses returned by the jsonWebKeySets disableOrganizationEnterpriseIssuer
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeDisableOrganizationEnterpriseIssuerResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDisableOrganizationEnterpriseIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DisableOrganizationEnterpriseIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateDisableOrganizationEnterpriseIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			res := NewDisableOrganizationEnterpriseIssuerOrganizationEnterpriseIssuerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DisableOrganizationEnterpriseIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateDisableOrganizationEnterpriseIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewDisableOrganizationEnterpriseIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DisableOrganizationEnterpriseIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateDisableOrganizationEnterpriseIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewDisableOrganizationEnterpriseIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DisableOrganizationEnterpriseIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateDisableOrganizationEnterpriseIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewDisableOrganizationEnterpriseIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DisableOrganizationEnterpriseIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateDisableOrganizationEnterpriseIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewDisableOrganizationEnterpriseIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DisableOrganizationEnterpriseIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateDisableOrganizationEnterpriseIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewDisableOrganizationEnterpriseIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DisableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateDisableOrganizationEnterpriseIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewDisableOrganizationEnterpriseIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DisableOrganizationEnterpriseIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateDisableOrganizationEnterpriseIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewDisableOrganizationEnterpriseIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DisableOrganizationEnterpriseIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+				}
+				err = ValidateDisableOrganizationEnterpriseIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+				}
+				return nil, NewDisableOrganizationEnterpriseIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DisableOrganizationEnterpriseIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+				}
+				err = ValidateDisableOrganizationEnterpriseIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+				}
+				return nil, NewDisableOrganizationEnterpriseIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DisableOrganizationEnterpriseIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateDisableOrganizationEnterpriseIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewDisableOrganizationEnterpriseIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRotateOrganizationEnterpriseIssuerRequest instantiates a HTTP request
+// object with method and path set to call the "jsonWebKeySets" service
+// "rotateOrganizationEnterpriseIssuer" endpoint
+func (c *Client) BuildRotateOrganizationEnterpriseIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RotateOrganizationEnterpriseIssuerJSONWebKeySetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRotateOrganizationEnterpriseIssuerRequest returns an encoder for
+// requests sent to the jsonWebKeySets rotateOrganizationEnterpriseIssuer
+// server.
+func EncodeRotateOrganizationEnterpriseIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*jsonwebkeysets.RotateOrganizationEnterpriseIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", "*jsonwebkeysets.RotateOrganizationEnterpriseIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRotateOrganizationEnterpriseIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRotateOrganizationEnterpriseIssuerResponse returns a decoder for
+// responses returned by the jsonWebKeySets rotateOrganizationEnterpriseIssuer
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeRotateOrganizationEnterpriseIssuerResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRotateOrganizationEnterpriseIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RotateOrganizationEnterpriseIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateRotateOrganizationEnterpriseIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			res := NewRotateOrganizationEnterpriseIssuerOrganizationEnterpriseIssuerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RotateOrganizationEnterpriseIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateRotateOrganizationEnterpriseIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewRotateOrganizationEnterpriseIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RotateOrganizationEnterpriseIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateRotateOrganizationEnterpriseIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewRotateOrganizationEnterpriseIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RotateOrganizationEnterpriseIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateRotateOrganizationEnterpriseIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewRotateOrganizationEnterpriseIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RotateOrganizationEnterpriseIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateRotateOrganizationEnterpriseIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewRotateOrganizationEnterpriseIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RotateOrganizationEnterpriseIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateRotateOrganizationEnterpriseIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewRotateOrganizationEnterpriseIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RotateOrganizationEnterpriseIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateRotateOrganizationEnterpriseIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewRotateOrganizationEnterpriseIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RotateOrganizationEnterpriseIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateRotateOrganizationEnterpriseIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewRotateOrganizationEnterpriseIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RotateOrganizationEnterpriseIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+				}
+				err = ValidateRotateOrganizationEnterpriseIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+				}
+				return nil, NewRotateOrganizationEnterpriseIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RotateOrganizationEnterpriseIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+				}
+				err = ValidateRotateOrganizationEnterpriseIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+				}
+				return nil, NewRotateOrganizationEnterpriseIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RotateOrganizationEnterpriseIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			err = ValidateRotateOrganizationEnterpriseIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
+			}
+			return nil, NewRotateOrganizationEnterpriseIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildReplaceOrganizationEnterpriseIssuerKeyRequest instantiates a HTTP
+// request object with method and path set to call the "jsonWebKeySets" service
+// "replaceOrganizationEnterpriseIssuerKey" endpoint
+func (c *Client) BuildReplaceOrganizationEnterpriseIssuerKeyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ReplaceOrganizationEnterpriseIssuerKeyJSONWebKeySetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeReplaceOrganizationEnterpriseIssuerKeyRequest returns an encoder for
+// requests sent to the jsonWebKeySets replaceOrganizationEnterpriseIssuerKey
+// server.
+func EncodeReplaceOrganizationEnterpriseIssuerKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*jsonwebkeysets.ReplaceOrganizationEnterpriseIssuerKeyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", "*jsonwebkeysets.ReplaceOrganizationEnterpriseIssuerKeyPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewReplaceOrganizationEnterpriseIssuerKeyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+		}
+		return nil
+	}
+}
+
+// DecodeReplaceOrganizationEnterpriseIssuerKeyResponse returns a decoder for
+// responses returned by the jsonWebKeySets
+// replaceOrganizationEnterpriseIssuerKey endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeReplaceOrganizationEnterpriseIssuerKeyResponse may return the
+// following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeReplaceOrganizationEnterpriseIssuerKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ReplaceOrganizationEnterpriseIssuerKeyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			err = ValidateReplaceOrganizationEnterpriseIssuerKeyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			res := NewReplaceOrganizationEnterpriseIssuerKeyOrganizationEnterpriseIssuerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ReplaceOrganizationEnterpriseIssuerKeyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			err = ValidateReplaceOrganizationEnterpriseIssuerKeyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			return nil, NewReplaceOrganizationEnterpriseIssuerKeyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ReplaceOrganizationEnterpriseIssuerKeyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			err = ValidateReplaceOrganizationEnterpriseIssuerKeyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			return nil, NewReplaceOrganizationEnterpriseIssuerKeyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ReplaceOrganizationEnterpriseIssuerKeyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			err = ValidateReplaceOrganizationEnterpriseIssuerKeyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			return nil, NewReplaceOrganizationEnterpriseIssuerKeyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ReplaceOrganizationEnterpriseIssuerKeyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			err = ValidateReplaceOrganizationEnterpriseIssuerKeyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			return nil, NewReplaceOrganizationEnterpriseIssuerKeyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ReplaceOrganizationEnterpriseIssuerKeyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			err = ValidateReplaceOrganizationEnterpriseIssuerKeyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			return nil, NewReplaceOrganizationEnterpriseIssuerKeyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ReplaceOrganizationEnterpriseIssuerKeyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			err = ValidateReplaceOrganizationEnterpriseIssuerKeyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			return nil, NewReplaceOrganizationEnterpriseIssuerKeyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ReplaceOrganizationEnterpriseIssuerKeyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			err = ValidateReplaceOrganizationEnterpriseIssuerKeyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			return nil, NewReplaceOrganizationEnterpriseIssuerKeyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ReplaceOrganizationEnterpriseIssuerKeyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+				}
+				err = ValidateReplaceOrganizationEnterpriseIssuerKeyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+				}
+				return nil, NewReplaceOrganizationEnterpriseIssuerKeyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ReplaceOrganizationEnterpriseIssuerKeyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+				}
+				err = ValidateReplaceOrganizationEnterpriseIssuerKeyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+				}
+				return nil, NewReplaceOrganizationEnterpriseIssuerKeyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ReplaceOrganizationEnterpriseIssuerKeyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			err = ValidateReplaceOrganizationEnterpriseIssuerKeyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
+			}
+			return nil, NewReplaceOrganizationEnterpriseIssuerKeyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateSetRequest instantiates a HTTP request object with method and
 // path set to call the "jsonWebKeySets" service "createSet" endpoint
 func (c *Client) BuildCreateSetRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2598,6 +3775,18 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 			return nil, goahttp.ErrInvalidResponse("jsonWebKeySets", "revokeKey", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalOrganizationEnterpriseIssuerKeyResponseBodyToJsonwebkeysetsOrganizationEnterpriseIssuerKey
+// builds a value of type *jsonwebkeysets.OrganizationEnterpriseIssuerKey from
+// a value of type *OrganizationEnterpriseIssuerKeyResponseBody.
+func unmarshalOrganizationEnterpriseIssuerKeyResponseBodyToJsonwebkeysetsOrganizationEnterpriseIssuerKey(v *OrganizationEnterpriseIssuerKeyResponseBody) *jsonwebkeysets.OrganizationEnterpriseIssuerKey {
+	res := &jsonwebkeysets.OrganizationEnterpriseIssuerKey{
+		Kid:   *v.Kid,
+		State: *v.State,
+	}
+
+	return res
 }
 
 // unmarshalJSONWebKeySetResponseBodyToJsonwebkeysetsJSONWebKeySet builds a

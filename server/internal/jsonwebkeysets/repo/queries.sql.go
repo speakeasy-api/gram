@@ -240,6 +240,36 @@ func (q *Queries) CreateJsonWebKeySet(ctx context.Context, arg CreateJsonWebKeyS
 	return i, err
 }
 
+const createOrganizationEMAIssuer = `-- name: CreateOrganizationEMAIssuer :one
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name, managed_ema_issuer)
+VALUES ($1, $2, 'Enterprise authorization issuer', TRUE)
+RETURNING id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, managed_ema_issuer, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateOrganizationEMAIssuerParams struct {
+	OrganizationID string
+	ExternalKeyID  uuid.UUID
+}
+
+func (q *Queries) CreateOrganizationEMAIssuer(ctx context.Context, arg CreateOrganizationEMAIssuerParams) (JsonWebKeySet, error) {
+	row := q.db.QueryRow(ctx, createOrganizationEMAIssuer, arg.OrganizationID, arg.ExternalKeyID)
+	var i JsonWebKeySet
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ExternalKeyID,
+		&i.Name,
+		&i.IdentityProviderConnectionID,
+		&i.ManagedEmaIssuer,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getActiveJsonWebKey = `-- name: GetActiveJsonWebKey :one
 SELECT id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
 FROM json_web_keys
@@ -282,6 +312,16 @@ const getExternalKeyForMint = `-- name: GetExternalKeyForMint :one
 SELECT
   ek.id, ek.organization_id, ek.project_id, ek.external_credential_id, ek.provider, ek.algorithm, ek.name, ek.customer_grant_reference, ek.identity_provider_connection_id, ek.created_at, ek.updated_at, ek.deleted_at, ek.deleted,
   gcp.resource_name,
+  EXISTS (
+    SELECT 1 FROM json_web_key_sets AS ema
+    WHERE ema.organization_id = ek.organization_id
+      AND ema.managed_ema_issuer IS TRUE
+      AND (ema.external_key_id = ek.id OR EXISTS (
+        SELECT 1 FROM json_web_keys AS emak
+        WHERE emak.organization_id = ema.organization_id
+          AND emak.json_web_key_set_id = ema.id
+          AND emak.external_key_id = ek.id))
+  ) AS ema_issuer_managed,
   ec.id AS credential_id,
   gic.impersonate_service_account,
   gic.wif_pool_id,
@@ -294,7 +334,16 @@ LEFT JOIN external_credentials AS ec
        ON ec.id = ek.external_credential_id
       AND (
         ec.organization_id = ek.organization_id
-        OR (ek.identity_provider_connection_id IS NOT NULL AND ec.organization_id IS NULL)
+        OR (ec.organization_id IS NULL AND (ek.identity_provider_connection_id IS NOT NULL OR EXISTS (
+    SELECT 1 FROM json_web_key_sets AS ema
+    WHERE ema.organization_id = ek.organization_id
+      AND ema.managed_ema_issuer IS TRUE
+      AND (ema.external_key_id = ek.id OR EXISTS (
+        SELECT 1 FROM json_web_keys AS emak
+        WHERE emak.organization_id = ema.organization_id
+          AND emak.json_web_key_set_id = ema.id
+          AND emak.external_key_id = ek.id))
+  )))
       )
       AND ec.project_id IS NULL
       AND ec.provider = 'gcp_iam'
@@ -315,6 +364,7 @@ type GetExternalKeyForMintParams struct {
 type GetExternalKeyForMintRow struct {
 	ExternalKey               ExternalKey
 	ResourceName              pgtype.Text
+	EmaIssuerManaged          bool
 	CredentialID              uuid.NullUUID
 	ImpersonateServiceAccount pgtype.Text
 	WifPoolID                 pgtype.Text
@@ -356,6 +406,7 @@ func (q *Queries) GetExternalKeyForMint(ctx context.Context, arg GetExternalKeyF
 		&i.ExternalKey.DeletedAt,
 		&i.ExternalKey.Deleted,
 		&i.ResourceName,
+		&i.EmaIssuerManaged,
 		&i.CredentialID,
 		&i.ImpersonateServiceAccount,
 		&i.WifPoolID,
@@ -409,6 +460,7 @@ FROM json_web_key_sets
 WHERE id = $1
   AND organization_id = $2
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE
 `
 
@@ -434,6 +486,69 @@ func (q *Queries) GetJsonWebKeySet(ctx context.Context, arg GetJsonWebKeySetPara
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getOrganizationEMAIssuer = `-- name: GetOrganizationEMAIssuer :one
+SELECT s.id, s.organization_id, s.project_id, s.external_key_id, s.name, s.identity_provider_connection_id, s.managed_ema_issuer, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM json_web_key_sets AS s
+JOIN organization_metadata AS o ON o.id = s.organization_id AND o.disabled_at IS NULL
+WHERE s.organization_id = $1
+  AND s.managed_ema_issuer IS TRUE
+  AND s.project_id IS NULL
+  AND s.deleted IS FALSE
+`
+
+// One live issuer per organization; a disabled organization has none.
+func (q *Queries) GetOrganizationEMAIssuer(ctx context.Context, organizationID string) (JsonWebKeySet, error) {
+	row := q.db.QueryRow(ctx, getOrganizationEMAIssuer, organizationID)
+	var i JsonWebKeySet
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ExternalKeyID,
+		&i.Name,
+		&i.IdentityProviderConnectionID,
+		&i.ManagedEmaIssuer,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getOrganizationEMAIssuerKeys = `-- name: GetOrganizationEMAIssuerKeys :one
+SELECT COALESCE(jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL), '[]'::jsonb)::jsonb AS keys
+FROM json_web_key_sets AS s
+JOIN organization_metadata AS o ON o.id = s.organization_id AND o.disabled_at IS NULL
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.deleted IS FALSE
+ AND (k.state IN ('pending', 'active')
+   OR (k.state = 'retired' AND k.retired_at > clock_timestamp() - make_interval(secs => $1::integer)))
+WHERE s.organization_id = $2::text
+  AND s.managed_ema_issuer IS TRUE
+  AND s.project_id IS NULL
+  AND s.deleted IS FALSE
+GROUP BY s.id
+`
+
+type GetOrganizationEMAIssuerKeysParams struct {
+	RetiredOverlapSeconds int32
+	OrganizationID        string
+}
+
+// Public verification keys of the organization's live issuer. Pending keys
+// are published before activation; a retired key stays published only for the
+// overlap window, then drops out even before it is revoked. Ordered by
+// immutable key id so the document and its ETag are stable.
+func (q *Queries) GetOrganizationEMAIssuerKeys(ctx context.Context, arg GetOrganizationEMAIssuerKeysParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getOrganizationEMAIssuerKeys, arg.RetiredOverlapSeconds, arg.OrganizationID)
+	var keys []byte
+	err := row.Scan(&keys)
+	return keys, err
 }
 
 const jsonWebKeyKidExistsInSet = `-- name: JsonWebKeyKidExistsInSet :one
@@ -471,6 +586,7 @@ SELECT id, organization_id, project_id, external_key_id, name, identity_provider
 FROM json_web_key_sets AS s
 WHERE s.organization_id = $1
   AND s.project_id IS NULL
+  AND s.managed_ema_issuer IS NOT TRUE
   AND s.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1
@@ -580,13 +696,23 @@ func (q *Queries) ListJsonWebKeys(ctx context.Context, arg ListJsonWebKeysParams
 }
 
 const lockExternalKeyForJwksWrite = `-- name: LockExternalKeyForJwksWrite :one
-SELECT id, provider, algorithm, identity_provider_connection_id
-FROM external_keys
-WHERE id = $1
-  AND organization_id = $2
-  AND project_id IS NULL
-  AND deleted IS FALSE
-FOR SHARE
+SELECT ek.id, ek.provider, ek.algorithm, ek.identity_provider_connection_id,
+  EXISTS (
+    SELECT 1 FROM json_web_key_sets AS ema
+    WHERE ema.organization_id = ek.organization_id
+      AND ema.managed_ema_issuer IS TRUE
+      AND (ema.external_key_id = ek.id OR EXISTS (
+        SELECT 1 FROM json_web_keys AS emak
+        WHERE emak.organization_id = ema.organization_id
+          AND emak.json_web_key_set_id = ema.id
+          AND emak.external_key_id = ek.id))
+  ) AS ema_issuer_managed
+FROM external_keys AS ek
+WHERE ek.id = $1
+  AND ek.organization_id = $2
+  AND ek.project_id IS NULL
+  AND ek.deleted IS FALSE
+FOR SHARE OF ek
 `
 
 type LockExternalKeyForJwksWriteParams struct {
@@ -599,6 +725,7 @@ type LockExternalKeyForJwksWriteRow struct {
 	Provider                     string
 	Algorithm                    string
 	IdentityProviderConnectionID uuid.NullUUID
+	EmaIssuerManaged             bool
 }
 
 // Locks the backing external key row for the duration of a JWKS write, as the
@@ -621,6 +748,7 @@ func (q *Queries) LockExternalKeyForJwksWrite(ctx context.Context, arg LockExter
 		&i.Provider,
 		&i.Algorithm,
 		&i.IdentityProviderConnectionID,
+		&i.EmaIssuerManaged,
 	)
 	return i, err
 }
@@ -631,6 +759,7 @@ FROM json_web_key_sets
 WHERE id = $1
   AND organization_id = $2
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE
 FOR UPDATE
 `
@@ -665,6 +794,53 @@ func (q *Queries) LockJsonWebKeySetForKeyWrite(ctx context.Context, arg LockJson
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const lockOrganizationEMAIssuerForKeyWrite = `-- name: LockOrganizationEMAIssuerForKeyWrite :one
+SELECT id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, managed_ema_issuer, created_at, updated_at, deleted_at, deleted
+FROM json_web_key_sets
+WHERE organization_id = $1
+  AND managed_ema_issuer IS TRUE
+  AND project_id IS NULL
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+// Serializes every key write on the issuer, like LockJsonWebKeySetForKeyWrite
+// does for customer sets.
+func (q *Queries) LockOrganizationEMAIssuerForKeyWrite(ctx context.Context, organizationID string) (JsonWebKeySet, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationEMAIssuerForKeyWrite, organizationID)
+	var i JsonWebKeySet
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ExternalKeyID,
+		&i.Name,
+		&i.IdentityProviderConnectionID,
+		&i.ManagedEmaIssuer,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockOrganizationForEMAIssuer = `-- name: LockOrganizationForEMAIssuer :one
+SELECT id
+FROM organization_metadata
+WHERE id = $1
+  AND disabled_at IS NULL
+FOR UPDATE
+`
+
+// Serializes issuer creation per organization.
+func (q *Queries) LockOrganizationForEMAIssuer(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForEMAIssuer, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const retireActiveJsonWebKey = `-- name: RetireActiveJsonWebKey :one
@@ -757,6 +933,65 @@ func (q *Queries) RetireJsonWebKey(ctx context.Context, arg RetireJsonWebKeyPara
 	return i, err
 }
 
+const revokeExpiredEMAIssuerKeys = `-- name: RevokeExpiredEMAIssuerKeys :many
+UPDATE json_web_keys
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE json_web_key_set_id = $1
+  AND organization_id = $2
+  AND state = 'retired'
+  AND deleted IS FALSE
+  AND retired_at <= clock_timestamp() - make_interval(secs => $3::integer)
+RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+`
+
+type RevokeExpiredEMAIssuerKeysParams struct {
+	JsonWebKeySetID uuid.UUID
+	OrganizationID  string
+	OverlapSeconds  int32
+}
+
+// Retired issuer keys stop being published once nothing they signed can still
+// verify. Uses the database clock.
+func (q *Queries) RevokeExpiredEMAIssuerKeys(ctx context.Context, arg RevokeExpiredEMAIssuerKeysParams) ([]JsonWebKey, error) {
+	rows, err := q.db.Query(ctx, revokeExpiredEMAIssuerKeys, arg.JsonWebKeySetID, arg.OrganizationID, arg.OverlapSeconds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []JsonWebKey
+	for rows.Next() {
+		var i JsonWebKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.JsonWebKeySetID,
+			&i.ExternalKeyID,
+			&i.ExternalKeyVersion,
+			&i.State,
+			&i.Kid,
+			&i.PublicJwk,
+			&i.ActivatedAt,
+			&i.RetiredAt,
+			&i.RevokedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeJsonWebKey = `-- name: RevokeJsonWebKey :one
 UPDATE json_web_keys
 SET state = 'revoked',
@@ -802,12 +1037,49 @@ func (q *Queries) RevokeJsonWebKey(ctx context.Context, arg RevokeJsonWebKeyPara
 	return i, err
 }
 
+const setOrganizationEMAIssuerBackingKey = `-- name: SetOrganizationEMAIssuerBackingKey :one
+UPDATE json_web_key_sets
+SET external_key_id = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND managed_ema_issuer IS TRUE
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, managed_ema_issuer, created_at, updated_at, deleted_at, deleted
+`
+
+type SetOrganizationEMAIssuerBackingKeyParams struct {
+	ExternalKeyID  uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SetOrganizationEMAIssuerBackingKey(ctx context.Context, arg SetOrganizationEMAIssuerBackingKeyParams) (JsonWebKeySet, error) {
+	row := q.db.QueryRow(ctx, setOrganizationEMAIssuerBackingKey, arg.ExternalKeyID, arg.ID, arg.OrganizationID)
+	var i JsonWebKeySet
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ExternalKeyID,
+		&i.Name,
+		&i.IdentityProviderConnectionID,
+		&i.ManagedEmaIssuer,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const softDeleteJsonWebKeySet = `-- name: SoftDeleteJsonWebKeySet :one
 UPDATE json_web_key_sets
 SET deleted_at = clock_timestamp()
 WHERE id = $1
   AND organization_id = $2
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, managed_ema_issuer, created_at, updated_at, deleted_at, deleted
 `
@@ -819,6 +1091,40 @@ type SoftDeleteJsonWebKeySetParams struct {
 
 func (q *Queries) SoftDeleteJsonWebKeySet(ctx context.Context, arg SoftDeleteJsonWebKeySetParams) (JsonWebKeySet, error) {
 	row := q.db.QueryRow(ctx, softDeleteJsonWebKeySet, arg.ID, arg.OrganizationID)
+	var i JsonWebKeySet
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.ExternalKeyID,
+		&i.Name,
+		&i.IdentityProviderConnectionID,
+		&i.ManagedEmaIssuer,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const softDeleteOrganizationEMAIssuer = `-- name: SoftDeleteOrganizationEMAIssuer :one
+UPDATE json_web_key_sets
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND managed_ema_issuer IS TRUE
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, managed_ema_issuer, created_at, updated_at, deleted_at, deleted
+`
+
+type SoftDeleteOrganizationEMAIssuerParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SoftDeleteOrganizationEMAIssuer(ctx context.Context, arg SoftDeleteOrganizationEMAIssuerParams) (JsonWebKeySet, error) {
+	row := q.db.QueryRow(ctx, softDeleteOrganizationEMAIssuer, arg.ID, arg.OrganizationID)
 	var i JsonWebKeySet
 	err := row.Scan(
 		&i.ID,
@@ -885,6 +1191,7 @@ SET name = $1,
 WHERE id = $3
   AND organization_id = $4
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, external_key_id, name, identity_provider_connection_id, managed_ema_issuer, created_at, updated_at, deleted_at, deleted
 `

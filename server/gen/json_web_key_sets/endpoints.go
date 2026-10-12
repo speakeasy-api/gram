@@ -16,17 +16,22 @@ import (
 
 // Endpoints wraps the "jsonWebKeySets" service endpoints.
 type Endpoints struct {
-	CreateSet             goa.Endpoint
-	UpdateSet             goa.Endpoint
-	ListSets              goa.Endpoint
-	GetSet                goa.Endpoint
-	GetSetDeletePreflight goa.Endpoint
-	DeleteSet             goa.Endpoint
-	ListKeys              goa.Endpoint
-	PublishKey            goa.Endpoint
-	ActivateKey           goa.Endpoint
-	RetireKey             goa.Endpoint
-	RevokeKey             goa.Endpoint
+	GetOrganizationEnterpriseIssuer        goa.Endpoint
+	EnableOrganizationEnterpriseIssuer     goa.Endpoint
+	DisableOrganizationEnterpriseIssuer    goa.Endpoint
+	RotateOrganizationEnterpriseIssuer     goa.Endpoint
+	ReplaceOrganizationEnterpriseIssuerKey goa.Endpoint
+	CreateSet                              goa.Endpoint
+	UpdateSet                              goa.Endpoint
+	ListSets                               goa.Endpoint
+	GetSet                                 goa.Endpoint
+	GetSetDeletePreflight                  goa.Endpoint
+	DeleteSet                              goa.Endpoint
+	ListKeys                               goa.Endpoint
+	PublishKey                             goa.Endpoint
+	ActivateKey                            goa.Endpoint
+	RetireKey                              goa.Endpoint
+	RevokeKey                              goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "jsonWebKeySets" service with
@@ -35,23 +40,33 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateSet:             NewCreateSetEndpoint(s, a.APIKeyAuth),
-		UpdateSet:             NewUpdateSetEndpoint(s, a.APIKeyAuth),
-		ListSets:              NewListSetsEndpoint(s, a.APIKeyAuth),
-		GetSet:                NewGetSetEndpoint(s, a.APIKeyAuth),
-		GetSetDeletePreflight: NewGetSetDeletePreflightEndpoint(s, a.APIKeyAuth),
-		DeleteSet:             NewDeleteSetEndpoint(s, a.APIKeyAuth),
-		ListKeys:              NewListKeysEndpoint(s, a.APIKeyAuth),
-		PublishKey:            NewPublishKeyEndpoint(s, a.APIKeyAuth),
-		ActivateKey:           NewActivateKeyEndpoint(s, a.APIKeyAuth),
-		RetireKey:             NewRetireKeyEndpoint(s, a.APIKeyAuth),
-		RevokeKey:             NewRevokeKeyEndpoint(s, a.APIKeyAuth),
+		GetOrganizationEnterpriseIssuer:        NewGetOrganizationEnterpriseIssuerEndpoint(s, a.APIKeyAuth),
+		EnableOrganizationEnterpriseIssuer:     NewEnableOrganizationEnterpriseIssuerEndpoint(s, a.APIKeyAuth),
+		DisableOrganizationEnterpriseIssuer:    NewDisableOrganizationEnterpriseIssuerEndpoint(s, a.APIKeyAuth),
+		RotateOrganizationEnterpriseIssuer:     NewRotateOrganizationEnterpriseIssuerEndpoint(s, a.APIKeyAuth),
+		ReplaceOrganizationEnterpriseIssuerKey: NewReplaceOrganizationEnterpriseIssuerKeyEndpoint(s, a.APIKeyAuth),
+		CreateSet:                              NewCreateSetEndpoint(s, a.APIKeyAuth),
+		UpdateSet:                              NewUpdateSetEndpoint(s, a.APIKeyAuth),
+		ListSets:                               NewListSetsEndpoint(s, a.APIKeyAuth),
+		GetSet:                                 NewGetSetEndpoint(s, a.APIKeyAuth),
+		GetSetDeletePreflight:                  NewGetSetDeletePreflightEndpoint(s, a.APIKeyAuth),
+		DeleteSet:                              NewDeleteSetEndpoint(s, a.APIKeyAuth),
+		ListKeys:                               NewListKeysEndpoint(s, a.APIKeyAuth),
+		PublishKey:                             NewPublishKeyEndpoint(s, a.APIKeyAuth),
+		ActivateKey:                            NewActivateKeyEndpoint(s, a.APIKeyAuth),
+		RetireKey:                              NewRetireKeyEndpoint(s, a.APIKeyAuth),
+		RevokeKey:                              NewRevokeKeyEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "jsonWebKeySets" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.GetOrganizationEnterpriseIssuer = m(e.GetOrganizationEnterpriseIssuer)
+	e.EnableOrganizationEnterpriseIssuer = m(e.EnableOrganizationEnterpriseIssuer)
+	e.DisableOrganizationEnterpriseIssuer = m(e.DisableOrganizationEnterpriseIssuer)
+	e.RotateOrganizationEnterpriseIssuer = m(e.RotateOrganizationEnterpriseIssuer)
+	e.ReplaceOrganizationEnterpriseIssuerKey = m(e.ReplaceOrganizationEnterpriseIssuerKey)
 	e.CreateSet = m(e.CreateSet)
 	e.UpdateSet = m(e.UpdateSet)
 	e.ListSets = m(e.ListSets)
@@ -63,6 +78,126 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ActivateKey = m(e.ActivateKey)
 	e.RetireKey = m(e.RetireKey)
 	e.RevokeKey = m(e.RevokeKey)
+}
+
+// NewGetOrganizationEnterpriseIssuerEndpoint returns an endpoint function that
+// calls the method "getOrganizationEnterpriseIssuer" of service
+// "jsonWebKeySets".
+func NewGetOrganizationEnterpriseIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationEnterpriseIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationEnterpriseIssuer(ctx, p)
+	}
+}
+
+// NewEnableOrganizationEnterpriseIssuerEndpoint returns an endpoint function
+// that calls the method "enableOrganizationEnterpriseIssuer" of service
+// "jsonWebKeySets".
+func NewEnableOrganizationEnterpriseIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EnableOrganizationEnterpriseIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.EnableOrganizationEnterpriseIssuer(ctx, p)
+	}
+}
+
+// NewDisableOrganizationEnterpriseIssuerEndpoint returns an endpoint function
+// that calls the method "disableOrganizationEnterpriseIssuer" of service
+// "jsonWebKeySets".
+func NewDisableOrganizationEnterpriseIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DisableOrganizationEnterpriseIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DisableOrganizationEnterpriseIssuer(ctx, p)
+	}
+}
+
+// NewRotateOrganizationEnterpriseIssuerEndpoint returns an endpoint function
+// that calls the method "rotateOrganizationEnterpriseIssuer" of service
+// "jsonWebKeySets".
+func NewRotateOrganizationEnterpriseIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RotateOrganizationEnterpriseIssuerPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RotateOrganizationEnterpriseIssuer(ctx, p)
+	}
+}
+
+// NewReplaceOrganizationEnterpriseIssuerKeyEndpoint returns an endpoint
+// function that calls the method "replaceOrganizationEnterpriseIssuerKey" of
+// service "jsonWebKeySets".
+func NewReplaceOrganizationEnterpriseIssuerKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReplaceOrganizationEnterpriseIssuerKeyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ReplaceOrganizationEnterpriseIssuerKey(ctx, p)
+	}
 }
 
 // NewCreateSetEndpoint returns an endpoint function that calls the method

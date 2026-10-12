@@ -17,6 +17,16 @@
 SELECT
   sqlc.embed(ek),
   gcp.resource_name,
+  EXISTS (
+    SELECT 1 FROM json_web_key_sets AS ema
+    WHERE ema.organization_id = ek.organization_id
+      AND ema.managed_ema_issuer IS TRUE
+      AND (ema.external_key_id = ek.id OR EXISTS (
+        SELECT 1 FROM json_web_keys AS emak
+        WHERE emak.organization_id = ema.organization_id
+          AND emak.json_web_key_set_id = ema.id
+          AND emak.external_key_id = ek.id))
+  ) AS ema_issuer_managed,
   ec.id AS credential_id,
   gic.impersonate_service_account,
   gic.wif_pool_id,
@@ -29,7 +39,16 @@ LEFT JOIN external_credentials AS ec
        ON ec.id = ek.external_credential_id
       AND (
         ec.organization_id = ek.organization_id
-        OR (ek.identity_provider_connection_id IS NOT NULL AND ec.organization_id IS NULL)
+        OR (ec.organization_id IS NULL AND (ek.identity_provider_connection_id IS NOT NULL OR EXISTS (
+    SELECT 1 FROM json_web_key_sets AS ema
+    WHERE ema.organization_id = ek.organization_id
+      AND ema.managed_ema_issuer IS TRUE
+      AND (ema.external_key_id = ek.id OR EXISTS (
+        SELECT 1 FROM json_web_keys AS emak
+        WHERE emak.organization_id = ema.organization_id
+          AND emak.json_web_key_set_id = ema.id
+          AND emak.external_key_id = ek.id))
+  )))
       )
       AND ec.project_id IS NULL
       AND ec.provider = 'gcp_iam'
@@ -54,13 +73,23 @@ WHERE ek.id = @id
 -- set reference a project-scoped key would entangle project deletion with
 -- org-level state.
 -- name: LockExternalKeyForJwksWrite :one
-SELECT id, provider, algorithm, identity_provider_connection_id
-FROM external_keys
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND deleted IS FALSE
-FOR SHARE;
+SELECT ek.id, ek.provider, ek.algorithm, ek.identity_provider_connection_id,
+  EXISTS (
+    SELECT 1 FROM json_web_key_sets AS ema
+    WHERE ema.organization_id = ek.organization_id
+      AND ema.managed_ema_issuer IS TRUE
+      AND (ema.external_key_id = ek.id OR EXISTS (
+        SELECT 1 FROM json_web_keys AS emak
+        WHERE emak.organization_id = ema.organization_id
+          AND emak.json_web_key_set_id = ema.id
+          AND emak.external_key_id = ek.id))
+  ) AS ema_issuer_managed
+FROM external_keys AS ek
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id
+  AND ek.project_id IS NULL
+  AND ek.deleted IS FALSE
+FOR SHARE OF ek;
 
 -- name: CreateJsonWebKeySet :one
 INSERT INTO json_web_key_sets (organization_id, external_key_id, name, identity_provider_connection_id)
@@ -73,6 +102,7 @@ FROM json_web_key_sets
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE;
 
 -- Sets left behind by a tombstoned identity provider connection are hidden;
@@ -82,6 +112,7 @@ SELECT *
 FROM json_web_key_sets AS s
 WHERE s.organization_id = @organization_id
   AND s.project_id IS NULL
+  AND s.managed_ema_issuer IS NOT TRUE
   AND s.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1
@@ -100,6 +131,7 @@ SET name = @name,
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE
 RETURNING *;
 
@@ -117,6 +149,7 @@ FROM json_web_key_sets
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE
 FOR UPDATE;
 
@@ -126,6 +159,7 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
   AND project_id IS NULL
+  AND managed_ema_issuer IS NOT TRUE
   AND deleted IS FALSE
 RETURNING *;
 
@@ -308,3 +342,91 @@ FROM remote_session_clients
 WHERE organization_id = @organization_id::text
   AND json_web_key_set_id = @json_web_key_set_id::uuid
   AND deleted IS FALSE;
+
+-- One live issuer per organization; a disabled organization has none.
+-- name: GetOrganizationEMAIssuer :one
+SELECT s.*
+FROM json_web_key_sets AS s
+JOIN organization_metadata AS o ON o.id = s.organization_id AND o.disabled_at IS NULL
+WHERE s.organization_id = @organization_id
+  AND s.managed_ema_issuer IS TRUE
+  AND s.project_id IS NULL
+  AND s.deleted IS FALSE;
+
+-- Serializes issuer creation per organization.
+-- name: LockOrganizationForEMAIssuer :one
+SELECT id
+FROM organization_metadata
+WHERE id = @organization_id
+  AND disabled_at IS NULL
+FOR UPDATE;
+
+-- name: CreateOrganizationEMAIssuer :one
+INSERT INTO json_web_key_sets (organization_id, external_key_id, name, managed_ema_issuer)
+VALUES (@organization_id, @external_key_id, 'Enterprise authorization issuer', TRUE)
+RETURNING *;
+
+-- Serializes every key write on the issuer, like LockJsonWebKeySetForKeyWrite
+-- does for customer sets.
+-- name: LockOrganizationEMAIssuerForKeyWrite :one
+SELECT *
+FROM json_web_key_sets
+WHERE organization_id = @organization_id
+  AND managed_ema_issuer IS TRUE
+  AND project_id IS NULL
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: SetOrganizationEMAIssuerBackingKey :one
+UPDATE json_web_key_sets
+SET external_key_id = @external_key_id,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND managed_ema_issuer IS TRUE
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: SoftDeleteOrganizationEMAIssuer :one
+UPDATE json_web_key_sets
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND managed_ema_issuer IS TRUE
+  AND deleted IS FALSE
+RETURNING *;
+
+-- Public verification keys of the organization's live issuer. Pending keys
+-- are published before activation; a retired key stays published only for the
+-- overlap window, then drops out even before it is revoked. Ordered by
+-- immutable key id so the document and its ETag are stable.
+-- name: GetOrganizationEMAIssuerKeys :one
+SELECT COALESCE(jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL), '[]'::jsonb)::jsonb AS keys
+FROM json_web_key_sets AS s
+JOIN organization_metadata AS o ON o.id = s.organization_id AND o.disabled_at IS NULL
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.deleted IS FALSE
+ AND (k.state IN ('pending', 'active')
+   OR (k.state = 'retired' AND k.retired_at > clock_timestamp() - make_interval(secs => @retired_overlap_seconds::integer)))
+WHERE s.organization_id = @organization_id::text
+  AND s.managed_ema_issuer IS TRUE
+  AND s.project_id IS NULL
+  AND s.deleted IS FALSE
+GROUP BY s.id;
+
+-- Retired issuer keys stop being published once nothing they signed can still
+-- verify. Uses the database clock.
+-- name: RevokeExpiredEMAIssuerKeys :many
+UPDATE json_web_keys
+SET state = 'revoked',
+    revoked_at = clock_timestamp(),
+    deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND organization_id = @organization_id
+  AND state = 'retired'
+  AND deleted IS FALSE
+  AND retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer)
+RETURNING *;

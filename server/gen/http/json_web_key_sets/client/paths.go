@@ -7,6 +7,31 @@
 
 package client
 
+// GetOrganizationEnterpriseIssuerJSONWebKeySetsPath returns the URL path to the jsonWebKeySets service getOrganizationEnterpriseIssuer HTTP endpoint.
+func GetOrganizationEnterpriseIssuerJSONWebKeySetsPath() string {
+	return "/rpc/jsonWebKeySets.getOrganizationEnterpriseIssuer"
+}
+
+// EnableOrganizationEnterpriseIssuerJSONWebKeySetsPath returns the URL path to the jsonWebKeySets service enableOrganizationEnterpriseIssuer HTTP endpoint.
+func EnableOrganizationEnterpriseIssuerJSONWebKeySetsPath() string {
+	return "/rpc/jsonWebKeySets.enableOrganizationEnterpriseIssuer"
+}
+
+// DisableOrganizationEnterpriseIssuerJSONWebKeySetsPath returns the URL path to the jsonWebKeySets service disableOrganizationEnterpriseIssuer HTTP endpoint.
+func DisableOrganizationEnterpriseIssuerJSONWebKeySetsPath() string {
+	return "/rpc/jsonWebKeySets.disableOrganizationEnterpriseIssuer"
+}
+
+// RotateOrganizationEnterpriseIssuerJSONWebKeySetsPath returns the URL path to the jsonWebKeySets service rotateOrganizationEnterpriseIssuer HTTP endpoint.
+func RotateOrganizationEnterpriseIssuerJSONWebKeySetsPath() string {
+	return "/rpc/jsonWebKeySets.rotateOrganizationEnterpriseIssuer"
+}
+
+// ReplaceOrganizationEnterpriseIssuerKeyJSONWebKeySetsPath returns the URL path to the jsonWebKeySets service replaceOrganizationEnterpriseIssuerKey HTTP endpoint.
+func ReplaceOrganizationEnterpriseIssuerKeyJSONWebKeySetsPath() string {
+	return "/rpc/jsonWebKeySets.replaceOrganizationEnterpriseIssuerKey"
+}
+
 // CreateSetJSONWebKeySetsPath returns the URL path to the jsonWebKeySets service createSet HTTP endpoint.
 func CreateSetJSONWebKeySetsPath() string {
 	return "/rpc/jsonWebKeySets.create"

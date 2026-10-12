@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/emaissuer"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -52,6 +54,10 @@ type Service struct {
 	kmsClients      gcpkms.SigningClientFactory
 	productFeatures *productfeatures.Client
 	mintLimiter     *ratelimit.Limiter
+	// Enterprise authorization issuer; unset where the deployment can't provision.
+	issuerManager EnterpriseIssuerManager
+	issuerSigner  *emaissuer.Signer
+	issuerOrigin  *url.URL
 }
 
 var (
@@ -87,6 +93,9 @@ func NewService(
 		mintLimiter: ratelimit.New(mintStore, "jwks-mint",
 			ratelimit.PerMinute(mintRatePerMin).WithBurst(mintRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
+		issuerManager: nil,
+		issuerSigner:  nil,
+		issuerOrigin:  nil,
 	}
 }
 
@@ -546,6 +555,10 @@ func (s *Service) lockBackingKey(ctx context.Context, logger *slog.Logger, q *re
 
 	if key.Provider != externalKeyProviderGcpKms {
 		return oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
+	}
+
+	if key.EmaIssuerManaged {
+		return oops.E(oops.CodeForbidden, nil, "enterprise authorization issuer keys are managed by Speakeasy")
 	}
 
 	if err := managedrows.RequireUnmanaged(key.IdentityProviderConnectionID, "this external key"); err != nil {

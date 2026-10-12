@@ -31,6 +31,25 @@ func (q *Queries) BackdatePendingRotationPublication(ctx context.Context, arg Ba
 	return err
 }
 
+const backdateRetiredJsonWebKeys = `-- name: BackdateRetiredJsonWebKeys :exec
+UPDATE json_web_keys
+SET retired_at = clock_timestamp() - make_interval(secs => $1::integer)
+WHERE json_web_key_set_id = $2
+  AND organization_id = $3 AND state = 'retired' AND deleted IS FALSE
+`
+
+type BackdateRetiredJsonWebKeysParams struct {
+	AgeSeconds      int32
+	JsonWebKeySetID uuid.UUID
+	OrganizationID  string
+}
+
+// Test fixture: age retired keys relative to the database clock.
+func (q *Queries) BackdateRetiredJsonWebKeys(ctx context.Context, arg BackdateRetiredJsonWebKeysParams) error {
+	_, err := q.db.Exec(ctx, backdateRetiredJsonWebKeys, arg.AgeSeconds, arg.JsonWebKeySetID, arg.OrganizationID)
+	return err
+}
+
 const clearManagedClientSecret = `-- name: ClearManagedClientSecret :one
 UPDATE remote_session_clients
 SET client_secret_encrypted = NULL,
@@ -460,6 +479,34 @@ func (q *Queries) GetManagedClient(ctx context.Context, arg GetManagedClientPara
 		&i.Kid,
 		&i.ActivatedAt,
 	)
+	return i, err
+}
+
+const getManagedKeyResource = `-- name: GetManagedKeyResource :one
+SELECT gcp.resource_name, ek.external_credential_id
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+WHERE ek.id = $1
+  AND ek.organization_id = $2
+  AND ek.deleted IS FALSE
+`
+
+type GetManagedKeyResourceParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+type GetManagedKeyResourceRow struct {
+	ResourceName         string
+	ExternalCredentialID uuid.UUID
+}
+
+// KMS resource behind any managed key, including enterprise issuer keys that
+// customer key APIs never see. Used only to disable revoked key versions.
+func (q *Queries) GetManagedKeyResource(ctx context.Context, arg GetManagedKeyResourceParams) (GetManagedKeyResourceRow, error) {
+	row := q.db.QueryRow(ctx, getManagedKeyResource, arg.ID, arg.OrganizationID)
+	var i GetManagedKeyResourceRow
+	err := row.Scan(&i.ResourceName, &i.ExternalCredentialID)
 	return i, err
 }
 

@@ -135,6 +135,13 @@ SET updated_at = clock_timestamp() - make_interval(secs => @age_seconds::integer
 WHERE json_web_key_set_id = @json_web_key_set_id
   AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
 
+-- Test fixture: age retired keys relative to the database clock.
+-- name: BackdateRetiredJsonWebKeys :exec
+UPDATE json_web_keys
+SET retired_at = clock_timestamp() - make_interval(secs => @age_seconds::integer)
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND organization_id = @organization_id AND state = 'retired' AND deleted IS FALSE;
+
 -- Connection management API. Every query below is organization-qualified.
 
 -- The live parent with its Okta details if any; a parent without them is a
@@ -517,3 +524,13 @@ WHERE u.organization_id = @organization_id
   AND u.deleted IS FALSE
   AND c.identity_provider_connection_id IS NULL
 ORDER BY u.slug, u.id;
+
+-- KMS resource behind any managed key, including enterprise issuer keys that
+-- customer key APIs never see. Used only to disable revoked key versions.
+-- name: GetManagedKeyResource :one
+SELECT gcp.resource_name, ek.external_credential_id
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id
+  AND ek.deleted IS FALSE;

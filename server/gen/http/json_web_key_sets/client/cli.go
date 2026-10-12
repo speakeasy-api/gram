@@ -16,6 +16,102 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildGetOrganizationEnterpriseIssuerPayload builds the payload for the
+// jsonWebKeySets getOrganizationEnterpriseIssuer endpoint from CLI flags.
+func BuildGetOrganizationEnterpriseIssuerPayload(jsonWebKeySetsGetOrganizationEnterpriseIssuerSessionToken string) (*jsonwebkeysets.GetOrganizationEnterpriseIssuerPayload, error) {
+	var sessionToken *string
+	{
+		if jsonWebKeySetsGetOrganizationEnterpriseIssuerSessionToken != "" {
+			sessionToken = &jsonWebKeySetsGetOrganizationEnterpriseIssuerSessionToken
+		}
+	}
+	v := &jsonwebkeysets.GetOrganizationEnterpriseIssuerPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildEnableOrganizationEnterpriseIssuerPayload builds the payload for the
+// jsonWebKeySets enableOrganizationEnterpriseIssuer endpoint from CLI flags.
+func BuildEnableOrganizationEnterpriseIssuerPayload(jsonWebKeySetsEnableOrganizationEnterpriseIssuerSessionToken string) (*jsonwebkeysets.EnableOrganizationEnterpriseIssuerPayload, error) {
+	var sessionToken *string
+	{
+		if jsonWebKeySetsEnableOrganizationEnterpriseIssuerSessionToken != "" {
+			sessionToken = &jsonWebKeySetsEnableOrganizationEnterpriseIssuerSessionToken
+		}
+	}
+	v := &jsonwebkeysets.EnableOrganizationEnterpriseIssuerPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildDisableOrganizationEnterpriseIssuerPayload builds the payload for the
+// jsonWebKeySets disableOrganizationEnterpriseIssuer endpoint from CLI flags.
+func BuildDisableOrganizationEnterpriseIssuerPayload(jsonWebKeySetsDisableOrganizationEnterpriseIssuerSessionToken string) (*jsonwebkeysets.DisableOrganizationEnterpriseIssuerPayload, error) {
+	var sessionToken *string
+	{
+		if jsonWebKeySetsDisableOrganizationEnterpriseIssuerSessionToken != "" {
+			sessionToken = &jsonWebKeySetsDisableOrganizationEnterpriseIssuerSessionToken
+		}
+	}
+	v := &jsonwebkeysets.DisableOrganizationEnterpriseIssuerPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRotateOrganizationEnterpriseIssuerPayload builds the payload for the
+// jsonWebKeySets rotateOrganizationEnterpriseIssuer endpoint from CLI flags.
+func BuildRotateOrganizationEnterpriseIssuerPayload(jsonWebKeySetsRotateOrganizationEnterpriseIssuerBody string, jsonWebKeySetsRotateOrganizationEnterpriseIssuerSessionToken string) (*jsonwebkeysets.RotateOrganizationEnterpriseIssuerPayload, error) {
+	var err error
+	var body RotateOrganizationEnterpriseIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(jsonWebKeySetsRotateOrganizationEnterpriseIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"active_kid\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if jsonWebKeySetsRotateOrganizationEnterpriseIssuerSessionToken != "" {
+			sessionToken = &jsonWebKeySetsRotateOrganizationEnterpriseIssuerSessionToken
+		}
+	}
+	v := &jsonwebkeysets.RotateOrganizationEnterpriseIssuerPayload{
+		ActiveKid: body.ActiveKid,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildReplaceOrganizationEnterpriseIssuerKeyPayload builds the payload for
+// the jsonWebKeySets replaceOrganizationEnterpriseIssuerKey endpoint from CLI
+// flags.
+func BuildReplaceOrganizationEnterpriseIssuerKeyPayload(jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyBody string, jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeySessionToken string) (*jsonwebkeysets.ReplaceOrganizationEnterpriseIssuerKeyPayload, error) {
+	var err error
+	var body ReplaceOrganizationEnterpriseIssuerKeyRequestBody
+	{
+		err = json.Unmarshal([]byte(jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"kid\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeySessionToken != "" {
+			sessionToken = &jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKeySessionToken
+		}
+	}
+	v := &jsonwebkeysets.ReplaceOrganizationEnterpriseIssuerKeyPayload{
+		Kid: body.Kid,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateSetPayload builds the payload for the jsonWebKeySets createSet
 // endpoint from CLI flags.
 func BuildCreateSetPayload(jsonWebKeySetsCreateSetBody string, jsonWebKeySetsCreateSetSessionToken string) (*jsonwebkeysets.CreateSetPayload, error) {
