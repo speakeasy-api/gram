@@ -88,6 +88,7 @@ import {
   PolicyStartChooser,
 } from "./PolicyStart";
 import {
+  clearPolicyStartSession,
   invalidEmailDomains,
   draftMCPScopeValue,
   type PolicyDraft,
@@ -763,6 +764,7 @@ function PromptPolicyEditor({
   draft?: PolicyDraft | null;
 }): JSX.Element {
   const routes = useRoutes();
+  const gramProject = useProjectSlugForRequests();
   const queryClient = useQueryClient();
   const isCreate = policy === null;
 
@@ -853,6 +855,7 @@ function PromptPolicyEditor({
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
+      clearPolicyStartSession(gramProject);
       void invalidateAllRiskListPolicies(queryClient);
       routes.policyCenter.goTo();
     },
@@ -3651,6 +3654,7 @@ export function StandardPolicyEditor({
   draft?: PolicyDraft | null;
 }): JSX.Element {
   const routes = useRoutes();
+  const gramProject = useProjectSlugForRequests();
   const project = useProject();
   const queryClient = useQueryClient();
   const { customRules } = useDetectionRulesStore();
@@ -3972,6 +3976,7 @@ export function StandardPolicyEditor({
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
+      clearPolicyStartSession(gramProject);
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
       void invalidateShadowMCPPolicyInventory(queryClient, project.id);

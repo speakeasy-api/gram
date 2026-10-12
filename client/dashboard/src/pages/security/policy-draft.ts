@@ -291,6 +291,47 @@ export function readPolicyStartRestore(
   };
 }
 
+const POLICY_START_STORAGE_PREFIX = "speakeasy:policy-start:";
+
+/** The intent screen's description and draft review for a project, kept for
+ * the browser session so leaving the page does not lose them. */
+export function loadPolicyStartSession(
+  projectSlug: string,
+): PolicyStartRestore | null {
+  try {
+    const raw = window.sessionStorage.getItem(
+      POLICY_START_STORAGE_PREFIX + projectSlug,
+    );
+    return raw ? readPolicyStartRestore({ restore: JSON.parse(raw) }) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function savePolicyStartSession(
+  projectSlug: string,
+  restore: PolicyStartRestore,
+): void {
+  try {
+    const key = POLICY_START_STORAGE_PREFIX + projectSlug;
+    if (!restore.description.trim() && !restore.review) {
+      window.sessionStorage.removeItem(key);
+      return;
+    }
+    window.sessionStorage.setItem(key, JSON.stringify(restore));
+  } catch {
+    // Storage can be unavailable; the screen then starts empty next time.
+  }
+}
+
+export function clearPolicyStartSession(projectSlug: string): void {
+  try {
+    window.sessionStorage.removeItem(POLICY_START_STORAGE_PREFIX + projectSlug);
+  } catch {
+    // Nothing to clear when storage is unavailable.
+  }
+}
+
 export function actionBadgeVariant(
   action: string,
 ): "neutral" | "warning" | "destructive" {

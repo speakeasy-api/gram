@@ -20,7 +20,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRiskPresets } from "@gram/client/react-query/riskPresets.js";
 import { useRiskSuggestPolicyMutation } from "@gram/client/react-query/riskSuggestPolicy.js";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useQueryState } from "nuqs";
@@ -30,9 +30,11 @@ import {
   draftFromPreset,
   draftFromSuggestion,
   draftKind,
+  loadPolicyStartSession,
   matchMCPServers,
   readPolicyStartRestore,
   restoreFromDraft,
+  savePolicyStartSession,
   sessionOnlyReason,
   type PolicyDraft,
 } from "./policy-draft";
@@ -157,16 +159,25 @@ export function PolicyStartChooser(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const telemetry = useTelemetry();
+  const gramProject = useProjectSlugForRequests();
   const mode = useDetectorMode();
   const promptPoliciesEnabled =
     telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
   const [, setKind] = useQueryState("kind");
-  const gramProject = useProjectSlugForRequests();
-  const [restore] = useState(() => readPolicyStartRestore(location.state));
+  // "Change starting point" hands the state over in the route; otherwise
+  // pick up a description left behind earlier in this browser session.
+  const [restore] = useState(
+    () =>
+      readPolicyStartRestore(location.state) ??
+      loadPolicyStartSession(gramProject),
+  );
   const [description, setDescription] = useState(restore?.description ?? "");
   const [review, setReview] = useState<ReviewState | null>(
     restore?.review ?? null,
   );
+  useEffect(() => {
+    savePolicyStartSession(gramProject, { description, review });
+  }, [gramProject, description, review]);
   const { data, isLoading, isError, refetch } = useRiskPresets();
   const allPresets = data?.presets ?? [];
   const presets = allPresets.filter(
@@ -226,8 +237,14 @@ export function PolicyStartChooser(): JSX.Element {
   };
 
   const suggest = useRiskSuggestPolicyMutation({
-    onSuccess: (suggestion) =>
-      setReview({ suggestion, overridePresetId: null }),
+    onSuccess: (suggestion) => {
+      setReview({ suggestion, overridePresetId: null });
+      toast.success(`Drafted "${suggestion.name}"`, {
+        description: suggestion.presetId
+          ? "Review it, then continue in the wizard."
+          : "No use case fits, so it's a prompt-based guardrail. Review it, then continue in the wizard.",
+      });
+    },
     onError: () =>
       toast.error(
         "Couldn't draft a policy from that description. Try again, or start from a use case.",

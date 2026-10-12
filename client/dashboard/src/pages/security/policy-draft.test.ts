@@ -1,5 +1,5 @@
 import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   draftFromPreset,
   draftFromSuggestion,
@@ -8,10 +8,13 @@ import {
   matchMCPServers,
   readPolicyDraft,
   sessionOnlyReason,
+  clearPolicyStartSession,
   invalidEmailDomains,
+  loadPolicyStartSession,
   readPolicyStartRestore,
   readSuggestion,
   restoreFromDraft,
+  savePolicyStartSession,
 } from "./policy-draft";
 
 const secretsPreset = {
@@ -222,5 +225,31 @@ describe("invalidEmailDomains", () => {
     expect(
       invalidEmailDomains(["acme.com", "corp.acme.co.uk", "acme..com", "acme"]),
     ).toEqual(["acme..com", "acme"]);
+  });
+});
+
+describe("policy start session", () => {
+  beforeEach(() => window.sessionStorage.clear());
+
+  it("keeps a description and its review per project", () => {
+    const restore = {
+      description: "never promise refunds",
+      review: { suggestion: refundSuggestion, overridePresetId: null },
+    };
+    savePolicyStartSession("default", restore);
+    expect(loadPolicyStartSession("default")).toEqual(restore);
+    expect(loadPolicyStartSession("other")).toBeNull();
+  });
+
+  it("drops the entry once there is nothing to restore", () => {
+    savePolicyStartSession("default", { description: "draft", review: null });
+    savePolicyStartSession("default", { description: "  ", review: null });
+    expect(loadPolicyStartSession("default")).toBeNull();
+  });
+
+  it("clears after a policy is created", () => {
+    savePolicyStartSession("default", { description: "draft", review: null });
+    clearPolicyStartSession("default");
+    expect(loadPolicyStartSession("default")).toBeNull();
   });
 });
