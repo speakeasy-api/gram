@@ -830,10 +830,6 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		}
 	}
 
-	if err := AddInternalSessionIssuerKeySweepSchedule(ctx, env); err != nil {
-		logger.ErrorContext(ctx, "failed to add internal session issuer key sweep schedule", attr.SlogError(err))
-	}
-
 	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
 	}
@@ -862,6 +858,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if env.Queue() != sharedTaskQueue {
 		logger.InfoContext(ctx, "skipping fleet-wide schedules on non-shared task queue")
 		return
+	}
+
+	// The sweep disables KMS versions. Preview databases clone dev's keys,
+	// so only the shared queue may run it.
+	if err := AddInternalSessionIssuerKeySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add internal session issuer key sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {

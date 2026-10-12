@@ -25,7 +25,7 @@ const (
 	internalSessionIssuerKeySweepWorkflowID   = "v1:internal-session-issuer-key-sweep" //nolint:gosec // A workflow ID, not a credential.
 	internalSessionIssuerKeySweepInterval     = time.Hour
 	internalSessionIssuerKeySweepCatchup      = internalSessionIssuerKeySweepInterval - time.Second
-	internalSessionIssuerKeySweepRunTimeout   = 30 * time.Minute
+	internalSessionIssuerKeySweepRunTimeout   = 35 * time.Minute
 	InternalSessionIssuerKeySweepActivityName = "SweepInternalSessionIssuerKeys"
 )
 
@@ -109,6 +109,9 @@ func AddInternalSessionIssuerKeySweepSchedule(ctx context.Context, temporalEnv *
 	if err := scheduleClient.GetHandle(ctx, options.ID).Update(ctx, client.ScheduleUpdateOptions{
 		DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			schedule := input.Description.Schedule
+			if existing, ok := schedule.Action.(*client.ScheduleWorkflowAction); ok && existing.TaskQueue != string(temporalEnv.Queue()) {
+				return nil, fmt.Errorf("schedule %s targets task queue %q, not %q", options.ID, existing.TaskQueue, temporalEnv.Queue())
+			}
 			schedule.Spec = &options.Spec
 			schedule.Action = options.Action
 			setScheduleCatchup(&schedule, internalSessionIssuerKeySweepCatchup)
