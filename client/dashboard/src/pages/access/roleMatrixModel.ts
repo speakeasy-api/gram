@@ -27,7 +27,7 @@ export type Level = "use" | "view" | "manage";
 export const LEVELS: readonly Level[] = ["use", "view", "manage"];
 
 export const LEVEL_LABEL: Record<Level, string> = {
-  use: "Use",
+  use: "Connect",
   view: "View",
   manage: "Manage",
 };

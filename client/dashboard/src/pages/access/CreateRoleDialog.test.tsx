@@ -298,7 +298,7 @@ describe("the access grid", () => {
     // Manage includes the levels below it, which the role does not store.
     expect(
       screen
-        .getByRole("button", { name: "Use GitHub" })
+        .getByRole("button", { name: "Connect GitHub" })
         .getAttribute("aria-pressed"),
     ).toBe("false");
     expect(savedForm().addGrants).toEqual([
@@ -320,7 +320,7 @@ describe("the access grid", () => {
       ],
     });
     expect(
-      screen.getByRole("button", { name: "Use Linear, blocked" }),
+      screen.getByRole("button", { name: "Connect Linear, blocked" }),
     ).toBeTruthy();
     expect(
       screen
@@ -369,7 +369,7 @@ describe("the access grid", () => {
         },
       ],
     });
-    const use = screen.getByRole("button", { name: "Use GitHub" });
+    const use = screen.getByRole("button", { name: "Connect GitHub" });
     expect(use.getAttribute("aria-pressed")).toBe("false");
     expect(use.getAttribute("aria-disabled")).toBe("true");
     expect(

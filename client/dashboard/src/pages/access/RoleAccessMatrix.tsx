@@ -661,7 +661,7 @@ function McpMatrix({
       <MatrixTable
         title="MCP servers"
         columns={[
-          { label: "Use", hint: "Connect and call tools" },
+          { label: "Connect", hint: "Connect and call tools" },
           { label: "View", hint: "Also see the server's configuration" },
           { label: "Manage", hint: "Also change the server" },
           {
@@ -979,7 +979,7 @@ function PlatformMatrix({
   return (
     <section className="flex flex-col gap-3">
       <MatrixTable
-        title="Platform"
+        title="Platform feature"
         columns={[
           { label: "View", hint: "See it" },
           { label: "Manage", hint: "Also create, change and delete it" },
