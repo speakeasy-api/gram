@@ -1349,10 +1349,11 @@ func portalIntentLabel(intent workos.PortalIntent) string {
 // admin can act on.
 //
 // The messages describe the admin's setup and their next step, never our
-// dependency on WorkOS: that it was WorkOS rather than Gram that refused, and
-// whether it refused on credentials or on a missing record, is a distinction
-// only we can act on, and naming it hands the reader a dead end. WorkOS is
-// named in this flow only where the admin's next action is in the WorkOS tab.
+// dependency on WorkOS: that it was WorkOS rather than Speakeasy that refused,
+// and whether it refused on credentials or on a missing record, is a
+// distinction only we can act on, and naming it hands the reader a dead end.
+// WorkOS is named in this flow only where the admin's next action is in the
+// WorkOS tab.
 // The failing status still decides which branch runs — it is what separates
 // "wait and retry" from "verify a domain" from "we have to fix this" — and the
 // cause, which carries WorkOS's response body, goes to the log and the span.
