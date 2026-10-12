@@ -3061,6 +3061,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
 ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
 WHERE deleted IS FALSE;
 
+-- One row per WorkOS session established by a Speakeasy sign-in, from the
+-- dashboard login or an MCP authorization. MCP grants (user_sessions) record
+-- the sign-in that created them, so revoking a sign-in revokes its grants.
+CREATE TABLE IF NOT EXISTS sso_sign_ins (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  workos_session_id TEXT NOT NULL,
+  -- WorkOS authentication method, e.g. 'SSO'; validated in application code.
+  authentication_method TEXT NOT NULL,
+  authenticated_at timestamptz NOT NULL,
+  revoked_at timestamptz,
+  -- sign_out, sign_out_everywhere, admin or deprovisioned; validated in
+  -- application code.
+  revoke_reason TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT sso_sign_ins_pkey PRIMARY KEY (id),
+  CONSTRAINT sso_sign_ins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sso_sign_ins_organization_id_workos_session_id_key
+ON sso_sign_ins (organization_id, workos_session_id);
+
+CREATE INDEX IF NOT EXISTS sso_sign_ins_organization_id_user_id_idx
+ON sso_sign_ins (organization_id, user_id)
+WHERE revoked_at IS NULL;
+
 -- User Sessions are records representing active Gram sessions for a given Subject
 -- They contain token grant information to allow for validating and exchanging tokens
 CREATE TABLE IF NOT EXISTS user_sessions (
@@ -3098,6 +3126,10 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   -- servers, and a refreshed token must be issued for the same one. NULL for
   -- sessions of an 'endpoint' authorization server, which serves only one.
   resource TEXT,
+  -- The sign-in that created this grant. NULL for grants created before
+  -- sign-ins were recorded and for non-interactive grants; those never
+  -- qualify for Speakeasy-issued ID-JAGs.
+  sso_sign_in_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -3108,8 +3140,14 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   CONSTRAINT user_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
-  CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
+  CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL,
+  CONSTRAINT user_sessions_sso_sign_in_id_fkey FOREIGN KEY (sso_sign_in_id) REFERENCES sso_sign_ins (id) ON DELETE SET NULL
 );
+
+-- Revocation cascade: find the live grants created by a sign-in.
+CREATE INDEX IF NOT EXISTS user_sessions_sso_sign_in_id_idx
+ON user_sessions (sso_sign_in_id)
+WHERE sso_sign_in_id IS NOT NULL AND deleted IS FALSE;
 
 CREATE INDEX IF NOT EXISTS user_sessions_organization_id_idx
 ON user_sessions (organization_id);
