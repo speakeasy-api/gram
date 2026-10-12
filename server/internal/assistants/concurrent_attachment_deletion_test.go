@@ -85,9 +85,9 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				// Use the production resolvers and writers in an explicit transaction
 				// so deletion can start after validation but before the attachment exists.
 				tx := testenv.BeginTx(t, ctx, conn)
-				resolved, err := svc.core.resolveToolsetRefsForWrite(ctx, tx, projectID, payload.Toolsets, payload.McpServers)
+				resolved, lockedToolsetIDs, err := svc.core.resolveToolsetRefsForWrite(ctx, tx, projectID, payload.Toolsets, payload.McpServers)
 				require.NoError(t, err)
-				resolvedServers, err := svc.core.resolveMcpServerRefsForWrite(ctx, tx, projectID, payload.McpServers, toolsetIDSet(resolved), hostedmcp.Actor{UserID: "user-test", Email: nil})
+				resolvedServers, err := svc.core.resolveMcpServerRefsForWrite(ctx, tx, projectID, payload.McpServers, toolsetIDSet(resolved), lockedToolsetIDs, hostedmcp.Actor{UserID: "user-test", Email: nil})
 				require.NoError(t, err)
 
 				// Mirror the deletion services' target-lock/delete/detach sequence.
