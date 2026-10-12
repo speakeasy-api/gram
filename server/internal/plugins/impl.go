@@ -883,6 +883,10 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		if exists {
 			return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
 		}
+		backend.toolsetID, backend.mcpServerID, err = hostedEntryKey(ctx, s.repo.WithTx(tx), *ac.ProjectID, backend.toolsetID, backend.mcpServerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve plugin server key").LogError(ctx, s.logger)
+		}
 	}
 
 	var row repo.PluginServer

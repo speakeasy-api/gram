@@ -8,9 +8,9 @@ import {
 
 /**
  * Single dimension: which underlying MCP servers a plugin includes. Keyed by
- * backend resource (`toolset:<id>` / `mcpServer:<id>`) rather than the
- * plugin_server row id, since the same server can be attached to multiple
- * plugins under different row ids.
+ * backend resource (`mcpServer:<id>`) rather than the plugin_server row id,
+ * since the same server can be attached to multiple plugins under different
+ * row ids.
  */
 export const PLUGINS_FILTERS = defineFilters([
   {
@@ -21,10 +21,9 @@ export const PLUGINS_FILTERS = defineFilters([
   },
 ]);
 
+// A hosted entry keyed by its toolset and one keyed by its canonical server share an id.
 function serverKey(server: PluginServer): string {
-  return server.toolsetId
-    ? `toolset:${server.toolsetId}`
-    : `mcpServer:${server.mcpServerId}`;
+  return `mcpServer:${server.toolsetId ?? server.mcpServerId}`;
 }
 
 /** Distinct servers across all plugins, for the "Including servers" options list. */

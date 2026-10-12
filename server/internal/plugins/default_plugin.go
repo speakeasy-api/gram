@@ -316,10 +316,15 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		return nil, err
 	}
 
+	toolsetID, mcpServerID, err := hostedEntryKey(ctx, q, plugin.ProjectID, params.ToolsetID, params.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+
 	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    plugin.ID,
-		ToolsetID:   params.ToolsetID,
-		McpServerID: params.McpServerID,
+		ToolsetID:   toolsetID,
+		McpServerID: mcpServerID,
 		DisplayName: displayName,
 		Policy:      "required",
 		SortOrder:   0,
@@ -407,6 +412,21 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 	return s[len(s)-4:]
 }
 
+// hostedEntryKey stores a toolset that has a canonical wrapper under the wrapper, which shares its id.
+func hostedEntryKey(ctx context.Context, q *repo.Queries, projectID uuid.UUID, toolsetID, mcpServerID uuid.NullUUID) (uuid.NullUUID, uuid.NullUUID, error) {
+	if !toolsetID.Valid {
+		return toolsetID, mcpServerID, nil
+	}
+	wrapped, err := q.HasCanonicalWrapper(ctx, repo.HasCanonicalWrapperParams{ToolsetID: toolsetID.UUID, ProjectID: projectID})
+	if err != nil {
+		return uuid.NullUUID{}, uuid.NullUUID{}, fmt.Errorf("check canonical wrapper: %w", err)
+	}
+	if !wrapped {
+		return toolsetID, mcpServerID, nil
+	}
+	return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolsetID, nil
+}
+
 // AttachToDefaultAndRolePluginsAudited attaches a newly eligible server to the
 // Default plugin and matching role-audience plugins in the caller's transaction.
 // Callers enqueue publication only after commit; the returned bool reports
@@ -490,16 +510,16 @@ func AttachToDefaultPluginAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, a
 		}
 	}
 
-	// Exactly one of the URNs is set, mirroring params' toolset_id XOR
+	// Exactly one of the URNs is set, mirroring the stored row's toolset_id XOR
 	// mcp_server_id contract.
 	var toolsetURN *urn.Toolset
 	var mcpServerURN *urn.McpServer
-	if params.ToolsetID.Valid {
-		u := urn.NewToolset(params.ToolsetID.UUID)
+	if attached.Server.ToolsetID.Valid {
+		u := urn.NewToolset(attached.Server.ToolsetID.UUID)
 		toolsetURN = &u
 	}
-	if params.McpServerID.Valid {
-		u := urn.NewMcpServer(params.McpServerID.UUID)
+	if attached.Server.McpServerID.Valid {
+		u := urn.NewMcpServer(attached.Server.McpServerID.UUID)
 		mcpServerURN = &u
 	}
 

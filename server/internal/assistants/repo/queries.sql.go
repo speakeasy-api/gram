@@ -2034,6 +2034,45 @@ func (q *Queries) ListAttachmentTargetIDs(ctx context.Context, arg ListAttachmen
 	return items, nil
 }
 
+const listCanonicalWrapperIDs = `-- name: ListCanonicalWrapperIDs :many
+SELECT ms.id
+FROM mcp_servers ms
+JOIN toolsets t ON t.id = ms.id AND t.project_id = ms.project_id
+WHERE ms.project_id = $1
+  AND ms.id = ANY($2::UUID[])
+  AND ms.toolset_id = ms.id
+  AND ms.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND t.mcp_slug IS NOT NULL
+  AND t.deleted IS FALSE
+`
+
+type ListCanonicalWrapperIDsParams struct {
+	ProjectID  uuid.UUID
+	ToolsetIds []uuid.UUID
+}
+
+// Dialable toolsets with a live canonical wrapper (same id): the attachments the dependent move re-keys.
+func (q *Queries) ListCanonicalWrapperIDs(ctx context.Context, arg ListCanonicalWrapperIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listCanonicalWrapperIDs, arg.ProjectID, arg.ToolsetIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatAttachmentAssets = `-- name: ListChatAttachmentAssets :many
 SELECT id, name, url, content_type, content_length
 FROM assets

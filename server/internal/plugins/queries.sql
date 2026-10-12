@@ -288,6 +288,14 @@ VALUES (
 )
 RETURNING *;
 
+-- name: HasCanonicalWrapper :one
+-- A hosted entry is stored under its enabled canonical wrapper (same id); a drifted, disabled one keeps the toolset key.
+SELECT EXISTS (
+  SELECT 1 FROM mcp_servers
+  WHERE id = @toolset_id AND toolset_id = @toolset_id AND project_id = @project_id
+    AND deleted IS FALSE AND visibility <> 'disabled'
+)::bool;
+
 -- name: AddGatewayPluginServer :one
 INSERT INTO plugin_servers (plugin_id, project_id, meta_mcp_server_id, display_name, policy, sort_order)
 SELECT p.id, p.project_id, @meta_mcp_server_id, @display_name, @policy, @sort_order

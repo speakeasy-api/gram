@@ -2,6 +2,7 @@ package toolsets_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestToolsetsService_CreateToolset_Success(t *testing.T) {
@@ -543,13 +545,20 @@ func TestToolsetsService_CreateToolset_AttachesToDefaultPlugin(t *testing.T) {
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 1)
-	require.Equal(t, uuid.MustParse(result.ID), servers[0].ToolsetID.UUID)
+	require.False(t, servers[0].ToolsetID.Valid, "stored under the canonical server")
+	require.Equal(t, uuid.MustParse(result.ID), servers[0].McpServerID.UUID)
 	require.Equal(t, "Attach Toolset", servers[0].DisplayName)
 	require.Equal(t, "required", servers[0].Policy)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionPluginServerAdd)
+	require.NoError(t, err)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(record.Metadata, &metadata))
+	require.Equal(t, urn.NewMcpServer(uuid.MustParse(result.ID)).String(), metadata["mcp_server_urn"], "the audit names the stored key")
+	require.NotContains(t, metadata, "toolset_urn")
 }
 
 func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testing.T) {

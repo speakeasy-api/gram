@@ -1,0 +1,6 @@
+---
+"server": patch
+"dashboard": patch
+---
+
+Hosted MCP plugin entries, install page metadata, and assistant attachments are now saved under the toolset's canonical MCP server instead of the toolset. Adding a hosted toolset to a plugin (directly, on toolset creation, or when MCP is turned back on) stores the entry under its MCP server. Saving install page metadata moves an existing toolset-keyed record onto the MCP server in place, keeping its id and environment configuration, and drops a duplicate MCP-server-keyed record beside it (the toolset-keyed record wins, as every reader already shows it). Saving an assistant moves its hosted attachments onto the MCP server, keeping their environments, so the assistant's runtime config is unchanged. Toolsets without a canonical MCP server keep the toolset key, and so do assistant attachments to a toolset with MCP off or no MCP slug. For a wrapped toolset, `addPluginServer` and `setMcpMetadata` responses now return the MCP server id in `mcp_server_id` (with `toolset_id` empty), and the `plugin:server_add` audit event names the MCP server instead of the toolset. The Plugins page's server filter lists a hosted server once whichever key its entries use.

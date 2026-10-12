@@ -978,6 +978,27 @@ func (q *Queries) GetRoleSetupBlockedPIDFixture(ctx context.Context, blocker int
 	return pid, err
 }
 
+const hasCanonicalWrapper = `-- name: HasCanonicalWrapper :one
+SELECT EXISTS (
+  SELECT 1 FROM mcp_servers
+  WHERE id = $1 AND toolset_id = $1 AND project_id = $2
+    AND deleted IS FALSE AND visibility <> 'disabled'
+)::bool
+`
+
+type HasCanonicalWrapperParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// A hosted entry is stored under its enabled canonical wrapper (same id); a drifted, disabled one keeps the toolset key.
+func (q *Queries) HasCanonicalWrapper(ctx context.Context, arg HasCanonicalWrapperParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasCanonicalWrapper, arg.ToolsetID, arg.ProjectID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const hasPluginGithubConnectionForProject = `-- name: HasPluginGithubConnectionForProject :one
 SELECT EXISTS (
   SELECT 1 FROM plugin_github_connections WHERE project_id = $1
