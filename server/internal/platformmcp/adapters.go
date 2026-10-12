@@ -383,6 +383,7 @@ type PostgresReader struct {
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 	widgets                   *WidgetService
+	dashboards                *DashboardsService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -418,6 +419,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		projectLifecycle:          nil,
 		analytics:                 nil,
 		widgets:                   nil,
+		dashboards:                nil,
 	}
 }
 
@@ -561,6 +563,15 @@ func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget O
 func (r *PostgresReader) WithAnalytics(service *AnalyticsService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.analytics = service
+	}
+	return r
+}
+
+// WithDashboards attaches the dashboard tools. A nil or incomplete service
+// leaves them listed with the same contract, answering unavailable.
+func (r *PostgresReader) WithDashboards(service *DashboardsService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.dashboards = service
 	}
 	return r
 }

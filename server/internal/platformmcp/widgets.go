@@ -3,14 +3,11 @@ package platformmcp
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
@@ -537,7 +534,7 @@ type confirmation struct {
 // preview signs a preview so its confirmation can only commit exactly what
 // was shown, at exactly the version that was read.
 func (s *WidgetService) preview(principal Principal, project ResolvedProject, out widgetWriteOutput, proposal widgetTokenProposal) (widgetWriteOutput, error) {
-	token, err := s.previewToken(strconv.FormatInt(s.now().Unix(), 10)+"-"+rand.Text(), principal, project, out.Operation, out.Version, proposal)
+	token, err := s.previewToken(previewNonce(s.now()), principal, project, out.Operation, out.Version, proposal)
 	if err != nil {
 		return widgetWriteOutput{}, err
 	}
@@ -564,7 +561,7 @@ func (s *WidgetService) previewToken(nonce string, principal Principal, project 
 	mac := hmac.New(sha256.New, s.key)
 	_, _ = mac.Write([]byte("platform-widget-authoring-v1\x00"))
 	_, _ = mac.Write(data)
-	return nonce + "." + hex.EncodeToString(mac.Sum(nil)), nil
+	return joinPreviewToken(nonce, mac.Sum(nil)), nil
 }
 
 // confirm checks a confirmation against its preview, authorizes it, and runs
@@ -581,20 +578,10 @@ func (s *WidgetService) confirm(ctx context.Context, principal Principal, projec
 	if confirmed.Token == "" {
 		return OperationReceipt{}, widgetInvalid("preview_token", "Preview the change with confirmed:false first and confirm with the preview_token it returns.")
 	}
-	nonce, _, _ := strings.Cut(confirmed.Token, ".")
-	token, err := s.previewToken(nonce, principal, project, operation, confirmed.Version, proposal)
-	if err != nil {
+	if err := verifyPreviewToken(confirmed.Token, s.now(), func(nonce string) (string, error) {
+		return s.previewToken(nonce, principal, project, operation, confirmed.Version, proposal)
+	}); err != nil {
 		return OperationReceipt{}, err
-	}
-	if !hmac.Equal([]byte(token), []byte(confirmed.Token)) {
-		return OperationReceipt{}, &widgetToolError{Code: "preview_mismatch", Field: "preview_token", Message: "The confirmation does not match its preview: the proposal, the version or the widget differs from what was previewed. Preview again and confirm what that preview shows.", Cause: nil}
-	}
-	// A preview lives no longer than a receipt, so the receipt that holds it to
-	// one key is never swept while the preview can still be confirmed.
-	issued, _, _ := strings.Cut(nonce, "-")
-	issuedAt, err := strconv.ParseInt(issued, 10, 64)
-	if err != nil || s.now().Sub(time.Unix(issuedAt, 0)) > receiptLifetime {
-		return OperationReceipt{}, &widgetToolError{Code: "preview_expired", Field: "preview_token", Message: "This preview has expired. Preview the change again and confirm what that preview shows.", Cause: nil}
 	}
 
 	mutate, err := authorize(ctx)
@@ -606,7 +593,7 @@ func (s *WidgetService) confirm(ctx context.Context, principal Principal, projec
 	// is the receipt's input hash. A preview commits under one key only: a
 	// create or duplicate could otherwise be confirmed again under a new key.
 	return executeSingleUseMutationReceipt(ctx, mutationReceiptExecution[widgetReceipt]{
-		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: string(operation), IdempotencyKey: key, InputHash: token, Label: "widget " + string(operation),
+		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: string(operation), IdempotencyKey: key, InputHash: confirmed.Token, Label: "widget " + string(operation),
 		Invalid: widgetInvalidCause,
 		Conflict: func(message string) error {
 			return &widgetToolError{Code: "conflict", Field: "idempotency_key", Message: message + " Use a new idempotency_key for a different request.", Cause: nil}
@@ -624,9 +611,7 @@ func (s *WidgetService) confirm(ctx context.Context, principal Principal, projec
 			return encoded, nil
 		},
 		Mutate: mutate,
-	}, func() error {
-		return &widgetToolError{Code: "preview_used", Field: "preview_token", Message: "This preview was already confirmed under another idempotency_key. Retry with that key to see its result, or preview again to make another change.", Cause: nil}
-	})
+	}, func() error { return errPreviewUsed })
 }
 
 func decodeWidgetReceipt(data []byte) (widgetReceipt, error) {
@@ -657,6 +642,12 @@ func (s *WidgetService) boundaryError(ctx context.Context, tool string, err erro
 		return &widgetToolError{Code: analyticsNotEnabledCode, Field: "", Message: "Widgets are not switched on for your organization yet. They arrive with Explore; ask your Speakeasy contact to turn it on.", Cause: err}
 	case errors.Is(err, ErrForbidden):
 		return &widgetToolError{Code: "permission_denied", Field: "", Message: "This needs read access to the project.", Cause: err}
+	case errors.Is(err, errPreviewMismatch):
+		return &widgetToolError{Code: "preview_mismatch", Field: "preview_token", Message: "The confirmation does not match its preview: the proposal, the version or the widget differs from what was previewed. Preview again and confirm what that preview shows.", Cause: err}
+	case errors.Is(err, errPreviewExpired):
+		return &widgetToolError{Code: previewExpiredCode, Field: "preview_token", Message: previewExpiredMessage, Cause: err}
+	case errors.Is(err, errPreviewUsed):
+		return &widgetToolError{Code: previewUsedCode, Field: "preview_token", Message: previewUsedMessage, Cause: err}
 	}
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shareable.Code {

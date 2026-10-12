@@ -49,15 +49,17 @@ func registerWidgetTools(reg *Registrar, service *WidgetService) {
 		Description: "Create a widget, or replace every field of an existing one when widget_id is given. The query is checked against the analytics catalog and the visualization against the query before anything is saved; an invalid widget is refused naming what is wrong. Build the query with describe_analytics_catalog, and try it with run_analytics_query first. " +
 			"An update reaches every dashboard the widget is on; the preview names them. " +
 			widgetWriteNote + widgetAccessNote,
-		// Replacing a widget overwrites the one every dashboard shows.
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
+		// Replacing a widget overwrites the one every dashboard shows; a create,
+		// confirmed again under a new key, makes another widget.
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: false, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}
 	duplicate := &mcp.Tool{
 		Name:  duplicateWidgetToolName,
 		Title: "Duplicate an Explore Widget",
 		Description: "Copy a widget into a new one the caller owns, named \"<name> (copy)\": the way to start from a teammate's widget and change the copy rather than the widget their dashboards show. A widget that no longer works cannot be duplicated until it is fixed. " +
 			widgetWriteNote + widgetAccessNote,
-		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
+		// Every confirmed key makes another copy.
+		Annotations: &mcp.ToolAnnotations{IdempotentHint: false, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}
 	remove := &mcp.Tool{
 		Name:  deleteWidgetToolName,
