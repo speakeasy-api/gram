@@ -33,7 +33,8 @@ import (
 // without knowing what asked for it.
 //
 // Login reads SourcePlatformAdmin and only that value: a prospect stays behind
-// the book-a-demo gate. No entitlement decision reads the column.
+// the book-a-demo gate. The source decides whether a trial can start. Feature
+// entitlement calculation does not read it.
 const (
 	// SourceSignup is a self-serve signup: someone named a company and Speakeasy
 	// created the organization around them.

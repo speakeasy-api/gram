@@ -387,14 +387,17 @@ func SetTrialRuntimeFeaturesTx(ctx context.Context, tx pgx.Tx, organizationID st
 }
 
 // SeedEnterpriseTrialBundleTx enables the enterprise trial entitlements in the
-// caller's transaction. Idempotent, so a replayed signup is safe. The feature
-// cache is left untouched: the organization is created in the same transaction,
-// so no reader can have cached a state for it yet.
+// caller's transaction. A soft-deleted row stays disabled, so an administrator
+// choice survives a later trial on an organization that already exists. A new
+// organization has no rows, so it still receives the bundle. Idempotent, so a
+// replayed signup is safe. The feature cache is left untouched. A brand-new
+// organization cannot have a cached state yet; an organization that already
+// exists can, and that cache expires on its own.
 func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	q := repo.New(tx)
 
 	for _, feature := range EnterpriseAccessBundle {
-		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+		if _, err := q.EnableFeatureIfNeverConfigured(ctx, repo.EnableFeatureIfNeverConfiguredParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),
 		}); err != nil {

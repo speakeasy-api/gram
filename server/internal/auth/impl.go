@@ -542,17 +542,24 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if orgMetadata.WorkosID.Valid {
 		workosOrgID = orgMetadata.WorkosID.String
 	}
-	orgMetadata, trialArmed, err := s.armSelfServeTrialForExistingOrganization(ctx, orgMetadata, userID, userInfo.Email, membershipRoleForOrg(login.MembershipRoles, workosOrgID))
-	if err != nil {
-		// The arming transaction rolls back, so the organization is unchanged.
-		// Login still completes: a seeding or trial write must not turn into a
-		// sign-in error for an account that already has an organization.
-		logger.ErrorContext(ctx, "self-serve trial was not armed; login continues",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(orgMetadata.ID),
-			attr.SlogUserID(userID),
-		)
-		trialArmed = false
+	// An impersonated session is a staff operator wearing the customer's
+	// identity. Starting a trial from it would bill the customer and record
+	// the customer as the actor.
+	var trialArmed bool
+	if idpUser.ImpersonatorEmail() == "" {
+		var armErr error
+		orgMetadata, trialArmed, armErr = s.armSelfServeTrialForExistingOrganization(ctx, orgMetadata, userID, userInfo.Email, membershipRoleForOrg(login.MembershipRoles, workosOrgID))
+		if armErr != nil {
+			// The arming transaction rolls back, so the organization is unchanged.
+			// Login still completes: a seeding or trial write must not turn into a
+			// sign-in error for an account that already has an organization.
+			logger.ErrorContext(ctx, "self-serve trial was not armed; login continues",
+				attr.SlogError(armErr),
+				attr.SlogOrganizationID(orgMetadata.ID),
+				attr.SlogUserID(userID),
+			)
+			trialArmed = false
+		}
 	}
 	if trialArmed {
 		if err := s.trialNotifier.TrialStarted(ctx, orgMetadata.ID); err != nil {

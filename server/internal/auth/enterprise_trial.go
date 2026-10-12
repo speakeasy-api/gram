@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -155,7 +156,14 @@ func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, 
 
 	updated, err := s.orgRepo.GetOrganizationMetadata(ctx, org.ID)
 	if err != nil {
-		return org, false, fmt.Errorf("reload organization after trial: %w", err)
+		// The trial is already committed. Returning an error here would make
+		// the caller skip the trial-started notification and claim the
+		// transaction rolled back.
+		s.logger.ErrorContext(ctx, "reload organization after self-serve trial",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(org.ID),
+		)
+		return org, true, nil
 	}
 	return updated, true, nil
 }

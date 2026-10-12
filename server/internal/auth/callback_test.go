@@ -761,6 +761,51 @@ func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {
 	require.Equal(t, "support@example.com", *info.ImpersonatorEmail)
 }
 
+func TestCallback_ImpersonatedLoginDoesNotArmSelfServeTrial(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "impersonated-admin@example.com"
+		organizationID = "org-impersonated-admin"
+		workosOrgID    = "org_01IMPERSONATED_ADMIN"
+	)
+	userInfo := &MockUserInfo{
+		UserID:        "user_01IMPERSONATED_ADMIN",
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, adminMembershipFetcher(userInfo.UserID, workosOrgID, "Gated Org"))
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 organizationID,
+		Name:               "Gated Org",
+		Slug:               organizationID,
+		WorkosID:           new(workosOrgID),
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+
+	ctx, stateParam := instance.stateWithNonce(ctx, t, "")
+	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+		Code:  "impersonation_code",
+		State: &stateParam,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	storedSession, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
+	require.NoError(t, err)
+	require.Equal(t, "support@example.com", storedSession.ImpersonatorEmail)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.False(t, org.Whitelisted, "staff impersonation must not start the customer's trial")
+
+	_, err = trialsRepo.New(instance.conn).GetTrial(ctx, organizationID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.Empty(t, instance.trialNotifier.trialStarted)
+}
+
 func TestIdentityResolverCapturesWorkOSImpersonatorEmail(t *testing.T) {
 	t.Parallel()
 
@@ -1047,6 +1092,23 @@ func TestCallback_SignupAfterWorkOSDeleteWhitelistsActiveOrg(t *testing.T) {
 	require.True(t, org.Whitelisted)
 }
 
+func adminMembershipFetcher(userID, workosOrgID, orgName string) *mockWorkOSFetcher {
+	return &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			userID: {{
+				ID:             "om_" + workosOrgID,
+				UserID:         userID,
+				OrganizationID: workosOrgID,
+				Organization:   orgName,
+				RoleSlugs:      []string{"admin"},
+			}},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+}
+
 func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 	t.Parallel()
 
@@ -1055,6 +1117,7 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 		oldWorkosID = "user_01STALE_LOGIN_DELETED"
 		newWorkosID = "user_01STALE_LOGIN"
 		staleOrgID  = "org-stale-login-unwhitelisted"
+		workosOrgID = "org_01STALE_LOGIN"
 	)
 	gramUserID := uuid.New().String()
 
@@ -1063,7 +1126,7 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 		Email:         email,
 		Organizations: nil,
 	}
-	ctx, instance := newTestAuthService(t, userInfo)
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, adminMembershipFetcher(newWorkosID, workosOrgID, "Stale Org"))
 	usersQueries := usersRepo.New(instance.conn)
 
 	_, err := usersQueries.UpsertUser(ctx, usersRepo.UpsertUserParams{
@@ -1082,7 +1145,7 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 		ID:                 staleOrgID,
 		Name:               "Stale Org",
 		Slug:               staleOrgID,
-		WorkosID:           nil,
+		WorkosID:           new(workosOrgID),
 		UserWorkspaceSlugs: nil,
 	}, gramUserID))
 	expiredAt := time.Now().UTC().Add(-time.Hour)
@@ -1173,26 +1236,27 @@ func TestCallback_LoginDoesNotArmTrialForProspect(t *testing.T) {
 	const (
 		email          = "prospect-login@example.com"
 		organizationID = "org-prospect-login"
+		workosOrgID    = "org_01PROSPECT_LOGIN"
 	)
 	userInfo := &MockUserInfo{
 		UserID:        "user_01PROSPECT_LOGIN",
 		Email:         email,
 		Organizations: nil,
 	}
-	ctx, instance := newTestAuthService(t, userInfo)
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, adminMembershipFetcher(userInfo.UserID, workosOrgID, "Prospect Org"))
 	require.NoError(t, instance.createTestUser(ctx, userInfo))
 	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
 		ID:                 organizationID,
 		Name:               "Prospect Org",
 		Slug:               organizationID,
-		WorkosID:           nil,
+		WorkosID:           new(workosOrgID),
 		UserWorkspaceSlugs: nil,
 	}, userInfo.UserID))
 	_, err := orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:             organizationID,
 		Name:           "Prospect Org",
 		Slug:           organizationID,
-		WorkosID:       pgtype.Text{},
+		WorkosID:       conv.ToPGText(workosOrgID),
 		Whitelisted:    pgtype.Bool{Bool: false, Valid: true},
 		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
 	})
@@ -1216,19 +1280,20 @@ func TestCallback_LoginDoesNotArmTrialForPaidOrganization(t *testing.T) {
 	const (
 		email          = "paid-gated@example.com"
 		organizationID = "org-paid-gated"
+		workosOrgID    = "org_01PAID_GATED"
 	)
 	userInfo := &MockUserInfo{
 		UserID:        "user_01PAID_GATED",
 		Email:         email,
 		Organizations: nil,
 	}
-	ctx, instance := newTestAuthService(t, userInfo)
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, adminMembershipFetcher(userInfo.UserID, workosOrgID, "Paid Org"))
 	require.NoError(t, instance.createTestUser(ctx, userInfo))
 	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
 		ID:                 organizationID,
 		Name:               "Paid Org",
 		Slug:               organizationID,
-		WorkosID:           nil,
+		WorkosID:           new(workosOrgID),
 		UserWorkspaceSlugs: nil,
 	}, userInfo.UserID))
 	require.NoError(t, orgRepo.New(instance.conn).SetAccountType(ctx, orgRepo.SetAccountTypeParams{
