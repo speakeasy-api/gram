@@ -185,6 +185,11 @@ const (
 	// AuthWorkOSSessionFingerprintKey is a short one-way digest of a WorkOS
 	// session id, enough to tell whether two flows shared a session.
 	AuthWorkOSSessionFingerprintKey = attribute.Key("gram.auth.workos_session_fingerprint")
+	// SSOSignInRecordOutcomeKey is how a WorkOS code exchange resolved to an
+	// SSO sign-in row.
+	SSOSignInRecordOutcomeKey = attribute.Key("gram.sso_sign_in.record_outcome")
+	// SSOSignInRevokeReasonKey is why SSO sign-ins were revoked.
+	SSOSignInRevokeReasonKey = attribute.Key("gram.sso_sign_in.revoke_reason")
 
 	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
@@ -1533,7 +1538,15 @@ func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(Auth
 func SlogAuthAuthenticationMethod(v string) slog.Attr {
 	return slog.String(string(AuthAuthenticationMethodKey), v)
 }
-func SlogAuthSignInFlow(v string) slog.Attr { return slog.String(string(AuthSignInFlowKey), v) }
+func SlogAuthSignInFlow(v string) slog.Attr      { return slog.String(string(AuthSignInFlowKey), v) }
+func AuthSignInFlow(v string) attribute.KeyValue { return AuthSignInFlowKey.String(v) }
+func SSOSignInRecordOutcome(v string) attribute.KeyValue {
+	return SSOSignInRecordOutcomeKey.String(v)
+}
+func SlogSSOSignInRecordOutcome(v string) slog.Attr {
+	return slog.String(string(SSOSignInRecordOutcomeKey), v)
+}
+func SSOSignInRevokeReason(v string) attribute.KeyValue { return SSOSignInRevokeReasonKey.String(v) }
 func SlogAuthWorkOSSessionFingerprint(v string) slog.Attr {
 	return slog.String(string(AuthWorkOSSessionFingerprintKey), v)
 }

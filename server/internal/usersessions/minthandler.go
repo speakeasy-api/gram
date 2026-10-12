@@ -171,8 +171,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 		ToolSelection:    nil,
 		// Dashboard sessions are issuer-scoped, never bound to one resource.
-		Resource:    pgtype.Text{String: "", Valid: false},
-		SsoSignInID: ssoSignInID,
+		Resource:        pgtype.Text{String: "", Valid: false},
+		SsoSignInID:     ssoSignInID,
+		SsoSignInUserID: conv.ToPGText(authCtx.UserID),
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
@@ -414,16 +415,18 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 	}, nil
 }
 
-// dashboardSSOSignIn is the live SSO sign-in behind the caller's dashboard
-// session in its active organization, or an invalid id when there is none.
-// Failures leave the minted session unlinked rather than failing the mint.
+// dashboardSSOSignIn is the caller's live SSO sign-in in its active organization; failures leave the mint unlinked.
 func (s *Service) dashboardSSOSignIn(ctx context.Context, authCtx *contextvalues.AuthContext) uuid.NullUUID {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" {
 		return none
 	}
 	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
-	if err != nil || session.UserID != authCtx.UserID {
+	if err != nil {
+		s.logger.WarnContext(ctx, "load dashboard session for sso sign-in link", attr.SlogError(err))
+		return none
+	}
+	if session.UserID != authCtx.UserID || session.ImpersonatorEmail != "" || session.SupportOrganizationID != "" {
 		return none
 	}
 	id, err := ssosignins.LiveSignInForSession(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.UserID, session.WorkOSSessionID)

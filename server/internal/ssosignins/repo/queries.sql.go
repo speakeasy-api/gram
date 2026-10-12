@@ -53,6 +53,7 @@ SELECT
     s.id AS user_session_id,
     s.subject_urn,
     s.sso_sign_in_id,
+    (s.refresh_expires_at IS NOT NULL AND s.refresh_expires_at > clock_timestamp())::boolean AS session_live,
     si.id AS sign_in_id,
     si.user_id AS sign_in_user_id,
     si.authentication_method,
@@ -92,6 +93,7 @@ LEFT JOIN sso_sign_ins AS si
 LEFT JOIN users AS u
     ON u.id = si.user_id
    AND u.deleted_at IS NULL
+   AND u.workos_deleted_at IS NULL
 WHERE s.id = $2
   AND s.organization_id = $1
   AND s.deleted IS FALSE
@@ -106,6 +108,7 @@ type GetSignInEligibilityRow struct {
 	UserSessionID          uuid.UUID
 	SubjectUrn             urn.SessionSubject
 	SsoSignInID            uuid.NullUUID
+	SessionLive            bool
 	SignInID               uuid.NullUUID
 	SignInUserID           pgtype.Text
 	AuthenticationMethod   pgtype.Text
@@ -127,6 +130,7 @@ func (q *Queries) GetSignInEligibility(ctx context.Context, arg GetSignInEligibi
 		&i.UserSessionID,
 		&i.SubjectUrn,
 		&i.SsoSignInID,
+		&i.SessionLive,
 		&i.SignInID,
 		&i.SignInUserID,
 		&i.AuthenticationMethod,
@@ -141,7 +145,112 @@ func (q *Queries) GetSignInEligibility(ctx context.Context, arg GetSignInEligibi
 	return i, err
 }
 
-const revokeSSOSignInsBySession = `-- name: RevokeSSOSignInsBySession :execrows
+const listRecentlyRevokedSessionJTIs = `-- name: ListRecentlyRevokedSessionJTIs :many
+SELECT s.jti
+FROM user_sessions AS s
+JOIN sso_sign_ins AS si
+    ON si.id = s.sso_sign_in_id
+   AND si.organization_id = s.organization_id
+WHERE s.organization_id = ANY($1::text[])
+  AND si.user_id = $2
+  AND s.deleted IS TRUE
+  AND s.deleted_at > $3
+`
+
+type ListRecentlyRevokedSessionJTIsParams struct {
+	OrganizationIds []string
+	UserID          string
+	Since           pgtype.Timestamptz
+}
+
+// Grants of the user's sign-ins soft-deleted recently, so a retried
+// revocation re-pushes JTIs a failed earlier push may have missed.
+func (q *Queries) ListRecentlyRevokedSessionJTIs(ctx context.Context, arg ListRecentlyRevokedSessionJTIsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listRecentlyRevokedSessionJTIs, arg.OrganizationIds, arg.UserID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var jti string
+		if err := rows.Scan(&jti); err != nil {
+			return nil, err
+		}
+		items = append(items, jti)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSSOSignInOrganizationsForUser = `-- name: ListSSOSignInOrganizationsForUser :many
+SELECT DISTINCT organization_id
+FROM sso_sign_ins
+WHERE user_id = $1
+`
+
+// Self-scoped: the organizations the caller has ever signed in to, including
+// ones they have since left.
+func (q *Queries) ListSSOSignInOrganizationsForUser(ctx context.Context, userID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listSSOSignInOrganizationsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockUserSSOSignIns = `-- name: LockUserSSOSignIns :many
+SELECT id
+FROM sso_sign_ins
+WHERE organization_id = ANY($1::text[])
+  AND user_id = $2
+ORDER BY id
+FOR UPDATE
+`
+
+type LockUserSSOSignInsParams struct {
+	OrganizationIds []string
+	UserID          string
+}
+
+// Locks the user's sign-ins in id order before any revocation write, so
+// concurrent revokes and grant issuance (which also locks sign-ins first)
+// never deadlock.
+func (q *Queries) LockUserSSOSignIns(ctx context.Context, arg LockUserSSOSignInsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockUserSSOSignIns, arg.OrganizationIds, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeSSOSignInsBySession = `-- name: RevokeSSOSignInsBySession :many
 UPDATE sso_sign_ins
 SET revoked_at = clock_timestamp(),
     revoke_reason = $1,
@@ -150,6 +259,7 @@ WHERE organization_id = ANY($2::text[])
   AND user_id = $3
   AND workos_session_id = $4
   AND revoked_at IS NULL
+RETURNING id, organization_id
 `
 
 type RevokeSSOSignInsBySessionParams struct {
@@ -159,18 +269,35 @@ type RevokeSSOSignInsBySessionParams struct {
 	WorkosSessionID string
 }
 
+type RevokeSSOSignInsBySessionRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
 // A single sign-out revokes only the signed-out WorkOS session's rows.
-func (q *Queries) RevokeSSOSignInsBySession(ctx context.Context, arg RevokeSSOSignInsBySessionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeSSOSignInsBySession,
+func (q *Queries) RevokeSSOSignInsBySession(ctx context.Context, arg RevokeSSOSignInsBySessionParams) ([]RevokeSSOSignInsBySessionRow, error) {
+	rows, err := q.db.Query(ctx, revokeSSOSignInsBySession,
 		arg.RevokeReason,
 		arg.OrganizationIds,
 		arg.UserID,
 		arg.WorkosSessionID,
 	)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []RevokeSSOSignInsBySessionRow
+	for rows.Next() {
+		var i RevokeSSOSignInsBySessionRow
+		if err := rows.Scan(&i.ID, &i.OrganizationID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const revokeUserSSOSignIns = `-- name: RevokeUserSSOSignIns :many
@@ -284,7 +411,18 @@ INSERT INTO sso_sign_ins (
     $2,
     $3,
     $4,
-    $5
+    LEAST(
+        $5::timestamptz,
+        COALESCE(
+            (
+                SELECT min(prior.authenticated_at)
+                FROM sso_sign_ins AS prior
+                WHERE prior.user_id = $2
+                  AND prior.workos_session_id = $3
+            ),
+            $5::timestamptz
+        )
+    )
 )
 ON CONFLICT (organization_id, workos_session_id) DO UPDATE
 SET updated_at = clock_timestamp()
@@ -305,8 +443,10 @@ type UpsertSSOSignInRow struct {
 	RevokedAt pgtype.Timestamptz
 }
 
-// A repeated code exchange for the same WorkOS session refreshes the row but
-// never reassigns it to another user or clears a revocation.
+// Never reassigns a row to another user, clears a revocation or moves
+// authenticated_at. A new row for a WorkOS session already seen in another
+// organization keeps that session's earliest sign-in time, so recording it in
+// a second organization cannot restart the age window.
 func (q *Queries) UpsertSSOSignIn(ctx context.Context, arg UpsertSSOSignInParams) (UpsertSSOSignInRow, error) {
 	row := q.db.QueryRow(ctx, upsertSSOSignIn,
 		arg.OrganizationID,

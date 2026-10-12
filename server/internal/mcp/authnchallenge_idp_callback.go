@@ -288,7 +288,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 
 	var federatedIdentity *remotesessions.FederatedIdentity
 	var gramUserID string
-	var ssoSignInID uuid.NullUUID
+	var exchange *ssosignins.ExchangeParams
 	impersonated := false
 	if federation := challengeState.Federation; federation != nil {
 		verified := federation.ValidatedIdentity
@@ -329,14 +329,15 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		}
 		gramUserID = login.UserID
 		impersonated = idpUser.ImpersonatorEmail() != ""
-		ssoSignInID = ssosignins.RecordExchange(ctx, logger, s.db, ssosignins.ExchangeParams{
+		exchange = &ssosignins.ExchangeParams{
 			Flow:                   ssosignins.FlowMCPAuthorize,
 			WorkOSOrganizationID:   idpUser.OrganizationID,
-			FallbackOrganizationID: endpoint.OrganizationID,
+			ExpectedOrganizationID: endpoint.OrganizationID,
 			UserID:                 gramUserID,
 			WorkOSSessionID:        idpUser.WorkOSSessionID,
 			AuthenticationMethod:   idpUser.AuthenticationMethod,
-		})
+			Impersonated:           impersonated,
+		}
 	}
 
 	// Validate the user belongs to the endpoint's organization before
@@ -359,6 +360,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").LogError(ctx, logger)
+	}
+	// Recorded only for members, and only in the endpoint's organization.
+	ssoSignInID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if exchange != nil {
+		ssoSignInID = ssosignins.RecordExchange(ctx, logger, s.db, *exchange).ID
 	}
 
 	if federation := challengeState.Federation; federation != nil {
