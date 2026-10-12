@@ -8,6 +8,7 @@ import type { GridCard } from "./dashboardLayout";
 
 const testState = vi.hoisted(() => ({
   pending: false,
+  failed: false,
   builtIn: [] as unknown[],
   refetch: vi.fn(),
   duplicateBuiltIn: vi.fn(),
@@ -20,9 +21,11 @@ const testState = vi.hoisted(() => ({
 vi.mock("@gram/client/react-query/dashboards.js", () => ({
   useDashboards: () => ({
     isPending: testState.pending,
-    data: testState.pending
-      ? undefined
-      : { dashboards: [], builtIn: testState.builtIn },
+    isError: testState.failed,
+    data:
+      testState.pending || testState.failed
+        ? undefined
+        : { dashboards: [], builtIn: testState.builtIn },
     refetch: testState.refetch,
   }),
 }));
@@ -134,6 +137,7 @@ function renderPage(slug = "mcp-tools", onOpen = vi.fn<() => void>()) {
 describe("BuiltInDashboardPage", () => {
   beforeEach(() => {
     testState.pending = false;
+    testState.failed = false;
     testState.builtIn = [mcpTools];
     testState.refetch.mockClear();
     testState.duplicateBuiltIn.mockClear();
@@ -221,14 +225,21 @@ describe("BuiltInDashboardPage", () => {
     ).toBeTruthy();
   });
 
-  it("says while the list loads, and when the dashboard is not there", () => {
+  it("says while the list loads, when the dashboard is not shipped, and when the list failed", () => {
     testState.pending = true;
     renderPage();
     expect(document.querySelector("[aria-busy='true']")).toBeTruthy();
     cleanup();
 
+    // A retired slug will not come back on a retry, so none is offered.
     testState.pending = false;
     renderPage("retired");
+    expect(screen.getByText("This dashboard is not available")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    cleanup();
+
+    testState.failed = true;
+    renderPage();
     expect(screen.getByText("This dashboard did not load")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(testState.refetch).toHaveBeenCalled();

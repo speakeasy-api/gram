@@ -1,8 +1,8 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import type { BuiltInDashboard } from "@gram/client/models/components/builtindashboard.js";
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { DashboardFilters } from "@gram/client/models/components/dashboardfilters.js";
@@ -47,8 +47,10 @@ export function BuiltInDashboardPage({
   ...props
 }: BuiltInDashboardPageProps & { slug: string }): JSX.Element {
   // The built-ins come with the dashboard list, so an open one needs no
-  // request of its own.
-  const list = useDashboards();
+  // request of its own: asking with the list's own arguments shares its
+  // cache entry.
+  const gramProject = useProjectSlugForRequests();
+  const list = useDashboards({ gramProject });
   const page = list.data?.builtIn.find((candidate) => candidate.slug === slug);
   const back =
     props.backHref === undefined ? null : (
@@ -64,6 +66,21 @@ export function BuiltInDashboardPage({
       </div>
     );
   }
+  // A list that loaded without the slug is a dashboard Speakeasy no longer
+  // ships; asking again would not bring it back, so only a failed request
+  // offers to.
+  if (page === undefined && !list.isError) {
+    return (
+      <div className="flex flex-col gap-4">
+        {back}
+        <InlineEmptyState
+          icon="layout-dashboard"
+          heading="This dashboard is not available"
+          description="Speakeasy no longer ships it. Pick another from the list of dashboards."
+        />
+      </div>
+    );
+  }
   if (page === undefined) {
     return (
       <div className="flex flex-col gap-4">
@@ -71,7 +88,7 @@ export function BuiltInDashboardPage({
         <InlineEmptyState
           icon="triangle-alert"
           heading="This dashboard did not load"
-          description="It may have been retired, or the request did not go through."
+          description="The request did not go through."
           action={
             <Button
               variant="secondary"
@@ -175,23 +192,17 @@ function BuiltInDashboardView({
           </Button>
         </>
       }
-      toolbar={
-        <>
-          <Page.Toolbar.Filters {...bar.toolbar} />
-          {changed ? (
-            <Page.Toolbar.Actions>
-              <Button
-                variant="tertiary"
-                size="sm"
-                onClick={() =>
-                  bar.apply(barValuesFromSaved(NO_FILTERS, fields))
-                }
-              >
-                Reset filters
-              </Button>
-            </Page.Toolbar.Actions>
-          ) : null}
-        </>
+      filters={bar.toolbar}
+      filterActions={
+        changed ? (
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={() => bar.apply(barValuesFromSaved(NO_FILTERS, fields))}
+          >
+            Reset filters
+          </Button>
+        ) : null
       }
     >
       <DashboardGrid

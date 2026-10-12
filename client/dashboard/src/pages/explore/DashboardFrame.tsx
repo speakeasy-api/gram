@@ -1,6 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { Icon } from "@/components/ui/Icon";
-import type { JSX, ReactNode } from "react";
+import type { ComponentProps, JSX, ReactNode } from "react";
 import { Link } from "react-router";
 
 /**
@@ -16,7 +16,8 @@ export function DashboardFrame({
   badge,
   byline,
   actions,
-  toolbar,
+  filters,
+  filterActions,
   children,
 }: {
   /** Where the list of dashboards is; a page with no list above it has none. */
@@ -29,8 +30,10 @@ export function DashboardFrame({
   byline: ReactNode;
   /** The buttons and menu at the top right. */
   actions: ReactNode;
-  /** The filter bar's row, when the page has cards to filter. */
-  toolbar?: ReactNode;
+  /** The filter bar, when the page has cards to filter. */
+  filters?: ComponentProps<typeof Page.Toolbar.Filters> | undefined;
+  /** The buttons at the filter bar's right edge, when there are any. */
+  filterActions?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -53,9 +56,16 @@ export function DashboardFrame({
           <div className="flex shrink-0 items-center gap-2">{actions}</div>
         </div>
       </div>
-      {toolbar ? (
+      {filters ? (
+        // The toolbar sorts its direct children into the left filter
+        // cluster and the right actions cluster by component type, so the
+        // filters and actions are placed here rather than handed over in a
+        // fragment, which it would read as one trailing child.
         <Page.Toolbar>
-          <Page.Toolbar.Row>{toolbar}</Page.Toolbar.Row>
+          <Page.Toolbar.Filters {...filters} />
+          {filterActions ? (
+            <Page.Toolbar.Actions>{filterActions}</Page.Toolbar.Actions>
+          ) : null}
         </Page.Toolbar>
       ) : null}
       {children}

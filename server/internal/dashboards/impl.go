@@ -574,7 +574,10 @@ func (s *Service) DuplicateBuiltInDashboard(ctx context.Context, payload *gen.Du
 		})
 		from.placements = append(from.placements, copyPlacement{
 			key: key,
-			x:   int32(card.X), y: int32(card.Y), w: int32(card.W), h: int32(card.H), //nolint:gosec // bounded by the registry test
+			x:   conv.SafeInt32(card.X),
+			y:   conv.SafeInt32(card.Y),
+			w:   conv.SafeInt32(card.W),
+			h:   conv.SafeInt32(card.H),
 		})
 	}
 

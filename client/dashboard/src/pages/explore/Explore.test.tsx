@@ -302,15 +302,40 @@ function applyDashboardWrite(
       const page = testState.builtIn.find(
         (candidate) => candidate.slug === slug,
       )!;
+      const id = `dashboard-${testState.dashboardWrites.length}`;
+      const name = `${String(page.name)} (copy)`;
+      // As the server does: each card becomes a new saved widget, placed on
+      // the copy where the card sat.
+      const cards = page.cards as Record<string, unknown>[];
+      const copied = cards.map(({ x, y, w, h, ...card }, index) => ({
+        widget: {
+          ...card,
+          id: `${id}-widget-${index}`,
+          dashboards: [{ id, name }],
+          projectId: "project",
+          organizationId: "org",
+          createdByUserId: "member-1",
+          createdAt: now,
+          updatedAt: now,
+        },
+        placement: { id: `${id}-placement-${index}`, x, y, w, h },
+      }));
+      testState.widgets = [
+        ...copied.map(({ widget }) => widget),
+        ...testState.widgets,
+      ];
       return add({
-        id: `dashboard-${testState.dashboardWrites.length}`,
-        name: `${String(page.name)} (copy)`,
+        id,
+        name,
         description: page.description,
         projectId: "project",
         organizationId: "org",
         createdByUserId: "member-1",
         filters: { values: {} },
-        widgets: [],
+        widgets: copied.map(({ widget, placement }) => ({
+          ...placement,
+          widgetId: widget.id,
+        })),
         createdAt: now,
         updatedAt: now,
       });
@@ -466,9 +491,11 @@ vi.mock("./DashboardGrid", async () => {
               >
                 Open {name} in Explore
               </Link>
-              <button type="button" onClick={() => onRemove(placement.id)}>
-                Remove {name}
-              </button>
+              {canEdit ? (
+                <button type="button" onClick={() => onRemove(placement.id)}>
+                  Remove {name}
+                </button>
+              ) : null}
             </li>
           );
         })}
@@ -1944,6 +1971,9 @@ describe("Explore", () => {
       const cards = screen.getByRole("list", { name: "Cards" });
       expect(cards.getAttribute("data-editable")).toBe("false");
       expect(within(cards).getByText("Tool calls")).toBeTruthy();
+      expect(
+        within(cards).queryByRole("button", { name: "Remove Tool calls" }),
+      ).toBeNull();
       expect(screen.queryByRole("button", { name: "Add widget" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Save filters" })).toBeNull();
 
@@ -1959,6 +1989,13 @@ describe("Explore", () => {
         screen.getByRole("heading", { name: "MCP & Tools (copy)" }),
       ).toBeTruthy();
       expect(screen.getByRole("button", { name: "Add widget" })).toBeTruthy();
+      // The copy holds the card as its own saved widget, which it can edit.
+      const copy = screen.getByRole("list", { name: "Cards" });
+      expect(copy.getAttribute("data-editable")).toBe("true");
+      expect(within(copy).getByText("Tool calls")).toBeTruthy();
+      expect(
+        within(copy).getByRole("button", { name: "Remove Tool calls" }),
+      ).toBeTruthy();
     });
 
     it("opens a Speakeasy-built card's question in Explore, never as a widget", () => {

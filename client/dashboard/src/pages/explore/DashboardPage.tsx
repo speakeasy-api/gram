@@ -1,5 +1,4 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -285,38 +284,32 @@ function DashboardView({
         // The shared filter bar every card answers within. Picking in it
         // is the viewer's own view; Save filters makes it what the
         // dashboard opens on, for everyone.
-        toolbar={
-          hasCards && !widgetsFailed ? (
+        filters={hasCards && !widgetsFailed ? bar.toolbar : undefined}
+        filterActions={
+          changed ? (
             <>
-              <Page.Toolbar.Filters {...bar.toolbar} />
-              {changed ? (
-                <Page.Toolbar.Actions>
-                  {editable ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon="save"
-                      disabled={mutations.pending}
-                      onClick={() =>
-                        mutations.saveFilters(dashboard.id, current)
-                      }
-                    >
-                      Save filters
-                    </Button>
-                  ) : null}
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={() =>
-                      apply(barValuesFromSaved(dashboard.filters, fields))
-                    }
-                  >
-                    Reset filters
-                  </Button>
-                </Page.Toolbar.Actions>
+              {editable ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon="save"
+                  disabled={mutations.pending}
+                  onClick={() => mutations.saveFilters(dashboard.id, current)}
+                >
+                  Save filters
+                </Button>
               ) : null}
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() =>
+                  apply(barValuesFromSaved(dashboard.filters, fields))
+                }
+              >
+                Reset filters
+              </Button>
             </>
-          ) : undefined
+          ) : null
         }
       >
         {body}
