@@ -516,6 +516,21 @@ func TestSaveWidgetReportsAnUnverifiedCommit(t *testing.T) {
 	require.Len(t, all, 1, "the write committed")
 }
 
+func TestSaveWidgetReplayReportsAWidgetDeletedSince(t *testing.T) {
+	t.Parallel()
+	ctx, f := newWidgetToolsFixture(t)
+	arguments := saveArguments(f.project.ID.String(), "Short-lived")
+	request := confirmed(arguments, f.write(t, ctx, saveWidgetToolName, arguments), "short-lived")
+	created := f.write(t, ctx, saveWidgetToolName, request)
+
+	require.NoError(t, f.management.DeleteWidget(f.scopedContext(t, ctx), &genwidgets.DeleteWidgetPayload{ID: created.Widget.ID, SessionToken: nil, ProjectSlugInput: nil}))
+
+	replayed := f.write(t, ctx, saveWidgetToolName, request)
+	require.True(t, replayed.Replayed)
+	require.Equal(t, widgetSnapshotDeleted, replayed.SnapshotScope)
+	require.Nil(t, replayed.Widget)
+}
+
 func TestDuplicateWidgetCopiesIntoTheCaller(t *testing.T) {
 	t.Parallel()
 	ctx, f := newWidgetToolsFixture(t)

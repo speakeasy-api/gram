@@ -408,8 +408,9 @@ func (s *WidgetService) target(ctx context.Context, principal Principal, operati
 	return s.finish(ctx, out, receipt)
 }
 
-// finish reports a committed or replayed write from a fresh read; a delete is
-// verified by the widget reading as gone.
+// finish reports a committed or replayed write from a fresh read. A widget
+// that reads as gone, deleted by this write or by someone since, is reported
+// as deleted.
 func (s *WidgetService) finish(ctx context.Context, out widgetWriteOutput, receipt OperationReceipt) (widgetWriteOutput, error) {
 	stored, err := decodeWidgetReceipt(receipt.ResultPayload)
 	if err != nil {
@@ -430,7 +431,7 @@ func (s *WidgetService) finish(ctx context.Context, out widgetWriteOutput, recei
 		if !deleted {
 			out.Dashboards = definition.Dashboards
 		}
-	case deleted && isShareable && shareable.Code == oops.CodeNotFound:
+	case isShareable && shareable.Code == oops.CodeNotFound:
 		out.SnapshotScope = widgetSnapshotDeleted
 	default:
 		out.SnapshotScope = widgetSnapshotVerificationUnavailable
