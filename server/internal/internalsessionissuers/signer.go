@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -167,10 +168,12 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 	if !backing.EmaIssuerManaged || !backing.ResourceName.Valid || backing.ResourceName.String == "" {
 		return "", fmt.Errorf("%w: active key is not a managed issuer key", ErrMisconfigured)
 	}
-	if s.managedSigner != "" {
-		if got := strings.TrimSpace(backing.ImpersonateServiceAccount.String); got != "" && !strings.EqualFold(got, s.managedSigner) {
-			return "", fmt.Errorf("%w: key credential impersonates %s, configured signer is %s", ErrMisconfigured, got, s.managedSigner)
-		}
+	// The key's credential must impersonate exactly the configured signer.
+	if s.managedSigner == "" {
+		return "", fmt.Errorf("%w: no platform signing service account is configured", ErrMisconfigured)
+	}
+	if got := strings.TrimSpace(backing.ImpersonateServiceAccount.String); !strings.EqualFold(got, s.managedSigner) {
+		return "", fmt.Errorf("%w: key credential impersonates %q, configured signer is %s", ErrMisconfigured, got, s.managedSigner)
 	}
 	credential, problem, detail, err := s.gcpIdentity.ScreenStoredCredential(ctx, logger, gcpauth.StoredCredential{
 		Present:                   backing.CredentialID.Valid,
@@ -197,10 +200,20 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 	if err != nil {
 		return "", err
 	}
-	// A disable that committed while KMS was signing wins.
+	// A disable or revocation that committed while KMS was signing wins.
 	current, err := q.GetOrganizationInternalSessionIssuer(ctx, organizationID)
-	if err != nil || current.DisabledAt.Valid {
+	if err != nil {
+		return "", fmt.Errorf("recheck issuer after signing: %w", err)
+	}
+	if current.DisabledAt.Valid {
 		return "", &SigningRefusedError{State: StateDisabled}
+	}
+	live, err := q.ListJsonWebKeys(ctx, repo.ListJsonWebKeysParams{JsonWebKeySetID: issuer.JsonWebKeySetID, OrganizationID: organizationID, IncludeRevoked: false})
+	if err != nil {
+		return "", fmt.Errorf("recheck issuer key after signing: %w", err)
+	}
+	if !slices.ContainsFunc(live, func(k repo.JsonWebKey) bool { return k.ID == key.ID }) {
+		return "", &SigningRefusedError{State: StateKeyless}
 	}
 	return assertion, nil
 }

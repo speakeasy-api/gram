@@ -89,7 +89,7 @@ func (f issuerFixture) signerWithFlags(t *testing.T, kms *hookedKMSClients, paus
 		return kms.inner.Factory(ctx, ts)
 	}
 	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: paused})
-	return internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, "")
+	return internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, provisiontest.SigningServiceAccount())
 }
 
 func claims() internalsessionissuers.Claims {
@@ -442,6 +442,16 @@ func TestEMAIssuer_SigningGates(t *testing.T) {
 	requireRefused(t, err, internalsessionissuers.StateUnavailable)
 	f.flags.SetFlag(feature.FlagInternalSessionIssuer, f.ti.orgID, true)
 
+	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
+		return kms.inner.Factory(ctx, ts)
+	}
+	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
+	for _, pin := range []string{"", "someone-else@example.iam.gserviceaccount.com"} {
+		unpinned := internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, pin)
+		_, err = unpinned.Sign(ctx, f.ti.orgID, claims())
+		require.ErrorIs(t, err, internalsessionissuers.ErrMisconfigured, "signing needs the key's credential to match the configured signer %q", pin)
+	}
+
 	require.Len(t, publishedIssuerKids(t, ctx, f, f.ti.orgID), 1, "discovery keeps serving")
 }
 
@@ -467,7 +477,8 @@ func TestEMAIssuer_SignEnforcesClaimInvariants(t *testing.T) {
 			c.Extra = map[string]any{"iss": "https://attacker.example.com"}
 		},
 		"overrides iat":     func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"iat": 1} },
-		"overrides subject": func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"email": "someone-else@example.com"} },
+		"overrides sub":     func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"sub": "someone-else"} },
+		"overrides email":   func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"email": "someone-else@example.com"} },
 	} {
 		c := claims()
 		mutate(&c)
