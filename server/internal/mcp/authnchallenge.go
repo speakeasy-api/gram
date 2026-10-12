@@ -281,13 +281,17 @@ type UserSessionGrant struct {
 	// Nil means all tools.
 	ToolSelection *toolfilter.SessionSelection `json:"tool_selection,omitempty"`
 	// SignInID carries the authorizing user's sign-in to the session row.
-	SignInID  *uuid.UUID `json:"sign_in_id,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
+	SignInID *uuid.UUID `json:"sign_in_id,omitempty"`
+	// GatewayPolicy is cached only in the versioned gateway grant namespace.
+	GatewayPolicy *toolfilter.SessionPolicy `json:"gateway_policy,omitempty"`
+	CreatedAt     time.Time                 `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
 
 const agentAuthorizationCodePrefix = "agent-v1."
+
+const gatewayAuthorizationCodePrefix = "gateway-v1."
 
 // CacheKey implements cache.CacheableObject. Agent authorization grants use a
 // namespace that older binaries do not read, so a mixed-version deployment
@@ -298,6 +302,9 @@ func (g UserSessionGrant) CacheKey() string {
 
 func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorization bool) string {
 	prefix := "userSessionGrant:"
+	if strings.HasPrefix(code, gatewayAuthorizationCodePrefix) {
+		prefix = "gatewayUserSessionGrant:"
+	}
 	if agentAuthorization {
 		prefix = "agentUserSessionGrant:"
 	}
@@ -506,7 +513,7 @@ func (s *Service) touchUserSessionLastUsed(ctx context.Context, endpoint *Resolv
 // The bool reports whether the session came from a refreshable grant, which
 // is what lets a client recover from invalid_token through its refresh token
 // and, failing that, a new authorization.
-func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, *toolfilter.SessionSelection, bool, error) {
+func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, *toolfilter.SessionPolicy, bool, error) {
 	if token == "" {
 		return ctx, nil, nil, false, nil
 	}
@@ -986,7 +993,7 @@ func (s *Service) authenticateIssuerGate(
 	w http.ResponseWriter,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
-) (context.Context, *issuerGateAuthentication, *toolfilter.SessionSelection, error) {
+) (context.Context, *issuerGateAuthentication, *toolfilter.SessionPolicy, error) {
 	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
 	if err != nil {
 		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
@@ -1010,7 +1017,7 @@ func (s *Service) authenticateIssuerGate(
 	var (
 		newCtx        context.Context
 		subject       *urn.SessionSubject
-		toolSelection *toolfilter.SessionSelection
+		toolSelection *toolfilter.SessionPolicy
 		refreshable   bool
 		valErr        error
 	)
@@ -1219,7 +1226,7 @@ func (s *Service) ApplyIssuerGate(
 	w http.ResponseWriter,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
-) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionSelection, error) {
+) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionPolicy, error) {
 	newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
 	if err != nil {
 		return ctx, nil, nil, err
