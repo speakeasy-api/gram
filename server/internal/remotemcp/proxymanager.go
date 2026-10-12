@@ -363,7 +363,7 @@ func (f *ProxyManager) BuildTarget(
 		interceptors.NewFigma(upstreamURL, logger),
 	}
 
-	usageTracking := f.toolsCallUsageTrackingInterceptor
+	usageTracking := f.toolsCallUsageTrackingInterceptor.WithMCPServerID(identity.McpServerID)
 	if identity.MetaMCPServerID != "" {
 		usageTracking = usageTracking.WithMetaMCPServerID(identity.MetaMCPServerID)
 	}
@@ -416,7 +416,7 @@ func (f *ProxyManager) BuildTarget(
 			f.resourcesReadUsageLimitsInterceptor,
 		},
 		ResourcesReadResponseInterceptors: []proxy.ResourcesReadResponseInterceptor{
-			f.resourcesReadUsageTrackingInterceptor,
+			f.resourcesReadUsageTrackingInterceptor.WithMCPServerID(identity.McpServerID),
 		},
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,

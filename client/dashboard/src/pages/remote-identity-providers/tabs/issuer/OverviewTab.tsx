@@ -4,6 +4,7 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
+import { ScopeList } from "@/lib/remote-identity";
 import {
   InfoField,
   InfoList,
@@ -136,35 +137,35 @@ export function OverviewTab({
         </InfoSection>
       </div>
 
-      <InfoSection title="Identity Provider Details">
+      <InfoSection title="Provider details">
         <InfoField label="Scopes">
-          <InfoList values={issuer.scopesSupported} />
+          <ScopeList scopes={issuer.scopesSupported} />
         </InfoField>
-        <InfoField label="Scope Override">
-          <InfoList values={issuer.scopeOverride} />
+        <InfoField label="Scope override">
+          <ScopeList scopes={issuer.scopeOverride} />
         </InfoField>
         <InfoField label="Scope fallback">
           <InfoText>{scopeFallbackLabel(issuer.omitScopeFallback)}</InfoText>
         </InfoField>
-        <InfoField label="Grant Types">
+        <InfoField label="Grant types">
           <InfoList values={issuer.grantTypesSupported} />
         </InfoField>
-        <InfoField label="Response Types">
+        <InfoField label="Response types">
           <InfoList values={issuer.responseTypesSupported} />
         </InfoField>
-        <InfoField label="Token Endpoint Authentication Methods">
+        <InfoField label="Token endpoint authentication methods">
           <InfoList values={issuer.tokenEndpointAuthMethodsSupported} />
         </InfoField>
-        <InfoField label="PKCE Code Challenge Methods">
+        <InfoField label="PKCE code challenge methods">
           {pkceMethods(issuer.codeChallengeMethodsSupported)}
         </InfoField>
-        <InfoField label="Client ID Metadata Document">
+        <InfoField label="Client ID metadata document">
           <InfoSupported value={issuer.clientIdMetadataDocumentSupported} />
         </InfoField>
-        <InfoField label="Client Setup Documentation">
+        <InfoField label="Client setup documentation">
           <DocumentationUrlValue value={issuer.clientSetupDocumentationUrl} />
         </InfoField>
-        <InfoField label="Service Documentation">
+        <InfoField label="Service documentation">
           <DocumentationUrlValue value={issuer.serviceDocumentation} />
         </InfoField>
       </InfoSection>

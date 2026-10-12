@@ -25,6 +25,66 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
+func TestMintUserSessionSelectsEnabledAlternateWrapper(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	server := createIssuerGatedMintServer(t, ctx, ti, "mint-enabled-alternate")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.True(t, server.ToolsetID.Valid)
+	require.NotEqual(t, server.ToolsetID.UUID, server.ID)
+
+	// A live but disabled canonical wrapper must not displace the enabled
+	// alternate, nor supply its issuer, endpoint, or mint authorization resource.
+	canonicalIssuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		Slug: "mint-disabled-canonical-issuer", AuthnChallengeMode: "chain", SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	canonical, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: server.ToolsetID.UUID, ProjectID: *authCtx.ProjectID,
+		Name: conv.ToPGText("Disabled canonical"), Slug: conv.ToPGText("mint-disabled-canonical"),
+		ToolsetID:           server.ToolsetID,
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.MustParse(canonicalIssuer.ID), Valid: true},
+		Visibility:          mcpservers.VisibilityDisabled,
+	})
+	require.NoError(t, err)
+	for _, wrapper := range []mcpserversrepo.McpServer{canonical, server} {
+		_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+			ProjectID:   *authCtx.ProjectID,
+			McpServerID: uuid.NullUUID{UUID: wrapper.ID, Valid: true},
+			Slug:        wrapper.Slug.String + "-endpoint",
+		})
+		require.NoError(t, err)
+	}
+
+	for _, tt := range []struct {
+		name    string
+		payload sessionsgen.MintUserSessionPayload
+	}{
+		{name: "toolset", payload: sessionsgen.MintUserSessionPayload{ToolsetID: conv.PtrEmpty(server.ToolsetID.UUID.String())}},
+		{name: "explicit server", payload: sessionsgen.MintUserSessionPayload{McpServerID: conv.PtrEmpty(server.ID.String())}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			granted := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPConnect, server.ID.String()))
+			got, err := ti.service.MintUserSession(granted, &tt.payload)
+			require.NoError(t, err)
+			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(got.AccessToken,
+				urn.NewUserSessionIssuer(server.UserSessionIssuerID.UUID).String())
+			require.NoError(t, err)
+			require.Equal(t, "http://0.0.0.0/mcp/"+server.Slug.String+"-endpoint", claims.Issuer)
+			_, err = usersessions.NewSigner("test-jwt-secret").Validate(got.AccessToken,
+				urn.NewUserSessionIssuer(canonical.UserSessionIssuerID.UUID).String())
+			require.Error(t, err, "the canonical issuer must not govern the alternate's token")
+
+			// A grant on C (also T) is not a grant on the selected S mint target.
+			denied := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPConnect, canonical.ID.String()))
+			_, err = ti.service.MintUserSession(denied, &tt.payload)
+			requireOopsCode(t, err, oops.CodeForbidden)
+		})
+	}
+}
+
 func TestMintUserSessionForServerRequiresMCPConnect(t *testing.T) {
 	t.Parallel()
 

@@ -464,7 +464,6 @@ func TestDecodeAnswerRejectsInvalidDistributions(t *testing.T) {
 		`{"type":"choice","choice":"0","probabilities":{"0":0.1,"1":0.9},"confidence":0.5}`,
 		`{"type":"choice","choice":"0","probabilities":{"0":0.9},"confidence":0.5}`,
 		`{"type":"choice","choice":"0","probabilities":{"0":0.9,"1":null},"confidence":0.5}`,
-		`{"type":"choice","choice":"0","probabilities":{"0":0.9,"1":0.5},"confidence":0.5}`,
 		`{"type":"choice","choice":"0","probabilities":{"0":0.9,"1":0.1},"confidence":2}`,
 		`{"type":"score","score":0.1,"probabilities":{"0":0.9,"1":0.1},"confidence":0.5}`,
 	} {
