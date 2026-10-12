@@ -21,6 +21,31 @@ CREATE INDEX "internal_session_issuers_key_set_idx" ON "internal_session_issuers
 CREATE UNIQUE INDEX "internal_session_issuers_organization_id_id_key" ON "internal_session_issuers" ("organization_id", "id");
 -- Create index "internal_session_issuers_organization_id_key" to table: "internal_session_issuers"
 CREATE UNIQUE INDEX "internal_session_issuers_organization_id_key" ON "internal_session_issuers" ("organization_id") WHERE (deleted IS FALSE);
+-- Create "is_internal_session_issuer_external_key" function
+CREATE FUNCTION "is_internal_session_issuer_external_key" ("org_id" text, "key_id" uuid) RETURNS boolean LANGUAGE sql STABLE PARALLEL SAFE AS $$
+SELECT EXISTS (
+    SELECT 1
+    FROM internal_session_issuers AS isi
+    JOIN json_web_key_sets AS s
+      ON s.organization_id = isi.organization_id
+     AND s.id = isi.json_web_key_set_id
+    WHERE isi.organization_id = org_id
+      AND (s.external_key_id = key_id OR EXISTS (
+        SELECT 1 FROM json_web_keys AS k
+        WHERE k.organization_id = s.organization_id
+          AND k.json_web_key_set_id = s.id
+          AND k.external_key_id = key_id
+      ))
+  );
+$$;
+-- Create "is_internal_session_issuer_key_set" function
+CREATE FUNCTION "is_internal_session_issuer_key_set" ("org_id" text, "set_id" uuid) RETURNS boolean LANGUAGE sql STABLE PARALLEL SAFE AS $$
+SELECT EXISTS (
+    SELECT 1 FROM internal_session_issuers AS isi
+    WHERE isi.organization_id = org_id
+      AND isi.json_web_key_set_id = set_id
+  );
+$$;
 -- Create "remote_session_ema_providers" table
 CREATE TABLE "remote_session_ema_providers" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
