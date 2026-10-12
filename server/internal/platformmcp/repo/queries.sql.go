@@ -7055,6 +7055,38 @@ func (q *Queries) LockPlatformMCPOperationReceipt(ctx context.Context, arg LockP
 	return err
 }
 
+const lockPlatformMCPOperationReceiptInput = `-- name: LockPlatformMCPOperationReceiptInput :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-receipt-input', $1::text, $2::text, $3::text, $4::text, $5::text)::text,
+        0
+    )
+)
+`
+
+type LockPlatformMCPOperationReceiptInputParams struct {
+	OrganizationID string
+	SubjectUrn     string
+	ProjectID      string
+	Operation      string
+	InputHash      string
+}
+
+// A single-use preview is claimed by its input, so confirmations racing for
+// one input serialize here. The namespace differs from the key lock above so
+// a caller-chosen idempotency key can never name this lock, which is what
+// keeps two confirmations from taking the pair in opposite orders.
+func (q *Queries) LockPlatformMCPOperationReceiptInput(ctx context.Context, arg LockPlatformMCPOperationReceiptInputParams) error {
+	_, err := q.db.Exec(ctx, lockPlatformMCPOperationReceiptInput,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.ProjectID,
+		arg.Operation,
+		arg.InputHash,
+	)
+	return err
+}
+
 const lockPlatformMCPRemoteIssuerAttachment = `-- name: LockPlatformMCPRemoteIssuerAttachment :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -7234,6 +7266,45 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const platformMCPOperationReceiptInputClaimed = `-- name: PlatformMCPOperationReceiptInputClaimed :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_operation_receipts
+    WHERE organization_id = $1
+      AND project_id = $2
+      AND operation = $3
+      AND user_id = $4
+      AND input_hash = $5
+      AND idempotency_key <> $6
+)
+`
+
+type PlatformMCPOperationReceiptInputClaimedParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Operation      string
+	UserID         pgtype.Text
+	InputHash      string
+	IdempotencyKey string
+}
+
+// Whether another idempotency key already holds this exact input for the same
+// user, project and operation. A write whose input is single-use, such as a
+// preview token, commits under one key only.
+func (q *Queries) PlatformMCPOperationReceiptInputClaimed(ctx context.Context, arg PlatformMCPOperationReceiptInputClaimedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, platformMCPOperationReceiptInputClaimed,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Operation,
+		arg.UserID,
+		arg.InputHash,
+		arg.IdempotencyKey,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const recordPlatformMCPCatalogExplored = `-- name: RecordPlatformMCPCatalogExplored :execrows

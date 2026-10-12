@@ -1810,6 +1810,7 @@ func newStartCommand() *cli.Command {
 				riskAnalysisDescriber = riskSignaler
 			}
 			riskFindings := riskchrepo.New(chDB)
+			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				AssistantIdentity:         assistantsSvc,
 				SignalAuthoring:           sigintSvc,
@@ -1862,6 +1863,7 @@ func newStartCommand() *cli.Command {
 				ToolCallSearch:            telemetryrepo.New(chDB),
 				TelemetryDrilldown:        telemetryrepo.New(chDB),
 				Analytics:                 analyticsSvc.Engine(),
+				Widgets:                   widgetsSvc,
 				WorkflowRun:               posthogClient,
 				CanonicalIdentity:         telemSvc,
 				RecentToolCalls:           telemetryrepo.New(chDB),
@@ -1903,7 +1905,7 @@ func newStartCommand() *cli.Command {
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
 			tm.Attach(mux, telemSvc)
 			analytics.Attach(mux, analyticsSvc)
-			widgets.Attach(mux, widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			widgets.Attach(mux, widgetsSvc)
 			dashboards.Attach(mux, dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			workloadpolicy.Attach(mux, workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, authserver.Hosts{ServerURL: serverURL.String(), AuthenticationHostBaseURL: mcpAuthenticationHost.BaseURL(), PlatformHosts: platformHosts}))
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
