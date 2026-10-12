@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -390,6 +391,9 @@ func (h *Handler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 		"access_token":  unsignedSessionJWT("devidp_session_" + uuid.NewString()),
 		"refresh_token": uuid.NewString(),
 	}
+	if method := authenticationMethod(); method != "" {
+		resp["authentication_method"] = method
+	}
 	if orgID != "" {
 		resp["organization_id"] = orgID
 	}
@@ -603,4 +607,18 @@ func strPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// authenticationMethod is what an authorization-code exchange reports.
+// DEVIDP_AUTHENTICATION_METHOD overrides the "SSO" default (e.g. "Password");
+// "none" omits it.
+func authenticationMethod() string {
+	switch v := os.Getenv("DEVIDP_AUTHENTICATION_METHOD"); v {
+	case "":
+		return "SSO"
+	case "none":
+		return ""
+	default:
+		return v
+	}
 }

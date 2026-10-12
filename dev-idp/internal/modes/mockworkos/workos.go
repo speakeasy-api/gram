@@ -44,6 +44,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -287,6 +288,8 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 	}
 	if body.GrantType == magicAuthGrantType {
 		resp["authentication_method"] = "MagicAuth"
+	} else if method := authenticationMethod(); method != "" {
+		resp["authentication_method"] = method
 	}
 	if orgID != "" {
 		resp["organization_id"] = orgID
@@ -1763,5 +1766,19 @@ func statusCodeForJSON(status int) string {
 		return "conflict"
 	default:
 		return "server_error"
+	}
+}
+
+// authenticationMethod is what an authorization-code exchange reports.
+// DEVIDP_AUTHENTICATION_METHOD overrides the "SSO" default (e.g. "Password");
+// "none" omits it.
+func authenticationMethod() string {
+	switch v := os.Getenv("DEVIDP_AUTHENTICATION_METHOD"); v {
+	case "":
+		return "SSO"
+	case "none":
+		return ""
+	default:
+		return v
 	}
 }

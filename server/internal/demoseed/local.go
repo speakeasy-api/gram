@@ -134,6 +134,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
+		{"verify developer email domain", localVerifiedDomainSQL, []any{spec.OrgID, emailDomain(dev.Email)}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
 		{"mcp registry", localMCPRegistrySQL, nil},
@@ -353,6 +354,16 @@ VALUES ($1, 'sso'), ($1, 'scim')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 `
 
+// The developer's email domain is verified locally so a dev-idp SSO sign-in
+// passes the SSO identity check end to end.
+const localVerifiedDomainSQL = `
+UPDATE organization_metadata
+SET verified_domains = array_append(COALESCE(verified_domains, '{}'), $2::text)
+WHERE id = $1
+  AND $2::text <> ''
+  AND NOT ($2::text = ANY(COALESCE(verified_domains, '{}')))
+`
+
 // A key with a well-known hash. The plaintext is never stored, so the row is
 // upserted by id and the value lives in mise.toml.
 const localAPIKeySQL = `
@@ -379,3 +390,11 @@ INSERT INTO mcp_registries (name, url)
 VALUES ('Speakeasy Recommended', 'https://api.pulsemcp.com')
 ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING
 `
+
+func emailDomain(email string) string {
+	at := strings.LastIndexByte(email, '@')
+	if at < 0 {
+		return ""
+	}
+	return strings.ToLower(email[at+1:])
+}
