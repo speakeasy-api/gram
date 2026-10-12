@@ -33,9 +33,10 @@ const (
 	newWidgetVersion = "new"
 
 	// maxWidgetProposalBytes bounds what the preview token hashes; a real widget is a few hundred bytes.
-	maxWidgetProposalBytes = 64 << 10
+	maxWidgetProposalBytes = 64 << 10 // 64 KiB
 
-	// maxListedWidgets bounds list_widgets; past it the result is marked truncated.
+	// maxListedWidgets bounds list_widgets. A project holds far fewer widgets
+	// than this; past it the result is marked truncated.
 	maxListedWidgets = 200
 )
 

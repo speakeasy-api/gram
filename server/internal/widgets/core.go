@@ -32,16 +32,22 @@ var ErrVersionChanged = errors.New("widget changed since it was read")
 
 // Input is a widget as a caller wants it saved.
 type Input struct {
-	Name          string         `json:"name"`
-	Description   *string        `json:"description"`
-	Dataset       string         `json:"dataset"`
-	Query         map[string]any `json:"query"`
+	// Name is the display name, 1 to 200 characters.
+	Name string `json:"name"`
+	// Description says what the widget is for, at most 2000 characters.
+	Description *string `json:"description"`
+	// Dataset is the catalog dataset the widget asks.
+	Dataset string `json:"dataset"`
+	// Query is the question, validated against the catalog.
+	Query map[string]any `json:"query"`
+	// Visualization is how the question is drawn, checked against the query.
 	Visualization map[string]any `json:"visualization"`
 }
 
 // Snapshot is a widget as read or written, with the version a later write
 // can expect.
 type Snapshot struct {
+	// Widget is the widget as the RPC shows it.
 	Widget *gen.Widget
 
 	// Version is the widget's updated_at at full precision. Every write moves
@@ -61,12 +67,15 @@ func Version(row repo.Widget) string {
 // challenge through the pool, which must not wait on a connection the
 // transaction holds.
 type Caller struct {
+	// auth is the request's auth context, with its project selected.
 	auth *contextvalues.AuthContext
 }
 
 // Change is a caller admitted to update or delete one widget.
 type Change struct {
-	caller   Caller
+	// caller is who is making the change.
+	caller Caller
+	// widgetID is the widget the caller may change.
 	widgetID uuid.UUID
 }
 
