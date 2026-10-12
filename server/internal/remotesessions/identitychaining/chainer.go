@@ -85,6 +85,9 @@ type Chainer struct {
 	locks      cache.Cache
 	observerMu sync.RWMutex
 	observer   Observer
+
+	// sourceOverrides replaces a provider kind's token source; tests only.
+	sourceOverrides map[remotesessions.EMAProviderKind]tokenSource
 }
 
 // New builds a chainer over the challenge manager's egress, tunnel and
@@ -92,12 +95,13 @@ type Chainer struct {
 // locks serializes acquisition across processes and shares failures.
 func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, keys *jwks.KeyResolver, locks cache.Cache) *Chainer {
 	return &Chainer{
-		Governor:   *NewGovernor(logger, db, enc, delegation),
-		challenges: challenges,
-		keys:       keys,
-		locks:      locks,
-		observerMu: sync.RWMutex{},
-		observer:   nil,
+		Governor:        *NewGovernor(logger, db, enc, delegation),
+		challenges:      challenges,
+		keys:            keys,
+		locks:           locks,
+		observerMu:      sync.RWMutex{},
+		observer:        nil,
+		sourceOverrides: nil,
 	}
 }
 
@@ -126,10 +130,39 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		attr.SlogRemoteSessionClientID(sel.clientID.String()),
 		attr.SlogOAuthResource(sel.resource),
 	)
-	if outcome = c.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
+	kinds, outcome := c.providerOrder(ctx, logger, req, sel)
+	if !outcome.Succeeded() {
 		return none, outcome
 	}
-	if outcome = c.checkDelegation(ctx, req, sel); !outcome.Succeeded() {
+	// Every allowed provider is tried in order; any failure falls through to
+	// the next. The first real failure is reported, since an unavailable
+	// source says nothing about the request.
+	var first Outcome
+	for _, kind := range kinds {
+		token, attempt := c.acquireFrom(ctx, logger.With(attr.SlogProvider(string(kind))), req, sel, c.source(kind))
+		attempt.Provider = kind
+		if attempt.Succeeded() {
+			return token, attempt
+		}
+		if attempt.Reason != ReasonProviderUnavailable && first.Reason == "" {
+			first = attempt
+		}
+	}
+	if first.Reason == "" {
+		return none, providerUnavailable
+	}
+	return none, first
+}
+
+// acquireFrom obtains a token for sel from one source: a still-valid stored
+// credential, or a fresh issue and redemption under single flight.
+func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, src tokenSource) (Token, Outcome) {
+	var none Token
+	sel.provider = src.kind()
+	if outcome := src.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
+		return none, outcome
+	}
+	if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
 		return none, outcome
 	}
 
@@ -173,7 +206,8 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 	attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
 	defer cancel()
 	startedAt := c.now()
-	token, outcome, grantValidated := c.acquire(attemptCtx, logger, req, sel)
+	token, outcome, grantValidated := c.acquire(attemptCtx, logger, req, sel, src)
+	outcome.Provider = src.kind()
 	if !outcome.Succeeded() {
 		logAcquisitionFailure(ctx, logger, outcome)
 		outcome.providerDescription = ""
@@ -191,6 +225,7 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 	// After publishing to waiters; the caller waits at most observeTimeout.
 	c.observe(ctx, logger, Observation{
 		OrganizationID:  req.OrganizationID,
+		Provider:        src.kind(),
 		TrustedIssuerID: sel.trustedIssuerID,
 		RemoteIssuerID:  sel.remoteIssuerID,
 		RemoteIssuer:    sel.issuer,
@@ -241,7 +276,7 @@ func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.L
 func cacheKey(prefix string, req Request, sel selection) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		req.OrganizationID, req.ProjectID.String(), req.UserSessionIssuerID.String(), req.UserID,
-		sel.bindingID.String(), strconv.FormatInt(sel.generation, 10),
+		string(sel.provider), sel.bindingID.String(), strconv.FormatInt(sel.generation, 10),
 		sel.trustedIssuerID.String(), sel.trustedClientID.String(), sel.audience,
 		sel.clientID.String(), sel.resource, strings.Join(sel.scopes, " "),
 	}, "\n")))

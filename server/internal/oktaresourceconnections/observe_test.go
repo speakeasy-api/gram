@@ -40,14 +40,14 @@ func confirmedUpstream(t *testing.T, ctx context.Context, si *instance, name str
 		RemoteIssuer:    audience,
 		Audience:        audience,
 		Resource:        row.ResourceIndicator + "/",
-		Outcome:         identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false},
+		Outcome:         identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""},
 		GrantValidated:  true,
 		StartedAt:       time.Now().Add(time.Second),
 	}
 }
 
 func failure(stage identitychaining.Stage, reason identitychaining.Reason, retryable bool) identitychaining.Outcome {
-	return identitychaining.Outcome{Stage: stage, Reason: reason, Confidence: identitychaining.ConfidenceInferred, Retryable: retryable, Cached: false}
+	return identitychaining.Outcome{Stage: stage, Reason: reason, Confidence: identitychaining.ConfidenceInferred, Retryable: retryable, Cached: false, Provider: ""}
 }
 
 func observedRow(t *testing.T, ctx context.Context, si *instance, serverID uuid.UUID) *gen.OktaResourceConnectionServer {
@@ -65,7 +65,7 @@ func TestObserveAttempt_Mapping(t *testing.T) {
 		want      string
 		state     string
 	}{
-		{"success", identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false}, true, "verified", "verified"},
+		{"success", identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, true, "verified", "verified"},
 		{"redemption rejected after a valid grant", failure(identitychaining.StageRedemption, identitychaining.ReasonInvalidGrant, false), true, "downstream_rejected", "broken"},
 		{"exchange invalid_target", failure(identitychaining.StageExchange, identitychaining.ReasonInvalidTarget, false), false, "connection_missing", "needs_connection"},
 		{"exchange scope denied", failure(identitychaining.StageExchange, identitychaining.ReasonScopePolicyDenied, false), false, "scope_not_allowed", "broken"},

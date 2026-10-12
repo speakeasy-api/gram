@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,7 +50,8 @@ func (g *Governor) Governs(ctx context.Context, req Request) bool {
 
 // Serves reports the remote session issuer whose binding identity chaining
 // would use for req. Unlike Governs it requires exactly one ready binding, so
-// an ambiguous configuration is never presented as configured.
+// an ambiguous configuration is never presented as configured, and at least
+// one identity provider allowed for the vendor.
 func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !req.complete() {
 		return uuid.Nil, false
@@ -58,7 +60,28 @@ func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !outcome.Succeeded() {
 		return uuid.Nil, false
 	}
+	if _, outcome := g.providerOrder(ctx, g.logger, req, sel); !outcome.Succeeded() {
+		return uuid.Nil, false
+	}
 	return sel.remoteIssuerID, true
+}
+
+// Providers lists the identity provider kinds identity chaining would try
+// for req's upstream, in order. Faults and unconfigured upstreams read as
+// none.
+func (g *Governor) Providers(ctx context.Context, req Request) []remotesessions.EMAProviderKind {
+	if !req.complete() {
+		return nil
+	}
+	sel, outcome := g.selectBinding(ctx, g.logger, req)
+	if !outcome.Succeeded() {
+		return nil
+	}
+	kinds, outcome := g.providerOrder(ctx, g.logger, req, sel)
+	if !outcome.Succeeded() {
+		return nil
+	}
+	return kinds
 }
 
 // Configured reports whether any binding exists for the user session issuer
@@ -91,6 +114,12 @@ func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 	}
 	sel, outcome := g.selectBinding(ctx, g.logger, req)
 	if !outcome.Succeeded() {
+		return false
+	}
+	// Stored credentials are external; one the vendor's policy no longer
+	// allows is never reported usable.
+	kinds, outcome := g.providerOrder(ctx, g.logger, req, sel)
+	if !outcome.Succeeded() || !slices.Contains(kinds, remotesessions.EMAProviderExternal) {
 		return false
 	}
 	q := repo.New(g.db)

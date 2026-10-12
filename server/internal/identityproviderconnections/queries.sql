@@ -517,3 +517,42 @@ WHERE u.organization_id = @organization_id
   AND u.deleted IS FALSE
   AND c.identity_provider_connection_id IS NULL
 ORDER BY u.slug, u.id;
+
+-- name: ListVendorIdentityProviders :many
+-- The organization's ordered identity provider policy for one vendor issuer,
+-- including rows whose connection has since been deleted (shown as stale).
+SELECT p.id, p.provider_kind, p.identity_provider_connection_id, p.position,
+  (p.identity_provider_connection_id IS NOT NULL AND (c.id IS NULL OR c.deleted IS TRUE))::boolean AS connection_deleted
+FROM ema_vendor_identity_providers AS p
+LEFT JOIN identity_provider_connections AS c
+  ON c.organization_id = p.organization_id
+ AND c.id = p.identity_provider_connection_id
+WHERE p.organization_id = @organization_id
+  AND p.vendor_issuer = @vendor_issuer
+  AND p.deleted IS FALSE
+ORDER BY p.position;
+
+-- name: DeleteVendorIdentityProviders :execrows
+-- Retires the organization's policy for one vendor issuer before a replace.
+UPDATE ema_vendor_identity_providers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND vendor_issuer = @vendor_issuer
+  AND deleted IS FALSE;
+
+-- name: InsertVendorIdentityProvider :exec
+INSERT INTO ema_vendor_identity_providers (
+  organization_id, vendor_issuer, provider_kind, identity_provider_connection_id, position
+) VALUES (
+  @organization_id, @vendor_issuer, @provider_kind, @identity_provider_connection_id, @position
+);
+
+-- name: GetLiveIdentityProviderConnection :one
+-- A live connection of the organization, for validating policy references.
+SELECT id, provider
+FROM identity_provider_connections
+WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
+
+-- name: LockOrganizationVendorIdentityProviders :exec
+-- Serializes policy replaces for one organization.
+SELECT pg_advisory_xact_lock(hashtextextended('ema_vendor_identity_providers:' || @organization_id::text, 0));

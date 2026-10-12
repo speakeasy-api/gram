@@ -5222,3 +5222,35 @@ WHERE g.user_session_issuer_id = @user_session_issuer_id
   AND p.deleted IS FALSE
   AND g.deleted IS FALSE
 ORDER BY p.name, g.id;
+
+-- name: ListEMAVendorIdentityProviders :many
+-- The organization's ordered identity provider policy for one vendor
+-- authorization server issuer. Rows naming a connection that has since been
+-- deleted are flagged, not dropped, so a policy that only named deleted
+-- connections never reads as no policy.
+SELECT p.provider_kind, p.identity_provider_connection_id, p.position,
+  (p.identity_provider_connection_id IS NOT NULL AND (c.id IS NULL OR c.deleted IS TRUE))::boolean AS connection_deleted
+FROM ema_vendor_identity_providers AS p
+LEFT JOIN identity_provider_connections AS c
+  ON c.organization_id = p.organization_id
+ AND c.id = p.identity_provider_connection_id
+WHERE p.organization_id = @organization_id
+  AND p.vendor_issuer = @vendor_issuer
+  AND p.deleted IS FALSE
+ORDER BY p.position;
+
+-- name: GetEMAExternalProviderConnection :one
+-- The live identity provider connection backing the organization remote
+-- session issuer an endpoint trusts, if any. Each provider's subtype row
+-- records the issuer it provisioned; Okta is the only provider today.
+SELECT c.id
+FROM identity_provider_connections AS c
+JOIN okta_identity_provider_connections AS o
+  ON o.identity_provider_connection_id = c.id
+ AND o.organization_id = c.organization_id
+ AND o.deleted IS FALSE
+WHERE c.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND o.remote_session_issuer_id = @remote_session_issuer_id
+ORDER BY c.id
+LIMIT 1;

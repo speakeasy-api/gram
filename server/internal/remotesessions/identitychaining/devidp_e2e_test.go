@@ -54,6 +54,14 @@ type devIDPFixture struct {
 	db          *pgxpool.Pool
 	enc         *encryption.Client
 	idpClientID uuid.UUID
+
+	// connectionID is the Okta connection backing the trusted registration;
+	// uuid.Nil unless the options asked for one.
+	connectionID uuid.UUID
+
+	// vendorIssuer is the downstream authorization server issuer the
+	// binding names, as a provider policy keys it.
+	vendorIssuer string
 }
 
 // recordingObserver keeps every observation the chainer reports.
@@ -89,6 +97,9 @@ type devIDPOptions struct {
 	// confirmAudience records an administrator-confirmed Okta resource
 	// connection naming the dev-idp resource server's issuer as audience.
 	confirmAudience bool
+
+	// connection records an Okta connection backing the trusted registration.
+	connection bool
 }
 
 // newDevIDPFixture wires a human with a retained dev-idp ID token, a ready
@@ -159,7 +170,8 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://mcp.docs.example"}
 	bindResource(t, db, req, resourceIssuer, resourceClient, devIDPResource, remotesessions.PreparationStateReady)
 
-	if opts.confirmAudience {
+	connectionID := uuid.Nil
+	if opts.confirmAudience || opts.connection {
 		connection, err := identityproviderconnectionsrepo.New(db).CreateIdentityProviderConnection(ctx, identityproviderconnectionsrepo.CreateIdentityProviderConnectionParams{OrganizationID: org, Provider: "okta"})
 		require.NoError(t, err)
 		_, err = identityproviderconnectionsrepo.New(db).CreateOktaIdentityProviderConnection(ctx, identityproviderconnectionsrepo.CreateOktaIdentityProviderConnectionParams{
@@ -167,8 +179,11 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 			RemoteSessionIssuerID: idpIssuer.ID, RemoteSessionClientID: idpClient.ID, ListingMode: "custom_app",
 		})
 		require.NoError(t, err)
+		connectionID = connection.ID
+	}
+	if opts.confirmAudience {
 		_, err = oktaresourceconnectionsrepo.New(db).UpsertResourceConnection(ctx, oktaresourceconnectionsrepo.UpsertResourceConnectionParams{
-			OrganizationID: org, IdentityProviderConnectionID: connection.ID, RemoteSessionIssuerID: resourceIssuer,
+			OrganizationID: org, IdentityProviderConnectionID: connectionID, RemoteSessionIssuerID: resourceIssuer,
 			Resource: strings.TrimRight(devIDPResource, "/"), Audience: resourceAS, OktaApplicationID: pgtype.Text{},
 		})
 		require.NoError(t, err)
@@ -208,13 +223,15 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	observed := &recordingObserver{}
 	chainer.SetObserver(observed)
 	return devIDPFixture{
-		observed:    observed,
-		idp:         idp,
-		chainer:     chainer,
-		req:         req,
-		db:          db,
-		enc:         enc,
-		idpClientID: idpClient.ID,
+		observed:     observed,
+		idp:          idp,
+		chainer:      chainer,
+		req:          req,
+		db:           db,
+		enc:          enc,
+		idpClientID:  idpClient.ID,
+		connectionID: connectionID,
+		vendorIssuer: remoteIssuer,
 	}
 }
 
@@ -281,7 +298,7 @@ func TestDevIDP_UnassignedHumanIsDeniedAndCached(t *testing.T) {
 	f := newDevIDPFixture(t, devIDPOptions{unassigned: true})
 
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
-	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false}, outcome)
+	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome)
 	observed := f.observed.all()
 	require.Len(t, observed, 1)
 	require.Equal(t, outcome, observed[0].Outcome)
@@ -312,7 +329,7 @@ func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 
 	requests := f.idp.Requests()
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
-	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonConfigurationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome,
+	require.Equal(t, Outcome{Stage: StageDelegation, Reason: ReasonConfigurationRequired, Confidence: ConfidenceVerified, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome,
 		"a token acquired under the previous trusted registration is never released")
 	require.Equal(t, requests, f.idp.Requests())
 }

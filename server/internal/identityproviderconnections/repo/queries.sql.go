@@ -217,6 +217,28 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 	return i, err
 }
 
+const deleteVendorIdentityProviders = `-- name: DeleteVendorIdentityProviders :execrows
+UPDATE ema_vendor_identity_providers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND vendor_issuer = $2
+  AND deleted IS FALSE
+`
+
+type DeleteVendorIdentityProvidersParams struct {
+	OrganizationID string
+	VendorIssuer   string
+}
+
+// Retires the organization's policy for one vendor issuer before a replace.
+func (q *Queries) DeleteVendorIdentityProviders(ctx context.Context, arg DeleteVendorIdentityProvidersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteVendorIdentityProviders, arg.OrganizationID, arg.VendorIssuer)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const forceManagedClientAuthMethodFixture = `-- name: ForceManagedClientAuthMethodFixture :execrows
 UPDATE remote_session_clients
 SET token_endpoint_auth_method = $1
@@ -324,6 +346,30 @@ func (q *Queries) GetIdentityProviderConnectionIncludingDeleted(ctx context.Cont
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getLiveIdentityProviderConnection = `-- name: GetLiveIdentityProviderConnection :one
+SELECT id, provider
+FROM identity_provider_connections
+WHERE organization_id = $1 AND id = $2 AND deleted IS FALSE
+`
+
+type GetLiveIdentityProviderConnectionParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type GetLiveIdentityProviderConnectionRow struct {
+	ID       uuid.UUID
+	Provider string
+}
+
+// A live connection of the organization, for validating policy references.
+func (q *Queries) GetLiveIdentityProviderConnection(ctx context.Context, arg GetLiveIdentityProviderConnectionParams) (GetLiveIdentityProviderConnectionRow, error) {
+	row := q.db.QueryRow(ctx, getLiveIdentityProviderConnection, arg.OrganizationID, arg.ID)
+	var i GetLiveIdentityProviderConnectionRow
+	err := row.Scan(&i.ID, &i.Provider)
 	return i, err
 }
 
@@ -710,6 +756,33 @@ func (q *Queries) GetPlatformGcpIamCredentialForProvisioning(ctx context.Context
 	return i, err
 }
 
+const insertVendorIdentityProvider = `-- name: InsertVendorIdentityProvider :exec
+INSERT INTO ema_vendor_identity_providers (
+  organization_id, vendor_issuer, provider_kind, identity_provider_connection_id, position
+) VALUES (
+  $1, $2, $3, $4, $5
+)
+`
+
+type InsertVendorIdentityProviderParams struct {
+	OrganizationID               string
+	VendorIssuer                 string
+	ProviderKind                 string
+	IdentityProviderConnectionID uuid.NullUUID
+	Position                     int32
+}
+
+func (q *Queries) InsertVendorIdentityProvider(ctx context.Context, arg InsertVendorIdentityProviderParams) error {
+	_, err := q.db.Exec(ctx, insertVendorIdentityProvider,
+		arg.OrganizationID,
+		arg.VendorIssuer,
+		arg.ProviderKind,
+		arg.IdentityProviderConnectionID,
+		arg.Position,
+	)
+	return err
+}
+
 const keySetAttached = `-- name: KeySetAttached :one
 SELECT EXISTS (
   SELECT 1
@@ -917,6 +990,60 @@ func (q *Queries) ListParkedConnectionKeySets(ctx context.Context, arg ListParke
 	return items, nil
 }
 
+const listVendorIdentityProviders = `-- name: ListVendorIdentityProviders :many
+SELECT p.id, p.provider_kind, p.identity_provider_connection_id, p.position,
+  (p.identity_provider_connection_id IS NOT NULL AND (c.id IS NULL OR c.deleted IS TRUE))::boolean AS connection_deleted
+FROM ema_vendor_identity_providers AS p
+LEFT JOIN identity_provider_connections AS c
+  ON c.organization_id = p.organization_id
+ AND c.id = p.identity_provider_connection_id
+WHERE p.organization_id = $1
+  AND p.vendor_issuer = $2
+  AND p.deleted IS FALSE
+ORDER BY p.position
+`
+
+type ListVendorIdentityProvidersParams struct {
+	OrganizationID string
+	VendorIssuer   string
+}
+
+type ListVendorIdentityProvidersRow struct {
+	ID                           uuid.UUID
+	ProviderKind                 string
+	IdentityProviderConnectionID uuid.NullUUID
+	Position                     int32
+	ConnectionDeleted            bool
+}
+
+// The organization's ordered identity provider policy for one vendor issuer,
+// including rows whose connection has since been deleted (shown as stale).
+func (q *Queries) ListVendorIdentityProviders(ctx context.Context, arg ListVendorIdentityProvidersParams) ([]ListVendorIdentityProvidersRow, error) {
+	rows, err := q.db.Query(ctx, listVendorIdentityProviders, arg.OrganizationID, arg.VendorIssuer)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVendorIdentityProvidersRow
+	for rows.Next() {
+		var i ListVendorIdentityProvidersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProviderKind,
+			&i.IdentityProviderConnectionID,
+			&i.Position,
+			&i.ConnectionDeleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockIdentityProviderConnectionCreate = `-- name: LockIdentityProviderConnectionCreate :one
 SELECT pg_try_advisory_xact_lock(hashtextextended('identity-provider-create:' || $1::text, 0))
 `
@@ -1054,6 +1181,16 @@ func (q *Queries) LockOktaTokenCredential(ctx context.Context, arg LockOktaToken
 	var i LockOktaTokenCredentialRow
 	err := row.Scan(&i.ClientSecretEncrypted, &i.ClientID)
 	return i, err
+}
+
+const lockOrganizationVendorIdentityProviders = `-- name: LockOrganizationVendorIdentityProviders :exec
+SELECT pg_advisory_xact_lock(hashtextextended('ema_vendor_identity_providers:' || $1::text, 0))
+`
+
+// Serializes policy replaces for one organization.
+func (q *Queries) LockOrganizationVendorIdentityProviders(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockOrganizationVendorIdentityProviders, organizationID)
+	return err
 }
 
 const managedClientIDInUse = `-- name: ManagedClientIDInUse :one
