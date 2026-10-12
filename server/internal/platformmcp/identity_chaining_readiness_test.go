@@ -49,8 +49,15 @@ func (g *recordingGovernor) HasUsableCredential(context.Context, identitychainin
 	return g.usable
 }
 
-func (g *recordingGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool) {
-	return remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: true, Providers: nil}, g.serves
+func (g *recordingGovernor) ProviderOrder(_ context.Context, req identitychaining.Request) (remotesessions.EMAProviderOrder, bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.requests = append(g.requests, req)
+	providers := []remotesessions.EMAProvider{}
+	if g.serves {
+		providers = append(providers, remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""})
+	}
+	return remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: true, Providers: providers}, g.serves
 }
 
 func (g *recordingGovernor) recorded() []identitychaining.Request {
