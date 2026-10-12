@@ -1,3 +1,8 @@
+import { errorMessage } from "@/lib/gramAdminApi";
+import {
+  RemoveCauses$outboundSchema,
+  type RepairInferenceKeyRequestBody,
+} from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import { useId, useRef, useState, type JSX } from "react";
 import { AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,11 +32,10 @@ export interface RepairKeyCause {
   removable: boolean;
   blockedReason?: string;
 }
-export interface RepairKeySubmission {
-  removeCauses: string[];
-  reason: string;
-  confirmation: string;
-}
+export type RepairKeySubmission = Pick<
+  RepairInferenceKeyRequestBody,
+  "removeCauses" | "reason" | "confirmation"
+>;
 export interface RepairInferenceKeyProps {
   keyType: string;
   keyName: string;
@@ -105,16 +109,18 @@ export function RepairInferenceKey({
     setError(null);
     try {
       await onSubmit({
-        removeCauses: removals.map((cause) => cause.cause),
+        removeCauses: removals.map((cause) =>
+          RemoveCauses$outboundSchema.parse(cause.cause),
+        ),
         reason: reason.trim(),
-        confirmation,
+        confirmation: CONFIRMATION,
       });
       setAccepted(true);
       setOpen(false);
     } catch (failure) {
       setError(
         failure instanceof Error
-          ? failure.message
+          ? errorMessage(failure)
           : "Could not repair this key. Please try again.",
       );
     } finally {

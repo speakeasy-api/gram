@@ -779,3 +779,56 @@ it.each([
     expect(href).toHaveBeenCalledOnce();
   },
 );
+
+it.each([401, 503])(
+  "keeps repair same-origin without retries and preserves HTTP %s errors",
+  async (status) => {
+    vi.resetModules();
+    const fresh = await import("@/lib/gramAdminClient");
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(unauthorizedBody, {
+          status,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const href = vi.spyOn(window.location, "href", "set");
+    await expect(
+      fresh.repairInferenceKey({
+        organizationId: "org_placeholder",
+        keyType: "chat",
+        confirmation: "I know what I'm doing",
+        removeCauses: ["admin_lock"],
+        reason: "BUG-123",
+        serverURL: "https://untrusted.example.test",
+        options: {
+          serverURL: "https://untrusted.example.test",
+          retries: { strategy: "backoff" },
+          fetchOptions: {
+            credentials: "include",
+            headers: { Authorization: "forged" },
+          },
+        },
+      } as never),
+    ).rejects.toMatchObject({ statusCode: status });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const request = fetch.mock.calls[0]![0] as Request;
+    expect(request.url).toBe(
+      `${window.location.origin}/admin/organization.repairInferenceKey`,
+    );
+    expect(request.credentials).toBe("same-origin");
+    expect(request.headers.has("Authorization")).toBe(false);
+    expect(request.headers.has("Cookie")).toBe(false);
+    expect(await request.json()).toEqual({
+      organization_id: "org_placeholder",
+      key_type: "chat",
+      confirmation: "I know what I'm doing",
+      remove_causes: ["admin_lock"],
+      reason: "BUG-123",
+    });
+    expect(fresh.isRedirectingToLogin()).toBe(status === 401);
+    expect(href).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+  },
+);

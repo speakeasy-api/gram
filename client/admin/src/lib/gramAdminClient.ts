@@ -1,3 +1,6 @@
+import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
+import { buildAdminRepairInferenceKeyMutation } from "@gram/admin-client/react-query/adminRepairInferenceKey";
+import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import type {
   AdminSetRegistryEntryPublishedMutationData,
   AdminSetRegistryEntryPublishedMutationError,
@@ -1030,4 +1033,17 @@ export function registryOktaUnmappedQuery(): ReturnType<
   typeof createRegistryOktaUnmappedQuery
 > {
   return createRegistryOktaUnmappedQuery();
+}
+
+const generatedRepairInferenceKeyMutation =
+  buildAdminRepairInferenceKeyMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function repairInferenceKey(
+  request: RepairInferenceKeyRequestBody,
+): Promise<AdminInferenceKeyRepairResult> {
+  return redirecting(
+    generatedRepairInferenceKeyMutation.mutationFn({ request }),
+  );
 }

@@ -345,19 +345,59 @@ describe("organization billing endpoints", () => {
     });
     expect(result).toEqual(response);
     expect(result.key).not.toHaveProperty("credits_used");
-    expect(fetch).toHaveBeenCalledWith(
-      "/admin/organization.repairInferenceKey",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          organization_id: "org_1",
-          key_type: "internal",
-          remove_causes: ["admin_lock"],
-          confirmation: "I know what I'm doing",
-          reason: "BUG-123",
-        }),
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const request = fetch.mock.calls[0]![0] as Request;
+    expect(request.url).toBe(
+      `${window.location.origin}/admin/organization.repairInferenceKey`,
+    );
+    expect(request.method).toBe("POST");
+    expect(request.credentials).toBe("same-origin");
+    expect(request.headers.has("Authorization")).toBe(false);
+    expect(request.headers.has("Cookie")).toBe(false);
+    expect(await request.json()).toEqual({
+      organization_id: "org_1",
+      key_type: "internal",
+      remove_causes: ["admin_lock"],
+      confirmation: "I know what I'm doing",
+      reason: "BUG-123",
+    });
+  });
+
+  it.each([
+    { confirmation: "almost" },
+    { removeCauses: ["unknown_lock"] },
+    { keyType: "unknown" },
+  ])("rejects invalid repair input before fetching: %j", async (invalid) => {
+    const fetch = stubFetch();
+    await expect(
+      repairInferenceKey({
+        organizationID: "org_placeholder",
+        keyType: "chat",
+        removeCauses: ["admin_lock"],
+        confirmation: "I know what I'm doing",
+        reason: "BUG-123",
+        ...invalid,
+      } as never),
+    ).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed successful repair responses at the SDK boundary", async () => {
+    const fetch = stubFetch();
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ key: {}, reconciliation_pending: true }), {
+        headers: { "Content-Type": "application/json" },
       }),
     );
+    await expect(
+      repairInferenceKey({
+        organizationID: "org_placeholder",
+        keyType: "chat",
+        removeCauses: ["admin_lock"],
+        confirmation: "I know what I'm doing",
+        reason: "BUG-123",
+      }),
+    ).rejects.toThrow();
   });
 
   afterEach(() => vi.unstubAllGlobals());

@@ -1,3 +1,4 @@
+import { ServiceError } from "@gram/admin-client/models/errors/serviceerror";
 import {
   act,
   cleanup,
@@ -310,5 +311,38 @@ it("does not describe an enabled legacy key as still disabled", () => {
   );
   expect(screen.getByRole("status").textContent).not.toContain(
     "Still disabled",
+  );
+});
+
+it("normalizes generated server errors instead of showing the handler verb", async () => {
+  setup({
+    onSubmit: vi.fn().mockRejectedValue(
+      new ServiceError(
+        {
+          fault: true,
+          id: "placeholder",
+          message: "repair inference key",
+          name: "internal",
+          temporary: false,
+          timeout: false,
+        },
+        {
+          response: new Response("{}", {
+            status: 500,
+            statusText: "Internal Server Error",
+          }),
+          request: new Request("https://admin.example.test/rpc"),
+          body: "{}",
+        },
+      ),
+    ),
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Trial ended" }));
+  confirm();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove selected locks" }),
+  );
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "gram admin 500 Internal Server Error",
   );
 });

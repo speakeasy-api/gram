@@ -294,6 +294,7 @@ function InferenceKeyRepair({
   const { announce } = useWriteReport();
   const queryKey = inferenceKeysQuery(organizationID).queryKey;
   const mutation = useMutation({
+    retry: false,
     mutationFn: (submission: RepairKeySubmission) =>
       repairInferenceKey({
         organizationID,
