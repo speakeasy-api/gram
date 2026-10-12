@@ -229,12 +229,10 @@ function blockingPolicyWithDirtyDraftName(): RiskPolicy {
     createdAt: new Date("2026-01-01T10:00:00Z"),
     enabled: true,
     id: "policy-1",
-    pendingMessages: 0,
     policyType: "standard",
     projectId: "project-1",
     score: 5,
     sources: ["shadow_mcp"],
-    totalMessages: 0,
     updatedAt: new Date("2026-01-01T10:00:00Z"),
     version: 1,
   };

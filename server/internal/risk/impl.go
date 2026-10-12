@@ -858,7 +858,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
-	mcpScope := policycore.Project(current, nil, nil).MCPScope
+	mcpScope := policycore.Project(current, nil).MCPScope
 	mcpScopeJSON := current.McpScope
 	if payload.McpScope != nil {
 		mcpScope, mcpScopeJSON, err = s.normalizeMCPScope(ctx, *authCtx.ProjectID, payload.McpScope)
@@ -2155,73 +2155,6 @@ func (s *Service) GetRiskRuleBreakdown(ctx context.Context, payload *gen.GetRisk
 		Category: payload.Category,
 		Rules:    rules,
 		Total:    total,
-	}, nil
-}
-
-func (s *Service) GetRiskPolicyStatus(ctx context.Context, payload *gen.GetRiskPolicyStatusPayload) (*types.RiskPolicyStatus, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	id, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.C(oops.CodeInvalid)
-	}
-
-	policy, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
-	}
-
-	totalMessages, err := s.repo.CountTotalMessages(ctx, uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count total messages").LogError(ctx, s.logger)
-	}
-
-	analyzedMessages, err := s.repo.CountAnalyzedMessages(ctx, repo.CountAnalyzedMessagesParams{
-		ProjectID:         *authCtx.ProjectID,
-		RiskPolicyID:      id,
-		RiskPolicyVersion: policy.Version,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count analyzed messages").LogError(ctx, s.logger)
-	}
-
-	findingsCount, err := s.repo.CountFindingsByPolicy(ctx, repo.CountFindingsByPolicyParams{
-		ProjectID:         *authCtx.ProjectID,
-		RiskPolicyID:      id,
-		RiskPolicyVersion: policy.Version,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "count findings").LogError(ctx, s.logger)
-	}
-
-	pending := max(totalMessages-analyzedMessages, 0)
-
-	// We report a simplified workflow status based on pending work.
-	workflowStatus := "not_started"
-	if pending > 0 && policy.Enabled {
-		workflowStatus = "running"
-	} else if pending == 0 && policy.Enabled {
-		workflowStatus = "sleeping"
-	}
-
-	return &types.RiskPolicyStatus{
-		PolicyID:         id.String(),
-		PolicyVersion:    policy.Version,
-		TotalMessages:    totalMessages,
-		AnalyzedMessages: analyzedMessages,
-		PendingMessages:  pending,
-		FindingsCount:    findingsCount,
-		WorkflowStatus:   workflowStatus,
 	}, nil
 }
 
@@ -3720,7 +3653,7 @@ func findingToMatch(f scanners.Finding) *gen.TestDetectionRuleMatch {
 // policyToType converts an already-loaded database row to the API type,
 // enriching it through the shared transport-neutral policy core.
 func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types.RiskPolicy, error) {
-	policy, err := s.policies.ProjectWithProgress(ctx, row)
+	policy, err := s.policies.ProjectWithAudience(ctx, row)
 	if err != nil {
 		return nil, fmt.Errorf("project risk policy: %w", err)
 	}

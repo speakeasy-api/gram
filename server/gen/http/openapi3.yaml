@@ -60559,112 +60559,6 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskGetPolicyChallenge
                 type: mutation
-    /rpc/risk.getPolicyStatus:
-        get:
-            description: Get the analysis status of a risk policy including progress and workflow state.
-            operationId: getRiskPolicyStatus
-            parameters:
-                - allowEmptyValue: true
-                  description: The policy ID.
-                  in: query
-                  name: id
-                  required: true
-                  schema:
-                    description: The policy ID.
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RiskPolicyStatus'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-            summary: getRiskPolicyStatus risk
-            tags:
-                - risk
-            x-speakeasy-group: risk.policies
-            x-speakeasy-name-override: status
     /rpc/risk.getRuleBreakdown:
         get:
             description: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.
@@ -108635,10 +108529,6 @@ components:
                 name:
                     type: string
                     description: The policy name.
-                pending_messages:
-                    type: integer
-                    description: Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).
-                    format: int64
                 policy_type:
                     type: string
                     description: 'Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).'
@@ -108689,10 +108579,6 @@ components:
                     items:
                         type: string
                     description: Detection sources enabled for this policy.
-                total_messages:
-                    type: integer
-                    description: Total number of messages in the project. Populated on single-policy reads; omitted from list responses.
-                    format: int64
                 updated_at:
                     type: string
                     description: When the policy was last updated.
@@ -108860,48 +108746,6 @@ components:
                     type: number
                     description: Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.
                     format: double
-        RiskPolicyStatus:
-            type: object
-            properties:
-                analyzed_messages:
-                    type: integer
-                    description: Messages analyzed at the current policy version.
-                    format: int64
-                findings_count:
-                    type: integer
-                    description: Number of findings at the current policy version.
-                    format: int64
-                pending_messages:
-                    type: integer
-                    description: Messages not yet analyzed.
-                    format: int64
-                policy_id:
-                    type: string
-                    description: The risk policy ID.
-                    format: uuid
-                policy_version:
-                    type: integer
-                    description: Current policy version.
-                    format: int64
-                total_messages:
-                    type: integer
-                    description: Total messages in the project.
-                    format: int64
-                workflow_status:
-                    type: string
-                    description: 'Workflow state: running, sleeping, or not_started.'
-                    enum:
-                        - running
-                        - sleeping
-                        - not_started
-            required:
-                - policy_id
-                - policy_version
-                - total_messages
-                - analyzed_messages
-                - pending_messages
-                - findings_count
-                - workflow_status
         RiskResult:
             type: object
             properties:
