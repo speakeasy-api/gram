@@ -552,9 +552,10 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 	// Optional system prompt
 	if req.SystemPrompt != "" {
 		messages = append(messages, or.CreateChatMessagesSystem(or.ChatSystemMessage{
-			Role:    or.ChatSystemMessageRoleSystem,
-			Content: or.CreateChatSystemMessageContentStr(req.SystemPrompt),
-			Name:    nil,
+			ConfigurationUpdate: nil,
+			Role:                or.ChatSystemMessageRoleSystem,
+			Content:             or.CreateChatSystemMessageContentStr(req.SystemPrompt),
+			Name:                nil,
 		}))
 	}
 
@@ -1076,6 +1077,7 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 
 	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
+		SessionID: nil, Trace: nil,
 		Model:          model,
 		Input:          or_operations.CreateInputUnionArrayOfStr(inputs),
 		EncodingFormat: nil,
