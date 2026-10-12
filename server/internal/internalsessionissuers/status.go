@@ -70,13 +70,16 @@ type Status struct {
 	// RolledOut is the rollout flag; Entitled is the SSO entitlement.
 	RolledOut bool
 	Entitled  bool
+	// ActiveKey is the signing key Status read; set only for an issuer that
+	// reached the key check.
+	ActiveKey *repo.JsonWebKey
 }
 
 // Status reads an organization's state. A flag or entitlement lookup failure
 // is an error, never a silent state. A keyless issuer is checked before the
 // pause switch: it cannot sign either way.
 func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error) {
-	status := Status{State: StateUnavailable, Issuer: nil, RolledOut: false, Entitled: false}
+	status := Status{State: StateUnavailable, Issuer: nil, RolledOut: false, Entitled: false, ActiveKey: nil}
 	row, err := repo.New(g.db).GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -109,13 +112,13 @@ func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error
 	case status.Issuer == nil:
 		status.State = StateSetupRequired
 	default:
-		keyless, err := Keyless(ctx, g.db, organizationID, status.Issuer.JsonWebKeySetID)
+		status.ActiveKey, err = ActiveKey(ctx, g.db, organizationID, status.Issuer.JsonWebKeySetID)
 		if err != nil {
 			return status, err
 		}
 		status.State = StateEnabled
 		switch {
-		case keyless:
+		case status.ActiveKey == nil:
 			status.State = StateKeyless
 		case g.signingPaused(ctx, organizationID, groups):
 			status.State = StateSigningPaused
@@ -124,16 +127,16 @@ func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error
 	return status, nil
 }
 
-// Keyless reports whether the issuer's set has no active key.
-func Keyless(ctx context.Context, db repo.DBTX, organizationID string, setID uuid.UUID) (bool, error) {
-	_, err := repo.New(db).GetActiveJsonWebKey(ctx, repo.GetActiveJsonWebKeyParams{JsonWebKeySetID: setID, OrganizationID: organizationID})
+// ActiveKey returns the issuer set's active key, or nil when it is keyless.
+func ActiveKey(ctx context.Context, db repo.DBTX, organizationID string, setID uuid.UUID) (*repo.JsonWebKey, error) {
+	key, err := repo.New(db).GetActiveJsonWebKey(ctx, repo.GetActiveJsonWebKeyParams{JsonWebKeySetID: setID, OrganizationID: organizationID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return true, nil
+		return nil, nil
 	case err != nil:
-		return false, fmt.Errorf("read active issuer key: %w", err)
+		return nil, fmt.Errorf("read active issuer key: %w", err)
 	}
-	return false, nil
+	return &key, nil
 }
 
 // signingPaused fails closed: signing runs only when the kill switch is

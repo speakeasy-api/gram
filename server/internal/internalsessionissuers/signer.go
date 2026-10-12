@@ -150,16 +150,13 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 	if err != nil {
 		return "", fmt.Errorf("read issuer status: %w", err)
 	}
-	if status.State != StateEnabled || status.Issuer == nil {
+	if status.State != StateEnabled || status.Issuer == nil || status.ActiveKey == nil {
 		return "", &SigningRefusedError{State: status.State}
 	}
 	issuer := *status.Issuer
+	key := *status.ActiveKey
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
 	q := repo.New(s.db)
-	key, err := q.GetActiveJsonWebKey(ctx, repo.GetActiveJsonWebKeyParams{JsonWebKeySetID: issuer.JsonWebKeySetID, OrganizationID: organizationID})
-	if err != nil {
-		return "", fmt.Errorf("load active issuer key: %w", err)
-	}
 	backing, err := q.GetExternalKeyForMint(ctx, repo.GetExternalKeyForMintParams{ID: key.ExternalKeyID, OrganizationID: conv.ToPGText(organizationID)})
 	if err != nil {
 		return "", fmt.Errorf("load issuer backing key: %w", err)

@@ -265,8 +265,8 @@ func (s *Service) replace(ctx context.Context, logger *slog.Logger, organization
 	if err != nil {
 		return fmt.Errorf("read issuer: %w", err)
 	}
-	keyless, err := Keyless(ctx, s.db, organizationID, issuer.JsonWebKeySetID)
-	if err != nil || !keyless {
+	active, err := ActiveKey(ctx, s.db, organizationID, issuer.JsonWebKeySetID)
+	if err != nil || active != nil {
 		return err
 	}
 	if err := s.allowMint(ctx, logger, organizationID); err != nil {
@@ -392,7 +392,7 @@ func (s *Service) databaseState(ctx context.Context, organizationID string, row 
 	if row.DisabledAt.Valid {
 		return StateDisabled
 	}
-	if keyless, err := Keyless(ctx, s.db, organizationID, row.JsonWebKeySetID); err == nil && keyless {
+	if active, err := ActiveKey(ctx, s.db, organizationID, row.JsonWebKeySetID); err == nil && active == nil {
 		return StateKeyless
 	}
 	return StateSigningPaused
