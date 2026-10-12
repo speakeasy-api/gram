@@ -283,6 +283,8 @@ export function TokenEndpointAuthMethodField({
   value,
   onChange,
   allowPrivateKeyJwt = false,
+  privateKeyJwtUnavailable,
+  hideNone = false,
   disabled = false,
 }: {
   value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
@@ -290,6 +292,13 @@ export function TokenEndpointAuthMethodField({
     value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => void;
   allowPrivateKeyJwt?: boolean;
+  /**
+   * Lists private_key_jwt even when it can't be picked, with this reason
+   * beside it, so the option is visible rather than missing.
+   */
+  privateKeyJwtUnavailable?: string;
+  /** A service account must prove who it is, so `none` is not offered. */
+  hideNone?: boolean;
   disabled?: boolean;
 }): JSX.Element {
   return (
@@ -322,11 +331,26 @@ export function TokenEndpointAuthMethodField({
           >
             client_secret_post
           </SelectItem>
-          <SelectItem
-            value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
-          >
-            none
-          </SelectItem>
+          {!hideNone && (
+            <SelectItem
+              value={CreateRemoteSessionClientFormTokenEndpointAuthMethod.None}
+            >
+              none
+            </SelectItem>
+          )}
+          {privateKeyJwtUnavailable !== undefined &&
+            !allowPrivateKeyJwt &&
+            value !==
+              CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt && (
+              <SelectItem
+                value={
+                  CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+                }
+                disabled
+              >
+                private_key_jwt · {privateKeyJwtUnavailable}
+              </SelectItem>
+            )}
           {(allowPrivateKeyJwt ||
             value ===
               CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt) && (
