@@ -7,7 +7,9 @@ import (
 	"errors"
 	"log/slog"
 	"maps"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -344,6 +346,19 @@ func TestAWidgetPreviewCommitsUnderOneKey(t *testing.T) {
 	require.Len(t, listed.Widgets, 5, "the source, plus two creates and two copies")
 }
 
+func TestAWidgetPreviewExpiresWithItsReceipt(t *testing.T) {
+	t.Parallel()
+	ctx, f := newWidgetToolsFixture(t)
+	arguments := saveArguments(f.project.ID.String(), "Late")
+	preview := f.write(t, ctx, saveWidgetToolName, arguments)
+
+	f.service.now = func() time.Time { return time.Now().Add(receiptLifetime + time.Minute) }
+	_, err := f.invoke(t, ctx, saveWidgetToolName, confirmed(arguments, preview, "late"))
+	refusal := requireWidgetRefusal(t, err)
+	require.Equal(t, "preview_expired", refusal.Code)
+	require.Equal(t, "preview_token", refusal.Field)
+}
+
 func TestSaveWidgetConfirmationNeedsItsPreview(t *testing.T) {
 	t.Parallel()
 	ctx, f := newWidgetToolsFixture(t)
@@ -455,7 +470,7 @@ func TestWidgetWritesRefuseANonCreatorWithoutProjectWrite(t *testing.T) {
 		saveWidgetToolName:   {update, operationUpdateWidget, widgetTokenProposal{WidgetID: existing.Widget.ID, Widget: &widgets.Input{Name: "Hijacked", Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart()}}},
 		deleteWidgetToolName: {remove, operationDeleteWidget, widgetTokenProposal{WidgetID: existing.Widget.ID, Widget: nil}},
 	} {
-		token, err := f.service.previewToken("test-nonce", other, project, request.operation, existing.Version, request.proposal)
+		token, err := f.service.previewToken(strconv.FormatInt(time.Now().Unix(), 10)+"-test", other, project, request.operation, existing.Version, request.proposal)
 		require.NoError(t, err)
 		arguments := confirmed(request.arguments, widgetWriteOutput{Version: existing.Version, PreviewToken: token}, "member-"+tool)
 		_, err = f.invoke(t, member, tool, arguments)

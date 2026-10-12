@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -536,7 +537,7 @@ type confirmation struct {
 // preview signs a preview so its confirmation can only commit exactly what
 // was shown, at exactly the version that was read.
 func (s *WidgetService) preview(principal Principal, project ResolvedProject, out widgetWriteOutput, proposal widgetTokenProposal) (widgetWriteOutput, error) {
-	token, err := s.previewToken(rand.Text(), principal, project, out.Operation, out.Version, proposal)
+	token, err := s.previewToken(strconv.FormatInt(s.now().Unix(), 10)+"-"+rand.Text(), principal, project, out.Operation, out.Version, proposal)
 	if err != nil {
 		return widgetWriteOutput{}, err
 	}
@@ -544,8 +545,9 @@ func (s *WidgetService) preview(principal Principal, project ResolvedProject, ou
 	return out, nil
 }
 
-// previewToken signs a preview. The nonce makes every preview distinct, so a
-// confirmed preview can be held to one idempotency key.
+// previewToken signs a preview. The nonce, its issue time and a random part,
+// makes every preview distinct, so a confirmed preview can be held to one
+// idempotency key.
 func (s *WidgetService) previewToken(nonce string, principal Principal, project ResolvedProject, operation widgetOperation, version string, proposal widgetTokenProposal) (string, error) {
 	data, err := json.Marshal(struct {
 		Nonce        string              `json:"nonce"`
@@ -586,6 +588,13 @@ func (s *WidgetService) confirm(ctx context.Context, principal Principal, projec
 	}
 	if !hmac.Equal([]byte(token), []byte(confirmed.Token)) {
 		return OperationReceipt{}, &widgetToolError{Code: "preview_mismatch", Field: "preview_token", Message: "The confirmation does not match its preview: the proposal, the version or the widget differs from what was previewed. Preview again and confirm what that preview shows.", Cause: nil}
+	}
+	// A preview lives no longer than a receipt, so the receipt that holds it to
+	// one key is never swept while the preview can still be confirmed.
+	issued, _, _ := strings.Cut(nonce, "-")
+	issuedAt, err := strconv.ParseInt(issued, 10, 64)
+	if err != nil || s.now().Sub(time.Unix(issuedAt, 0)) > receiptLifetime {
+		return OperationReceipt{}, &widgetToolError{Code: "preview_expired", Field: "preview_token", Message: "This preview has expired. Preview the change again and confirm what that preview shows.", Cause: nil}
 	}
 
 	mutate, err := authorize(ctx)
