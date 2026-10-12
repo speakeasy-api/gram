@@ -246,6 +246,8 @@ type ListDashboardsForWidgetsRow struct {
 	DashboardName string
 }
 
+// Which live dashboards each of the given widgets is on, once each, however
+// many cards show it.
 func (q *Queries) ListDashboardsForWidgets(ctx context.Context, arg ListDashboardsForWidgetsParams) ([]ListDashboardsForWidgetsRow, error) {
 	rows, err := q.db.Query(ctx, listDashboardsForWidgets, arg.ProjectID, arg.WidgetIds)
 	if err != nil {
@@ -266,100 +268,23 @@ func (q *Queries) ListDashboardsForWidgets(ctx context.Context, arg ListDashboar
 	return items, nil
 }
 
-const listRecentWidgets = `-- name: ListRecentWidgets :many
-SELECT id, project_id, organization_id, created_by_user_id, name, description, dataset, query, visualization, created_at, updated_at, deleted_at, deleted
-FROM widgets
-WHERE project_id = $1
-  AND deleted IS FALSE
-ORDER BY updated_at DESC, id DESC
-LIMIT $2
-`
-
-type ListRecentWidgetsParams struct {
-	ProjectID uuid.UUID
-	RowLimit  int32
-}
-
-func (q *Queries) ListRecentWidgets(ctx context.Context, arg ListRecentWidgetsParams) ([]Widget, error) {
-	rows, err := q.db.Query(ctx, listRecentWidgets, arg.ProjectID, arg.RowLimit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Widget
-	for rows.Next() {
-		var i Widget
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.CreatedByUserID,
-			&i.Name,
-			&i.Description,
-			&i.Dataset,
-			&i.Query,
-			&i.Visualization,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listWidgetDashboards = `-- name: ListWidgetDashboards :many
-SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
-FROM dashboard_widgets p
-JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
-WHERE p.project_id = $1
-ORDER BY p.widget_id, d.name, d.id
-`
-
-type ListWidgetDashboardsRow struct {
-	WidgetID      uuid.UUID
-	DashboardID   uuid.UUID
-	DashboardName string
-}
-
-// Which live dashboards each of the project's widgets is on, once each,
-// however many cards show it.
-func (q *Queries) ListWidgetDashboards(ctx context.Context, projectID uuid.UUID) ([]ListWidgetDashboardsRow, error) {
-	rows, err := q.db.Query(ctx, listWidgetDashboards, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListWidgetDashboardsRow
-	for rows.Next() {
-		var i ListWidgetDashboardsRow
-		if err := rows.Scan(&i.WidgetID, &i.DashboardID, &i.DashboardName); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listWidgets = `-- name: ListWidgets :many
 SELECT id, project_id, organization_id, created_by_user_id, name, description, dataset, query, visualization, created_at, updated_at, deleted_at, deleted
 FROM widgets
 WHERE project_id = $1
   AND deleted IS FALSE
 ORDER BY updated_at DESC, id DESC
+LIMIT $2::int
 `
 
-func (q *Queries) ListWidgets(ctx context.Context, projectID uuid.UUID) ([]Widget, error) {
-	rows, err := q.db.Query(ctx, listWidgets, projectID)
+type ListWidgetsParams struct {
+	ProjectID uuid.UUID
+	RowLimit  pgtype.Int4
+}
+
+// A null row_limit lists every widget.
+func (q *Queries) ListWidgets(ctx context.Context, arg ListWidgetsParams) ([]Widget, error) {
+	rows, err := q.db.Query(ctx, listWidgets, arg.ProjectID, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}

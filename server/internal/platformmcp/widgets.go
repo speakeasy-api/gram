@@ -21,10 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
@@ -330,35 +328,35 @@ func (s *WidgetService) save(ctx context.Context, principal Principal, operation
 		return s.preview(principal, project, out, token)
 	}
 
-	var write func(context.Context, pgx.Tx) (widgets.Snapshot, error)
-	if operation == operationCreateWidget {
-		caller, err := s.widgets.Authorize(ctx)
-		if err != nil {
-			return out, fmt.Errorf("authorize widget creation: %w", err)
+	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, token, func(ctx context.Context) (widgetMutation, error) {
+		if operation == operationCreateWidget {
+			caller, err := s.widgets.Authorize(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("authorize widget creation: %w", err)
+			}
+			return func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
+				return savedWidget(s.widgets.CreateInTx(ctx, tx, caller, proposal))
+			}, nil
 		}
-		write = func(ctx context.Context, tx pgx.Tx) (widgets.Snapshot, error) {
-			return s.widgets.CreateInTx(ctx, tx, caller, proposal)
-		}
-	} else {
 		change, err := s.widgets.AuthorizeChange(ctx, input.WidgetID)
 		if err != nil {
-			return out, fmt.Errorf("authorize widget update: %w", err)
+			return nil, fmt.Errorf("authorize widget update: %w", err)
 		}
-		write = func(ctx context.Context, tx pgx.Tx) (widgets.Snapshot, error) {
-			return s.widgets.UpdateInTx(ctx, tx, change, proposal, input.ExpectedVersion)
-		}
-	}
-	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, token, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
-		snapshot, err := write(ctx, tx)
-		if err != nil {
-			return widgetReceipt{}, fmt.Errorf("save widget: %w", err)
-		}
-		return widgetReceipt{WidgetID: snapshot.Widget.ID, RemovedFrom: nil}, nil
+		return func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
+			return savedWidget(s.widgets.UpdateInTx(ctx, tx, change, proposal, input.ExpectedVersion))
+		}, nil
 	})
 	if err != nil {
 		return out, err
 	}
 	return s.finish(ctx, out, receipt)
+}
+
+func savedWidget(snapshot widgets.Snapshot, err error) (widgetReceipt, error) {
+	if err != nil {
+		return widgetReceipt{}, fmt.Errorf("save widget: %w", err)
+	}
+	return widgetReceipt{WidgetID: snapshot.Widget.ID, RemovedFrom: nil}, nil
 }
 
 // Duplicate previews or commits a copy of a widget the caller then owns.
@@ -400,9 +398,12 @@ func (s *WidgetService) Delete(ctx context.Context, principal Principal, input w
 // widgetMutation is a confirmed write, run inside its receipt's transaction.
 type widgetMutation func(context.Context, pgx.Tx) (widgetReceipt, error)
 
+// widgetAuthorization authorizes a confirmed write before its receipt's
+// transaction opens and returns the write.
+type widgetAuthorization func(context.Context) (widgetMutation, error)
+
 // target previews or commits a duplicate or delete of one existing widget.
-// authorize runs before the receipt's transaction opens and returns the write.
-func (s *WidgetService) target(ctx context.Context, principal Principal, operation widgetOperation, input widgetTargetInput, authorize func(context.Context) (widgetMutation, error)) (widgetWriteOutput, error) {
+func (s *WidgetService) target(ctx context.Context, principal Principal, operation widgetOperation, input widgetTargetInput, authorize widgetAuthorization) (widgetWriteOutput, error) {
 	if err := validateWidgetID(input.WidgetID); err != nil {
 		return widgetWriteOutput{}, err
 	}
@@ -434,11 +435,7 @@ func (s *WidgetService) target(ctx context.Context, principal Principal, operati
 		return s.preview(principal, project, out, token)
 	}
 
-	mutate, err := authorize(ctx)
-	if err != nil {
-		return out, err
-	}
-	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, token, mutate)
+	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, token, authorize)
 	if err != nil {
 		return out, err
 	}
@@ -567,10 +564,10 @@ func (s *WidgetService) previewToken(nonce string, principal Principal, project 
 	return nonce + "." + hex.EncodeToString(mac.Sum(nil)), nil
 }
 
-// confirm checks a confirmation against its preview and runs the write in
-// the receipt's transaction, so a retry with the same key replays the stored
-// result instead of writing twice.
-func (s *WidgetService) confirm(ctx context.Context, principal Principal, project ResolvedProject, operation widgetOperation, confirmed confirmation, proposal widgetTokenProposal, mutate widgetMutation) (OperationReceipt, error) {
+// confirm checks a confirmation against its preview, authorizes it, and runs
+// the write in the receipt's transaction, so a retry with the same key replays
+// the stored result instead of writing twice.
+func (s *WidgetService) confirm(ctx context.Context, principal Principal, project ResolvedProject, operation widgetOperation, confirmed confirmation, proposal widgetTokenProposal, authorize widgetAuthorization) (OperationReceipt, error) {
 	key := strings.TrimSpace(confirmed.Key)
 	if key == "" || len(key) > maxIdempotencyKeyLength {
 		return OperationReceipt{}, widgetInvalid("idempotency_key", fmt.Sprintf("Provide a stable idempotency_key of at most %d characters to confirm, and reuse it only to retry this exact request.", maxIdempotencyKeyLength))
@@ -590,9 +587,15 @@ func (s *WidgetService) confirm(ctx context.Context, principal Principal, projec
 		return OperationReceipt{}, &widgetToolError{Code: "preview_mismatch", Field: "preview_token", Message: "The confirmation does not match its preview: the proposal, the version or the widget differs from what was previewed. Preview again and confirm what that preview shows.", Cause: nil}
 	}
 
+	mutate, err := authorize(ctx)
+	if err != nil {
+		return OperationReceipt{}, err
+	}
+
 	// The token binds actor, project, operation, version and proposal, so it
-	// is the receipt's input hash.
-	return executeMutationReceipt(ctx, mutationReceiptExecution[widgetReceipt]{
+	// is the receipt's input hash. A preview commits under one key only: a
+	// create or duplicate could otherwise be confirmed again under a new key.
+	return executeSingleUseMutationReceipt(ctx, mutationReceiptExecution[widgetReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: string(operation), IdempotencyKey: key, InputHash: token, Label: "widget " + string(operation),
 		Invalid: widgetInvalidCause,
 		Conflict: func(message string) error {
@@ -610,32 +613,10 @@ func (s *WidgetService) confirm(ctx context.Context, principal Principal, projec
 			}
 			return encoded, nil
 		},
-		Mutate: func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
-			if err := claimPreview(ctx, tx, principal, project, operation, key, token); err != nil {
-				return widgetReceipt{}, err
-			}
-			return mutate(ctx, tx)
-		},
-	})
-}
-
-// claimPreview holds a preview to the first idempotency key that confirms it;
-// a create or duplicate could otherwise be confirmed again under a new key and
-// write a second widget. It locks on the token so two keys racing for one
-// preview serialize and the loser sees the winner's receipt.
-func claimPreview(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, operation widgetOperation, key string, token string) error {
-	q := platformrepo.New(tx)
-	if err := q.LockPlatformMCPOperationReceipt(ctx, platformrepo.LockPlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, SubjectUrn: userSubjectURN(principal.UserID), ProjectID: project.ID.String(), Operation: string(operation), IdempotencyKey: "preview-token:" + token}); err != nil {
-		return fmt.Errorf("lock widget preview: %w", err)
-	}
-	claimed, err := q.PlatformMCPOperationReceiptInputClaimed(ctx, platformrepo.PlatformMCPOperationReceiptInputClaimedParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, Operation: string(operation), UserID: conv.ToPGText(principal.UserID), InputHash: token, IdempotencyKey: key})
-	if err != nil {
-		return fmt.Errorf("check widget preview: %w", err)
-	}
-	if claimed {
+		Mutate: mutate,
+	}, func() error {
 		return &widgetToolError{Code: "preview_used", Field: "preview_token", Message: "This preview was already confirmed under another idempotency_key. Retry with that key to see its result, or preview again to make another change.", Cause: nil}
-	}
-	return nil
+	})
 }
 
 func decodeWidgetReceipt(data []byte) (widgetReceipt, error) {

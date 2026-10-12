@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/widgets"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -163,38 +164,23 @@ func (s *Service) ReadForChange(ctx context.Context, id string) (Snapshot, error
 // ReadAll lists the request project's widgets, most recently updated first,
 // each validated as it is read, with its dashboards and version.
 func (s *Service) ReadAll(ctx context.Context) ([]Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
-	if err != nil {
-		return nil, err
-	}
-
-	queries := repo.New(s.db)
-	rows, err := queries.ListWidgets(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list widgets").LogError(ctx, s.logger)
-	}
-	placed, err := queries.ListWidgetDashboards(ctx, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list widget dashboards").LogError(ctx, s.logger)
-	}
-	byWidget := map[uuid.UUID][]*gen.WidgetDashboard{}
-	for _, row := range placed {
-		byWidget[row.WidgetID] = append(byWidget[row.WidgetID], &gen.WidgetDashboard{ID: row.DashboardID.String(), Name: row.DashboardName})
-	}
-
-	return s.snapshots(ctx, rows, byWidget), nil
+	return s.list(ctx, pgtype.Int4{Int32: 0, Valid: false})
 }
 
-// ReadRecent lists at most limit of the request project's widgets, most
-// recently updated first, reading and validating no more than that.
+// ReadRecent is ReadAll bounded to limit widgets, reading and validating no
+// more than that.
 func (s *Service) ReadRecent(ctx context.Context, limit int32) ([]Snapshot, error) {
+	return s.list(ctx, pgtype.Int4{Int32: limit, Valid: true})
+}
+
+func (s *Service) list(ctx context.Context, limit pgtype.Int4) ([]Snapshot, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
 		return nil, err
 	}
 
 	queries := repo.New(s.db)
-	rows, err := queries.ListRecentWidgets(ctx, repo.ListRecentWidgetsParams{ProjectID: *authCtx.ProjectID, RowLimit: limit})
+	rows, err := queries.ListWidgets(ctx, repo.ListWidgetsParams{ProjectID: *authCtx.ProjectID, RowLimit: limit})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list widgets").LogError(ctx, s.logger)
 	}
@@ -211,16 +197,12 @@ func (s *Service) ReadRecent(ctx context.Context, limit int32) ([]Snapshot, erro
 		byWidget[row.WidgetID] = append(byWidget[row.WidgetID], &gen.WidgetDashboard{ID: row.DashboardID.String(), Name: row.DashboardName})
 	}
 
-	return s.snapshots(ctx, rows, byWidget), nil
-}
-
-func (s *Service) snapshots(ctx context.Context, rows []repo.Widget, byWidget map[uuid.UUID][]*gen.WidgetDashboard) []Snapshot {
 	now := s.now()
 	out := make([]Snapshot, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, Snapshot{Widget: s.view(ctx, row, now, byWidget[row.ID]), Version: Version(row)})
 	}
-	return out
+	return out, nil
 }
 
 // Check validates a widget as a save would, without writing it: the query
