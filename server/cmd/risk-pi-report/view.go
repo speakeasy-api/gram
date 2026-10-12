@@ -32,10 +32,6 @@ const (
 	// well-known attacks a detector must catch.
 	wellKnownGoal = 0.95
 
-	// hashPrefixLen is how much of a prompt hash the summary shows; ten hex
-	// characters tell prompt versions apart.
-	hashPrefixLen = 10
-
 	// maxViewRuns bounds the runs the viewer loads: this checkout's, the base,
 	// and the most recently updated others.
 	maxViewRuns = 12
@@ -462,16 +458,6 @@ func summaryMarkdown(data viewData) string {
 			role(r), strings.ReplaceAll(runTitle(r.Manifest), "|", `\|`), t.FalsePositives, t.WellKnownCaught, t.WellKnown, t.Caught, t.Attacks, 100*safeDiv(t.Caught, t.Attacks),
 			t.Refused, t.NoVerdict, t.OutOfCredit, t.LatencyP50MS/1000, t.LatencyP90MS/1000, r.GateStatus, r.GoalsStatus, t.CostUSD)
 	}
-	b.WriteString("\n")
-	for _, r := range shown {
-		d := r.Manifest.Detector
-		if d.PrefilterModel == "" {
-			fmt.Fprintf(&b, "- %s: %s · prompt `%s`\n", role(r), d.ConfirmationModel, prefix(d.ConfirmationPromptSHA256))
-			continue
-		}
-		fmt.Fprintf(&b, "- %s: %s ≥ %.2f → %s · confirmation prompt `%s` · questions `%s`\n",
-			role(r), d.PrefilterModel, d.PrefilterThreshold, d.ConfirmationModel, prefix(d.ConfirmationPromptSHA256), prefix(d.PrefilterQuestionsSHA256))
-	}
 	if data.Base == data.Change && data.Base != "" {
 		b.WriteString("\nMain has the same code as this change, so one run covers both.\n")
 	}
@@ -481,11 +467,6 @@ func summaryMarkdown(data viewData) string {
 			f.NewlyCaught, f.NewlyMissed, f.NewFalsePositives, f.FixedFalsePositives)
 	}
 	return b.String()
-}
-
-// prefix shortens a hash for display.
-func prefix(hash string) string {
-	return hash[:min(len(hash), hashPrefixLen)]
 }
 
 // renderViewer fills the page template. A nil data with live set makes the

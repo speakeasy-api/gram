@@ -18,7 +18,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 )
@@ -188,37 +187,10 @@ func TestOpenRecordsForAppendEndsAPartialLine(t *testing.T) {
 	}
 }
 
-// writeManifestFile writes m as dir's manifest and returns the bytes written.
-func writeManifestFile(t *testing.T, dir string, m runManifest) []byte {
-	t.Helper()
-	raw, err := json.Marshal(m)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, manifestFile), raw, 0o600))
-	return raw
-}
-
-func detectorForTest(t *testing.T) runDetector {
-	t.Helper()
-	detector, err := currentDetector()
-	require.NoError(t, err)
-	return detector
-}
-
 var (
 	mainCommit    = runCommit{SHA: "1a2b3c4d5e6f", Subject: "chore: main", Uncommitted: false}
 	fixtureCommit = runCommit{SHA: "6f5e4d3c2b1a", Subject: "chore: edit a fixture", Uncommitted: false}
 )
-
-func TestCurrentDetectorIsTheCascade(t *testing.T) {
-	t.Parallel()
-
-	detector := detectorForTest(t)
-	require.Equal(t, typesafe.Model, detector.PrefilterModel)
-	require.InDelta(t, piopenrouter.PrefilterThreshold, detector.PrefilterThreshold, 1e-9)
-	require.Equal(t, piopenrouter.ConfirmationModel, detector.ConfirmationModel)
-	require.Len(t, detector.ConfirmationPromptSHA256, 64)
-	require.Len(t, detector.PrefilterQuestionsSHA256, 64)
-}
 
 func TestClaimRunDirListsEachCommitOnce(t *testing.T) {
 	t.Parallel()
@@ -231,55 +203,8 @@ func TestClaimRunDirListsEachCommitOnce(t *testing.T) {
 
 	got, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
-	require.Equal(t, detectorForTest(t), got.Detector)
 	require.Equal(t, []runCommit{mainCommit, fixtureCommit}, got.Commits)
 	require.WithinDuration(t, now, got.Updated, time.Second)
-}
-
-func TestClaimRunDirRefusesAnotherDetector(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		change func(*runDetector)
-	}{
-		{name: "confirmation model", change: func(d *runDetector) { d.ConfirmationModel = "other/model" }},
-		{name: "confirmation prompt", change: func(d *runDetector) { d.ConfirmationPromptSHA256 = "0123456789ab" }},
-		{name: "prefilter model", change: func(d *runDetector) { d.PrefilterModel = "other/prefilter" }},
-		{name: "prefilter threshold", change: func(d *runDetector) { d.PrefilterThreshold = 0.9 }},
-		{name: "prefilter questions", change: func(d *runDetector) { d.PrefilterQuestionsSHA256 = "0123456789ab" }},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			dir := t.TempDir()
-			other := detectorForTest(t)
-			tc.change(&other)
-			before := writeManifestFile(t, dir, runManifest{Detector: other, Commits: []runCommit{mainCommit}, Updated: time.Now()})
-
-			require.ErrorContains(t, claimRunDir(dir, mainCommit, time.Now()), "holds another detector's results")
-			after, err := os.ReadFile(filepath.Join(dir, manifestFile))
-			require.NoError(t, err)
-			require.Equal(t, before, after, "a refused run dir keeps its manifest")
-		})
-	}
-}
-
-func TestRunRecordsRefusesAnotherDetectorsRecords(t *testing.T) {
-	t.Parallel()
-
-	attack := recordsCase("attack", "malicious", "")
-	dir := t.TempDir()
-	file, err := openRecordsForAppend(filepath.Join(dir, casesFile))
-	require.NoError(t, err)
-	require.NoError(t, appendRecord(file, caseRecord{Key: caseKey(attack), Hash: caseHash(attack), Status: statusFlagged}))
-	require.NoError(t, file.Close())
-	other := detectorForTest(t)
-	other.ConfirmationModel = "other/model"
-	writeManifestFile(t, dir, runManifest{Detector: other, Commits: nil, Updated: time.Now()})
-
-	err = runRecords(t.Context(), options{runDir: dir, commit: mainCommit}, []labeledCase{attack})
-	require.ErrorContains(t, err, "run this tool from the checkout it was built from")
 }
 
 func TestRunRecordsRefusesDuplicateCaseKeys(t *testing.T) {
@@ -342,7 +267,6 @@ func TestRunRecordsReusesAFinishedRunWithoutCalls(t *testing.T) {
 	manifest, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
 	require.Equal(t, []runCommit{mainCommit}, manifest.Commits)
-	require.Equal(t, detectorForTest(t), manifest.Detector)
 	require.WithinDuration(t, time.Now(), manifest.Updated, time.Minute)
 }
 

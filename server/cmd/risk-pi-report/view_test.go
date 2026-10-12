@@ -11,15 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testDetector is a cascade manifest's detector for viewer tests.
-var testDetector = runDetector{
-	PrefilterModel:           "typesafe/jev-1.13",
-	PrefilterThreshold:       0.5,
-	ConfirmationModel:        "anthropic/claude-sonnet-5.5",
-	ConfirmationPromptSHA256: "1f4c2ffbb7cd153e",
-	PrefilterQuestionsSHA256: "0219e560da66ed88",
-}
-
 // writeRun writes a run named id under runs, measured by commit, updated at
 // updated, holding records.
 func writeRun(t *testing.T, runs, id string, commit runCommit, updated time.Time, records ...caseRecord) {
@@ -33,7 +24,7 @@ func writeRun(t *testing.T, runs, id string, commit runCommit, updated time.Time
 		lines = append(lines, string(raw))
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, casesFile), []byte(strings.Join(lines, "\n")), 0o600))
-	manifest, err := json.Marshal(runManifest{Detector: testDetector, Commits: []runCommit{commit}, Updated: updated})
+	manifest, err := json.Marshal(runManifest{Commits: []runCommit{commit}, Updated: updated})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, manifestFile), manifest, 0o600))
 }
@@ -119,7 +110,6 @@ func TestSummaryMarkdownListsTheComparedRunsAndFlips(t *testing.T) {
 	require.NotContains(t, md, "an older try", "the PR summary shows only the compared runs")
 	require.Contains(t, md, "| Pass | Meets both |")
 	require.Contains(t, md, "Compared with main: 1 newly caught · 0 newly missed")
-	require.Contains(t, md, "- this change: typesafe/jev-1.13 ≥ 0.50 → anthropic/claude-sonnet-5.5 · confirmation prompt `1f4c2ffbb7` · questions `0219e560da`")
 	require.NoError(t, changeGate(data))
 }
 

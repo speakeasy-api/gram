@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 )
@@ -116,12 +115,8 @@ type caseRecord struct {
 	LatencyMS float64 `json:"latency_ms"`
 }
 
-// runManifest describes a run directory: the detector behind its verdicts and
-// the commits whose code it measured.
+// runManifest describes a run directory: the commits whose code it measured.
 type runManifest struct {
-	// Detector identifies the detector behind the run's verdicts.
-	Detector runDetector `json:"detector"`
-
 	// Commits lists the commits whose code produced the run, in the order a
 	// run first measured each. Commits that differ only in fixtures share a
 	// run.
@@ -129,25 +124,6 @@ type runManifest struct {
 
 	// Updated is when a run last wrote the manifest.
 	Updated time.Time `json:"updated"`
-}
-
-// runDetector identifies a detector by its models and prompts.
-type runDetector struct {
-	// PrefilterModel names a prefilter stage's model; the single judge has
-	// none.
-	PrefilterModel string `json:"prefilter_model"`
-
-	// PrefilterThreshold is the prefilter probability that escalates a case.
-	PrefilterThreshold float64 `json:"prefilter_threshold"`
-
-	// ConfirmationModel is the model that decides each case.
-	ConfirmationModel string `json:"confirmation_model"`
-
-	// ConfirmationPromptSHA256 hashes the deciding model's system prompt.
-	ConfirmationPromptSHA256 string `json:"confirmation_prompt_sha256"`
-
-	// PrefilterQuestionsSHA256 hashes a prefilter's questions; empty without one.
-	PrefilterQuestionsSHA256 string `json:"prefilter_questions_sha256"`
 }
 
 // sideTotals summarizes a run over a corpus. Pending cases have no record for
@@ -602,44 +578,13 @@ func lockRunDir(dir string) (func(), error) {
 	return func() { o11y.NoLogDefer(file.Close) }, nil
 }
 
-// currentDetector identifies the detector this build ships: the Jev to
-// confirmer cascade, with its prompts hashed as the evaluation harness
-// registers prompt versions.
-func currentDetector() (runDetector, error) {
-	confirmationHash, questionsHash, err := registryPromptHashes()
-	if err != nil {
-		return runDetector{}, err
-	}
-	return runDetector{
-		PrefilterModel:           typesafe.Model,
-		PrefilterThreshold:       piopenrouter.PrefilterThreshold,
-		ConfirmationModel:        piopenrouter.ConfirmationModel,
-		ConfirmationPromptSHA256: confirmationHash,
-		PrefilterQuestionsSHA256: questionsHash,
-	}, nil
-}
-
 // claimRunDir records commit in the run's manifest before any case runs, so a
-// crashed run still names its code. It refuses a directory that holds another
-// detector's results, which happens when the binary was not built from the
-// checkout it measures.
+// crashed run still names its code.
 func claimRunDir(dir string, commit runCommit, now time.Time) error {
-	detector, err := currentDetector()
-	if err != nil {
-		return err
-	}
 	path := filepath.Join(dir, manifestFile)
 	manifest, err := readManifest(path)
-	if errors.Is(err, os.ErrNotExist) {
-		manifest = runManifest{Detector: detector, Commits: nil, Updated: time.Time{}}
-		err = nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
-	}
-	if manifest.Detector != detector {
-		return fmt.Errorf("run dir %s holds another detector's results (model %s, prompt sha256 %.12s); run this tool from the checkout it was built from",
-			dir, manifest.Detector.ConfirmationModel, manifest.Detector.ConfirmationPromptSHA256)
 	}
 	if !slices.Contains(manifest.Commits, commit) {
 		manifest.Commits = append(manifest.Commits, commit)
