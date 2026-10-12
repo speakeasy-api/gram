@@ -120,10 +120,15 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log ema provider order").LogError(ctx, logger)
 	}
+	// Read under the lock, so the response is this write's order.
+	view, err := s.emaProvidersView(ctx, logger, q, org, vendor)
+	if err != nil {
+		return nil, err
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit ema provider order").LogError(ctx, logger)
 	}
-	return s.emaProvidersView(ctx, logger, repo.New(s.db), org, vendor)
+	return view, nil
 }
 
 // requireEMAProviders checks the rollout flag; a lookup failure reads as

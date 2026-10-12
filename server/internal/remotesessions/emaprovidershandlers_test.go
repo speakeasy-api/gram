@@ -228,14 +228,20 @@ func TestSetEMAProviders_ConcurrentReplacesSerialize(t *testing.T) {
 
 	var wg sync.WaitGroup
 	errs := make([]error, len(orders)*3)
+	results := make([]*types.EMAProviderOrder, len(errs))
 	for i := range errs {
 		wg.Go(func() {
-			_, errs[i] = setEMAProviders(ctx, ti, f.vendor, orders[i%len(orders)]...)
+			results[i], errs[i] = setEMAProviders(ctx, ti, f.vendor, orders[i%len(orders)]...)
 		})
 	}
 	wg.Wait()
-	for _, err := range errs {
+	for i, err := range errs {
 		require.NoError(t, err, "replaces serialize instead of colliding on positions")
+		submitted := orders[i%len(orders)]
+		require.Len(t, results[i].Providers, len(submitted), "each response is its own write's order")
+		for j, p := range submitted {
+			require.Equal(t, p.Kind, results[i].Providers[j].Kind, "each response is its own write's order")
+		}
 	}
 	rows, err := repo.New(ti.conn).ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: f.org, VendorIssuer: "https://vendor.example.com"})
 	require.NoError(t, err)
