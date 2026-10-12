@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GramAdminError } from "@/lib/gramAdminApi";
+import { inferenceKeysQuery } from "@/lib/gramAdminClient";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -31,6 +32,18 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
   return { ...actual, ...mocks };
+});
+
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
+  return {
+    ...actual,
+    inferenceKeysQuery: (organizationID: string) => ({
+      ...actual.inferenceKeysQuery(organizationID),
+      queryFn: () => mocks.getInferenceKeys(organizationID),
+    }),
+    repairInferenceKey: mocks.repairInferenceKey,
+  };
 });
 
 // These tests exercise subscription and inference controls independently of
@@ -79,33 +92,33 @@ beforeEach(() => {
   mocks.getOrganization.mockResolvedValue(ORG);
   mocks.getInferenceKeys.mockResolvedValue([
     {
-      key_type: "chat",
-      credits_used: 42.75,
-      monthly_credits: 100,
+      keyType: "chat",
+      creditsUsed: 42.75,
+      monthlyCredits: 100,
       disabled: false,
-      disable_causes: [],
-      disable_causes_classified: true,
+      disableCauses: [],
+      disableCausesClassified: true,
     },
     {
-      key_type: "internal",
-      credits_used: 12.5,
-      monthly_credits: 0,
+      keyType: "internal",
+      creditsUsed: 12.5,
+      monthlyCredits: 0,
       disabled: true,
-      disable_causes: [
+      disableCauses: [
         "admin_lock",
         "billing_inactive",
         "future_policy",
         "constructor",
       ],
-      disable_causes_classified: true,
+      disableCausesClassified: true,
     },
     {
-      key_type: "future-purpose",
-      credits_used: 1.25,
-      monthly_credits: 25,
+      keyType: "future-purpose",
+      creditsUsed: 1.25,
+      monthlyCredits: 25,
       disabled: false,
-      disable_causes: null,
-      disable_causes_classified: false,
+      disableCauses: null,
+      disableCausesClassified: false,
     },
   ]);
   mocks.getInferenceSpendHistory.mockImplementation((organizationID: string) =>
@@ -244,9 +257,9 @@ describe("Billing", () => {
   it("shows a loaded unlimited key without an error but rejects zero as an edit", async () => {
     mocks.getInferenceKeys.mockResolvedValue([
       {
-        key_type: "chat",
-        credits_used: 4.25,
-        monthly_credits: 0,
+        keyType: "chat",
+        creditsUsed: 4.25,
+        monthlyCredits: 0,
         disabled: false,
       },
     ]);
@@ -276,17 +289,17 @@ describe("Billing", () => {
     mocks.getInferenceKeys
       .mockResolvedValueOnce([
         {
-          key_type: "chat",
-          credits_used: 42.75,
-          monthly_credits: 100,
+          keyType: "chat",
+          creditsUsed: 42.75,
+          monthlyCredits: 100,
           disabled: false,
         },
       ])
       .mockResolvedValue([
         {
-          key_type: "chat",
-          credits_used: 42.75,
-          monthly_credits: 750,
+          keyType: "chat",
+          creditsUsed: 42.75,
+          monthlyCredits: 750,
           disabled: false,
         },
       ]);
@@ -320,9 +333,7 @@ describe("Billing", () => {
         resolveUpdate = () =>
           resolve({
             key_type: "chat",
-            credits_used: 42.75,
             monthly_credits: 750,
-            disabled: false,
           });
       }),
     );
@@ -358,8 +369,19 @@ describe("Billing", () => {
     await vi.waitFor(() => expect(chatButton.textContent).toBe("Saving…"));
     expect((chatButton as HTMLButtonElement).disabled).toBe(true);
 
+    mocks.getInferenceKeys.mockResolvedValue([
+      {
+        keyType: "chat",
+        creditsUsed: 42.75,
+        monthlyCredits: 750,
+        disabled: false,
+        disableCausesClassified: true,
+        disableCauses: [],
+      },
+    ]);
     resolveUpdate?.();
     await vi.waitFor(() => expect(chatButton.textContent).toBe("Save limit"));
+    expect((chatInput as HTMLInputElement).value).toBe("750");
   });
 
   it.each(["incomplete", "paused"] as const)(
@@ -439,13 +461,13 @@ describe("Billing", () => {
 });
 
 const REPAIR_KEY = {
-  key_type: "chat",
-  credits_used: 42.75,
-  monthly_credits: 100,
+  keyType: "chat",
+  creditsUsed: 42.75,
+  monthlyCredits: 100,
   disabled: true,
-  disable_causes: ["trial_demotion", "billing_inactive"],
-  disable_causes_classified: true,
-  cause_diagnostics: [
+  disableCauses: ["trial_demotion", "billing_inactive"],
+  disableCausesClassified: true,
+  causeDiagnostics: [
     {
       cause: "trial_demotion",
       description: "Trial access ended automatically.",
@@ -455,7 +477,7 @@ const REPAIR_KEY = {
       cause: "billing_inactive",
       description: "Billing needs attention.",
       removable: false,
-      blocked_reason: "Verified eligible billing is required.",
+      blockedReason: "Verified eligible billing is required.",
     },
   ],
 };
@@ -478,10 +500,10 @@ it("repairs the canonical key, preserves usage and concurrent locks when the acc
   mocks.repairInferenceKey.mockResolvedValue({
     key: {
       ...REPAIR_KEY,
-      credits_used: undefined,
-      disable_causes: ["billing_inactive", "admin_lock"],
-      cause_diagnostics: [
-        REPAIR_KEY.cause_diagnostics[1],
+      creditsUsed: undefined,
+      disableCauses: ["billing_inactive", "admin_lock"],
+      causeDiagnostics: [
+        REPAIR_KEY.causeDiagnostics[1],
         {
           cause: "admin_lock",
           description: "Concurrent staff lock",
@@ -489,7 +511,7 @@ it("repairs the canonical key, preserves usage and concurrent locks when the acc
         },
       ],
     },
-    reconciliation_pending: true,
+    reconciliationPending: true,
   });
   const qc = await renderBilling();
   await openRepair();
@@ -505,7 +527,7 @@ it("repairs the canonical key, preserves usage and concurrent locks when the acc
   );
   await waitFor(() =>
     expect(mocks.repairInferenceKey).toHaveBeenCalledWith({
-      organizationID: ORG.id,
+      organizationId: ORG.id,
       keyType: "chat",
       removeCauses: ["trial_demotion"],
       confirmation: "I know what I'm doing",
@@ -526,8 +548,8 @@ it("repairs the canonical key, preserves usage and concurrent locks when the acc
   expect(
     screen.getAllByText(/upstream reconciliation pending/i).length,
   ).toBeGreaterThan(0);
-  expect(qc.getQueryData(["gram-admin-inference-keys", ORG.id])).toMatchObject([
-    { credits_used: 42.75, disable_causes: ["billing_inactive", "admin_lock"] },
+  expect(qc.getQueryData(inferenceKeysQuery(ORG.id).queryKey)).toMatchObject([
+    { creditsUsed: 42.75, disableCauses: ["billing_inactive", "admin_lock"] },
   ]);
 });
 it("reports rejected writes without closing", async () => {
@@ -545,7 +567,7 @@ it("reports rejected writes without closing", async () => {
 });
 it("blocks repair when lifecycle metadata is absent", async () => {
   mocks.getInferenceKeys.mockResolvedValue([
-    { ...REPAIR_KEY, cause_diagnostics: undefined },
+    { ...REPAIR_KEY, causeDiagnostics: undefined },
   ]);
   await renderBilling();
   fireEvent.click(
@@ -569,7 +591,7 @@ it("blocks repair when lifecycle metadata is absent", async () => {
 
 it("blocks removal with outdated cause metadata", async () => {
   mocks.getInferenceKeys.mockResolvedValue([
-    { ...REPAIR_KEY, cause_diagnostics: [REPAIR_KEY.cause_diagnostics[0]] },
+    { ...REPAIR_KEY, causeDiagnostics: [REPAIR_KEY.causeDiagnostics[0]] },
   ]);
   await renderBilling();
   fireEvent.click(
@@ -589,7 +611,7 @@ it("blocks cached removable billing locks while diagnostics refetch is paused", 
   mocks.getInferenceKeys.mockResolvedValue([
     {
       ...REPAIR_KEY,
-      cause_diagnostics: REPAIR_KEY.cause_diagnostics.map((cause) => ({
+      causeDiagnostics: REPAIR_KEY.causeDiagnostics.map((cause) => ({
         ...cause,
         removable: true,
       })),
@@ -605,12 +627,12 @@ it("blocks cached removable billing locks while diagnostics refetch is paused", 
     onlineManager.setOnline(false);
     act(() => {
       void qc.invalidateQueries({
-        queryKey: ["gram-admin-inference-keys", ORG.id],
+        queryKey: inferenceKeysQuery(ORG.id).queryKey,
       });
     });
     await waitFor(() =>
       expect(
-        qc.getQueryState(["gram-admin-inference-keys", ORG.id])?.fetchStatus,
+        qc.getQueryState(inferenceKeysQuery(ORG.id).queryKey)?.fetchStatus,
       ).toBe("paused"),
     );
     await waitFor(() => expect(checkbox.disabled).toBe(true));

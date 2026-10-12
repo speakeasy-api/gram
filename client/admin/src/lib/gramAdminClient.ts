@@ -1,3 +1,5 @@
+import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
+import { buildAdminGetInferenceKeysQuery } from "@gram/admin-client/react-query/adminGetInferenceKeys.core";
 import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
 import { buildAdminRepairInferenceKeyMutation } from "@gram/admin-client/react-query/adminRepairInferenceKey";
 import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
@@ -1046,4 +1048,19 @@ export function repairInferenceKey(
   return redirecting(
     generatedRepairInferenceKeyMutation.mutationFn({ request }),
   );
+}
+
+export function inferenceKeysQuery(
+  organizationID: string,
+): UseQueryOptions<AdminInferenceKey[]> {
+  const generated = buildAdminGetInferenceKeysQuery(
+    redirectingClient,
+    { organizationId: organizationID },
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
 }

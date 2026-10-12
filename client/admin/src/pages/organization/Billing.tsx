@@ -1,3 +1,5 @@
+import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
+import { inferenceKeysQuery, repairInferenceKey } from "@/lib/gramAdminClient";
 import { useRef, type JSX, type ReactNode } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,7 +9,6 @@ import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  inferenceKeysQuery,
   inferenceSpendHistoryQuery,
   invalidateOrganizationBilling,
   organizationQuery,
@@ -19,9 +20,7 @@ import {
   errorMessage,
   GramAdminError,
   resumeStripeSubscription,
-  repairInferenceKey,
   setInferenceKeyMonthlyLimit,
-  type AdminInferenceKey,
   type AdminInferenceKeyType,
   type AdminInferenceSpendMonth,
   type AdminOrganization,
@@ -84,7 +83,7 @@ function cycleLabel(start: string, end: string): string {
   return `${formattedStart} to ${formattedEnd}`;
 }
 
-function inferenceKeyPurpose(keyType: AdminInferenceKey["key_type"]): string {
+function inferenceKeyPurpose(keyType: AdminInferenceKey["keyType"]): string {
   switch (keyType) {
     case "chat":
       return "Other inference";
@@ -109,11 +108,11 @@ function inferenceKeyDisableCauseLabel(cause: string): string {
 }
 
 function inferenceKeyDisableCauses(key: AdminInferenceKey): string {
-  if (!key.disable_causes_classified) return "Unclassified (legacy)";
-  if (key.disable_causes === null || key.disable_causes.length === 0)
+  if (!key.disableCausesClassified) return "Unclassified (legacy)";
+  if (key.disableCauses == null || key.disableCauses.length === 0)
     return "No disable causes";
 
-  return key.disable_causes.map(inferenceKeyDisableCauseLabel).join(", ");
+  return key.disableCauses.map(inferenceKeyDisableCauseLabel).join(", ");
 }
 
 function formatCredits(value: number): string {
@@ -130,8 +129,8 @@ const MAX_MONTHLY_LIMIT = 10_000;
 
 function isWritableInferenceKey(
   key: AdminInferenceKey,
-): key is AdminInferenceKey & { key_type: AdminInferenceKeyType } {
-  return key.key_type === "chat" || key.key_type === "internal";
+): key is AdminInferenceKey & { keyType: AdminInferenceKeyType } {
+  return key.keyType === "chat" || key.keyType === "internal";
 }
 
 function InferenceKeyLimitEditor({
@@ -139,7 +138,7 @@ function InferenceKeyLimitEditor({
   inferenceKey,
 }: {
   organizationID: string;
-  inferenceKey: AdminInferenceKey & { key_type: AdminInferenceKeyType };
+  inferenceKey: AdminInferenceKey & { keyType: AdminInferenceKeyType };
 }): JSX.Element {
   const qc = useQueryClient();
   const { announce, showFailure } = useWriteReport();
@@ -147,28 +146,28 @@ function InferenceKeyLimitEditor({
     mutationFn: (monthlyCredits: number) =>
       setInferenceKeyMonthlyLimit({
         organizationID,
-        keyType: inferenceKey.key_type,
+        keyType: inferenceKey.keyType,
         monthlyCredits,
       }),
     onSuccess: async () => {
       showFailure(null);
-      announce(`${inferenceKey.key_type} monthly limit updated.`);
+      announce(`${inferenceKey.keyType} monthly limit updated.`);
       await qc.invalidateQueries({
         queryKey: inferenceKeysQuery(organizationID).queryKey,
       });
     },
     onError: (error) => {
-      const message = `Could not update ${inferenceKey.key_type} monthly limit: ${errorMessage(error)}`;
+      const message = `Could not update ${inferenceKey.keyType} monthly limit: ${errorMessage(error)}`;
       announce(message);
       showFailure(message);
     },
   });
 
-  const inputID = `inference-key-limit-${inferenceKey.key_type}`;
+  const inputID = `inference-key-limit-${inferenceKey.keyType}`;
   const errorID = `${inputID}-error`;
 
   const form = useForm({
-    defaultValues: { monthlyCredits: String(inferenceKey.monthly_credits) },
+    defaultValues: { monthlyCredits: String(inferenceKey.monthlyCredits) },
     onSubmit: async ({ value }) => {
       if (inferenceKey.disabled) return;
       showFailure(null);
@@ -213,7 +212,7 @@ function InferenceKeyLimitEditor({
             return (
               <div className="flex-1">
                 <label className="sr-only" htmlFor={inputID}>
-                  {inferenceKey.key_type} monthly limit in USD
+                  {inferenceKey.keyType} monthly limit in USD
                 </label>
                 <Input
                   id={inputID}
@@ -269,7 +268,7 @@ function InferenceKeyLimitEditor({
                 !canSubmit ||
                 mutation.isPending ||
                 isSubmitting ||
-                Number(value) === inferenceKey.monthly_credits
+                Number(value) === inferenceKey.monthlyCredits
               }
             >
               {mutation.isPending || isSubmitting ? "Saving…" : "Save limit"}
@@ -287,7 +286,7 @@ function InferenceKeyRepair({
   diagnosticsFresh,
 }: {
   organizationID: string;
-  inferenceKey: AdminInferenceKey & { key_type: AdminInferenceKeyType };
+  inferenceKey: AdminInferenceKey & { keyType: AdminInferenceKeyType };
   diagnosticsFresh: boolean;
 }): JSX.Element {
   const qc = useQueryClient();
@@ -297,21 +296,21 @@ function InferenceKeyRepair({
     retry: false,
     mutationFn: (submission: RepairKeySubmission) =>
       repairInferenceKey({
-        organizationID,
-        keyType: inferenceKey.key_type,
+        organizationId: organizationID,
+        keyType: inferenceKey.keyType,
         ...submission,
       }),
     onSuccess: async (result) => {
       await qc.cancelQueries({ queryKey });
       qc.setQueryData<AdminInferenceKey[]>(queryKey, (current) =>
         current?.map((key) =>
-          key.key_type === result.key.key_type
-            ? { ...key, ...result.key, credits_used: key.credits_used }
+          key.keyType === result.key.keyType
+            ? { ...key, ...result.key, creditsUsed: key.creditsUsed }
             : key,
         ),
       );
       announce(
-        `${inferenceKey.key_type} repair accepted; upstream reconciliation pending. Refresh diagnostics to verify application.`,
+        `${inferenceKey.keyType} repair accepted; upstream reconciliation pending. Refresh diagnostics to verify application.`,
       );
       // A refresh failure is a read failure, never a failed write. Keep the accepted cache result.
       void qc
@@ -323,8 +322,8 @@ function InferenceKeyRepair({
         });
     },
   });
-  const causes = inferenceKey.disable_causes ?? [];
-  const diagnostics = inferenceKey.cause_diagnostics ?? [];
+  const causes = inferenceKey.disableCauses ?? [];
+  const diagnostics = inferenceKey.causeDiagnostics ?? [];
   const metadataValid =
     diagnosticsFresh &&
     diagnostics.length === causes.length &&
@@ -336,20 +335,20 @@ function InferenceKeyRepair({
     );
   return (
     <RepairInferenceKey
-      keyType={inferenceKey.key_type}
-      keyName={inferenceKeyPurpose(inferenceKey.key_type)}
+      keyType={inferenceKey.keyType}
+      keyName={inferenceKeyPurpose(inferenceKey.keyType)}
       disabled={inferenceKey.disabled}
-      classified={inferenceKey.disable_causes_classified}
+      classified={inferenceKey.disableCausesClassified}
       causes={causes.map((cause) => {
         const diagnostic = diagnostics.find((item) => item.cause === cause);
         return {
           cause,
           label: inferenceKeyDisableCauseLabel(cause),
-          description: diagnostic?.description,
+          description: diagnostic?.description ?? "",
           removable: metadataValid && diagnostic?.removable === true,
           blockedReason: !metadataValid
             ? "Current lock diagnostics are unavailable. Refresh before repairing this key."
-            : diagnostic?.blocked_reason,
+            : diagnostic?.blockedReason,
         };
       })}
       onSubmit={(submission) => mutation.mutateAsync(submission)}
@@ -375,25 +374,25 @@ function InferenceKeys({
       )}
       {keys.map((key) => (
         <div
-          key={key.key_type}
+          key={key.keyType}
           className="border-border mt-3 border-t pt-2 first:mt-0 first:border-0 first:pt-0"
         >
-          <Row label="Key type">{key.key_type}</Row>
-          <Row label="Purpose">{inferenceKeyPurpose(key.key_type)}</Row>
+          <Row label="Key type">{key.keyType}</Row>
+          <Row label="Purpose">{inferenceKeyPurpose(key.keyType)}</Row>
           <Row label="Current monthly usage">
-            {formatCredits(key.credits_used)}
-            {key.monthly_credits === 0
+            {formatCredits(key.creditsUsed)}
+            {key.monthlyCredits === 0
               ? " (unlimited limit)"
-              : ` of ${formatCredits(key.monthly_credits)}`}
+              : ` of ${formatCredits(key.monthlyCredits)}`}
           </Row>
           <Row label="Configured monthly credit limit">
-            {key.monthly_credits === 0
+            {key.monthlyCredits === 0
               ? "Unlimited"
-              : formatCredits(key.monthly_credits)}
+              : formatCredits(key.monthlyCredits)}
           </Row>
           <Row label="State">{key.disabled ? "Disabled" : "Enabled"}</Row>
           <Row label="Disable causes">{inferenceKeyDisableCauses(key)}</Row>
-          {key.cause_diagnostics?.map((diagnostic) => (
+          {key.causeDiagnostics?.map((diagnostic) => (
             <p
               key={diagnostic.cause}
               className="mt-2 text-sm text-muted-foreground [overflow-wrap:anywhere]"
@@ -402,9 +401,9 @@ function InferenceKeys({
                 {inferenceKeyDisableCauseLabel(diagnostic.cause)}:{" "}
               </span>
               {diagnostic.description}
-              {diagnostic.blocked_reason && (
+              {diagnostic.blockedReason && (
                 <span className="block text-xs">
-                  {diagnostic.blocked_reason}
+                  {diagnostic.blockedReason}
                 </span>
               )}
             </p>

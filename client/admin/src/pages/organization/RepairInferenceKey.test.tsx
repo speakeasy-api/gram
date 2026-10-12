@@ -155,7 +155,12 @@ it("keeps unknown causes locked even when classified metadata says removable", (
   setup({
     causes: [
       causes[1]!,
-      { cause: "future_lock", label: "Unknown lock", removable: true },
+      {
+        cause: "future_lock",
+        label: "Unknown lock",
+        description: "Unknown policy",
+        removable: true,
+      },
     ],
   });
   expect(

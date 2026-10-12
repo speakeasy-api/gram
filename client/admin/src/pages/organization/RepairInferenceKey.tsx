@@ -1,3 +1,4 @@
+import type { AdminInferenceKeyCause } from "@gram/admin-client/models/components/admininferencekeycause";
 import { errorMessage } from "@/lib/gramAdminApi";
 import {
   RemoveCauses$outboundSchema,
@@ -25,13 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export interface RepairKeyCause {
-  cause: string;
-  label: string;
-  description?: string;
-  removable: boolean;
-  blockedReason?: string;
-}
+export type RepairKeyCause = AdminInferenceKeyCause & { label: string };
 export type RepairKeySubmission = Pick<
   RepairInferenceKeyRequestBody,
   "removeCauses" | "reason" | "confirmation"

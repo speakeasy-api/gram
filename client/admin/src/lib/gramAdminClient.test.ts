@@ -12,6 +12,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   return { ...actual, useMutation };
 });
 
+import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 import type { SetOrganizationOnboardingStackRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingstackrequestbody";
 import type { SetStripeSubscriptionRequestBody } from "@gram/admin-client/models/components/setstripesubscriptionrequestbody";
@@ -42,6 +43,12 @@ afterEach(() => {
 
 describe("generated admin boundary", () => {
   it("accepts only request arguments at the public boundary", () => {
+    expectTypeOf(boundary.inferenceKeysQuery).parameters.toEqualTypeOf<
+      [organizationID: string]
+    >();
+    expectTypeOf(boundary.repairInferenceKey).parameters.toEqualTypeOf<
+      [request: RepairInferenceKeyRequestBody]
+    >();
     expectTypeOf(boundary.adminSessionQuery).parameters.toEqualTypeOf<[]>();
     expectTypeOf(boundary.setAdminOrganizationFeature).parameters.toEqualTypeOf<
       [request: SetOrganizationFeatureRequestBody]
@@ -832,3 +839,244 @@ it.each([401, 503])(
     expect(href).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
   },
 );
+
+describe("generated inference key operations", () => {
+  it("posts exact removal-only repair payload without inventing usage", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const response = {
+      key: {
+        key_type: "internal",
+        monthly_credits: 100,
+        disabled: false,
+        disable_causes: [],
+        disable_causes_classified: true,
+        cause_diagnostics: [],
+      },
+      reconciliation_pending: true,
+    };
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const result = await boundary.repairInferenceKey({
+      organizationId: "org_1",
+      keyType: "internal",
+      removeCauses: ["admin_lock"],
+      confirmation: "I know what I'm doing",
+      reason: "BUG-123",
+    });
+    expect(result).toEqual({
+      key: {
+        keyType: "internal",
+        monthlyCredits: 100,
+        disabled: false,
+        disableCauses: [],
+        disableCausesClassified: true,
+        causeDiagnostics: [],
+      },
+      reconciliationPending: true,
+    });
+    expect(result.key).not.toHaveProperty("creditsUsed");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const request = fetch.mock.calls[0]![0] as Request;
+    expect(request.url).toBe(
+      `${window.location.origin}/admin/organization.repairInferenceKey`,
+    );
+    expect(request.method).toBe("POST");
+    expect(request.credentials).toBe("same-origin");
+    expect(request.headers.has("Authorization")).toBe(false);
+    expect(request.headers.has("Cookie")).toBe(false);
+    expect(await request.json()).toEqual({
+      organization_id: "org_1",
+      key_type: "internal",
+      remove_causes: ["admin_lock"],
+      confirmation: "I know what I'm doing",
+      reason: "BUG-123",
+    });
+  });
+
+  it.each([
+    { confirmation: "almost" },
+    { removeCauses: ["unknown_lock"] },
+    { keyType: "unknown" },
+  ])("rejects invalid repair input before fetching: %j", async (invalid) => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      boundary.repairInferenceKey({
+        organizationId: "org_placeholder",
+        keyType: "chat",
+        removeCauses: ["admin_lock"],
+        confirmation: "I know what I'm doing",
+        reason: "BUG-123",
+        ...invalid,
+      } as never),
+    ).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed successful repair responses at the SDK boundary", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ key: {}, reconciliation_pending: true }), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(
+      boundary.repairInferenceKey({
+        organizationId: "org_placeholder",
+        keyType: "chat",
+        removeCauses: ["admin_lock"],
+        confirmation: "I know what I'm doing",
+        reason: "BUG-123",
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("generated inference key reads", () => {
+  const wireKey = {
+    key_type: "chat",
+    credits_used: 0,
+    monthly_credits: 100,
+    disabled: true,
+    disable_causes_classified: true,
+  };
+
+  it("reads the exact organization same-origin and preserves optional and unknown causes", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          { ...wireKey, disable_causes: [] },
+          wireKey,
+          { ...wireKey, disable_causes_classified: false },
+          {
+            ...wireKey,
+            disable_causes: ["future_lock"],
+            cause_diagnostics: [
+              {
+                cause: "future_lock",
+                description: "Unknown policy",
+                removable: false,
+                blocked_reason: "Unsupported cause",
+              },
+            ],
+          },
+        ]),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const query = boundary.inferenceKeysQuery("org/id & value");
+    if (typeof query.queryFn !== "function")
+      throw new Error("Missing query function");
+    const result = await query.queryFn({
+      signal: new AbortController().signal,
+    } as never);
+    expect(result).toEqual([
+      {
+        keyType: "chat",
+        creditsUsed: 0,
+        monthlyCredits: 100,
+        disabled: true,
+        disableCausesClassified: true,
+        disableCauses: [],
+      },
+      {
+        keyType: "chat",
+        creditsUsed: 0,
+        monthlyCredits: 100,
+        disabled: true,
+        disableCausesClassified: true,
+      },
+      {
+        keyType: "chat",
+        creditsUsed: 0,
+        monthlyCredits: 100,
+        disabled: true,
+        disableCausesClassified: false,
+      },
+      {
+        keyType: "chat",
+        creditsUsed: 0,
+        monthlyCredits: 100,
+        disabled: true,
+        disableCausesClassified: true,
+        disableCauses: ["future_lock"],
+        causeDiagnostics: [
+          {
+            cause: "future_lock",
+            description: "Unknown policy",
+            removable: false,
+            blockedReason: "Unsupported cause",
+          },
+        ],
+      },
+    ]);
+    expect(fetch).toHaveBeenCalledOnce();
+    const request = fetch.mock.calls[0]![0] as Request;
+    const url = new URL(request.url);
+    expect(url.origin).toBe(window.location.origin);
+    expect(url.pathname).toBe("/admin/organization.inferenceKeys");
+    expect([...url.searchParams]).toEqual([
+      ["organization_id", "org/id & value"],
+    ]);
+    expect(request.method).toBe("GET");
+    expect(request.credentials).toBe("same-origin");
+    expect(request.headers.has("Authorization")).toBe(false);
+    expect(request.headers.has("Cookie")).toBe(false);
+  });
+
+  it.each([
+    { ...wireKey, disable_causes_classified: undefined },
+    { ...wireKey, credits_used: "unknown" },
+    { ...wireKey, disable_causes: null },
+  ])(
+    "rejects malformed read state rather than assuming classification: %j",
+    async (key) => {
+      const fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify([key]), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const query = boundary.inferenceKeysQuery("org_placeholder");
+      if (typeof query.queryFn !== "function")
+        throw new Error("Missing query function");
+      await expect(
+        query.queryFn?.({ signal: new AbortController().signal } as never),
+      ).rejects.toThrow();
+      expect(fetch).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([401, 403, 503])(
+    "preserves read HTTP %s errors and only redirects on unauthorized",
+    async (status) => {
+      vi.resetModules();
+      const fresh = await import("@/lib/gramAdminClient");
+      const fetch = vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(unauthorizedBody, {
+            status,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const href = vi.spyOn(window.location, "href", "set");
+      const query = fresh.inferenceKeysQuery("org_placeholder");
+      if (typeof query.queryFn !== "function")
+        throw new Error("Missing query function");
+      await expect(
+        query.queryFn?.({ signal: new AbortController().signal } as never),
+      ).rejects.toMatchObject({ statusCode: status });
+      expect(fresh.isRedirectingToLogin()).toBe(status === 401);
+      expect(href).toHaveBeenCalledTimes(status === 401 ? 1 : 0);
+    },
+  );
+});

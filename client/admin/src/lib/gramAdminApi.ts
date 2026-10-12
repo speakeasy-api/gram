@@ -1,7 +1,4 @@
-import type { AdminInferenceKeyRepairResult } from "@gram/admin-client/models/components/admininferencekeyrepairresult";
 import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
-import type { AdminInferenceKeyCause as GeneratedInferenceKeyCause } from "@gram/admin-client/models/components/admininferencekeycause";
-import { repairInferenceKey as generatedRepairInferenceKey } from "@/lib/gramAdminClient";
 import { GramError } from "@gram/admin-client/models/errors/gramerror";
 
 import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
@@ -624,30 +621,6 @@ export function listOrganizationMembers(
   );
 }
 
-export type AdminInferenceKeyCause = Omit<
-  GeneratedInferenceKeyCause,
-  "blockedReason"
-> & {
-  blocked_reason?: GeneratedInferenceKeyCause["blockedReason"];
-};
-
-type AdminInferenceKeyResponse = {
-  key_type: string;
-  credits_used: number;
-  monthly_credits: number;
-  disabled: boolean;
-  disable_causes?: string[];
-  disable_causes_classified: boolean;
-  cause_diagnostics?: AdminInferenceKeyCause[];
-};
-
-export type AdminInferenceKey = Omit<
-  AdminInferenceKeyResponse,
-  "disable_causes"
-> & {
-  disable_causes: string[] | null;
-};
-
 export type AdminChatAnalysisJudge = "work_units" | "business_memory";
 
 export type AdminOrganizationChatAnalysisSettings = {
@@ -706,62 +679,12 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
-export async function getInferenceKeys(
-  organizationID: string,
-): Promise<AdminInferenceKey[]> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  const keys = await gramAdminFetch<AdminInferenceKeyResponse[]>(
-    `/admin/organization.inferenceKeys?${qs}`,
-  );
-  return keys.map((key) => ({
-    ...key,
-    disable_causes: key.disable_causes_classified
-      ? (key.disable_causes ?? [])
-      : null,
-  }));
-}
-
 export type AdminInferenceKeyType = RepairInferenceKeyRequestBody["keyType"];
 
-// Adapt the generated model to the existing billing view; usage remains read-only.
-export async function repairInferenceKey(
-  input: Omit<RepairInferenceKeyRequestBody, "organizationId"> & {
-    organizationID: string;
-  },
-): Promise<ReturnType<typeof inferenceKeyRepairFromSdk>> {
-  const result = await generatedRepairInferenceKey({
-    organizationId: input.organizationID,
-    keyType: input.keyType,
-    removeCauses: input.removeCauses,
-    confirmation: input.confirmation,
-    reason: input.reason,
-  });
-  return inferenceKeyRepairFromSdk(result);
-}
-
-function inferenceKeyRepairFromSdk(result: AdminInferenceKeyRepairResult) {
-  return {
-    key: {
-      key_type: result.key.keyType,
-      monthly_credits: result.key.monthlyCredits,
-      disabled: result.key.disabled,
-      disable_causes: result.key.disableCauses,
-      disable_causes_classified: result.key.disableCausesClassified,
-      cause_diagnostics: result.key.causeDiagnostics.map(
-        ({ blockedReason, ...cause }) => ({
-          ...cause,
-          blocked_reason: blockedReason,
-        }),
-      ),
-    },
-    reconciliation_pending: result.reconciliationPending,
-  };
-}
-
-export type AdminInferenceKeyLimit = Pick<
-  AdminInferenceKey,
-  "key_type" | "monthly_credits"
->;
+export type AdminInferenceKeyLimit = {
+  key_type: string;
+  monthly_credits: number;
+};
 
 export function setInferenceKeyMonthlyLimit(input: {
   organizationID: string;

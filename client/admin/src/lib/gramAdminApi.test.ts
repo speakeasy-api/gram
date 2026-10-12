@@ -20,7 +20,6 @@ import {
   createOrganization,
   errorMessage,
   getStripeCustomer,
-  getInferenceKeys,
   getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
@@ -37,7 +36,6 @@ import {
   MIN_TRIAL_START_DAYS,
   resumeStripeSubscription,
   setInferenceKeyMonthlyLimit,
-  repairInferenceKey,
   setStripeCustomer,
   toSearchParams,
   omitUnset,
@@ -317,89 +315,6 @@ describe("getProject", () => {
 });
 
 describe("organization billing endpoints", () => {
-  it("posts exact removal-only repair payload without inventing usage", async () => {
-    const fetch = stubFetch();
-    const response = {
-      key: {
-        key_type: "internal",
-        monthly_credits: 100,
-        disabled: false,
-        disable_causes: [],
-        disable_causes_classified: true,
-        cause_diagnostics: [],
-      },
-      reconciliation_pending: true,
-    };
-    fetch.mockResolvedValueOnce(
-      new Response(JSON.stringify(response), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    const result = await repairInferenceKey({
-      organizationID: "org_1",
-      keyType: "internal",
-      removeCauses: ["admin_lock"],
-      confirmation: "I know what I'm doing",
-      reason: "BUG-123",
-    });
-    expect(result).toEqual(response);
-    expect(result.key).not.toHaveProperty("credits_used");
-    expect(fetch).toHaveBeenCalledTimes(1);
-    const request = fetch.mock.calls[0]![0] as Request;
-    expect(request.url).toBe(
-      `${window.location.origin}/admin/organization.repairInferenceKey`,
-    );
-    expect(request.method).toBe("POST");
-    expect(request.credentials).toBe("same-origin");
-    expect(request.headers.has("Authorization")).toBe(false);
-    expect(request.headers.has("Cookie")).toBe(false);
-    expect(await request.json()).toEqual({
-      organization_id: "org_1",
-      key_type: "internal",
-      remove_causes: ["admin_lock"],
-      confirmation: "I know what I'm doing",
-      reason: "BUG-123",
-    });
-  });
-
-  it.each([
-    { confirmation: "almost" },
-    { removeCauses: ["unknown_lock"] },
-    { keyType: "unknown" },
-  ])("rejects invalid repair input before fetching: %j", async (invalid) => {
-    const fetch = stubFetch();
-    await expect(
-      repairInferenceKey({
-        organizationID: "org_placeholder",
-        keyType: "chat",
-        removeCauses: ["admin_lock"],
-        confirmation: "I know what I'm doing",
-        reason: "BUG-123",
-        ...invalid,
-      } as never),
-    ).rejects.toThrow();
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("rejects malformed successful repair responses at the SDK boundary", async () => {
-    const fetch = stubFetch();
-    fetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({ key: {}, reconciliation_pending: true }), {
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    await expect(
-      repairInferenceKey({
-        organizationID: "org_placeholder",
-        keyType: "chat",
-        removeCauses: ["admin_lock"],
-        confirmation: "I know what I'm doing",
-        reason: "BUG-123",
-      }),
-    ).rejects.toThrow();
-  });
-
   afterEach(() => vi.unstubAllGlobals());
 
   function stubFetch(): ReturnType<typeof vi.fn> {
@@ -415,56 +330,20 @@ describe("organization billing endpoints", () => {
     return fetch;
   }
 
-  it("preserves classified empty and legacy unclassified cause semantics", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify([
-            {
-              key_type: "chat",
-              credits_used: 0,
-              monthly_credits: 100,
-              disabled: false,
-              disable_causes_classified: true,
-            },
-            {
-              key_type: "internal",
-              credits_used: 0,
-              monthly_credits: 50,
-              disabled: true,
-              disable_causes_classified: false,
-            },
-          ]),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      ),
-    );
-
-    await expect(getInferenceKeys("org one")).resolves.toMatchObject([
-      { disable_causes: [], disable_causes_classified: true },
-      { disable_causes: null, disable_causes_classified: false },
-    ]);
-  });
-
   it("reads billing state from explicit admin organization endpoints", async () => {
     const fetch = stubFetch();
 
-    await getInferenceKeys("org one");
     await getInferenceSpendHistory("org one");
     await getPaygBillingSummary("org one");
     await getStripeSubscription("org one");
 
     expect(fetch.mock.calls[0]?.[0]).toBe(
-      "/admin/organization.inferenceKeys?organization_id=org+one",
-    );
-    expect(fetch.mock.calls[1]?.[0]).toBe(
       "/admin/organization.inferenceSpendHistory?organization_id=org+one",
     );
-    expect(fetch.mock.calls[2]?.[0]).toBe(
+    expect(fetch.mock.calls[1]?.[0]).toBe(
       "/admin/organization.paygBillingSummary?organization_id=org+one",
     );
-    expect(fetch.mock.calls[3]?.[0]).toBe(
+    expect(fetch.mock.calls[2]?.[0]).toBe(
       "/admin/organization.stripeSubscription?organization_id=org+one",
     );
   });
