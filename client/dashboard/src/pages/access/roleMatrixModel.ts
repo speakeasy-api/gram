@@ -441,21 +441,59 @@ export function removeOtherMcpRule(
 export interface PlatformArea {
   resourceType: ResourceType;
   label: string;
+  /** What the area covers, in a few words. */
+  description: string;
   view?: ScopeDefinition;
   manage?: ScopeDefinition;
   /** Permissions in this area that are not a level, e.g. authorizing agents. */
   extras: ScopeDefinition[];
 }
 
-const PLATFORM_AREAS: { resourceType: ResourceType; label: string }[] = [
-  { resourceType: "org", label: "Organization" },
-  { resourceType: "project", label: "Projects" },
-  { resourceType: "environment", label: "Environments" },
-  { resourceType: "skill", label: "Skills" },
-  { resourceType: "assistant", label: "Assistants" },
-  { resourceType: "agent", label: "Agents" },
-  { resourceType: "chat", label: "Agent sessions" },
-  { resourceType: "workload", label: "Workload identities" },
+const PLATFORM_AREAS: {
+  resourceType: ResourceType;
+  label: string;
+  description: string;
+}[] = [
+  {
+    resourceType: "org",
+    label: "Organization",
+    description: "Organization settings and members",
+  },
+  {
+    resourceType: "project",
+    label: "Projects",
+    description: "Projects and what they contain",
+  },
+  {
+    resourceType: "environment",
+    label: "Environments",
+    description: "Variables and secrets that servers use",
+  },
+  {
+    resourceType: "skill",
+    label: "Skills",
+    description: "Skills shared in a project",
+  },
+  {
+    resourceType: "assistant",
+    label: "Assistants",
+    description: "Assistants in a project",
+  },
+  {
+    resourceType: "agent",
+    label: "Agents",
+    description: "Agents and their settings",
+  },
+  {
+    resourceType: "chat",
+    label: "Agent sessions",
+    description: "Other members' session transcripts",
+  },
+  {
+    resourceType: "workload",
+    label: "Workload identities",
+    description: "Which workloads can act as which agents",
+  },
 ];
 
 const VIEW_ACTIONS = new Set(["read"]);
@@ -467,7 +505,7 @@ function scopeAction(slug: string): string {
 
 /** Group the permissions a role can hold into platform rows. MCP is its own table. */
 export function platformAreas(scopes: ScopeDefinition[]): PlatformArea[] {
-  return PLATFORM_AREAS.map(({ resourceType, label }) => {
+  return PLATFORM_AREAS.map(({ resourceType, label, description }) => {
     const inArea = scopes.filter(
       (s) =>
         s.resourceType === resourceType &&
@@ -482,6 +520,7 @@ export function platformAreas(scopes: ScopeDefinition[]): PlatformArea[] {
     return {
       resourceType,
       label,
+      description,
       view,
       manage: view ? manage : undefined,
       extras: inArea.filter((s) => !levels.includes(s)),

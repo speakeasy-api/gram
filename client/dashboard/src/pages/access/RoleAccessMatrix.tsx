@@ -1005,14 +1005,15 @@ function PlatformMatrix({
                   className="py-2 pr-2 pl-4 text-left font-normal"
                 >
                   <div className="flex flex-wrap items-center gap-2">
-                    <SimpleTooltip tooltip={area.view?.description}>
-                      <span className="cursor-default">{area.label}</span>
-                    </SimpleTooltip>
+                    <span>{area.label}</span>
                     {ineligible([area.view, area.manage]) && (
                       <Badge variant="neutral" size="sm">
                         Not available to agents
                       </Badge>
                     )}
+                  </div>
+                  <div className="text-muted-foreground truncate text-xs">
+                    {area.description}
                   </div>
                 </th>
                 {PLATFORM_LEVELS.map((level) => {

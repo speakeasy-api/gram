@@ -711,7 +711,7 @@ export function CreateRoleDialog({
 
             {/* ─── Assign Members (read-only when directory sync manages assignment) ─── */}
             {!hideAssignments && scimWithNoMembers && (
-              <div className="border-border flex items-center gap-1 border-t pt-4 pb-4">
+              <div className="border-border flex items-center gap-1 border-t pt-4">
                 <Text variant="body" className="font-medium">
                   Assign Members
                 </Text>
@@ -724,7 +724,7 @@ export function CreateRoleDialog({
               </div>
             )}
             {!hideAssignments && !scimWithNoMembers && (
-              <div className="border-border border-t pt-4 pb-4">
+              <div className="border-border border-t pt-4">
                 <button
                   type="button"
                   onClick={() => setShowMembers(!showMembers)}
@@ -882,7 +882,7 @@ export function CreateRoleDialog({
                 Not gated on SCIM: a directory syncs people, never agents,
                 so this is the only place an agent's roles are decided. */}
             {agentManagementEnabled && !hideAssignments && (
-              <div className="border-border border-t pt-4 pb-4">
+              <div className="border-border border-t pt-4">
                 <button
                   type="button"
                   onClick={() => setShowAgents(!showAgents)}
