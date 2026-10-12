@@ -14,6 +14,10 @@ on:
       - .mise-tasks/pause.sh
       - .mise-tasks/wake.sh
       - .mise-tasks/park.mts
+      - .mise-tasks/park/**
+      - .mise-tasks/check/daemon*
+      - .mise-tasks/check/listeners.test.mts
+      - .mise-tasks/test/local-network.sh
       - .mise-tasks/ensure-stack.sh
       - .mise-tasks/idle-pause.sh
       - .mise-tasks/nuke.sh
@@ -106,6 +110,9 @@ jobs:
 
       - name: Test Temporal lifecycle
         run: mise run test:temporal
+
+      - name: Test local networking
+        run: mise run test:local-network
 
       - name: Test
         run: mise run test:wake-stack

@@ -32,19 +32,19 @@ case "$usage_name" in
     mise run check:http --url "http://$(probe_address "${MOCK_OIDC_ADDRESS:-localhost:$GRAM_ADMIN_OIDC_EMULATOR_PORT}")/healthz"
     ;;
   server)
-    mise run check:http --url "http://localhost:$GRAM_CONTROL_PORT/healthz"
+    mise run check:http --url "http://$(probe_address "${GRAM_CONTROL_ADDRESS:-localhost:$GRAM_CONTROL_PORT}")/healthz"
     ;;
   admin)
-    mise run check:http --url "http://localhost:$GRAM_ADMIN_CONTROL_PORT/healthz"
+    mise run check:http --url "http://$(probe_address "${GRAM_ADMIN_CONTROL_ADDRESS:-localhost:$GRAM_ADMIN_CONTROL_PORT}")/healthz"
     ;;
   admin-dashboard)
     mise run check:http --url "$GRAM_HTTP_SCHEME://localhost:$GRAM_ADMIN_DASHBOARD_PORT/"
     ;;
   worker)
-    mise run check:http --url "http://localhost:$GRAM_WORKER_CONTROL_PORT/healthz"
+    mise run check:http --url "http://$(probe_address "${GRAM_WORKER_CONTROL_ADDRESS:-localhost:$GRAM_WORKER_CONTROL_PORT}")/healthz"
     ;;
   streams)
-    mise run check:http --url "http://localhost:$GRAM_STREAMS_CONTROL_PORT/healthz"
+    mise run check:http --url "http://$(probe_address "${GRAM_STREAMS_CONTROL_ADDRESS:-localhost:$GRAM_STREAMS_CONTROL_PORT}")/healthz"
     ;;
   pystreams-multi)
     mise run check:http --url "http://localhost:$GRAM_PYSTREAMS_CONTROL_PORT/readyz"

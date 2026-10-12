@@ -28,7 +28,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
-import { BlockList, isIP } from "node:net";
+import { fromAllowedPeer } from "./park/peers.mts";
 
 const port = Number(process.env["GRAM_SITE_PORT"]);
 if (!Number.isInteger(port) || port <= 0) {
@@ -311,22 +311,6 @@ function wake(): void {
 }
 
 const creds = tls();
-// Permit local browsers and Tailnet peers, including IPv4-mapped IPv6 peers.
-// Check the socket address, so forwarded headers cannot grant access. Keep the
-// wildcard listener to support both loopback families and the Tailnet interface.
-const allowedPeers = new BlockList();
-allowedPeers.addSubnet("127.0.0.0", 8, "ipv4");
-allowedPeers.addAddress("::1", "ipv6");
-allowedPeers.addSubnet("100.64.0.0", 10, "ipv4");
-allowedPeers.addSubnet("fd7a:115c:a1e0::", 48, "ipv6");
-
-function fromAllowedPeer(req: http.IncomingMessage): boolean {
-  const addr = req.socket.remoteAddress ?? "";
-  const family = isIP(addr);
-  return (
-    family !== 0 && allowedPeers.check(addr, family === 4 ? "ipv4" : "ipv6")
-  );
-}
 
 const handler = (req: http.IncomingMessage, res: http.ServerResponse): void => {
   if (!fromAllowedPeer(req)) {

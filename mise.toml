@@ -132,6 +132,8 @@ GRAM_RISK_LLM_API_KEY = ""
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
 GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
+## Listener hosts accept IPv4 or bracketed IPv6 literals (e.g. [::1]).
+## Empty keeps existing wildcard listeners; dev-idp defaults to loopback.
 GRAM_BIND_IP = "" # Only needed for local development.
 ## Setting this to 1 will run the server and worker in a single process.
 ## This is useful when debugging during local development. It can also be used
@@ -187,8 +189,9 @@ GRAM_DEVIDP_HOST = "{{env.GRAM_HOST}}"
 GRAM_DEVIDP_PORT = "35291"
 GRAM_DEVIDP_CONTROL_PORT = "35292"
 GRAM_DEVIDP_DASHBOARD_PORT = "35293"
-GRAM_DEVIDP_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_DEVIDP_PORT}}"
-GRAM_DEVIDP_CONTROL_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_DEVIDP_CONTROL_PORT}}"
+## dev-idp has unauthenticated management APIs; remote access requires an explicit trusted bind address.
+GRAM_DEVIDP_ADDRESS = "{% if env.GRAM_BIND_IP %}{{env.GRAM_BIND_IP}}{% else %}127.0.0.1{% endif %}:{{env.GRAM_DEVIDP_PORT}}"
+GRAM_DEVIDP_CONTROL_ADDRESS = "{% if env.GRAM_BIND_IP %}{{env.GRAM_BIND_IP}}{% else %}127.0.0.1{% endif %}:{{env.GRAM_DEVIDP_CONTROL_PORT}}"
 GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
 GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2-1"
