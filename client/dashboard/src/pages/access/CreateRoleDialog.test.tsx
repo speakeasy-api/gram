@@ -54,6 +54,7 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
           resourceType: "mcp",
           visibility: "user_visible",
           label: "Connect to MCP servers",
+          exclusionScope: "mcp:blocked_connect",
         },
       ],
     },
@@ -68,6 +69,20 @@ vi.mock("@gram/client/react-query/updateRole.js", () => ({
 // The MCP access tab reads the organization's servers; the section that
 // would show it is mocked below.
 vi.mock("./useMcpAccessCount", () => ({ useMcpAccessCount: () => 0 }));
+vi.mock("./useOrgMcpServers", () => ({
+  useOrgMcpServers: () => ({
+    groups: [
+      {
+        projectId: "project-a",
+        projectName: "Default",
+        servers: [{ id: "server-a", name: "GitHub", slug: "github" }],
+      },
+    ],
+    settled: true,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("./RolePermissionsSection", () => ({
   RolePermissionsSection: ({
     onToggleScope,
@@ -306,5 +321,37 @@ describe("member assignment under directory sync", () => {
     const link = screen.getByRole("link", { name: "Configure directory sync" });
     expect(link.getAttribute("href")).toBe("/org/identity");
     expect(screen.queryByText("Enrolled Person")).toBeNull();
+  });
+});
+
+describe("a permission the role only blocks", () => {
+  const blockingRole: Role = {
+    ...role,
+    grants: [
+      {
+        scope: "mcp:blocked_connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
+      },
+    ],
+  };
+
+  it("names the blocked server instead of reading as a grant", () => {
+    renderEditor(blockingRole);
+    expect(screen.getByText("GitHub")).toBeTruthy();
+    expect(screen.getByText(/even when another role grants it/)).toBeTruthy();
+  });
+
+  it("keeps the block when the permission is granted beside it", () => {
+    renderEditor(blockingRole);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect to MCP servers" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.update).toHaveBeenCalledOnce();
+    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
+    expect(form.addGrants).toEqual([
+      expect.objectContaining({ scope: "mcp:connect" }),
+    ]);
+    expect(form.removeGrants ?? []).toEqual([]);
   });
 });

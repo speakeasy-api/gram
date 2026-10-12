@@ -49,9 +49,10 @@ import {
   membersWithRole,
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
-import { MCP_CONNECT_SCOPE } from "./mcpAccessModel";
+import { indexServers, MCP_CONNECT_SCOPE } from "./mcpAccessModel";
 import { McpAccessPanel } from "./McpAccessPanel";
 import { useMcpAccessCount } from "./useMcpAccessCount";
+import { useOrgMcpServers } from "./useOrgMcpServers";
 import { PermissionScopeControl } from "./PermissionScopeControl";
 import { RolePermissionsSection } from "./RolePermissionsSection";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -238,6 +239,39 @@ export function CreateRoleDialog({
   );
 
   const mcpAccessCount = useMcpAccessCount(grants, open);
+  const mcpInventory = useOrgMcpServers(open);
+  const mcpServerIndex = useMemo(
+    () => indexServers(mcpInventory.groups),
+    [mcpInventory.groups],
+  );
+  // Names the servers a block covers, so the row says which one it is; falls
+  // back to the count-style label for anything else.
+  const blockedResourceLabel = (
+    selectors: Selector[] | null,
+    resourceType: ResourceType,
+  ): string => {
+    const names = (selectors ?? []).map((s) =>
+      s.tool || s.projectId || s.disposition
+        ? undefined
+        : mcpServerIndex.get(s.resourceId)?.server.name,
+    );
+    if (
+      resourceType === "mcp" &&
+      names.length > 0 &&
+      names.every((n) => n !== undefined)
+    ) {
+      return names.join(", ");
+    }
+    return computeRuleLabel(selectors, resourceType, projectList);
+  };
+  // Permissions the role only takes away: every rule is an exception.
+  const blockOnlyScopes = new Set(
+    Object.values(grants)
+      .filter(
+        (g) => g.rules.length > 0 && g.rules.every((r) => r.effect === "deny"),
+      )
+      .map((g) => g.scope),
+  );
 
   const projectList = useMemo(
     () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
@@ -408,7 +442,18 @@ export function CreateRoleDialog({
   const toggleScope = (scope: Scope) => {
     updateGrants((prev) => {
       const next = { ...prev };
-      if (next[scope]) {
+      const existing = next[scope];
+      if (existing && existing.rules.every((r) => r.effect === "deny")) {
+        // Granting a permission the role only blocks keeps the block, which
+        // then reads as the grant's exception.
+        next[scope] = {
+          ...existing,
+          rules: [
+            { id: crypto.randomUUID(), effect: "allow", selectors: null },
+            ...existing.rules,
+          ],
+        };
+      } else if (existing) {
         delete next[scope];
       } else {
         next[scope] = {
@@ -808,6 +853,7 @@ export function CreateRoleDialog({
             <RolePermissionsSection
               groups={scopeGroups}
               selectedScopes={new Set(Object.keys(grants))}
+              blockOnlyScopes={blockOnlyScopes}
               disabled={false}
               markAgentIneligible={selectedAgents.size > 0}
               onToggleScope={toggleScope}
@@ -849,6 +895,27 @@ export function CreateRoleDialog({
                 const denyRules = grant.rules
                   .map((rule, index) => ({ rule, index }))
                   .filter(({ rule }) => rule.effect === "deny");
+                if (allowRules.length === 0) {
+                  // A block with nothing granted beside it. It still wins
+                  // over every other role, which is what makes it easy to
+                  // miss, so the row says so.
+                  return (
+                    <Text muted small>
+                      Takes this permission away on{" "}
+                      <span className="text-foreground">
+                        {denyRules
+                          .map(({ rule }) =>
+                            blockedResourceLabel(
+                              rule.selectors,
+                              scopeDef.resourceType,
+                            ),
+                          )
+                          .join(", ")}
+                      </span>
+                      , even when another role grants it.
+                    </Text>
+                  );
+                }
                 return allowRules.map(
                   ({ rule: allowRule, index: allowIndex }, position) => (
                     <PermissionScopeControl
@@ -864,10 +931,9 @@ export function CreateRoleDialog({
                         projectList,
                       )}
                       denyLabel={(rule) =>
-                        computeRuleLabel(
+                        blockedResourceLabel(
                           rule.selectors,
                           scopeDef.resourceType,
-                          projectList,
                         )
                       }
                       canAddException={
