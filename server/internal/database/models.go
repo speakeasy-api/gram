@@ -1015,19 +1015,6 @@ type DirectoryUserGroupMembership struct {
 	WorkosCreatedAt        pgtype.Timestamptz
 }
 
-type EmaVendorIdentityProvider struct {
-	ID                      uuid.UUID
-	OrganizationID          string
-	VendorIssuer            string
-	RemoteSessionIssuerID   uuid.NullUUID
-	InternalSessionIssuerID uuid.NullUUID
-	Position                int32
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-	DeletedAt               pgtype.Timestamptz
-	Deleted                 bool
-}
-
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -2824,6 +2811,19 @@ type RemoteSessionEmaCredential struct {
 	UpdatedAt                      pgtype.Timestamptz
 	DeletedAt                      pgtype.Timestamptz
 	Deleted                        bool
+}
+
+type RemoteSessionEmaProvider struct {
+	ID                      uuid.UUID
+	OrganizationID          string
+	VendorIssuer            string
+	RemoteSessionIssuerID   uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	Position                int32
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
 }
 
 type RemoteSessionIssuer struct {

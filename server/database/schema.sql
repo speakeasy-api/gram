@@ -2489,10 +2489,13 @@ WHERE jwks_uri IS NOT NULL AND deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_organization_id_id_key
 ON remote_session_issuers (organization_id, id);
 
--- Which identity providers may issue ID-JAGs for a downstream vendor, and in
--- what order they are tried. No live rows for a vendor means every available
--- provider, external ones first and Speakeasy last.
-CREATE TABLE IF NOT EXISTS ema_vendor_identity_providers (
+-- Which issuers may supply ID-JAGs for a downstream vendor, and in what order
+-- they are tried, for every remote_session_ema_bindings row that redeems at
+-- that vendor. No live rows for a vendor keeps today's behaviour: the
+-- endpoint's trusted external issuer (user_session_issuers
+-- trusted_remote_session_issuer_id), then the organization's internal session
+-- issuer if it has one.
+CREATE TABLE IF NOT EXISTS remote_session_ema_providers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   -- RFC 8414 issuer of the vendor's authorization server, normalized in
@@ -2511,27 +2514,27 @@ CREATE TABLE IF NOT EXISTS ema_vendor_identity_providers (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  CONSTRAINT ema_vendor_identity_providers_pkey PRIMARY KEY (id),
-  CONSTRAINT ema_vendor_identity_providers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT ema_vendor_identity_providers_remote_issuer_tenant_fkey FOREIGN KEY (organization_id, remote_session_issuer_id) REFERENCES remote_session_issuers (organization_id, id),
-  CONSTRAINT ema_vendor_identity_providers_internal_issuer_tenant_fkey FOREIGN KEY (organization_id, internal_session_issuer_id) REFERENCES internal_session_issuers (organization_id, id),
-  CONSTRAINT ema_vendor_identity_providers_one_provider_check CHECK (num_nonnulls(remote_session_issuer_id, internal_session_issuer_id) = 1)
+  CONSTRAINT remote_session_ema_providers_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_ema_providers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_ema_providers_remote_issuer_tenant_fkey FOREIGN KEY (organization_id, remote_session_issuer_id) REFERENCES remote_session_issuers (organization_id, id),
+  CONSTRAINT remote_session_ema_providers_internal_issuer_tenant_fkey FOREIGN KEY (organization_id, internal_session_issuer_id) REFERENCES internal_session_issuers (organization_id, id),
+  CONSTRAINT remote_session_ema_providers_one_provider_check CHECK (num_nonnulls(remote_session_issuer_id, internal_session_issuer_id) = 1)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS ema_vendor_identity_providers_position_key
-ON ema_vendor_identity_providers (organization_id, vendor_issuer, position)
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_providers_position_key
+ON remote_session_ema_providers (organization_id, vendor_issuer, position)
 WHERE deleted IS FALSE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS ema_vendor_identity_providers_provider_key
-ON ema_vendor_identity_providers (organization_id, vendor_issuer, remote_session_issuer_id, internal_session_issuer_id) NULLS NOT DISTINCT
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_providers_provider_key
+ON remote_session_ema_providers (organization_id, vendor_issuer, remote_session_issuer_id, internal_session_issuer_id) NULLS NOT DISTINCT
 WHERE deleted IS FALSE;
 
-CREATE INDEX IF NOT EXISTS ema_vendor_identity_providers_remote_issuer_idx
-ON ema_vendor_identity_providers (organization_id, remote_session_issuer_id)
+CREATE INDEX IF NOT EXISTS remote_session_ema_providers_remote_issuer_idx
+ON remote_session_ema_providers (organization_id, remote_session_issuer_id)
 WHERE remote_session_issuer_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS ema_vendor_identity_providers_internal_issuer_idx
-ON ema_vendor_identity_providers (organization_id, internal_session_issuer_id)
+CREATE INDEX IF NOT EXISTS remote_session_ema_providers_internal_issuer_idx
+ON remote_session_ema_providers (organization_id, internal_session_issuer_id)
 WHERE internal_session_issuer_id IS NOT NULL;
 
 -- Scope-qualified FK target for identity provider connections.
