@@ -55,9 +55,10 @@ type devIDPFixture struct {
 	enc         *encryption.Client
 	idpClientID uuid.UUID
 
-	// connectionID is the Okta connection backing the trusted registration;
-	// uuid.Nil unless the options asked for one.
-	connectionID uuid.UUID
+	// trustedIssuerID is the remote session issuer external chaining
+	// exchanges at; resourceIssuerID is the vendor's.
+	trustedIssuerID  uuid.UUID
+	resourceIssuerID uuid.UUID
 
 	// vendorIssuer is the downstream authorization server issuer the
 	// binding names, as a provider policy keys it.
@@ -97,9 +98,6 @@ type devIDPOptions struct {
 	// confirmAudience records an administrator-confirmed Okta resource
 	// connection naming the dev-idp resource server's issuer as audience.
 	confirmAudience bool
-
-	// connection records an Okta connection backing the trusted registration.
-	connection bool
 }
 
 // newDevIDPFixture wires a human with a retained dev-idp ID token, a ready
@@ -170,8 +168,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://mcp.docs.example"}
 	bindResource(t, db, req, resourceIssuer, resourceClient, devIDPResource, remotesessions.PreparationStateReady)
 
-	connectionID := uuid.Nil
-	if opts.confirmAudience || opts.connection {
+	if opts.confirmAudience {
 		connection, err := identityproviderconnectionsrepo.New(db).CreateIdentityProviderConnection(ctx, identityproviderconnectionsrepo.CreateIdentityProviderConnectionParams{OrganizationID: org, Provider: "okta"})
 		require.NoError(t, err)
 		_, err = identityproviderconnectionsrepo.New(db).CreateOktaIdentityProviderConnection(ctx, identityproviderconnectionsrepo.CreateOktaIdentityProviderConnectionParams{
@@ -179,11 +176,8 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 			RemoteSessionIssuerID: idpIssuer.ID, RemoteSessionClientID: idpClient.ID, ListingMode: "custom_app",
 		})
 		require.NoError(t, err)
-		connectionID = connection.ID
-	}
-	if opts.confirmAudience {
 		_, err = oktaresourceconnectionsrepo.New(db).UpsertResourceConnection(ctx, oktaresourceconnectionsrepo.UpsertResourceConnectionParams{
-			OrganizationID: org, IdentityProviderConnectionID: connectionID, RemoteSessionIssuerID: resourceIssuer,
+			OrganizationID: org, IdentityProviderConnectionID: connection.ID, RemoteSessionIssuerID: resourceIssuer,
 			Resource: strings.TrimRight(devIDPResource, "/"), Audience: resourceAS, OktaApplicationID: pgtype.Text{},
 		})
 		require.NoError(t, err)
@@ -223,15 +217,16 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	observed := &recordingObserver{}
 	chainer.SetObserver(observed)
 	return devIDPFixture{
-		observed:     observed,
-		idp:          idp,
-		chainer:      chainer,
-		req:          req,
-		db:           db,
-		enc:          enc,
-		idpClientID:  idpClient.ID,
-		connectionID: connectionID,
-		vendorIssuer: remoteIssuer,
+		observed:         observed,
+		idp:              idp,
+		chainer:          chainer,
+		req:              req,
+		db:               db,
+		enc:              enc,
+		idpClientID:      idpClient.ID,
+		trustedIssuerID:  idpIssuer.ID,
+		resourceIssuerID: resourceIssuer,
+		vendorIssuer:     remoteIssuer,
 	}
 }
 

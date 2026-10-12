@@ -3489,35 +3489,6 @@ func (q *Queries) GetEMACredentialForUse(ctx context.Context, arg GetEMACredenti
 	return i, err
 }
 
-const getEMAExternalProviderConnection = `-- name: GetEMAExternalProviderConnection :one
-SELECT c.id
-FROM identity_provider_connections AS c
-JOIN okta_identity_provider_connections AS o
-  ON o.identity_provider_connection_id = c.id
- AND o.organization_id = c.organization_id
- AND o.deleted IS FALSE
-WHERE c.organization_id = $1
-  AND c.deleted IS FALSE
-  AND o.remote_session_issuer_id = $2
-ORDER BY c.id
-LIMIT 1
-`
-
-type GetEMAExternalProviderConnectionParams struct {
-	OrganizationID        string
-	RemoteSessionIssuerID uuid.UUID
-}
-
-// The live identity provider connection backing the organization remote
-// session issuer an endpoint trusts, if any. Each provider's subtype row
-// records the issuer it provisioned; Okta is the only provider today.
-func (q *Queries) GetEMAExternalProviderConnection(ctx context.Context, arg GetEMAExternalProviderConnectionParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getEMAExternalProviderConnection, arg.OrganizationID, arg.RemoteSessionIssuerID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const getEMAProjectOrganization = `-- name: GetEMAProjectOrganization :one
 SELECT organization_id FROM projects WHERE id = $1 AND deleted IS FALSE FOR SHARE
 `
@@ -6445,12 +6416,18 @@ func (q *Queries) ListEMACredentialsFixture(ctx context.Context, projectID uuid.
 }
 
 const listEMAVendorIdentityProviders = `-- name: ListEMAVendorIdentityProviders :many
-SELECT p.provider_kind, p.identity_provider_connection_id, p.position,
-  (p.identity_provider_connection_id IS NOT NULL AND (c.id IS NULL OR c.deleted IS TRUE))::boolean AS connection_deleted
-FROM ema_vendor_identity_providers AS p
-LEFT JOIN identity_provider_connections AS c
-  ON c.organization_id = p.organization_id
- AND c.id = p.identity_provider_connection_id
+SELECT p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
+  (
+    (p.remote_session_issuer_id IS NOT NULL AND (r.id IS NULL OR r.deleted IS TRUE))
+    OR (p.internal_session_issuer_id IS NOT NULL AND (i.id IS NULL OR i.deleted IS TRUE OR i.disabled_at IS NOT NULL))
+  )::boolean AS provider_unavailable
+FROM remote_session_ema_providers AS p
+LEFT JOIN remote_session_issuers AS r
+  ON r.organization_id = p.organization_id
+ AND r.id = p.remote_session_issuer_id
+LEFT JOIN internal_session_issuers AS i
+  ON i.organization_id = p.organization_id
+ AND i.id = p.internal_session_issuer_id
 WHERE p.organization_id = $1
   AND p.vendor_issuer = $2
   AND p.deleted IS FALSE
@@ -6463,16 +6440,17 @@ type ListEMAVendorIdentityProvidersParams struct {
 }
 
 type ListEMAVendorIdentityProvidersRow struct {
-	ProviderKind                 string
-	IdentityProviderConnectionID uuid.NullUUID
-	Position                     int32
-	ConnectionDeleted            bool
+	RemoteSessionIssuerID   uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	Position                int32
+	ProviderUnavailable     bool
 }
 
-// The organization's ordered identity provider policy for one vendor
-// authorization server issuer. Rows naming a connection that has since been
-// deleted are flagged, not dropped, so a policy that only named deleted
-// connections never reads as no policy.
+// The organization's ordered ID-JAG suppliers for one vendor authorization
+// server issuer. Each row names an external remote session issuer, which does
+// the token exchange, or the organization's internal session issuer. Rows
+// whose supplier was deleted or disabled are flagged, not dropped, so a policy
+// left with only those never reads as no policy.
 func (q *Queries) ListEMAVendorIdentityProviders(ctx context.Context, arg ListEMAVendorIdentityProvidersParams) ([]ListEMAVendorIdentityProvidersRow, error) {
 	rows, err := q.db.Query(ctx, listEMAVendorIdentityProviders, arg.OrganizationID, arg.VendorIssuer)
 	if err != nil {
@@ -6483,10 +6461,10 @@ func (q *Queries) ListEMAVendorIdentityProviders(ctx context.Context, arg ListEM
 	for rows.Next() {
 		var i ListEMAVendorIdentityProvidersRow
 		if err := rows.Scan(
-			&i.ProviderKind,
-			&i.IdentityProviderConnectionID,
+			&i.RemoteSessionIssuerID,
+			&i.InternalSessionIssuerID,
 			&i.Position,
-			&i.ConnectionDeleted,
+			&i.ProviderUnavailable,
 		); err != nil {
 			return nil, err
 		}

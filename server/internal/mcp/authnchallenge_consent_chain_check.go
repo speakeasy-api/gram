@@ -158,7 +158,7 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		}
 	case identitychaining.ReasonReauthenticationRequired:
 		return rejected("Your identity provider sign-in for %s has expired. Sign in again, or use a separate sign-in.")
-	case identitychaining.ReasonConfigurationRequired:
+	case identitychaining.ReasonConfigurationRequired, identitychaining.ReasonProviderUnavailable:
 		return rejected("%s isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.")
 	case identitychaining.ReasonNotApplicable, identitychaining.ReasonBindingNotReady, identitychaining.ReasonMalformedAssertion,
 		identitychaining.ReasonMalformedResponse, identitychaining.ReasonTransientFailure, identitychaining.ReasonUnknownRejection,

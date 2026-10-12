@@ -14,11 +14,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-// policyRow is one provider in a vendor policy; connection is uuid.Nil for
-// Speakeasy.
+// policyRow is one supplier in a vendor policy: an external remote session
+// issuer or the organization's Speakeasy issuer.
 type policyRow struct {
-	kind       remotesessions.EMAProviderKind
-	connection uuid.UUID
+	remoteIssuer uuid.UUID
+	issuer       uuid.UUID
+}
+
+func external(remoteIssuer uuid.UUID) policyRow {
+	return policyRow{remoteIssuer: remoteIssuer, issuer: uuid.Nil}
+}
+
+func speakeasy(issuer uuid.UUID) policyRow {
+	return policyRow{remoteIssuer: uuid.Nil, issuer: issuer}
+}
+
+// seedSpeakeasyIssuer creates the organization's Speakeasy issuer row.
+func seedSpeakeasyIssuer(t *testing.T, f devIDPFixture, organizationID string) uuid.UUID {
+	t.Helper()
+	fixtures := testrepo.New(f.db)
+	set, err := fixtures.SeedJsonWebKeySetFixture(t.Context(), testrepo.SeedJsonWebKeySetFixtureParams{OrganizationID: organizationID, Name: "speakeasy-issuer-" + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	issuer, err := fixtures.SeedInternalSessionIssuerFixture(t.Context(), testrepo.SeedInternalSessionIssuerFixtureParams{OrganizationID: organizationID, Issuer: "https://speakeasy.example.test/oauth/idp/org/" + organizationID, JsonWebKeySetID: set})
+	require.NoError(t, err)
+	return issuer
 }
 
 // setPolicy records the organization's ordered provider policy for the
@@ -30,9 +49,10 @@ func setPolicy(t *testing.T, f devIDPFixture, organizationID string, rows ...pol
 	q := identityproviderconnectionsrepo.New(f.db)
 	for i, row := range rows {
 		require.NoError(t, q.InsertVendorIdentityProvider(t.Context(), identityproviderconnectionsrepo.InsertVendorIdentityProviderParams{
-			OrganizationID: organizationID, VendorIssuer: vendor, ProviderKind: string(row.kind),
-			IdentityProviderConnectionID: uuid.NullUUID{UUID: row.connection, Valid: row.connection != uuid.Nil},
-			Position:                     int32(i),
+			OrganizationID: organizationID, VendorIssuer: vendor,
+			RemoteSessionIssuerID:   uuid.NullUUID{UUID: row.remoteIssuer, Valid: row.remoteIssuer != uuid.Nil},
+			InternalSessionIssuerID: uuid.NullUUID{UUID: row.issuer, Valid: row.issuer != uuid.Nil},
+			Position:                int32(i),
 		}))
 	}
 }
@@ -74,8 +94,8 @@ func TestProviders_DefaultOrderIsExternalThenSpeakeasy(t *testing.T) {
 
 func TestProviders_PolicyOrderFallsThroughToExternal(t *testing.T) {
 	t.Parallel()
-	f := newDevIDPFixture(t, devIDPOptions{connection: true})
-	setPolicy(t, f, f.req.OrganizationID, policyRow{kind: remotesessions.EMAProviderSpeakeasy, connection: uuid.Nil}, policyRow{kind: remotesessions.EMAProviderExternal, connection: f.connectionID})
+	f := newDevIDPFixture(t, devIDPOptions{})
+	setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)), external(f.trustedIssuerID))
 
 	require.Equal(t, []remotesessions.EMAProviderKind{remotesessions.EMAProviderSpeakeasy, remotesessions.EMAProviderExternal}, f.chainer.Providers(t.Context(), f.req))
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
@@ -102,9 +122,9 @@ func TestProviders_FallsThroughOnEveryFailure(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			f := newDevIDPFixture(t, devIDPOptions{connection: true})
-			f.chainer.sourceOverrides = map[remotesessions.EMAProviderKind]tokenSource{remotesessions.EMAProviderSpeakeasy: tc.source}
-			setPolicy(t, f, f.req.OrganizationID, policyRow{kind: remotesessions.EMAProviderSpeakeasy, connection: uuid.Nil}, policyRow{kind: remotesessions.EMAProviderExternal, connection: f.connectionID})
+			f := newDevIDPFixture(t, devIDPOptions{})
+			f.chainer.sourceOverrides = map[remotesessions.EMAProviderKind]tokenSource{remotesessions.EMAProviderSpeakeasy: tc.source, remotesessions.EMAProviderExternal: externalSource{c: f.chainer}}
+			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)), external(f.trustedIssuerID))
 
 			token, outcome := f.chainer.Acquire(t.Context(), f.req)
 			require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
@@ -117,8 +137,8 @@ func TestProviders_FallsThroughOnEveryFailure(t *testing.T) {
 
 func TestProviders_FirstRealFailureIsReported(t *testing.T) {
 	t.Parallel()
-	f := newDevIDPFixture(t, devIDPOptions{unassigned: true, connection: true})
-	setPolicy(t, f, f.req.OrganizationID, policyRow{kind: remotesessions.EMAProviderExternal, connection: f.connectionID}, policyRow{kind: remotesessions.EMAProviderSpeakeasy, connection: uuid.Nil})
+	f := newDevIDPFixture(t, devIDPOptions{unassigned: true})
+	setPolicy(t, f, f.req.OrganizationID, external(f.trustedIssuerID), speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
 
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome)
@@ -135,18 +155,23 @@ func TestProviders_PolicyWithoutUsableProviderServesNobody(t *testing.T) {
 	}{
 		{name: "speakeasy only", serves: true, setup: func(t *testing.T, f devIDPFixture) {
 			t.Helper()
-			setPolicy(t, f, f.req.OrganizationID, policyRow{kind: remotesessions.EMAProviderSpeakeasy, connection: uuid.Nil})
+			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
 		}},
-		{name: "deleted connection", serves: false, setup: func(t *testing.T, f devIDPFixture) {
+		{name: "disabled speakeasy issuer", serves: false, setup: func(t *testing.T, f devIDPFixture) {
 			t.Helper()
-			setPolicy(t, f, f.req.OrganizationID, policyRow{kind: remotesessions.EMAProviderExternal, connection: f.connectionID})
-			_, err := identityproviderconnectionsrepo.New(f.db).SoftDeleteIdentityProviderConnection(t.Context(), identityproviderconnectionsrepo.SoftDeleteIdentityProviderConnectionParams{ID: f.connectionID, OrganizationID: f.req.OrganizationID})
+			issuer := seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
+			setPolicy(t, f, f.req.OrganizationID, speakeasy(issuer))
+			_, err := testrepo.New(f.db).DisableInternalSessionIssuerFixture(t.Context(), testrepo.DisableInternalSessionIssuerFixtureParams{OrganizationID: f.req.OrganizationID, ID: issuer})
 			require.NoError(t, err)
+		}},
+		{name: "an issuer the endpoint does not trust", serves: false, setup: func(t *testing.T, f devIDPFixture) {
+			t.Helper()
+			setPolicy(t, f, f.req.OrganizationID, external(f.resourceIssuerID))
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			f := newDevIDPFixture(t, devIDPOptions{connection: true})
+			f := newDevIDPFixture(t, devIDPOptions{})
 			tc.setup(t, f)
 			requests := f.idp.Requests()
 
@@ -162,12 +187,12 @@ func TestProviders_PolicyWithoutUsableProviderServesNobody(t *testing.T) {
 
 func TestProviders_PolicyStopsStoredCredentialReuse(t *testing.T) {
 	t.Parallel()
-	f := newDevIDPFixture(t, devIDPOptions{connection: true})
+	f := newDevIDPFixture(t, devIDPOptions{})
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.True(t, f.chainer.HasUsableCredential(t.Context(), f.req))
 
-	setPolicy(t, f, f.req.OrganizationID, policyRow{kind: remotesessions.EMAProviderSpeakeasy, connection: uuid.Nil})
+	setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
 	require.False(t, f.chainer.HasUsableCredential(t.Context(), f.req), "a credential from a provider the policy removed is never usable")
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
 	require.Equal(t, ReasonProviderUnavailable, outcome.Reason)
@@ -175,10 +200,10 @@ func TestProviders_PolicyStopsStoredCredentialReuse(t *testing.T) {
 
 func TestProviders_AnotherOrganizationsPolicyDoesNotApply(t *testing.T) {
 	t.Parallel()
-	f := newDevIDPFixture(t, devIDPOptions{connection: true})
+	f := newDevIDPFixture(t, devIDPOptions{})
 	other := "org-" + uuid.NewString()
 	require.NoError(t, testrepo.New(f.db).SeedDelegationLoaderOrganizationFixture(t.Context(), testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: other, Name: "Other organization", Slug: "other-" + uuid.NewString()[:8]}))
-	setPolicy(t, f, other, policyRow{kind: remotesessions.EMAProviderSpeakeasy, connection: uuid.Nil})
+	setPolicy(t, f, other, speakeasy(seedSpeakeasyIssuer(t, f, other)))
 
 	require.Equal(t, []remotesessions.EMAProviderKind{remotesessions.EMAProviderExternal, remotesessions.EMAProviderSpeakeasy}, f.chainer.Providers(t.Context(), f.req))
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)

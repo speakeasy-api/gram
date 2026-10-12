@@ -1113,6 +1113,25 @@ func (q *Queries) DisableDeviceIntegrationSchedulesFixture(ctx context.Context, 
 	return err
 }
 
+const disableInternalSessionIssuerFixture = `-- name: DisableInternalSessionIssuerFixture :execrows
+UPDATE internal_session_issuers
+SET disabled_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1 AND id = $2 AND deleted IS FALSE
+`
+
+type DisableInternalSessionIssuerFixtureParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+func (q *Queries) DisableInternalSessionIssuerFixture(ctx context.Context, arg DisableInternalSessionIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, disableInternalSessionIssuerFixture, arg.OrganizationID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const disableOpenRouterAdminDisableAuditFailureFixture = `-- name: DisableOpenRouterAdminDisableAuditFailureFixture :exec
 ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit
 `
@@ -4595,6 +4614,27 @@ type SeedDelegationLoaderOrganizationFixtureParams struct {
 func (q *Queries) SeedDelegationLoaderOrganizationFixture(ctx context.Context, arg SeedDelegationLoaderOrganizationFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedDelegationLoaderOrganizationFixture, arg.OrganizationID, arg.Name, arg.Slug)
 	return err
+}
+
+const seedInternalSessionIssuerFixture = `-- name: SeedInternalSessionIssuerFixture :one
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id)
+VALUES ($1, $2, $3)
+RETURNING id
+`
+
+type SeedInternalSessionIssuerFixtureParams struct {
+	OrganizationID  string
+	Issuer          string
+	JsonWebKeySetID uuid.UUID
+}
+
+// An organization's Speakeasy issuer over an existing key set, for tests that
+// reference the issuer row without signing.
+func (q *Queries) SeedInternalSessionIssuerFixture(ctx context.Context, arg SeedInternalSessionIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedInternalSessionIssuerFixture, arg.OrganizationID, arg.Issuer, arg.JsonWebKeySetID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const seedJsonWebKeySetFixture = `-- name: SeedJsonWebKeySetFixture :one

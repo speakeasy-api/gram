@@ -48,9 +48,10 @@ var providerUnavailable = newOutcome(StageAuthorization, ReasonProviderUnavailab
 
 // providerOrder lists the provider kinds allowed for sel's vendor, in the
 // order they are tried. With no policy rows the default is the endpoint's
-// external identity provider, then Speakeasy. A policy row naming a deleted
-// connection, or one that does not back the endpoint's trusted registration,
-// cannot serve it and is skipped; a policy left with nothing serves nobody.
+// external identity provider, then Speakeasy. A row naming a deleted or
+// disabled supplier, or an external issuer other than the one the endpoint
+// trusts, cannot serve it and is skipped; a policy left with nothing serves
+// nobody.
 func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req Request, sel selection) ([]remotesessions.EMAProviderKind, Outcome) {
 	defaults := []remotesessions.EMAProviderKind{remotesessions.EMAProviderExternal, remotesessions.EMAProviderSpeakeasy}
 	vendor, err := remotesessions.NormalizeVendorIssuer(sel.issuer)
@@ -67,17 +68,20 @@ func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req R
 	if len(rows) == 0 {
 		return defaults, success
 	}
-	endpointConnection, outcome := g.endpointExternalConnection(ctx, logger, req)
+	trusted, outcome := g.endpointTrustedIssuer(ctx, logger, req)
 	if !outcome.Succeeded() {
 		return nil, outcome
 	}
 	var kinds []remotesessions.EMAProviderKind
 	for _, row := range rows {
-		kind, ok := remotesessions.ParseEMAProviderKind(row.ProviderKind)
+		kind := remotesessions.EMAProviderSpeakeasy
+		if row.RemoteSessionIssuerID.Valid {
+			kind = remotesessions.EMAProviderExternal
+		}
 		switch {
-		case !ok, row.ConnectionDeleted:
+		case row.ProviderUnavailable:
 			continue
-		case kind == remotesessions.EMAProviderExternal && (!row.IdentityProviderConnectionID.Valid || row.IdentityProviderConnectionID != endpointConnection):
+		case kind == remotesessions.EMAProviderExternal && row.RemoteSessionIssuerID != trusted:
 			continue
 		}
 		if !slices.Contains(kinds, kind) {
@@ -90,12 +94,12 @@ func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req R
 	return kinds, success
 }
 
-// endpointExternalConnection is the live connection backing the endpoint's
-// trusted identity provider registration; invalid when there is none.
-func (g *Governor) endpointExternalConnection(ctx context.Context, logger *slog.Logger, req Request) (uuid.NullUUID, Outcome) {
+// endpointTrustedIssuer is the remote session issuer the endpoint's user
+// session issuer trusts, which external chaining exchanges at; invalid when
+// there is none.
+func (g *Governor) endpointTrustedIssuer(ctx context.Context, logger *slog.Logger, req Request) (uuid.NullUUID, Outcome) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	q := repo.New(g.db)
-	issuer, err := q.GetEMAChainingUserIssuer(ctx, repo.GetEMAChainingUserIssuerParams{ID: req.UserSessionIssuerID, OrganizationID: conv.ToPGText(req.OrganizationID)})
+	issuer, err := repo.New(g.db).GetEMAChainingUserIssuer(ctx, repo.GetEMAChainingUserIssuerParams{ID: req.UserSessionIssuerID, OrganizationID: conv.ToPGText(req.OrganizationID)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, success
@@ -103,15 +107,7 @@ func (g *Governor) endpointExternalConnection(ctx context.Context, logger *slog.
 		logger.ErrorContext(ctx, "read identity chaining user session issuer", attr.SlogError(err))
 		return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
 	}
-	conn, err := q.GetEMAExternalProviderConnection(ctx, repo.GetEMAExternalProviderConnectionParams{OrganizationID: req.OrganizationID, RemoteSessionIssuerID: issuer.TrustedRemoteSessionIssuerID.UUID})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return none, success
-	case err != nil:
-		logger.ErrorContext(ctx, "read identity chaining provider connection", attr.SlogError(err))
-		return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
-	}
-	return uuid.NullUUID{UUID: conn, Valid: true}, success
+	return issuer.TrustedRemoteSessionIssuerID, success
 }
 
 // externalSource exchanges the human's retained identity provider ID token for
