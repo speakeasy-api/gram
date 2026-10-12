@@ -25,6 +25,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -118,6 +119,12 @@ func (f deviceAgentGrantFixture) registerDevice(t *testing.T) registeredDevice {
 	require.NoError(t, err)
 	policy := workloadpolicy.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
 		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient))
+
+	// A join token is refused for an agent that could not poll or send hooks.
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String())
+	for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
+		seedPrincipalGrant(t, f.ctx, f.ti, f.fx.orgID, agentPrincipal, scope, f.fx.orgID)
+	}
 
 	join, err := policy.CreateDeviceJoinToken(f.ctx, &gen.CreateDeviceJoinTokenPayload{
 		AgentID:          f.agentID.String(),
