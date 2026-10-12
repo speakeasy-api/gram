@@ -11,6 +11,7 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
@@ -98,7 +99,7 @@ func claims() internalsessionissuers.Claims {
 
 func issuerURL(t *testing.T, orgID string) string {
 	t.Helper()
-	issuer, err := internalsessionissuers.URL(mustURL(t, testServerURL), orgID)
+	issuer, err := internalsessionissuers.URL(mustURL(t, testServerURL), orgID, false)
 	require.NoError(t, err)
 	return issuer.String()
 }
@@ -696,10 +697,20 @@ func TestEMAIssuer_SweepPagesThroughEveryOrganization(t *testing.T) {
 	}
 	sweeper, kms := f.provisioner(t)
 	sweeper.SetSweepPage(1)
-	swept, pending, err := sweeper.SweepAllEMAIssuerKeys(ctx)
+
+	// A spent budget stops after one organization and says where to resume.
+	first, err := sweeper.SweepEMAIssuerKeysFrom(ctx, "", time.Nanosecond)
 	require.NoError(t, err)
-	require.Equal(t, len(organizations), swept, "one run reaches every page")
-	require.Zero(t, pending)
+	require.Equal(t, 1, first.Swept)
+	require.False(t, first.Done)
+	require.NotEmpty(t, first.Next)
+	require.Len(t, kms.Disabled(), 1)
+
+	rest, err := sweeper.SweepEMAIssuerKeysFrom(ctx, first.Next, 0)
+	require.NoError(t, err)
+	require.True(t, rest.Done)
+	require.Equal(t, len(organizations)-1, rest.Swept, "resuming covers the remaining pages")
+	require.Zero(t, rest.Pending)
 	require.Len(t, kms.Disabled(), len(organizations))
 }
 
@@ -712,7 +723,7 @@ func TestEMAIssuer_CleanupWithoutTheKeyCredentialRevokesTheConfiguredSignerOrSta
 	kid := activeIssuerKid(t, ctx, f, f.ti.orgID)
 	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, &kid)
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(f.ti.conn).SoftDeleteExternalCredentialFixture(ctx, f.credentialID))
+	require.NoError(t, testrepo.New(f.ti.conn).SoftDeleteExternalCredentialFixture(ctx, testrepo.SoftDeleteExternalCredentialFixtureParams{ID: f.credentialID, OrganizationID: pgtype.Text{String: "", Valid: false}}))
 
 	unconfigured, _ := f.provisioner(t)
 	cleaned, pending, err := unconfigured.CleanupEMAIssuerKMS(ctx, f.ti.orgID)

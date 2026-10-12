@@ -14,26 +14,37 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 // The sweep is a backstop: rotation and management reads already retire
 // expired issuer keys. It revokes retired keys past the overlap and retries
-// KMS cleanup of every revoked key until it succeeds. Payloads carry no
-// organization data.
+// KMS cleanup of every revoked key until it succeeds. Each activity sweeps
+// for a fixed budget and returns a cursor; the workflow continues from it for
+// a bounded number of pages, and the next hourly run covers anything left.
+// Payloads carry an organization id cursor, never organization data.
+//
+// Temporal actions/month: ~2,200 per namespace (one schedule start and one
+// activity per hour); each extra page costs one activity, at most
+// internalSessionIssuerKeySweepMaxPages-1 more per hour (~4,400 worst case).
 const (
 	internalSessionIssuerKeySweepWorkflowID   = "v1:internal-session-issuer-key-sweep" //nolint:gosec // A workflow ID, not a credential.
 	internalSessionIssuerKeySweepInterval     = time.Hour
 	internalSessionIssuerKeySweepCatchup      = internalSessionIssuerKeySweepInterval - time.Second
-	internalSessionIssuerKeySweepRunTimeout   = 35 * time.Minute
+	internalSessionIssuerKeySweepRunTimeout   = 55 * time.Minute
+	// A page stops starting organizations after this, well inside its
+	// StartToClose timeout.
+	internalSessionIssuerKeySweepPageBudget = 8 * time.Minute
+	internalSessionIssuerKeySweepMaxPages   = 3
 	InternalSessionIssuerKeySweepActivityName = "SweepInternalSessionIssuerKeys"
 )
 
 // InternalSessionIssuerKeySweeper retires expired issuer keys and finishes
-// pending KMS cleanup across organizations. pending counts revoked keys whose
-// KMS version is still enabled after the sweep, or is -1 when unknown.
+// pending KMS cleanup across organizations, resuming after an organization id
+// and stopping once budget is spent.
 type InternalSessionIssuerKeySweeper interface {
-	SweepAllEMAIssuerKeys(ctx context.Context) (swept, pending int, err error)
+	SweepEMAIssuerKeysFrom(ctx context.Context, after string, budget time.Duration) (internalsessionissuers.SweepProgress, error)
 }
 
 func internalSessionIssuerKeySweepScheduleID(queue string) string {
@@ -50,9 +61,16 @@ func InternalSessionIssuerKeySweepWorkflow(ctx workflow.Context) error {
 			MaximumInterval:    5 * time.Minute,
 		},
 	})
-	var swept int
-	if err := workflow.ExecuteActivity(ctx, InternalSessionIssuerKeySweepActivityName).Get(ctx, &swept); err != nil {
-		return fmt.Errorf("sweep internal session issuer keys: %w", err)
+	after := ""
+	for range internalSessionIssuerKeySweepMaxPages {
+		var progress internalsessionissuers.SweepProgress
+		if err := workflow.ExecuteActivity(ctx, InternalSessionIssuerKeySweepActivityName, after).Get(ctx, &progress); err != nil {
+			return fmt.Errorf("sweep internal session issuer keys: %w", err)
+		}
+		if progress.Done {
+			return nil
+		}
+		after = progress.Next
 	}
 	return nil
 }
@@ -77,26 +95,31 @@ func NewInternalSessionIssuerKeySweepActivities(logger *slog.Logger, meterProvid
 	return &InternalSessionIssuerKeySweepActivities{logger: logger, sweeper: sweeper, pending: pending}
 }
 
-func (a *InternalSessionIssuerKeySweepActivities) Sweep(ctx context.Context) (int, error) {
+// Sweep runs one budgeted page. It fails, so Temporal retries the page, only
+// when it made no progress; otherwise failures are logged and paging goes on.
+func (a *InternalSessionIssuerKeySweepActivities) Sweep(ctx context.Context, after string) (internalsessionissuers.SweepProgress, error) {
 	if a.sweeper == nil {
-		return 0, nil
+		return internalsessionissuers.SweepProgress{Swept: 0, Pending: 0, Next: "", Done: true}, nil
 	}
-	swept, pending, err := a.sweeper.SweepAllEMAIssuerKeys(ctx)
+	progress, err := a.sweeper.SweepEMAIssuerKeysFrom(ctx, after, internalSessionIssuerKeySweepPageBudget)
 	// The count is fleet-wide and read after the sweep, so it stays accurate
 	// when some organizations failed; -1 means it could not be read.
-	if a.pending != nil && pending >= 0 {
-		a.pending.Record(ctx, int64(pending))
+	if a.pending != nil && progress.Pending >= 0 {
+		a.pending.Record(ctx, int64(progress.Pending))
 	}
-	if pending > 0 {
-		a.logger.ErrorContext(ctx, "revoked internal session issuer keys still await kms cleanup", attr.SlogValueInt(pending))
+	if progress.Pending > 0 {
+		a.logger.ErrorContext(ctx, "revoked internal session issuer keys still await kms cleanup", attr.SlogValueInt(progress.Pending))
 	}
 	if err != nil {
-		return swept, fmt.Errorf("sweep issuer keys: %w", err)
+		if progress.Swept == 0 {
+			return progress, fmt.Errorf("sweep issuer keys: %w", err)
+		}
+		a.logger.ErrorContext(ctx, "some organizations failed the issuer key sweep", attr.SlogError(err))
 	}
-	if swept > 0 {
-		a.logger.InfoContext(ctx, "swept internal session issuer keys", attr.SlogValueInt(swept))
+	if progress.Swept > 0 {
+		a.logger.InfoContext(ctx, "swept internal session issuer keys", attr.SlogValueInt(progress.Swept))
 	}
-	return swept, nil
+	return progress, nil
 }
 
 func AddInternalSessionIssuerKeySweepSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {

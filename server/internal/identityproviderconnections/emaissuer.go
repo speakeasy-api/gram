@@ -146,7 +146,7 @@ func (p *Provisioner) createEMAIssuerRows(ctx context.Context, organizationID st
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("create issuer key set: %w", err)
 	}
-	issuerURL, err := internalsessionissuers.URL(p.cfg.ServerURL, organizationID)
+	issuerURL, err := internalsessionissuers.URL(p.cfg.ServerURL, organizationID, p.cfg.AllowLoopbackIssuer)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("%w: %w", internalsessionissuers.ErrMisconfigured, err)
 	}
@@ -344,17 +344,17 @@ func (p *Provisioner) disableEMAIssuerKey(ctx context.Context, kms gcpkms.Provis
 // SweepEMAIssuerKeys revokes retired issuer keys past the overlap, then
 // retries every pending KMS cleanup. It reports how many stay pending.
 func (p *Provisioner) SweepEMAIssuerKeys(ctx context.Context, organizationID string) (int, error) {
+	// Cleanup of earlier revocations never waits on this revocation step.
+	var revokeErr error
 	due, err := jwksrepo.New(p.db).HasExpiredEMAIssuerKeys(ctx, jwksrepo.HasExpiredEMAIssuerKeysParams{OrganizationID: organizationID, OverlapSeconds: int32(internalsessionissuers.RetiredKeyOverlap / time.Second)})
-	if err != nil {
-		return 0, fmt.Errorf("check expired issuer keys: %w", err)
+	switch {
+	case err != nil:
+		revokeErr = fmt.Errorf("check expired issuer keys: %w", err)
+	case due:
+		revokeErr = p.revokeExpiredIssuerKeysNow(ctx, organizationID)
 	}
-	if due {
-		if err := p.revokeExpiredIssuerKeysNow(ctx, organizationID); err != nil {
-			return 0, err
-		}
-	}
-	_, pending, err := p.CleanupEMAIssuerKMS(ctx, organizationID)
-	return pending, err
+	_, pending, cleanupErr := p.CleanupEMAIssuerKMS(ctx, organizationID)
+	return pending, errors.Join(revokeErr, cleanupErr)
 }
 
 func (p *Provisioner) revokeExpiredIssuerKeysNow(ctx context.Context, organizationID string) error {
@@ -376,15 +376,25 @@ func (p *Provisioner) revokeExpiredIssuerKeysNow(ctx context.Context, organizati
 	return nil
 }
 
-// SweepAllEMAIssuerKeys sweeps every organization with expired keys or
-// pending KMS cleanup, paging by organization id so a run reaches all of
-// them and failing organizations can't starve the rest. pending is the
+// SweepAllEMAIssuerKeys sweeps every organization with issuer key work in one
+// call, with no time budget.
+func (p *Provisioner) SweepAllEMAIssuerKeys(ctx context.Context) (swept, pending int, err error) {
+	progress, err := p.SweepEMAIssuerKeysFrom(ctx, "", 0)
+	return progress.Swept, progress.Pending, err
+}
+
+// SweepEMAIssuerKeysFrom sweeps organizations with expired keys or pending KMS
+// cleanup, paging by organization id from after. With a budget it stops
+// between organizations once the budget is spent and reports where to resume,
+// so one call stays bounded however large the fleet. Pending is the
 // fleet-wide count of revoked keys still awaiting KMS cleanup afterwards, or
 // -1 when it could not be read.
-func (p *Provisioner) SweepAllEMAIssuerKeys(ctx context.Context) (swept, pending int, err error) {
+func (p *Provisioner) SweepEMAIssuerKeysFrom(ctx context.Context, after string, budget time.Duration) (internalsessionissuers.SweepProgress, error) {
+	progress := internalsessionissuers.SweepProgress{Swept: 0, Pending: -1, Next: "", Done: false}
 	q := jwksrepo.New(p.db)
+	started := time.Now()
 	var errs []error
-	after := ""
+pages:
 	for {
 		organizations, err := q.ListOrganizationsWithPendingEMAIssuerWork(ctx, jwksrepo.ListOrganizationsWithPendingEMAIssuerWorkParams{AfterOrganizationID: after, OverlapSeconds: int32(internalsessionissuers.RetiredKeyOverlap / time.Second), MaxOrganizations: p.sweepPage})
 		if err != nil {
@@ -392,22 +402,29 @@ func (p *Provisioner) SweepAllEMAIssuerKeys(ctx context.Context) (swept, pending
 			break
 		}
 		for _, organizationID := range organizations {
+			// Every call sweeps at least one organization, so it always advances.
+			if progress.Swept > 0 && ((budget > 0 && time.Since(started) >= budget) || ctx.Err() != nil) {
+				progress.Next = after
+				break pages
+			}
 			if _, err := p.SweepEMAIssuerKeys(ctx, organizationID); err != nil && !errors.Is(err, internalsessionissuers.ErrNotFound) {
 				errs = append(errs, fmt.Errorf("sweep organization issuer keys: %w", err))
 			}
+			progress.Swept++
+			after = organizationID
 		}
-		swept += len(organizations)
-		if len(organizations) < int(p.sweepPage) || ctx.Err() != nil {
+		if len(organizations) < int(p.sweepPage) {
+			progress.Done = true
 			break
 		}
-		after = organizations[len(organizations)-1]
 	}
 	count, err := q.CountPendingEMAIssuerKMSCleanup(ctx)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("count pending issuer kms cleanup: %w", err))
-		return swept, -1, errors.Join(errs...)
+	} else {
+		progress.Pending = int(count)
 	}
-	return swept, int(count), errors.Join(errs...)
+	return progress, errors.Join(errs...)
 }
 
 // activateEMAIssuerKey retires any active key, activates next and re-points
@@ -659,7 +676,7 @@ func (p *Provisioner) emaPublicationAbsent(ctx context.Context, organizationID, 
 	if _, err := jq.LockOrganizationEMAIssuerForKeyWrite(ctx, organizationID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("lock issuer for publication reconciliation: %w", err)
 	}
-	referenced, err := repo.New(tx).ManagedKeyResourceExists(ctx, resourceName)
+	referenced, err := repo.New(tx).ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{ResourceName: resourceName, OrganizationID: organizationID})
 	if err != nil {
 		return false, fmt.Errorf("lookup published key resource: %w", err)
 	}
