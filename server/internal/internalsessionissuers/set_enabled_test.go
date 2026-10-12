@@ -8,6 +8,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/internal_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -21,6 +22,30 @@ func TestSetEnabled_RequiresOrgAdmin(t *testing.T) {
 		_, err := ti.service.SetEnabled(readCtx(t, ctx), &gen.SetEnabledPayload{Enabled: enabled, SessionToken: nil})
 		requireOopsCode(t, err, oops.CodeForbidden)
 	}
+}
+
+func TestMutations_RefuseSupportSessions(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t, true)
+	admin := adminCtx(t, ctx)
+	kid := enable(t, ti, admin)
+	authCtx, ok := contextvalues.GetAuthContext(admin)
+	require.True(t, ok)
+	support := *authCtx
+	support.IsAdmin = true
+	support.SupportOrganizationID = ti.orgID
+	asSupport := contextvalues.WithValidatedSupportSession(admin, &support)
+
+	for _, enabled := range []bool{true, false} {
+		_, err := ti.service.SetEnabled(asSupport, &gen.SetEnabledPayload{Enabled: enabled, SessionToken: nil})
+		requireOopsCode(t, err, oops.CodeForbidden)
+	}
+	for _, compromised := range []bool{true, false} {
+		_, err := ti.service.Rotate(asSupport, &gen.RotatePayload{ActiveKid: &kid, Compromised: compromised, SessionToken: nil})
+		requireOopsCode(t, err, oops.CodeForbidden)
+	}
+	_, err := ti.service.Get(asSupport, &gen.GetPayload{SessionToken: nil})
+	require.NoError(t, err, "support can still read the issuer")
 }
 
 func TestSetEnabled_EnablingRequiresRolloutAndEntitlement(t *testing.T) {
