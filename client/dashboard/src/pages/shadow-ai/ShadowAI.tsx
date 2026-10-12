@@ -1,6 +1,8 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { PageTabsList, PageTabsTrigger, Tabs } from "@/components/ui/Tabs";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import {
   shadowAIBreadcrumbSubstitutions,
@@ -13,16 +15,27 @@ export function ShadowAIRoot(): JSX.Element {
   return <Outlet />;
 }
 
+// With the Shadow AI guardrails flag on, the section is folded into
+// Guardrails: the inventory and its decisions live in the Shadow AI policy,
+// so the section's own pages send people there. The URLs stay, since they sit
+// in tickets and bookmarks and the tool and server detail pages under them
+// still render.
+function useShadowAIFolded(): boolean {
+  return useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
+}
+
 // ShadowAIIndexRedirect sends the bare section URL to the harnesses tab: the
 // tools people actually run, and the only ones an access decision reaches.
+// Folded, it goes to Guardrails instead.
 export function ShadowAIIndexRedirect(): JSX.Element {
   const routes = useRoutes();
   const location = useLocation();
+  const folded = useShadowAIFolded();
+  const target = folded
+    ? routes.policyCenter.href()
+    : routes.shadowAI.harnesses.href();
   return (
-    <Navigate
-      to={`${routes.shadowAI.harnesses.href()}${location.search}${location.hash}`}
-      replace
-    />
+    <Navigate to={`${target}${location.search}${location.hash}`} replace />
   );
 }
 
@@ -63,6 +76,10 @@ export function ShadowAISection({
   children: React.ReactNode;
 }): JSX.Element {
   const routes = useRoutes();
+  const folded = useShadowAIFolded();
+  if (folded) {
+    return <Navigate to={routes.policyCenter.href()} replace />;
+  }
 
   return (
     <Page>

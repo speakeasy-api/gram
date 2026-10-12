@@ -968,7 +968,9 @@ const ROUTE_STRUCTURE = {
   // same shape as identities above and for the same reason.
   shadowAI: {
     // "Shadow AI" in the nav, matching the URL segment, which is also what
-    // the redirects below and the links already in tickets point at.
+    // the redirects below and the links already in tickets point at. With the
+    // Shadow AI guardrails flag on it leaves the nav and its index pages send
+    // people to Guardrails; the detail pages beneath keep rendering.
     title: "Shadow AI",
     url: "shadow-ai",
     icon: "shield",

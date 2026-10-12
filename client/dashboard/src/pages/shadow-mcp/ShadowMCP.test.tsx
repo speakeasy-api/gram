@@ -86,6 +86,12 @@ vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 
+// The section redirects into Guardrails once the Shadow AI fold-in is on;
+// these tests exercise the MCPs tab as it stands with the flag off.
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "disabled" }),
+}));
+
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     shadowAI: {
