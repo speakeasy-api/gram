@@ -62,6 +62,10 @@ export type McpServer = {
    */
   networkAccessMode: McpServerNetworkAccessMode;
   /**
+   * An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.
+   */
+  platformEndpointSlug?: string | undefined;
+  /**
    * The project ID this MCP server belongs to
    */
   projectId: string;
@@ -125,6 +129,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       id: z.string(),
       name: z.optional(z.string()),
       network_access_mode: McpServerNetworkAccessMode$inboundSchema,
+      platform_endpoint_slug: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
       slug: z.optional(z.string()),
@@ -144,6 +149,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "created_at": "createdAt",
         "environment_id": "environmentId",
         "network_access_mode": "networkAccessMode",
+        "platform_endpoint_slug": "platformEndpointSlug",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
         "tool_variations_group_id": "toolVariationsGroupId",

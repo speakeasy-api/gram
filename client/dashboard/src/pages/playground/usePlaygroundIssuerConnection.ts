@@ -1,11 +1,13 @@
 import { useProxiedMcpTools } from "@/hooks/useProxiedMcpTools";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
 import { Toolset } from "@/lib/toolTypes";
 import { firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import { useCallback, useMemo } from "react";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 
 export interface PlaygroundIssuerConnection {
+  mcpUrl: string | undefined;
   /** True when the toolset is issuer-gated (has a user_session_issuer). */
   isIssuerGated: boolean;
   /** The minted user-session JWT for the chat `Authorization: Bearer` header. */
@@ -16,7 +18,10 @@ export interface PlaygroundIssuerConnection {
   needsAuth: boolean;
   /** True while minting the token or probing the endpoint. */
   isLoading: boolean;
-  /** Re-run the probe (e.g. after returning from the connect tab). */
+  /** A lookup, address, mint, or non-auth probe failure blocks the chat. */
+  isError: boolean;
+  errorMessage: string | undefined;
+  /** Retry the failed stage, or re-run the probe after connecting. */
   refetch: () => void;
   /** Opens the first-party connect page in a new tab, if a URL is available. */
   connect: () => void;
@@ -39,14 +44,24 @@ export interface PlaygroundIssuerConnection {
 export function usePlaygroundIssuerConnection(
   toolset: Toolset | undefined,
 ): PlaygroundIssuerConnection {
-  const isIssuerGated = !!toolset?.userSessionIssuerId;
+  const target = useToolsetMcpTarget(toolset);
+  const queryClient = useQueryClient();
+  const isIssuerGated = !!target.userSessionIssuerId;
 
-  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
-    target: { kind: "toolset", id: toolset?.id },
-    userSessionIssuerId: toolset?.userSessionIssuerId,
+  const {
+    accessToken,
+    isLoading: isTokenLoading,
+    isError: isTokenError,
+    refetch: refetchToken,
+  } = useUserSessionToken({
+    target: target.legacy
+      ? { kind: "toolset", id: target.url ? toolset?.id : undefined }
+      : { kind: "mcpServer", id: target.url ? target.serverId : undefined },
+    userSessionIssuerId: target.userSessionIssuerId,
+    throwOnError: false,
   });
 
-  const mcpUrl = useInternalMcpUrl(toolset);
+  const mcpUrl = target.url;
   // Connect through the dev proxy origin (same-origin) so the AI SDK transport
   // carries the gram_session cookie; no-op in prod. Mirrors the remote Tools tab.
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
@@ -59,15 +74,48 @@ export function usePlaygroundIssuerConnection(
 
   // Issuer-gated toolsets must wait for the JWT before probing, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.
-  const probeEnabled = isIssuerGated && !!accessToken;
+  const probeEnabled =
+    target.status === "ready" &&
+    !!mcpUrl &&
+    isIssuerGated &&
+    !!accessToken &&
+    !isTokenError &&
+    !isTokenLoading;
 
-  const { tools, isLoading, needsAuth, refetch } = useProxiedMcpTools(
+  const {
+    tools,
+    isLoading,
+    isError: isProbeError,
+    needsAuth,
+    refetch: refetchProbe,
+  } = useProxiedMcpTools(connectUrl, {
+    headers,
+    enabled: probeEnabled,
+    throwOnError: false,
+  });
+
+  // Keep healthy cached tools usable during background refresh, but block chat
+  // while retrying a failed probe. Fetching also independently guards retries.
+  const probeQueryKey = [
+    "proxiedMcpTools",
     connectUrl,
-    {
-      headers,
-      enabled: probeEnabled,
-    },
-  );
+    accessToken ? [`Authorization:Bearer ${accessToken}`] : [],
+  ];
+  const isProbeFetching = useIsFetching({ queryKey: probeQueryKey }) > 0;
+  const isProbeRetrying = isProbeFetching && isProbeError;
+  const refetch = () => {
+    if (target.isLoading || isTokenLoading || isProbeFetching) return;
+    if (target.status !== "ready" || !mcpUrl) {
+      target.refetch();
+    } else if (isIssuerGated && (isTokenError || !accessToken)) {
+      refetchToken();
+    } else if (
+      probeEnabled &&
+      !queryClient.isFetching({ queryKey: probeQueryKey })
+    ) {
+      refetchProbe();
+    }
+  };
 
   // The connect page is opened as a top-level tab on the toolset `/mcp` surface
   // so it rides the gram_session cookie on the backend origin (not the proxy).
@@ -80,12 +128,35 @@ export function usePlaygroundIssuerConnection(
     if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer");
   }, [authUrl]);
 
+  const errorMessage =
+    target.status === "error"
+      ? "Unable to load the selected MCP server. Try again."
+      : target.status === "unavailable"
+        ? "The selected MCP server is disabled."
+        : target.status === "ready" && !mcpUrl
+          ? "The selected MCP server has no platform address available for the playground."
+          : isIssuerGated && isTokenError
+            ? "Unable to create a session for the selected MCP server. Try again."
+            : probeEnabled && isProbeError && !needsAuth
+              ? "Unable to connect to the selected MCP server. Try again."
+              : undefined;
+
   return {
+    mcpUrl,
     isIssuerGated,
     accessToken,
-    connected: probeEnabled && !!tools && !needsAuth,
-    needsAuth,
-    isLoading: isIssuerGated && (isTokenLoading || isLoading),
+    connected:
+      probeEnabled &&
+      !!tools &&
+      !isProbeError &&
+      !needsAuth &&
+      !isProbeRetrying,
+    needsAuth: probeEnabled && needsAuth,
+    isError: !!errorMessage && !isTokenLoading && !isProbeRetrying,
+    errorMessage,
+    isLoading:
+      target.isLoading ||
+      (isIssuerGated && (isTokenLoading || isLoading || isProbeRetrying)),
     refetch,
     connect,
     canConnect: !!authUrl,
