@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -56,6 +57,30 @@ const (
 // registerDeviceRate bounds enrollment across the fleet. Join tokens are 256-bit
 // random values, so this protects the database rather than the tokens.
 var registerDeviceRate = ratelimit.PerMinute(120).WithBurst(30)
+
+// deviceAgentScopes are what an enrolled device needs from its agent's policy:
+// polling plugin policy and sending hooks. Without them the device enrolls and
+// then every request it makes is refused.
+var deviceAgentScopes = []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest}
+
+// requireDeviceAgentGrants refuses a join token for an agent whose live policy
+// lacks the device-agent scopes, naming each one missing.
+func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID string, agentID uuid.UUID) error {
+	grants, err := runtimepolicy.LoadAgentPolicy(ctx, s.db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error loading agent policy").LogError(ctx, s.logger)
+	}
+	var missing []string
+	for _, scope := range deviceAgentScopes {
+		if !authz.GrantsSatisfy(grants, authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}) {
+			missing = append(missing, string(scope))
+		}
+	}
+	if len(missing) > 0 {
+		return oops.E(oops.CodeFailedPrecondition, nil, "the agent's policy must grant %s on the organization before a device can enroll under it", strings.Join(missing, " and "))
+	}
+	return nil
+}
 
 // DeviceIssuer is the issuer an organization's enrolled devices sign as.
 func DeviceIssuer(serverURL, organizationID string) string {
@@ -96,6 +121,10 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		}); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := s.requireDeviceAgentGrants(ctx, t.organizationID, agent.ID); err != nil {
+		return nil, err
 	}
 
 	token, hash, err := newDeviceJoinToken()

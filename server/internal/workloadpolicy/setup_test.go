@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy"
 )
@@ -106,7 +108,18 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 // newAgent creates an agent in the caller's organization. Admission assigns one,
 // and a subject admitted without an agent is a state this API refuses to create.
+// newAgent creates an agent whose policy grants what an enrolled device needs.
 func newAgent(t *testing.T, ctx context.Context, ti *testInstance, name string) uuid.UUID {
+	t.Helper()
+
+	agentID := newAgentWithoutDeviceGrants(t, ctx, ti, name)
+	for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
+		seedAgentGrant(t, ctx, ti, agentID, scope)
+	}
+	return agentID
+}
+
+func newAgentWithoutDeviceGrants(t *testing.T, ctx context.Context, ti *testInstance, name string) uuid.UUID {
 	t.Helper()
 
 	agent, err := agentsRepo.New(ti.conn).CreateAgent(ctx, agentsRepo.CreateAgentParams{
@@ -118,6 +131,20 @@ func newAgent(t *testing.T, ctx context.Context, ti *testInstance, name string) 
 	require.NoError(t, err)
 
 	return agent.ID
+}
+
+func seedAgentGrant(t *testing.T, ctx context.Context, ti *testInstance, agentID uuid.UUID, scope authz.Scope) {
+	t.Helper()
+
+	selectors, err := authz.NewSelector(scope, ti.orgID).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: ti.orgID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
+		Scope:          string(scope),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
 }
 
 // withScopes replaces the caller's grants with exactly the ones named, so a

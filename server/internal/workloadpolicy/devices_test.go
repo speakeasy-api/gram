@@ -218,6 +218,37 @@ func TestCreateDeviceJoinToken_RequiresAuthorizingTheAgent(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
+func TestCreateDeviceJoinToken_RequiresTheDeviceAgentGrants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	payload := func(agentID uuid.UUID) *gen.CreateDeviceJoinTokenPayload {
+		return &gen.CreateDeviceJoinTokenPayload{
+			AgentID:          agentID.String(),
+			ExpiresInSeconds: 3600,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		}
+	}
+
+	bare := newAgentWithoutDeviceGrants(t, ctx, ti, "no-device-grants")
+	_, err := ti.service.CreateDeviceJoinToken(ctx, payload(bare))
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	require.ErrorContains(t, err, "org:device_agent_sync and org:hooks_ingest")
+
+	// Policy polling alone is not enough: hooks would be refused on every send.
+	seedAgentGrant(t, ctx, ti, bare, authz.ScopeOrgDeviceAgentSync)
+	_, err = ti.service.CreateDeviceJoinToken(ctx, payload(bare))
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	require.ErrorContains(t, err, "org:hooks_ingest")
+	require.NotContains(t, err.Error(), "org:device_agent_sync")
+
+	seedAgentGrant(t, ctx, ti, bare, authz.ScopeOrgHooksIngest)
+	_, err = ti.service.CreateDeviceJoinToken(ctx, payload(bare))
+	require.NoError(t, err)
+}
+
 // asUser returns ctx as another user of the same organization arrives.
 func asUser(t *testing.T, ctx context.Context, userID string) context.Context {
 	t.Helper()
