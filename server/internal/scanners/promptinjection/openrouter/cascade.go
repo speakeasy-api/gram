@@ -27,8 +27,9 @@ import (
 const PrefilterThreshold = 0.50
 
 // ConfirmationModel pins the Sonnet release used to confirm Jev candidates.
-// On the 2,046-case benchmark it kept 0 false positives and caught 82.9% of
-// attacks behind Jev, faster and cheaper than Opus 5.5 (see CASCADE.md). Changes here must pass `mise run risk:pi` before merge.
+// On the 2,046-case benchmark, Jev with this model kept 0 false positives and
+// caught 82.9% of all attacks, faster and cheaper than Opus 5.5 (see
+// CASCADE.md). Changes here must pass `mise run risk:pi` before merge.
 const ConfirmationModel = "anthropic/claude-sonnet-5.5"
 
 // WindowInstructions isolates the target from its untrusted neighbors.
