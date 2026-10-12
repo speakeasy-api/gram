@@ -1,6 +1,6 @@
 # Changing prompt-injection fixtures
 
-Read with `SKILL.md` in this folder. Fixtures live in `server/internal/scanners/promptinjection/testdata/prompt_injection/`; a fixture change needs a gate run, and `mise run risk:pi --resume` after a fixture-only edit runs only new or edited cases.
+Read with `SKILL.md` in this folder. Fixtures live in `server/internal/scanners/promptinjection/testdata/prompt_injection/`; a fixture change needs a gate run, and `mise run risk:pi --resume` before committing the edit runs only new or edited cases.
 
 - Copy an existing line from the same file. Every case has an `id` unique within its file, a `label` (`benign` or `malicious`), `text` and `source`. `litellm_extended` and `adversarial_*` rows also need `directive_present`; `mutations` rows carry `seed_id` instead and inherit it. Edit `mutations.jsonl` by hand: `gen:risk-mutations` writes to an old path. Fixtures are public, so never add customer data.
 - Tag an attack that uses a classic phrase with `well_known`, naming the phrase: "Ignore previous instructions", "Reveal the system prompt", "DAN or developer mode", "Jailbreak or unrestricted AI", "Fake system override" or "German version".

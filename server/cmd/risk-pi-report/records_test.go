@@ -188,25 +188,34 @@ func TestOpenRecordsForAppendEndsAPartialLine(t *testing.T) {
 }
 
 var (
-	mainCommit    = runCommit{SHA: "1a2b3c4d5e6f", Subject: "chore: main", Uncommitted: false}
-	fixtureCommit = runCommit{SHA: "6f5e4d3c2b1a", Subject: "chore: edit a fixture", Uncommitted: false}
+	mainCommit    = runCommit{SHA: "1a2b3c4d5e6f", Subject: "chore: main", Uncommitted: ""}
+	fixtureCommit = runCommit{SHA: "6f5e4d3c2b1a", Subject: "chore: edit a fixture", Uncommitted: ""}
 )
 
-func TestClaimRunDirListsEachCommitOnce(t *testing.T) {
+func TestClaimRunDirKeepsItsStartTime(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	started := time.Now().Add(-time.Hour)
 	require.NoError(t, claimRunDir(dir, mainCommit, started))
 	now := time.Now()
-	require.NoError(t, claimRunDir(dir, fixtureCommit, now))
 	require.NoError(t, claimRunDir(dir, mainCommit, now))
 
 	got, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
-	require.Equal(t, []runCommit{mainCommit, fixtureCommit}, got.Commits)
+	require.Equal(t, mainCommit, got.Commit)
 	require.WithinDuration(t, started, got.Started, time.Second, "a resumed run keeps its start time")
 	require.WithinDuration(t, now, got.Updated, time.Second)
+}
+
+func TestClaimRunDirRefusesARunOfOtherCode(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, claimRunDir(dir, mainCommit, time.Now()))
+	edited := runCommit{SHA: mainCommit.SHA, Subject: mainCommit.Subject, Uncommitted: "9f8e7d6c"}
+	require.ErrorContains(t, claimRunDir(dir, fixtureCommit, time.Now()), "measured 1a2b3c4d5e, not this checkout's 6f5e4d3c2b")
+	require.ErrorContains(t, claimRunDir(dir, edited, time.Now()), "not this checkout's 1a2b3c4d5e + uncommitted")
 }
 
 func TestRunRecordsRefusesDuplicateCaseKeys(t *testing.T) {
@@ -268,7 +277,7 @@ func TestRunRecordsReusesAFinishedRunWithoutCalls(t *testing.T) {
 	require.NoError(t, runRecords(t.Context(), options{runDir: dir, commit: mainCommit}, []labeledCase{benign, attack}))
 	manifest, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
-	require.Equal(t, []runCommit{mainCommit}, manifest.Commits)
+	require.Equal(t, mainCommit, manifest.Commit)
 	require.WithinDuration(t, time.Now(), manifest.Updated, time.Minute)
 }
 

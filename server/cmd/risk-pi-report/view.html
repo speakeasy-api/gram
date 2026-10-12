@@ -95,13 +95,13 @@ function writeHash() {
 
 const runIds = () => DATA.runs.map((r) => r.id);
 const runOf = (id) => DATA.runs.find((r) => r.id === id);
-const latest = (r) => { const cs = (r && r.manifest.commits) || []; return cs[cs.length - 1] || null; };
+const commitOf = (r) => (r && r.manifest.commit) || null;
 function role(id) { return id === DATA.change ? "this change" : id === DATA.base ? "base" : ""; }
 const when = (r) => (r && r.manifest.started ? new Date(r.manifest.started).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 // shortName names a run by its commit and start time; runs of the same code
 // differ only in the time.
 function shortName(id) {
-  const r = runOf(id), c = latest(r);
+  const r = runOf(id), c = commitOf(r);
   const sha = c ? c.sha.slice(0, 10) + (c.uncommitted ? "+" : "") : id.slice(0, 10);
   const name = [sha, when(r)].filter(Boolean).join(" · ");
   return role(id) ? `${role(id)} (${name})` : name;
@@ -178,10 +178,9 @@ function renderSummary() {
   const paired = pair();
   for (const s of DATA.runs) {
     const t = s.totals, tr = el("tr", undefined, paired.includes(s.id) ? "paired" : ""), name = el("div");
-    const c = latest(s);
+    const c = commitOf(s);
     name.append(el("strong", shortName(s.id)));
     if (c) name.append(el("div", c.subject, "muted"));
-    if ((s.manifest.commits || []).length > 1) name.append(el("div", `${s.manifest.commits.length} commits share this code`, "muted"));
     if (t.pending) name.append(el("div", `${t.pending} of ${t.cases} pending`, "muted"));
     tr.append(td(name));
     tr.append(td(link(String(t.false_positives), `fp@${s.id}`, "Show the false positives"), "num"));
