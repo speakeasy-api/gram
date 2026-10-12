@@ -18,7 +18,7 @@ export type AssistantMCPServerRef = {
    */
   environmentSlug?: string | undefined;
   /**
-   * The MCP server slug exposed to the assistant. Covers remote- and tunnelled-backed MCP servers, which have no toolset to attach.
+   * The MCP server slug exposed to the assistant. Covers every backend, including hosted (toolset-backed) servers.
    */
   mcpServerSlug: string;
 };
