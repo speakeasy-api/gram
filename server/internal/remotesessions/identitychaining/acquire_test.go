@@ -466,3 +466,21 @@ func TestRedeem_LogsScopesWhenTokenLacksRequestedScope(t *testing.T) {
 	require.Equal(t, testResource, entry[string(attr.OAuthResourceKey)])
 	require.NotContains(t, buf.String(), "downstream-token")
 }
+
+func TestAcquisitionFailure_LogsProviderDescriptionOnly(t *testing.T) {
+	t.Parallel()
+	outcome := classifyEndpointError(StageRedemption, &remotesessions.TokenEndpointError{StatusCode: http.StatusBadRequest, Code: "invalid_grant", Description: "No seat was found for this user", Transport: false, Signing: false})
+	require.Equal(t, ReasonInvalidGrant, outcome.Reason)
+	require.Equal(t, "No seat was found for this user", outcome.providerDescription)
+
+	var buf bytes.Buffer
+	logAcquisitionFailure(t.Context(), slog.New(slog.NewJSONHandler(&buf, nil)), outcome)
+	var entry map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &entry))
+	require.Equal(t, "WARN", entry["level"])
+	require.Equal(t, "No seat was found for this user", entry[string(attr.OAuthErrorDescriptionKey)])
+
+	wire, err := json.Marshal(attemptResult{Outcome: outcome, FinishedAt: time.Time{}})
+	require.NoError(t, err)
+	require.NotContains(t, string(wire), "No seat", "serialized outcomes never carry provider text")
+}

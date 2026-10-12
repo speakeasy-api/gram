@@ -26,6 +26,8 @@ export type AuthTarget = {
   kind: "remote-mcp" | "standard";
   /** Resource identifier used by the target's mcp:write check. */
   permissionResourceId: string;
+  /** The MCP server row id, when the target is one; differs from permissionResourceId for toolset-backed servers. */
+  mcpServerId?: string;
   /** Whether the target backend accepts organization-owned issuers. */
   supportsOrganizationIssuers: boolean;
   /** Current issuer link; null when the target has none yet. */
@@ -54,6 +56,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
       projectId: mcpServer.projectId,
       kind: mcpServer.remoteMcpServerId ? "remote-mcp" : "standard",
       permissionResourceId: mcpServer.toolsetId ?? mcpServer.id,
+      mcpServerId: mcpServer.id,
       supportsOrganizationIssuers: true,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,

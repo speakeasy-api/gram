@@ -193,6 +193,12 @@ func classifyEndpointError(stage Stage, err error) Outcome {
 	if !ok {
 		return newOutcome(stage, ReasonMalformedResponse, ConfidenceVerified, false)
 	}
+	outcome := classifyEndpointFailure(stage, failure)
+	outcome.providerDescription = failure.Description
+	return outcome
+}
+
+func classifyEndpointFailure(stage Stage, failure *remotesessions.TokenEndpointError) Outcome {
 	switch {
 	case failure.Transport, failure.Signing:
 		return newOutcome(stage, ReasonTransientFailure, ConfidenceUnknown, true)
