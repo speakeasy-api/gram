@@ -72,6 +72,9 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 		servers, err := plugins.ListPluginServers(ctx, pluginID)
 		require.NoError(t, err)
 		require.Contains(t, displayNames(servers), "Renamed Toolset", "a toolset rename reaches its entries")
+		if pluginID == other.ID {
+			require.Contains(t, displayNames(servers), "Bystander", "renaming one toolset leaves other server names unchanged")
+		}
 	}
 
 	beforeRemovals, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerRemove)

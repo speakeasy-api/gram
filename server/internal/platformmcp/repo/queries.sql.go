@@ -2410,7 +2410,8 @@ LEFT JOIN LATERAL (
      AND plugin.organization_id = $3
      AND plugin.deleted IS FALSE
     WHERE membership.deleted IS FALSE
-      AND (($1::text = 'mcp_server' AND membership.mcp_server_id = server.id)
+      AND (($1::text = 'mcp_server' AND (membership.mcp_server_id = server.id
+          OR (membership.toolset_id = server.id AND server.toolset_id = membership.toolset_id)))
         OR ($1::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
 ) memberships ON TRUE
 WHERE project.id = $4
@@ -5932,7 +5933,7 @@ LEFT JOIN mcp_servers s
   ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR s.toolset_id = ps.toolset_id)
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
   ON t.id = ps.toolset_id
   AND t.project_id = p.project_id
@@ -6054,7 +6055,7 @@ LEFT JOIN mcp_servers s
   ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR s.toolset_id = ps.toolset_id)
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
   ON t.id = ps.toolset_id
   AND t.project_id = p.project_id
@@ -6105,7 +6106,7 @@ type ListPlatformMCPPluginServersRow struct {
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
-// A toolset-keyed row reads through its canonical wrapper (same id) when one exists.
+// A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,

@@ -777,17 +777,25 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 const getPluginServerByBackend = `-- name: GetPluginServerByBackend :one
 SELECT id, plugin_id, project_id, toolset_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted FROM plugin_servers
 WHERE plugin_id = $1
-  AND (toolset_id = COALESCE($2::uuid, $3::uuid)
-    OR mcp_server_id = COALESCE($3::uuid, $2::uuid))
+  AND EXISTS (
+    SELECT 1 FROM plugins
+    WHERE plugins.id = plugin_servers.plugin_id
+      AND plugins.project_id = $2
+      AND plugins.organization_id = $3
+  )
+  AND (toolset_id = COALESCE($4::uuid, $5::uuid)
+    OR mcp_server_id = COALESCE($5::uuid, $4::uuid))
   AND deleted IS FALSE
 ORDER BY created_at, id
 LIMIT 1
 `
 
 type GetPluginServerByBackendParams struct {
-	PluginID    uuid.UUID
-	ToolsetID   uuid.NullUUID
-	McpServerID uuid.NullUUID
+	PluginID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ToolsetID      uuid.NullUUID
+	McpServerID    uuid.NullUUID
 }
 
 // Look up a live plugin server by its backend (toolset or mcp_server).
@@ -797,7 +805,13 @@ type GetPluginServerByBackendParams struct {
 // statement aborts the caller's surrounding transaction. A toolset and its
 // canonical wrapper share one id, so either key finds the other's row.
 func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginServerByBackendParams) (PluginServer, error) {
-	row := q.db.QueryRow(ctx, getPluginServerByBackend, arg.PluginID, arg.ToolsetID, arg.McpServerID)
+	row := q.db.QueryRow(ctx, getPluginServerByBackend,
+		arg.PluginID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ToolsetID,
+		arg.McpServerID,
+	)
 	var i PluginServer
 	err := row.Scan(
 		&i.ID,
