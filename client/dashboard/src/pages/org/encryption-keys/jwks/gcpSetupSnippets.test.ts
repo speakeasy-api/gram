@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  hasResourcePlaceholder,
   impersonationInstructions,
   keyRingInstructions,
+  keyVersionResourceName,
   type SetupValues,
 } from "./gcpSetupSnippets";
 
@@ -96,5 +98,23 @@ describe("impersonationInstructions", () => {
       "Create a service account named speakeasy-signer",
     );
     expect(console).toContain("Open the new account");
+  });
+});
+
+describe("hasResourcePlaceholder", () => {
+  it("flags a key version name with any field left blank", () => {
+    expect(hasResourcePlaceholder(keyVersionResourceName(values))).toBe(false);
+    for (const field of ["projectId", "location", "keyRing", "keyName"]) {
+      const name = keyVersionResourceName({ ...values, [field]: " " });
+      expect(hasResourcePlaceholder(name)).toBe(true);
+    }
+  });
+
+  it("matches whole path segments, not names that contain a token", () => {
+    expect(
+      hasResourcePlaceholder(
+        "projects/KEY_PROJECT/locations/global/keyRings/ring/cryptoKeys/MY_KEY/cryptoKeyVersions/1",
+      ),
+    ).toBe(false);
   });
 });

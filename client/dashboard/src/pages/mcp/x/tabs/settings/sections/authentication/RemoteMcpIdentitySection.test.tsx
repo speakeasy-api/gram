@@ -137,9 +137,10 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
     });
     return { data: { result: { items } }, isLoading: false };
   },
-  // Stands in for the server's tier and search filters over the listing.
+  // Stands in for the server's tier and search filters over the listing; no
+  // tier lists every one.
   useRemoteSessionIssuersInfinite: (request: {
-    tier: "project" | "organization" | "platform";
+    tier?: "project" | "organization" | "platform";
     search?: string;
   }) => {
     mocks.tierSearch(request.tier, request.search);
@@ -159,7 +160,7 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
           : "platform";
       const q = request.search?.toLowerCase();
       return (
-        tier === request.tier &&
+        (!request.tier || tier === request.tier) &&
         (!q ||
           [issuer.name ?? "", issuer.slug, issuer.issuer].some((field) =>
             field.toLowerCase().includes(q),
@@ -2103,15 +2104,79 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
+    const dialog = screen.getByRole("dialog");
     expect(
-      within(screen.getByRole("dialog")).getByText(
-        "Replace the connected client?",
-      ),
+      within(dialog).getByText("Replace the service account client?"),
     ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "stops this server using its current service account client",
+    );
+    expect(dialog.textContent).not.toContain("sign in again");
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
     // The commit replaces the bound client, so it is not detached first.
+    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("removes a leftover credential after binding User Identity over the service account client", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    boundSelfClient();
+    autoConfigurableProvider();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Replace the service account client?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "removes the static Authorization credential",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.remove).toHaveBeenCalledWith({
+        request: { id: "header-1" },
+      }),
+    );
+    expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.remove.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("holds Save when User Identity is left for an unfinished OAuth client", async () => {
+    connectClient();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+      ).getByRole("radio", { name: /^Client Secret/ }),
+    );
+    addCustomHeader("X-Team", "platform");
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Finish the service account client, or cancel, to save.",
+      ),
+    ).toBeDefined();
+    fireEvent.click(save);
+    await Promise.resolve();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
     expect(mocks.detach).not.toHaveBeenCalled();
   });
 

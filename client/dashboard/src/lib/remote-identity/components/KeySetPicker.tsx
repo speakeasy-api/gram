@@ -30,7 +30,8 @@ export function KeySetPicker({
   disabled = false,
 }: {
   value: KeySetChoice | null;
-  onChange: (choice: KeySetChoice) => void;
+  /** Null when a chosen set is gone and there is none left to start on. */
+  onChange: (choice: KeySetChoice | null) => void;
   /** A set another client at the same identity provider signs with. */
   suggestedSetId?: string | null;
   /** Still looking for a suggestion; the default waits rather than guess. */
@@ -67,8 +68,13 @@ export function KeySetPicker({
     !setsQuery.isFetching &&
     !sets.some((set) => set.id === value.id);
   useEffect(() => {
-    if (!loaded || suggestionLoading || sets.length === 0) return;
+    if (!loaded || suggestionLoading) return;
     if (value && !missing) return;
+    // Nothing to start over on, so the missing set is not kept as a choice.
+    if (sets.length === 0) {
+      if (missing) onChange(null);
+      return;
+    }
     const suggested = sets.find((set) => set.id === suggestedSetId);
     onChange({ kind: "existing", id: (suggested ?? sets[0]!).id });
   }, [

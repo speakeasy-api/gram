@@ -3,9 +3,8 @@ import { isExpectedAPIError } from "@/lib/errors";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
-import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   keySetChoiceReady,
   oauthFormatOf,
@@ -17,6 +16,8 @@ import {
 } from "../model/serviceAccount";
 import { useResolveKeySet } from "../queries/useKeySets";
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
+import { useAllRemoteSessionIssuers } from "../queries/useAllRemoteSessionIssuers";
+import { useRemoteSessionIssuersByIds } from "../queries/useRemoteSessionIssuersByIds";
 
 export type ServiceAccountClientDraft = {
   issuers: RemoteSessionIssuer[];
@@ -72,8 +73,11 @@ export type ServiceAccountClientDraft = {
 export function useServiceAccountClientDraft({
   mcpServerId,
   boundClient,
+  enabled = true,
 }: {
   mcpServerId: string;
+  /** The Service Account choice is on screen, so its providers are needed. */
+  enabled?: boolean;
   /** The service account client this server uses now, if any. */
   boundClient: RemoteSessionClient | undefined;
 }): ServiceAccountClientDraft {
@@ -82,14 +86,19 @@ export function useServiceAccountClientDraft({
   const resolveKeySet = useResolveKeySet();
 
   // Every provider this project can see. A service account only needs the
-  // token endpoint, so a provider without one is listed but refused.
-  const issuersQuery = useRemoteSessionIssuers({}, undefined, {
-    throwOnError: false,
-  });
-  const issuers: RemoteSessionIssuer[] = useMemo(
-    () => issuersQuery.data?.result.items ?? [],
-    [issuersQuery.data],
+  // token endpoint, so a provider without one is listed but refused. The bound
+  // client's provider is looked up by id too, since the listing spans the
+  // project, its organization and the platform catalog and may not reach it.
+  const listed = useAllRemoteSessionIssuers({ enabled });
+  const boundIssuer = useRemoteSessionIssuersByIds(
+    boundClient ? [boundClient.remoteSessionIssuerId] : [],
   );
+  const issuers: RemoteSessionIssuer[] = useMemo(() => {
+    const unlisted = boundIssuer.items.filter(
+      (bound) => !listed.items.some((item) => item.id === bound.id),
+    );
+    return [...listed.items, ...unlisted];
+  }, [listed.items, boundIssuer.items]);
 
   const [issuerPick, setIssuerPick] = useState<string | null>(null);
   const issuerId = issuerPick ?? boundClient?.remoteSessionIssuerId ?? null;
@@ -148,16 +157,50 @@ export function useServiceAccountClientDraft({
 
   // Best effort and in the background: a leftover client is clutter, not a
   // failure the operator has to act on.
-  const deleteClient = (id: string) =>
-    client.remoteSessionClients
-      .delete({ id })
-      .then(() => invalidateAllRemoteSessionClients(queryClient))
-      .catch((error: unknown) =>
-        console.error(
-          "Couldn't delete an unbound service account client",
-          error,
+  const deleteClient = useCallback(
+    (id: string) =>
+      client.remoteSessionClients
+        .delete({ id })
+        .then(() => invalidateAllRemoteSessionClients(queryClient))
+        .catch((error: unknown) =>
+          console.error(
+            "Couldn't delete an unbound service account client",
+            error,
+          ),
         ),
-      );
+    [client, queryClient],
+  );
+
+  // A created client outlives the draft only by mistake: leaving the page
+  // before Save would strand it. The browser asks before a reload or close,
+  // and an unmount deletes it. The delete waits a tick so a remount, such as
+  // StrictMode's dev rehearsal, can call it off and keep the client. Save
+  // clears the ref while its commit is out, since that may bind the client.
+  const createdRef = useRef(created);
+  const pendingDelete = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set once the unmount is real, so a create still in flight cleans up.
+  const disposed = useRef(false);
+  useEffect(() => {
+    createdRef.current = created;
+    if (!created) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [created]);
+  useEffect(() => {
+    if (pendingDelete.current) clearTimeout(pendingDelete.current);
+    pendingDelete.current = null;
+    return () => {
+      pendingDelete.current = setTimeout(() => {
+        pendingDelete.current = null;
+        disposed.current = true;
+        if (createdRef.current) void deleteClient(createdRef.current.id);
+      }, 0);
+    };
+  }, [deleteClient]);
 
   // A signing key client made by "Create client" exists before Save binds it,
   // so dropping it from the draft deletes it too.
@@ -235,6 +278,11 @@ export function useServiceAccountClientDraft({
         tokenEndpointAuthAudienceFormat: assertionAudience,
         jsonWebKeySetId,
       });
+      if (disposed.current) {
+        void deleteClient(made.id);
+        return false;
+      }
+      createdRef.current = made;
       setCreated(made);
       await invalidateAllRemoteSessionClients(queryClient);
       return true;
@@ -272,6 +320,9 @@ export function useServiceAccountClientDraft({
       const discardMadeHere = () => {
         if (madeHere) void deleteClient(madeHere.id);
       };
+      // Bound or not is unknown until the commit answers, so an unmount in
+      // between must leave a signing key client alone.
+      if (!madeHere) createdRef.current = null;
       let result;
       try {
         result = await client.remoteSessions.commitServerIdentityConfiguration({
@@ -283,12 +334,17 @@ export function useServiceAccountClientDraft({
           },
         });
       } catch (error) {
-        if (isExpectedAPIError(error)) discardMadeHere();
-        else if (madeHere) unsettled.current = { client: madeHere, fields };
+        if (isExpectedAPIError(error)) {
+          discardMadeHere();
+          createdRef.current = created;
+        } else if (madeHere) {
+          unsettled.current = { client: madeHere, fields };
+        }
         throw error;
       }
       if (result.failure) {
         discardMadeHere();
+        createdRef.current = created;
         throw new Error(
           result.failure.providerMessage ??
             `Couldn't connect this server to ${issuer.name}.`,
@@ -307,7 +363,7 @@ export function useServiceAccountClientDraft({
 
   return {
     issuers,
-    issuersLoading: issuersQuery.isLoading,
+    issuersLoading: listed.isLoading || boundIssuer.isLoading,
     issuer,
     issuerUsable,
     pickIssuer,

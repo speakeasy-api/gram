@@ -1,10 +1,18 @@
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
-import { useSdkClient } from "@/contexts/Sdk";
+import type { JSONWebKey } from "@gram/client/models/components/jsonwebkey.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import {
+  buildListJsonWebKeysQuery,
+  useListJsonWebKeys,
+} from "@gram/client/react-query/listJsonWebKeys.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { clientKeySetUrl } from "../model/serviceAccount";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
+
+const SECURITY = { sessionHeaderGramSession: "" };
 
 /**
  * How the provider learns the client's public keys: the key set URL to paste
@@ -18,28 +26,61 @@ export function ClientKeyRegistration({
   clientRowId: string;
   keySetId: string;
 }): JSX.Element {
-  const client = useSdkClient();
+  const gramClient = useGramContext();
+  const queryClient = useQueryClient();
   const url = clientKeySetUrl(clientRowId);
+
+  // Fetched up front: Safari refuses a clipboard write that follows an await,
+  // so the click has to have the keys in hand.
+  const keysQuery = useListJsonWebKeys({ setId: keySetId }, SECURITY, {
+    throwOnError: false,
+  });
 
   // Every key a verifier should trust, as a set even when there is one:
   // the key that signs now and the one about to, which is what the key set
   // URL serves. Retired and revoked keys must not be registered again.
+  const keySetText = (keys: JSONWebKey[]): string => {
+    const published = keys
+      .filter((key) => key.keyState === "active" || key.keyState === "pending")
+      .map((key) => key.publicJwk);
+    if (published.length === 0) {
+      throw new Error("This key set has no published key yet.");
+    }
+    return JSON.stringify({ keys: published }, null, 2);
+  };
+
+  // Joins the prefetch when it is still in flight rather than asking twice.
+  const fetchKeySetText = async (): Promise<string> => {
+    const result = await queryClient.ensureQueryData(
+      buildListJsonWebKeysQuery(gramClient, { setId: keySetId }, SECURITY),
+    );
+    return keySetText(result.keys);
+  };
+
   const copyPublicKey = async () => {
     try {
-      const result = await client.jsonWebKeySets.listKeys(
-        { setId: keySetId },
-        { sessionHeaderGramSession: "" },
-      );
-      const keys = result.keys
-        .filter(
-          (key) => key.keyState === "active" || key.keyState === "pending",
-        )
-        .map((key) => key.publicJwk);
-      if (keys.length === 0) {
-        toast.error("This key set has no published key yet.");
-        return;
+      if (keysQuery.data) {
+        await navigator.clipboard.writeText(keySetText(keysQuery.data.keys));
+      } else if (typeof ClipboardItem !== "undefined") {
+        // Not loaded yet: hand the clipboard a promise within the click, so
+        // the write stays tied to the gesture until the keys arrive.
+        const text = fetchKeySetText();
+        const blob = text.then(
+          (value) => new Blob([value], { type: "text/plain" }),
+        );
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "text/plain": blob }),
+          ]);
+        } catch (error) {
+          // The browser reports a failed promise as its own error; the
+          // lookup's reason says more.
+          await text;
+          throw error;
+        }
+      } else {
+        await navigator.clipboard.writeText(await fetchKeySetText());
       }
-      await navigator.clipboard.writeText(JSON.stringify({ keys }, null, 2));
       toast.success("Public key copied");
     } catch (error) {
       toast.error(

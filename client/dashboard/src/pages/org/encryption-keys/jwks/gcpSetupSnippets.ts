@@ -58,8 +58,30 @@ export function serviceAccountEmail(values: SetupValues): string {
   return `${or(values.accountId, "SERVICE_ACCOUNT")}@${or(values.projectId, "PROJECT_ID")}.iam.gserviceaccount.com`;
 }
 
+// The stand-ins a blank field leaves in the key version name.
+const RESOURCE_PLACEHOLDERS = {
+  projectId: "PROJECT_ID",
+  location: "LOCATION",
+  keyRing: "KEY_RING",
+  keyName: "KEY",
+} as const;
+
 export function keyVersionResourceName(values: SetupValues): string {
-  return `projects/${or(values.projectId, "PROJECT_ID")}/locations/${or(values.location, "LOCATION")}/keyRings/${or(values.keyRing, "KEY_RING")}/cryptoKeys/${or(values.keyName, "KEY")}/cryptoKeyVersions/1`;
+  const field = (name: keyof typeof RESOURCE_PLACEHOLDERS) =>
+    or(values[name], RESOURCE_PLACEHOLDERS[name]);
+  return `projects/${field("projectId")}/locations/${field("location")}/keyRings/${field("keyRing")}/cryptoKeys/${field("keyName")}/cryptoKeyVersions/1`;
+}
+
+const PLACEHOLDER_SEGMENTS = new Set<string>(
+  Object.values(RESOURCE_PLACEHOLDERS),
+);
+
+/** A key version name with a blank field still standing in as a placeholder. */
+export function hasResourcePlaceholder(resourceName: string): boolean {
+  return resourceName
+    .trim()
+    .split("/")
+    .some((segment) => PLACEHOLDER_SEGMENTS.has(segment));
 }
 
 /** Step: create the service account and let Speakeasy impersonate it. */

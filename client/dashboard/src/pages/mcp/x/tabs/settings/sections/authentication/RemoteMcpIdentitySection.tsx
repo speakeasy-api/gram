@@ -241,6 +241,7 @@ export function RemoteMcpIdentitySectionBody({
   const clientDraft = useServiceAccountClientDraft({
     mcpServerId: target.permissionResourceId,
     boundClient: selfClient,
+    enabled: selectedMode === "agent",
   });
   const { entitled: customerManagedKeys } = useCustomerManagedKeys();
   const [formatPick, setFormatPick] = useState<ServiceAccountFormat | null>(
@@ -313,9 +314,12 @@ export function RemoteMcpIdentitySectionBody({
   // A server can carry a bound client and a leftover static credential at
   // once, and the client wins the derived mode. No Identity has to clear both
   // or the credential alone would make the server read as Agent again — and
-  // unlike under User, nothing overrides it on the way upstream.
+  // unlike under User, nothing overrides it on the way upstream. Under a bound
+  // service account client, only a leftover credential is left behind.
   const leavingAgent =
-    (actualMode === "agent" && !selfClient && selectedMode !== "agent") ||
+    (actualMode === "agent" &&
+      selectedMode !== "agent" &&
+      (!selfClient || !!authorizationHeader)) ||
     (selectedMode === "none" && !!authorizationHeader) ||
     replacingCredential;
   // Moving off the service account client to a static credential or to no
@@ -327,19 +331,17 @@ export function RemoteMcpIdentitySectionBody({
   // No Identity removes the client with nothing in its place.
   const removingSelf = leavingSelf && selectedMode === "none";
   // Staying on User but saving a different client swaps out the one people
-  // signed in through, so they all have to sign in again. Moving from the
-  // service account client to User replaces it too: the commit that binds the
-  // user client unbinds it.
-  const replacingClient =
-    selectedMode === "user" && (userDraft.replacesClient || !!selfClient);
-  const oauthReplacing =
-    !!oauthFormat && !!selfClient && clientDraft.canSave(oauthFormat);
-  const destructive =
-    leavingUser ||
-    leavingAgent ||
+  // signed in through, so they all have to sign in again.
+  const replacingClient = selectedMode === "user" && userDraft.replacesClient;
+  // Another OAuth client, or User Identity, takes the service account
+  // client's place: the commit that binds the new client unbinds it.
+  const replacingSelf =
     leavingSelf ||
-    oauthReplacing ||
-    replacingClient;
+    (!!selfClient &&
+      (selectedMode === "user" ||
+        (!!oauthFormat && clientDraft.canSave(oauthFormat))));
+  const destructive =
+    leavingUser || leavingAgent || replacingSelf || replacingClient;
 
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
@@ -421,6 +423,11 @@ export function RemoteMcpIdentitySectionBody({
     !oauthSelected &&
     !agentDraft.canSave &&
     !authorizationHeader;
+  // Leaving User for a service account client keeps the user client until
+  // the new one binds. Without one to bind, Save would commit the rest and
+  // leave the server on User Identity behind the operator's back.
+  const oauthSwitchBlocked =
+    leavingUser && !!oauthFormat && !clientDraft.canSave(oauthFormat);
 
   const performSave = async () => {
     if (
@@ -428,7 +435,8 @@ export function RemoteMcpIdentitySectionBody({
       rbacLoading ||
       userSwitchBlocked ||
       userEditIncomplete ||
-      staticSwitchBlocked
+      staticSwitchBlocked ||
+      oauthSwitchBlocked
     )
       return;
     setConfirmOpen(false);
@@ -565,6 +573,7 @@ export function RemoteMcpIdentitySectionBody({
     !userSwitchBlocked &&
     !userEditIncomplete &&
     !staticSwitchBlocked &&
+    !oauthSwitchBlocked &&
     (identityCanSave || headerDrafts.isDirty || scopePinDirty);
   const savePending =
     detachIssuer.isPending ||
@@ -862,6 +871,11 @@ export function RemoteMcpIdentitySectionBody({
                 Enter the credential, or cancel, to save.
               </Text>
             ) : null}
+            {oauthSwitchBlocked ? (
+              <Text small warning>
+                Finish the service account client, or cancel, to save.
+              </Text>
+            ) : null}
             <SettingsSection.FooterActions>
               {selectedMode === "agent" && clientDraft.replacing ? (
                 // Backs out of replacing the saved service account client.
@@ -907,7 +921,7 @@ export function RemoteMcpIdentitySectionBody({
             <Dialog.Title>
               {confirmTitle({
                 removingSelf,
-                replacingSelf: leavingSelf || oauthReplacing,
+                replacingSelf,
                 leavingUser,
                 replacingClient,
                 replacingCredential,
@@ -917,7 +931,7 @@ export function RemoteMcpIdentitySectionBody({
             <Dialog.Description>
               {removalConsequences({
                 removingSelf,
-                replacingSelf: leavingSelf || oauthReplacing,
+                replacingSelf,
                 leavingUser,
                 leavingAgent,
                 replacingClient,
@@ -994,15 +1008,15 @@ function removalConsequences({
   const credentialConsequence = replacingCredential
     ? REPLACE_CREDENTIAL_CONSEQUENCE
     : REMOVE_CREDENTIAL_CONSEQUENCE;
-  if (removingSelf) {
-    return leavingAgent
-      ? `${REMOVE_SELF_CLIENT_CONSEQUENCE} ${REMOVE_CREDENTIAL_CONSEQUENCE}`
-      : REMOVE_SELF_CLIENT_CONSEQUENCE;
-  }
-  if (replacingSelf) {
-    return replacingCredential
-      ? `${REPLACE_SELF_CLIENT_CONSEQUENCE} ${REPLACE_CREDENTIAL_CONSEQUENCE}`
+  if (removingSelf || replacingSelf) {
+    // Only another service account client takes a static credential's
+    // place; No Identity and User Identity drop it.
+    const selfConsequence = removingSelf
+      ? REMOVE_SELF_CLIENT_CONSEQUENCE
       : REPLACE_SELF_CLIENT_CONSEQUENCE;
+    return leavingAgent
+      ? `${selfConsequence} ${credentialConsequence}`
+      : selfConsequence;
   }
   if (replacingClient) return REPLACE_CLIENT_CONSEQUENCE;
   if (leavingUser && leavingAgent) {
