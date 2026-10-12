@@ -1,3 +1,4 @@
+import { Checkbox } from "@/components/ui/Checkbox";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { authPageHref } from "@/lib/safe-external-url";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
@@ -25,6 +26,11 @@ function validateEmail(value: string): string | undefined {
   return undefined;
 }
 
+function validateTerms(value: boolean): string | undefined {
+  if (value) return undefined;
+  return "You must agree to the Terms of Service to continue";
+}
+
 /** First error string for a field, or undefined. */
 function firstError(errors: unknown[]): string | undefined {
   const error = errors.find(Boolean);
@@ -38,7 +44,7 @@ export function SignUpPanel({
 }): JSX.Element {
   const telemetry = useTelemetry();
   const form = useForm({
-    defaultValues: { email: "", companyName: "" },
+    defaultValues: { email: "", companyName: "", acceptedTerms: false },
     onSubmit: ({ value }) => {
       // The server has no identity until the identity provider answers, so it
       // can't count this attempt — only the client sees it. Firing here joins
@@ -46,6 +52,7 @@ export function SignUpPanel({
       telemetry.capture("onboarding_event", {
         action: "signup_started",
         created_via: "signup",
+        accepted_terms: value.acceptedTerms,
       });
 
       // The org itself is created server-side during the auth callback. The
@@ -200,6 +207,61 @@ export function SignUpPanel({
                             : "border-(--input-edge) focus:border-(--focus)",
                         )}
                       />
+                      {error && (
+                        <p
+                          id={`${field.name}-error`}
+                          className="mt-0.5 text-[12px] leading-[1.45] text-destructive"
+                        >
+                          {error}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }}
+              </form.Field>
+
+              <form.Field
+                name="acceptedTerms"
+                validators={{
+                  onChange: ({ value }) => validateTerms(value),
+                  onSubmit: ({ value }) => validateTerms(value),
+                }}
+              >
+                {(field) => {
+                  const error = firstError(field.state.meta.errors);
+                  return (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          id={field.name}
+                          name={field.name}
+                          checked={field.state.value}
+                          onCheckedChange={(checked) =>
+                            field.handleChange(checked === true)
+                          }
+                          onBlur={field.handleBlur}
+                          aria-required="true"
+                          aria-invalid={error ? true : undefined}
+                          aria-describedby={
+                            error ? `${field.name}-error` : undefined
+                          }
+                          className="mt-0.5"
+                        />
+                        <label
+                          htmlFor={field.name}
+                          className="text-[14px] leading-5 text-(--muted-strong)"
+                        >
+                          I agree to the Speakeasy{" "}
+                          <a
+                            href="https://www.speakeasy.com/terms"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-(--link) underline hover:text-(--focus)"
+                          >
+                            Terms of Service
+                          </a>
+                        </label>
+                      </div>
                       {error && (
                         <p
                           id={`${field.name}-error`}
