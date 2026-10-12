@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -95,18 +96,19 @@ func organizationEligibleForSelfServeTrial(org orgRepo.OrganizationMetadatum) bo
 }
 
 // armSelfServeTrialForExistingOrganization grants the standard signup trial to
-// an organization that already existed when its member signed in. Customers of
-// another Speakeasy product already have an identity-provider organization, so
-// the zero-organization signup path never runs for them and they would
-// otherwise land on the book-a-demo gate.
+// an organization that already existed when an organization admin signed in.
+// Customers of another Speakeasy product already have an identity-provider
+// organization, so the zero-organization signup path never runs for them and
+// they would otherwise land on the book-a-demo gate. A membership without the
+// admin role does not start the trial.
 //
-// armed is false when the organization is not eligible or already has a trial
-// lifecycle, including one that has ended. A concurrent login that commits
-// first is also not armed here; that request sends the trial-started
-// notification. The returned organization is the row after a successful arm,
-// and the caller's row otherwise.
+// armed is false when the organization is not eligible, the signer is not an
+// admin, or a trial lifecycle already exists, including one that has ended. A
+// concurrent login that commits first is also not armed here; that request
+// sends the trial-started notification. The returned organization is the row
+// after a successful arm, and the caller's row otherwise.
 func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, org orgRepo.OrganizationMetadatum, userID, actorEmail string, membership identity.IDPMembershipRole) (orgRepo.OrganizationMetadatum, bool, error) {
-	if !organizationEligibleForSelfServeTrial(org) {
+	if !organizationEligibleForSelfServeTrial(org) || !slices.Contains(membership.RoleSlugs, authz.SystemRoleAdmin) {
 		return org, false, nil
 	}
 

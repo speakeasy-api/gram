@@ -28,6 +28,7 @@ import (
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -1122,19 +1123,33 @@ func TestCallback_LoginArmsTrialForOrganizationThatNeverTrialled(t *testing.T) {
 	const (
 		email          = "active-signup@example.com"
 		organizationID = "org-active-signup"
+		workosOrgID    = "org_01ACTIVE_SIGNUP"
 	)
 	userInfo := &MockUserInfo{
 		UserID:        "user_01ACTIVE_SIGNUP",
 		Email:         email,
 		Organizations: nil,
 	}
-	ctx, instance := newTestAuthService(t, userInfo)
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			userInfo.UserID: {{
+				ID:             "om_active_signup",
+				UserID:         userInfo.UserID,
+				OrganizationID: workosOrgID,
+				Organization:   "Gated Org",
+				RoleSlugs:      []string{"admin"},
+			}},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Gated Org"},
+		},
+	})
 	require.NoError(t, instance.createTestUser(ctx, userInfo))
 	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
 		ID:                 organizationID,
 		Name:               "Gated Org",
 		Slug:               organizationID,
-		WorkosID:           nil,
+		WorkosID:           new(workosOrgID),
 		UserWorkspaceSlugs: nil,
 	}, userInfo.UserID))
 
@@ -1243,13 +1258,27 @@ func TestCallback_LoginContinuesWhenSelfServeTrialArmingFails(t *testing.T) {
 		Email:         email,
 		Organizations: nil,
 	}
-	ctx, instance := newTestAuthService(t, userInfo)
+	const workosOrgID = "org_01TRIAL_ARM_FAILS"
+	ctx, instance := newTestAuthServiceWithWorkOSClient(t, userInfo, &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			userInfo.UserID: {{
+				ID:             "om_trial_arm_fails",
+				UserID:         userInfo.UserID,
+				OrganizationID: workosOrgID,
+				Organization:   "Gated Org",
+				RoleSlugs:      []string{"admin"},
+			}},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Gated Org"},
+		},
+	})
 	require.NoError(t, instance.createTestUser(ctx, userInfo))
 	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
 		ID:                 organizationID,
 		Name:               "Gated Org",
 		Slug:               organizationID,
-		WorkosID:           nil,
+		WorkosID:           new(workosOrgID),
 		UserWorkspaceSlugs: nil,
 	}, userInfo.UserID))
 	instance.service.SetOrganizationFeatureSeederForTest(func(context.Context, pgx.Tx, string) error {

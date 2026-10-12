@@ -378,7 +378,49 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, orgName, orgMeta.Name)
 	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
-	assert.True(t, orgMeta.Whitelisted, "an identity-provider organization that has never trialed receives the self-serve trial")
+	assert.False(t, orgMeta.Whitelisted, "a member sign-in does not start the self-serve trial")
+
+	_, err = trialsRepo.New(inst.conn).GetTrial(ctx, expectedOrgID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestE2E_Callback_AdminMembershipStartsSelfServeTrial(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01WORKOS_ADMIN_TRIAL"
+		workosOrgID  = "org_01WORKOS_ADMIN_TRIAL"
+		orgName      = "Admin Trial Corp"
+	)
+
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {{
+				ID:             "om_01ADMIN_TRIAL",
+				UserID:         workosUserID,
+				OrganizationID: workosOrgID,
+				Organization:   orgName,
+				RoleSlugs:      []string{"admin"},
+			}},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: orgName},
+		},
+	}
+	userInfo := &MockUserInfo{
+		UserID:        workosUserID,
+		Email:         "admin-trial@example.com",
+		Organizations: []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	result, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+
+	expectedOrgID := orgid.FromWorkOSID(workosOrgID)
+	orgMeta, err := orgRepo.New(inst.conn).GetOrganizationMetadata(ctx, expectedOrgID)
+	require.NoError(t, err)
+	require.True(t, orgMeta.Whitelisted)
 
 	_, err = trialsRepo.New(inst.conn).GetTrial(ctx, expectedOrgID)
 	require.NoError(t, err)
@@ -389,10 +431,9 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
-	require.False(t, assignments[0].DeletedAt.Valid)
-	memberRole, err := accessRepo.New(inst.conn).GetGlobalRoleBySlug(ctx, "member")
+	adminRole, err := accessRepo.New(inst.conn).GetGlobalRoleBySlug(ctx, "admin")
 	require.NoError(t, err)
-	require.Equal(t, "role:global:"+memberRole.ID.String(), assignments[0].RoleUrn)
+	require.Equal(t, "role:global:"+adminRole.ID.String(), assignments[0].RoleUrn)
 	require.Equal(t, users.UserIDFromWorkOSID(workosUserID), assignments[0].UserID.String)
 }
 
