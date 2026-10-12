@@ -17,6 +17,14 @@ func DeviceIssuerURL(serverURL, organizationID string) string {
 	return strings.TrimSuffix(serverURL, "/") + deviceIssuerPath + organizationID
 }
 
+// IsUnderDeviceIssuerPrefix reports whether issuerURL falls anywhere under
+// serverURL's device issuer prefix. The whole prefix is reserved: an operator
+// issuer there would verify against a key set of its choosing instead of the
+// keys devices registered.
+func IsUnderDeviceIssuerPrefix(serverURL, issuerURL string) bool {
+	return strings.HasPrefix(strings.TrimSpace(issuerURL), strings.TrimSuffix(serverURL, "/")+deviceIssuerPath)
+}
+
 // DeviceIssuerOrganization returns the organization a Speakeasy device issuer
 // URL names, and whether issuerURL is one on this server at all.
 //

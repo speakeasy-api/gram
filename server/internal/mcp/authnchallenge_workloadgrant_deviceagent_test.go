@@ -1,110 +1,91 @@
 package mcp_test
 
 import (
+	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
-	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
+	"github.com/speakeasy-api/gram/server/internal/workloadpolicy"
+	workloadpolicyrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
-// deviceAgentGrantFixture is the workload grant fixture with the same dev-idp
-// keys also registered as the organization's Speakeasy device issuer, and the
-// fixture's subject admitted and assigned under it.
+// deviceAgentGrantFixture is the workload grant fixture on an https server
+// URL, which device issuer URLs require, with the platform subject admitted
+// and assigned in the organization.
 type deviceAgentGrantFixture struct {
 	workloadGrantFixture
 
-	// deviceIssuer is the organization's device issuer URL.
-	deviceIssuer string
-
-	// deviceIssuerID is its workload issuer row.
-	deviceIssuerID uuid.UUID
-
-	// tokenURL is the device-agent token endpoint, the assertion audience.
+	// tokenURL is the organization's device-agent token endpoint, the
+	// audience its assertions must name.
 	tokenURL string
-
-	// assignmentID is the subject's agent assignment under the device issuer.
-	assignmentID uuid.UUID
 }
 
 func newDeviceAgentGrantFixture(t *testing.T) deviceAgentGrantFixture {
 	t.Helper()
 
-	// Issuer URLs are https-only, and the device issuer is on the server URL.
 	f := newWorkloadGrantFixtureOn(t, testenv.NewLogger(t), "https://speakeasy.example.test")
-	ctx := t.Context()
-	deviceIssuer := workloadidentity.DeviceIssuerURL(f.ti.serverURL.String(), f.fx.orgID)
-	fixtures := testrepo.New(f.ti.conn)
-	deviceIssuerID, err := fixtures.CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
-		OrganizationID: f.fx.orgID,
-		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Name:           "devices",
-		Issuer:         deviceIssuer,
-		JwksUri:        oauthtest.DiscoverWorkloadJWKSURI(t, f.issuer),
-	})
-	require.NoError(t, err)
-	require.NoError(t, fixtures.CreateWorkloadIdentityAdmissionFixture(ctx, testrepo.CreateWorkloadIdentityAdmissionFixtureParams{
-		OrganizationID:   f.fx.orgID,
-		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		WorkloadIssuerID: deviceIssuerID,
-		Subject:          f.subject,
-	}))
-	assignmentID := assignAgentToWorkload(t, ctx, f.ti, f.fx.orgID, deviceIssuerID, f.subject, f.agentID)
-
 	return deviceAgentGrantFixture{
 		workloadGrantFixture: f,
-		deviceIssuer:         deviceIssuer,
-		deviceIssuerID:       deviceIssuerID,
-		tokenURL:             deviceagenttoken.TokenURL(f.ti.serverURL.String()),
-		assignmentID:         assignmentID,
+		tokenURL:             deviceagenttoken.TokenURL(f.ti.serverURL.String(), f.fx.orgID),
 	}
 }
 
-// deviceAssertion signs an assertion from the device issuer for subject,
-// addressed to aud.
-func (f deviceAgentGrantFixture) deviceAssertion(t *testing.T, subject, aud string) string {
-	t.Helper()
-
-	claims := oauthtest.WorkloadClaims(f.issuer, subject, aud)
-	claims.Issuer = f.deviceIssuer
-	return oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims)
-}
-
-func (f deviceAgentGrantFixture) exchangeDeviceAgent(t *testing.T, assertion string) *httptest.ResponseRecorder {
+// exchangeDeviceAgentAt posts assertion to organizationID's device-agent
+// token endpoint.
+func (f deviceAgentGrantFixture) exchangeDeviceAgentAt(t *testing.T, organizationID, assertion string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	form := url.Values{}
 	form.Set("grant_type", workloadGrantJWTBearer)
 	form.Set("assertion", assertion)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, deviceagenttoken.TokenPath, strings.NewReader(form.Encode()))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, deviceagenttoken.TokenPath(organizationID), strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add(deviceagenttoken.TokenPathOrganizationParam, organizationID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
 	w := httptest.NewRecorder()
 	require.NoError(t, f.ti.service.HandleDeviceAgentToken(w, req))
 	return w
 }
 
-// An admitted device exchanges its assertion for a 15-minute device-agent
-// token naming its workload, with no refresh token.
-func TestDeviceAgentToken_AdmittedDeviceReceivesAToken(t *testing.T) {
-	t.Parallel()
+func (f deviceAgentGrantFixture) exchangeDeviceAgent(t *testing.T, assertion string) *httptest.ResponseRecorder {
+	t.Helper()
+	return f.exchangeDeviceAgentAt(t, f.fx.orgID, assertion)
+}
 
-	f := newDeviceAgentGrantFixture(t)
-	w := f.exchangeDeviceAgent(t, f.deviceAssertion(t, f.subject, f.tokenURL))
+// requireDeviceAgentToken asserts w carries a 15-minute device-agent token
+// naming the workload principal for issuerID and subject.
+func requireDeviceAgentToken(t *testing.T, w *httptest.ResponseRecorder, organizationID string, issuerID uuid.UUID, subject string) {
+	t.Helper()
+
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
-
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.Equal(t, "Bearer", resp["token_type"])
@@ -113,20 +94,154 @@ func TestDeviceAgentToken_AdmittedDeviceReceivesAToken(t *testing.T) {
 
 	claims := accessTokenClaims(t, w.Body.Bytes())
 	require.Equal(t, []any{deviceagenttoken.Audience}, claims["aud"])
-	require.Equal(t, urn.NewWorkloadPrincipal(f.deviceIssuerID, f.subject).String(), claims["sub"])
-	require.Equal(t, f.fx.orgID, claims["org_id"])
+	require.Equal(t, urn.NewWorkloadPrincipal(issuerID, subject).String(), claims["sub"])
+	require.Equal(t, organizationID, claims["org_id"])
 
 	accessToken, ok := resp["access_token"].(string)
 	require.True(t, ok)
 	require.True(t, deviceagenttoken.IsToken(accessToken))
 }
 
-// An assertion addressed to another audience is refused.
+// registeredDevice is a device enrolled through registerDevice.
+type registeredDevice struct {
+	registration *gen.WorkloadDeviceRegistration
+	key          *ecdsa.PrivateKey
+	kid          string
+}
+
+// registerDevice enrolls a fresh key the way a device does: a join token for
+// the fixture's agent, created by its owner, redeemed by registerDevice.
+func (f deviceAgentGrantFixture) registerDevice(t *testing.T) registeredDevice {
+	t.Helper()
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	policy := workloadpolicy.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
+		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient))
+
+	join, err := policy.CreateDeviceJoinToken(f.ctx, &gen.CreateDeviceJoinTokenPayload{
+		AgentID:          f.agentID.String(),
+		ExpiresInSeconds: 600,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	public := jose.JSONWebKey{Key: key.Public(), KeyID: "", Algorithm: "", Use: ""}
+	sum, err := public.Thumbprint(crypto.SHA256)
+	require.NoError(t, err)
+	document, err := public.MarshalJSON()
+	require.NoError(t, err)
+	var jwk map[string]any
+	require.NoError(t, json.Unmarshal(document, &jwk))
+
+	hostname := "vps-test"
+	registration, err := policy.RegisterDevice(t.Context(), &gen.RegisterDevicePayload{
+		JoinToken: join.Token,
+		PublicJwk: jwk,
+		Hostname:  &hostname,
+		Serial:    nil,
+	})
+	require.NoError(t, err)
+	return registeredDevice{registration: registration, key: key, kid: base64.RawURLEncoding.EncodeToString(sum)}
+}
+
+// assertion signs an assertion as the device, addressed to aud.
+func (d registeredDevice) assertion(t *testing.T, aud string) string {
+	t.Helper()
+
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.ES256, Key: d.key},
+		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), d.kid),
+	)
+	require.NoError(t, err)
+	now := time.Now()
+	raw, err := jwt.Signed(signer).Claims(jwt.Claims{
+		Issuer:   d.registration.Issuer,
+		Subject:  d.registration.DeviceSubject,
+		Audience: jwt.Audience{aud},
+		ID:       uuid.NewString(),
+		IssuedAt: jwt.NewNumericDate(now),
+		Expiry:   jwt.NewNumericDate(now.Add(5 * time.Minute)),
+	}).Serialize()
+	require.NoError(t, err)
+	return raw
+}
+
+// deviceIssuerID returns the organization's device issuer row, the one a
+// registered device's assertions resolve to.
+func (f deviceAgentGrantFixture) deviceIssuerID(t *testing.T, d registeredDevice) uuid.UUID {
+	t.Helper()
+
+	issuers, err := workloadpolicyrepo.New(f.ti.conn).FindDeviceIssuer(t.Context(), f.fx.orgID)
+	require.NoError(t, err)
+	require.Len(t, issuers, 1)
+	require.Equal(t, d.registration.Issuer, issuers[0].Issuer)
+	return issuers[0].ID
+}
+
+// A platform workload admitted in the organization exchanges at that
+// organization's endpoint, the path naming the tenant its issuer cannot.
+func TestDeviceAgentToken_PlatformWorkloadReceivesAToken(t *testing.T) {
+	t.Parallel()
+
+	f := newDeviceAgentGrantFixture(t)
+	requireDeviceAgentToken(t, f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL)), f.fx.orgID, f.issuerID, f.subject)
+}
+
+// A device enrolled through registerDevice exchanges an assertion signed with
+// its registered key.
+func TestDeviceAgentToken_RegisteredDeviceReceivesAToken(t *testing.T) {
+	t.Parallel()
+
+	f := newDeviceAgentGrantFixture(t)
+	device := f.registerDevice(t)
+	require.Equal(t, f.fx.orgID, device.registration.OrganizationID)
+	requireDeviceAgentToken(t, f.exchangeDeviceAgent(t, device.assertion(t, f.tokenURL)), f.fx.orgID, f.deviceIssuerID(t, device), device.registration.DeviceSubject)
+}
+
+// A device cannot exchange at another organization's endpoint, even with the
+// audience that endpoint expects.
+func TestDeviceAgentToken_DeviceAtAnotherOrganizationRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newDeviceAgentGrantFixture(t)
+	device := f.registerDevice(t)
+	other := seedOtherOrganization(t, f)
+	requireWorkloadGrantRefused(t, f.exchangeDeviceAgentAt(t, other, device.assertion(t, deviceagenttoken.TokenURL(f.ti.serverURL.String(), other))))
+}
+
+// A platform subject admitted in one organization is refused at another
+// organization's endpoint, which has not admitted it.
+func TestDeviceAgentToken_PlatformWorkloadAtAnotherOrganizationRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newDeviceAgentGrantFixture(t)
+	other := seedOtherOrganization(t, f)
+	requireWorkloadGrantRefused(t, f.exchangeDeviceAgentAt(t, other, f.assertion(t, deviceagenttoken.TokenURL(f.ti.serverURL.String(), other))))
+}
+
+// An organization that does not exist reads like any other refusal.
+func TestDeviceAgentToken_UnknownOrganizationRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newDeviceAgentGrantFixture(t)
+	unknown := "org-" + uuid.NewString()
+	requireWorkloadGrantRefused(t, f.exchangeDeviceAgentAt(t, unknown, f.assertion(t, deviceagenttoken.TokenURL(f.ti.serverURL.String(), unknown))))
+}
+
+// An assertion addressed to another endpoint, this organization's MCP
+// authorization server or another organization's device-agent endpoint, is
+// refused.
 func TestDeviceAgentToken_WrongAudienceRefused(t *testing.T) {
 	t.Parallel()
 
 	f := newDeviceAgentGrantFixture(t)
-	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.deviceAssertion(t, f.subject, f.advertisedIssuer)))
+	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.assertion(t, f.advertisedIssuer)))
+	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.assertion(t, deviceagenttoken.TokenURL(f.ti.serverURL.String(), "org-elsewhere"))))
 }
 
 // A subject the organization has not admitted is refused.
@@ -134,7 +249,8 @@ func TestDeviceAgentToken_UnadmittedSubjectRefused(t *testing.T) {
 	t.Parallel()
 
 	f := newDeviceAgentGrantFixture(t)
-	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.deviceAssertion(t, "device:"+uuid.NewString(), f.tokenURL)))
+	f.subject = "repo:acme/unadmitted:ref:refs/heads/main"
+	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL)))
 }
 
 // The same assertion cannot be exchanged twice.
@@ -142,38 +258,29 @@ func TestDeviceAgentToken_ReplayRefused(t *testing.T) {
 	t.Parallel()
 
 	f := newDeviceAgentGrantFixture(t)
-	assertion := f.deviceAssertion(t, f.subject, f.tokenURL)
+	assertion := f.assertion(t, f.tokenURL)
 	require.Equal(t, http.StatusOK, f.exchangeDeviceAgent(t, assertion).Code)
 	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, assertion))
 }
 
-// A device whose assignment is withdrawn is refused on its next exchange.
+// A workload whose assignment is withdrawn is refused on its next exchange.
 func TestDeviceAgentToken_WithdrawnAssignmentRefused(t *testing.T) {
 	t.Parallel()
 
 	f := newDeviceAgentGrantFixture(t)
-	require.Equal(t, http.StatusOK, f.exchangeDeviceAgent(t, f.deviceAssertion(t, f.subject, f.tokenURL)).Code)
+	require.Equal(t, http.StatusOK, f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL)).Code)
 
 	unassignWorkloadAgent(t, t.Context(), f.ti, f.assignmentID)
-	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.deviceAssertion(t, f.subject, f.tokenURL)))
+	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL)))
 }
 
-// A device whose agent is suspended is refused.
+// A workload whose agent is suspended is refused.
 func TestDeviceAgentToken_SuspendedAgentRefused(t *testing.T) {
 	t.Parallel()
 
 	f := newDeviceAgentGrantFixture(t)
 	_, err := agentsrepo.New(f.ti.conn).SuspendAgent(t.Context(), agentsrepo.SuspendAgentParams{OrganizationID: f.fx.orgID, ID: f.agentID})
 	require.NoError(t, err)
-	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.deviceAssertion(t, f.subject, f.tokenURL)))
-}
-
-// A platform issuer's URL names no organization, so its assertions are
-// refused here even when the subject is admitted and assigned.
-func TestDeviceAgentToken_PlatformIssuerRefused(t *testing.T) {
-	t.Parallel()
-
-	f := newDeviceAgentGrantFixture(t)
 	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL)))
 }
 
@@ -184,7 +291,7 @@ func TestDeviceAgentToken_OtherGrantTypeRefused(t *testing.T) {
 	f := newDeviceAgentGrantFixture(t)
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, deviceagenttoken.TokenPath, strings.NewReader(form.Encode()))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, deviceagenttoken.TokenPath(f.fx.orgID), strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	require.NoError(t, f.ti.service.HandleDeviceAgentToken(w, req))
@@ -192,4 +299,27 @@ func TestDeviceAgentToken_OtherGrantTypeRefused(t *testing.T) {
 	var body map[string]string
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.Equal(t, "unsupported_grant_type", body["error"])
+}
+
+// seedOtherOrganization creates a second organization with the agent rollout
+// enabled, so a refusal there is down to tenancy rather than the rollout.
+func seedOtherOrganization(t *testing.T, f deviceAgentGrantFixture) string {
+	t.Helper()
+
+	id := "org-" + uuid.NewString()
+	require.NoError(t, testrepo.New(f.ti.conn).CreateOrganizationMetadataFixture(t.Context(), testrepo.CreateOrganizationMetadataFixtureParams{
+		ID:                 id,
+		Name:               "Other organization",
+		Slug:               "other-" + uuid.NewString()[:8],
+		GramAccountType:    "enterprise",
+		WorkosID:           pgtype.Text{},
+		Whitelisted:        false,
+		FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+		FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		DisabledAt:         pgtype.Timestamptz{},
+		CreatedAt:          pgtype.Timestamptz{},
+	}))
+	f.ti.features.SetFlag(feature.FlagAgentManagement, id, true)
+	f.ti.features.SetFlag(feature.FlagAgentIdentityCredentials, id, true)
+	return id
 }

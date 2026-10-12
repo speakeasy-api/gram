@@ -50,9 +50,18 @@ const (
 	// on the same cadence.
 	Lifetime = 15 * time.Minute
 
-	// TokenPath is the device-agent token endpoint, relative to the server
-	// URL. An assertion exchanged there must name this URL as its audience.
-	TokenPath = "/oauth/workload/device-agent/token" //nolint:gosec // G101: an endpoint path, not a credential
+	// TokenPathPattern is the route of the device-agent token endpoint,
+	// relative to the server URL. Each organization has its own, so the tenant
+	// comes from the path rather than from an assertion's issuer: a platform
+	// issuer's URL names no organization.
+	TokenPathPattern = tokenPathPrefix + "{" + TokenPathOrganizationParam + "}" + tokenPathSuffix
+
+	// TokenPathOrganizationParam names the route segment holding the
+	// organization ID.
+	TokenPathOrganizationParam = "organization_id"
+
+	tokenPathPrefix = "/oauth/workload/device-agent/" //nolint:gosec // G101: an endpoint path, not a credential
+	tokenPathSuffix = "/token"
 )
 
 var (
@@ -86,9 +95,16 @@ func New(signer *mcpauthz.Issuer, db *pgxpool.Pool) *Issuer {
 	return &Issuer{signer: signer, db: db}
 }
 
-// TokenURL is the absolute device-agent token endpoint on serverURL.
-func TokenURL(serverURL string) string {
-	return strings.TrimSuffix(serverURL, "/") + TokenPath
+// TokenPath is organizationID's device-agent token endpoint, relative to the
+// server URL.
+func TokenPath(organizationID string) string {
+	return tokenPathPrefix + organizationID + tokenPathSuffix
+}
+
+// TokenURL is organizationID's absolute device-agent token endpoint on
+// serverURL. An assertion exchanged there must name this URL as its audience.
+func TokenURL(serverURL, organizationID string) string {
+	return strings.TrimSuffix(serverURL, "/") + TokenPath(organizationID)
 }
 
 // Ceiling is the immutable policy every device-agent token acts under in

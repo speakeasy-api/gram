@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -37,12 +38,17 @@ const workloadGrantJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 // workload issuer at the organization tier, an admitted subject, and an agent
 // assigned to it that may connect to the server.
 type workloadGrantFixture struct {
+	// ctx is authenticated as the organization member who owns the agent.
+	ctx      context.Context //nolint:containedctx // immutable request authentication fixture
 	ti       *testInstance
 	fx       agentConsentFixture
 	issuer   *devidptest.Instance
 	issuerID uuid.UUID
 	agentID  uuid.UUID
 	subject  string
+
+	// assignmentID is the subject's agent assignment.
+	assignmentID uuid.UUID
 
 	// resource is the server's canonical URL on the MCP host.
 	resource string
@@ -100,17 +106,19 @@ func newWorkloadGrantFixtureOn(t *testing.T, logger *slog.Logger, serverURL stri
 		WorkloadIssuerID: issuerID,
 		Subject:          subject,
 	}))
-	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, subject, agent.ID)
+	assignmentID := assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, subject, agent.ID)
 
 	slug := fx.toolset.McpSlug.String
 	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, slug)
 
 	return workloadGrantFixture{
+		ctx:              ctx,
 		ti:               ti,
 		fx:               fx,
 		issuer:           issuer,
 		issuerID:         issuerID,
 		agentID:          agent.ID,
+		assignmentID:     assignmentID,
 		subject:          subject,
 		resource:         strings.TrimSuffix(ti.serverURL.String(), "/") + "/mcp/" + slug,
 		advertisedIssuer: advertisedIssuer,

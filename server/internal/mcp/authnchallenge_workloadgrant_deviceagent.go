@@ -9,10 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
@@ -20,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
@@ -39,6 +43,16 @@ func deviceAgentAuthorizationServerID(organizationID string) uuid.UUID {
 	return uuid.NewSHA1(deviceAgentAuthorizationServerNamespace, []byte(organizationID))
 }
 
+// maxPathOrganizationIDLength bounds the organization ID a device-agent token
+// path may name before anything is looked up.
+const maxPathOrganizationIDLength = 128
+
+// validPathOrganizationID reports whether id can name an organization at all:
+// non-empty, bounded, and a single path segment.
+func validPathOrganizationID(id string) bool {
+	return id != "" && len(id) <= maxPathOrganizationIDLength && !strings.ContainsAny(id, "/?#%")
+}
+
 // deviceAgentTokenResponse is the RFC 6749 §5.1 success body.
 type deviceAgentTokenResponse struct {
 	// AccessToken is the device-agent token.
@@ -54,16 +68,17 @@ type deviceAgentTokenResponse struct {
 // HandleDeviceAgentToken exchanges a workload's identity assertion for a
 // device-agent token (RFC 7523 §2.1, clientless).
 //
-// One endpoint serves every organization, so the tenant comes from the
-// assertion's iss, which must be an organization's Speakeasy device issuer:
-// that URL names its organization, and the issuer row is then looked up in
-// that organization alone. A platform issuer's URL names no organization, and
-// one organization admitting another's platform subject must never decide
-// where that subject's assertions land, so such assertions are refused here.
+// Each organization has its own endpoint, and the tenant is the organization
+// its path names: the issuer and the admission are resolved in that
+// organization alone, and the assertion's audience must be that exact URL. A
+// platform issuer's URL names no organization, so taking the tenant from the
+// path is what lets one organization admit a platform subject without any
+// other organization deciding where its assertions land. A Speakeasy device
+// issuer does name its organization, and it must be the path's.
 //
 // Past that, the assertion is verified and its subject admitted exactly as at
-// an MCP token endpoint, with the audience this endpoint's URL, and the
-// workload must have a live assigned agent. Refusals all read the same on the
+// an MCP token endpoint, and the workload must have a live assigned agent.
+// Refusals, an unknown organization among them, all read the same on the
 // wire.
 func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -100,9 +115,25 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	}
 	presented.issuerURL = unverified.Issuer
 	presented.subject = unverified.Subject
-	organizationID, ok := workloadidentity.DeviceIssuerOrganization(serverURL, unverified.Issuer)
-	if !ok {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("issuer_not_device_issuer", errors.New("iss is not a Speakeasy device issuer")))
+
+	organizationID := chi.URLParam(r, deviceagenttoken.TokenPathOrganizationParam)
+	if !validPathOrganizationID(organizationID) {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("organization_unknown", errors.New("the path names no organization")))
+	}
+	// A device issuer names the organization its devices enrolled in; a
+	// device must not exchange at another organization's endpoint, even one
+	// that admitted the same subject string.
+	if issuerOrganization, isDeviceIssuer := workloadidentity.DeviceIssuerOrganization(serverURL, unverified.Issuer); isDeviceIssuer && issuerOrganization != organizationID {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("device_issuer_wrong_organization", errors.New("iss is another organization's device issuer")))
+	}
+	// Checked before the rollout so an organization that does not exist is
+	// refused like any other bad assertion, rather than surfacing as the
+	// lookup failure the rollout check would report.
+	if _, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("organization_unknown", err))
+		}
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("organization_unavailable", err))
 	}
 
 	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, organizationID, logger); refused {
@@ -114,7 +145,7 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 		ProjectID:           uuid.Nil,
 		UserSessionIssuerID: deviceAgentAuthorizationServerID(organizationID),
 	}
-	presented, err = admitWorkloadAssertion(ctx, s.workloadGrant, tenancy, []string{deviceagenttoken.TokenURL(serverURL)}, assertion)
+	presented, err = admitWorkloadAssertion(ctx, s.workloadGrant, tenancy, []string{deviceagenttoken.TokenURL(serverURL, organizationID)}, assertion)
 	if err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
