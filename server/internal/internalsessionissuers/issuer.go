@@ -130,7 +130,10 @@ type documentKey struct {
 }
 
 // cachedDocument is a rendered document; a nil body means no issuer.
-type cachedDocument struct{ body []byte }
+type cachedDocument struct {
+	body       []byte
+	renderedAt time.Time
+}
 
 func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error {
 	ctx := r.Context()
@@ -153,7 +156,7 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 			case err != nil:
 				return nil, err
 			}
-			document := cachedDocument{body: body}
+			document := cachedDocument{body: body, renderedAt: time.Now()}
 			h.cache.Add(key, document)
 			return document, nil
 		})
@@ -173,7 +176,10 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 	if keys {
 		contentType = "application/jwk-set+json"
 	}
-	return httpcache.WriteCacheableJSON(ctx, w, r, h.logger, contentType, int(CacheTTL/time.Second), cached.body)
+	// Time spent in this process's cache counts against the verifier's
+	// window, so a revoked key is never cached longer than CacheTTL in total.
+	maxAge := int((CacheTTL - time.Since(cached.renderedAt)) / time.Second)
+	return httpcache.WriteCacheableJSON(ctx, w, r, h.logger, contentType, max(maxAge, 0), cached.body)
 }
 
 // render builds a document. Metadata needs only the issuer; keys are read

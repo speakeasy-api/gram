@@ -3,6 +3,7 @@ package gram
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -70,10 +71,23 @@ func TestMCPMuxServesInternalSessionIssuerDiscoveryAndKeys(t *testing.T) {
 	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, issuer+"/jwks", nil))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.Equal(t, "application/jwk-set+json", response.Header().Get("Content-Type"))
+	var fresh int
+	_, err = fmt.Sscanf(response.Header().Get("Cache-Control"), "public, max-age=%d", &fresh)
+	require.NoError(t, err)
+	require.InDelta(t, 60, fresh, 1, "a freshly read document gets the window, rounded down")
+	etag := response.Header().Get("ETag")
+	require.NotEmpty(t, etag)
 	var published jose.JSONWebKeySet
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &published))
 	require.Len(t, published.Keys, 1)
 	require.True(t, published.Keys[0].IsPublic())
+	cached := httptest.NewRecorder()
+	mux.ServeHTTP(cached, httptest.NewRequest(http.MethodGet, issuer+"/jwks", nil))
+	require.Equal(t, etag, cached.Header().Get("ETag"), "a cached copy keeps its validator")
+	var maxAge int
+	_, err = fmt.Sscanf(cached.Header().Get("Cache-Control"), "public, max-age=%d", &maxAge)
+	require.NoError(t, err)
+	require.LessOrEqual(t, maxAge, 60, "time in the process cache never extends the verifier's window")
 
 	response = httptest.NewRecorder()
 	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "https://app.example.com/oauth/idp/org/org_"+uuid.NewString()+"/jwks", nil))
