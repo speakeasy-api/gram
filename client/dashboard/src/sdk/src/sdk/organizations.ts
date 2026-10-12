@@ -258,7 +258,7 @@ export class Organizations extends ClientSDK {
    * listUsers organizations
    *
    * @remarks
-   * List users in the active organization from Gram organization_user_relationships.
+   * List users in the active organization from Speakeasy organization_user_relationships.
    */
   async listUsers(
     request?: ListOrganizationUsersRequest | undefined,
@@ -277,7 +277,7 @@ export class Organizations extends ClientSDK {
    * removeUser organizations
    *
    * @remarks
-   * Remove a user from the active organization in Gram and delete their WorkOS organization membership.
+   * Remove a user from the active organization in Speakeasy and delete their WorkOS organization membership.
    */
   async removeUser(
     request: RemoveOrganizationUserRequest,
@@ -410,7 +410,7 @@ export class Organizations extends ClientSDK {
    * verifyOnboardingHooksSetup organizations
    *
    * @remarks
-   * Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.
+   * Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Speakeasy. Polled from the confirm-traffic step.
    */
   async verifyOnboardingHooksSetup(
     request?: VerifyOnboardingHooksSetupRequest | undefined,

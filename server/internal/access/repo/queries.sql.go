@@ -297,6 +297,70 @@ func (q *Queries) FindMCPResourceProject(ctx context.Context, arg FindMCPResourc
 	return project_id, err
 }
 
+const findMCPResourceVisibility = `-- name: FindMCPResourceVisibility :one
+SELECT resource_type, visibility FROM (
+  SELECT
+    'toolset'::text AS resource_type,
+    (CASE
+      WHEN NOT toolsets.mcp_enabled THEN 'disabled'
+      WHEN toolsets.mcp_is_public THEN 'public'
+      ELSE 'private'
+    END)::text AS visibility,
+    2 AS source_rank
+  FROM toolsets
+  JOIN projects ON projects.id = toolsets.project_id
+  WHERE projects.organization_id = $1
+    AND toolsets.id = $2::uuid
+    AND toolsets.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT 'mcp_server'::text AS resource_type, mcp_servers.visibility::text AS visibility, 1 AS source_rank
+  FROM mcp_servers
+  JOIN projects ON projects.id = mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND mcp_servers.id = $2::uuid
+    AND mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+  UNION ALL
+  SELECT 'gateway'::text AS resource_type, meta_mcp_servers.visibility::text AS visibility, 0 AS source_rank
+  FROM meta_mcp_servers
+  JOIN projects ON projects.id = meta_mcp_servers.project_id
+  WHERE projects.organization_id = $1
+    AND meta_mcp_servers.id = $2::uuid
+    AND meta_mcp_servers.deleted IS FALSE
+    AND projects.deleted IS FALSE
+) AS owning
+ORDER BY (visibility = 'disabled') DESC, source_rank
+LIMIT 1
+`
+
+type FindMCPResourceVisibilityParams struct {
+	OrganizationID string
+	ResourceID     uuid.UUID
+}
+
+type FindMCPResourceVisibilityRow struct {
+	ResourceType string
+	Visibility   string
+}
+
+// Resolves who may connect to one MCP resource without an access rule, as the
+// same three-valued visibility mcp_servers stores: 'public' endpoints skip the
+// connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
+// A gateway toolset is public when its MCP endpoint is, and serves nobody
+// while its MCP endpoint is switched off. A hosted wrapper can share its
+// toolset's id; when either row serves nobody, nobody can connect, so
+// 'disabled' wins, and otherwise the wrapper's own visibility does. A gateway
+// (meta server) is reported as such: it has no connect check of its own, each
+// member server is checked instead. Resources are found by the same
+// identifiers and tenancy rules as FindMCPResourceProject.
+func (q *Queries) FindMCPResourceVisibility(ctx context.Context, arg FindMCPResourceVisibilityParams) (FindMCPResourceVisibilityRow, error) {
+	row := q.db.QueryRow(ctx, findMCPResourceVisibility, arg.OrganizationID, arg.ResourceID)
+	var i FindMCPResourceVisibilityRow
+	err := row.Scan(&i.ResourceType, &i.Visibility)
+	return i, err
+}
+
 const getActiveDirectoryGroupName = `-- name: GetActiveDirectoryGroupName :one
 SELECT name
 FROM directory_groups
@@ -2447,6 +2511,102 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 			return nil, err
 		}
 		items = append(items, challenge_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserDirectoryRoleMappingSources = `-- name: ListUserDirectoryRoleMappingSources :many
+WITH member AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  WHERE u.id = $2::text
+),
+profile AS (
+  SELECT d.id, d.attributes
+  FROM directory_users AS d
+  CROSS JOIN member
+  WHERE d.organization_id = $1
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = member.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(member.email)))
+  ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+)
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value
+FROM directory_role_mappings AS drm
+CROSS JOIN profile
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+  AND (
+    (
+      drm.source_kind = 'group'
+      AND dg.id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM directory_user_group_memberships AS m
+        WHERE m.directory_user_id = profile.id
+          AND m.directory_group_id = drm.directory_group_id
+          AND m.deleted IS FALSE
+      )
+    )
+    OR (
+      drm.source_kind = 'attribute'
+      AND profile.attributes ->> drm.attribute_key = drm.attribute_value
+    )
+  )
+ORDER BY drm.role_urn, drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id
+`
+
+type ListUserDirectoryRoleMappingSourcesParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+type ListUserDirectoryRoleMappingSourcesRow struct {
+	RoleUrn            string
+	SourceKind         string
+	DirectoryGroupName pgtype.Text
+	AttributeKey       pgtype.Text
+	AttributeValue     pgtype.Text
+}
+
+// The directory role mappings that currently give a member each of their
+// mapped roles: one row per matching mapping, so a role reached through two
+// groups is listed twice. The profile and matching rules are the same as the
+// mapped half of ListUserRolePrincipals, which decides the roles themselves;
+// this read only says where they came from.
+func (q *Queries) ListUserDirectoryRoleMappingSources(ctx context.Context, arg ListUserDirectoryRoleMappingSourcesParams) ([]ListUserDirectoryRoleMappingSourcesRow, error) {
+	rows, err := q.db.Query(ctx, listUserDirectoryRoleMappingSources, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserDirectoryRoleMappingSourcesRow
+	for rows.Next() {
+		var i ListUserDirectoryRoleMappingSourcesRow
+		if err := rows.Scan(
+			&i.RoleUrn,
+			&i.SourceKind,
+			&i.DirectoryGroupName,
+			&i.AttributeKey,
+			&i.AttributeValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

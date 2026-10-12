@@ -28,13 +28,9 @@ import (
 func TestProcessRoleDistributionSetup_CreatesRoleOnlyPlugin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestPluginsService(t)
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
 	role := createTestRolePrincipal(t, ctx, ti, "Sales Team")
-	err := pluginsrepo.New(ti.conn).EnableRoleSetupFeatureFixture(ctx, ac.ActiveOrganizationID)
-	require.NoError(t, err)
 
-	err = processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{})
+	err := processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{})
 	require.NoError(t, err)
 	list, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
 	require.NoError(t, err)
@@ -72,11 +68,7 @@ func TestProcessRoleDistributionSetup_CreatesRoleOnlyPlugin(t *testing.T) {
 // use the public worker and plugin readback seams.
 func roleSetupFixture(t *testing.T, ctx context.Context, ti *testInstance, name string) string {
 	t.Helper()
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
 	role := createTestRolePrincipal(t, ctx, ti, name)
-	err := pluginsrepo.New(ti.conn).EnableRoleSetupFeatureFixture(ctx, ac.ActiveOrganizationID)
-	require.NoError(t, err)
 	return role
 }
 
@@ -178,9 +170,9 @@ func TestProcessRoleDistributionSetup_InvalidNormalizedSlugDoesNotFallback(t *te
 	}
 }
 
-func TestProcessRoleDistributionSetup_GatingAndInactiveRoles(t *testing.T) {
+func TestProcessRoleDistributionSetup_InactiveRolesAndOrganizations(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"off", "deleted", "workos-deleted", "foreign-org", "invalid-urn", "no-project", "disabled-org"} {
+	for _, mode := range []string{"deleted", "workos-deleted", "foreign-org", "invalid-urn", "no-project", "disabled-org"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestPluginsService(t)
@@ -192,8 +184,6 @@ func TestProcessRoleDistributionSetup_GatingAndInactiveRoles(t *testing.T) {
 			switch mode {
 			case "disabled-org":
 				err = pluginsrepo.New(ti.conn).DisableRoleSetupOrganizationFixture(ctx, ac.ActiveOrganizationID)
-			case "off":
-				err = pluginsrepo.New(ti.conn).DisableRoleSetupFeatureFixture(ctx, ac.ActiveOrganizationID)
 			case "deleted":
 				err = pluginsrepo.New(ti.conn).DeleteRoleSetupRoleFixture(ctx, pluginsrepo.DeleteRoleSetupRoleFixtureParams{RoleUrn: role, OrganizationID: ac.ActiveOrganizationID})
 			case "workos-deleted":
@@ -209,11 +199,7 @@ func TestProcessRoleDistributionSetup_GatingAndInactiveRoles(t *testing.T) {
 			}
 			require.NoError(t, err)
 			err = processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true})
-			if mode == "no-project" {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
+			require.NoError(t, err)
 
 			if mode == "no-project" {
 				err = pluginsrepo.New(ti.conn).RestoreRoleSetupProjectFixture(ctx, *ac.ProjectID)
@@ -223,11 +209,6 @@ func TestProcessRoleDistributionSetup_GatingAndInactiveRoles(t *testing.T) {
 			require.NoError(t, err)
 			for _, p := range list.Plugins {
 				require.NotEqual(t, "Engineering", p.Name)
-			}
-			if mode == "off" {
-				err = pluginsrepo.New(ti.conn).RestoreRoleSetupFeatureFixture(ctx, ac.ActiveOrganizationID)
-				require.NoError(t, err)
-				require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
 			}
 		})
 	}
@@ -350,13 +331,9 @@ func TestProcessRoleDistributionSetup_PublicationFailureRollsBack(t *testing.T) 
 func TestProcessRoleDistributionSetup_GlobalRole(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestPluginsService(t)
-	ac, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	err := pluginsrepo.New(ti.conn).EnableRoleSetupFeatureFixture(ctx, ac.ActiveOrganizationID)
-	require.NoError(t, err)
 	id := uuid.New()
 	role := "role:global:" + id.String()
-	err = pluginsrepo.New(ti.conn).CreateRoleSetupGlobalRoleFixture(ctx, id)
+	err := pluginsrepo.New(ti.conn).CreateRoleSetupGlobalRoleFixture(ctx, id)
 	require.NoError(t, err)
 	require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{Enabled: true}))
 	list, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
@@ -374,7 +351,7 @@ func TestProcessRoleDistributionSetup_GlobalRole(t *testing.T) {
 	require.Equal(t, "role:global:"+id.String(), got.Assignments[0].PrincipalUrn)
 }
 
-func TestProcessRoleDistributionSetup_DisableWhileInFlight(t *testing.T) {
+func TestProcessRoleDistributionSetup_DisableOrganizationWhileInFlight(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestPluginsService(t)
 	role := roleSetupFixture(t, ctx, ti, "Engineering")
@@ -382,8 +359,8 @@ func TestProcessRoleDistributionSetup_DisableWhileInFlight(t *testing.T) {
 	require.True(t, ok)
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	// The processor must wait for the disabling transaction, then recheck
-	// the feature after its update lock is released.
-	err := pluginsrepo.New(tx).DisableRoleSetupFeatureFixture(ctx, ac.ActiveOrganizationID)
+	// the organization after its update lock is released.
+	err := pluginsrepo.New(tx).DisableRoleSetupOrganizationFixture(ctx, ac.ActiveOrganizationID)
 	require.NoError(t, err)
 	finished := make(chan error, 1)
 
@@ -493,8 +470,6 @@ func TestProcessRoleDistributionSetup_ConcurrentOrganizationAndGlobalRole(t *tes
 				scopedCtx = withauthzGrants(t, scopedCtx, ti.conn, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, organizationID)}, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, organizationID)})
 				require.NoError(t, roledistribution.ProcessGlobalFanout(ctx, ti.conn, globalRole.ID, ""))
 				require.NoError(t, roledistribution.ProcessOrganizationBootstrap(ctx, ti.conn, organizationID, ""))
-				err = pluginsrepo.New(ti.conn).EnableRoleSetupFeatureFixture(ctx, organizationID)
-				require.NoError(t, err)
 				require.NoError(t, processDirectRoleSetup(scopedCtx, ti, "role:global:"+globalRole.ID.String(), plugins.PublicationRequests{Enabled: true}))
 				list, err := ti.service.ListPlugins(scopedCtx, &gen.ListPluginsPayload{})
 				require.NoError(t, err)

@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/HoverCard";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { MultiSelect } from "@/components/ui/MultiSelect";
 import {
   Popover,
   PopoverContent,
@@ -52,8 +51,9 @@ import {
   X,
 } from "lucide-react";
 import type * as React from "react";
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 import { Link } from "react-router";
+import { ScopeMultiSelect } from "./ScopeMultiSelect";
 import type {
   ClientOption,
   ProviderGroup,
@@ -701,9 +701,6 @@ function RegistrationMethodField({
   );
 }
 
-// Enough that a typical selection shows whole before it collapses to a count.
-const SCOPE_BADGE_LIMIT = 8;
-
 /** The scopes a manual client requests: advertised ones to pick, or typed. */
 function ScopeField({
   draft,
@@ -716,36 +713,19 @@ function ScopeField({
 }): JSX.Element {
   const id = useId();
   const labelId = `${id}-label`;
-  // Typed scopes join the list so the menu shows every selection.
-  const options = useMemo(
-    () =>
-      [...new Set([...draft.scopeOptions, ...draft.scopes])].map((scope) => ({
-        label: scope,
-        value: scope,
-      })),
-    [draft.scopeOptions, draft.scopes],
-  );
   return (
     <>
       <Label id={labelId} htmlFor={id} className="block leading-normal">
         Scope
       </Label>
-      <MultiSelect
+      <ScopeMultiSelect
         id={id}
-        // The trigger's built-in aria-label would otherwise hide the label.
-        aria-labelledby={labelId}
-        options={options}
+        labelId={labelId}
+        options={draft.scopeOptions}
         value={draft.scopes}
         onValueChange={draft.setScopes}
         placeholder="Default scopes"
-        emptyIndicator="Type a scope to add it."
-        // Scopes are case-sensitive, so the badge must not uppercase them.
-        badgeClassName="normal-case tracking-normal"
-        maxCount={SCOPE_BADGE_LIMIT}
         disabled={disabled}
-        creatable
-        caseSensitiveCreate
-        hideSelectAll
       />
       <Text muted small className="block">
         Choose from the scopes this server and {providerName} advertise, or type

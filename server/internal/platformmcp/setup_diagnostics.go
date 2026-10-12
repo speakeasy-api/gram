@@ -94,17 +94,45 @@ func sanitizedSetupFailure(err error) error {
 	return setupFailure(category, ErrDirectRemoteUnavailable)
 }
 
+// setupCategoryFromInspection classifies a direct remote inspection. A provider
+// offering either automatic client registration path (dynamic client
+// registration or a Client ID Metadata Document) only needs the user to sign
+// in; one advertising OAuth with neither needs a client set up by hand.
 func setupCategoryFromInspection(inspection DirectRemoteInspection) SetupCategory {
 	if inspection.Authentication != "authentication_required" {
 		return ""
 	}
 	switch inspection.OAuthDiscovery {
-	case "available_dcr":
+	case oauthDiscoveryAvailableDCR, oauthDiscoveryAvailableCIMD:
 		return SetupCategoryAuthenticationRequired
-	case "available":
+	case oauthDiscoveryAvailable:
 		return SetupCategoryDynamicRegistrationUnsupported
 	default:
 		return SetupCategoryOAuthMetadataIncomplete
+	}
+}
+
+// Automatic client registration paths reported by inspect_mcp_candidate.
+const (
+	AutomaticClientRegistrationDCR  = "dynamic_client_registration"
+	AutomaticClientRegistrationCIMD = "client_id_metadata_document"
+	AutomaticClientRegistrationNone = "none"
+)
+
+// automaticClientRegistrationFromInspection names how the AI Control Plane can
+// obtain an OAuth client for an endpoint that requires sign-in, so an agent can
+// describe the path accurately. It is empty when no sign-in is required.
+func automaticClientRegistrationFromInspection(inspection DirectRemoteInspection) string {
+	if inspection.Authentication != "authentication_required" {
+		return ""
+	}
+	switch inspection.OAuthDiscovery {
+	case oauthDiscoveryAvailableDCR:
+		return AutomaticClientRegistrationDCR
+	case oauthDiscoveryAvailableCIMD:
+		return AutomaticClientRegistrationCIMD
+	default:
+		return AutomaticClientRegistrationNone
 	}
 }
 

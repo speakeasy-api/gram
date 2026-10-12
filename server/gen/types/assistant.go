@@ -15,6 +15,12 @@ type Assistant struct {
 	ProjectID string
 	// The ID of the user who created the assistant, if known.
 	CreatedByUserID *string
+	// NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its
+	// dedicated agent is usable, and UNAVAILABLE when that agent is suspended,
+	// revoked, or deleted. This is configuration state, not permission to execute.
+	IdentityState *string
+	// The assistant's dedicated agent ID, when it has one.
+	AgentID *string
 	// The assistant name.
 	Name string
 	// The model identifier used by the assistant.

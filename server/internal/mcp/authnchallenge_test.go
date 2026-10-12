@@ -1869,7 +1869,7 @@ func TestServeConsentMCP_LocalToolsetNegotiatesProtocolVersion(t *testing.T) {
 
 		serverInfo, ok := result["serverInfo"].(map[string]any)
 		require.True(t, ok, test.name)
-		require.Equal(t, "Gram", serverInfo["name"], test.name)
+		require.Equal(t, "Speakeasy", serverInfo["name"], test.name)
 		require.Equal(t, "0.0.0", serverInfo["version"], test.name)
 		meta, ok := result["_meta"].(map[string]any)
 		require.True(t, ok, test.name)
@@ -1918,7 +1918,7 @@ func TestServeConsentMCP_LocalToolsetEmitsResultFields(t *testing.T) {
 	require.True(t, ok)
 	serverInfo, ok := meta["io.modelcontextprotocol/serverInfo"].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "Gram", serverInfo["name"])
+	require.Equal(t, "Speakeasy", serverInfo["name"])
 	require.Equal(t, "0.0.0", serverInfo["version"])
 }
 

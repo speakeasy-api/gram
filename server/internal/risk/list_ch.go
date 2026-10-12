@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
+// MaxExecutionIDLen bounds an execution_id filter. Execution IDs are UUIDs;
+// the slack only rejects obviously bogus input.
+const MaxExecutionIDLen = 128
+
+// ParseExecutionIDFilter canonicalizes an execution_id filter, "" meaning
+// none. A blank or over-long value is invalid rather than dropped, since
+// dropping it would list every finding.
+func ParseExecutionIDFilter(raw string) (string, bool) {
+	id := CanonicalExecutionID(raw)
+	if (raw != "" && id == "") || len(id) > MaxExecutionIDLen {
+		return "", false
+	}
+	return id, true
+}
+
+// CanonicalExecutionID trims an execution_id filter and lowercases it when it
+// is a UUID, the form findings store, since the filter is an exact match.
+func CanonicalExecutionID(id string) string {
+	id = strings.TrimSpace(id)
+	if parsed, err := uuid.Parse(id); err == nil {
+		return parsed.String()
+	}
+	return id
+}
+
 // listResultsByProjectFromClickHouse serves the project-wide (non-chat-scoped)
 // ListRiskResults page from the ClickHouse risk_findings table, the only store
 // holding MCP-seam findings. Rows come back pre-redacted (the store never
@@ -33,6 +59,8 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	pageSize int,
 	policyID uuid.NullUUID,
 	mcpServerID, chatID string,
+	resultID uuid.NullUUID,
+	executionID string,
 	category, ruleID, userID string,
 	externalUserIDs []string,
 	uniqueMatch, nonAssistant bool,
@@ -54,6 +82,8 @@ func (s *Service) listResultsByProjectFromClickHouse(
 		ProjectID:       projectID.String(),
 		MCPServerID:     mcpServerID,
 		ChatID:          chatID,
+		ResultID:        resultID,
+		ExecutionID:     executionID,
 		PolicyIDs:       policyIDs,
 		From:            from,
 		To:              to,

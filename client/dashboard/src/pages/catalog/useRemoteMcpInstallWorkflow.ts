@@ -185,7 +185,7 @@ export interface GuardrailsPhase extends WorkflowBase {
     update: (state: ServerGuardrailState) => ServerGuardrailState,
   ) => void;
   /** The servers the guardrail will cover. Unproxied servers are left out:
-   *  their traffic never passes through Gram. */
+   *  their traffic never passes through Speakeasy. */
   servers: GuardrailServerSummary[];
   /** Install and create the guardrail, scoped to every server that installs. */
   installWithGuardrail: () => Promise<void>;
@@ -193,7 +193,7 @@ export interface GuardrailsPhase extends WorkflowBase {
   skip: () => Promise<void>;
   /**
    * Install without a guardrail and resolve to the ids of the installed
-   * servers Gram proxies, so the caller can open the full policy editor
+   * servers Speakeasy proxies, so the caller can open the full policy editor
    * scoped to them.
    */
   installForCustomizing: () => Promise<string[]>;
@@ -333,11 +333,11 @@ async function persistServerIconBestEffort(
 }
 
 /**
- * Installs one target as an unproxied MCP server instead of a Gram-proxied
+ * Installs one target as an unproxied MCP server instead of a Speakeasy-proxied
  * remote one: creates the unproxied_mcp_servers row, links an mcp_servers
  * wrapper (rolling back the former on failure, mirroring installTarget's own
  * remote-server path), and returns the same shape installTarget does. There
- * is no OAuth to auto-configure and no Gram endpoint to pre-stage — the
+ * is no OAuth to auto-configure and no Speakeasy endpoint to pre-stage — the
  * customer connects straight to the vendor.
  */
 async function installUnproxiedTarget(
@@ -370,8 +370,8 @@ async function installUnproxiedTarget(
         createMcpServerForm: {
           name: target.name,
           unproxiedMcpServerId: unproxiedMcpServer.id,
-          // Unproxied servers have no Gram-hosted endpoint, so
-          // disabled/private/public gates nothing Gram actually serves.
+          // Unproxied servers have no Speakeasy-hosted endpoint, so
+          // disabled/private/public gates nothing Speakeasy actually serves.
           visibility: "public",
         },
       },
@@ -923,7 +923,7 @@ export function useRemoteMcpInstallWorkflow({
           iconPersistences.push(result.iconPersistence);
           anyAuthConfigured ||= result.authConfigured;
           anyUnproxiedInstalled ||= isFigmaCatalogServer(target.server);
-          // Unproxied servers never pass through Gram, so there is no traffic
+          // Unproxied servers never pass through Speakeasy, so there is no traffic
           // for a guardrail to inspect.
           if (!isFigmaCatalogServer(target.server)) {
             installedServerIds.push(result.mcpServer.id);
@@ -1000,7 +1000,7 @@ export function useRemoteMcpInstallWorkflow({
             status: "failed",
             name,
             error:
-              "No server that Gram proxies was added, so there was nothing to scope it to.",
+              "No server that Speakeasy proxies was added, so there was nothing to scope it to.",
           });
         } else {
           try {

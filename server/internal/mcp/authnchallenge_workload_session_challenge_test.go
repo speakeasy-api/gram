@@ -225,7 +225,7 @@ func TestServePublic_ExpiredHumanSessionChallengeIsUnchanged(t *testing.T) {
 	)
 }
 
-// A token Gram did not sign names nobody, so it cannot claim the workload
+// A token Speakeasy did not sign names nobody, so it cannot claim the workload
 // challenge by asserting a workload subject.
 func requireBareChallenge(t *testing.T, ti *testInstance, slug string, w *httptest.ResponseRecorder) {
 	t.Helper()

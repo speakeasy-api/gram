@@ -18,11 +18,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/claudetag"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
@@ -137,7 +139,7 @@ func (s *Service) IngestAuthenticatedDetailed(ctx context.Context, authCtx *cont
 }
 
 // Ingest is the feature-first hook endpoint; this path only accepts the
-// canonical Gram contract. Auth is optional so hook senders stay non-blocking
+// canonical Speakeasy contract. Auth is optional so hook senders stay non-blocking
 // for machines that never signed in: a keyless request is acknowledged without
 // processing (there is nothing to attribute it to), while a presented key that
 // fails validation is a hard 401 — the sender explicitly tried to
@@ -272,7 +274,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// skipping retries would leave a session whose first delivery claimed the
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
-	// including Gram-hosted targets, with no path to recover.
+	// including Speakeasy-hosted targets, with no path to recover.
 	s.cacheCanonicalMCPList(
 		context.WithoutCancel(ctx),
 		canonicalSessionID(payload),
@@ -488,7 +490,7 @@ func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.Ingest
 		Email:  selfReported,
 	}
 	if actor.UserID == "" {
-		// A self-reported email that matches no Gram user cannot key
+		// A self-reported email that matches no Speakeasy user cannot key
 		// user-scoped policies; recover a complete identity instead of
 		// running unattributed. For shared plugin keys the session metadata
 		// cache may already link this session to a user (an earlier canonical
@@ -820,8 +822,8 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 	evidence := canonicalShadowMCPEvidence(payload, rawToolName)
 	// A Codex meta-tool names its target in tool_input.server, so nothing above
 	// can derive an identity from the tool name. Resolving that name against the
-	// session's inventory is what lets a Gram-hosted target be allowed at all —
-	// without a URL the guard can only reach its generic "not Gram-hosted" deny,
+	// session's inventory is what lets a Speakeasy-hosted target be allowed at all —
+	// without a URL the guard can only reach its generic "not Speakeasy-hosted" deny,
 	// which would block legitimate reads the legacy endpoint permits. A name we
 	// cannot resolve still denies: unproven is not absent.
 	if evidence.ServerIdentity == "" && evidence.FullURL == "" {
@@ -982,7 +984,7 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 //
 // Absent also covers every relay released before the flag existed. Those send
 // no inventory at all, and enforcing on them would deny every meta-tool call
-// including reads of Gram-hosted servers that work today — so they keep their
+// including reads of Speakeasy-hosted servers that work today — so they keep their
 // current behavior until they upgrade, rather than enforcement depending on a
 // server deploy and a hooks release landing in the right order.
 func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payload *gen.IngestPayload) bool {
@@ -1044,7 +1046,7 @@ func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPa
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.
 	metadata := s.canonicalSessionMetadata(ctx, payload, authCtx, actor)
-	if _, tag := claudeTagTitle(canonicalPromptText(payload)); tag && claudeServiceNameSpecificity(metadata.ServiceName) > 0 {
+	if claudeServiceNameSpecificity(metadata.ServiceName) > 0 && claudetag.Parse(canonicalPromptText(payload)).Detected {
 		metadata.ServiceName = "claude-tag"
 	}
 	// Resolve the product surface once per event: the OTEL-cached service.name
@@ -1400,6 +1402,15 @@ func hookTelemetryBaseAttrs(payload *gen.IngestPayload, authCtx *contextvalues.A
 }
 
 func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.AuthContext, metadata *SessionMetadata, timestamp time.Time, toolName string, attrs map[attr.Key]any) {
+	// Device details the speakeasy-hooks binary reported, so rows can be
+	// counted per client version. A spool replay's headers describe the binary
+	// draining the spool, which after an upgrade is not the one that captured
+	// the event, so replayed rows stay unstamped rather than miscounted.
+	if replayed, _ := attrs[attr.HookReplayedKey].(bool); !replayed {
+		for key, value := range middleware.HookDeviceAttributes(ctx) {
+			attrs[key] = value
+		}
+	}
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
 		Timestamp: timestamp,
 		ToolInfo: telemetry.ToolInfo{
@@ -1425,7 +1436,7 @@ func (s *Service) logHookTelemetry(ctx context.Context, authCtx *contextvalues.A
 // a fixed canonical fallback for senders that omit one, so unified-ingest rows
 // keep counting without a ClickHouse migration.
 func telemetryHookEventName(payload *gen.IngestPayload) string {
-	// Skill activations are a Gram-specific classification layered onto an
+	// Skill activations are a Speakeasy-specific classification layered onto an
 	// ordinary provider tool event; resolving via the raw name would erase it.
 	if isExplicitSkillActivation(payload) {
 		return eventTypeSkillActivated
@@ -2227,6 +2238,12 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 	if claudeServiceNameSpecificity(source) > 0 {
 		if tagTitle, ok := claudeTagTitle(title); ok {
 			title = tagTitle
+		} else if delivery := claudetag.Parse(title); delivery.Detected {
+			if delivery.Sender != "" {
+				title = delivery.Text
+			} else {
+				title = "Claude Tag coordination"
+			}
 		}
 	}
 	return chat.DerivedTitle(title)
@@ -2281,7 +2298,7 @@ func canonicalMCPInventoryEntries(payload *gen.IngestPayload) []MCPServerEntry {
 		// configured name, and the prefix is the only thing the cached-entry
 		// fallback matches on. Leaving it empty makes a hyphenated server
 		// ("platform-logs", addressed as "platform_logs") unresolvable here
-		// while the legacy endpoint resolves it — a Gram-hosted target would
+		// while the legacy endpoint resolves it — a Speakeasy-hosted target would
 		// be denied. Mirrors ParseCodexMCPList.
 		toolPrefix := ""
 		if isCodex {

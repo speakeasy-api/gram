@@ -11,6 +11,10 @@ export type SubmitIdentityProviderConnectionClientIDRequestBody = {
    */
   clientId: string;
   /**
+   * Client secret from the Speakeasy integration installed from the Okta Integration Network. Required for connections created with listing_mode oin; rejected otherwise. Encrypted before persisting and never returned.
+   */
+  clientSecret?: string | undefined;
+  /**
    * Connection ID.
    */
   id: string;
@@ -19,6 +23,7 @@ export type SubmitIdentityProviderConnectionClientIDRequestBody = {
 /** @internal */
 export type SubmitIdentityProviderConnectionClientIDRequestBody$Outbound = {
   client_id: string;
+  client_secret?: string | undefined;
   id: string;
 };
 
@@ -30,11 +35,13 @@ export const SubmitIdentityProviderConnectionClientIDRequestBody$outboundSchema:
   > = z.pipe(
     z.object({
       clientId: z.string(),
+      clientSecret: z.optional(z.string()),
       id: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
         clientId: "client_id",
+        clientSecret: "client_secret",
       });
     }),
   );

@@ -1,6 +1,6 @@
 // Package remotesessions implements the management API services that surface
 // remote_session_issuer / remote_session_client / remote_session resources —
-// Gram-as-OAuth-Client configuration and the upstream sessions Gram is
+// Speakeasy-as-OAuth-Client configuration and the upstream sessions Speakeasy is
 // holding on a principal's behalf. A single Go package owns three Goa
 // services' shared implementation, dependencies, and lifecycle.
 package remotesessions
@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -83,6 +84,8 @@ type Service struct {
 	// which is what ties this one link to customer_managed_encryption_keys.
 	productFeatures   *productfeatures.Client
 	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID) error
+
+	createDiscoveryBudget time.Duration
 }
 
 var (
@@ -131,7 +134,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		registrationTelemetry: registrationTelemetry,
 		origins:               DefaultCallbackOrigins(serverURL),
 
-		productFeatures: productFeatures,
+		productFeatures:       productFeatures,
+		createDiscoveryBudget: defaultCreateDiscoveryBudget,
 	}
 }
 

@@ -4,6 +4,7 @@ package requests
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 
 	roledistributionv1 "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 // Request identifies exactly one setup, global fanout, or organization bootstrap.
@@ -61,8 +63,8 @@ func PublishAll(ctx context.Context, tx pgx.Tx, data []byte) error {
 	return nil
 }
 
-// LockOrganization serializes attempts and bounded expansion with staff toggles,
-// including an enable when no feature row exists yet. Take this before row locks.
+// LockOrganization serializes setup attempts and bounded expansion.
+// Take this before row locks.
 func LockOrganization(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('role-distribution-setup:' || $1, 0))`, organizationID); err != nil {
 		return fmt.Errorf("lock organization role distribution: %w", err)
@@ -71,8 +73,23 @@ func LockOrganization(ctx context.Context, tx pgx.Tx, organizationID string) err
 }
 
 // ResumeOrganization starts one explicit enumeration pass, not a retry loop.
-// The caller holds LockOrganization and commits the feature change together with
-// the outbox event. Setup reuses plugins and assignments without a completion ledger.
+// The caller holds LockOrganization and commits the outbox event transactionally.
+// Setup reuses plugins and assignments without a completion ledger.
 func ResumeOrganization(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	return Publish(ctx, tx, Request{OrganizationID: "", RoleURN: "", GlobalRoleID: "", BootstrapOrganizationID: organizationID, Cursor: ""})
+}
+
+// PublishFirstProject starts one organization pass when projectID is the
+// organization's only active project. Setup skips projectless organizations,
+// so this is the trigger that distributes roles created before any project.
+// Concurrent first projects may each publish; setup reuses plugins and assignments.
+func PublishFirstProject(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID) error {
+	_, err := projectsrepo.New(tx).LockOtherActiveProject(ctx, projectsrepo.LockOtherActiveProjectParams{OrganizationID: organizationID, ProjectID: projectID})
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("check first organization project: %w", err)
+	}
+	return ResumeOrganization(ctx, tx, organizationID)
 }

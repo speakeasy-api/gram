@@ -299,6 +299,33 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 	return i, err
 }
 
+const cleanupExpiredMCPExecutionEvidenceBatch = `-- name: CleanupExpiredMCPExecutionEvidenceBatch :execrows
+WITH expired AS (
+  SELECT organization_id, project_id, execution_id, phase
+  FROM risk_execution_evidence
+  WHERE expires_at <= clock_timestamp()
+  ORDER BY expires_at, organization_id, project_id, execution_id, phase
+  LIMIT $1::integer
+  FOR UPDATE SKIP LOCKED
+)
+DELETE FROM risk_execution_evidence AS evidence
+USING expired
+WHERE evidence.organization_id = expired.organization_id
+  AND evidence.project_id = expired.project_id
+  AND evidence.execution_id = expired.execution_id
+  AND evidence.phase = expired.phase
+`
+
+// Privileged global maintenance query, batched like
+// CleanupExpiredMCPFindingEvidenceBatch.
+func (q *Queries) CleanupExpiredMCPExecutionEvidenceBatch(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, cleanupExpiredMCPExecutionEvidenceBatch, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const cleanupExpiredMCPFindingEvidenceBatch = `-- name: CleanupExpiredMCPFindingEvidenceBatch :execrows
 WITH expired AS (
   SELECT organization_id, project_id, finding_id
@@ -1862,6 +1889,42 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 	return i, err
 }
 
+const getMCPExecutionEvidence = `-- name: GetMCPExecutionEvidence :one
+SELECT payload_encrypted, expires_at
+FROM risk_execution_evidence
+WHERE organization_id = $1
+  AND project_id = $2
+  AND execution_id = $3
+  AND phase = $4
+  AND expires_at > $5
+`
+
+type GetMCPExecutionEvidenceParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ExecutionID    string
+	Phase          string
+	Now            pgtype.Timestamptz
+}
+
+type GetMCPExecutionEvidenceRow struct {
+	PayloadEncrypted string
+	ExpiresAt        pgtype.Timestamptz
+}
+
+func (q *Queries) GetMCPExecutionEvidence(ctx context.Context, arg GetMCPExecutionEvidenceParams) (GetMCPExecutionEvidenceRow, error) {
+	row := q.db.QueryRow(ctx, getMCPExecutionEvidence,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ExecutionID,
+		arg.Phase,
+		arg.Now,
+	)
+	var i GetMCPExecutionEvidenceRow
+	err := row.Scan(&i.PayloadEncrypted, &i.ExpiresAt)
+	return i, err
+}
+
 const getMCPFindingEvidence = `-- name: GetMCPFindingEvidence :one
 SELECT match_encrypted
 FROM risk_finding_evidence
@@ -2353,6 +2416,25 @@ func (q *Queries) GetRiskPolicyNameIncludingDeleted(ctx context.Context, arg Get
 	return name, err
 }
 
+const getRiskResultFalsePositiveForTest = `-- name: GetRiskResultFalsePositiveForTest :one
+SELECT false_positive_at
+FROM risk_results
+WHERE project_id = $1
+  AND id = $2
+`
+
+type GetRiskResultFalsePositiveForTestParams struct {
+	ProjectID uuid.UUID
+	ID        uuid.UUID
+}
+
+func (q *Queries) GetRiskResultFalsePositiveForTest(ctx context.Context, arg GetRiskResultFalsePositiveForTestParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getRiskResultFalsePositiveForTest, arg.ProjectID, arg.ID)
+	var false_positive_at pgtype.Timestamptz
+	err := row.Scan(&false_positive_at)
+	return false_positive_at, err
+}
+
 const getRiskResultsByIDs = `-- name: GetRiskResultsByIDs :many
 
 SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
@@ -2503,6 +2585,54 @@ DELETE FROM risk_policies WHERE project_id = $1
 // ghost rows that production lookups already filter out.
 func (q *Queries) HardDeleteRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, hardDeleteRiskPoliciesByProject, projectID)
+	return err
+}
+
+const insertMCPExecutionEvidence = `-- name: InsertMCPExecutionEvidence :exec
+INSERT INTO risk_execution_evidence (
+    organization_id
+  , project_id
+  , execution_id
+  , phase
+  , payload_encrypted
+  , created_at
+  , updated_at
+  , expires_at
+)
+VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , clock_timestamp()
+  , $7
+)
+ON CONFLICT (organization_id, project_id, execution_id, phase) DO NOTHING
+`
+
+type InsertMCPExecutionEvidenceParams struct {
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	ExecutionID      string
+	Phase            string
+	PayloadEncrypted string
+	CreatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+}
+
+// A phase's payload is fixed once scanned, so the first writer wins.
+func (q *Queries) InsertMCPExecutionEvidence(ctx context.Context, arg InsertMCPExecutionEvidenceParams) error {
+	_, err := q.db.Exec(ctx, insertMCPExecutionEvidence,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ExecutionID,
+		arg.Phase,
+		arg.PayloadEncrypted,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
 	return err
 }
 
@@ -3273,6 +3403,79 @@ func (q *Queries) ListLatestToolCallBlocksByMessageIDs(ctx context.Context, arg 
 	return items, nil
 }
 
+const listLifecycleBoundRiskPoliciesByMCPServer = `-- name: ListLifecycleBoundRiskPoliciesByMCPServer :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND COALESCE(mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(mcp_scope->'servers') = 'array' THEN mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', $2::text))
+  )
+ORDER BY id
+`
+
+type ListLifecycleBoundRiskPoliciesByMCPServerParams struct {
+	ProjectID   uuid.UUID
+	McpServerID string
+}
+
+// A policy belongs to one server's lifecycle only when that server is its
+// sole explicit target. Multi-server and all-server policies survive one
+// target's deletion.
+// The JSON guards below never raise on a malformed scope: Postgres does not
+// order AND operands, so a cast or array function cannot rely on an earlier
+// filter to skip a scalar such as {"servers": null}. Only a missing or JSON
+// false all_servers marks a policy server-bound; any other value keeps it.
+func (q *Queries) ListLifecycleBoundRiskPoliciesByMCPServer(ctx context.Context, arg ListLifecycleBoundRiskPoliciesByMCPServerParams) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listLifecycleBoundRiskPoliciesByMCPServer, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.McpScope,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMetaMCPServerIDsContainingMCPServer = `-- name: ListMetaMCPServerIDsContainingMCPServer :many
 SELECT gateway.id
 FROM meta_mcp_server_members AS member
@@ -3308,6 +3511,124 @@ func (q *Queries) ListMetaMCPServerIDsContainingMCPServer(ctx context.Context, a
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrphanedLifecycleBoundRiskPoliciesByProject = `-- name: ListOrphanedLifecycleBoundRiskPoliciesByProject :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies AS policy
+WHERE policy.project_id = $1
+  AND policy.deleted IS FALSE
+  AND COALESCE(policy.mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND server.deleted IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND gateway.deleted IS TRUE
+    )
+  )
+ORDER BY policy.id
+`
+
+func (q *Queries) ListOrphanedLifecycleBoundRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listOrphanedLifecycleBoundRiskPoliciesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.McpScope,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectIDsWithOrphanedLifecycleBoundRiskPolicies = `-- name: ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies :many
+SELECT DISTINCT policy.project_id
+FROM risk_policies AS policy
+WHERE policy.deleted IS FALSE
+  AND COALESCE(policy.mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND server.deleted IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND gateway.deleted IS TRUE
+    )
+  )
+ORDER BY policy.project_id
+`
+
+func (q *Queries) ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectIDsWithOrphanedLifecycleBoundRiskPolicies)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4729,6 +5050,21 @@ func (q *Queries) LockRiskPolicyMutations(ctx context.Context, projectID string)
 	return err
 }
 
+const lockRiskResultFalsePositiveTransition = `-- name: LockRiskResultFalsePositiveTransition :exec
+SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))
+`
+
+type LockRiskResultFalsePositiveTransitionParams struct {
+	ProjectID string
+	ID        string
+}
+
+// Two-key form keeps this lock apart from single-key project locks.
+func (q *Queries) LockRiskResultFalsePositiveTransition(ctx context.Context, arg LockRiskResultFalsePositiveTransitionParams) error {
+	_, err := q.db.Exec(ctx, lockRiskResultFalsePositiveTransition, arg.ProjectID, arg.ID)
+	return err
+}
+
 const markContentPartsRiskAnalyzed = `-- name: MarkContentPartsRiskAnalyzed :exec
 UPDATE chat_content_parts
 SET risk_analyzed_at = clock_timestamp()
@@ -4960,10 +5296,9 @@ type MarkRiskResultsFalsePositiveParams struct {
 	Ids       []uuid.UUID
 }
 
-// Returns the full rows the UPDATE actually changed: they drive audit logging
-// and the ClickHouse mirror's outbox enqueue, both inside the same
-// transaction as this UPDATE, so a retry that changes nothing correctly
-// audits and mirrors nothing.
+// Returns the full rows the UPDATE actually changed for audit logging.
+// ClickHouse copies are selected independently by requested id so a retry can
+// repair a successful append followed by a failed Postgres commit.
 func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRiskResultsFalsePositiveParams) ([]RiskResult, error) {
 	rows, err := q.db.Query(ctx, markRiskResultsFalsePositive, arg.Reason, arg.ProjectID, arg.Ids)
 	if err != nil {
@@ -5340,6 +5675,28 @@ type SetChatMessageExternalUserIDForTestParams struct {
 
 func (q *Queries) SetChatMessageExternalUserIDForTest(ctx context.Context, arg SetChatMessageExternalUserIDForTestParams) error {
 	_, err := q.db.Exec(ctx, setChatMessageExternalUserIDForTest, arg.ExternalUserID, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setRiskResultExcludedForTest = `-- name: SetRiskResultExcludedForTest :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultExcludedForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultExcludedForTest, id)
+	return err
+}
+
+const setRiskResultFalsePositiveForTest = `-- name: SetRiskResultFalsePositiveForTest :exec
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
 	return err
 }
 

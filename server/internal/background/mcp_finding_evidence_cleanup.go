@@ -29,7 +29,7 @@ const (
 // One global hourly sweep and one activity cost about 1,440 Temporal actions per
 // month per namespace, fixed rather than scaling with tenants or findings. Three
 // configured attempts cost at most about 2,880 actions per month. Each activity
-// attempt deletes at most 50,000 rows in bounded transactions.
+// attempt deletes at most 50,000 rows per evidence table in bounded transactions.
 func MCPFindingEvidenceCleanupWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: mcpFindingEvidenceCleanupActivityTimeout,
@@ -43,22 +43,32 @@ func MCPFindingEvidenceCleanupWorkflow(ctx workflow.Context) error {
 	return workflow.ExecuteActivity(ctx, a.CleanupMCPFindingEvidence).Get(ctx, nil)
 }
 
-// CleanupMCPFindingEvidence bounds each transaction and each activity attempt.
+// CleanupMCPFindingEvidence removes expired finding matches and execution
+// payloads, bounding each transaction and each table per activity attempt.
 func (a *Activities) CleanupMCPFindingEvidence(ctx context.Context) error {
-	return cleanupMCPFindingEvidenceBatches(ctx, riskrepo.New(a.db).CleanupExpiredMCPFindingEvidenceBatch)
+	queries := riskrepo.New(a.db)
+	return cleanupMCPEvidence(ctx, queries.CleanupExpiredMCPFindingEvidenceBatch, queries.CleanupExpiredMCPExecutionEvidenceBatch)
 }
 
-func cleanupMCPFindingEvidenceBatches(ctx context.Context, cleanup func(context.Context, int32) (int64, error)) error {
+func cleanupMCPEvidence(ctx context.Context, findings, executions func(context.Context, int32) (int64, error)) error {
+	// A saturated finding table must not starve payload cleanup.
+	return errors.Join(
+		cleanupMCPFindingEvidenceBatches(ctx, "finding matches", findings),
+		cleanupMCPFindingEvidenceBatches(ctx, "execution payloads", executions),
+	)
+}
+
+func cleanupMCPFindingEvidenceBatches(ctx context.Context, table string, cleanup func(context.Context, int32) (int64, error)) error {
 	for range mcpFindingEvidenceCleanupMaxBatchesPerAttempt {
 		n, err := cleanup(ctx, mcpFindingEvidenceCleanupBatchSize)
 		if err != nil {
-			return fmt.Errorf("cleanup MCP finding evidence: %w", err)
+			return fmt.Errorf("cleanup MCP %s batch: %w", table, err)
 		}
 		if n < int64(mcpFindingEvidenceCleanupBatchSize) {
 			return nil
 		}
 	}
-	return fmt.Errorf("MCP finding evidence cleanup per-attempt batch budget exhausted")
+	return fmt.Errorf("MCP %s cleanup per-attempt batch budget exhausted", table)
 }
 
 // Include every attempt, intervening backoff, and queue/workflow-task headroom.

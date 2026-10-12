@@ -9,38 +9,27 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import {
-  useProxiedMcpTools,
   type ProxiedMcpTool,
   type ProxiedMcpToolAnnotations,
 } from "@/hooks/useProxiedMcpTools";
-import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
-import {
-  cn,
-  firstPartyConnectUrl,
-  getServerURL,
-  mcpConnectionUrl,
-  supportsFirstPartyConnect,
-} from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
 import { ToolAnnotationIndicators } from "./ToolAnnotationIndicators";
 import { ToolMetadataDriftPanel } from "./ToolMetadataDriftPanel";
 import { computeDrift } from "./toolMetadataSync";
-import { useSyncToolMetadata } from "./useSyncToolMetadata";
-import {
-  useToolMetadata,
-  type ToolMetadataByName,
-} from "@/hooks/useToolMetadata";
+import { useRemoteMcpToolConnection } from "./useRemoteMcpToolConnection";
+import { type ToolMetadataByName } from "@/hooks/useToolMetadata";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { Link } from "react-router";
 
 type RemoteMcpToolsSectionProps = {
-  /** The Gram-proxied MCP URL to connect to; undefined while endpoints load. */
+  /** The Speakeasy-proxied MCP URL to connect to; undefined while endpoints load. */
   mcpUrl: string | undefined;
   /** True while the server address / endpoints are still resolving. */
   isResolvingUrl: boolean;
@@ -65,7 +54,7 @@ type RemoteMcpToolsSectionProps = {
    */
   authSettingsHref?: string;
   /**
-   * Gram-origin endpoint slug. Custom-domain slugs are a different namespace
+   * Speakeasy-origin endpoint slug. Custom-domain slugs are a different namespace
    * and must not be used to build the first-party connect URL.
    */
   platformSlug?: string;
@@ -76,13 +65,13 @@ type RemoteMcpToolsSectionProps = {
 
 /**
  * Lists the tools advertised by the remote MCP server, connecting through the
- * Gram-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client.
+ * Speakeasy-proxied `/mcp/<slug>` endpoint via the AI SDK MCP client.
  *
  * For issuer-gated servers we mint a user-session JWT scoped to the mcp_server
  * and connect with it. When no upstream remote_session exists yet the gateway
  * 401s into `needsAuth`, and we surface a Connect button that opens the
  * first-party connect page in a new tab; returning focus re-attempts the list.
- * That page 404s unless the server is issuer-gated on a Gram-hosted address, so
+ * That page 404s unless the server is issuer-gated on a Speakeasy-hosted address, so
  * a 401 from any other server points at authentication settings instead.
  *
  * Expected fetch failures are rendered inline (see RemoteMcpToolsBody). The
@@ -192,83 +181,34 @@ function RemoteMcpToolsSectionInner({
   tunneledMcpServerId,
   visibility,
 }: RemoteMcpToolsSectionProps): JSX.Element {
-  const isIssuerGated = !!userSessionIssuerId;
-  const canFirstPartyConnect = supportsFirstPartyConnect({
-    userSessionIssuerId,
-    platformSlug,
-    visibility,
-    tunneledMcpServerId,
-  });
-
-  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
-    target: { kind: "mcpServer", id: mcpServerId },
-    userSessionIssuerId,
-  });
-
-  // Speakeasy's stored annotation overrides for this server's tools. Toolset-backed
-  // servers don't carry any, so skip the request entirely for them.
-  const { metadataByTool, isLoading: isMetadataLoading } = useToolMetadata(
+  const {
+    tools,
+    metadataByTool,
+    loading: connectionLoading,
+    needsAuth,
+    isError,
+    isIssuerGated,
+    refetch,
+    connect,
+    sync,
+    isSyncing,
+  } = useRemoteMcpToolConnection({
+    mcpUrl,
     mcpServerId,
-    { enabled: !!remoteMcpServerId },
-  );
-
-  // Issuer-gated servers must wait for the JWT before connecting, otherwise the
-  // unauthenticated request 401s and caches a spurious `needsAuth`.
-  const headers = useMemo(
-    () =>
-      accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-    [accessToken],
-  );
-  const connectionEnabled = !isIssuerGated || !!accessToken;
-
-  // Connect through the dev proxy origin (same-origin) so the AI SDK transport
-  // carries the gram_session cookie and the gateway's proxied SSE response
-  // isn't dropped on a cross-origin hop. No-op in prod / for custom domains.
-  const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
-
-  const { tools, isLoading, needsAuth, isError, refetch } = useProxiedMcpTools(
-    connectUrl,
-    { headers, enabled: connectionEnabled },
-  );
+    userSessionIssuerId,
+    remoteMcpServerId,
+    platformSlug,
+    tunneledMcpServerId,
+    visibility,
+  });
 
   const toolEntries = useMemo(
     () => (tools ? Object.entries(tools) : []),
     [tools],
   );
 
-  // The first-party connect page is opened as a top-level new tab, so it rides
-  // the gram_session cookie on the backend origin (not the dev proxy). Built
-  // from the platform slug only — the display URL may be a custom domain.
-  const authUrl = useMemo(() => {
-    if (!canFirstPartyConnect || !platformSlug) return undefined;
-    return firstPartyConnectUrl(`${getServerURL()}/mcp/${platformSlug}`);
-  }, [canFirstPartyConnect, platformSlug]);
-
-  // When the user comes back from the connect tab, re-attempt the listing so a
-  // freshly linked session surfaces without a manual refresh.
-  useEffect(() => {
-    if (!needsAuth) return;
-    const onFocus = () => refetch();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [needsAuth, refetch]);
-
-  const handleConnect = () => {
-    if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer");
-  };
-
-  const loading =
-    isResolvingUrl || isTokenLoading || isLoading || isMetadataLoading;
-
-  // Only remote-backed servers carry tool metadata, and there is nothing to
-  // reconcile until both the session and the stored set have loaded.
+  const loading = isResolvingUrl || connectionLoading;
   const tracksMetadata = !!remoteMcpServerId;
-  const { sync, isSyncing } = useSyncToolMetadata({
-    mcpServerId,
-    live: tools,
-    stored: metadataByTool,
-    enabled: tracksMetadata && !loading && !!tools,
-  });
 
   const drift = useMemo(
     () => (tracksMetadata && tools ? computeDrift(tools, metadataByTool) : []),
@@ -294,7 +234,7 @@ function RemoteMcpToolsSectionInner({
         toolEntries={toolEntries}
         metadataByTool={metadataByTool}
         onRetry={refetch}
-        onConnect={authUrl ? handleConnect : undefined}
+        onConnect={connect}
       />
     </ToolsSectionShell>
   );
@@ -425,7 +365,7 @@ function RemoteMcpToolsList({
  * A single tool row, styled to match the toolset Tools tab (see ToolList's
  * ToolRow): tool name on top with the description truncated to one line below,
  * and any annotation hints rendered as badges beside the name. Remote MCP tools
- * carry no Gram-side identity, so there are no method/variation badges or action
+ * carry no Speakeasy-side identity, so there are no method/variation badges or action
  * menus — selecting a row opens the details drawer instead.
  */
 function RemoteToolRow({

@@ -19990,6 +19990,254 @@ func DecodeSetStripeSubscriptionResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildListCustomerUsageRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "listCustomerUsage" endpoint
+func (c *Client) BuildListCustomerUsageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListCustomerUsageAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listCustomerUsage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListCustomerUsageRequest returns an encoder for requests sent to the
+// admin listCustomerUsage server.
+func EncodeListCustomerUsageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListCustomerUsagePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listCustomerUsage", "*admin.ListCustomerUsagePayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("interval", p.Interval)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListCustomerUsageResponse returns a decoder for responses returned by
+// the admin listCustomerUsage endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListCustomerUsageResponse may return the following errors:
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListCustomerUsageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListCustomerUsageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			res := NewListCustomerUsageAdminCustomerUsageResponseOK(&body)
+			return res, nil
+		case http.StatusServiceUnavailable:
+			var (
+				body ListCustomerUsageUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			return nil, NewListCustomerUsageUnavailable(&body)
+		case http.StatusUnauthorized:
+			var (
+				body ListCustomerUsageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			return nil, NewListCustomerUsageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListCustomerUsageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			return nil, NewListCustomerUsageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListCustomerUsageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			return nil, NewListCustomerUsageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListCustomerUsageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			return nil, NewListCustomerUsageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListCustomerUsageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			return nil, NewListCustomerUsageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListCustomerUsageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			return nil, NewListCustomerUsageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListCustomerUsageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			return nil, NewListCustomerUsageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListCustomerUsageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+				}
+				err = ValidateListCustomerUsageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+				}
+				return nil, NewListCustomerUsageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListCustomerUsageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+				}
+				err = ValidateListCustomerUsageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+				}
+				return nil, NewListCustomerUsageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listCustomerUsage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListCustomerUsageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listCustomerUsage", err)
+			}
+			err = ValidateListCustomerUsageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listCustomerUsage", err)
+			}
+			return nil, NewListCustomerUsageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listCustomerUsage", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -20231,6 +20479,7 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          v.OmitScopeFallback,
 		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
 		CreatedAt:                                  *v.CreatedAt,
 		UpdatedAt:                                  *v.UpdatedAt,
@@ -20864,6 +21113,7 @@ func unmarshalAdminMcpServerHealthRemoteSessionIssuerResponseBodyToAdminAdminMcp
 		Passthrough:         *v.Passthrough,
 		Pkce:                *v.Pkce,
 		CimdSupported:       *v.CimdSupported,
+		OmitScopeFallback:   v.OmitScopeFallback,
 		MetadataFetchedAt:   v.MetadataFetchedAt,
 		MetadataLastErrorAt: v.MetadataLastErrorAt,
 		JwksLastErrorAt:     v.JwksLastErrorAt,
@@ -21194,6 +21444,55 @@ func unmarshalAdminOnboardingStepApplicabilityResponseBodyToAdminAdminOnboarding
 		Title:   *v.Title,
 		Applies: *v.Applies,
 		Reason:  *v.Reason,
+	}
+
+	return res
+}
+
+// unmarshalAdminCustomerUsageResponseBodyToAdminAdminCustomerUsage builds a
+// value of type *admin.AdminCustomerUsage from a value of type
+// *AdminCustomerUsageResponseBody.
+func unmarshalAdminCustomerUsageResponseBodyToAdminAdminCustomerUsage(v *AdminCustomerUsageResponseBody) *admin.AdminCustomerUsage {
+	res := &admin.AdminCustomerUsage{
+		OrganizationID: *v.OrganizationID,
+		Name:           *v.Name,
+		Slug:           *v.Slug,
+		AccountType:    *v.AccountType,
+		TrialState:     *v.TrialState,
+		Error:          v.Error,
+	}
+	res.CurrentCycle = unmarshalMeterUsageWindowResponseBodyToAdminMeterUsageWindow(v.CurrentCycle)
+	res.Window = unmarshalMeterUsageWindowResponseBodyToAdminMeterUsageWindow(v.Window)
+	res.Products = make([]*admin.SpendProduct, len(v.Products))
+	for i, val := range v.Products {
+		if val == nil {
+			res.Products[i] = nil
+			continue
+		}
+		res.Products[i] = unmarshalSpendProductResponseBodyToAdminSpendProduct(val)
+	}
+	if v.PreviousPeriod != nil {
+		res.PreviousPeriod = unmarshalMeterUsageWindowResponseBodyToAdminMeterUsageWindow(v.PreviousPeriod)
+	}
+	res.PreviousPeriodCosts = make([]*admin.AdminCustomerUsageProductCost, len(v.PreviousPeriodCosts))
+	for i, val := range v.PreviousPeriodCosts {
+		if val == nil {
+			res.PreviousPeriodCosts[i] = nil
+			continue
+		}
+		res.PreviousPeriodCosts[i] = unmarshalAdminCustomerUsageProductCostResponseBodyToAdminAdminCustomerUsageProductCost(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminCustomerUsageProductCostResponseBodyToAdminAdminCustomerUsageProductCost
+// builds a value of type *admin.AdminCustomerUsageProductCost from a value of
+// type *AdminCustomerUsageProductCostResponseBody.
+func unmarshalAdminCustomerUsageProductCostResponseBodyToAdminAdminCustomerUsageProductCost(v *AdminCustomerUsageProductCostResponseBody) *admin.AdminCustomerUsageProductCost {
+	res := &admin.AdminCustomerUsageProductCost{
+		ProductID: *v.ProductID,
+		CostUsd:   *v.CostUsd,
 	}
 
 	return res

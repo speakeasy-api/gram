@@ -1,0 +1,806 @@
+package remotemcp_test
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
+	remotemcpserver "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/server"
+	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	unproxiedrepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
+)
+
+type scopeServer struct {
+	mcpServerID         string
+	remoteServerID      uuid.UUID
+	userSessionIssuerID uuid.UUID
+	url                 string
+}
+
+func seedScopeServer(t *testing.T, ctx context.Context, ti *testInstance, url string) scopeServer {
+	t.Helper()
+	result, err := ti.service.CreateServerAndMcpServer(ctx, &gen.CreateServerAndMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                new("Scoped"),
+		URL:                 url,
+		TransportType:       "streamable-http",
+		UserSessionIssuerID: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.McpServer.UserSessionIssuerID)
+	return scopeServer{mcpServerID: result.McpServer.ID, remoteServerID: uuid.MustParse(result.RemoteMcpServer.ID), userSessionIssuerID: uuid.MustParse(*result.McpServer.UserSessionIssuerID), url: url}
+}
+
+// seedScopeIssuer creates a project authorization server advertising scopesSupported.
+func seedScopeIssuer(t *testing.T, ctx context.Context, ti *testInstance, scopesSupported, scopeOverride []string) remotesessionsrepo.RemoteSessionIssuer {
+	t.Helper()
+	return seedNamedScopeIssuer(t, ctx, ti, "", scopesSupported, scopeOverride)
+}
+
+func seedNamedScopeIssuer(t *testing.T, ctx context.Context, ti *testInstance, name string, scopesSupported, scopeOverride []string) remotesessionsrepo.RemoteSessionIssuer {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Name:                              conv.ToPGTextEmpty(name),
+		Slug:                              "as-" + uuid.NewString()[:8],
+		Issuer:                            "https://as-" + uuid.NewString()[:8] + ".example.test",
+		AuthorizationEndpoint:             conv.ToPGText("https://as.example.test/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://as.example.test/token"),
+		ScopesSupported:                   scopesSupported,
+		ScopeOverride:                     scopeOverride,
+		GrantTypesSupported:               []string{"authorization_code"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	return issuer
+}
+
+// seedScopeClient registers a client with its own scope on issuer and binds it to each user session issuer.
+func seedScopeClient(t *testing.T, ctx context.Context, ti *testInstance, issuer remotesessionsrepo.RemoteSessionIssuer, scope []string, userSessionIssuerIDs ...uuid.UUID) uuid.UUID {
+	t.Helper()
+	q := remotesessionsrepo.New(ti.conn)
+	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             issuer.ProjectID,
+		OrganizationID:        issuer.OrganizationID,
+		RemoteSessionIssuerID: issuer.ID,
+		ClientID:              "client-" + uuid.NewString(),
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		Scope:                 scope,
+	})
+	require.NoError(t, err)
+	for _, id := range userSessionIssuerIDs {
+		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: client.ID,
+			UserSessionIssuerID:   id,
+		}))
+	}
+	return client.ID
+}
+
+// recordResource writes a read of the resource's metadata advertising scopes, fetched at fetchedAt.
+func recordResource(t *testing.T, ctx context.Context, ti *testInstance, url string, scopes []string, fetchedAt time.Time) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	q := repo.New(ti.conn)
+	_, err := q.UpsertRemoteProtectedResource(ctx, repo.UpsertRemoteProtectedResourceParams{
+		ProjectID:              *authCtx.ProjectID,
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ResourceIdentifier:     url,
+		MetadataUrl:            "",
+		AuthorizationServers:   []string{"https://as.example.test"},
+		ScopesSupported:        scopes,
+		BearerMethodsSupported: nil,
+		ResourceName:           "",
+		ResourceDocumentation:  "",
+		ResourcePolicyUri:      "",
+		ResourceTosUri:         "",
+		Metadata:               "",
+	})
+	require.NoError(t, err)
+	_, err = q.SetRemoteProtectedResourceMetadataTimestamps(ctx, repo.SetRemoteProtectedResourceMetadataTimestampsParams{
+		MetadataFetchedAt:   pgtype.Timestamptz{Time: fetchedAt, Valid: true},
+		MetadataLastErrorAt: pgtype.Timestamptz{},
+		ProjectID:           *authCtx.ProjectID,
+		ResourceIdentifier:  url,
+	})
+	require.NoError(t, err)
+}
+
+func setPin(ctx context.Context, ti *testInstance, mcpServerID string, scopes ...string) (*gen.RemoteMcpServerScopes, error) {
+	if scopes == nil {
+		scopes = []string{}
+	}
+	return ti.service.SetServerScopePin(ctx, &gen.SetServerScopePinPayload{McpServerID: mcpServerID, Scopes: scopes, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}) //nolint:wrapcheck // returned for oops code assertions
+}
+
+func getScopes(ctx context.Context, ti *testInstance, mcpServerID string) (*gen.RemoteMcpServerScopes, error) {
+	return ti.service.GetServerScopes(ctx, &gen.GetServerScopesPayload{McpServerID: mcpServerID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}) //nolint:wrapcheck // returned for oops code assertions
+}
+
+func clientEntry(t *testing.T, result *gen.RemoteMcpServerScopes, clientID uuid.UUID) *gen.RemoteMcpServerClientScopes {
+	t.Helper()
+	for _, c := range result.Clients {
+		if c.ClientID == clientID.String() {
+			return c
+		}
+	}
+	t.Fatalf("client %s not in result", clientID)
+	return nil
+}
+
+func enableDiscovery(t *testing.T, ctx context.Context, ti *testInstance, on bool) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.features.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, authCtx.ActiveOrganizationID, on)
+}
+
+func storedPin(t *testing.T, ctx context.Context, ti *testInstance, url string) []string {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	row, err := repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: url})
+	require.NoError(t, err)
+	return row.ScopeOverride
+}
+
+// seedPin writes a pin straight to the resource row, bypassing the flag gate on the API.
+func seedPin(t *testing.T, ctx context.Context, ti *testInstance, url string, scopes ...string) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := repo.New(ti.conn).UpsertRemoteProtectedResourceScopeOverride(ctx, repo.UpsertRemoteProtectedResourceScopeOverrideParams{
+		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		ResourceIdentifier: url,
+		ScopeOverride:      scopes,
+	})
+	require.NoError(t, err)
+}
+
+func TestSetServerScopePin_CreatesReplacesAndClears(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-create.example.com/mcp")
+
+	got, err := setPin(ctx, ti, srv.mcpServerID, " read ", "write", "", "read")
+	require.NoError(t, err)
+	require.Equal(t, srv.url, got.ResourceURL)
+	require.Equal(t, []string{"read", "write"}, got.PinnedScopes, "trimmed, blanks and duplicates dropped, order kept")
+	require.Equal(t, []string{"read", "write"}, storedPin(t, ctx, ti, srv.url), "the row is created for a never-read resource")
+	require.False(t, got.AdvertisedScopesKnown)
+	require.Nil(t, got.AdvertisedScopes)
+
+	got, err = setPin(ctx, ti, srv.mcpServerID, "admin")
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin"}, got.PinnedScopes)
+
+	got, err = setPin(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Empty(t, got.PinnedScopes)
+	require.Nil(t, storedPin(t, ctx, ti, srv.url), "an empty list stores NULL")
+}
+
+func TestSetServerScopePin_KeepsDiscoveredMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-keep.example.com/mcp")
+	recordResource(t, ctx, ti, srv.url, []string{"read", "write"}, time.Now())
+
+	got, err := setPin(ctx, ti, srv.mcpServerID, "read")
+	require.NoError(t, err)
+	require.True(t, got.AdvertisedScopesKnown)
+	require.Equal(t, []string{"read", "write"}, got.AdvertisedScopes)
+
+	recordResource(t, ctx, ti, srv.url, []string{"read"}, time.Now())
+	require.Equal(t, []string{"read"}, storedPin(t, ctx, ti, srv.url), "discovery leaves the pin untouched")
+}
+
+func TestSetServerScopePin_RejectsInvalidScopes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-invalid.example.com/mcp")
+
+	tooMany := make([]string, 101)
+	for i := range tooMany {
+		tooMany[i] = "s" + uuid.NewString()[:8]
+	}
+	for name, scopes := range map[string][]string{
+		"interior space": {"read write"},
+		"quote":          {`re"ad`},
+		"backslash":      {`re\ad`},
+		"control":        {"read\x01"},
+		"non-ascii":      {"lecture-é"},
+		"too long":       {strings.Repeat("a", 257)},
+		"too many":       tooMany,
+	} {
+		_, err := setPin(ctx, ti, srv.mcpServerID, scopes...)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr, name)
+		require.Equal(t, oops.CodeBadRequest, oopsErr.Code, name)
+	}
+	_, err := getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
+	require.Error(t, err, "a rejected pin writes nothing")
+}
+
+func TestSetServerScopePin_CapCountsAfterDeduplication(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-cap.example.com/mcp")
+
+	unique := make([]string, 100)
+	for i := range unique {
+		unique[i] = fmt.Sprintf("s%03d", i)
+	}
+	withDuplicate := append(slices.Clone(unique), " "+unique[0])
+	require.Len(t, withDuplicate, 101)
+	body := &remotemcpserver.SetServerScopePinRequestBody{McpServerID: &srv.mcpServerID, Scopes: withDuplicate}
+	require.NoError(t, remotemcpserver.ValidateSetServerScopePinRequestBody(body), "the transport bound leaves the cap to the handler")
+
+	got, err := setPin(ctx, ti, srv.mcpServerID, withDuplicate...)
+	require.NoError(t, err)
+	require.Equal(t, unique, got.PinnedScopes)
+
+	_, err = setPin(ctx, ti, srv.mcpServerID, append(slices.Clone(unique), "s100")...)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Equal(t, unique, storedPin(t, ctx, ti, srv.url), "a rejected pin writes nothing")
+	require.Equal(t, int64(1), auditCount(t, ctx, ti))
+}
+
+func TestSetServerScopePin_WritesAudit(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-audit.example.com/mcp")
+
+	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
+	require.NoError(t, err)
+	_, err = setPin(ctx, ti, srv.mcpServerID, "read", "write")
+	require.NoError(t, err)
+
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerScopePinUpdate)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, count)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerScopePinUpdate)
+	require.NoError(t, err)
+	require.Equal(t, srv.mcpServerID, record.SubjectID)
+	require.Equal(t, "mcp_server", record.SubjectType)
+	before, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	after, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, []any{"read"}, before["pinned_scopes"])
+	require.Equal(t, []any{"read", "write"}, after["pinned_scopes"])
+	require.Equal(t, srv.url, metadata["resource_url"])
+	require.Equal(t, []any{srv.mcpServerID}, metadata["mcp_server_ids"])
+}
+
+func TestGetServerScopes_ReportsResourceAndPerClientResolution(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://scopes-a.example.com/mcp")
+	other := seedScopeServer(t, ctx, ti, "https://scopes-b.example.com/mcp")
+	issuer := seedScopeIssuer(t, ctx, ti, []string{"openid", "iss:read"}, nil)
+
+	own := seedScopeClient(t, ctx, ti, issuer, []string{"own:read"}, srv.userSessionIssuerID)
+	owner := seedScopeClient(t, ctx, ti, issuer, nil, srv.userSessionIssuerID)
+	// Bound to two servers' issuers, its grant is not qualified to this resource while owner serves it.
+	shared := seedScopeClient(t, ctx, ti, issuer, nil, srv.userSessionIssuerID, other.userSessionIssuerID)
+
+	recordResource(t, ctx, ti, srv.url, []string{"read", "write"}, time.Now())
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	_, err := repo.New(ti.conn).RecordRemoteProtectedResourceChallengeScopes(ctx, repo.RecordRemoteProtectedResourceChallengeScopesParams{ChallengeScopes: []string{"challenged"}, ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
+	require.NoError(t, err)
+	_, err = setPin(ctx, ti, srv.mcpServerID, "read", "admin")
+	require.NoError(t, err)
+
+	got, err := getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Equal(t, srv.url, got.ResourceURL)
+	require.True(t, got.DiscoveryEnabled)
+	require.Equal(t, []string{"read", "admin"}, got.PinnedScopes)
+	require.True(t, got.AdvertisedScopesKnown)
+	require.Equal(t, []string{"read", "write"}, got.AdvertisedScopes)
+	require.Equal(t, []string{"challenged"}, got.ChallengeScopes)
+	require.Len(t, got.Clients, 3)
+
+	c := clientEntry(t, got, own)
+	require.Equal(t, "client_scope", c.ScopeSource)
+	require.Equal(t, []string{"own:read", "openid"}, c.RequestedScopes)
+	require.Empty(t, c.UnadvertisedPinnedScopes)
+	require.False(t, c.PinWouldDecide, "the client's own scope outranks a pin")
+
+	// The challenge outranks the pin.
+	c = clientEntry(t, got, owner)
+	require.Equal(t, "challenge_scope", c.ScopeSource)
+	require.Equal(t, []string{"challenged", "openid"}, c.RequestedScopes)
+	require.False(t, c.PinWouldDecide, "a challenge outranks a pin")
+
+	c = clientEntry(t, got, shared)
+	require.Equal(t, "issuer_catalogue", c.ScopeSource, "a client that does not own the resource ignores the pin")
+	require.Equal(t, []string{"openid", "iss:read"}, c.RequestedScopes)
+	require.False(t, c.PinWouldDecide, "a non-owner never uses the pin")
+
+	_, err = repo.New(ti.conn).RecordRemoteProtectedResourceChallengeScopes(ctx, repo.RecordRemoteProtectedResourceChallengeScopesParams{ChallengeScopes: nil, ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
+	require.NoError(t, err)
+	got, err = getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Empty(t, got.ChallengeScopes)
+	c = clientEntry(t, got, owner)
+	require.Equal(t, "resource_pin", c.ScopeSource)
+	require.Equal(t, []string{"read", "admin", "openid"}, c.RequestedScopes)
+	require.Equal(t, []string{"admin"}, c.UnadvertisedPinnedScopes)
+	require.True(t, c.PinWouldDecide)
+}
+
+func TestGetServerScopes_StaleAdvertisedListIsUnknown(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://scopes-stale.example.com/mcp")
+	issuer := seedScopeIssuer(t, ctx, ti, []string{}, nil)
+	owner := seedScopeClient(t, ctx, ti, issuer, nil, srv.userSessionIssuerID)
+	recordResource(t, ctx, ti, srv.url, []string{"read"}, time.Now().Add(-8*24*time.Hour))
+	_, err := setPin(ctx, ti, srv.mcpServerID, "admin")
+	require.NoError(t, err)
+
+	got, err := getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.False(t, got.AdvertisedScopesKnown, "a read older than the last good window is not trusted")
+	require.Nil(t, got.AdvertisedScopes)
+	c := clientEntry(t, got, owner)
+	require.Equal(t, "resource_pin", c.ScopeSource)
+	require.Empty(t, c.UnadvertisedPinnedScopes, "nothing is flagged against an unknown list")
+}
+
+func TestGetServerScopes_FlagOffIgnoresPin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, false)
+	srv := seedScopeServer(t, ctx, ti, "https://scopes-off.example.com/mcp")
+	issuer := seedScopeIssuer(t, ctx, ti, []string{"iss:read"}, []string{"iss:override"})
+	owner := seedScopeClient(t, ctx, ti, issuer, []string{"own:read"}, srv.userSessionIssuerID)
+	bare := seedScopeClient(t, ctx, ti, issuer, nil, srv.userSessionIssuerID)
+	seedPin(t, ctx, ti, srv.url, "read")
+
+	got, err := getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.False(t, got.DiscoveryEnabled)
+	require.Equal(t, []string{"read"}, got.PinnedScopes)
+	c := clientEntry(t, got, owner)
+	require.Equal(t, "issuer_override", c.ScopeSource, "without discovery the issuer override beats even the client scope")
+	require.Equal(t, []string{"iss:override"}, c.RequestedScopes)
+	require.False(t, c.PinWouldDecide)
+	require.False(t, clientEntry(t, got, bare).PinWouldDecide, "without discovery no pin decides")
+}
+
+func TestServerScopes_RefusesServerWithoutRemoteBackend(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	backend, err := unproxiedrepo.New(ti.conn).CreateServer(ctx, unproxiedrepo.CreateServerParams{
+		ID:          uuid.Must(uuid.NewV7()),
+		ProjectID:   *authCtx.ProjectID,
+		Name:        conv.ToPGText("Unproxied"),
+		Slug:        conv.ToPGText("unproxied-" + uuid.NewString()[:8]),
+		Url:         "https://unproxied.example.com/mcp",
+		Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                   uuid.Must(uuid.NewV7()),
+		ProjectID:            *authCtx.ProjectID,
+		Name:                 conv.ToPGText("Unproxied"),
+		Slug:                 conv.ToPGText("unproxied-" + uuid.NewString()[:8]),
+		UnproxiedMcpServerID: conv.ToNullUUID(backend.ID),
+		Visibility:           "private",
+	})
+	require.NoError(t, err)
+
+	_, err = getScopes(ctx, ti, server.ID.String())
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = setPin(ctx, ti, server.ID.String(), "read")
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestServerScopes_CrossProjectServerIsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	remote := seedOtherProjectServer(t, ctx, ti)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                uuid.Must(uuid.NewV7()),
+		ProjectID:         remote.ProjectID,
+		Name:              conv.ToPGText("Other"),
+		Slug:              conv.ToPGText("other-" + uuid.NewString()[:8]),
+		RemoteMcpServerID: conv.ToNullUUID(remote.ID),
+		Visibility:        "private",
+	})
+	require.NoError(t, err)
+
+	_, err = getScopes(ctx, ti, server.ID.String())
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = setPin(ctx, ti, server.ID.String(), "read")
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: remote.ProjectID, ResourceIdentifier: remote.Url})
+	require.Error(t, err, "nothing is written to the other project")
+}
+
+func TestServerScopes_ReadToGetWriteToPin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://scopes-rbac.example.com/mcp")
+	other := seedScopeServer(t, ctx, ti, "https://scopes-rbac-other.example.com/mcp")
+
+	none := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, other.mcpServerID))
+	_, err := getScopes(none, ti, srv.mcpServerID)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = setPin(none, ti, srv.mcpServerID, "read")
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	reader := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID))
+	_, err = getScopes(reader, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	_, err = setPin(reader, ti, srv.mcpServerID, "read")
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Zero(t, auditCount(t, ctx, ti))
+
+	writer := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID))
+	_, err = setPin(writer, ti, srv.mcpServerID, "read")
+	require.NoError(t, err)
+	_, err = getScopes(writer, ti, srv.mcpServerID)
+	require.NoError(t, err)
+}
+
+func TestGetServerScopes_Issuer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	srv := seedScopeServer(t, ctx, ti, "https://scopes-issuer-name.example.com/mcp")
+	unnamed := seedScopeIssuer(t, ctx, ti, []string{"read"}, nil)
+	unnamedClient := seedScopeClient(t, ctx, ti, unnamed, nil, srv.userSessionIssuerID)
+	blank := seedNamedScopeIssuer(t, ctx, ti, "   ", []string{"read"}, nil)
+	blankClient := seedScopeClient(t, ctx, ti, blank, nil, srv.userSessionIssuerID)
+	named := seedNamedScopeIssuer(t, ctx, ti, "  Acme SSO ", []string{"read"}, nil)
+	namedClient := seedScopeClient(t, ctx, ti, named, nil, srv.userSessionIssuerID)
+
+	got, err := getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	for _, c := range []struct {
+		id     uuid.UUID
+		issuer remotesessionsrepo.RemoteSessionIssuer
+		name   *string
+	}{{unnamedClient, unnamed, nil}, {blankClient, blank, nil}, {namedClient, named, conv.PtrEmpty("Acme SSO")}} {
+		entry := clientEntry(t, got, c.id)
+		require.Equal(t, c.name, entry.IssuerName)
+		require.Equal(t, &c.issuer.Issuer, entry.IssuerURL)
+	}
+}
+
+func TestGetServerScopes_CanPin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://can-pin-"+uuid.NewString()[:8]+".example.com/mcp")
+	sibling := seedSiblingServer(t, ctx, ti, srv)
+
+	for name, tc := range map[string]struct {
+		grants []authz.Grant
+		want   bool
+	}{
+		"write on all":                     {[]authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPWrite, sibling)}, true},
+		"write on target, read on sibling": {[]authz.Grant{authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPRead, sibling)}, false},
+		"read only":                        {[]authz.Grant{authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPRead, sibling)}, false},
+		"read on target only":              {[]authz.Grant{authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID)}, false},
+	} {
+		got, err := getScopes(withExactAccessGrants(t, ctx, ti.conn, tc.grants...), ti, srv.mcpServerID)
+		require.NoError(t, err, name)
+		require.Equal(t, tc.want, got.CanPin, name)
+	}
+
+	got, err := setPin(withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPWrite, sibling)), ti, srv.mcpServerID, "read")
+	require.NoError(t, err)
+	require.True(t, got.CanPin)
+}
+
+// seedSiblingServer adds a second MCP server on the same remote MCP server row.
+func seedSiblingServer(t *testing.T, ctx context.Context, ti *testInstance, srv scopeServer) string {
+	t.Helper()
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                uuid.Must(uuid.NewV7()),
+		ProjectID:         *authCtx.ProjectID,
+		Name:              conv.ToPGText("Sibling"),
+		Slug:              conv.ToPGText("sibling-" + uuid.NewString()[:8]),
+		RemoteMcpServerID: conv.ToNullUUID(srv.remoteServerID),
+		Visibility:        "private",
+	})
+	require.NoError(t, err)
+	return server.ID.String()
+}
+
+func auditCount(t *testing.T, ctx context.Context, ti *testInstance) int64 {
+	t.Helper()
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerScopePinUpdate)
+	require.NoError(t, err)
+	return count
+}
+
+func TestServerScopes_SharedUpstreamPinRequiresWriteOnEveryServer(t *testing.T) {
+	t.Parallel()
+	for name, separateRemote := range map[string]bool{"same remote row": false, "separate remote row": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			enableDiscovery(t, ctx, ti, true)
+			url := "https://shared-" + uuid.NewString()[:8] + ".example.com/mcp"
+			srv := seedScopeServer(t, ctx, ti, url)
+			var sibling string
+			if separateRemote {
+				sibling = seedScopeServer(t, ctx, ti, url).mcpServerID
+			} else {
+				sibling = seedSiblingServer(t, ctx, ti, srv)
+			}
+
+			for _, ids := range [][2]string{{srv.mcpServerID, sibling}, {sibling, srv.mcpServerID}} {
+				id, hidden := ids[0], ids[1]
+				oneOnly := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, id))
+				_, err := setPin(oneOnly, ti, id, "read")
+				requireOopsCode(t, err, oops.CodeForbidden)
+				require.NotContains(t, err.Error(), hidden, "the refusal does not name the unauthorized server")
+
+				readOne := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, id))
+				got, err := getScopes(readOne, ti, id)
+				require.NoError(t, err, "read on the target alone is enough to view")
+				require.Equal(t, 1, got.SharedServerCount)
+				require.False(t, got.CanPin)
+
+				readOther := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, hidden))
+				_, err = getScopes(readOther, ti, id)
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+			readBoth := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPRead, sibling))
+			_, err := setPin(readBoth, ti, srv.mcpServerID, "read")
+			requireOopsCode(t, err, oops.CodeForbidden)
+			require.Zero(t, auditCount(t, ctx, ti))
+
+			both := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, srv.mcpServerID), authz.NewGrant(authz.ScopeMCPWrite, sibling))
+			got, err := setPin(both, ti, srv.mcpServerID, "read")
+			require.NoError(t, err)
+			require.Equal(t, 1, got.SharedServerCount)
+			got, err = getScopes(both, ti, sibling)
+			require.NoError(t, err)
+			require.Equal(t, []string{"read"}, got.PinnedScopes, "the pin is shared through the resource")
+			require.Equal(t, 1, got.SharedServerCount)
+
+			record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerScopePinUpdate)
+			require.NoError(t, err)
+			metadata, err := audittest.DecodeAuditData(record.Metadata)
+			require.NoError(t, err)
+			require.ElementsMatch(t, []any{srv.mcpServerID, sibling}, metadata["mcp_server_ids"])
+		})
+	}
+}
+
+func TestGetServerScopes_SharedServerCount(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	srv := seedScopeServer(t, ctx, ti, "https://shared-count.example.com/mcp")
+	seedSiblingServer(t, ctx, ti, srv)
+	seedScopeServer(t, ctx, ti, srv.url)
+	alone := seedScopeServer(t, ctx, ti, "https://shared-count-alone.example.com/mcp")
+
+	got, err := getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Equal(t, 2, got.SharedServerCount)
+	got, err = getScopes(ctx, ti, alone.mcpServerID)
+	require.NoError(t, err)
+	require.Zero(t, got.SharedServerCount)
+}
+
+func TestSetServerScopePin_NoOpWritesNothing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-noop.example.com/mcp")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	got, err := setPin(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Empty(t, got.PinnedScopes)
+	_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
+	require.Error(t, err, "clearing a never-set pin creates no row")
+	require.Zero(t, auditCount(t, ctx, ti))
+
+	_, err = setPin(ctx, ti, srv.mcpServerID, "read", "write")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, auditCount(t, ctx, ti))
+
+	got, err = setPin(ctx, ti, srv.mcpServerID, " read", "write", "read")
+	require.NoError(t, err)
+	require.Equal(t, []string{"read", "write"}, got.PinnedScopes)
+	require.EqualValues(t, 1, auditCount(t, ctx, ti), "an unchanged pin writes no audit row")
+}
+
+// A no-op must release its transaction before the response reads from the pool.
+// Otherwise concurrent pin requests can occupy every connection waiting for the
+// resource lock while its holder waits for a second connection to build a response.
+func TestSetServerScopePin_NoOpReleasesConnectionBeforeRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-pool.example.com/mcp")
+
+	// Leave one connection available, reproducing an exhausted pool without
+	// depending on the scheduling of concurrent requests.
+	for range ti.conn.Config().MaxConns - 1 {
+		conn, err := ti.conn.Acquire(ctx)
+		require.NoError(t, err)
+		t.Cleanup(conn.Release)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	got, err := setPin(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Empty(t, got.PinnedScopes)
+
+	_, err = setPin(ctx, ti, srv.mcpServerID, "read")
+	require.NoError(t, err)
+	got, err = setPin(ctx, ti, srv.mcpServerID, "read")
+	require.NoError(t, err)
+	require.Equal(t, []string{"read"}, got.PinnedScopes)
+}
+
+func TestGetServerScopes_CachedResourceWithoutPin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://scopes-cached.example.com/mcp")
+	issuer := seedScopeIssuer(t, ctx, ti, []string{}, nil)
+	owner := seedScopeClient(t, ctx, ti, issuer, nil, srv.userSessionIssuerID)
+	recordResource(t, ctx, ti, srv.url, []string{"read", "write"}, time.Now())
+
+	got, err := getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Empty(t, got.PinnedScopes)
+	c := clientEntry(t, got, owner)
+	require.Equal(t, "cached_resource", c.ScopeSource)
+	require.Equal(t, []string{"read", "write"}, c.RequestedScopes)
+	require.Empty(t, c.UnadvertisedPinnedScopes)
+	require.True(t, c.PinWouldDecide, "with no pin, one set now would decide")
+}
+
+func TestGetServerScopes_FlagOffClientScopeIgnoresPin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, false)
+	srv := seedScopeServer(t, ctx, ti, "https://scopes-off-client.example.com/mcp")
+	issuer := seedScopeIssuer(t, ctx, ti, []string{"iss:read"}, nil)
+	owner := seedScopeClient(t, ctx, ti, issuer, []string{"own:read"}, srv.userSessionIssuerID)
+	seedPin(t, ctx, ti, srv.url, "read")
+
+	got, err := getScopes(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.False(t, got.DiscoveryEnabled)
+	require.Equal(t, []string{"read"}, got.PinnedScopes)
+	c := clientEntry(t, got, owner)
+	require.Equal(t, "client_scope", c.ScopeSource)
+	require.Equal(t, []string{"own:read"}, c.RequestedScopes)
+	require.Empty(t, c.UnadvertisedPinnedScopes)
+}
+
+func TestSetServerScopePin_FlagOffRejectsNonEmptyPin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, false)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-off-reject.example.com/mcp")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
+	require.Error(t, err, "a rejected pin writes no row")
+	require.Zero(t, auditCount(t, ctx, ti))
+
+	seedPin(t, ctx, ti, srv.url, "read")
+	_, err = setPin(ctx, ti, srv.mcpServerID, "write")
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Equal(t, []string{"read"}, storedPin(t, ctx, ti, srv.url), "an existing pin cannot be replaced")
+	require.Zero(t, auditCount(t, ctx, ti))
+}
+
+func TestSetServerScopePin_FlagOffAllowsClearing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, false)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-off-clear.example.com/mcp")
+	seedPin(t, ctx, ti, srv.url, "read", "write")
+
+	got, err := setPin(ctx, ti, srv.mcpServerID)
+	require.NoError(t, err)
+	require.Empty(t, got.PinnedScopes)
+	require.Nil(t, storedPin(t, ctx, ti, srv.url))
+	require.EqualValues(t, 1, auditCount(t, ctx, ti))
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerScopePinUpdate)
+	require.NoError(t, err)
+	before, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, []any{"read", "write"}, before["pinned_scopes"])
+}
+
+func TestSetServerScopePin_RefusesWhenSharingSetChangesAfterAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-race-"+uuid.NewString()[:8]+".example.com/mcp")
+	ti.service.SetBeforeScopePinLock(func() { seedSiblingServer(t, ctx, ti, srv) })
+
+	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
+	requireOopsCode(t, err, oops.CodeConflict)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: srv.url})
+	require.Error(t, err, "a refused pin writes nothing")
+	require.Zero(t, auditCount(t, ctx, ti))
+}
+
+func TestSetServerScopePin_RefusesWhenURLChangesAfterAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	enableDiscovery(t, ctx, ti, true)
+	srv := seedScopeServer(t, ctx, ti, "https://pin-url-race-"+uuid.NewString()[:8]+".example.com/mcp")
+	moved := "https://pin-url-moved-" + uuid.NewString()[:8] + ".example.com/mcp"
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.service.SetBeforeScopePinLock(func() {
+		q := repo.New(ti.conn)
+		remote, err := q.GetServerByID(ctx, repo.GetServerByIDParams{ID: srv.remoteServerID, ProjectID: *authCtx.ProjectID})
+		require.NoError(t, err)
+		_, err = q.UpdateServer(ctx, repo.UpdateServerParams{Name: remote.Name, Slug: remote.Slug, TransportType: remote.TransportType, Url: moved, ID: remote.ID, ProjectID: remote.ProjectID})
+		require.NoError(t, err)
+	})
+
+	_, err := setPin(ctx, ti, srv.mcpServerID, "read")
+	requireOopsCode(t, err, oops.CodeConflict)
+	for _, url := range []string{srv.url, moved} {
+		_, err = repo.New(ti.conn).GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: *authCtx.ProjectID, ResourceIdentifier: url})
+		require.Error(t, err, "a refused pin writes nothing")
+	}
+	require.Zero(t, auditCount(t, ctx, ti))
+}

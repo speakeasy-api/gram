@@ -56,6 +56,7 @@ func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSes
 		BackchannelLogoutSupported:                 conv.FromPGBool[bool](row.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.FromPGBool[bool](row.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              row.ScopeOverride,
+		OmitScopeFallback:                          conv.FromPGBool[bool](row.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.FromPGBool[bool](row.ResourceIndicatorSupported),
 		CreatedAt:                                  row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                                  row.UpdatedAt.Time.Format(time.RFC3339),

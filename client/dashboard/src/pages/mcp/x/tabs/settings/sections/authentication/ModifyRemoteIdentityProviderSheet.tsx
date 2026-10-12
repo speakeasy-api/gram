@@ -20,6 +20,7 @@ import {
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import {
   invalidateAllMcpServers,
   useMcpServers,
@@ -195,6 +196,8 @@ function ModifyRemoteIdentityProviderSheetBody({
     jwksUri: issuer.jwksUri ?? "",
     scopesSupported: issuer.scopesSupported ?? [],
     grantTypesSupported: issuer.grantTypesSupported ?? [],
+    authorizationGrantProfilesSupported:
+      issuer.authorizationGrantProfilesSupported ?? [],
     responseTypesSupported: issuer.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       issuer.tokenEndpointAuthMethodsSupported ?? [],
@@ -304,7 +307,7 @@ function ModifyRemoteIdentityProviderSheetBody({
       // NULL"; an omitted field keeps the existing value. Send the trimmed
       // input directly (including "") so blanking out a field in the UI
       // actually clears the saved record — especially registration_endpoint,
-      // which is the signal Gram uses for "DCR is supported on this issuer".
+      // which is the signal Speakeasy uses for "DCR is supported on this issuer".
       await client.remoteSessionIssuers.update({
         updateRemoteSessionIssuerForm: {
           id: issuer.id,
@@ -320,6 +323,9 @@ function ModifyRemoteIdentityProviderSheetBody({
           jwksUri: jwksUri.trim(),
           scopesSupported: discoveredSnapshot?.scopesSupported,
           grantTypesSupported: discoveredSnapshot?.grantTypesSupported,
+          // A reset snapshot means a new issuer URL; its profiles are unknown until rediscovery.
+          authorizationGrantProfilesSupported:
+            discoveredSnapshot?.authorizationGrantProfilesSupported ?? [],
           responseTypesSupported: discoveredSnapshot?.responseTypesSupported,
           tokenEndpointAuthMethodsSupported:
             discoveredSnapshot?.tokenEndpointAuthMethodsSupported,
@@ -391,6 +397,8 @@ function ModifyRemoteIdentityProviderSheetBody({
         // refreshes (AGE-3279).
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        // Issuer overrides feed the scopes a sign-in would request.
+        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
       toast.success("Identity provider updated");
       onClose();

@@ -408,7 +408,11 @@ func (s *Service) buildMemberDispatch(
 	// consented for a specific member must never reach another member's
 	// tools. No entry degrades to no token rather than an error, so partially
 	// connected meta sessions keep hosted members callable.
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens, member))
+	hostedTokens, err := hostedMemberTokens(gate.tokens, member)
+	if err != nil {
+		return nil, nil, err
+	}
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
@@ -481,16 +485,21 @@ func (s *Service) buildMemberDispatch(
 // routeMetaMemberToken applies the same rule. A lone-token fallback would
 // forward a sibling's bearer once partial resolution leaves gaps in the map,
 // and a resource-qualified token is audience-bound to the remote upstream it
-// was consented for; both cases yield no token.
-func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) map[uuid.UUID]remotesessions.UpstreamToken {
+// was consented for; both cases yield no token. A self client whose
+// credential could not be obtained yields the member-scoped remedy instead,
+// so the member's tools never run without the credential it holds.
+func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	if !member.remoteSessionIssuerID.Valid {
-		return nil
+		return nil, nil
 	}
 	entry, ok := tokens[member.remoteSessionIssuerID.UUID]
 	if !ok || entry.Resource != "" {
-		return nil
+		return nil, nil
 	}
-	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}
+	if err := entry.ClientCredentialErr; err != nil {
+		return nil, metaMemberClientCredentialError(member, err)
+	}
+	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}, nil
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member

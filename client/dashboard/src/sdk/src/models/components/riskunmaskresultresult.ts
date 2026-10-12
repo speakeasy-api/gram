@@ -12,14 +12,16 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
  */
-export const RevealState = {
+export const RiskUnmaskResultResultRevealState = {
   Available: "available",
   EvidenceNotStored: "evidence_not_stored",
 } as const;
 /**
  * Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
  */
-export type RevealState = ClosedEnum<typeof RevealState>;
+export type RiskUnmaskResultResultRevealState = ClosedEnum<
+  typeof RiskUnmaskResultResultRevealState
+>;
 
 export type RiskUnmaskResultResult = {
   /**
@@ -33,12 +35,13 @@ export type RiskUnmaskResultResult = {
   /**
    * Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
    */
-  revealState: RevealState;
+  revealState: RiskUnmaskResultResultRevealState;
 };
 
 /** @internal */
-export const RevealState$inboundSchema: z.ZodMiniEnum<typeof RevealState> = z
-  .enum(RevealState);
+export const RiskUnmaskResultResultRevealState$inboundSchema: z.ZodMiniEnum<
+  typeof RiskUnmaskResultResultRevealState
+> = z.enum(RiskUnmaskResultResultRevealState);
 
 /** @internal */
 export const RiskUnmaskResultResult$inboundSchema: z.ZodMiniType<
@@ -48,7 +51,7 @@ export const RiskUnmaskResultResult$inboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     match: z.string(),
-    reveal_state: RevealState$inboundSchema,
+    reveal_state: RiskUnmaskResultResultRevealState$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

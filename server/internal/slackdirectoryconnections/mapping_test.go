@@ -481,3 +481,26 @@ func TestDisconnectForgetsRevokedMappings(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, remaining)
 }
+
+func TestResolveSlackMappingUserIsTenantAndWorkspaceScoped(t *testing.T) {
+	t.Parallel()
+	ctx, f, _, member := mappingFixture(t)
+	_, err := f.service.SetMapping(ctx, mappingRequest(member, &f.auth.UserID))
+	require.NoError(t, err)
+	q := repo.New(f.db)
+	params := repo.ResolveSlackMappingUserParams{OrganizationID: f.auth.ActiveOrganizationID, SlackTeamID: "TEXAMPLE01", SlackUserID: "UEXAMPLE01"}
+	user, err := q.ResolveSlackMappingUser(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, f.auth.UserID, user)
+	params.OrganizationID = "other-organization"
+	_, err = q.ResolveSlackMappingUser(ctx, params)
+	require.Error(t, err)
+	params.OrganizationID = f.auth.ActiveOrganizationID
+	params.SlackTeamID = "other-workspace"
+	_, err = q.ResolveSlackMappingUser(ctx, params)
+	require.Error(t, err)
+	params.SlackTeamID = "TEXAMPLE01"
+	params.SlackUserID = "unmapped"
+	_, err = q.ResolveSlackMappingUser(ctx, params)
+	require.Error(t, err)
+}

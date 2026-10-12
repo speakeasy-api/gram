@@ -318,7 +318,11 @@ function WatchdogContent(): JSX.Element {
       const results = await collectFindingsForRules(
         client,
         selected.map((signal) => signal.ruleId),
-        { from: undefined, to: undefined },
+        {
+          from: undefined,
+          to: undefined,
+          mcpServerId: mcpServerId || undefined,
+        },
       );
       if (results.length === 0) {
         // dismiss() ignores empty batches — fail loudly instead.
@@ -605,6 +609,7 @@ function WatchdogContent(): JSX.Element {
           <SignalDrawer
             signal={selectedSignal}
             mcpFindingNames={mcpFindingNames}
+            mcpServerId={mcpServerId || undefined}
             onClose={() => setUrlParam("signal", null)}
           />
           <SuppressFindingsDialog

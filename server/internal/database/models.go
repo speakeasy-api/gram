@@ -544,6 +544,10 @@ type BusinessMemory struct {
 }
 
 type Chat struct {
+	SessionSurface              pgtype.Text
+	SlackTeamID                 pgtype.Text
+	SlackChannelID              pgtype.Text
+	SlackChannelName            pgtype.Text
 	ID                          uuid.UUID
 	ProjectID                   uuid.UUID
 	OrganizationID              string
@@ -646,6 +650,20 @@ type ChatMessage struct {
 	RiskAnalyzedAt    pgtype.Timestamptz
 }
 
+type ChatMessageParticipant struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	ChatID         uuid.NullUUID
+	MessageID      uuid.NullUUID
+	Provider       string
+	ProviderUserID string
+	ProviderTeamID pgtype.Text
+	UserID         pgtype.Text
+	DisplayName    pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type ChatResolution struct {
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
@@ -712,6 +730,34 @@ type CustomDomain struct {
 	UpdatedAt                pgtype.Timestamptz
 	DeletedAt                pgtype.Timestamptz
 	Deleted                  bool
+}
+
+type Dashboard struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Description     pgtype.Text
+	Filters         []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type DashboardWidget struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	DashboardID    uuid.UUID
+	WidgetID       uuid.UUID
+	X              int32
+	Y              int32
+	W              int32
+	H              int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type DataExportRoute struct {
@@ -2408,6 +2454,7 @@ type PluginAssignment struct {
 	PluginID       uuid.UUID
 	OrganizationID string
 	PrincipalUrn   string
+	InstallMode    string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -2613,6 +2660,35 @@ type RemoteMcpServerHeader struct {
 	Deleted                bool
 }
 
+type RemoteProtectedResource struct {
+	ID                                    uuid.UUID
+	ProjectID                             uuid.UUID
+	OrganizationID                        string
+	ResourceIdentifier                    string
+	MetadataUrl                           pgtype.Text
+	AuthorizationServers                  []string
+	ScopesSupported                       []string
+	BearerMethodsSupported                []string
+	ResourceName                          pgtype.Text
+	ResourceDocumentation                 pgtype.Text
+	ResourcePolicyUri                     pgtype.Text
+	ResourceTosUri                        pgtype.Text
+	DpopBoundAccessTokensRequired         pgtype.Bool
+	DpopSigningAlgValuesSupported         []string
+	TlsClientCertificateBoundAccessTokens pgtype.Bool
+	ScopeOverride                         []string
+	ChallengeScopes                       []string
+	ChallengeScopesSeenAt                 pgtype.Timestamptz
+	Metadata                              []byte
+	MetadataFetchedAt                     pgtype.Timestamptz
+	MetadataLastError                     pgtype.Text
+	MetadataLastErrorAt                   pgtype.Timestamptz
+	CreatedAt                             pgtype.Timestamptz
+	UpdatedAt                             pgtype.Timestamptz
+	DeletedAt                             pgtype.Timestamptz
+	Deleted                               bool
+}
+
 type RemoteSession struct {
 	ID                     uuid.UUID
 	GrantGeneration        int64
@@ -2669,6 +2745,7 @@ type RemoteSessionClient struct {
 	ResourceTosUri                  pgtype.Text
 	UpstreamRejectedAt              pgtype.Timestamptz
 	IdentityProviderConnectionID    uuid.NullUUID
+	CredentialOwner                 string
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz
@@ -2760,6 +2837,7 @@ type RemoteSessionIssuer struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       bool
 	Passthrough                                bool
@@ -2978,6 +3056,47 @@ type SessionQuarantine struct {
 	UpdatedAt      pgtype.Timestamptz
 	ReleasedAt     pgtype.Timestamptz
 	ReleasedBy     pgtype.Text
+}
+
+type SigintCustomSignal struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	Slug               string
+	Description        pgtype.Text
+	ClassifierCriteria pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+}
+
+type SigintSensor struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	Instructions    pgtype.Text
+	Mode            string
+	MatchExpression string
+	Enabled         bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type SigintSensorSignal struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	SensorID  uuid.UUID
+	SignalID  uuid.UUID
+	SortOrder int32
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
 }
 
 type Skill struct {

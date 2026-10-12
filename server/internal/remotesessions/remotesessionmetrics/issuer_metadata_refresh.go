@@ -48,7 +48,7 @@ const (
 	// IssuerMetadataRefreshOutcomeSkippedRecent: a reactive request found the issuer visited within the reactive interval.
 	IssuerMetadataRefreshOutcomeSkippedRecent IssuerMetadataRefreshOutcome = "skipped_recent"
 
-	// IssuerMetadataRefreshOutcomeInternalError: Gram could not load or persist the row.
+	// IssuerMetadataRefreshOutcomeInternalError: Speakeasy could not load or persist the row.
 	IssuerMetadataRefreshOutcomeInternalError IssuerMetadataRefreshOutcome = "internal_error"
 )
 

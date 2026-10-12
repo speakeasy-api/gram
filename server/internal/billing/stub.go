@@ -248,7 +248,7 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"Oauth 2.1 proxy support",
 				"SSO",
 				"Audit logs",
-				"Self-hosting Gram dataplane",
+				"Self-hosting Speakeasy dataplane",
 			},
 			IncludedBullets: []string{
 				"Dedicated slack channel",

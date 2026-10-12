@@ -66,13 +66,6 @@ func ProcessOrganizationBootstrap(ctx context.Context, db *pgxpool.Pool, organiz
 	if err := requests.LockOrganization(ctx, tx, organizationID); err != nil {
 		return fmt.Errorf("lock organization role distribution: %w", err)
 	}
-	var enabled bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM organization_features WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution' AND deleted IS FALSE)`, organizationID).Scan(&enabled); err != nil {
-		return fmt.Errorf("read organization rollout: %w", err)
-	}
-	if !enabled {
-		return nil // A later staff enable creates a fresh enumeration pass.
-	}
 	var locked string
 	err = tx.QueryRow(ctx, `SELECT id FROM organization_metadata WHERE id = $1 AND disabled_at IS NULL FOR SHARE`, organizationID).Scan(&locked)
 	if errors.Is(err, pgx.ErrNoRows) {

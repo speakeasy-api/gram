@@ -17,17 +17,17 @@ import (
 type CreateAwsKmsKeyRequestBody struct {
 	// The ARN of the AWS KMS key.
 	KeyArn *string `form:"key_arn,omitempty" json:"key_arn,omitempty" xml:"key_arn,omitempty"`
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Speakeasy uses to authenticate to the key. Must
+	// belong to the same organization and matching cloud family (an aws_kms key
+	// requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
 	// The signing algorithm of the key.
 	Algorithm *string `form:"algorithm,omitempty" json:"algorithm,omitempty" xml:"algorithm,omitempty"`
 	// A human-readable name for the key.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The Speakeasy identity (GCP service-account email or AWS principal
+	// ARN) the customer granted on the key for the key-policy / IAM-grant model.
+	// Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -36,8 +36,8 @@ type CreateAwsKmsKeyRequestBody struct {
 type UpdateAwsKmsKeyRequestBody struct {
 	// The ID of the key to update.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The external credential Gram uses to authenticate to the key. Must be an
-	// aws_iam credential belonging to the same organization.
+	// The external credential Speakeasy uses to authenticate to the key. Must be
+	// an aws_iam credential belonging to the same organization.
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
 	// A human-readable name for the key.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
@@ -51,17 +51,17 @@ type UpdateAwsKmsKeyRequestBody struct {
 type CreateGcpKmsKeyRequestBody struct {
 	// The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
 	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Speakeasy uses to authenticate to the key. Must
+	// belong to the same organization and matching cloud family (an aws_kms key
+	// requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
 	// The signing algorithm of the key.
 	Algorithm *string `form:"algorithm,omitempty" json:"algorithm,omitempty" xml:"algorithm,omitempty"`
 	// A human-readable name for the key.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The Speakeasy identity (GCP service-account email or AWS principal
+	// ARN) the customer granted on the key for the key-policy / IAM-grant model.
+	// Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -70,13 +70,13 @@ type CreateGcpKmsKeyRequestBody struct {
 type UpdateGcpKmsKeyRequestBody struct {
 	// The ID of the key to update.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The external credential Gram uses to authenticate to the key. Must be a
+	// The external credential Speakeasy uses to authenticate to the key. Must be a
 	// gcp_iam credential belonging to the same organization.
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
 	// A human-readable name for the key.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional. The Gram service-account email the customer granted on the key in
-	// an IAM binding. Not a secret.
+	// Optional. The Speakeasy service-account email the customer granted on the
+	// key in an IAM binding. Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -89,7 +89,7 @@ type CreateAwsKmsKeyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization that owns the key.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string `form:"external_credential_id" json:"external_credential_id" xml:"external_credential_id"`
 	// The cloud KMS provider of the key.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
@@ -97,7 +97,7 @@ type CreateAwsKmsKeyResponseBody struct {
 	Algorithm string `form:"algorithm" json:"algorithm" xml:"algorithm"`
 	// A human-readable name for the key.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
@@ -116,7 +116,7 @@ type UpdateAwsKmsKeyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization that owns the key.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string `form:"external_credential_id" json:"external_credential_id" xml:"external_credential_id"`
 	// The cloud KMS provider of the key.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
@@ -124,7 +124,7 @@ type UpdateAwsKmsKeyResponseBody struct {
 	Algorithm string `form:"algorithm" json:"algorithm" xml:"algorithm"`
 	// A human-readable name for the key.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
@@ -143,7 +143,7 @@ type CreateGcpKmsKeyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization that owns the key.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string `form:"external_credential_id" json:"external_credential_id" xml:"external_credential_id"`
 	// The cloud KMS provider of the key.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
@@ -151,7 +151,7 @@ type CreateGcpKmsKeyResponseBody struct {
 	Algorithm string `form:"algorithm" json:"algorithm" xml:"algorithm"`
 	// A human-readable name for the key.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
@@ -170,7 +170,7 @@ type UpdateGcpKmsKeyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization that owns the key.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string `form:"external_credential_id" json:"external_credential_id" xml:"external_credential_id"`
 	// The cloud KMS provider of the key.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
@@ -178,7 +178,7 @@ type UpdateGcpKmsKeyResponseBody struct {
 	Algorithm string `form:"algorithm" json:"algorithm" xml:"algorithm"`
 	// A human-readable name for the key.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
@@ -218,7 +218,7 @@ type GetAwsKmsKeyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization that owns the key.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string `form:"external_credential_id" json:"external_credential_id" xml:"external_credential_id"`
 	// The cloud KMS provider of the key.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
@@ -226,7 +226,7 @@ type GetAwsKmsKeyResponseBody struct {
 	Algorithm string `form:"algorithm" json:"algorithm" xml:"algorithm"`
 	// A human-readable name for the key.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
@@ -245,7 +245,7 @@ type GetGcpKmsKeyResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization that owns the key.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string `form:"external_credential_id" json:"external_credential_id" xml:"external_credential_id"`
 	// The cloud KMS provider of the key.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
@@ -253,7 +253,7 @@ type GetGcpKmsKeyResponseBody struct {
 	Algorithm string `form:"algorithm" json:"algorithm" xml:"algorithm"`
 	// A human-readable name for the key.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
@@ -2557,7 +2557,7 @@ type ExternalKeySummaryResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The organization that owns the key.
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The external credential Gram uses to authenticate to the key.
+	// The external credential Speakeasy uses to authenticate to the key.
 	ExternalCredentialID string `form:"external_credential_id" json:"external_credential_id" xml:"external_credential_id"`
 	// The cloud KMS provider of the key.
 	Provider string `form:"provider" json:"provider" xml:"provider"`
@@ -2565,7 +2565,7 @@ type ExternalKeySummaryResponseBody struct {
 	Algorithm string `form:"algorithm" json:"algorithm" xml:"algorithm"`
 	// A human-readable name for the key.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The Gram identity (GCP service-account email or AWS principal ARN) the
+	// The Speakeasy identity (GCP service-account email or AWS principal ARN) the
 	// customer granted on the key for the key-policy / IAM-grant model. Not a
 	// secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`

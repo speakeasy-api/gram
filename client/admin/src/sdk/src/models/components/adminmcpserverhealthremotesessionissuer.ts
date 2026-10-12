@@ -25,14 +25,14 @@ export type AdminMcpServerHealthRemoteSessionIssuerAttachmentScope = ClosedEnum<
 >;
 
 /**
- * Whether Gram reaches the issuer over the public internet or a tunnel.
+ * Whether Speakeasy reaches the issuer over the public internet or a tunnel.
  */
 export const Networking = {
   Public: "public",
   Tunneled: "tunneled",
 } as const;
 /**
- * Whether Gram reaches the issuer over the public internet or a tunnel.
+ * Whether Speakeasy reaches the issuer over the public internet or a tunnel.
  */
 export type Networking = ClosedEnum<typeof Networking>;
 
@@ -87,13 +87,17 @@ export type AdminMcpServerHealthRemoteSessionIssuer = {
    */
   name?: string | undefined;
   /**
-   * Whether Gram reaches the issuer over the public internet or a tunnel.
+   * Whether Speakeasy reaches the issuer over the public internet or a tunnel.
    */
   networking: Networking;
   /**
    * Whether the issuer is treated as an OpenID Connect provider.
    */
   oidc: boolean;
+  /**
+   * Whether a login with no other scope source sends no scope instead of the issuer's whole scopes_supported. Absent when unset, which behaves as false.
+   */
+  omitScopeFallback?: boolean | undefined;
   /**
    * Whether upstream tokens are passed through to the server.
    */
@@ -145,6 +149,7 @@ export const AdminMcpServerHealthRemoteSessionIssuer$inboundSchema:
       name: z.optional(z.string()),
       networking: Networking$inboundSchema,
       oidc: z.boolean(),
+      omit_scope_fallback: z.optional(z.boolean()),
       passthrough: z.boolean(),
       pkce: Pkce$inboundSchema,
       scope_override: z.optional(z.array(z.string())),
@@ -157,6 +162,7 @@ export const AdminMcpServerHealthRemoteSessionIssuer$inboundSchema:
         "jwks_last_error_at": "jwksLastErrorAt",
         "metadata_fetched_at": "metadataFetchedAt",
         "metadata_last_error_at": "metadataLastErrorAt",
+        "omit_scope_fallback": "omitScopeFallback",
         "scope_override": "scopeOverride",
       });
     }),

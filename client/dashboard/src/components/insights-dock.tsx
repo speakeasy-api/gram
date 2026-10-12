@@ -903,7 +903,7 @@ export function InsightsProvider({
   const suggestions =
     override?.suggestions ?? routeSuggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
-  const hideTrigger =
+  const pageHidesTrigger =
     (override?.hideTrigger ?? false) || dockHiddenByPage || onAddFlowRoute;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
   const organization = useOrganization();
@@ -950,12 +950,14 @@ export function InsightsProvider({
     transport: serverTransport,
     assistantId: managedAssistantId,
     ready: assistantReady,
+    allowed: assistantAllowed,
     error: assistantError,
     needsAdmin: assistantNeedsAdmin,
   } = useServerAssistantTransport(mcpConfig.projectSlug, true, {
     getSkillIds: getSelectedSkillIds,
     onSkillIdsSent: handleSkillIdsSent,
   });
+  const hideTrigger = pageHidesTrigger || !assistantAllowed;
 
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
@@ -1574,8 +1576,10 @@ export function InsightsProvider({
     <div className="relative flex w-full flex-1 flex-col">
       {children}
 
-      {/* Backdrop overlay - closes the chat panel when clicked */}
-      {isExpanded && (
+      {/* Backdrop overlay - closes the chat panel when clicked. A page that
+          hides the dock hides the panel with it, so the backdrop goes too:
+          left behind, it would swallow clicks on that page. */}
+      {isExpanded && !hideTrigger && (
         <div
           className="fixed inset-0 z-20"
           onClick={() => setIsExpanded(false)}

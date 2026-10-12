@@ -30,7 +30,7 @@ export type TrialState = ClosedEnum<typeof TrialState>;
  */
 export type AdminOrganization = {
   /**
-   * Gram account type (e.g. free, pro, payg, enterprise).
+   * Speakeasy account type (e.g. free, pro, payg, enterprise).
    */
   accountType: string;
   /**

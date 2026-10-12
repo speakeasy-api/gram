@@ -26,7 +26,7 @@ const NONE = "__none__";
 
 // KeySetField picks the JSON Web Key Set this client signs private_key_jwt
 // assertions with. It sits beside the token endpoint authentication method
-// because that is where an administrator is already deciding how Gram
+// because that is where an administrator is already deciding how Speakeasy
 // authenticates at this counterparty.
 //
 // Unlike the other fields on this tab it saves immediately rather than on "Save
@@ -44,12 +44,14 @@ export function KeySetField({
   client,
   issuerId,
   onPendingChange,
+  disabled = false,
 }: {
   client: RemoteSessionClient;
   issuerId: string;
   // Lets the enclosing form hold its own Save until this link has settled, so
   // an update that depends on the attach cannot overtake it.
   onPendingChange?: (pending: boolean) => void;
+  disabled?: boolean;
 }): JSX.Element | null {
   const organization = useOrganization();
   const gramClient = useGramContext();
@@ -72,7 +74,7 @@ export function KeySetField({
   });
   const sets = setsData?.sets ?? [];
 
-  // AIM-64 establishes that Gram may hold more than one client at the same
+  // AIM-64 establishes that Speakeasy may hold more than one client at the same
   // downstream issuer — an interactive one and a separate chaining one. Same
   // trust relationship, same counterparty, so when a sibling at this issuer
   // already signs with a set, suggest that one rather than making the
@@ -167,7 +169,7 @@ export function KeySetField({
       <Select
         value={selected}
         onValueChange={handleChange}
-        disabled={setsPending || pending}
+        disabled={disabled || setsPending || pending}
       >
         <SelectTrigger>
           <SelectValue placeholder={setsPending ? "Loading…" : "None"} />

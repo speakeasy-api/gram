@@ -18,6 +18,8 @@ export {
 
 export { REDACTED_SECRET } from "./model/secret";
 
+export { normalizeScopes } from "./model/clientConfiguration";
+
 export {
   headerDraftErrors,
   headerDraftFromCatalog,
@@ -37,7 +39,10 @@ export {
 } from "./drafts/useCredentialDraft";
 export type { AgentCredentialFields } from "./drafts/useCredentialDraft";
 
-export { useUserIdentityDraft } from "./drafts/useIdentityDraft";
+export {
+  issuerDisplayName,
+  useUserIdentityDraft,
+} from "./drafts/useIdentityDraft";
 
 export { useAllRemoteSessionClients } from "./queries/useAllRemoteSessionClients";
 export { useRemoteSessionIssuersByIds } from "./queries/useRemoteSessionIssuersByIds";
@@ -53,3 +58,6 @@ export { identityModeCards } from "./components/IdentityModeCards";
 export { IssuerLink } from "./components/ProviderLink";
 export { UserIdentityRow } from "./components/ProviderRow";
 export { ScopeBadge } from "./components/ScopeBadge";
+export { ScopeMultiSelect } from "./components/ScopeMultiSelect";
+export { IssuerLogo } from "./components/IssuerLogo";
+export { ScopeList } from "./components/ScopeList";

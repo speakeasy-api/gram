@@ -1,11 +1,11 @@
 ---
 name: clickhouse
-description: Use when changing or reviewing Gram ClickHouse schemas, migrations, queries, inserts, access principals, bootstrap SQL, Cloud compatibility, partial migration failures, or performance for analytics, telemetry, risk, authz, and spend features
+description: Use when changing or reviewing Speakeasy ClickHouse schemas, migrations, queries, inserts, access principals, bootstrap SQL, Cloud compatibility, partial migration failures, or performance for analytics, telemetry, risk, authz, and spend features
 ---
 
 ## Official ClickHouse guidance
 
-Gram conventions and the checked-in schema remain authoritative. Also use:
+Speakeasy conventions and the checked-in schema remain authoritative. Also use:
 
 - `clickhouse-best-practices` when reviewing or changing a ClickHouse schema, query, insert strategy, or configuration. Read its applicable rule files and cite the rules in review findings.
 - `clickhouse-architecture-advisor` when choosing between ingestion patterns, raw tables and materialized views, partitioning or retention strategies, joins or enrichment, or mutable-state models.

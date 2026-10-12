@@ -55,6 +55,33 @@ describe("encodeSpec and decodeSpec", () => {
     expect(decodeSpec(encodeSpec(composing), [sessions])).toEqual(composing);
   });
 
+  it("round-trip an absolute range, and leave it out of a link without one", () => {
+    const ranged: ExploreSpec = {
+      ...spec,
+      range: { from: Date.UTC(2026, 8, 14, 10), to: Date.UTC(2026, 8, 14, 12) },
+    };
+    expect(decodeSpec(encodeSpec(ranged), [sessions])).toEqual(ranged);
+    expect(JSON.parse(encodeSpec(spec))).not.toHaveProperty("range");
+  });
+
+  it("open a link with the builder's old spelling of a day as 1d", () => {
+    const old = JSON.stringify({
+      ...JSON.parse(encodeSpec(spec)),
+      window: "24h",
+    });
+    expect(decodeSpec(old, [sessions])?.window).toBe("1d");
+  });
+
+  it("carry the date picker's label for a range", () => {
+    const ranged: ExploreSpec = {
+      ...spec,
+      range: { from: 1_000, to: 2_000, label: "Last Tuesday" },
+    };
+    expect(decodeSpec(encodeSpec(ranged), [sessions])?.range).toEqual(
+      ranged.range,
+    );
+  });
+
   it("keep only the query, whatever else the spec object carries", () => {
     const extra = { ...spec, unrelated: true } as ExploreSpec;
     expect(JSON.parse(encodeSpec(extra))).not.toHaveProperty("unrelated");
@@ -76,6 +103,25 @@ describe("encodeSpec and decodeSpec", () => {
     ],
     ["a limit past the cap", encodeSpec({ ...spec, limit: 5_000 })],
     ["a fractional limit", encodeSpec({ ...spec, limit: 1.5 })],
+    [
+      "a range that ends before it starts",
+      encodeSpec({ ...spec, range: { from: 2_000, to: 1_000 } }),
+    ],
+    [
+      "a range ending outside the supported Date range",
+      encodeSpec({ ...spec, range: { from: 0, to: Number.MAX_SAFE_INTEGER } }),
+    ],
+    [
+      "a range starting outside the supported Date range",
+      encodeSpec({ ...spec, range: { from: Number.MIN_SAFE_INTEGER, to: 0 } }),
+    ],
+    [
+      "a range that is not two numbers",
+      JSON.stringify({
+        ...JSON.parse(encodeSpec(spec)),
+        range: { from: "2026-09-14", to: 1_000 },
+      }),
+    ],
     [
       "a filter value that is not text",
       JSON.stringify({

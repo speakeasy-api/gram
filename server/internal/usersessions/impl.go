@@ -78,11 +78,11 @@ type Service struct {
 	revoker *remotesessions.UpstreamRevoker
 
 	// verifyLimiter bounds the VerifyURL handler, keyed per project. That
-	// endpoint is the only one that makes Gram issue an outbound request to
+	// endpoint is the only one that makes Speakeasy issue an outbound request to
 	// a caller-chosen host, and the resolver's guardian client carries no
 	// resilience layer of its own (WithResilience is opt-in and unused
 	// here), so without this a project:write holder could loop it into a
-	// scanner wearing Gram's egress IPs, or pin goroutines against a
+	// scanner wearing Speakeasy's egress IPs, or pin goroutines against a
 	// slowloris host for fetchTimeout apiece.
 	verifyLimiter *ratelimit.Limiter
 }

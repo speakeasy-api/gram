@@ -32,7 +32,7 @@ export type PluginServer = {
    */
   id: string;
   /**
-   * Gram MCP server ID. Exactly one backend ID is set.
+   * Speakeasy MCP server ID. Exactly one backend ID is set.
    */
   mcpServerId?: string | undefined;
   /**
@@ -48,7 +48,7 @@ export type PluginServer = {
    */
   sortOrder: number;
   /**
-   * Gram toolset ID. Exactly one backend ID is set.
+   * Speakeasy toolset ID. Exactly one backend ID is set.
    */
   toolsetId?: string | undefined;
 };

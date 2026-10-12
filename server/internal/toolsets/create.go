@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -208,6 +209,9 @@ func CreateToolsetInTransaction(ctx context.Context, tx pgx.Tx, logger *slog.Log
 	}); err != nil {
 		return ToolsetCreateResult{}, oops.E(oops.CodeUnexpected, err, "failed to log toolset creation").LogError(ctx, logger)
 	}
+	if _, err := hostedmcp.Sync(ctx, tx, auditLogger, hostedmcp.Actor{UserID: input.ActorUserID, Email: input.ActorEmail, System: ""}, created, nil); err != nil {
+		return ToolsetCreateResult{}, err //nolint:wrapcheck // oops errors pass through.
+	}
 
 	result := ToolsetCreateResult{Toolset: created, McpEnabled: params.McpEnabled, AddedToDefaultPlugin: false, PluginCreated: false}
 	if params.McpEnabled {
@@ -255,9 +259,9 @@ func ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logge
 }
 
 // attachToDefaultPluginInTransaction adds a newly MCP-enabled toolset to the
-// project's Default plugin so it's included in the auto-published marketplace
-// without a human visiting the Plugins page. No-op if the toolset is already
-// attached. Returns pluginCreated=true if this call lazily created the Default
+// project's Default plugin and matching role-audience plugins so it's included
+// in the auto-published marketplace without a human visiting the Plugins page.
+// Returns pluginCreated=true if this call lazily created the Default
 // plugin (project predates this feature) — callers should enqueue an initial
 // publish for it, but only after their own transaction commits, since this
 // runs pre-commit and the DB writes could still roll back.
@@ -267,13 +271,13 @@ func attachToDefaultPluginInTransaction(ctx context.Context, dbtx pgx.Tx, logger
 }
 
 func attachToDefaultPluginWithOutcome(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (plugins.DefaultPluginAttachOutcome, error) {
-	outcome, err := plugins.AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, plugins.AttachToDefaultPluginParams{
+	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: toolsetID, Valid: true},
 		McpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		DisplayName:    displayName,
-	})
+	}, nil)
 	if err != nil {
 		return plugins.DefaultPluginAttachOutcome{}, oops.E(oops.CodeUnexpected, err, "attach toolset to default plugin").LogError(ctx, logger)
 	}

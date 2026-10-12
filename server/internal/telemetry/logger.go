@@ -311,7 +311,7 @@ func (l *Logger) buildBulkParams(ctx context.Context, operationCtx context.Conte
 
 // hydrateUserInfo fills the directory-derived parts of the row's UserInfo
 // (allowlisted WorkOS predefined attributes, current group names, role
-// slugs) when the caller provided a Gram user ID. Telemetry rows are
+// slugs) when the caller provided a Speakeasy user ID. Telemetry rows are
 // append-only: the snapshot reflects state at write time and is never
 // rewritten. Empty snapshot parts (directory-deleted users, orgs without
 // Directory Sync, lingering API keys) are omitted rather than stamped as

@@ -2217,7 +2217,7 @@ func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
 }
 
 // A member the sanitizer blanks is reported, so an operator can tell a
-// provider that advertises nothing from one whose value Gram refused.
+// provider that advertises nothing from one whose value Speakeasy refused.
 func TestFetchRemoteSessionIssuerMetadata_WarnsAboutDroppedPlaintextUserinfoEndpoint(t *testing.T) {
 	t.Parallel()
 

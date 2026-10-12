@@ -1454,6 +1454,26 @@ func unmarshalWidgetResponseBodyToWidgetsWidget(v *WidgetResponseBody) *widgets.
 		tv := val
 		res.Visualization[tk] = tv
 	}
+	res.Dashboards = make([]*widgets.WidgetDashboard, len(v.Dashboards))
+	for i, val := range v.Dashboards {
+		if val == nil {
+			res.Dashboards[i] = nil
+			continue
+		}
+		res.Dashboards[i] = unmarshalWidgetDashboardResponseBodyToWidgetsWidgetDashboard(val)
+	}
+
+	return res
+}
+
+// unmarshalWidgetDashboardResponseBodyToWidgetsWidgetDashboard builds a value
+// of type *widgets.WidgetDashboard from a value of type
+// *WidgetDashboardResponseBody.
+func unmarshalWidgetDashboardResponseBodyToWidgetsWidgetDashboard(v *WidgetDashboardResponseBody) *widgets.WidgetDashboard {
+	res := &widgets.WidgetDashboard{
+		ID:   *v.ID,
+		Name: *v.Name,
+	}
 
 	return res
 }

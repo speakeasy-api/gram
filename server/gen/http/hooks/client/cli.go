@@ -507,3 +507,32 @@ func BuildMetricsPayload(hooksMetricsBody string, hooksMetricsApikeyToken string
 
 	return v, nil
 }
+
+// BuildGetStatusPayload builds the payload for the hooks getStatus endpoint
+// from CLI flags.
+func BuildGetStatusPayload(hooksGetStatusApikeyToken string, hooksGetStatusSessionToken string, hooksGetStatusProjectSlugInput string) (*hooks.GetStatusPayload, error) {
+	var apikeyToken *string
+	{
+		if hooksGetStatusApikeyToken != "" {
+			apikeyToken = &hooksGetStatusApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if hooksGetStatusSessionToken != "" {
+			sessionToken = &hooksGetStatusSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if hooksGetStatusProjectSlugInput != "" {
+			projectSlugInput = &hooksGetStatusProjectSlugInput
+		}
+	}
+	v := &hooks.GetStatusPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

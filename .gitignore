@@ -2,6 +2,7 @@
 *.log
 # Local agent scratch — per-machine memory store and ad-hoc planning notes.
 .claude/projects/
+/.opencode/opencode.jsonc
 PERSONAL_ACCOUNT_*
 .otel-capture/
 mise.local.toml
@@ -45,6 +46,7 @@ report.md
 /dev-idp/gen/http/openapi3.yaml
 scratch/
 /local/cache
+/local/lake
 /local/lgtm
 /local/ssl
 /local/keys

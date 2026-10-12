@@ -307,7 +307,6 @@ func TestFeature_RequiresPlatformAdmin(t *testing.T) {
 	}
 
 	staffOnly := []productfeatures.Feature{
-		productfeatures.FeatureAutomaticRoleDistribution,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 		productfeatures.FeatureSkills,
@@ -598,7 +597,7 @@ func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {
 	require.True(t, enabled)
 }
 
-func TestProductFeaturesService_RoleDistributionRequiresStaffSurface(t *testing.T) {
+func TestProductFeaturesService_RejectsRetiredRoleDistributionFlag(t *testing.T) {
 	t.Parallel()
 	for _, staff := range []bool{false, true} {
 		t.Run(fmt.Sprintf("staff=%v", staff), func(t *testing.T) {
@@ -609,12 +608,22 @@ func TestProductFeaturesService_RoleDistributionRequiresStaffSurface(t *testing.
 			}
 			err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 				OrganizationID: requestedOrganizationID(ctx),
-				FeatureName:    gen.ProductFeatureName(productfeatures.FeatureAutomaticRoleDistribution), Enabled: true,
+				FeatureName:    gen.ProductFeatureName("automatic-role-distribution"), Enabled: true,
 			})
-			requireOopsCode(t, err, oops.CodeForbidden)
-			enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: activeOrganizationID(t, ctx), FeatureName: string(productfeatures.FeatureAutomaticRoleDistribution)})
+			requireOopsCode(t, err, oops.CodeInvalid)
+			enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: activeOrganizationID(t, ctx), FeatureName: "automatic-role-distribution"})
 			require.NoError(t, err)
 			require.False(t, enabled)
 		})
+	}
+}
+
+func TestMutatorRejectsRetiredRoleDistributionFlag(t *testing.T) {
+	t.Parallel()
+	mutator := productfeatures.NewMutator(nil, nil)
+	for _, enabled := range []bool{false, true} {
+		changed, err := mutator.ApplyFeatureChangeTx(t.Context(), nil, "org_retired_flag", productfeatures.Feature("automatic-role-distribution"), enabled, productfeatures.MutationActor{})
+		require.False(t, changed)
+		requireOopsCode(t, err, oops.CodeInvalid)
 	}
 }

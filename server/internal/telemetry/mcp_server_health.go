@@ -65,7 +65,7 @@ func NewMCPServerHealth(_ *pgxpool.Pool, chConn clickhouse.Conn) *MCPServerHealt
 }
 
 // Outcomes counts the server's calls in [from, to] across both lanes: calls
-// that reached Gram directly and calls an agent hook observed.
+// that reached Speakeasy directly and calls an agent hook observed.
 func (h *MCPServerHealth) Outcomes(ctx context.Context, target MCPServerTelemetryTarget, from, to time.Time) (*MCPServerOutcomes, error) {
 	if target.ProjectID == "" {
 		return nil, fmt.Errorf("mcp server health: project id is required")

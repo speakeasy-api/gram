@@ -1256,22 +1256,23 @@ func TestCreateStripeCheckoutStartsImmediatelyWhenTrialDemoted(t *testing.T) {
 	require.Nil(t, checkouts[0].TrialEnd)
 }
 
-func TestCreateStripeCheckoutRejectsTrialUnderStripeMinimum(t *testing.T) {
+func TestCreateStripeCheckoutStartsPaygWhenTrialAtStripeMinimum(t *testing.T) {
 	t.Parallel()
 
 	ti := newStripeCheckoutTestInstance(t)
+	now := time.Date(2026, time.October, 5, 0, 0, 0, 0, time.UTC)
+	ti.service.now = func() time.Time { return now }
 	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
 		OrganizationID: ti.orgID,
 		Tier:           "enterprise",
-		EndsAt:         pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		EndsAt:         pgtype.Timestamptz{Time: now.Add(48 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 	}))
 
 	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeConflict)
-	uniqueCustomers, _, checkouts := ti.stripe.snapshot()
-	require.Zero(t, uniqueCustomers)
-	require.Empty(t, checkouts)
+	require.NoError(t, err)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 1)
+	require.Nil(t, checkouts[0].TrialEnd)
 }
 
 func TestCreateStripeCheckoutReusesStoredCustomer(t *testing.T) {

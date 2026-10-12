@@ -4,14 +4,14 @@ cwd: ../..
 
 # Plugins
 
-Plugins are distributable bundles of MCP servers (and observability hooks) that org admins create in Gram and publish to AI coding platforms. Once published, team members install the plugin through each platform's native plugin marketplace instead of configuring MCP servers manually.
+Plugins are distributable bundles of MCP servers (and observability hooks) that org admins create in Speakeasy and publish to AI coding platforms. Once published, team members install the plugin through each platform's native plugin marketplace instead of configuring MCP servers manually.
 
 ## What a plugin is
 
-A plugin aggregates one or more Gram toolsets under a single named unit. Admins configure which MCP servers are included, whether each is `required` or `optional`, and which roles/users are assigned to receive it. Gram then generates platform-specific package files and publishes them to a GitHub repo that each platform's marketplace indexes.
+A plugin aggregates one or more Speakeasy toolsets under a single named unit. Admins configure which MCP servers are included, whether each is `required` or `optional`, and which roles/users are assigned to receive it. Speakeasy then generates platform-specific package files and publishes them to a GitHub repo that each platform's marketplace indexes.
 
 ```
-Org admin                     Gram                        GitHub repo (auto-managed)
+Org admin                     Speakeasy                        GitHub repo (auto-managed)
   │                             │                                │
   ├─ create plugin "AI Tools"   │                                │
   ├─ add 3 MCP servers          │                                │
@@ -25,7 +25,7 @@ Team member installs from Claude/Cursor/Codex marketplace
 
 ## Key concepts
 
-**Toolsets as plugin servers.** Each MCP server inside a plugin maps to a Gram toolset with MCP enabled. The toolset's MCP URL is resolved at publish time and embedded in the generated config.
+**Toolsets as plugin servers.** Each MCP server inside a plugin maps to a Speakeasy toolset with MCP enabled. The toolset's MCP URL is resolved at publish time and embedded in the generated config.
 
 **Server policy.** Each server is `required` (always installed) or `optional` (user can opt out). This is expressed in the per-platform plugin manifest.
 
@@ -37,7 +37,7 @@ Team member installs from Claude/Cursor/Codex marketplace
 
 Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect` scope) still enforces access at the MCP entrypoint.
 
-**Observability plugin.** Every publish automatically includes a per-org observability plugin — one each for Claude, Cursor, Codex, OpenCode, OpenClaw, Pi and GitHub Copilot — that bundles hooks forwarding tool-use events back to Gram. This is required for proper audit logging.
+**Observability plugin.** Every publish automatically includes a per-org observability plugin — one each for Claude, Cursor, Codex, OpenCode, OpenClaw, Pi and GitHub Copilot — that bundles hooks forwarding tool-use events back to Speakeasy. This is required for proper audit logging.
 
 **OpenClaw.** The OpenClaw observability package is a native OpenClaw plugin (`openclaw.plugin.json` + `index.js`), installed with `openclaw plugins install <dir>` and a Gateway restart. Two caveats are load-bearing and documented in the [OpenClaw install runbook](../runbooks/openclaw-install.md): conversation-scope hooks require `plugins.entries.speakeasy-observability.hooks.allowConversationAccess: true`, and coverage depends on the customer's model-auth mode — models routed through the Claude CLI harness delegate the tool loop out-of-process, so OpenClaw's tool and LLM hooks never fire for them.
 
@@ -45,7 +45,7 @@ Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect
 
 **GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`), which Copilot loads in the CLI, VS Code and the Copilot app. Hooks ship through the Copilot observability package and run in **Copilot CLI only** — VS Code and the Copilot app load the plugin but never fire its hooks. See [Package format](./package-format.md#copilot-observability).
 
-**Scoped API keys.** At publish time, Gram mints two API keys and embeds them in the generated configs:
+**Scoped API keys.** At publish time, Speakeasy mints two API keys and embeds them in the generated configs:
 
 - A `consumer`-scoped key for MCP access
 - A `hooks`-scoped key embedded in the hook script
@@ -115,5 +115,6 @@ All mutations emit an audit event with actor, action, subject (plugin), and org/
 ## Related docs
 
 - [Local development](./local-development.md) — env vars, GitHub App setup, running locally
-- [Package format](./package-format.md) — exact file layout Gram generates per platform
+- [Package format](./package-format.md) — exact file layout Speakeasy generates per platform
 - [Publishing](./publishing.md) — end-to-end publish flow, marketplace tokens, GitHub integration
+- [Hooks environment overrides](../runbooks/hooks-environment-overrides.md) — the `SPEAKEASY_AI_HOOKS_*` variables an installed plugin honours, and how to collect a debug log

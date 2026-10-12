@@ -183,10 +183,10 @@ type workosOrgEvent struct {
 // failures are logged and never retried, so every effect must be safe to lose
 // (the database is the source of truth). The zero value requests nothing.
 type postCommitEffects struct {
-	// updateWorkOSExternalID writes a Gram org ID back to the WorkOS
+	// updateWorkOSExternalID writes a Speakeasy org ID back to the WorkOS
 	// organization's external_id.
 	updateWorkOSExternalID *workosOrgExternalIDUpdate
-	// invalidateUserInfoCacheUserID is the Gram user ID whose cached user
+	// invalidateUserInfoCacheUserID is the Speakeasy user ID whose cached user
 	// info to drop after a membership was added or removed, so org-access
 	// checks observe the change without waiting out the cache TTL.
 	invalidateUserInfoCacheUserID string
@@ -295,7 +295,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 // run by the caller after the transaction commits. workosOrgID is the
 // organization whose event stream is being processed. newOrganizationDefaultHost
 // is recorded on an organization the event creates.
-func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, workosOrgID string, event events.Event, newOrganizationDefaultHost pgtype.Text) (postCommitEffects, error) {
+func handleOrganizationEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, workosOrgID string, event events.Event, newOrganizationDefaultHost pgtype.Text) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	switch event.Event {
@@ -373,17 +373,17 @@ type resolvedWorkOSOrganization struct {
 // handleOrganizationUpsert applies an organization.created or
 // organization.updated event. The mapping rules are:
 //
-//   - workos_id is authoritative first: if a Gram org already points at this
+//   - workos_id is authoritative first: if a Speakeasy org already points at this
 //     WorkOS org, update that row.
-//   - otherwise, WorkOS external_id is the Gram org ID to link/update.
-//   - if WorkOS external_id points at no Gram org, create/link that local row
-//     using WorkOS external_id as the Gram org ID.
-//   - if WorkOS has no external_id, derive a deterministic Gram org ID from the
+//   - otherwise, WorkOS external_id is the Speakeasy org ID to link/update.
+//   - if WorkOS external_id points at no Speakeasy org, create/link that local row
+//     using WorkOS external_id as the Speakeasy org ID.
+//   - if WorkOS has no external_id, derive a deterministic Speakeasy org ID from the
 //     WorkOS org ID, create/link that local row, then write the derived ID back
 //     to WorkOS after the DB transaction commits.
 //
 // WorkOS owns name/workos_id/cursor metadata, but never updates an existing
-// Gram slug. New org slugs are chosen once and uniqued locally.
+// Speakeasy slug. New org slugs are chosen once and uniqued locally.
 func handleOrganizationUpsert(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, newOrganizationDefaultHost pgtype.Text) (postCommitEffects, error) {
 	var effects postCommitEffects
 

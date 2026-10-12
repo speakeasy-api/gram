@@ -20,7 +20,7 @@ const figmaMCPCatalogURL = "https://www.figma.com/mcp-catalog/"
 
 // Case-insensitive User-Agent substrings for the clients in Figma's MCP
 // catalog as of 2026-07-15. Tokens after the gap are inferred from product
-// names, not yet observed in Gram traffic.
+// names, not yet observed in Speakeasy traffic.
 var figmaAllowedUserAgents = []string{
 	"claude-user", // Claude via claude.ai remote connectors
 	"claude-code/",
@@ -60,7 +60,7 @@ var figmaAllowedUserAgents = []string{
 
 // figma rejects requests whose User-Agent is not a client in Figma's MCP
 // catalog, since Figma only supports those clients and proxied traffic reaches
-// it with Gram's transport. Policy gate, not a security boundary: User-Agent
+// it with Speakeasy's transport. Policy gate, not a security boundary: User-Agent
 // is spoofable.
 type figma struct {
 	figmaUpstream bool

@@ -1,4 +1,4 @@
-name: Sync Gram Docs → Marketing Site (PR)
+name: Sync Speakeasy Docs → Marketing Site (PR)
 on:
   push:
     branches: [main]
@@ -18,7 +18,7 @@ jobs:
   sync:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - name: Checkout Gram repo (source)
+      - name: Checkout Speakeasy repo (source)
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
         with:
           fetch-depth: 0
@@ -116,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           cd marketing-repo
-          echo "### Sync from Gram" > ../PR_BODY.md
+          echo "### Sync from Speakeasy" > ../PR_BODY.md
           echo "" >> ../PR_BODY.md
           echo "**Source commit:** \`${GITHUB_SHA}\`" >> ../PR_BODY.md
           echo "" >> ../PR_BODY.md
@@ -143,9 +143,9 @@ jobs:
         with:
           token: ${{ secrets.SERVICE_BOT_TOKEN }}
           path: marketing-repo
-          commit-message: "Sync marketing docs from Gram 🐝 (source ${{ github.sha }})"
+          commit-message: "Sync marketing docs from Speakeasy 🐝 (source ${{ github.sha }})"
           branch: chore/gram-to-marketing-sync-${{ github.sha }}
-          title: "chore: sync docs from Gram"
+          title: "chore: sync docs from Speakeasy"
           body-path: PR_BODY.md
           committer: "Beezy the bot <beezy-bot@users.noreply.github.com>"
           author: "Beezy the bot <beezy-bot@users.noreply.github.com>"

@@ -113,7 +113,7 @@ func exchange(ctx context.Context, idp tokenPoster, idToken string, sel selectio
 }
 
 // validateGrant verifies the ID-JAG against the trusted identity provider's
-// published keys before it leaves Gram. No claim selects keys or trust.
+// published keys before it leaves Speakeasy. No claim selects keys or trust.
 func (c *Chainer) validateGrant(ctx context.Context, logger *slog.Logger, verifier assertionVerifier, idpIssuer, raw, upstreamSubject string, sel selection) Outcome {
 	invalid := newOutcome(StageValidation, ReasonMalformedAssertion, ConfidenceVerified, false)
 	var claims grantClaims

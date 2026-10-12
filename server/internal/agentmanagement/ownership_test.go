@@ -82,7 +82,9 @@ func TestExplicitReassignmentIsTheOnlyOwnershipOperationThatClearsLatch(t *testi
 	seedOrganizationUser(t, conn, "org-a", "admin")
 	seedOrganizationUser(t, conn, "org-a", "replacement")
 	agent := createAgent(t, conn, "org-a", "former-owner", "Reassignment agent")
-	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), conn, "org-a", "former-owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil))
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		return agentownership.LatchOwnerLossByMembership(t.Context(), tx, "org-a", "former-owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil)
+	}))
 
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
 	allow(engine, authz.ScopeAgentTransfer, agent.ID)
@@ -194,7 +196,9 @@ func TestReassignmentCanRestoreFormerOwnerOnlyThroughExplicitOperation(t *testin
 	seedOrganizationUser(t, conn, "org-a", "owner")
 	seedOrganizationUser(t, conn, "org-a", "admin")
 	agent := createAgent(t, conn, "org-a", "owner", "Restored owner agent")
-	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), conn, "org-a", "owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil))
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		return agentownership.LatchOwnerLossByMembership(t.Context(), tx, "org-a", "owner", agentownership.OwnerReassignmentReasonOwnerInactive, agentownership.SystemActor, nil)
+	}))
 
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
 	allow(engine, authz.ScopeAgentTransfer, agent.ID)
@@ -225,7 +229,9 @@ func TestLatchedRestoredOwnerCannotManagePolicyButExactWriteAdministratorCan(t *
 	require.NoError(t, orgrepo.New(conn).DeleteOrganizationUserRelationship(t.Context(), orgrepo.DeleteOrganizationUserRelationshipParams{
 		OrganizationID: "org-a", UserID: conv.ToPGText("owner"),
 	}))
-	require.NoError(t, agentownership.LatchOwnerLossByMembership(t.Context(), conn, "org-a", "owner", agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil))
+	require.NoError(t, pgx.BeginFunc(t.Context(), conn, func(tx pgx.Tx) error {
+		return agentownership.LatchOwnerLossByMembership(t.Context(), tx, "org-a", "owner", agentownership.OwnerReassignmentReasonMembershipLost, agentownership.SystemActor, nil)
+	}))
 	seedOrganizationUser(t, conn, "org-a", "owner")
 	latched, err := repo.New(conn).GetAgentByID(t.Context(), repo.GetAgentByIDParams{OrganizationID: "org-a", ID: agent.ID})
 	require.NoError(t, err)

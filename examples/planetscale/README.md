@@ -1,6 +1,6 @@
-# PlanetScale Gram Function
+# PlanetScale Speakeasy Function
 
-This Gram Function provides a tool for executing SQL queries against a PlanetScale PostgreSQL database using their serverless HTTP driver.
+This Speakeasy Function provides a tool for executing SQL queries against a PlanetScale PostgreSQL database using their serverless HTTP driver.
 
 ## Overview
 
@@ -70,7 +70,7 @@ The function requires these environment variables:
 - `PLANETSCALE_USERNAME` - Your PostgreSQL username
 - `PLANETSCALE_PASSWORD` - Your database password (format: `pscale_pw_XXXX`)
 
-These are configured when you install the MCP server in Gram.
+These are configured when you install the MCP server in Speakeasy.
 
 ## Quick Start
 
@@ -80,13 +80,13 @@ Install dependencies:
 npm install
 ```
 
-To build a zip file that can be deployed to Gram:
+To build a zip file that can be deployed to Speakeasy:
 
 ```bash
 npm run build
 ```
 
-After building, push your function to Gram:
+After building, push your function to Speakeasy:
 
 ```bash
 npm push
@@ -140,6 +140,6 @@ LIMIT 5;
 
 ## Learn More
 
-To learn more about using the Gram Functions framework, check out [CONTRIBUTING.md](./CONTRIBUTING.md).
+To learn more about using the Speakeasy Functions framework, check out [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 [mcp-inspector]: https://github.com/modelcontextprotocol/inspector

@@ -7,7 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// ConsentBindingAuthorization is trusted OAuth consent provenance, not a Gram
+// ConsentBindingAuthorization is trusted OAuth consent provenance, not a Speakeasy
 // session. Only attachment operations for its exact target may consume it.
 type ConsentBindingAuthorization struct {
 	UserID         string

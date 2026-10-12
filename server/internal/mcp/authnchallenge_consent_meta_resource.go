@@ -41,13 +41,23 @@ func (s *Service) resolveMetaMemberResource(
 		return "", false, err
 	}
 
+	// The resource is sent upstream verbatim: a provider may match it exactly
+	// against its RFC 9728 resource, trailing slash included. Trailing slashes
+	// are ignored only to decide whether members share a destination.
 	resource := ""
 	for _, row := range candidates {
-		upstream := strings.TrimRight(row.UpstreamUrl, "/")
+		upstream := row.UpstreamUrl
+		trimmed := strings.TrimRight(upstream, "/")
 		switch {
+		case trimmed == "":
 		// Two members may front one URL — remote_mcp_servers is unique on
-		// (project_id, slug), not url — and a token keyed on that URL serves either.
-		case upstream == "", upstream == resource:
+		// (project_id, slug), not url — and a token keyed on that URL serves
+		// either. Spellings differing only in trailing slashes resolve to the
+		// shortest, so the result does not depend on member order.
+		case resource != "" && trimmed == strings.TrimRight(resource, "/"):
+			if len(upstream) < len(resource) {
+				resource = upstream
+			}
 		case resource == "":
 			resource = upstream
 		default:

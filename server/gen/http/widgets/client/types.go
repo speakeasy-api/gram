@@ -83,8 +83,12 @@ type GetWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards,omitempty" json:"dashboards,omitempty" xml:"dashboards,omitempty"`
+	CreatedAt  *string                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt  *string                        `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateWidgetResponseBody is the type of the "widgets" service "createWidget"
@@ -112,8 +116,12 @@ type CreateWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards,omitempty" json:"dashboards,omitempty" xml:"dashboards,omitempty"`
+	CreatedAt  *string                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt  *string                        `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateWidgetResponseBody is the type of the "widgets" service "updateWidget"
@@ -141,8 +149,12 @@ type UpdateWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards,omitempty" json:"dashboards,omitempty" xml:"dashboards,omitempty"`
+	CreatedAt  *string                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt  *string                        `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // DuplicateWidgetResponseBody is the type of the "widgets" service
@@ -170,8 +182,12 @@ type DuplicateWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards,omitempty" json:"dashboards,omitempty" xml:"dashboards,omitempty"`
+	CreatedAt  *string                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt  *string                        `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListWidgetsUnauthorizedResponseBody is the type of the "widgets" service
@@ -1287,8 +1303,18 @@ type WidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards,omitempty" json:"dashboards,omitempty" xml:"dashboards,omitempty"`
+	CreatedAt  *string                        `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt  *string                        `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// WidgetDashboardResponseBody is used to define fields on response body types.
+type WidgetDashboardResponseBody struct {
+	ID   *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
 // NewCreateWidgetRequestBody builds the HTTP request body from the payload of
@@ -1548,6 +1574,14 @@ func NewGetWidgetWidgetOK(body *GetWidgetResponseBody) *widgets.Widget {
 		tv := val
 		v.Visualization[tk] = tv
 	}
+	v.Dashboards = make([]*widgets.WidgetDashboard, len(body.Dashboards))
+	for i, val := range body.Dashboards {
+		if val == nil {
+			v.Dashboards[i] = nil
+			continue
+		}
+		v.Dashboards[i] = unmarshalWidgetDashboardResponseBodyToWidgetsWidgetDashboard(val)
+	}
 
 	return v
 }
@@ -1728,6 +1762,14 @@ func NewCreateWidgetWidgetOK(body *CreateWidgetResponseBody) *widgets.Widget {
 		tk := key
 		tv := val
 		v.Visualization[tk] = tv
+	}
+	v.Dashboards = make([]*widgets.WidgetDashboard, len(body.Dashboards))
+	for i, val := range body.Dashboards {
+		if val == nil {
+			v.Dashboards[i] = nil
+			continue
+		}
+		v.Dashboards[i] = unmarshalWidgetDashboardResponseBodyToWidgetsWidgetDashboard(val)
 	}
 
 	return v
@@ -1910,6 +1952,14 @@ func NewUpdateWidgetWidgetOK(body *UpdateWidgetResponseBody) *widgets.Widget {
 		tv := val
 		v.Visualization[tk] = tv
 	}
+	v.Dashboards = make([]*widgets.WidgetDashboard, len(body.Dashboards))
+	for i, val := range body.Dashboards {
+		if val == nil {
+			v.Dashboards[i] = nil
+			continue
+		}
+		v.Dashboards[i] = unmarshalWidgetDashboardResponseBodyToWidgetsWidgetDashboard(val)
+	}
 
 	return v
 }
@@ -2090,6 +2140,14 @@ func NewDuplicateWidgetWidgetOK(body *DuplicateWidgetResponseBody) *widgets.Widg
 		tk := key
 		tv := val
 		v.Visualization[tk] = tv
+	}
+	v.Dashboards = make([]*widgets.WidgetDashboard, len(body.Dashboards))
+	for i, val := range body.Dashboards {
+		if val == nil {
+			v.Dashboards[i] = nil
+			continue
+		}
+		v.Dashboards[i] = unmarshalWidgetDashboardResponseBodyToWidgetsWidgetDashboard(val)
 	}
 
 	return v
@@ -2435,6 +2493,9 @@ func ValidateGetWidgetResponseBody(body *GetWidgetResponseBody) (err error) {
 	if body.Visualization == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visualization", "body"))
 	}
+	if body.Dashboards == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dashboards", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2446,6 +2507,13 @@ func ValidateGetWidgetResponseBody(body *GetWidgetResponseBody) (err error) {
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	for _, e := range body.Dashboards {
+		if e != nil {
+			if err2 := ValidateWidgetDashboardResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2480,6 +2548,9 @@ func ValidateCreateWidgetResponseBody(body *CreateWidgetResponseBody) (err error
 	if body.Visualization == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visualization", "body"))
 	}
+	if body.Dashboards == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dashboards", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2491,6 +2562,13 @@ func ValidateCreateWidgetResponseBody(body *CreateWidgetResponseBody) (err error
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	for _, e := range body.Dashboards {
+		if e != nil {
+			if err2 := ValidateWidgetDashboardResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2525,6 +2603,9 @@ func ValidateUpdateWidgetResponseBody(body *UpdateWidgetResponseBody) (err error
 	if body.Visualization == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visualization", "body"))
 	}
+	if body.Dashboards == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dashboards", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2536,6 +2617,13 @@ func ValidateUpdateWidgetResponseBody(body *UpdateWidgetResponseBody) (err error
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	for _, e := range body.Dashboards {
+		if e != nil {
+			if err2 := ValidateWidgetDashboardResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2570,6 +2658,9 @@ func ValidateDuplicateWidgetResponseBody(body *DuplicateWidgetResponseBody) (err
 	if body.Visualization == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visualization", "body"))
 	}
+	if body.Dashboards == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dashboards", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2581,6 +2672,13 @@ func ValidateDuplicateWidgetResponseBody(body *DuplicateWidgetResponseBody) (err
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	for _, e := range body.Dashboards {
+		if e != nil {
+			if err2 := ValidateWidgetDashboardResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -4054,6 +4152,9 @@ func ValidateWidgetResponseBody(body *WidgetResponseBody) (err error) {
 	if body.Visualization == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visualization", "body"))
 	}
+	if body.Dashboards == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dashboards", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -4066,11 +4167,33 @@ func ValidateWidgetResponseBody(body *WidgetResponseBody) (err error) {
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	for _, e := range body.Dashboards {
+		if e != nil {
+			if err2 := ValidateWidgetDashboardResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateWidgetDashboardResponseBody runs the validations defined on
+// WidgetDashboardResponseBody
+func ValidateWidgetDashboardResponseBody(body *WidgetDashboardResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

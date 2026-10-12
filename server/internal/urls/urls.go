@@ -1,6 +1,6 @@
 // Package urls holds validation helpers for URLs that arrive from outside
-// Gram — request payloads, upstream metadata documents, and other untrusted
-// sources — and that Gram stores, dials, or renders as a link.
+// Speakeasy — request payloads, upstream metadata documents, and other untrusted
+// sources — and that Speakeasy stores, dials, or renders as a link.
 package urls
 
 import (
@@ -39,7 +39,7 @@ func IsAbsoluteHTTPS(raw string) bool {
 	return u.Scheme == "https" && u.Hostname() != "" && u.User == nil
 }
 
-// IsAbsoluteHTTPSOrLoopback reports whether raw is an absolute URL that Gram may
+// IsAbsoluteHTTPSOrLoopback reports whether raw is an absolute URL that Speakeasy may
 // send credentials to: HTTPS to any host, or plain HTTP to loopback.
 //
 // The loopback exemption does not weaken the guarantee IsAbsoluteHTTPS exists
@@ -88,4 +88,20 @@ func HTTPOrEmpty(raw string) string {
 		return raw
 	}
 	return ""
+}
+
+// DiagnosticURL renders an HTTP(S) URL without userinfo, query, or fragment.
+// It preserves the escaped path for diagnostics, not protocol identity or
+// requests. Paths may still contain credentials; no path heuristics are applied.
+// Empty input stays empty. Invalid nonempty input is replaced rather than
+// echoed, since parse errors can leak it.
+func DiagnosticURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.Opaque != "" {
+		return "<invalid URL>"
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path, RawPath: u.RawPath}).String()
 }

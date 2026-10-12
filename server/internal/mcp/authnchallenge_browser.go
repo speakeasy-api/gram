@@ -59,7 +59,7 @@ func (s *Service) prepareFederatedBrowserHandoff(w http.ResponseWriter, r *http.
 	state.Browser.CallbackHash = sha256Hex(browser)
 	state.Federation.BrowserHash = state.Browser.CallbackHash
 	state.Federation.StartPhase = "origin"
-	target, err := endpoint.ConsentURL(state.mintOriginOr(s.serverURL.String()), state.ID)
+	target, err := s.consentURL(endpoint, state.mintOriginOr(s.serverURL.String()), state.ID)
 	if err != nil {
 		return err
 	}

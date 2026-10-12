@@ -121,7 +121,7 @@ type authorizer interface {
 
 // SessionMetadata contains validated session information from the Logs endpoint.
 //
-// Beyond the Gram identity (UserID/GramOrgID/ProjectID) it carries the provider's
+// Beyond the Speakeasy identity (UserID/GramOrgID/ProjectID) it carries the provider's
 // own account identity, normalized into provider-agnostic fields, so personal vs
 // team AI-account usage can be attributed and tracked. For Claude these map from
 // organization.id, user.account_uuid, user.account_id, and the per-device user.id.

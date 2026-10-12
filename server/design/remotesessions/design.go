@@ -10,7 +10,7 @@ import (
 )
 
 var _ = Service("remoteSessions", func() {
-	Description("Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.")
+	Description("Operator visibility into remote_sessions Speakeasy is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -225,7 +225,7 @@ var CommitServerIdentityConfigurationResult = Type("CommitServerIdentityConfigur
 // organization-scoped (no ProjectSlug); RBAC gates writes on org:admin and
 // reads on org:read.
 var _ = Service("organizationRemoteSessions", func() {
-	Description("Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.")
+	Description("Organization-administrator visibility into remote_sessions Speakeasy is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.")
 	Security(security.Session)
 	Security(security.ByKey, func() {
 		Scope("producer")
@@ -347,15 +347,15 @@ var _ = Service("organizationRemoteSessions", func() {
 var RemoteSession = Type("RemoteSession", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("A remote_session record — Gram's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.")
+	Description("A remote_session record — Speakeasy's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.")
 
 	Attribute("id", String, "The remote_session id.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
-	Attribute("subject_display_name", String, "Resolved display name when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
-	Attribute("subject_email", String, "Resolved email when the subject is a Gram user. Absent for apikey/anonymous subjects or unresolved users.")
-	Attribute("upstream_email", String, "Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Gram subject.")
+	Attribute("subject_display_name", String, "Resolved display name when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.")
+	Attribute("subject_email", String, "Resolved email when the subject is a Speakeasy user. Absent for apikey/anonymous subjects or unresolved users.")
+	Attribute("upstream_email", String, "Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Speakeasy subject.")
 	Attribute("upstream_display_name", String, "Stored display name of the account at the upstream provider. Absent when no upstream identity interface supplied it.")
 	Attribute("identity_source", String, "The upstream identity interface that supplied the stored account identity, such as an ID token or userinfo response. Absent when upstream identity is unknown.")
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this session is bound to.", func() {

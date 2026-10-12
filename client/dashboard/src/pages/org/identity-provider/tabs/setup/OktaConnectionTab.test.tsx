@@ -3,35 +3,70 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 
 import { OktaConnectionTab } from "./OktaConnectionTab";
+import { makeConnection } from "./testFixtures";
 
-vi.mock("@gram/client/react-query/createIdentityProviderConnection.js", () => ({
-  useCreateIdentityProviderConnectionMutation: () => ({
-    mutate: vi.fn(),
-    isPending: false,
-    error: null,
-  }),
+const idleMutation = vi.hoisted(() => () => ({
+  mutate: vi.fn(),
+  isPending: false,
+  error: null,
 }));
+vi.mock("@gram/client/react-query/createIdentityProviderConnection.js", () => ({
+  useCreateIdentityProviderConnectionMutation: idleMutation,
+}));
+vi.mock("@gram/client/react-query/verifyIdentityProviderConnection.js", () => ({
+  useVerifyIdentityProviderConnectionMutation: idleMutation,
+}));
+vi.mock("@gram/client/react-query/revokeIdentityProviderConnection.js", () => ({
+  useRevokeIdentityProviderConnectionMutation: idleMutation,
+}));
+vi.mock(
+  "@gram/client/react-query/submitIdentityProviderConnectionClientId.js",
+  () => ({
+    useSubmitIdentityProviderConnectionClientIdMutation: idleMutation,
+  }),
+);
+vi.mock(
+  "@gram/client/react-query/replaceIdentityProviderConnectionClientSecret.js",
+  () => ({
+    useReplaceIdentityProviderConnectionClientSecretMutation: idleMutation,
+  }),
+);
+vi.mock(
+  "@gram/client/react-query/setIdentityProviderConnectionSetupMethod.js",
+  () => ({
+    useSetIdentityProviderConnectionSetupMethodMutation: idleMutation,
+  }),
+);
+vi.mock(
+  "@gram/client/react-query/recordIdentityProviderConnectionAgent.js",
+  () => ({
+    useRecordIdentityProviderConnectionAgentMutation: idleMutation,
+  }),
+);
 
 afterEach(cleanup);
+
+function renderTab(connection: OktaIdentityProviderConnection | undefined) {
+  return render(
+    <MemoryRouter>
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <OktaConnectionTab connection={connection} />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+}
 
 describe("OktaConnectionTab", () => {
   it.each([undefined, "revoked"] as const)(
     "shows only the organization form for %s",
     (status) => {
-      render(
-        <MemoryRouter>
-          <QueryClientProvider client={new QueryClient()}>
-            <OktaConnectionTab
-              connection={
-                status
-                  ? ({ status } as OktaIdentityProviderConnection)
-                  : undefined
-              }
-            />
-          </QueryClientProvider>
-        </MemoryRouter>,
+      renderTab(
+        status ? ({ status } as OktaIdentityProviderConnection) : undefined,
       );
       expect(screen.getByLabelText("Okta organization URL")).toBeTruthy();
       expect(screen.getAllByRole("textbox")).toHaveLength(1);
@@ -40,4 +75,65 @@ describe("OktaConnectionTab", () => {
       expect(screen.queryByRole("navigation")).toBeNull();
     },
   );
+
+  it("offers the method choice only until the client ID is submitted", () => {
+    renderTab(makeConnection({ status: "pending", clientIdSubmitted: false }));
+    expect(
+      screen.getByRole("radiogroup", { name: "Installation method" }),
+    ).toBeTruthy();
+    cleanup();
+    renderTab(makeConnection({ status: "pending", clientIdSubmitted: true }));
+    expect(
+      screen.queryByRole("radiogroup", { name: "Installation method" }),
+    ).toBeNull();
+  });
+
+  it("describes a public-key connection by its JWKS", () => {
+    renderTab(makeConnection({ status: "pending" }));
+    expect(
+      screen.getByText(/public keys from the public key URL \(JWKS\)/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Verify once the app is set up to use the public key URL (JWKS).",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("describes an OIN connection by its client secret, not a JWKS", () => {
+    renderTab(
+      makeConnection({
+        status: "pending",
+        listingMode: "oin",
+        jwksUrl: undefined,
+      }),
+    );
+    expect(screen.getByText(/client ID and client secret/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Verify once the app’s client secret is submitted and its permissions are granted.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/JWKS/)).toBeNull();
+  });
+
+  it("offers to replace the secret on secret-based OIN connections", () => {
+    renderTab(makeConnection({ listingMode: "oin", jwksUrl: undefined }));
+    expect(
+      screen.getByRole("button", { name: "Replace client secret" }),
+    ).toBeTruthy();
+  });
+
+  it.each([
+    ["legacy OIN with a key set", makeConnection({ listingMode: "oin" })],
+    ["custom app", makeConnection()],
+  ])("has no secret to replace on a %s connection", (_, connection) => {
+    renderTab(connection);
+    expect(
+      screen.queryByRole("button", { name: "Replace client secret" }),
+    ).toBeNull();
+    expect(
+      screen.getByText(/public keys from the public key URL \(JWKS\)/),
+    ).toBeTruthy();
+  });
 });

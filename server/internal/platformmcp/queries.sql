@@ -647,6 +647,45 @@ WHERE receipt.organization_id = @organization_id
 ORDER BY receipt.created_at DESC, receipt.id DESC
 LIMIT 1;
 
+-- name: GetUnexpiredPlatformMCPOperationReceipt :one
+-- The unlocked replay pre-check that runs before a write charges its budget.
+-- Same match as GetPlatformMCPOperationReceipt, but expiry is judged here with
+-- the database clock, the same clock DeleteExpiredPlatformMCPOperationReceipt
+-- uses under the lock, so the pre-check can never replay a receipt the locked
+-- path would already treat as expired.
+SELECT receipt.*
+FROM platform_mcp_operation_receipts AS receipt
+LEFT JOIN platform_mcp_connections AS connection
+  ON connection.id = receipt.connection_id
+ AND connection.organization_id = receipt.organization_id
+WHERE receipt.organization_id = @organization_id
+  AND receipt.project_id = @project_id
+  AND receipt.operation = @operation
+  AND receipt.idempotency_key = @idempotency_key
+  AND receipt.expires_at > clock_timestamp()
+  AND (
+    receipt.user_id = @user_id
+    OR (receipt.user_id IS NULL AND connection.subject_urn = @subject_urn)
+  )
+ORDER BY receipt.created_at DESC, receipt.id DESC
+LIMIT 1;
+
+-- name: DeleteExpiredPlatformMCPOperationReceiptsBatch :execrows
+-- The periodic sweep that bounds the receipt table. The per-key reclaim in the
+-- receipt transaction only reaches a key that is written again, and a
+-- project-creation receipt is never reclaimed that way at all. Bounded by
+-- batch so one tick never holds a long delete; SKIP LOCKED leaves rows a
+-- receipt transaction is touching to the next tick.
+DELETE FROM platform_mcp_operation_receipts
+WHERE id IN (
+    SELECT id
+    FROM platform_mcp_operation_receipts
+    WHERE expires_at <= clock_timestamp()
+    ORDER BY expires_at
+    LIMIT @batch_size
+    FOR UPDATE SKIP LOCKED
+);
+
 -- name: GetPlatformMCPProjectCreationReceipt :one
 -- An operation that creates its own project has no project to key a receipt
 -- on before it runs, so its replay lookup spans the organization: the receipt
@@ -3030,7 +3069,7 @@ LIMIT 2;
 -- name: GetPlatformMCPInstallTarget :one
 -- Tenant-scoped exact MCP target plus its canonical public endpoint. Disabled
 -- and unproxied servers deliberately expose no endpoint even if an endpoint row
--- remains, because neither can be dispatched through Gram's public MCP route.
+-- remains, because neither can be dispatched through Speakeasy's public MCP route.
 SELECT
     m.name,
     m.slug,
@@ -3708,9 +3747,9 @@ WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
 -- Takes the toolset row lock, and must run BEFORE the server row is locked.
 --
 -- The order is the constraint, not the lock. toolsets.UpdateToolset holds this
--- same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
--- updates the hosted mcp_servers row — an exclusive row lock taken by a plain
--- UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+-- same row (via GetToolsetForUpdate) and then, inside hostedmcp.Sync, locks
+-- the hosted mcp_servers row FOR UPDATE (LockMCPServerByIDAndProjectID) before
+-- writing it. For a hosted server both ids are
 -- the toolset id, so it is the same pair of rows this path touches. Locking the
 -- server first here and the toolset first there is an ABBA cycle that
 -- PostgreSQL resolves by aborting one side with deadlock_detected, so both
@@ -3761,8 +3800,8 @@ FOR UPDATE OF m;
 
 -- name: GetPlatformMCPServerToolExposure :one
 -- The tool list one hosted MCP server exposes, read through its modern server
--- record. A server whose backend is not a Gram toolset, or a bare toolset with
--- no server record, deliberately returns no row: its tool list is not Gram's
+-- record. A server whose backend is not a Speakeasy toolset, or a bare toolset with
+-- no server record, deliberately returns no row: its tool list is not Speakeasy's
 -- to change from here.
 -- The columns this returns are only the ones the caller cannot already supply:
 -- the organization, project and MCP server ids are query inputs, so echoing

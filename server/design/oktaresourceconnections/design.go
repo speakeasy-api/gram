@@ -39,6 +39,7 @@ var ResourceConnectionServer = Type("OktaResourceConnectionServer", func() {
 	Attribute("issuer_id", String, "The upstream authorization server ID. Together with the resource indicator, identifies the shared readiness confirmation; independent of the confirmed identity assertion audience.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("authorization_server_issuer", String, "The server's authorization server issuer; the Issuer URL to enter when enabling Cross App Access on a resource app. Omitted when unknown.")
 	Attribute("resource_indicator", String, "The resource indicator to enter on the connection: the server's RFC 9728 resource identifier when known, otherwise its URL.")
 	Attribute("client_id", String, "Speakeasy's client ID at the server's authorization server. Omitted when no client is bound yet.")
 	Attribute("client_binding", String, "bound: an explicit identity chaining binding selects the client; single: the one client attached to the authorization server; ambiguous: more than one candidate and no single binding; missing: no client registered yet.", func() {

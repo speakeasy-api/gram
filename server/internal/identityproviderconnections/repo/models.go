@@ -46,6 +46,19 @@ type IdentityProviderConnection struct {
 	Deleted        bool
 }
 
+type JsonWebKeySet struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	ProjectID                    uuid.NullUUID
+	ExternalKeyID                uuid.UUID
+	Name                         string
+	IdentityProviderConnectionID uuid.NullUUID
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+	DeletedAt                    pgtype.Timestamptz
+	Deleted                      bool
+}
+
 type OktaIdentityProviderConnection struct {
 	IdentityProviderConnectionID        uuid.UUID
 	IdentityProviderConnectionsProvider string
@@ -97,6 +110,7 @@ type RemoteSessionClient struct {
 	ResourceTosUri                  pgtype.Text
 	UpstreamRejectedAt              pgtype.Timestamptz
 	IdentityProviderConnectionID    uuid.NullUUID
+	CredentialOwner                 string
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz
@@ -139,6 +153,7 @@ type RemoteSessionIssuer struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       bool
 	Passthrough                                bool

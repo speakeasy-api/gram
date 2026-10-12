@@ -98,6 +98,23 @@ func (q *Queries) DeleteWidget(ctx context.Context, arg DeleteWidgetParams) (Wid
 	return i, err
 }
 
+const deleteWidgetPlacements = `-- name: DeleteWidgetPlacements :exec
+DELETE FROM dashboard_widgets
+WHERE project_id = $1
+  AND widget_id = $2
+`
+
+type DeleteWidgetPlacementsParams struct {
+	ProjectID uuid.UUID
+	WidgetID  uuid.UUID
+}
+
+// A deleted widget comes off every dashboard it was on.
+func (q *Queries) DeleteWidgetPlacements(ctx context.Context, arg DeleteWidgetPlacementsParams) error {
+	_, err := q.db.Exec(ctx, deleteWidgetPlacements, arg.ProjectID, arg.WidgetID)
+	return err
+}
+
 const getWidget = `-- name: GetWidget :one
 SELECT id, project_id, organization_id, created_by_user_id, name, description, dataset, query, visualization, created_at, updated_at, deleted_at, deleted
 FROM widgets
@@ -168,6 +185,81 @@ func (q *Queries) GetWidgetForUpdate(ctx context.Context, arg GetWidgetForUpdate
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const listDashboardsForWidget = `-- name: ListDashboardsForWidget :many
+SELECT DISTINCT d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = $1
+  AND p.widget_id = $2
+ORDER BY d.name, d.id
+`
+
+type ListDashboardsForWidgetParams struct {
+	ProjectID uuid.UUID
+	WidgetID  uuid.UUID
+}
+
+type ListDashboardsForWidgetRow struct {
+	DashboardID   uuid.UUID
+	DashboardName string
+}
+
+func (q *Queries) ListDashboardsForWidget(ctx context.Context, arg ListDashboardsForWidgetParams) ([]ListDashboardsForWidgetRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardsForWidget, arg.ProjectID, arg.WidgetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDashboardsForWidgetRow
+	for rows.Next() {
+		var i ListDashboardsForWidgetRow
+		if err := rows.Scan(&i.DashboardID, &i.DashboardName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWidgetDashboards = `-- name: ListWidgetDashboards :many
+SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = $1
+ORDER BY p.widget_id, d.name, d.id
+`
+
+type ListWidgetDashboardsRow struct {
+	WidgetID      uuid.UUID
+	DashboardID   uuid.UUID
+	DashboardName string
+}
+
+// Which live dashboards each of the project's widgets is on, once each,
+// however many cards show it.
+func (q *Queries) ListWidgetDashboards(ctx context.Context, projectID uuid.UUID) ([]ListWidgetDashboardsRow, error) {
+	rows, err := q.db.Query(ctx, listWidgetDashboards, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWidgetDashboardsRow
+	for rows.Next() {
+		var i ListWidgetDashboardsRow
+		if err := rows.Scan(&i.WidgetID, &i.DashboardID, &i.DashboardName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listWidgets = `-- name: ListWidgets :many

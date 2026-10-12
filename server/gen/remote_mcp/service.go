@@ -36,6 +36,20 @@ type Service interface {
 	// guardian.Policy so production resource servers without CORS can still be
 	// inspected.
 	DiscoverProtectedResourceMetadata(context.Context, *DiscoverProtectedResourceMetadataPayload) (res *ProtectedResourceMetadataDiscovery, err error)
+	// Report the scope state of the protected resource a remote-backed MCP
+	// server's logins are for: the operator pin, which belongs to the protected
+	// resource and so is shared by every server in the project with the same
+	// upstream URL, the scopes the resource advertises and last challenged with,
+	// the organization's resource scope discovery flag, and what a login through
+	// each bound client would request now. Requires read access to the server
+	// only. Reads cached state only; never contacts the resource.
+	GetServerScopes(context.Context, *GetServerScopesPayload) (res *RemoteMcpServerScopes, err error)
+	// Pin the scopes logins to a remote-backed MCP server's protected resource
+	// request, or clear the pin with an empty list. The pin belongs to the
+	// protected resource, so it applies to every server in the project with the
+	// same upstream URL, and the caller needs write access to all of them. Returns
+	// the scope state re-read after the write.
+	SetServerScopePin(context.Context, *SetServerScopePinPayload) (res *RemoteMcpServerScopes, err error)
 	// Probe a candidate remote MCP server URL by issuing an MCP initialize request
 	// and reporting whether MCP is available, authentication is required, the
 	// response is invalid, or the server is unreachable.
@@ -79,7 +93,7 @@ const ServiceName = "remoteMcp"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"createServer", "createServerAndMcpServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "probeURL", "verifyURL", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
+var MethodNames = [16]string{"createServer", "createServerAndMcpServer", "listServers", "getServer", "updateServer", "discoverProtectedResourceMetadata", "getServerScopes", "setServerScopePin", "probeURL", "verifyURL", "deleteServer", "listServerHeaders", "getServerHeader", "createServerHeader", "updateServerHeader", "deleteServerHeader"}
 
 // CreateServerAndMcpServerPayload is the payload type of the remoteMcp service
 // createServerAndMcpServer method.
@@ -204,6 +218,16 @@ type GetServerPayload struct {
 	ProjectSlugInput *string
 }
 
+// GetServerScopesPayload is the payload type of the remoteMcp service
+// getServerScopes method.
+type GetServerScopesPayload struct {
+	// The ID of the remote-backed MCP server.
+	McpServerID      string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // ListServerHeadersPayload is the payload type of the remoteMcp service
 // listServerHeaders method.
 type ListServerHeadersPayload struct {
@@ -308,6 +332,74 @@ type ProtectedResourceMetadataUnavailable struct {
 	// Human-readable summary of the unavailability reason, composed by the
 	// backend. Dashboards should render verbatim.
 	Message string
+}
+
+// What a login through one client bound to the MCP server would request now,
+// resolved from cached state.
+type RemoteMcpServerClientScopes struct {
+	// The remote session client's ID.
+	ClientID string
+	// The configured name of the client's authorization server; absent when it has
+	// none.
+	IssuerName *string
+	// The issuer URL of the client's authorization server.
+	IssuerURL *string
+	// The precedence step that decided the request.
+	ScopeSource string
+	// The scope parameter the login would send; empty sends none.
+	RequestedScopes []string
+	// Pinned scopes the resource does not advertise; sent regardless. Empty when
+	// the pin does not decide or the resource's list is unknown.
+	UnadvertisedPinnedScopes []string
+	// Whether a pin, if set, decides this client's request: discovery is on, the
+	// client owns the resource, and neither its own scope nor a challenge outranks
+	// the pin.
+	PinWouldDecide bool
+}
+
+// RemoteMcpServerScopes is the result type of the remoteMcp service
+// getServerScopes method.
+type RemoteMcpServerScopes struct {
+	// The protected resource: the server's upstream URL.
+	ResourceURL string
+	// The operator's scope pin on the protected resource, shared by servers with
+	// the same upstream URL; empty when unset.
+	PinnedScopes []string
+	// Whether a read of the resource's metadata within the last good window
+	// captured an advertised list.
+	AdvertisedScopesKnown bool
+	// The resource's advertised scopes_supported from that read. Absent when
+	// unknown or empty; see advertised_scopes_known.
+	AdvertisedScopes []string
+	// The scope parameter of the resource's last WWW-Authenticate challenge; empty
+	// when none was seen.
+	ChallengeScopes []string
+	// Whether the organization's logins consult the protected resource (challenge
+	// scopes, pin, advertised list). Off, the pin is stored but not applied.
+	DiscoveryEnabled bool
+	// One entry per client bound to the server's user session issuer.
+	Clients []*RemoteMcpServerClientScopes
+	// How many other live MCP servers in the project share this upstream URL, and
+	// so this pin.
+	SharedServerCount int
+	// Whether the caller may change the pin: write access to this server and every
+	// server in the project with the same upstream URL.
+	CanPin bool
+}
+
+// SetServerScopePinPayload is the payload type of the remoteMcp service
+// setServerScopePin method.
+type SetServerScopePinPayload struct {
+	// The ID of the remote-backed MCP server.
+	McpServerID string
+	// Scopes to pin on the server's protected resource, shared by servers with the
+	// same upstream URL, in request order. Whitespace is trimmed, blanks and
+	// duplicates are dropped, and at most 100 scopes may remain; an empty list
+	// clears the pin.
+	Scopes           []string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
 }
 
 // UpdateServerHeaderPayload is the payload type of the remoteMcp service

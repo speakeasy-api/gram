@@ -39,6 +39,8 @@ type RiskFindingUnmaskRow struct {
 	ToolCallID       string
 	OrganizationID   string
 	RiskPolicyID     string
+	ExecutionID      string
+	Phase            string
 }
 
 // GetRiskFindingForUnmask returns the reveal-relevant state for one finding id,
@@ -72,6 +74,8 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		"tool_call_id",
 		"organization_id",
 		"risk_policy_id",
+		"execution_id",
+		"phase",
 		"dead_letter_reason",
 		"excluded_at",
 		"false_positive_at",
@@ -103,6 +107,8 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		"tool_call_id",
 		"organization_id",
 		"risk_policy_id",
+		"execution_id",
+		"phase",
 	).
 		FromSelect(latest, "latest").
 		Where("dead_letter_reason = ''").
@@ -150,6 +156,8 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		&row.ToolCallID,
 		&row.OrganizationID,
 		&row.RiskPolicyID,
+		&row.ExecutionID,
+		&row.Phase,
 	); err != nil {
 		return nil, fmt.Errorf("scan risk finding unmask row: %w", err)
 	}

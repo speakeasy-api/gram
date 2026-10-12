@@ -4,9 +4,9 @@ import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminCli
 
 export { isRedirectingToLogin } from "@/lib/gramAdminClient";
 
-// Gram admin API client.
+// Speakeasy admin API client.
 //
-// This app is served from the same origin as the Gram admin API (the admin
+// This app is served from the same origin as the Speakeasy admin API (the admin
 // Ingress puts both behind one host), so every path below is relative
 // and the `gram_admin` session cookie rides along as a first-party cookie.
 //
@@ -158,7 +158,7 @@ async function gramAdminSend(path: string, init?: RequestInit): Promise<void> {
 
 // Identity of the admin operator that owns the current session. The backend
 // reads it from the OIDC session record, so it names the identity-provider
-// account that signed in to this app, not any Gram customer account.
+// account that signed in to this app, not any Speakeasy customer account.
 export type AdminSessionInfo = {
   email: string;
   name?: string;

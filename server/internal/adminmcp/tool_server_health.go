@@ -135,6 +135,7 @@ type MCPServerHealthRemoteIssuer struct {
 	PKCE                string   `json:"pkce"`
 	CIMDSupported       bool     `json:"cimd_supported"`
 	ScopeOverride       []string `json:"scope_override,omitempty"`
+	OmitScopeFallback   *bool    `json:"omit_scope_fallback,omitempty"`
 	MetadataFetchedAt   *string  `json:"metadata_fetched_at,omitempty"`
 	MetadataLastErrorAt *string  `json:"metadata_last_error_at,omitempty"`
 	JWKSLastErrorAt     *string  `json:"jwks_last_error_at,omitempty"`
@@ -393,7 +394,7 @@ func projectHealthRemoteClient(c *gen.AdminMcpServerHealthRemoteSessionClient) (
 		Issuer: MCPServerHealthRemoteIssuer{
 			ID: i.ID, Slug: i.Slug, Name: i.Name, Issuer: i.Issuer, AttachmentScope: i.AttachmentScope,
 			Networking: i.Networking, OIDC: i.Oidc, Passthrough: i.Passthrough, PKCE: i.Pkce, CIMDSupported: i.CimdSupported,
-			ScopeOverride: slices.Clone(i.ScopeOverride), MetadataFetchedAt: i.MetadataFetchedAt,
+			ScopeOverride: slices.Clone(i.ScopeOverride), OmitScopeFallback: i.OmitScopeFallback, MetadataFetchedAt: i.MetadataFetchedAt,
 			MetadataLastErrorAt: i.MetadataLastErrorAt, JWKSLastErrorAt: i.JwksLastErrorAt,
 		},
 		Sessions: MCPServerHealthRemoteSessions{

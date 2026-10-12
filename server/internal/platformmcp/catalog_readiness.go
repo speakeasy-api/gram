@@ -116,6 +116,9 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) {
 		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_client"), nil
 	}
+	if state, evidence, ok := ClientCredentialReadiness(err); ok {
+		return p.result(principal, registrationID, state, evidence, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_session"), nil
+	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
 		return p.result(principal, registrationID, ReadinessNeedsGramAuthorization, "upstream_authorization_required", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_session"), nil
 	}
@@ -124,7 +127,8 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	}
 
 	state, evidence := p.probe(ctx, remote.Url, headers, authorization.AccessToken)
-	return p.result(principal, registrationID, state, evidence, authorization, ""), nil
+	state, evidence = ClientCredentialProbeReadiness(authorization, state, evidence)
+	return p.result(principal, registrationID, state, evidence, authorization, ProviderAuthorizationAbsence(authorization)), nil
 }
 
 func validCatalogReadinessURL(raw string) bool {
@@ -157,7 +161,7 @@ func (p *RemoteMCPReadinessProber) result(principal Principal, registrationID uu
 func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, headers []remotemcprepo.RemoteMcpServerHeader, token string) (ReadinessState, string) {
 	ctx, cancel := context.WithTimeout(ctx, catalogProbeTimeout)
 	defer cancel()
-	httpClient := p.policy.Client()
+	httpClient := p.policy.Client(guardian.WithInternalCatalog())
 	httpClient.Timeout = catalogProbeTimeout
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	baseTransport := httpClient.Transport

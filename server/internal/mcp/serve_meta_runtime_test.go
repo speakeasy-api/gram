@@ -448,10 +448,10 @@ func TestServePublic_MetaEndpoint_ListServers_ExcludesSluglessMember(t *testing.
 	require.Empty(t, listed.Servers)
 }
 
-// A notification carrying a bad protocol-version declaration is dropped, not
-// answered: JSON-RPC 2.0 forbids responding to notifications, even with an
-// error.
-func TestServePublic_MetaEndpoint_NotificationWithBadVersionIsDropped(t *testing.T) {
+// A notification declaring an unsupported revision is refused with an HTTP
+// error status, as every revision requires for a notification the server
+// cannot accept, under a null id because it answers no request.
+func TestServePublic_MetaEndpoint_NotificationWithUnsupportedVersionIsRefused(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -468,11 +468,10 @@ func TestServePublic_MetaEndpoint_NotificationWithBadVersionIsDropped(t *testing
 	require.NoError(t, err)
 
 	w, err := servePublicHTTP(t, ctx, ti, slug, body, "", map[string]string{
-		mcpversions.HTTPHeader: "2031-01-01",
+		mcpversions.HTTPHeader: unservedProtocolVersion,
 	})
 	require.NoError(t, err)
-	require.Equal(t, http.StatusAccepted, w.Code, "body=%s", w.Body.String())
-	require.Empty(t, w.Body.String())
+	requireRefusedNotification(t, w, unservedProtocolVersion, mcpversions.SupportedMetaServer())
 }
 
 // Challenge-resumption arms of the meta endpoint resolver, driven through

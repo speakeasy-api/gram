@@ -121,7 +121,7 @@ func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
 		}
 	}
 
-	// Gram's own platform MCP server carries no slug, so routePathForSlug
+	// Speakeasy's own platform MCP server carries no slug, so routePathForSlug
 	// cannot derive it, and the constant cannot be imported: internal/platformmcp
 	// imports this package, so referencing platformmcp.Path here would be an
 	// import cycle. Keep this literal in lockstep with it. Registered for POST

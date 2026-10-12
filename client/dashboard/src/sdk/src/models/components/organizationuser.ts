@@ -15,7 +15,7 @@ export type OrganizationUser = {
    */
   email: string;
   /**
-   * Gram relationship row ID.
+   * Speakeasy relationship row ID.
    */
   id: string;
   /**
@@ -27,7 +27,7 @@ export type OrganizationUser = {
    */
   name: string;
   /**
-   * Gram organization ID.
+   * Speakeasy organization ID.
    */
   organizationId: string;
   /**
@@ -36,7 +36,7 @@ export type OrganizationUser = {
   photoUrl?: string | undefined;
   updatedAt: Date;
   /**
-   * Gram user ID.
+   * Speakeasy user ID.
    */
   userId: string;
   /**

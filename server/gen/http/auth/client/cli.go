@@ -168,3 +168,68 @@ func BuildInfoPayload(authInfoSessionToken string) (*auth.InfoPayload, error) {
 
 	return v, nil
 }
+
+// BuildTransferOutPayload builds the payload for the auth transferOut endpoint
+// from CLI flags.
+func BuildTransferOutPayload(authTransferOutTargetHost string, authTransferOutNonce string, authTransferOutRedirect string, authTransferOutSessionToken string) (*auth.TransferOutPayload, error) {
+	var targetHost *string
+	{
+		if authTransferOutTargetHost != "" {
+			targetHost = &authTransferOutTargetHost
+		}
+	}
+	var nonce *string
+	{
+		if authTransferOutNonce != "" {
+			nonce = &authTransferOutNonce
+		}
+	}
+	var redirect *string
+	{
+		if authTransferOutRedirect != "" {
+			redirect = &authTransferOutRedirect
+		}
+	}
+	var sessionToken *string
+	{
+		if authTransferOutSessionToken != "" {
+			sessionToken = &authTransferOutSessionToken
+		}
+	}
+	v := &auth.TransferOutPayload{}
+	v.TargetHost = targetHost
+	v.Nonce = nonce
+	v.Redirect = redirect
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildTransferInPayload builds the payload for the auth transferIn endpoint
+// from CLI flags.
+func BuildTransferInPayload(authTransferInSourceHost string, authTransferInCode string, authTransferInRedirect string) (*auth.TransferInPayload, error) {
+	var sourceHost *string
+	{
+		if authTransferInSourceHost != "" {
+			sourceHost = &authTransferInSourceHost
+		}
+	}
+	var code *string
+	{
+		if authTransferInCode != "" {
+			code = &authTransferInCode
+		}
+	}
+	var redirect *string
+	{
+		if authTransferInRedirect != "" {
+			redirect = &authTransferInRedirect
+		}
+	}
+	v := &auth.TransferInPayload{}
+	v.SourceHost = sourceHost
+	v.Code = code
+	v.Redirect = redirect
+
+	return v, nil
+}

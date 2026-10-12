@@ -129,7 +129,7 @@ func TestAuthorizationOrChatSessionToken_BearerWinsWhenBothSet(t *testing.T) {
 }
 
 // TestAuthorizationOrChatSessionToken_RawKeyWinsOverChatSession is the
-// regression guard for the hosted install-page snippets: a raw Gram API
+// regression guard for the hosted install-page snippets: a raw Speakeasy API
 // key with no Bearer prefix must round-trip through the identity-auth
 // helper untouched and pre-empt the chat-session fallback. See the
 // [httpheaders.AuthorizationOrChatSessionToken] docstring.
@@ -197,4 +197,45 @@ func TestIsStandardMCPRequestHeader_BareParamPrefixIsNotStandard(t *testing.T) {
 
 	// The Mcp-Param-{Name} family requires a non-empty name.
 	require.False(t, httpheaders.IsStandardMCPRequestHeader("Mcp-Param-"))
+}
+
+func TestIsReservedVariableHeaderName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{name: "NAME", want: true},
+		{name: "name", want: true},
+		{name: "METHOD", want: true},
+		{name: "PARAM_REGION", want: true},
+		{name: "Param Region", want: true},
+		{name: "param-region", want: true},
+		{name: "Protocol Version", want: true},
+		{name: "PROTOCOL_VERSION", want: true},
+		{name: " Name ", want: false},
+		{name: "PARAM_", want: false},
+		{name: "PARAMS_REGION", want: false},
+		{name: "NAMESPACE", want: false},
+		{name: "API_KEY", want: false},
+		{name: "API Key", want: false},
+		{name: "SESSION_ID", want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, tc.want, httpheaders.IsReservedVariableHeaderName(tc.name))
+		})
+	}
+}
+
+func TestVariableHeaderName(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "MCP-PARAM-REGION", httpheaders.VariableHeaderName("PARAM_REGION"))
+	require.Equal(t, "MCP-Param-Region", httpheaders.VariableHeaderName("Param Region"))
+	// Edge spaces become dashes, exactly as the hosted runtime maps them.
+	require.Equal(t, "MCP--Name-", httpheaders.VariableHeaderName(" Name "))
 }

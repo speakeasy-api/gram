@@ -94,25 +94,6 @@ func (q *Queries) DeleteProjectEMATombstones(ctx context.Context, arg DeleteProj
 	return err
 }
 
-const deleteProjectRiskFindingEvidence = `-- name: DeleteProjectRiskFindingEvidence :execrows
-DELETE FROM risk_finding_evidence
-WHERE project_id = $1
-  AND organization_id = $2
-`
-
-type DeleteProjectRiskFindingEvidenceParams struct {
-	ProjectID      uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) DeleteProjectRiskFindingEvidence(ctx context.Context, arg DeleteProjectRiskFindingEvidenceParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteProjectRiskFindingEvidence, arg.ProjectID, arg.OrganizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const getFirstProject = `-- name: GetFirstProject :one
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
@@ -555,6 +536,30 @@ func (q *Queries) ListProjectsByOrganizationPage(ctx context.Context, arg ListPr
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockOtherActiveProject = `-- name: LockOtherActiveProject :one
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND id <> $2
+LIMIT 1
+FOR SHARE
+`
+
+type LockOtherActiveProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// FOR SHARE waits for an in-flight project delete, then rechecks the row, so a
+// concurrently deleted project is not reported as still active.
+func (q *Queries) LockOtherActiveProject(ctx context.Context, arg LockOtherActiveProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOtherActiveProject, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockProjectForEMADeletion = `-- name: LockProjectForEMADeletion :one

@@ -66,17 +66,17 @@ type StoredCredential struct {
 // The ladder is ordered from most to least fundamental. Rows written before the
 // organization tier became impersonation-only can name no target, or name one
 // alongside Workload Identity Federation columns; neither can be used honestly.
-// An empty target would authenticate as Gram's own ambient identity and act on
-// a customer-supplied resource with Gram's own reach, and a WIF row's real
+// An empty target would authenticate as Speakeasy's own ambient identity and act on
+// a customer-supplied resource with Speakeasy's own reach, and a WIF row's real
 // resolution mode is WIF (which the resolver reports as unsupported), so using
 // its impersonation hop in isolation would claim the credential works when
 // nothing else can use it.
 //
 // The final step re-screens the stored target via ImpersonationTargetProblem.
 // The write-time guard postdates the rows it screens, so a credential created
-// earlier can still name a service account in Gram's own project — and an
+// earlier can still name a service account in Speakeasy's own project — and an
 // endpoint would then authenticate as it against a caller-supplied resource
-// name, which is an inventory oracle for Gram's own GCP estate.
+// name, which is an inventory oracle for Speakeasy's own GCP estate.
 //
 // A row carrying SkipProjectVerification is forgiven that final refusal, and
 // only that one. The screening still runs in full: forgiving a classified

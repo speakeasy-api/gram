@@ -1188,16 +1188,24 @@ function DisplayItemView({
       return (
         <TurnHeader
           author={item.author}
-          userId={ctx.userLabelOverride ?? item.userId}
+          userId={
+            item.participant
+              ? item.userId
+              : (ctx.userLabelOverride ?? item.userId)
+          }
           userLabel={ctx.userLabel}
           // The header links whatever name it shows. On a session run from a
           // personal AI account the override is that account's address, which
           // is a different subject from the chat's attributed owner, so the
           // link follows the address rather than the owner.
           ownerIdentifier={
-            ctx.userLabelOverride && isEmailAddress(ctx.userLabelOverride)
-              ? { email: ctx.userLabelOverride }
-              : ctx.ownerIdentifier
+            item.participant
+              ? item.participant.userId
+                ? { userId: item.participant.userId }
+                : null
+              : ctx.userLabelOverride && isEmailAddress(ctx.userLabelOverride)
+                ? { email: ctx.userLabelOverride }
+                : ctx.ownerIdentifier
           }
           createdAt={item.createdAt}
           results={item.messageIds.flatMap(

@@ -46,6 +46,9 @@ var ErrCustomerNotFound = errors.New("stripe customer not found or deleted")
 // ErrSubscriptionNotFound indicates that a subscription is missing in Stripe.
 var ErrSubscriptionNotFound = errors.New("stripe subscription not found")
 
+// ErrCheckoutTrialEndInvalid means Stripe rejected the trial_end parameter.
+var ErrCheckoutTrialEndInvalid = errors.New("stripe checkout trial end is invalid")
+
 // ErrCustomerLookupUnavailable indicates that no live customer lookup is configured.
 var ErrCustomerLookupUnavailable = errors.New("stripe customer lookup is unavailable")
 
@@ -204,7 +207,7 @@ type CreateCheckoutSessionInput struct {
 	// CustomerID identifies the Stripe customer that owns the subscription.
 	CustomerID string
 
-	// OrganizationID is Gram's stable organization identifier.
+	// OrganizationID is Speakeasy's stable organization identifier.
 	OrganizationID string
 
 	// OrganizationSlug is the organization slug included in Stripe metadata.
@@ -216,7 +219,7 @@ type CreateCheckoutSessionInput struct {
 	// CancelURL is the browser destination when Checkout is canceled.
 	CancelURL string
 
-	// TrialEnd is the UTC-aligned financial trial end. Gram retains the exact
+	// TrialEnd is the UTC-aligned financial trial end. Speakeasy retains the exact
 	// product trial end separately and the interval between them is a free stub.
 	TrialEnd *time.Time
 
@@ -313,7 +316,7 @@ type CreatePortalSessionInput struct {
 	// CustomerID identifies the Stripe customer entering the portal.
 	CustomerID string
 
-	// ReturnURL is the Gram billing page Stripe returns the customer to.
+	// ReturnURL is the Speakeasy billing page Stripe returns the customer to.
 	ReturnURL string
 }
 
@@ -693,6 +696,11 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 
 	session, err := c.api.createCheckoutSession(ctx, params)
 	if err != nil {
+		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok &&
+			stripeErr.HTTPStatusCode == 400 && stripeErr.Type == stripesdk.ErrorTypeInvalidRequest &&
+			stripeErr.Param == "subscription_data[trial_end]" {
+			err = errors.Join(ErrCheckoutTrialEndInvalid, err)
+		}
 		return nil, fmt.Errorf("create Stripe Checkout session: %w", err)
 	}
 	return &CheckoutSession{ID: session.ID, URL: session.URL}, nil

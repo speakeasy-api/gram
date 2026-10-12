@@ -610,7 +610,7 @@ func BuildReleaseSessionQuarantinePayload(riskReleaseSessionQuarantineBody strin
 
 // BuildListRiskResultsPayload builds the payload for the risk listRiskResults
 // endpoint from CLI flags.
-func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsMcpServerID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUserID string, riskListRiskResultsExternalUserIds string, riskListRiskResultsUniqueMatch string, riskListRiskResultsNonAssistant string, riskListRiskResultsAssistantID string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
+func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRiskResultsChatID string, riskListRiskResultsMcpServerID string, riskListRiskResultsResultID string, riskListRiskResultsExecutionID string, riskListRiskResultsCategory string, riskListRiskResultsRuleID string, riskListRiskResultsUserID string, riskListRiskResultsExternalUserIds string, riskListRiskResultsUniqueMatch string, riskListRiskResultsNonAssistant string, riskListRiskResultsAssistantID string, riskListRiskResultsFrom string, riskListRiskResultsTo string, riskListRiskResultsCursor string, riskListRiskResultsLimit string, riskListRiskResultsApikeyToken string, riskListRiskResultsSessionToken string, riskListRiskResultsProjectSlugInput string) (*risk.ListRiskResultsPayload, error) {
 	var err error
 	var policyID *string
 	{
@@ -640,6 +640,22 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 			if err != nil {
 				return nil, err
 			}
+		}
+	}
+	var resultID *string
+	{
+		if riskListRiskResultsResultID != "" {
+			resultID = &riskListRiskResultsResultID
+			err = goa.MergeErrors(err, goa.ValidateFormat("result_id", *resultID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var executionID *string
+	{
+		if riskListRiskResultsExecutionID != "" {
+			executionID = &riskListRiskResultsExecutionID
 		}
 	}
 	var category *string
@@ -770,6 +786,8 @@ func BuildListRiskResultsPayload(riskListRiskResultsPolicyID string, riskListRis
 	v.PolicyID = policyID
 	v.ChatID = chatID
 	v.McpServerID = mcpServerID
+	v.ResultID = resultID
+	v.ExecutionID = executionID
 	v.Category = category
 	v.RuleID = ruleID
 	v.UserID = userID
@@ -992,6 +1010,49 @@ func BuildUnmaskRiskResultPayload(riskUnmaskRiskResultBody string, riskUnmaskRis
 		}
 	}
 	v := &risk.UnmaskRiskResultPayload{
+		ID: body.ID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRevealRiskResultPayloadPayload builds the payload for the risk
+// revealRiskResultPayload endpoint from CLI flags.
+func BuildRevealRiskResultPayloadPayload(riskRevealRiskResultPayloadBody string, riskRevealRiskResultPayloadApikeyToken string, riskRevealRiskResultPayloadSessionToken string, riskRevealRiskResultPayloadProjectSlugInput string) (*risk.RevealRiskResultPayloadPayload, error) {
+	var err error
+	var body RevealRiskResultPayloadRequestBody
+	{
+		err = json.Unmarshal([]byte(riskRevealRiskResultPayloadBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskRevealRiskResultPayloadApikeyToken != "" {
+			apikeyToken = &riskRevealRiskResultPayloadApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskRevealRiskResultPayloadSessionToken != "" {
+			sessionToken = &riskRevealRiskResultPayloadSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskRevealRiskResultPayloadProjectSlugInput != "" {
+			projectSlugInput = &riskRevealRiskResultPayloadProjectSlugInput
+		}
+	}
+	v := &risk.RevealRiskResultPayloadPayload{
 		ID: body.ID,
 	}
 	v.ApikeyToken = apikeyToken

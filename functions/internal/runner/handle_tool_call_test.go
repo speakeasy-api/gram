@@ -2,14 +2,16 @@ package runner
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// gramToolCallBody is the request body Gram sends for a tool call carrying
+// gramToolCallBody is the request body Speakeasy sends for a tool call carrying
 // caller identity. Kept as a literal so a rename of any JSON tag on either
 // side of the wire fails loudly here rather than silently dropping the
 // caller's identity in production.
@@ -183,6 +185,69 @@ func TestCallTool_ClientWithoutOAuthReachesUserCode(t *testing.T) {
 	  "meta": {"io.modelcontextprotocol/clientInfo": {"name": "claude-code", "version": "2.1"}}
 	}`, recorder.Body.String())
 	require.NotContains(t, recorder.Body.String(), "oauthClientId")
+}
+
+// echoInputSizeBundle reports how many characters of `input.data` reached user
+// code.
+const echoInputSizeBundle = `
+export async function handleToolCall(call) {
+  return new Response(JSON.stringify({ size: call.input.data.length }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+`
+
+// TestCallTool_DeliversInputLargerThanArgumentLimits sends input past both
+// Linux's 128 KiB per-argument cap and macOS's 1 MiB total argument cap, so a
+// regression to passing the request on the command line fails on either OS.
+func TestCallTool_DeliversInputLargerThanArgumentLimits(t *testing.T) {
+	t.Parallel()
+
+	svc := benchService(t, echoInputSizeBundle)
+	recorder := httptest.NewRecorder()
+
+	const size = 2 << 20 // 2 MiB
+	input, err := json.Marshal(map[string]string{"data": strings.Repeat("x", size)})
+	require.NoError(t, err)
+
+	err = svc.callTool(t.Context(), svc.logger, CallToolPayload{
+		ToolName:    "upload",
+		Input:       input,
+		Environment: nil,
+		Meta:        nil,
+	}, recorder)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, fmt.Sprintf(`{"size": %d}`, size), recorder.Body.String())
+}
+
+func TestDecodeRequestBody_RejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+
+	svc := newLimiterService(0, 0)
+	recorder := httptest.NewRecorder()
+
+	body := `{"name":"upload","input":{"data":"` + strings.Repeat("x", maxRequestBodyBytes) + `"}}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/tool-call", strings.NewReader(body))
+
+	var payload CallToolPayload
+	require.False(t, svc.decodeRequestBody(recorder, req, &payload))
+	require.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+}
+
+func TestDecodeRequestBody_RejectsMalformedBody(t *testing.T) {
+	t.Parallel()
+
+	svc := newLimiterService(0, 0)
+	recorder := httptest.NewRecorder()
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/tool-call", strings.NewReader(`{"name":`))
+
+	var payload CallToolPayload
+	require.False(t, svc.decodeRequestBody(recorder, req, &payload))
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
 func TestCallTool_UnknownCallerReachesUserCodeAsEmpty(t *testing.T) {

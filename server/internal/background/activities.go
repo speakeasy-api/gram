@@ -397,11 +397,11 @@ func NewActivities(
 	// activity from the worker.
 	growthEmitter := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
 
-	// The Okta client needs the assertion signer to mint tokens; workers
-	// without one record every applications sync as failed.
+	// Without an assertion signer, private_key_jwt connections fail to
+	// build their client and their applications sync is recorded as failed.
 	var oktaClients okta.ClientFactory
-	if guardianPolicy != nil && remoteSessionAssertionSigner != nil {
-		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner)
+	if guardianPolicy != nil {
+		oktaClients = okta.NewClientFactory(logger, guardianPolicy, remoteSessionAssertionSigner, encryption)
 	}
 	oktaApplicationSyncer := oktaapplications.NewSyncer(logger, meterProvider, db, oktaClients)
 

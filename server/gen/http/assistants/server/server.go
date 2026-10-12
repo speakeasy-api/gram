@@ -18,16 +18,17 @@ import (
 
 // Server lists the assistants service endpoint HTTP handlers.
 type Server struct {
-	Mounts                 []*MountPoint
-	ListAssistants         http.Handler
-	GetAssistant           http.Handler
-	CreateAssistant        http.Handler
-	UpdateAssistant        http.Handler
-	DeleteAssistant        http.Handler
-	SendMessage            http.Handler
-	InterruptTurn          http.Handler
-	GetManagedAssistant    http.Handler
-	EnsureManagedAssistant http.Handler
+	Mounts                   []*MountPoint
+	ListAssistants           http.Handler
+	GetAssistant             http.Handler
+	CreateAssistant          http.Handler
+	UpgradeAssistantIdentity http.Handler
+	UpdateAssistant          http.Handler
+	DeleteAssistant          http.Handler
+	SendMessage              http.Handler
+	InterruptTurn            http.Handler
+	GetManagedAssistant      http.Handler
+	EnsureManagedAssistant   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -60,6 +61,7 @@ func New(
 			{"ListAssistants", "GET", "/rpc/assistants.list"},
 			{"GetAssistant", "GET", "/rpc/assistants.get"},
 			{"CreateAssistant", "POST", "/rpc/assistants.create"},
+			{"UpgradeAssistantIdentity", "POST", "/rpc/assistants.upgradeIdentity"},
 			{"UpdateAssistant", "POST", "/rpc/assistants.update"},
 			{"DeleteAssistant", "DELETE", "/rpc/assistants.delete"},
 			{"SendMessage", "POST", "/rpc/assistants.sendMessage"},
@@ -67,15 +69,16 @@ func New(
 			{"GetManagedAssistant", "GET", "/rpc/assistants.getManagedAssistant"},
 			{"EnsureManagedAssistant", "POST", "/rpc/assistants.ensureManagedAssistant"},
 		},
-		ListAssistants:         NewListAssistantsHandler(e.ListAssistants, mux, decoder, encoder, errhandler, formatter),
-		GetAssistant:           NewGetAssistantHandler(e.GetAssistant, mux, decoder, encoder, errhandler, formatter),
-		CreateAssistant:        NewCreateAssistantHandler(e.CreateAssistant, mux, decoder, encoder, errhandler, formatter),
-		UpdateAssistant:        NewUpdateAssistantHandler(e.UpdateAssistant, mux, decoder, encoder, errhandler, formatter),
-		DeleteAssistant:        NewDeleteAssistantHandler(e.DeleteAssistant, mux, decoder, encoder, errhandler, formatter),
-		SendMessage:            NewSendMessageHandler(e.SendMessage, mux, decoder, encoder, errhandler, formatter),
-		InterruptTurn:          NewInterruptTurnHandler(e.InterruptTurn, mux, decoder, encoder, errhandler, formatter),
-		GetManagedAssistant:    NewGetManagedAssistantHandler(e.GetManagedAssistant, mux, decoder, encoder, errhandler, formatter),
-		EnsureManagedAssistant: NewEnsureManagedAssistantHandler(e.EnsureManagedAssistant, mux, decoder, encoder, errhandler, formatter),
+		ListAssistants:           NewListAssistantsHandler(e.ListAssistants, mux, decoder, encoder, errhandler, formatter),
+		GetAssistant:             NewGetAssistantHandler(e.GetAssistant, mux, decoder, encoder, errhandler, formatter),
+		CreateAssistant:          NewCreateAssistantHandler(e.CreateAssistant, mux, decoder, encoder, errhandler, formatter),
+		UpgradeAssistantIdentity: NewUpgradeAssistantIdentityHandler(e.UpgradeAssistantIdentity, mux, decoder, encoder, errhandler, formatter),
+		UpdateAssistant:          NewUpdateAssistantHandler(e.UpdateAssistant, mux, decoder, encoder, errhandler, formatter),
+		DeleteAssistant:          NewDeleteAssistantHandler(e.DeleteAssistant, mux, decoder, encoder, errhandler, formatter),
+		SendMessage:              NewSendMessageHandler(e.SendMessage, mux, decoder, encoder, errhandler, formatter),
+		InterruptTurn:            NewInterruptTurnHandler(e.InterruptTurn, mux, decoder, encoder, errhandler, formatter),
+		GetManagedAssistant:      NewGetManagedAssistantHandler(e.GetManagedAssistant, mux, decoder, encoder, errhandler, formatter),
+		EnsureManagedAssistant:   NewEnsureManagedAssistantHandler(e.EnsureManagedAssistant, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -87,6 +90,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListAssistants = m(s.ListAssistants)
 	s.GetAssistant = m(s.GetAssistant)
 	s.CreateAssistant = m(s.CreateAssistant)
+	s.UpgradeAssistantIdentity = m(s.UpgradeAssistantIdentity)
 	s.UpdateAssistant = m(s.UpdateAssistant)
 	s.DeleteAssistant = m(s.DeleteAssistant)
 	s.SendMessage = m(s.SendMessage)
@@ -103,6 +107,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListAssistantsHandler(mux, h.ListAssistants)
 	MountGetAssistantHandler(mux, h.GetAssistant)
 	MountCreateAssistantHandler(mux, h.CreateAssistant)
+	MountUpgradeAssistantIdentityHandler(mux, h.UpgradeAssistantIdentity)
 	MountUpdateAssistantHandler(mux, h.UpdateAssistant)
 	MountDeleteAssistantHandler(mux, h.DeleteAssistant)
 	MountSendMessageHandler(mux, h.SendMessage)
@@ -252,6 +257,60 @@ func NewCreateAssistantHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createAssistant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assistants")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpgradeAssistantIdentityHandler configures the mux to serve the
+// "assistants" service "upgradeAssistantIdentity" endpoint.
+func MountUpgradeAssistantIdentityHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/assistants.upgradeIdentity", f)
+}
+
+// NewUpgradeAssistantIdentityHandler creates a HTTP handler which loads the
+// HTTP request and calls the "assistants" service "upgradeAssistantIdentity"
+// endpoint.
+func NewUpgradeAssistantIdentityHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpgradeAssistantIdentityRequest(mux, decoder)
+		encodeResponse = EncodeUpgradeAssistantIdentityResponse(encoder)
+		encodeError    = EncodeUpgradeAssistantIdentityError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "upgradeAssistantIdentity")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "assistants")
 		payload, err := decodeRequest(r)
 		if err != nil {

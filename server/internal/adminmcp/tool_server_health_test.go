@@ -83,7 +83,7 @@ func testHealthClient(id, registration string) *gen.AdminMcpServerHealthRemoteSe
 		Issuer: &gen.AdminMcpServerHealthRemoteSessionIssuer{
 			ID: testHealthRemoteID, Slug: "upstream", Name: new("Upstream"), Issuer: "https://idp.example.test",
 			AttachmentScope: "global", Networking: "public", Oidc: true, Pkce: "supported", CimdSupported: true,
-			ScopeOverride: []string{"read"}, MetadataFetchedAt: new("2026-09-01T00:00:00Z"),
+			ScopeOverride: []string{"read"}, OmitScopeFallback: new(true), MetadataFetchedAt: new("2026-09-01T00:00:00Z"),
 			MetadataLastErrorAt: new("2026-08-01T00:00:00Z"), JwksLastErrorAt: new("2026-08-02T00:00:00Z"),
 		},
 		Sessions: &gen.AdminMcpServerHealthRemoteSessions{

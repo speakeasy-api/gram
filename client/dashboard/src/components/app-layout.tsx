@@ -126,6 +126,8 @@ export const ImpersonationBanner = (): JSX.Element => {
 
   return (
     <div
+      // The mode switch measures this to keep its cards out from under it.
+      data-chrome-banner=""
       className={cn(
         "sticky top-0 z-40 flex h-9 items-center justify-center gap-3 border-b px-4",
         toneClasses,

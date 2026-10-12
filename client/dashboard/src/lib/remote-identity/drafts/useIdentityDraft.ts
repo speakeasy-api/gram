@@ -9,6 +9,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import {
@@ -266,11 +267,16 @@ function displayUrl(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-function issuerDisplayName(issuer: RemoteSessionIssuer): string {
+/** An issuer's name, else its URL's host, else its slug; "" when none. */
+export function issuerDisplayName(
+  issuer: Pick<RemoteSessionIssuer, "issuer"> &
+    Partial<Pick<RemoteSessionIssuer, "name" | "slug">>,
+): string {
   return (
     issuer.name?.trim() ||
     deriveRemoteSessionIssuerNameFromUrl(issuer.issuer) ||
-    issuer.slug
+    issuer.slug ||
+    ""
   );
 }
 
@@ -302,6 +308,8 @@ export type UserIdentityDraft = {
   connected: boolean;
   /** The connected client, once the provider's client list has loaded. */
   connectedClient: ClientOption | null;
+  /** The connected client's id, known before the client list loads. */
+  connectedClientId: string | null;
   /** People signed in through the connected client; null while unknown. */
   signedIn: number | null;
   /** The server had a client and the operator cleared it. Save replaces it. */
@@ -340,7 +348,10 @@ export type UserIdentityDraft = {
   replacesClient: boolean;
   status: UserIdentityStatus;
   canSave: boolean;
-  save: () => Promise<void>;
+  /** The operator changed the selection, whether or not it can be saved yet. */
+  pendingChange: boolean;
+  /** Resolves true when the commit landed; failures are already on screen. */
+  save: () => Promise<boolean>;
   saving: boolean;
 };
 
@@ -757,6 +768,8 @@ export function useUserIdentityDraft({
           jwksUri: draft.jwksUri ?? undefined,
           scopesSupported: draft.scopesSupported ?? undefined,
           grantTypesSupported: draft.grantTypesSupported ?? undefined,
+          authorizationGrantProfilesSupported:
+            draft.authorizationGrantProfilesSupported ?? [],
           responseTypesSupported: draft.responseTypesSupported ?? undefined,
           tokenEndpointAuthMethodsSupported:
             draft.tokenEndpointAuthMethodsSupported ?? undefined,
@@ -862,6 +875,7 @@ export function useUserIdentityDraft({
         invalidateAllRemoteSessionClients(queryClient),
         invalidateAllRemoteSessionIssuers(queryClient),
         invalidateAllRemoteSessionsCount(queryClient),
+        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
     },
     onError: (error: unknown) => {
@@ -891,6 +905,11 @@ export function useUserIdentityDraft({
   if (choice === "existing")
     choiceComplete = !!existingClient && !sameAsConnected;
   if (choice === "manual") choiceComplete = clientId.trim() !== "";
+
+  const pendingChange =
+    touched &&
+    status.kind !== "done" &&
+    !(choice === "existing" && sameAsConnected);
 
   const canSave =
     !!selected &&
@@ -923,6 +942,7 @@ export function useUserIdentityDraft({
 
     connected,
     connectedClient,
+    connectedClientId: connected ? linkedClientId : null,
     signedIn,
     cleared,
     clear: (): void => {
@@ -966,14 +986,17 @@ export function useUserIdentityDraft({
     replacesClient,
     status,
     canSave,
-    save: async (): Promise<void> => {
+    pendingChange,
+    save: async (): Promise<boolean> => {
       // Awaitable so callers can sequence work after it. onError has already
       // put the failure on screen, so the rejection is swallowed here rather
       // than surfacing twice or escaping as an unhandled rejection.
       try {
         await runCommit();
+        return true;
       } catch {
         /* reported by onError */
+        return false;
       }
     },
     saving: isPending,

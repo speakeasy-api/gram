@@ -24,6 +24,7 @@ type Endpoints struct {
 	SkillFeedback      goa.Endpoint
 	Logs               goa.Endpoint
 	Metrics            goa.Endpoint
+	GetStatus          goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "hooks" service with endpoints.
@@ -39,6 +40,7 @@ func NewEndpoints(s Service) *Endpoints {
 		SkillFeedback:      NewSkillFeedbackEndpoint(s, a.APIKeyAuth),
 		Logs:               NewLogsEndpoint(s, a.APIKeyAuth),
 		Metrics:            NewMetricsEndpoint(s, a.APIKeyAuth),
+		GetStatus:          NewGetStatusEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -52,6 +54,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SkillFeedback = m(e.SkillFeedback)
 	e.Logs = m(e.Logs)
 	e.Metrics = m(e.Metrics)
+	e.GetStatus = m(e.GetStatus)
 }
 
 // NewClaudeEndpoint returns an endpoint function that calls the method
@@ -279,5 +282,64 @@ func NewMetricsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 			return nil, err
 		}
 		return nil, s.Metrics(ctx, p)
+	}
+}
+
+// NewGetStatusEndpoint returns an endpoint function that calls the method
+// "getStatus" of service "hooks".
+func NewGetStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetStatusPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetStatus(ctx, p)
 	}
 }

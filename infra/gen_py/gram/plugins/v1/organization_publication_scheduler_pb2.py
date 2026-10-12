@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n8gram/plugins/v1/organization_publication_scheduler.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"s\n OrganizationPublicationScheduler:O\x92\xb5\x18K\x12\x04\x08\x80\xf5$\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04J\x02\x10\nR0gram.plugins.v1.OrganizationPublicationRequestedBCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n8gram/plugins/v1/organization_publication_scheduler.proto\x12\x0fgram.plugins.v1\x1a\x1bgcp/pubsub/v1/options.proto\"o\n OrganizationPublicationScheduler:K\x92\xb5\x18G\x12\x04\x08\x80\xf5$\"\x02\x08<2\t\n\x02\x08\n\x12\x03\x08\xd8\x04R0gram.plugins.v1.OrganizationPublicationRequestedBCZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZAgithub.com/speakeasy-api/gram/infra/gen/gram/plugins/v1;pluginsv1'
   _globals['_ORGANIZATIONPUBLICATIONSCHEDULER']._loaded_options = None
-  _globals['_ORGANIZATIONPUBLICATIONSCHEDULER']._serialized_options = b'\222\265\030K\022\004\010\200\365$\"\002\010<2\t\n\002\010\n\022\003\010\330\004J\002\020\nR0gram.plugins.v1.OrganizationPublicationRequested'
+  _globals['_ORGANIZATIONPUBLICATIONSCHEDULER']._serialized_options = b'\222\265\030G\022\004\010\200\365$\"\002\010<2\t\n\002\010\n\022\003\010\330\004R0gram.plugins.v1.OrganizationPublicationRequested'
   _globals['_ORGANIZATIONPUBLICATIONSCHEDULER']._serialized_start=106
-  _globals['_ORGANIZATIONPUBLICATIONSCHEDULER']._serialized_end=221
+  _globals['_ORGANIZATIONPUBLICATIONSCHEDULER']._serialized_end=217
 # @@protoc_insertion_point(module_scope)

@@ -69,7 +69,7 @@ func FetchClickHouse(
 	eg.Go(func() error {
 		var queryErr error
 		result.ToolMetrics, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			// Org-scope read: Gram-hosted sources stay counted, matching the
+			// Org-scope read: Speakeasy-hosted sources stay counted, matching the
 			// summaries fast path.
 			ExcludedHookSources: nil,
 			GramProjectID:       params.ProjectID,
@@ -97,7 +97,7 @@ func FetchClickHouse(
 	eg.Go(func() error {
 		var queryErr error
 		result.ToolMetricsComparison, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			// Org-scope read: Gram-hosted sources stay counted, matching the
+			// Org-scope read: Speakeasy-hosted sources stay counted, matching the
 			// summaries fast path.
 			ExcludedHookSources: nil,
 			GramProjectID:       params.ProjectID,

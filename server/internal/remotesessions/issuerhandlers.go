@@ -48,7 +48,7 @@ const discoveryHTTPTimeout = 10 * time.Second
 // provider metadata while bounding memory consumed by an untrusted response.
 const maxDiscoveryBodyBytes = 1 << 20
 
-// rfc8414Document is a discovery document as Gram reads it: the RFC 8414
+// rfc8414Document is a discovery document as Speakeasy reads it: the RFC 8414
 // members, the OpenID Connect Discovery members it enriches sessions with,
 // and the served (or merged) document verbatim, from which every typed field
 // is derived.
@@ -115,7 +115,7 @@ type rfc8414Document struct {
 	// omit are not lost.
 	raw json.RawMessage
 
-	// dropped names the members sanitizeIssuerDocument blanked because Gram
+	// dropped names the members sanitizeIssuerDocument blanked because Speakeasy
 	// would not act on their values, so warnings can say what was not
 	// captured. raw still carries the members as served.
 	dropped []string
@@ -132,6 +132,8 @@ type discoveryResult struct {
 	unreadable string
 	// unreadableErr retains the upstream status and cause for refresh failures.
 	unreadableErr *discoveryError
+	// originFallback reports that an origin-root candidate supplied any adopted member.
+	originFallback bool
 }
 
 // metadataFamily is the discovery specification a well-known URL follows.
@@ -424,15 +426,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txRepo := repo.New(dbtx)
-
-	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+	params := repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		OrganizationID:                      conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:                                payload.Slug,
@@ -468,12 +462,27 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Metadata:                                   nil,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		MetadataLastError:                          "",
 		MetadataLastErrorUrl:                       "",
-	})
+	}
+	if err := s.preflightCreateDiscoverySlug(ctx, logger, &params); err != nil {
+		return nil, err
+	}
+	s.recordCreateDiscovery(ctx, logger, tunnelID, &params, time.Now())
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, params)
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) {
 			return nil, oops.E(oops.CodeConflict, err, "an issuer with this slug already exists").LogError(ctx, logger)
@@ -672,6 +681,7 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              payload.ScopeOverride,
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
@@ -689,6 +699,10 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := requireIssuerTokenEndpointForSelfClients(ctx, logger, txRepo, updated); err != nil {
+		return nil, err
 	}
 
 	afterView := mv.BuildRemoteSessionIssuerView(updated)
@@ -1038,7 +1052,7 @@ type discoveryError struct {
 	Status       int
 	cause        error
 
-	// definitive marks a refusal Gram itself made (a candidate or redirect
+	// definitive marks a refusal Speakeasy itself made (a candidate or redirect
 	// target outside the URL policy), which says as much about the
 	// candidate as a 404 would and must not be mistaken for an outage.
 	definitive bool
@@ -1086,7 +1100,7 @@ func (e *discoveryError) UserMessage() string {
 	}
 }
 
-// DiscoveredIssuerMetadata is the whole discovery document as Gram persists
+// DiscoveredIssuerMetadata is the whole discovery document as Speakeasy persists
 // it: the OAuth core, the OpenID Connect session-enrichment members, the
 // merged document verbatim, and which candidate the run could not read. It is
 // deliberately an internal application return type rather than an API
@@ -1256,6 +1270,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	var untrustedErr *untrustedDocumentError
 	var primary, fallback *rfc8414Document
 	var primaryFamily metadataFamily
+	originFallback, fallbackFromOrigin := false, false
 	// unreadable records, per family, the first candidate that could not be
 	// read at all rather than one that definitively has no document. Such a
 	// candidate may be hiding fields the merge would have captured, whichever
@@ -1311,6 +1326,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 		if doc.AuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
 			if primary == nil && fallback == nil {
 				fallback = &doc
+				fallbackFromOrigin = candidate.fallback
 			}
 			continue
 		}
@@ -1318,6 +1334,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 		if primary == nil {
 			primary = &doc
 			primaryFamily = candidate.family
+			originFallback = candidate.fallback
 			continue
 		}
 		// Only a document naming the same issuer may contribute: an
@@ -1325,6 +1342,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 		// tenant, and one naming no issuer cannot be tied to this one.
 		if doc.Issuer != "" && doc.Issuer == primary.Issuer {
 			union := mergeIssuerMetadata(*primary, doc)
+			originFallback = originFallback || (candidate.fallback && !bytes.Equal(union.raw, primary.raw))
 			primary = &union
 			break
 		}
@@ -1340,10 +1358,11 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 			partialURL = partialErr.WellKnownURL
 		}
 		result := discoveryResult{
-			doc:           *primary,
-			warnings:      collectDiscoveryWarnings(issuerURL, *primary),
-			unreadable:    partialURL,
-			unreadableErr: partialErr,
+			doc:            *primary,
+			warnings:       collectDiscoveryWarnings(issuerURL, *primary),
+			unreadable:     partialURL,
+			unreadableErr:  partialErr,
+			originFallback: originFallback,
 		}
 		if result.unreadable != "" {
 			result.warnings = append(result.warnings, unreadableCandidateMessage(result.unreadable, result.unreadableErr))
@@ -1361,7 +1380,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	// issuer has. With a candidate unread, the real document may be behind
 	// the outage, so the run is transient rather than a verdict on the issuer.
 	if fallback != nil && unreadableErr == nil {
-		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: "", unreadableErr: nil}, nil
+		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: "", unreadableErr: nil, originFallback: fallbackFromOrigin}, nil
 	}
 	if unreadableErr != nil {
 		return discoveryResult{}, unreadableErr
@@ -1374,7 +1393,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 // document that base's document does not state, then re-derives the typed
 // fields from the union so the two never disagree. A member base states,
 // even as false or empty, is kept: the primary document is authoritative for
-// flags such as CIMD support that Gram acts on. Either side without a JSON
+// flags such as CIMD support that Speakeasy acts on. Either side without a JSON
 // object leaves base unchanged.
 func mergeIssuerMetadata(base, extra rfc8414Document) rfc8414Document {
 	var baseMembers, extraMembers map[string]json.RawMessage
@@ -1538,7 +1557,7 @@ func attemptIssuerProbe(ctx context.Context, client httpDoer, wellKnown string) 
 
 // decodeIssuerDocument projects a discovery document body onto its typed
 // fields: it rejects endpoints that would weaken the transport guarantee,
-// keeps the body verbatim as raw, and blanks the members Gram would not act
+// keeps the body verbatim as raw, and blanks the members Speakeasy would not act
 // on. requested is the well-known URL the body came from, which is what the
 // loopback exception for endpoints is measured against. A stored document is
 // re-projected the same way, without a fetch.
@@ -1703,7 +1722,7 @@ func validateIssuerMetadataEndpoints(doc rfc8414Document, requestedIssuer *url.U
 	return nil
 }
 
-// sanitizeIssuerDocument blanks the advertised URLs that Gram never dials
+// sanitizeIssuerDocument blanks the advertised URLs that Speakeasy never dials
 // during discovery but would render or send a token to later, when they are
 // not acceptable: the revocation, userinfo, and introspection endpoints must
 // be HTTPS or local loopback, and the documentation, policy, and terms links

@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$gram/risk/v1/presidio_enforcer.proto\x12\x0cgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"M\n\x10PresidioEnforcer:9\x92\xb5\x18\x35\x12\x03\x08\xd8\x04\"\x02\x08\n2\x04\n\x02\x08\nJ\x02\x10\x05R gram.risk.v1.PresidioEnforcementB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n$gram/risk/v1/presidio_enforcer.proto\x12\x0cgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"I\n\x10PresidioEnforcer:5\x92\xb5\x18\x31\x12\x03\x08\xd8\x04\"\x02\x08\n2\x04\n\x02\x08\nR gram.risk.v1.PresidioEnforcementB=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1'
   _globals['_PRESIDIOENFORCER']._loaded_options = None
-  _globals['_PRESIDIOENFORCER']._serialized_options = b'\222\265\0305\022\003\010\330\004\"\002\010\n2\004\n\002\010\nJ\002\020\005R gram.risk.v1.PresidioEnforcement'
+  _globals['_PRESIDIOENFORCER']._serialized_options = b'\222\265\0301\022\003\010\330\004\"\002\010\n2\004\n\002\010\nR gram.risk.v1.PresidioEnforcement'
   _globals['_PRESIDIOENFORCER']._serialized_start=83
-  _globals['_PRESIDIOENFORCER']._serialized_end=160
+  _globals['_PRESIDIOENFORCER']._serialized_end=156
 # @@protoc_insertion_point(module_scope)

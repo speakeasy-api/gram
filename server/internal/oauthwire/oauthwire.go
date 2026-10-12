@@ -76,6 +76,10 @@ const (
 	// ResponseTypeCode requests an authorization code from the authorization
 	// endpoint (RFC 6749 §4.1.1).
 	ResponseTypeCode = "code"
+
+	// TokenTypeBearer is the bearer token_type value and Authorization scheme
+	// (RFC 6750 §4, §2.1).
+	TokenTypeBearer = "Bearer"
 )
 
 // Client authentication parameters as they appear in a token or revocation
@@ -97,7 +101,8 @@ const (
 	ParamClientAssertionType = "client_assertion_type"
 )
 
-// Token request parameters for the assertion and token exchange grants.
+// Token request parameters: the grant type, and the parameters of the
+// authorization code, refresh token, assertion, and token exchange grants.
 const (
 	// ParamGrantType selects the token endpoint grant (RFC 6749 §4.1.3).
 	ParamGrantType = "grant_type"
@@ -127,6 +132,22 @@ const (
 
 	// ParamScope requests a space-delimited scope set (RFC 6749 §3.3).
 	ParamScope = "scope"
+
+	// ParamCode carries the authorization code of an authorization_code grant
+	// (RFC 6749 §4.1.3).
+	ParamCode = "code"
+
+	// ParamRefreshToken carries the refresh token of a refresh_token grant
+	// (RFC 6749 §6).
+	ParamRefreshToken = "refresh_token"
+
+	// ParamToken carries the token a revocation request revokes (RFC 7009
+	// §2.1).
+	ParamToken = "token"
+
+	// ParamTokenTypeHint carries a revocation request's hint about the type
+	// of the token it revokes (RFC 7009 §2.1).
+	ParamTokenTypeHint = "token_type_hint"
 )
 
 // Error carries an OAuth wire error: the shared shape used across the

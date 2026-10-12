@@ -258,7 +258,7 @@ func sendMCPRequest(
 }
 
 // TestE2E_ExternalMCP_Proxy_StreamableHTTP tests the full proxy flow with StreamableHTTP transport:
-// MCP Client -> Gram -> External MCP Server (StreamableHTTP)
+// MCP Client -> Speakeasy -> External MCP Server (StreamableHTTP)
 func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 	t.Parallel()
 
@@ -417,7 +417,7 @@ func TestE2E_ExternalMCP_Proxy_StreamableHTTP(t *testing.T) {
 }
 
 // TestE2E_ExternalMCP_Proxy_SSE tests the full proxy flow with SSE transport:
-// MCP Client -> Gram -> External MCP Server (SSE)
+// MCP Client -> Speakeasy -> External MCP Server (SSE)
 func TestE2E_ExternalMCP_Proxy_SSE(t *testing.T) {
 	t.Parallel()
 

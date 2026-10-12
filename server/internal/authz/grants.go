@@ -403,20 +403,29 @@ func evaluateGrantCheck(grants []Grant, check Check) (grantCheckEvaluation, erro
 func matchingGrant(grants []Grant, checks []Check) (*Grant, *Check) {
 	for i := range grants {
 		grant := &grants[i]
-		for j := range checks {
-			check := &checks[j]
-			if grant.Scope != check.Scope {
-				continue
-			}
-
-			if !check.matchesAllowSelector(grant.Selector) {
-				continue
-			}
+		if check := grantMatchingCheck(grant, checks); check != nil {
 			return grant, check
 		}
 	}
 
 	return nil, nil
+}
+
+// grantMatchingCheck returns the first of checks that grant satisfies, or nil.
+func grantMatchingCheck(grant *Grant, checks []Check) *Check {
+	for j := range checks {
+		check := &checks[j]
+		if grant.Scope != check.Scope {
+			continue
+		}
+
+		if !check.matchesAllowSelector(grant.Selector) {
+			continue
+		}
+		return check
+	}
+
+	return nil
 }
 
 // allScopeGrants returns wildcard grants for every user-visible scope. Used to

@@ -52,7 +52,7 @@ export function CatalogDetailRoot(): JSX.Element {
 }
 
 // The server's own endpoint: the one shown as its Server URL and the one a
-// setup guide is looked up by. Gram installs the streamable-HTTP remote, so
+// setup guide is looked up by. Speakeasy installs the streamable-HTTP remote, so
 // that comes first, but guides are published per server rather than per
 // transport: an entry that only lists an SSE endpoint still has one, and would
 // find it under no other key when the guide publishes no registry alias.

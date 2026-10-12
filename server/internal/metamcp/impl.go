@@ -43,12 +43,14 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/policylifecycle"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
+	tracerProvider           trace.TracerProvider
 	tracer                   trace.Tracer
 	logger                   *slog.Logger
 	db                       *pgxpool.Pool
@@ -78,6 +80,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
+		tracerProvider:           tracerProvider,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
 		logger:                   logger,
 		db:                       db,
@@ -695,6 +698,16 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete meta mcp server").LogError(ctx, logger)
 	}
+	// The admission lock taken above precedes the gateway row lock, as the
+	// risk policy cleanup requires.
+	deletedPolicies, err := policylifecycle.NewCleaner(s.tracerProvider, s.audit).SoftDeleteForMCPServer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, deleted.ID, policylifecycle.Actor{
+		Principal:   actor,
+		DisplayName: authCtx.Email,
+		Slug:        nil,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete meta mcp server risk policies").LogError(ctx, logger)
+	}
 
 	if err := s.audit.LogMetaMcpServerDelete(ctx, dbtx, audit.LogMetaMcpServerDeleteEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
@@ -716,6 +729,8 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 	}
 
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, len(detached) > 0)
+	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
+	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, deletedPolicies)
 	if err := s.reconcileCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
 		return err
 	}
@@ -793,14 +808,6 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sort_order").LogError(ctx, logger)
 	}
 
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	if s.distributionAdmission == nil {
-		rolloutErr = admission.ErrUnavailable
-	} else {
-		rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -864,12 +871,14 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeConflict, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
 	}
 
-	if err := s.distributionAdmission.CheckGatewayMemberAddition(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, metaID, mcpServerID); err != nil {
+	admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "gateway member distribution approval could not be verified safely").LogError(ctx, logger)
+	}
+	if err := s.distributionAdmission.CheckGatewayMemberAddition(admissionCtx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, metaID, mcpServerID); err != nil {
 		switch {
 		case errors.Is(err, admission.ErrApprovalRequired):
 			return nil, oops.E(oops.CodeConflict, err, "gateway member requires Shadow MCP approval").LogError(ctx, logger)
-		case errors.Is(err, admission.ErrDistributionDisabled):
-			return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is temporarily disabled").LogError(ctx, logger)
 		default:
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway member distribution approval could not be verified safely").LogError(ctx, logger)
 		}

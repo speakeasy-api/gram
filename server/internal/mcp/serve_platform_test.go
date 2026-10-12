@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -118,7 +120,7 @@ func TestServePlatformToolset_UnsupportedVersionPrecedesTokenAuthentication(t *t
 	req := httptest.NewRequest(http.MethodPost, "/platform/mcp/"+slug, bytes.NewReader(toolsListBody()))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(mcpversions.HTTPHeader, mcpversions.Version20260728)
+	req.Header.Set(mcpversions.HTTPHeader, unservedProtocolVersion)
 
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("toolsetSlug", slug)
@@ -127,8 +129,60 @@ func TestServePlatformToolset_UnsupportedVersionPrecedesTokenAuthentication(t *t
 	w := httptest.NewRecorder()
 	err := ti.service.ServePlatformToolset(w, req)
 	require.NoError(t, err)
-	requireUnsupportedProtocolVersionResponse(t, w, mcpversions.Version20260728, mcpversions.SupportedPlatformToolset())
+	requireUnsupportedProtocolVersionResponse(t, w, unservedProtocolVersion, mcpversions.SupportedPlatformToolset())
 	require.Empty(t, w.Header().Get("WWW-Authenticate"))
+}
+
+// Failures that escape the platform handler reach the client as JSON-RPC
+// errors, as on the other MCP surfaces, with the HTTP status the failure
+// carries. A handshake-era revision is declared deliberately: the unknown
+// toolset is rejected before the body is read, so its error is encoded under
+// the handshake revisions' rules whatever the client declared, and encoding it
+// under 2026-07-28 rules for a 2026-07-28 declaration is tracked as AIM-446.
+func TestServePlatformToolset_AttachedFailuresAreJSONRPCErrors(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+
+	for _, tc := range []struct {
+		name   string
+		slug   string
+		status int
+		code   oops.MCPCode
+		id     string
+	}{
+		{name: "missing token", slug: platformtools.ManagedAssistantPlatformToolsetSlug, status: http.StatusUnauthorized, code: oops.MCPCodeUnauthorized, id: `1`},
+		// The slug is resolved before the body is read, so the request id is
+		// not known yet.
+		{name: "unknown toolset", slug: "unknown-platform-toolset", status: http.StatusNotFound, code: oops.MCPCodeResourceNotFound, id: `null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/platform/mcp/"+tc.slug, bytes.NewReader(toolsListBody()))
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set(mcpversions.HTTPHeader, mcpversions.Version20251125)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			require.Equal(t, tc.status, w.Code, "body=%s", w.Body.String())
+			require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+			var response struct {
+				JSONRPC string          `json:"jsonrpc"`
+				ID      json.RawMessage `json:"id"`
+				Error   struct {
+					Code oops.MCPCode `json:"code"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response), "body=%s", w.Body.String())
+			require.Equal(t, "2.0", response.JSONRPC)
+			require.JSONEq(t, tc.id, string(response.ID))
+			require.Equal(t, tc.code, response.Error.Code)
+		})
+	}
 }
 
 func TestServePlatformToolset_EmptyBodyRequiresTokenAuthentication(t *testing.T) {
@@ -299,7 +353,7 @@ func createAssistant(t *testing.T, ti *testInstance, authCtx *contextvalues.Auth
 
 func mintAssistantToken(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext, assistantID uuid.UUID) string {
 	t.Helper()
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,
@@ -332,7 +386,7 @@ func mintThreadAssistantToken(t *testing.T, ti *testInstance, authCtx *contextva
 		SourceRefJson: []byte("{}"),
 	})
 	require.NoError(t, err)
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,

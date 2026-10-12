@@ -274,9 +274,9 @@ type ListManagedDevicesPayload struct {
 	Provider *string
 	// Only devices in this coverage bucket.
 	CoverageBucket *string
-	// Only devices assigned to these Gram users. Combined with user_emails as an
-	// OR, because a device only carries a resolved user id when the MDM's reported
-	// email matched a member.
+	// Only devices assigned to these Speakeasy users. Combined with user_emails as
+	// an OR, because a device only carries a resolved user id when the MDM's
+	// reported email matched a member.
 	UserIds []string
 	// Only devices whose MDM-reported assigned email is one of these, matched
 	// case-insensitively.
@@ -337,8 +337,8 @@ type ManagedDevice struct {
 	// Assigned user's email exactly as the MDM reported it. Omitted when the MDM
 	// has no assignment.
 	UserEmail *string
-	// Resolved Gram user for the assigned email. Omitted when the email is missing
-	// or does not resolve to an org member.
+	// Resolved Speakeasy user for the assigned email. Omitted when the email is
+	// missing or does not resolve to an org member.
 	UserID *string
 	// Last device check-in as reported by the MDM.
 	MdmLastCheckInAt *string

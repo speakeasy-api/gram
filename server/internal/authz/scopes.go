@@ -40,6 +40,10 @@ const (
 	ScopeSkillBlockedWrite       Scope = "skill:blocked_write"
 	ScopePluginWrite             Scope = "plugin:write"
 	ScopePluginBlockedWrite      Scope = "plugin:blocked_write"
+	ScopeAssistantRead           Scope = "assistant:read"
+	ScopeAssistantBlockedRead    Scope = "assistant:blocked_read"
+	ScopeAssistantWrite          Scope = "assistant:write"
+	ScopeAssistantBlockedWrite   Scope = "assistant:blocked_write"
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
@@ -93,6 +97,8 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
+	ScopeAssistantRead,
+	ScopeAssistantWrite,
 	ScopePluginWrite,
 	ScopeAgentRead,
 	ScopeAgentWrite,
@@ -146,6 +152,10 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
 	ScopePluginWrite:             scopeVisibilityUserVisible,
 	ScopePluginBlockedWrite:      scopeVisibilityInternal,
+	ScopeAssistantRead:           scopeVisibilityUserVisible,
+	ScopeAssistantBlockedRead:    scopeVisibilityInternal,
+	ScopeAssistantWrite:          scopeVisibilityUserVisible,
+	ScopeAssistantBlockedWrite:   scopeVisibilityInternal,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
@@ -169,6 +179,7 @@ var memberScopes = []Scope{
 	ScopeMCPRead,
 	ScopeMCPConnect,
 	ScopeSkillRead,
+	ScopeAssistantRead,
 	// environment:read is intentionally NOT a default for members: environment
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
@@ -262,6 +273,10 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
 	ScopePluginWrite:             nil,
 	ScopePluginBlockedWrite:      nil,
+	ScopeAssistantRead:           {ScopeAssistantWrite},
+	ScopeAssistantBlockedRead:    nil,
+	ScopeAssistantWrite:          nil,
+	ScopeAssistantBlockedWrite:   {ScopeAssistantBlockedRead},
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeRiskPolicyBlock:         nil,
@@ -308,6 +323,10 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeSkillBlockedWrite:       "",
 	ScopePluginWrite:             ScopePluginBlockedWrite,
 	ScopePluginBlockedWrite:      "",
+	ScopeAssistantRead:           ScopeAssistantBlockedRead,
+	ScopeAssistantBlockedRead:    "",
+	ScopeAssistantWrite:          ScopeAssistantBlockedWrite,
+	ScopeAssistantBlockedWrite:   "",
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { AVAILABLE_MODELS } from "@/lib/models";
 import { Assistant } from "@gram/client/models/components/assistant.js";
@@ -51,8 +52,9 @@ export function AssistantOverviewSettings({
   onUpdated?: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const project = useProject();
   const { hasScope } = useRBAC();
-  const canWrite = hasScope("project:write");
+  const canWrite = hasScope("assistant:write", assistant.id, project.id);
 
   const [draft, setDraft] = useState<OverviewDraft | null>(null);
   const editing = draft !== null;
@@ -175,7 +177,11 @@ export function AssistantOverviewSettings({
       action={canWrite ? (editing ? editingActions : editAction) : undefined}
     >
       <Row label="Status">
-        <AssistantStatusToggle assistant={assistant} onUpdated={onUpdated} />
+        <AssistantStatusToggle
+          assistant={assistant}
+          canWrite={canWrite}
+          onUpdated={onUpdated}
+        />
       </Row>
       <Row label="Name">
         {editing ? (

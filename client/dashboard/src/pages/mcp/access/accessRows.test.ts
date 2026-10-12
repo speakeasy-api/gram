@@ -183,8 +183,8 @@ describe("scope resolution", () => {
 
 describe("a person and the roles they are in", () => {
   it("gives a person no row until a rule names them here", () => {
-    // The list is of rules; someone reached only through a role shows up
-    // under "People this reaches" instead.
+    // The list is of rules; what someone reached only through a role can do
+    // is answered by Check access instead.
     expect(
       buildAccessRows([role("Admin", { level: "manage" })]).map(
         (row) => row.principalUrn,

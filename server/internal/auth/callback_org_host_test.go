@@ -51,8 +51,13 @@ func originAt(surface requestorigin.Surface, baseURL string) requestorigin.Origi
 	}
 }
 
-func extraHostLogin(redirect string) string {
-	return "https://" + testExtraPlatformHost + "/rpc/auth.login?" + url.Values{"redirect": {redirect}}.Encode()
+// extraHostTransfer starts a session transfer (transferIn's start mode) from
+// the server host to the extra platform host, landing on redirect.
+func extraHostTransfer(redirect string) string {
+	return "https://" + testExtraPlatformHost + "/rpc/auth.transferIn?" + url.Values{
+		"source_host": {testServerURL.Host},
+		"redirect":    {redirect},
+	}.Encode()
 }
 
 func TestService_Callback_OrganizationHost(t *testing.T) {
@@ -73,14 +78,14 @@ func TestService_Callback_OrganizationHost(t *testing.T) {
 			defaultHost: new(extraHost),
 			origin:      serverOrigin,
 			destination: "http://localhost:3000/other-org/projects/default?tab=logs#recent",
-			want:        extraHostLogin("/other-org/projects/default?tab=logs#recent"),
+			want:        extraHostTransfer("/other-org/projects/default?tab=logs#recent"),
 		},
 		{
 			name:        "keeps a relative destination",
 			defaultHost: new(extraHost),
 			origin:      serverOrigin,
 			destination: "/other-org/mcp",
-			want:        extraHostLogin("/other-org/mcp"),
+			want:        extraHostTransfer("/other-org/mcp"),
 		},
 		{
 			name:        "refuses a destination on another origin",
@@ -116,6 +121,20 @@ func TestService_Callback_OrganizationHost(t *testing.T) {
 			origin:      originAt(requestorigin.SurfacePlatform, extraHost),
 			destination: "/other-org/mcp",
 			want:        "/other-org/mcp",
+		},
+		{
+			name:        "null host on the server host stays",
+			defaultHost: nil,
+			origin:      serverOrigin,
+			destination: "/other-org/mcp",
+			want:        "/other-org/mcp",
+		},
+		{
+			name:        "destination selecting an organization on the legacy host stays",
+			defaultHost: new(extraHost),
+			origin:      serverOrigin,
+			destination: "/speakeasy-team/mcp",
+			want:        "/speakeasy-team/mcp",
 		},
 		{
 			name:        "stored host that is not a platform host stays",
@@ -185,7 +204,14 @@ func TestService_Callback_OrganizationHostNamesTheOrganization(t *testing.T) {
 			State: &stateParam,
 		})
 		require.NoError(t, err)
-		require.Equal(t, extraHostLogin("/speakeasy-team"), result.Location, "destination %q", destination)
+		require.Equal(t, extraHostTransfer("/speakeasy-team"), result.Location, "destination %q", destination)
+
+		// The session the transfer hands over is stored, and its cookie is set
+		// on this same response, before the browser reaches transferOut.
+		require.NotEmpty(t, result.SessionCookie)
+		stored, err := instance.sessionManager.GetSession(ctx, result.SessionCookie)
+		require.NoError(t, err)
+		require.Equal(t, "speakeasy-team-123", stored.ActiveOrganizationID)
 	}
 }
 

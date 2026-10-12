@@ -76,6 +76,8 @@ func ResourceKindForScope(scope Scope) string {
 		return ResourceKindEnvironment
 	case "skill":
 		return ResourceKindSkill
+	case "assistant":
+		return ResourceKindAssistant
 	case "risk_policy":
 		return ResourceKindRiskPolicy
 	case "chat":
@@ -115,6 +117,9 @@ var allowedSelectorKeys = map[string]map[string]bool{
 		SelectorKeyProjectID:   true,
 	},
 	ResourceKindEnvironment: {
+		SelectorKeyProjectID: true,
+	},
+	ResourceKindAssistant: {
 		SelectorKeyProjectID: true,
 	},
 	ResourceKindRiskPolicy: {

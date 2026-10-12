@@ -42,6 +42,14 @@ type Client struct {
 	// Info Doer is the HTTP client used to make requests to the info endpoint.
 	InfoDoer goahttp.Doer
 
+	// TransferOut Doer is the HTTP client used to make requests to the transferOut
+	// endpoint.
+	TransferOutDoer goahttp.Doer
+
+	// TransferIn Doer is the HTTP client used to make requests to the transferIn
+	// endpoint.
+	TransferInDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -69,6 +77,8 @@ func NewClient(
 		LogoutDoer:          doer,
 		RegisterDoer:        doer,
 		InfoDoer:            doer,
+		TransferOutDoer:     doer,
+		TransferInDoer:      doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -240,6 +250,54 @@ func (c *Client) Info() goa.Endpoint {
 		resp, err := c.InfoDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("auth", "info", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TransferOut returns an endpoint that makes HTTP requests to the auth service
+// transferOut server.
+func (c *Client) TransferOut() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTransferOutRequest(c.encoder)
+		decodeResponse = DecodeTransferOutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTransferOutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TransferOutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auth", "transferOut", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TransferIn returns an endpoint that makes HTTP requests to the auth service
+// transferIn server.
+func (c *Client) TransferIn() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTransferInRequest(c.encoder)
+		decodeResponse = DecodeTransferInResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTransferInRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TransferInDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("auth", "transferIn", err)
 		}
 		return decodeResponse(resp)
 	}

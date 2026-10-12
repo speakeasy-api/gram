@@ -118,11 +118,17 @@ import {
 } from "./policy-shadow-mcp-setup";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
+import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
+  initialPolicyMCPScopeValue,
+  policyMCPScopeComplete,
   policyMCPScopePayload,
-  policyMCPScopeValue,
+  policyScopeSummary,
   type PolicyMCPScopeValue,
+  type PolicyScopeChoice,
 } from "./policy-mcp-scope";
+import { useGetHooksStatus } from "@gram/client/react-query/getHooksStatus.js";
 
 import {
   DETECTION_RULES,
@@ -870,10 +876,12 @@ function StepNav({
   step,
   count,
   onStep,
+  continueDisabled = false,
 }: {
   step: number;
   count: number;
   onStep: (index: number) => void;
+  continueDisabled?: boolean;
 }): JSX.Element {
   return (
     <Stack direction="horizontal" justify="space-between" gap={3}>
@@ -885,7 +893,11 @@ function StepNav({
         <span />
       )}
       {step < count - 1 ? (
-        <Button variant="secondary" onClick={() => onStep(step + 1)}>
+        <Button
+          variant="secondary"
+          disabled={continueDisabled}
+          onClick={() => onStep(step + 1)}
+        >
           <Button.Text>Continue</Button.Text>
         </Button>
       ) : (
@@ -1123,7 +1135,7 @@ function PromptPolicyEditor({
   const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(
     () =>
       (policy ? null : draftMCPScopeValue(draft)) ??
-      policyMCPScopeValue(policy?.mcpScope),
+      initialPolicyMCPScopeValue(policy),
   );
   const [draftScopeNames, setDraftScopeNames] = useState<string[]>(
     policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
@@ -1227,10 +1239,7 @@ function PromptPolicyEditor({
     () => new Set<RuleCategory>(["prompt_policy"]),
     [],
   );
-  const mcpScopeValid =
-    mcpScope.mode === "everywhere" ||
-    mcpScope.allServers ||
-    mcpScope.servers.length > 0;
+  const mcpScopeValid = policyMCPScopeComplete(mcpScope);
   const detectionScopesPayloadForPrompt = () =>
     detectionScopesPayload(promptPolicyCategories, scopeOverrides);
 
@@ -1363,7 +1372,7 @@ function PromptPolicyEditor({
           draftScopeNames={draftScopeNames}
           onClearDraftScope={() => {
             setDraftScopeNames([]);
-            updateMCPScope(policyMCPScopeValue(null));
+            updateMCPScope(initialPolicyMCPScopeValue(null));
           }}
         />
       )}
@@ -1400,6 +1409,7 @@ function PromptPolicyEditor({
           prompt={prompt}
           temperature={temperature}
           failOpen={failOpen}
+          mcpScope={mcpScope}
           customizedScopeCount={scopeOverrides.size}
           action={action}
           score={score}
@@ -1414,7 +1424,12 @@ function PromptPolicyEditor({
         />
       )}
 
-      <StepNav step={step} count={PROMPT_STEPS.length} onStep={handleStep} />
+      <StepNav
+        step={step}
+        count={PROMPT_STEPS.length}
+        onStep={handleStep}
+        continueDisabled={step === 1 && !policyMCPScopeComplete(mcpScope)}
+      />
     </StepperShell>
   );
 }
@@ -1550,16 +1565,71 @@ function ScopeStep({
   onClearDraftScope: () => void;
 }): JSX.Element {
   const mcpScopeFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
+  const gramProject = useProjectSlugForRequests();
+  // Configuration only (hooks-scoped keys, inference hooks), never traffic,
+  // so it is cheap enough to read on every policy edit.
+  const hooksStatus = useGetHooksStatus({ gramProject }, undefined, {
+    throwOnError: false,
+    staleTime: 5 * 60 * 1000,
+  });
   const mcpScoped = mcpScope.mode === "mcp";
+  const chosen = mcpScope.mode !== "unset";
+  // Only a successful read offers Client sessions. A failed read offers no
+  // cards and asks for a retry: guessing either way would let the author save
+  // a policy whose scope was never verified.
+  const sessionsAvailable = hooksStatus.data?.configured ?? false;
   // Fail closed while the flag loads or is unavailable. A stored scope or an
-  // in-progress MCP draft keeps the picker so the form never strands the user
-  // in MCP mode without the control to change it.
-  const showMcpScopePicker =
+  // in-progress MCP draft keeps the MCP option so the form never strands the
+  // user in MCP mode without the control to change it.
+  const mcpAvailable =
     mcpScopeFlag.status === "enabled" || hasStoredMcpScope || mcpScoped;
+  const settled = hooksStatus.isSuccess && mcpScopeFlag.status !== "loading";
+  // A single available option is taken without a click: an org without hooks
+  // goes straight to MCP scope, an org without the MCP flag to client
+  // sessions. Waits for both signals so a value still loading never pre-empts
+  // the author's choice.
+  useEffect(() => {
+    if (!settled || sessionsAvailable === mcpAvailable) return;
+    const only: PolicyScopeChoice = mcpAvailable ? "mcp" : "everywhere";
+    if (mcpScope.mode !== only) setMcpScope({ ...mcpScope, mode: only });
+  }, [settled, sessionsAvailable, mcpAvailable, mcpScope, setMcpScope]);
   return (
     <Card>
       <Stack gap={6}>
-        {showMcpScopePicker && mcpScoped && draftScopeNames.length > 0 ? (
+        {hooksStatus.isError ? (
+          <div className="flex items-center gap-3">
+            <Text small muted>
+              Could not check whether hooks are configured.
+            </Text>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void hooksStatus.refetch()}
+            >
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          </div>
+        ) : null}
+        {settled ? (
+          <PolicyScopeModeCards
+            value={mcpScope.mode}
+            sessionsAvailable={sessionsAvailable}
+            mcpAvailable={mcpAvailable}
+            onChange={(mode) => setMcpScope({ ...mcpScope, mode })}
+            // The dialog may have minted a hooks key; the cached status would
+            // otherwise keep Client sessions hidden until staleTime elapses.
+            onHooksSetupClosed={() => void hooksStatus.refetch()}
+          />
+        ) : null}
+        {!settled && !hooksStatus.isError ? (
+          <Skeleton className="h-28 w-full" />
+        ) : null}
+        {settled && !chosen && (sessionsAvailable || mcpAvailable) ? (
+          <Text small muted>
+            Choose where this policy applies to continue.
+          </Text>
+        ) : null}
+        {mcpScoped && draftScopeNames.length > 0 ? (
           <div className="flex items-center justify-between gap-4 border px-4 py-3 text-sm">
             <span>
               Set from your description, which names{" "}
@@ -1575,14 +1645,14 @@ function ScopeStep({
             </Button>
           </div>
         ) : null}
-        {showMcpScopePicker ? (
+        {mcpScoped ? (
           <PolicyMCPScopePicker
             value={mcpScope}
             onChange={setMcpScope}
             action={action}
           />
         ) : null}
-        {!showMcpScopePicker && selectedCategories.size === 0 ? (
+        {chosen && selectedCategories.size === 0 ? (
           <Text small muted>
             Scope options appear here once you enable a detector.
           </Text>
@@ -1604,12 +1674,14 @@ function ScopeStep({
             limited to selected MCP servers.
           </Text>
         ) : null}
-        <InspectMatrix
-          selectedCategories={selectedCategories}
-          scopeOverrides={scopeOverrides}
-          setScopeOverrides={setScopeOverrides}
-          mcpScoped={mcpScoped}
-        />
+        {chosen ? (
+          <InspectMatrix
+            selectedCategories={selectedCategories}
+            scopeOverrides={scopeOverrides}
+            setScopeOverrides={setScopeOverrides}
+            mcpScoped={mcpScoped}
+          />
+        ) : null}
       </Stack>
     </Card>
   );
@@ -2218,10 +2290,15 @@ function sameScopeOverrides(
   return true;
 }
 
-function scopeSummaryText(customizedScopeCount: number): string {
-  return customizedScopeCount > 0
-    ? `Recommended scopes (${customizedScopeCount} customized)`
-    : "Recommended scopes";
+function scopeSummaryText(
+  mcpScope: PolicyMCPScopeValue,
+  customizedScopeCount: number,
+): string {
+  const inspect =
+    customizedScopeCount > 0
+      ? `recommended scopes (${customizedScopeCount} customized)`
+      : "recommended scopes";
+  return `${policyScopeSummary(mcpScope)} · ${inspect}`;
 }
 
 function detectionScopesPayload(
@@ -2772,6 +2849,7 @@ function PromptReview({
   prompt,
   temperature,
   failOpen,
+  mcpScope,
   customizedScopeCount,
   action,
   score,
@@ -2784,6 +2862,7 @@ function PromptReview({
   prompt: string;
   temperature: number;
   failOpen: boolean;
+  mcpScope: PolicyMCPScopeValue;
   customizedScopeCount: number;
   action: PolicyAction;
   score: number;
@@ -2793,7 +2872,7 @@ function PromptReview({
   activeVerdict: EvalVerdict | null;
   onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
-  const scopeText = scopeSummaryText(customizedScopeCount);
+  const scopeText = scopeSummaryText(mcpScope, customizedScopeCount);
 
   return (
     <Stack gap={4}>
@@ -4001,7 +4080,7 @@ export function StandardPolicyEditor({
           servers: seed.mcpServerIds.map((mcpServerId) => ({ mcpServerId })),
         }
       : ((policy ? null : draftMCPScopeValue(draft)) ??
-        policyMCPScopeValue(policy?.mcpScope)),
+        initialPolicyMCPScopeValue(policy)),
   );
   const [draftScopeNames, setDraftScopeNames] = useState<string[]>(
     policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
@@ -4163,6 +4242,7 @@ export function StandardPolicyEditor({
     !hasEnabledDetector ||
     audienceMissing ||
     shadowMCPInventoryUnavailable ||
+    mcpScope.mode === "unset" ||
     mcpScopeMissingServers ||
     mcpScopeIncompatible ||
     !inspectRowsValid ||
@@ -4534,7 +4614,7 @@ export function StandardPolicyEditor({
             draftScopeNames={draftScopeNames}
             onClearDraftScope={() => {
               setDraftScopeNames([]);
-              updateMCPScope(policyMCPScopeValue(null));
+              updateMCPScope(initialPolicyMCPScopeValue(null));
             }}
           />
         )}
@@ -4595,6 +4675,7 @@ export function StandardPolicyEditor({
             name={name}
             categories={selectedCategories}
             customRuleCount={selectedCustomRuleIds.size}
+            mcpScope={mcpScope}
             customizedScopeCount={scopeOverrides.size}
             action={action}
             score={score}
@@ -4606,7 +4687,12 @@ export function StandardPolicyEditor({
           />
         )}
 
-        <StepNav step={step} count={STANDARD_STEPS.length} onStep={setStep} />
+        <StepNav
+          step={step}
+          count={STANDARD_STEPS.length}
+          onStep={setStep}
+          continueDisabled={step === 1 && !policyMCPScopeComplete(mcpScope)}
+        />
       </StepperShell>
 
       {customizeCategory && (
@@ -4630,6 +4716,7 @@ function StandardReview({
   name,
   categories,
   customRuleCount,
+  mcpScope,
   customizedScopeCount,
   action,
   score,
@@ -4642,6 +4729,7 @@ function StandardReview({
   name: string;
   categories: Set<RuleCategory>;
   customRuleCount: number;
+  mcpScope: PolicyMCPScopeValue;
   customizedScopeCount: number;
   action: PolicyAction;
   score: number;
@@ -4660,7 +4748,7 @@ function StandardReview({
     );
   }
 
-  const scopeText = scopeSummaryText(customizedScopeCount);
+  const scopeText = scopeSummaryText(mcpScope, customizedScopeCount);
 
   return (
     <Card>

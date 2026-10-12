@@ -30,6 +30,8 @@ import { Bot, Boxes, Cpu, Plus } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { MouseEvent, useMemo, useState } from "react";
 import { Outlet } from "react-router";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 
 import { AssistantsAuditLog } from "./AssistantAuditLog";
 import { assistantAttachedServerSlugs } from "./assistantServers";
@@ -43,10 +45,21 @@ function stopLinkNavigation(e: MouseEvent<HTMLDivElement>) {
 }
 
 export function AssistantsRoot(): JSX.Element {
-  return <Outlet />;
+  const project = useProject();
+  return (
+    <RequireScope scope="assistant:read" projectId={project.id} level="page">
+      <Outlet />
+    </RequireScope>
+  );
 }
 
-function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
+function AssistantsEmptyState({
+  onCreate,
+  projectId,
+}: {
+  onCreate: () => void;
+  projectId: string;
+}) {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center">
@@ -59,8 +72,9 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
         Create an assistant to wire a model up to your MCP servers.
       </Text>
       <RequireScope
-        scope={["project:write", "mcp:write"]}
-        all
+        scope="assistant:write"
+        resourceId={projectId}
+        projectId={projectId}
         level="component"
         reason="You don't have permission to create assistants."
       >
@@ -77,14 +91,23 @@ function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
 
 export default function AssistantsIndex(): JSX.Element {
   const routes = useRoutes();
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canManageTriggers = hasScope("project:write", project.id);
   const [activeTab] = useQueryState(
     "tab",
     parseAsStringLiteral(TOP_LEVEL_TABS).withDefault("assistants"),
   );
-  const { data, isLoading } = useAssistantsList(undefined, undefined, {
-    retry: false,
-    throwOnError: false,
-  });
+  const visibleActiveTab =
+    activeTab === "triggers" && !canManageTriggers ? "assistants" : activeTab;
+  const { data, isLoading } = useAssistantsList(
+    { gramProject: project.slug },
+    undefined,
+    {
+      retry: false,
+      throwOnError: false,
+    },
+  );
 
   const assistants = useMemo(() => data?.assistants ?? [], [data]);
 
@@ -109,6 +132,7 @@ export default function AssistantsIndex(): JSX.Element {
     !isLoading && assistants.length === 0 ? (
       <AssistantsEmptyState
         onCreate={() => routes.assistants.newAssistant.goTo()}
+        projectId={project.id}
       />
     ) : (
       <Page.Section>
@@ -120,8 +144,9 @@ export default function AssistantsIndex(): JSX.Element {
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope
-            scope={["project:write", "mcp:write"]}
-            all
+            scope="assistant:write"
+            resourceId={project.id}
+            projectId={project.id}
             level="component"
             reason="You don't have permission to create assistants."
           >
@@ -154,20 +179,18 @@ export default function AssistantsIndex(): JSX.Element {
 
   return (
     <TabbedPage
-      activeTab={activeTab}
+      activeTab={visibleActiveTab}
       tabs={[
         { value: "assistants", label: "Assistants", href: "?tab=assistants" },
-        { value: "triggers", label: "Triggers", href: "?tab=triggers" },
+        ...(canManageTriggers
+          ? [{ value: "triggers", label: "Triggers", href: "?tab=triggers" }]
+          : []),
         { value: "audit", label: "Activity", href: "?tab=audit" },
       ]}
     >
-      {activeTab === "assistants" && content}
-      {activeTab === "triggers" && (
-        <RequireScope scope="project:write" level="section">
-          <TriggersPanel />
-        </RequireScope>
-      )}
-      {activeTab === "audit" && (
+      {visibleActiveTab === "assistants" && content}
+      {visibleActiveTab === "triggers" && <TriggersPanel />}
+      {visibleActiveTab === "audit" && (
         <RequireScope scope="org:read" level="section">
           <AssistantsAuditLog />
         </RequireScope>
@@ -263,6 +286,9 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
 
 function AssistantCard({ assistant }: { assistant: Assistant }) {
   const routes = useRoutes();
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope("assistant:write", assistant.id, project.id);
   const queryClient = useQueryClient();
 
   const deleteAssistant = useAssistantsDeleteMutation({
@@ -271,18 +297,20 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
     },
   });
 
-  const actions: Action[] = [
-    {
-      label: "Delete",
-      destructive: true,
-      icon: "trash",
-      onClick: () => {
-        if (confirm(`Delete assistant "${assistant.name}"?`)) {
-          deleteAssistant.mutate({ request: { id: assistant.id } });
-        }
-      },
-    },
-  ];
+  const actions: Action[] = canWrite
+    ? [
+        {
+          label: "Delete",
+          destructive: true,
+          icon: "trash",
+          onClick: () => {
+            if (confirm(`Delete assistant "${assistant.name}"?`)) {
+              deleteAssistant.mutate({ request: { id: assistant.id } });
+            }
+          },
+        },
+      ]
+    : [];
 
   return (
     <CardContextMenu actions={actions}>
@@ -305,9 +333,11 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
             >
               {assistant.name}
             </Text>
-            <div onClick={stopLinkNavigation}>
-              <MoreActions actions={actions} />
-            </div>
+            {canWrite && (
+              <div onClick={stopLinkNavigation}>
+                <MoreActions actions={actions} />
+              </div>
+            )}
           </div>
 
           {/* Metadata: model + MCP servers */}
@@ -327,7 +357,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
 
           {/* Footer row: status toggle + activity sparkline + last updated */}
           <div className="border-border/60 mt-auto flex items-center justify-between gap-2 border-t pt-3">
-            <AssistantStatusToggle assistant={assistant} />
+            <AssistantStatusToggle assistant={assistant} canWrite={canWrite} />
             <div className="flex items-center gap-2">
               <AssistantActivitySparkline assistantId={assistant.id} />
               <UpdatedAt date={new Date(assistant.updatedAt)} />

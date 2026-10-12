@@ -1,10 +1,10 @@
 // cimd_e2e_test.go drives the full outbound CIMD round-trip against a live
 // dev-idp acting as the upstream OAuth 2.1 authorization server. Unlike the
-// httptest-mock tests in cimd_test.go (which only assert what Gram *sends*),
-// this exercises the load-bearing CIMD behavior: the AS dereferences Gram's
+// httptest-mock tests in cimd_test.go (which only assert what Speakeasy *sends*),
+// this exercises the load-bearing CIMD behavior: the AS dereferences Speakeasy's
 // hosted client metadata document URL and accepts it as the client_id.
 //
-// Setup: one httptest server serves Gram's HandleClientMetadataDocument and is
+// Setup: one httptest server serves Speakeasy's HandleClientMetadataDocument and is
 // the ChallengeManager's serverURL, so the document's redirect_uris match the
 // outbound redirect_uri and the dev-idp can fetch the document over localhost.
 
@@ -58,7 +58,7 @@ func TestCIMD_OutboundRoundTripAgainstDevIDP(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	// One server serves Gram's CIMD document and is the ChallengeManager's
+	// One server serves Speakeasy's CIMD document and is the ChallengeManager's
 	// serverURL, so the document's redirect_uris match the outbound redirect_uri
 	// and the dev-idp can fetch the document over localhost. mgr is bound after
 	// the server starts (closure captures it), resolving the URL chicken-and-egg.
@@ -123,7 +123,7 @@ func TestCIMD_OutboundRoundTripAgainstDevIDP(t *testing.T) {
 
 	// The dev-idp /authorize fetches the document from gramSrv, validates that
 	// its client_id and redirect_uris match, and redirects with a code — a 302
-	// (not a 400) proves the AS dereferenced and accepted Gram's CIMD document.
+	// (not a 400) proves the AS dereferenced and accepted Speakeasy's CIMD document.
 	resp := httpGetNoFollow(t, authURL)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusFound, resp.StatusCode, "dev-idp must accept the CIMD URL client_id after fetching the document")
@@ -135,7 +135,7 @@ func TestCIMD_OutboundRoundTripAgainstDevIDP(t *testing.T) {
 	require.NotEmpty(t, code, "upstream redirect must carry ?code")
 	require.NotEmpty(t, state, "upstream redirect must carry ?state")
 
-	// Gram exchanges the code at the dev-idp /token using the CIMD URL as
+	// Speakeasy exchanges the code at the dev-idp /token using the CIMD URL as
 	// client_id and no secret (token_endpoint_auth_method=none), then persists
 	// the remote_session.
 	cbReq := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(state), nil)

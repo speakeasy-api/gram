@@ -13,11 +13,12 @@ func TestBuildRowIssuerID(t *testing.T) {
 	t.Parallel()
 
 	r := row{
-		server:   repo.ListEligibleServersRow{IssuerID: uuid.New()},
+		server:   repo.ListEligibleServersRow{IssuerID: uuid.New(), Issuer: "https://auth.example.com"},
 		resource: "https://mcp.example.com",
 	}
 	unconfirmed := buildRow(&snapshot{}, r)
 	require.Equal(t, "https://mcp.example.com", unconfirmed.ResourceIndicator)
+	require.Equal(t, new("https://auth.example.com"), unconfirmed.AuthorizationServerIssuer)
 	require.NotNil(t, unconfirmed.IssuerID)
 	require.Equal(t, r.server.IssuerID.String(), *unconfirmed.IssuerID)
 	require.Nil(t, unconfirmed.Audience)

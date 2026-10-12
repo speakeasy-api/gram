@@ -308,7 +308,7 @@ func runSignupLoginCallback(t *testing.T, workosUserID, email, orgName string, u
 	inst.requireSignupProvisioned(ctx, t, nonce, orgName, workosUserID, result.SessionToken)
 }
 
-// setUserWorkosID stamps the WorkOS user ID on an existing Gram user so the
+// setUserWorkosID stamps the WorkOS user ID on an existing Speakeasy user so the
 // membership reconciliation path can run.
 func (e *e2eInstance) setUserWorkosID(ctx context.Context, t *testing.T, gramUserID, workosUserID string) {
 	t.Helper()
@@ -993,7 +993,7 @@ func TestE2E_Callback_RejoinedOrg(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, result.Location, "signin_error=")
 
-	// The Gram user ID is a UUIDv5 derived from the WorkOS user ID.
+	// The Speakeasy user ID is a UUIDv5 derived from the WorkOS user ID.
 	gramUserID := users.UserIDFromWorkOSID(workosUserID)
 
 	// Soft-delete the relationship via the SQLc method.
@@ -1432,7 +1432,7 @@ func TestE2E_LoginCallback_SignupNewWorkOSUser(t *testing.T) {
 // TestE2E_LoginCallback_SignupExistingWorkOSUser exercises Login → Callback
 // for a signup whose email already has a WorkOS account. AuthKit gets
 // login_hint and no screen_hint=sign-up, but the signup intent is still
-// stored so callback can provision a Gram organization and create a session.
+// stored so callback can provision a Speakeasy organization and create a session.
 func TestE2E_LoginCallback_SignupExistingWorkOSUser(t *testing.T) {
 	t.Parallel()
 	email := "existing-signup@example.com"
@@ -1539,7 +1539,7 @@ func TestE2E_Register_ZeroOrgUserCreatesOrg(t *testing.T) {
 }
 
 // TestE2E_Register_CreatesWorkOSOrg verifies that Register provisions the org
-// in WorkOS with the Gram org ID as external_id, and creates a membership
+// in WorkOS with the Speakeasy org ID as external_id, and creates a membership
 // linking the user to the new WorkOS org.
 func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
 	t.Parallel()
@@ -1584,7 +1584,7 @@ func TestE2E_Register_CreatesWorkOSOrg(t *testing.T) {
 	assert.Equal(t, workosUserID, fetcher.createdMemberships[0].WorkOSUserID)
 	assert.Equal(t, workosOrgID, fetcher.createdMemberships[0].WorkOSOrgID)
 
-	// Verify workos_id was stored on the Gram org row.
+	// Verify workos_id was stored on the Speakeasy org row.
 	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
 	require.NoError(t, err)
 	orgQueries := orgRepo.New(inst.conn)

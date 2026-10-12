@@ -35,7 +35,7 @@ function ProviderContent(): JSX.Element {
           their applications and, where a provider supports it, manages how AI
           agents access those applications through Enterprise Managed Auth.
         </Text>
-        <Text muted small>
+        <Text muted>
           Employee sign-in and directory sync live on the Single sign-on tab.
         </Text>
       </div>

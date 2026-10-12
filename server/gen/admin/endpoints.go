@@ -100,6 +100,7 @@ type Endpoints struct {
 	AssignOrganizationOnboardingPlaybook  goa.Endpoint
 	GetStripeSubscriptionCandidate        goa.Endpoint
 	SetStripeSubscription                 goa.Endpoint
+	ListCustomerUsage                     goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -208,6 +209,7 @@ func NewEndpoints(s Service) *Endpoints {
 		AssignOrganizationOnboardingPlaybook:  NewAssignOrganizationOnboardingPlaybookEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscriptionCandidate:        NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
 		SetStripeSubscription:                 NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ListCustomerUsage:                     NewListCustomerUsageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -296,6 +298,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AssignOrganizationOnboardingPlaybook = m(e.AssignOrganizationOnboardingPlaybook)
 	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
 	e.SetStripeSubscription = m(e.SetStripeSubscription)
+	e.ListCustomerUsage = m(e.ListCustomerUsage)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -2166,5 +2169,28 @@ func NewSetStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.SetStripeSubscription(ctx, p)
+	}
+}
+
+// NewListCustomerUsageEndpoint returns an endpoint function that calls the
+// method "listCustomerUsage" of service "admin".
+func NewListCustomerUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListCustomerUsagePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListCustomerUsage(ctx, p)
 	}
 }

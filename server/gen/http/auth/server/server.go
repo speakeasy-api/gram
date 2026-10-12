@@ -26,6 +26,8 @@ type Server struct {
 	Logout       http.Handler
 	Register     http.Handler
 	Info         http.Handler
+	TransferOut  http.Handler
+	TransferIn   http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -62,6 +64,8 @@ func New(
 			{"Logout", "POST", "/rpc/auth.logout"},
 			{"Register", "POST", "/rpc/auth.register"},
 			{"Info", "GET", "/rpc/auth.info"},
+			{"TransferOut", "GET", "/rpc/auth.transferOut"},
+			{"TransferIn", "GET", "/rpc/auth.transferIn"},
 		},
 		Callback:     NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
 		Login:        NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
@@ -70,6 +74,8 @@ func New(
 		Logout:       NewLogoutHandler(e.Logout, mux, decoder, encoder, errhandler, formatter),
 		Register:     NewRegisterHandler(e.Register, mux, decoder, encoder, errhandler, formatter),
 		Info:         NewInfoHandler(e.Info, mux, decoder, encoder, errhandler, formatter),
+		TransferOut:  NewTransferOutHandler(e.TransferOut, mux, decoder, encoder, errhandler, formatter),
+		TransferIn:   NewTransferInHandler(e.TransferIn, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -85,6 +91,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Logout = m(s.Logout)
 	s.Register = m(s.Register)
 	s.Info = m(s.Info)
+	s.TransferOut = m(s.TransferOut)
+	s.TransferIn = m(s.TransferIn)
 }
 
 // MethodNames returns the methods served.
@@ -99,6 +107,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountLogoutHandler(mux, h.Logout)
 	MountRegisterHandler(mux, h.Register)
 	MountInfoHandler(mux, h.Info)
+	MountTransferOutHandler(mux, h.TransferOut)
+	MountTransferInHandler(mux, h.TransferIn)
 }
 
 // Mount configures the mux to serve the auth endpoints.
@@ -454,6 +464,112 @@ func NewInfoHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "info")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTransferOutHandler configures the mux to serve the "auth" service
+// "transferOut" endpoint.
+func MountTransferOutHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/auth.transferOut", f)
+}
+
+// NewTransferOutHandler creates a HTTP handler which loads the HTTP request
+// and calls the "auth" service "transferOut" endpoint.
+func NewTransferOutHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTransferOutRequest(mux, decoder)
+		encodeResponse = EncodeTransferOutResponse(encoder)
+		encodeError    = EncodeTransferOutError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "transferOut")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTransferInHandler configures the mux to serve the "auth" service
+// "transferIn" endpoint.
+func MountTransferInHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/auth.transferIn", f)
+}
+
+// NewTransferInHandler creates a HTTP handler which loads the HTTP request and
+// calls the "auth" service "transferIn" endpoint.
+func NewTransferInHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTransferInRequest(mux, decoder)
+		encodeResponse = EncodeTransferInResponse(encoder)
+		encodeError    = EncodeTransferInError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "transferIn")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "auth")
 		payload, err := decodeRequest(r)
 		if err != nil {

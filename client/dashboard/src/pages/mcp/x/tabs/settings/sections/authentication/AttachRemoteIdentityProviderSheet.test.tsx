@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   issuersPage: vi.fn(),
   issuersSearch: vi.fn(),
   issuerById: vi.fn(),
+  discovery: { snapshot: null as Record<string, unknown> | null },
 }));
 
 vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
@@ -116,7 +117,7 @@ vi.mock("./useIssuerDiscovery", () => ({
     setRegistrationEndpoint: mocks.setRegistrationEndpoint,
     jwksUri: "https://id.example.test/jwks",
     setJwksUri: mocks.setJwksUri,
-    discoveredSnapshot: null,
+    discoveredSnapshot: mocks.discovery.snapshot,
     discoverPending: false,
     discoverError: null,
     clearDiscoverError: mocks.clearDiscoverError,
@@ -186,6 +187,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mocks.discovery.snapshot = null;
 });
 
 describe("AttachRemoteIdentityProviderSheet", () => {
@@ -200,6 +202,46 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       expect(mocks.createClient).toHaveBeenCalled();
       expect(mocks.linkTarget).toHaveBeenCalledWith("user-session-issuer-1");
     });
+  });
+
+  it("forwards discovered grant profiles on a new provider", async () => {
+    mocks.discovery.snapshot = {
+      url: "https://id.example.test",
+      scopesSupported: [],
+      grantTypesSupported: [],
+      authorizationGrantProfilesSupported: [
+        "urn:ietf:params:oauth:grant-profile:id-jag",
+      ],
+      responseTypesSupported: [],
+      tokenEndpointAuthMethodsSupported: [],
+    };
+    renderSheet();
+
+    await submitManualClient();
+
+    await waitFor(() =>
+      expect(mocks.createProvider).toHaveBeenCalledWith({
+        createRemoteSessionIssuerForm: expect.objectContaining({
+          authorizationGrantProfilesSupported: [
+            "urn:ietf:params:oauth:grant-profile:id-jag",
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("omits grant profiles on a hand-typed provider", async () => {
+    renderSheet();
+
+    await submitManualClient();
+
+    await waitFor(() => expect(mocks.createProvider).toHaveBeenCalled());
+    const [request] = mocks.createProvider.mock.calls[0]! as [
+      { createRemoteSessionIssuerForm: Record<string, unknown> },
+    ];
+    expect(
+      request.createRemoteSessionIssuerForm.authorizationGrantProfilesSupported,
+    ).toBeUndefined();
   });
 
   it("searches the listing on the server and resolves the pick by id", async () => {

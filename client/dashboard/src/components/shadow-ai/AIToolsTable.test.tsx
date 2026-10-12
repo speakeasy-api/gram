@@ -174,7 +174,7 @@ describe("AIToolsTable", () => {
     expect(screen.queryByText("Cursor")).toBeNull();
   });
 
-  it("renders a tool Gram cannot recognise as plain unreviewed", () => {
+  it("renders a tool Speakeasy cannot recognise as plain unreviewed", () => {
     // What the server sends for a tool that publishes no CIMD document:
     // blocking is CIMD-only, so no decision about it can mean anything and
     // SummarizeAccess resolves it to unreviewed whatever is stored.

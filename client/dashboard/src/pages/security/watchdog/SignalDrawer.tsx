@@ -153,6 +153,7 @@ function EvidenceRow({
       {isMCPFinding(result) ? (
         <div className="flex items-start justify-between gap-4 px-3 py-2">
           <MCPFindingContext
+            showOutcome
             finding={result}
             names={mcpFindingNames}
             className="min-w-0"
@@ -230,10 +231,12 @@ function EvidenceRow({
  */
 export function SignalDrawer({
   signal,
+  mcpServerId,
   onClose,
   mcpFindingNames,
 }: {
   signal: RiskSignal | null;
+  mcpServerId?: string;
   onClose: () => void;
   mcpFindingNames?: MCPFindingNames;
 }): JSX.Element {
@@ -267,16 +270,21 @@ export function SignalDrawer({
   const ruleId = signal?.ruleId ?? "";
   // The list endpoint's rule filter is substring-match, so an id that is a
   // strict prefix of another could over-fetch; the exact-match filter below
-  // keeps evidence and dismissal scoped to this signal's rule only.
+  // keeps evidence and dismissal scoped to this signal's rule and the selected
+  // MCP server.
   //
   // Deliberately unwindowed: signals count findings by scan time while the
   // list endpoint filters by message event time, so a windowed evidence query
   // can come back empty for a signal that clearly has findings (scans of
   // older messages). Latest evidence for the rule is what the drawer wants.
-  const evidenceQuery = useRiskListResults({ ruleId, limit: 25 }, undefined, {
-    enabled: signal !== null,
-    throwOnError: false,
-  });
+  const evidenceQuery = useRiskListResults(
+    { ruleId, mcpServerId, limit: 25 },
+    undefined,
+    {
+      enabled: signal !== null,
+      throwOnError: false,
+    },
+  );
   const evidence = useMemo(
     () =>
       (evidenceQuery.data?.results ?? [])
@@ -315,28 +323,24 @@ export function SignalDrawer({
   const rationaleSignal =
     signal !== null && hasOnlyRationaleSources(signal.detectionSources);
 
-  // The signal lives in the URL, so back/forward can swap it mid-collection;
-  // bumping the token makes an in-flight collection drop its result instead
-  // of confirming the previous signal's findings under the new one's name.
-  // Keyed by signal key (not object identity) so refetches don't cancel;
-  // useLayoutEffect so the swap can't paint one frame of the old dialog.
+  // The signal or server scope can change while a collection is in flight.
+  // Bumping the token prevents a result from the old scope opening a dialog
+  // under the new selection.
   const collectionToken = useRef(0);
   useLayoutEffect(() => {
     collectionToken.current += 1;
     setPendingDismiss(null);
     setCollecting(false);
-  }, [signal?.key]);
+    setOpenChat(null);
+  }, [signal?.key, mcpServerId]);
 
-  // Editor state follows the signal alone: an open editor would go on targeting
-  // the previous signal's rule (and keep the sheet's close affordance hidden),
-  // and the back-from-editor slide would replay for a signal whose editor was
-  // never opened. The window is deliberately absent — the rule and evidence the
-  // editor seeds from are unwindowed, so a date change must not discard a
-  // half-filled form.
+  // The editor follows the scoped signal. A server change must not retain
+  // evidence from the previous scope. Date changes remain safe because the
+  // rule and evidence are deliberately unwindowed.
   useLayoutEffect(() => {
     setExclusionState(null);
     setReturningFromEditor(false);
-  }, [signal?.key]);
+  }, [signal?.key, mcpServerId]);
 
   const openSignalDismiss = async () => {
     if (!signal) return;
@@ -349,6 +353,7 @@ export function SignalDrawer({
       const results = await collectFindingsForRules(client, [signal.ruleId], {
         from: undefined,
         to: undefined,
+        mcpServerId,
       });
       if (collectionToken.current !== token) return;
       if (results.length === 0) {

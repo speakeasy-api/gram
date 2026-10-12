@@ -14,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -24,18 +26,15 @@ import (
 // Redelivery can re-add assignments removed by an administrator.
 // Errors are retried by the existing transport, not by an application sweep.
 func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publication plugins.PublicationRequests, guard *admission.Guard, roleURN string, organizationID string) (bool, error) {
-	// Resolve external rollout state before taking database locks. The selected
-	// project and organization are revalidated inside the transaction.
+	// The selected project is revalidated inside the transaction.
 	var projectID uuid.UUID
-	var organizationSlug, projectSlug string
-	err := db.QueryRow(ctx, `SELECT p.id, o.slug, p.slug FROM projects p
+	err := db.QueryRow(ctx, `SELECT p.id FROM projects p
  JOIN organization_metadata o ON o.id = p.organization_id
  WHERE p.organization_id = $1 AND p.deleted IS FALSE AND o.disabled_at IS NULL
- ORDER BY p.created_at, p.id LIMIT 1`, organizationID).Scan(&projectID, &organizationSlug, &projectSlug)
+ ORDER BY p.created_at, p.id LIMIT 1`, organizationID).Scan(&projectID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, fmt.Errorf("select role setup project: %w", err)
 	}
-	rollout, rolloutErr := guard.Resolve(ctx, organizationID, organizationSlug, projectSlug)
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin role plugin setup: %w", err)
@@ -51,15 +50,6 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 			return false, fmt.Errorf("commit skipped role setup attempt: %w", err)
 		}
 		return false, nil
-	}
-	// This row lock serializes completion with disabling the rollout feature.
-	var featureID int64
-	err = tx.QueryRow(ctx, `SELECT id FROM organization_features WHERE organization_id = $1 AND feature_name = 'automatic-role-distribution' AND deleted IS FALSE FOR UPDATE`, organizationID).Scan(&featureID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return skip()
-	}
-	if err != nil {
-		return false, fmt.Errorf("lock role setup feature gate: %w", err)
 	}
 	var activeOrganization string
 	err = tx.QueryRow(ctx, `SELECT id FROM organization_metadata WHERE id = $1 AND disabled_at IS NULL FOR SHARE`, organizationID).Scan(&activeOrganization)
@@ -92,18 +82,27 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 	if err != nil {
 		return false, fmt.Errorf("validate role setup liveness: %w", err)
 	}
+	// A projectless organization is valid. Creating its first project publishes
+	// an organization bootstrap, so skip rather than retry.
 	if projectID == uuid.Nil {
-		return false, fmt.Errorf("role distribution organization has no active project")
+		return skip()
 	}
-	// Match ordinary audience/content writers: admission lock, then project and
-	// plugin row locks. Never wait for admission while holding the project row.
-	if err := admission.LockProject(ctx, tx, projectID); err != nil {
-		return false, fmt.Errorf("lock role setup distribution admission: %w", err)
+	// Match cross-project grant writers: acquire admission locks in UUID order
+	// before any project/plugin row locks, rather than locking the oldest
+	// project first and risking an inverted order during backfill.
+	admissionProjects, err := repo.New(tx).ListRoleDeliveryProjects(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("list role setup admission projects: %w", err)
+	}
+	for _, project := range admissionProjects {
+		if err := admission.LockProject(ctx, tx, project.ID); err != nil {
+			return false, fmt.Errorf("lock role setup distribution admission: %w", err)
+		}
 	}
 	var currentProjectID uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT id FROM projects WHERE organization_id = $1 AND deleted IS FALSE ORDER BY created_at, id LIMIT 1 FOR SHARE`, organizationID).Scan(&currentProjectID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, fmt.Errorf("role distribution organization has no active project")
+		return skip()
 	}
 	if err != nil {
 		return false, fmt.Errorf("revalidate role setup project: %w", err)
@@ -135,24 +134,28 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		return false, fmt.Errorf("list role plugin assignments: %w", err)
 	}
 	current := make([]string, 0, len(existing))
+	modes := make(map[string]string, len(existing)+1)
 	alreadyAssigned := false
 	for _, a := range existing {
 		current = append(current, a.PrincipalUrn)
+		modes[a.PrincipalUrn] = string(installmode.FromStored(a.InstallMode))
 		alreadyAssigned = alreadyAssigned || a.PrincipalUrn == roleURN
 	}
 	desired := append([]string{}, current...)
 	if !alreadyAssigned {
 		desired = append(desired, roleURN)
+		modes[roleURN] = string(installmode.Default)
 	}
 	if !assignments.IsSubset(desired, current) {
-		if err := guard.CheckPluginAudience(ctx, tx, rollout, rolloutErr, organizationID, projectID, pluginID, desired); err != nil {
+		if err := guard.CheckPluginAudience(ctx, tx, organizationID, projectID, pluginID, desired); err != nil {
 			return false, fmt.Errorf("check role plugin audience: %w", err)
 		}
 	}
 	auditLogger := audit.NewLogger()
 	actor := urn.NewPrincipal(urn.PrincipalTypeSystem, "automatic-role-distribution")
+	actorDisplayName := "Speakeasy"
 	if created {
-		if err := auditLogger.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: nil, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug}); err != nil {
+		if err := auditLogger.LogPluginCreate(ctx, tx, audit.LogPluginCreateEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug}); err != nil {
 			return false, fmt.Errorf("audit role plugin creation: %w", err)
 		}
 	}
@@ -160,8 +163,60 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		return false, fmt.Errorf("add role plugin assignment: %w", err)
 	}
 	if !alreadyAssigned {
-		if err := auditLogger.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: nil, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: desired}); err != nil {
+		if err := auditLogger.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: desired, InstallModes: modes}); err != nil {
 			return false, fmt.Errorf("audit role plugin assignment: %w", err)
+		}
+	}
+	// The bounded setup pass also populates existing role audiences, regardless
+	// of plugin provenance or which project contains the plugin. Setup replay
+	// uses the same deleted-content history as ordinary automatic additions.
+	targets, err := repo.New(tx).ListRoleDeliveryPlugins(ctx, repo.ListRoleDeliveryPluginsParams{OrganizationID: organizationID, PrincipalUrn: roleURN})
+	if err != nil {
+		return false, fmt.Errorf("list matching role plugins: %w", err)
+	}
+	changedProjects := make(map[uuid.UUID]bool)
+	for _, target := range targets {
+		if err := admission.LockProject(ctx, tx, target.ProjectID); err != nil {
+			return false, fmt.Errorf("lock role content admission: %w", err)
+		}
+		_, err := repo.New(tx).LockRoleDeliveryProject(ctx, repo.LockRoleDeliveryProjectParams{ProjectID: target.ProjectID, OrganizationID: organizationID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("lock role content project: %w", err)
+		}
+		// Revalidate the audience after waiting for ordinary content writers.
+		_, err = repo.New(tx).LockRoleDeliveryPlugin(ctx, repo.LockRoleDeliveryPluginParams{PluginID: target.ID, OrganizationID: organizationID, ProjectID: target.ProjectID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return false, fmt.Errorf("lock role content plugin: %w", err)
+		}
+		audiences, err := repo.New(tx).ListPluginAssignments(ctx, repo.ListPluginAssignmentsParams{PluginID: target.ID, OrganizationID: organizationID, ProjectID: target.ProjectID})
+		if err != nil {
+			return false, fmt.Errorf("revalidate role content audience: %w", err)
+		}
+		assigned := false
+		for _, audience := range audiences {
+			assigned = assigned || audience.PrincipalUrn == roleURN
+		}
+		if !assigned {
+			continue
+		}
+		changed, err := roledelivery.Populate(ctx, tx, organizationID, target.ProjectID, target.ID, roleURN, guard)
+		if err != nil {
+			return false, fmt.Errorf("populate role plugin: %w", err)
+		}
+		changedProjects[target.ProjectID] = changedProjects[target.ProjectID] || changed
+	}
+	for changedProject, changed := range changedProjects {
+		if !changed || changedProject == projectID {
+			continue
+		}
+		if err := publication.Project(ctx, tx, organizationID, changedProject, ""); err != nil {
+			return false, fmt.Errorf("request role content publication: %w", err)
 		}
 	}
 	if err := publication.Project(ctx, tx, organizationID, projectID, ""); err != nil {

@@ -27,7 +27,7 @@ import type { FeatureName } from "@gram/admin-client/models/components/setorgani
 
 type EnabledProductFeatureKey = Extract<
   keyof ProductFeatures,
-  `${string}Enabled` | "automaticRoleDistribution"
+  `${string}Enabled`
 >;
 
 type ProductFeatureDecision =
@@ -40,13 +40,6 @@ type ProductFeatureDecision =
   | { kind: "omitted"; where: string };
 
 const PRODUCT_FEATURES = {
-  "automatic-role-distribution": {
-    kind: "toggle",
-    enabledKey: "automaticRoleDistribution",
-    label: "Automatic role distribution",
-    description:
-      "Automatically set up role distribution using matching or new plugins. Existing plugins and assignments are preserved when disabled; re-enabling checks active roles and reuses matching plugins and assignments.",
-  },
   ai_platform_push_integrations: {
     kind: "toggle",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
@@ -102,6 +95,13 @@ const PRODUCT_FEATURES = {
     label: "Session Portability",
     description:
       "Enables agent session portability for the device agent: session sharing links, move reporting with lineage, and picker title enrichment.",
+  },
+  signals_intelligence: {
+    kind: "toggle",
+    enabledKey: "signalsIntelligenceEnabled",
+    label: "Signals Intelligence",
+    description:
+      "Enables the Signals intelligence configuration dashboard for this organization.",
   },
   sso: {
     kind: "toggle",

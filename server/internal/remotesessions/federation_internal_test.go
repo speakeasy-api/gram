@@ -211,6 +211,9 @@ func TestFederatedRuntimePolicy(t *testing.T) {
 		"implicit response":    func(p *FederatedProvider) { p.metadata.ResponseTypesSupported = []string{"id_token"} },
 		"empty response types": func(p *FederatedProvider) { p.metadata.ResponseTypesSupported = []string{} },
 		"HTTP loopback JWKS":   func(p *FederatedProvider) { p.metadata.JwksURI = "http://127.0.0.1/jwks" },
+		// RFC 8414 section 2: an omitted list means client_secret_basic only.
+		"omitted auth methods": func(p *FederatedProvider) { p.client.TokenEndpointAuthMethod.String = "client_secret_post" },
+		"empty auth methods":   func(p *FederatedProvider) { p.metadata.TokenEndpointAuthMethodsSupported = []string{} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -236,7 +239,7 @@ func TestFederatedSignerPreflightAndExchange(t *testing.T) {
 	for _, signer := range []TokenEndpointAssertionSigner{nil, unavailableTokenEndpointAssertionSigner{}} {
 		m := &ChallengeManager{assertions: signer}
 		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedUnavailable)
-		_, err := newTokenEndpointRequest(t.Context(), p.metadata.TokenEndpoint, url.Values{}, tokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer})
+		_, err := NewTokenEndpointRequest(t.Context(), p.metadata.TokenEndpoint, url.Values{}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer})
 		require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedUnavailable)
 	}
 	calls := 0
@@ -249,13 +252,13 @@ func TestFederatedSignerPreflightAndExchange(t *testing.T) {
 		require.Equal(t, "signed-assertion", r.Form.Get("client_assertion"))
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"access_token":"access"}`))}, nil
 	})
-	_, err := m.exchangeCode(t.Context(), doer, RemoteLoginState{TokenEndpoint: p.metadata.TokenEndpoint}, tokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer}, "", "code")
+	_, err := m.exchangeCode(t.Context(), doer, RemoteLoginState{TokenEndpoint: p.metadata.TokenEndpoint}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer}, "", "code")
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
 	failing := federatedAssertionSignerFunc(func(context.Context, ClientAssertionRequest) (string, error) {
 		return "", errors.New("sensitive signing detail")
 	})
-	_, err = m.exchangeCode(t.Context(), doer, RemoteLoginState{TokenEndpoint: p.metadata.TokenEndpoint}, tokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: failing}, "", "code")
+	_, err = m.exchangeCode(t.Context(), doer, RemoteLoginState{TokenEndpoint: p.metadata.TokenEndpoint}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: failing}, "", "code")
 	require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedSigning)
 	require.NotContains(t, classifyFederatedExchangeError(err).Error(), "sensitive")
 }

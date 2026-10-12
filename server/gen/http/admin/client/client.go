@@ -348,6 +348,10 @@ type Client struct {
 	// setStripeSubscription endpoint.
 	SetStripeSubscriptionDoer goahttp.Doer
 
+	// ListCustomerUsage Doer is the HTTP client used to make requests to the
+	// listCustomerUsage endpoint.
+	ListCustomerUsageDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -451,6 +455,7 @@ func NewClient(
 		AssignOrganizationOnboardingPlaybookDoer:  doer,
 		GetStripeSubscriptionCandidateDoer:        doer,
 		SetStripeSubscriptionDoer:                 doer,
+		ListCustomerUsageDoer:                     doer,
 		RestoreResponseBody:                       restoreBody,
 		scheme:                                    scheme,
 		host:                                      host,
@@ -2451,6 +2456,30 @@ func (c *Client) SetStripeSubscription() goa.Endpoint {
 		resp, err := c.SetStripeSubscriptionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "setStripeSubscription", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListCustomerUsage returns an endpoint that makes HTTP requests to the admin
+// service listCustomerUsage server.
+func (c *Client) ListCustomerUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListCustomerUsageRequest(c.encoder)
+		decodeResponse = DecodeListCustomerUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListCustomerUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListCustomerUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listCustomerUsage", err)
 		}
 		return decodeResponse(resp)
 	}

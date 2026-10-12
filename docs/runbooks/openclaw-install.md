@@ -32,7 +32,7 @@ customer whose models all route through the Claude CLI.
 
 ## Install (developer laptop)
 
-1. In the Gram dashboard, download the OpenClaw observability plugin ZIP
+1. In the Speakeasy dashboard, download the OpenClaw observability plugin ZIP
    (**Plugins → Observability → OpenClaw**). This mints a hooks API key and
    bakes it into the package's `speakeasy.json`. Requires `OrgAdmin`.
 
@@ -106,27 +106,32 @@ environment instead of the key baked into the download.
 
 3. Optionally preinstall the `speakeasy-hooks` binary. The plugin's bootstrap
    otherwise fetches it on the first hook firing, which needs egress from the
-   running container and adds latency to the first turn. Set `GRAM_HOOKS_HOME`
+   running container and adds latency to the first turn. Set `SPEAKEASY_AI_HOOKS_HOME`
    to a directory baked into the image and populate it at build time; the
    bootstrap uses that instead of its per-OS cache location.
 
-   If you leave the download in place, the host to allowlist is **your own Gram
-   server** (`<GRAM_HOOKS_SERVER_URL>/hooks/releases/...`), not GitHub. The
-   binary is served by the org's Gram deployment precisely so that egress
+   If you leave the download in place, the host to allowlist is **your own Speakeasy
+   server** (`<SPEAKEASY_AI_HOOKS_SERVER_URL>/hooks/releases/...`), not GitHub. The
+   binary is served by the org's Speakeasy deployment precisely so that egress
    restricted environments only ever need the one domain they already allow for
    ingest.
 
 **At run time**, supply:
 
-| Variable                  | Purpose                                 |
-| ------------------------- | --------------------------------------- |
-| `GRAM_HOOKS_SERVER_URL`   | Gram server base URL                    |
-| `GRAM_HOOKS_ORG_KEY`      | Org hooks key (mint one per deployment) |
-| `GRAM_HOOKS_PROJECT_SLUG` | Target project; defaults to `default`   |
-| `GRAM_HOOKS_ORG_ID`       | Org ID                                  |
+| Variable                          | Purpose                                 |
+| --------------------------------- | --------------------------------------- |
+| `SPEAKEASY_AI_HOOKS_SERVER_URL`   | Speakeasy server base URL               |
+| `SPEAKEASY_AI_HOOKS_ORG_KEY`      | Org hooks key (mint one per deployment) |
+| `SPEAKEASY_AI_HOOKS_PROJECT_SLUG` | Target project; defaults to `default`   |
+| `SPEAKEASY_AI_HOOKS_ORG_ID`       | Org ID                                  |
 
 Supplying these at run time keeps the key out of an image layer. Rotate by
-replacing `GRAM_HOOKS_ORG_KEY` and restarting the gateway, with no reinstall.
+replacing `SPEAKEASY_AI_HOOKS_ORG_KEY` and restarting the gateway, with no reinstall.
+
+Each variable replaces a deprecated `GRAM_HOOKS_*` name with the same suffix.
+`speakeasy-hooks` releases older than the rename read only the `GRAM_HOOKS_*`
+names, so if you preinstall an older binary, set those instead. Current
+releases read both and prefer the `SPEAKEASY_AI_HOOKS_*` name.
 
 Sessions from a shared gateway attribute to the org, not to an individual.
 Per-user attribution on shared gateways is tracked separately in DNO-971.
@@ -153,6 +158,13 @@ Per-user attribution on shared gateways is tracked separately in DNO-971.
    - `openclaw plugins list` shows `speakeasy-observability` enabled?
    - Is the model on the Claude CLI harness? (see the coverage table above)
    - Gateway logs for `speakeasy-observability` errors.
+   - Still nothing? Set `SPEAKEASY_AI_HOOKS_DEBUG_LOG=<path>` in the gateway's
+     environment, restart it, and reproduce: the relay records diagnostic
+     lines for each event, including the server and status when it sends a
+     request. A launchd-managed gateway (`ai.openclaw.open`) does not inherit
+     shell exports; use `launchctl setenv SPEAKEASY_AI_HOOKS_DEBUG_LOG <path>` before
+     restarting it, and `launchctl unsetenv` afterwards. See
+     [Hooks environment overrides](./hooks-environment-overrides.md).
 
 ## Enforcement
 

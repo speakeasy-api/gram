@@ -147,10 +147,10 @@ export function supportsFirstPartyConnect(server: {
 
 // firstPartyConnectUrl derives the runtime first-party connect entry point
 // (`/<runtimePath>/<slug>/connect/first-party`) for a display MCP URL. It's
-// always built on the Gram server origin (getServerURL), never the display
+// always built on the Speakeasy server origin (getServerURL), never the display
 // URL's origin: a custom-domain endpoint's display URL is
-// `https://<customer-domain>/mcp/<slug>`, but the connect page is a Gram auth
-// surface — the IDP callback, routes, and any session live on the Gram origin,
+// `https://<customer-domain>/mcp/<slug>`, but the connect page is a Speakeasy auth
+// surface — the IDP callback, routes, and any session live on the Speakeasy origin,
 // not the customer's MCP domain. Pass a platform-namespace URL
 // (`${getServerURL()}/mcp/<platform slug>`); a custom-domain display URL's
 // slug is not looked up on that host. Opened as a top-level new tab; the IDP
@@ -198,7 +198,7 @@ export function buildLoginRedirectURL(
   // which is not a secret, and it goes no further than this request.
   if (orgName) url.searchParams.set("org_name", orgName);
   // Also sign-up only. The server turns this into WorkOS's `login_hint`, which
-  // pre-fills the email field on the hosted AuthKit screen. Gram never writes
+  // pre-fills the email field on the hosted AuthKit screen. Speakeasy never writes
   // it to Redis or the database.
   //
   // It does land in request logs, though: the logger records full URLs, so

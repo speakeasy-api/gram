@@ -23,6 +23,8 @@ type Endpoints struct {
 	Logout       goa.Endpoint
 	Register     goa.Endpoint
 	Info         goa.Endpoint
+	TransferOut  goa.Endpoint
+	TransferIn   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "auth" service with endpoints.
@@ -37,6 +39,8 @@ func NewEndpoints(s Service) *Endpoints {
 		Logout:       NewLogoutEndpoint(s, a.APIKeyAuth),
 		Register:     NewRegisterEndpoint(s, a.APIKeyAuth),
 		Info:         NewInfoEndpoint(s, a.APIKeyAuth),
+		TransferOut:  NewTransferOutEndpoint(s),
+		TransferIn:   NewTransferInEndpoint(s),
 	}
 }
 
@@ -49,6 +53,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logout = m(e.Logout)
 	e.Register = m(e.Register)
 	e.Info = m(e.Info)
+	e.TransferOut = m(e.TransferOut)
+	e.TransferIn = m(e.TransferIn)
 }
 
 // NewCallbackEndpoint returns an endpoint function that calls the method
@@ -181,5 +187,23 @@ func NewInfoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 			return nil, err
 		}
 		return s.Info(ctx, p)
+	}
+}
+
+// NewTransferOutEndpoint returns an endpoint function that calls the method
+// "transferOut" of service "auth".
+func NewTransferOutEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TransferOutPayload)
+		return s.TransferOut(ctx, p)
+	}
+}
+
+// NewTransferInEndpoint returns an endpoint function that calls the method
+// "transferIn" of service "auth".
+func NewTransferInEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*TransferInPayload)
+		return s.TransferIn(ctx, p)
 	}
 }

@@ -145,23 +145,31 @@ export function AssistantSkillsSection(): JSX.Element {
           Skills ({attached.length})
         </Text>
         <RequireScope
-          scope={["skill:read", "project:write"]}
-          all
-          resourceId={project.id}
+          scope="assistant:write"
+          resourceId={draft.assistantId ?? project.id}
+          projectId={project.id}
           level="component"
-          reason="You need skill read and project write access to attach skills."
+          reason="You need assistant write access to attach skills."
         >
-          <Button
-            variant="tertiary"
-            size="sm"
-            onClick={() => setAddOpen(true)}
-            disabled={skillsQuery.hasNextPage}
+          <RequireScope
+            scope={["skill:read", "project:write"]}
+            all
+            resourceId={project.id}
+            level="component"
+            reason="You need skill read and project write access to attach skills."
           >
-            <Button.LeftIcon>
-              <Icon name="plus" className="h-3 w-3" />
-            </Button.LeftIcon>
-            <Button.Text>Add</Button.Text>
-          </Button>
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => setAddOpen(true)}
+              disabled={skillsQuery.hasNextPage}
+            >
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-3 w-3" />
+              </Button.LeftIcon>
+              <Button.Text>Add</Button.Text>
+            </Button>
+          </RequireScope>
         </RequireScope>
       </div>
 
@@ -237,6 +245,7 @@ function AttachedSkillRow({
   onRemove: () => void;
 }): JSX.Element {
   const project = useProject();
+  const { assistantId } = useAssistantDraft();
   const [versionsOpen, setVersionsOpen] = useState(false);
   const versionsQuery = useSkillVersionsInfinite(
     { id: skillRef.skillId, limit: 50 },
@@ -269,62 +278,70 @@ function AttachedSkillRow({
         </Badge>
       </div>
       <RequireScope
-        scope={["skill:read", "project:write"]}
-        all
-        resourceId={project.id}
+        scope="assistant:write"
+        resourceId={assistantId ?? project.id}
+        projectId={project.id}
         level="component"
         className="mt-2 w-full"
       >
-        <div className="flex w-full items-center gap-2">
-          {skill ? (
-            <Select
-              value={skillRef.pinnedVersionId ?? "latest"}
-              onOpenChange={setVersionsOpen}
-              onValueChange={(value) =>
-                onPin(value === "latest" ? undefined : value)
-              }
-              disabled={disabled}
-            >
-              <SelectTrigger
-                size="sm"
-                className="min-w-0 flex-1"
-                aria-label={`Version for ${skillLabel}`}
+        <RequireScope
+          scope={["skill:read", "project:write"]}
+          all
+          resourceId={project.id}
+          level="component"
+          className="w-full"
+        >
+          <div className="flex w-full items-center gap-2">
+            {skill ? (
+              <Select
+                value={skillRef.pinnedVersionId ?? "latest"}
+                onOpenChange={setVersionsOpen}
+                onValueChange={(value) =>
+                  onPin(value === "latest" ? undefined : value)
+                }
+                disabled={disabled}
               >
-                <SelectValue>
-                  {skillRef.pinnedVersionId
-                    ? `Pinned ${pinnedVersion?.canonicalSha256.slice(0, 8) ?? skillRef.pinnedVersionId.slice(0, 8)}`
-                    : "Latest"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="latest">Latest</SelectItem>
-                {versionsQuery.error && (
-                  <SelectItem value="versions-unavailable" disabled>
-                    Unable to load versions
-                  </SelectItem>
-                )}
-                {versions.map((version) => (
-                  <SelectItem key={version.id} value={version.id}>
-                    {version.canonicalSha256.slice(0, 8)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <Text small muted className="flex-1">
-              Version unavailable
-            </Text>
-          )}
-          <Button
-            variant="tertiary"
-            size="sm"
-            disabled={disabled}
-            onClick={onRemove}
-            aria-label={`Remove ${skillLabel}`}
-          >
-            Remove
-          </Button>
-        </div>
+                <SelectTrigger
+                  size="sm"
+                  className="min-w-0 flex-1"
+                  aria-label={`Version for ${skillLabel}`}
+                >
+                  <SelectValue>
+                    {skillRef.pinnedVersionId
+                      ? `Pinned ${pinnedVersion?.canonicalSha256.slice(0, 8) ?? skillRef.pinnedVersionId.slice(0, 8)}`
+                      : "Latest"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest">Latest</SelectItem>
+                  {versionsQuery.error && (
+                    <SelectItem value="versions-unavailable" disabled>
+                      Unable to load versions
+                    </SelectItem>
+                  )}
+                  {versions.map((version) => (
+                    <SelectItem key={version.id} value={version.id}>
+                      {version.canonicalSha256.slice(0, 8)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Text small muted className="flex-1">
+                Version unavailable
+              </Text>
+            )}
+            <Button
+              variant="tertiary"
+              size="sm"
+              disabled={disabled}
+              onClick={onRemove}
+              aria-label={`Remove ${skillLabel}`}
+            >
+              Remove
+            </Button>
+          </div>
+        </RequireScope>
       </RequireScope>
     </div>
   );

@@ -288,3 +288,34 @@ func TestCatalogAdmits_ExactEntriesUnaffectedByPatterns(t *testing.T) {
 	require.False(t, catalogAdmits("https://claude.ai/oauth/anything-else"))
 	require.False(t, catalogAdmits("https://claude.ai/oauth/claude-code-client-metadata/x"))
 }
+
+// TestCatalogAdmits_VercelConnectNamespace exercises the Vercel Connect
+// connector wildcard against the real client_id shape observed in production
+// (scl_...) and the boundary cases that must be rejected.
+func TestCatalogAdmits_VercelConnectNamespace(t *testing.T) {
+	t.Parallel()
+
+	const vercelPattern = "https://connect.vercel.com/connectors/*"
+
+	// Real connector ID from production (AIM-383)
+	admitted := []string{
+		"https://connect.vercel.com/connectors/scl_lcd9uojo79WQ4Qh3UZKvLQ",
+		"https://connect.vercel.com/connectors/scl_abc123xyz",
+	}
+	for _, clientID := range admitted {
+		require.Truef(t, matchesPattern(vercelPattern, clientID), "%q should match", clientID)
+		require.Truef(t, catalogAdmits(clientID), "%q should be admitted by the catalog", clientID)
+	}
+
+	rejected := []string{
+		"https://connect.vercel.com/connectors",           // zero segments for the *
+		"https://connect.vercel.com/connectors/a/b",       // two segments for one *
+		"https://connect.vercel.com/connectors//",         // empty segment
+		"https://connect.vercel.com/other/scl_abc123xyz",  // different path
+		"https://connect.vercel.com/connectors/scl_abc?x", // query differs
+	}
+	for _, clientID := range rejected {
+		require.Falsef(t, matchesPattern(vercelPattern, clientID), "%q must NOT match", clientID)
+		require.Falsef(t, catalogAdmits(clientID), "%q must NOT be admitted by the catalog", clientID)
+	}
+}

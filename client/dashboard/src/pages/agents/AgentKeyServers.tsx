@@ -310,7 +310,7 @@ export function AgentKeyServers({
                 </Text>
                 {server.kind === "Unproxied" && (
                   <Text as="span" small muted className="block">
-                    This server doesn’t accept Gram API keys.
+                    This server doesn’t accept Speakeasy API keys.
                   </Text>
                 )}
               </span>

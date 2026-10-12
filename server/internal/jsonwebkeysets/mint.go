@@ -113,7 +113,7 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 		return nil, oops.E(oops.CodeUnexpected, nil, "gcp kms key is missing its resource name").LogError(ctx, logger)
 	}
 
-	// The recorded algorithm is what Gram advertises and signs with, so it is
+	// The recorded algorithm is what Speakeasy advertises and signs with, so it is
 	// the expectation the key is measured against. It comes back out of a text
 	// column, where a bare conversion would accept anything the column holds.
 	want, err := gcpkms.ParseSignatureAlgorithm(row.ExternalKey.Algorithm)
@@ -135,7 +135,7 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 	}
 
 	// TokenSource alone proves nothing: it is lazy by design, so resolving the
-	// principal first is what separates "Gram cannot assume this identity" (a
+	// principal first is what separates "Speakeasy cannot assume this identity" (a
 	// grant the customer must add) from a key-level permission problem.
 	if _, err := s.gcpIdentity.ResolvePrincipal(ctx, credential); err != nil {
 		logger.InfoContext(ctx, "jwks mint could not assume the credential's identity", attr.SlogError(err))
@@ -199,7 +199,7 @@ func BuildPublishedJWK(public *gcpkms.PublicKey) (string, []byte, error) {
 
 // mintPublicKeyError maps a GetPublicKey failure onto an error code by the same
 // classification the verify probe uses: transient provider trouble is a
-// gateway error worth retrying, unrecognised failures are Gram's to
+// gateway error worth retrying, unrecognised failures are Speakeasy's to
 // investigate, and everything else names something the key's owner can fix.
 func (s *Service) mintPublicKeyError(ctx context.Context, logger *slog.Logger, err error) error {
 	detail := conv.TruncateDetail(err.Error(), mintDetailMaxLen)

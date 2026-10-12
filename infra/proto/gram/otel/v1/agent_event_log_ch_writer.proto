@@ -19,6 +19,5 @@ message AgentEventLogCHWriter {
       minimum_backoff: {seconds: 10}
       maximum_backoff: {seconds: 60}
     }
-    dead_letter: {max_delivery_attempts: 10}
   };
 }

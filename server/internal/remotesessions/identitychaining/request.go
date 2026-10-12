@@ -19,7 +19,7 @@ type Request struct {
 	// UserSessionIssuerID is the endpoint's user session issuer.
 	UserSessionIssuerID uuid.UUID
 
-	// UserID is the authenticated Gram human, never an agent or workload.
+	// UserID is the authenticated Speakeasy human, never an agent or workload.
 	UserID string
 
 	// UpstreamResource is the endpoint's upstream, compared to binding

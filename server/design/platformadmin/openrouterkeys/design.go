@@ -19,7 +19,7 @@ var AdminKey = Type("AdminOpenRouterKey", func() {
 	Attribute("organization_id", String, "Organization that owns the key.")
 	Attribute("organization_name", String, "Display name of the owning organization.")
 	Attribute("organization_slug", String, "Slug of the owning organization.")
-	Attribute("gram_account_type", String, "The organization's Gram account type (e.g. free, pro, enterprise).")
+	Attribute("gram_account_type", String, "The organization's Speakeasy account type (e.g. free, pro, enterprise).")
 	Attribute("key_type", String, "Which upstream key this row provisions: 'chat' pays for customer-facing completions, 'internal' pays for platform-initiated LLM usage.")
 	Attribute("monthly_credits", Int64, "Monthly credit ceiling last mirrored from OpenRouter.")
 	Attribute("disabled", Boolean, "Whether the key is locked down (refused locally and disabled upstream).")

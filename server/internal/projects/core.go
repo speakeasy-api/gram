@@ -19,6 +19,7 @@ import (
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -235,6 +236,10 @@ func (c *Core) CreateInTransaction(ctx context.Context, dbtx pgx.Tx, mutation Cr
 		ProjectSlug:      prj.Slug,
 	}); err != nil {
 		return repo.Project{}, fmt.Errorf("log project creation: %w", err)
+	}
+
+	if err := requests.PublishFirstProject(ctx, dbtx, mutation.OrganizationID, prj.ID); err != nil {
+		return repo.Project{}, fmt.Errorf("request role distribution: %w", err)
 	}
 
 	return prj, nil

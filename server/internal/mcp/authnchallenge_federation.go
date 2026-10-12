@@ -120,7 +120,14 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 		return nil, err
 	}
 	// Bind the initiating browser before exposing any transferable state URL.
-	origin, err := federatedCallbackURL(state.mintOriginOr(s.serverURL.String()))
+	// It holds the challenge on the host the flow started on: the shared
+	// authorization server's for a challenge one minted, whose mint origin
+	// names the resource instead.
+	browserOrigin := state.mintOriginOr(s.serverURL.String())
+	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+		browserOrigin = shared.origin()
+	}
+	origin, err := federatedCallbackURL(browserOrigin)
 	if err != nil {
 		return nil, err
 	}
@@ -330,6 +337,9 @@ func (s *Service) finishFederatedFailure(w http.ResponseWriter, r *http.Request,
 	var redirect string
 	if !state.FirstParty {
 		issuer, err := endpoint.RootURL(state.mintOriginOr(s.serverURL.String()))
+		if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+			issuer, err = shared.issuer, nil
+		}
 		if err == nil {
 			redirect, err = buildClientRedirect(clientRedirectParams{RedirectURI: state.RedirectURI, Issuer: issuer, Code: "", State: state.State, ErrorCode: oauthCode, ErrorDescription: message})
 		}

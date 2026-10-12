@@ -1,5 +1,5 @@
 // WorkOS-shaped REST surface backing the local identity backend. Wire
-// shapes match workos-go/v6 SDK types (see workos_types.go) so Gram-side's
+// shapes match workos-go/v6 SDK types (see workos_types.go) so Speakeasy-side's
 // `*workos.Client` decodes our responses identically to api.workos.com.
 //
 // Endpoint inventory:
@@ -252,7 +252,7 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 
 	// Look up the user's first org membership so we can return organization_id.
 	// This mirrors production WorkOS which includes the org ID in the auth response,
-	// triggering SyncMembershipsFromWorkOS on the Gram side.
+	// triggering SyncMembershipsFromWorkOS on the Speakeasy side.
 	var orgID string
 	memberships, err := queries.ListMembershipsWithOrgName(ctx, repo.ListMembershipsWithOrgNameParams{
 		After:   uuid.Nil,
@@ -351,7 +351,7 @@ func (h *Handler) handlePasswordlessCreateSession(w http.ResponseWriter, r *http
 	}
 	h.pwlMu.Unlock()
 
-	// Build the authorize link. The caller (Gram server) will embed this
+	// Build the authorize link. The caller (Speakeasy server) will embed this
 	// in the invite email; clicking it simulates the magic-link flow.
 	scheme := "http"
 	if r.TLS != nil {
@@ -605,8 +605,8 @@ func (h *Handler) handleWorkosGetOrganization(w http.ResponseWriter, r *http.Req
 }
 
 // handleWorkosCreateOrganization creates an organization with no members. It is
-// the endpoint behind Gram's admin create-organization flow, which mints the
-// organization first and only then decides what its Gram id is, so external_id
+// the endpoint behind Speakeasy's admin create-organization flow, which mints the
+// organization first and only then decides what its Speakeasy id is, so external_id
 // normally arrives later through PUT rather than here.
 func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -674,7 +674,7 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 
 // handleWorkosUpdateOrganization applies a partial update. The WorkOS SDK omits
 // empty fields from the request body, so an absent field means "leave alone"
-// rather than "set to empty": Gram's external_id back-fill sends external_id
+// rather than "set to empty": Speakeasy's external_id back-fill sends external_id
 // and no name, and must not blank the name it just set.
 //
 // The ID is resolved without auto-association, so an unknown one is a 404
@@ -904,7 +904,7 @@ func (h *Handler) handleWorkosDeleteMembership(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		// Gram may store KSUID-style membership IDs (e.g. "om_01KPD...") that
+		// Speakeasy may store KSUID-style membership IDs (e.g. "om_01KPD...") that
 		// don't exist in dev-idp's SQLite. Treat as already-deleted.
 		w.WriteHeader(http.StatusAccepted)
 		return
@@ -1152,7 +1152,7 @@ func (h *Handler) handleWorkosAcceptInvitation(w http.ResponseWriter, r *http.Re
 // =============================================================================
 
 // resolveOrgID maps an external organization ID (which may be a UUID or an
-// opaque string like a Gram KSUID "org_01KMD...") to the dev-idp's internal
+// opaque string like a Speakeasy KSUID "org_01KMD...") to the dev-idp's internal
 // UUID. Resolution order:
 //  1. Try UUID parse → direct lookup by organizations.id
 //  2. Lookup by organizations.workos_id (text match)
@@ -1208,7 +1208,7 @@ func (h *Handler) lookupOrgID(ctx context.Context, raw string) (uuid.UUID, error
 }
 
 // optionalQueryOrgID is like optionalQueryUUID but routes non-UUID org IDs
-// through resolveOrgID so that Gram KSUIDs work transparently.
+// through resolveOrgID so that Speakeasy KSUIDs work transparently.
 func (h *Handler) optionalQueryOrgID(ctx context.Context, q map[string][]string, key string) (uuid.NullUUID, error) {
 	raw := firstQuery(q, key)
 	if raw == "" {
@@ -1699,7 +1699,7 @@ func nullableString(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
 
-// The prefix lives in devidentity because the Gram local seed writes the same
+// The prefix lives in devidentity because the Speakeasy local seed writes the same
 // subject into users.workos_id before anyone has logged in.
 const workosUserIDPrefix = devidentity.WorkOSUserIDPrefix
 

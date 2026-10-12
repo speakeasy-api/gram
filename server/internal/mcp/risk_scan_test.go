@@ -125,7 +125,7 @@ func TestRiskScan_ProxiedMetaMember(t *testing.T) {
 	text, isError := metaToolResultText(t, rpc)
 	require.False(t, isError)
 	require.Equal(t, "pong from ping", text)
-	require.Empty(t, upstream.capturedAuth())
+	upstream.requireToolCallAuth(t, "")
 
 	scanCount := 0
 	for _, span := range recorder.Ended() {
@@ -366,6 +366,38 @@ func TestRiskScan_LegacyToolsetRouteLeavesAmbiguousWrapperUnattributed(t *testin
 	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
 	require.Len(t, events, 2)
 	require.Empty(t, events[0][attr.McpServerIDKey])
+}
+
+func TestRiskScan_LegacyToolsetRouteResolvesCanonicalWrapperOverOtherServers(t *testing.T) {
+	t.Parallel()
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "scan-legacy-canonical-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug+"-member", "public", uuid.NullUUID{}, uuid.Nil)
+	canonical := createToolsetMcpEndpointWithID(t, ctx, ti.conn, toolset.ID, *authCtx.ProjectID, toolset.ID, slug+"-canonical", "public", uuid.NullUUID{}, uuid.Nil)
+	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "legacy_scan_canonical")
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	_, err := ti.service.HandleToolsCall(ctx, &mcp.McpInputs{
+		ProjectID:       *authCtx.ProjectID,
+		Toolset:         toolset.Slug,
+		McpEnvVariables: map[string]string{"TEST_SERVER_URL": upstream.URL},
+		Mode:            mcp.ToolModeStatic,
+	}, "legacy_scan_canonical", json.RawMessage(`{}`))
+	require.NoError(t, err)
+
+	events := scanAttributes(recorder, mcpriskscan.SurfaceHostedMCP)
+	require.Len(t, events, 2)
+	require.Equal(t, canonical.ID.String(), events[0][attr.McpServerIDKey])
 }
 
 func TestRiskScan_HostedScopedBlockPolicyOnlyStopsMatchingServer(t *testing.T) {

@@ -137,7 +137,7 @@ describe("Add servers sheet", () => {
         ],
         [
           "Hosted remotely",
-          "Add a server that already runs elsewhere by its URL, proxied through Gram.",
+          "Add a server that already runs elsewhere by its URL, proxied through Speakeasy.",
         ],
         [
           "Reachable through a tunnel",

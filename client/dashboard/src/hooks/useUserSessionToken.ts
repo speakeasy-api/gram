@@ -61,12 +61,19 @@ function mintRequestBody(
 export function useUserSessionToken({
   target,
   userSessionIssuerId,
+  project: projectOverride,
 }: {
   target: UserSessionTokenTarget;
   userSessionIssuerId: string | undefined;
+  /**
+   * The target's project, for org-level pages that have no ambient project
+   * (the role editor lists servers from every project).
+   */
+  project?: { id: string; slug: string };
 }): UseUserSessionTokenResult {
   const session = useSession();
-  const project = useProject();
+  const ambientProject = useProject();
+  const project = projectOverride ?? ambientProject;
   const mintMutation = useMintUserSessionMutation();
 
   const { kind, id } = target;

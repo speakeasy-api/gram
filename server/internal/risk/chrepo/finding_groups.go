@@ -46,6 +46,8 @@ func groupRiskFindingsByChatQuery(p GroupRiskFindingsByChatParams) (squirrel.Sel
 		PolicyIDs:       p.PolicyIDs,
 		MCPServerID:     "",
 		ChatID:          "",
+		ResultID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExecutionID:     "",
 		From:            nil,
 		To:              nil,
 		Category:        "",

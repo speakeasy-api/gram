@@ -69,14 +69,14 @@ func (s *Service) SetAIToolDecision(ctx context.Context, payload *gen.SetAIToolD
 	// switched-off state that could leave a recorded decision inert, which is
 	// what used to need a second, differently worded refusal here.
 	//
-	// A tool Gram cannot recognize at the gateway cannot be decided about.
+	// A tool Speakeasy cannot recognize at the gateway cannot be decided about.
 	// Refused rather than recorded-and-ignored for two reasons: the inventory
 	// would report unreviewed whatever was stored, so the write would look
 	// like it did nothing; and a block stored against a tool that later starts
 	// publishing a document would silently begin enforcing months after
 	// somebody set it.
 	if !aitargets.Enforceable(entry.Target) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "%q publishes no client ID metadata document, so Gram cannot recognize it at the gateway and cannot enforce a decision about it", targetID)
+		return nil, oops.E(oops.CodeBadRequest, nil, "%q publishes no client ID metadata document, so Speakeasy cannot recognize it at the gateway and cannot enforce a decision about it", targetID)
 	}
 
 	before := entry.Decision

@@ -430,7 +430,7 @@ const getMCPServerByToolsetID = `-- name: GetMCPServerByToolsetID :one
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE toolset_id = $1::uuid AND project_id = $2 AND deleted IS FALSE
-ORDER BY created_at, id
+ORDER BY (id = toolset_id) DESC, created_at, id
 LIMIT 1
 `
 
@@ -439,7 +439,8 @@ type GetMCPServerByToolsetIDParams struct {
 	ProjectID uuid.UUID
 }
 
-// Deterministic pick until a partial unique index enforces one wrapper per toolset.
+// The toolset's canonical wrapper (id = toolset id) when it has one, else the
+// oldest toolset-backed server.
 func (q *Queries) GetMCPServerByToolsetID(ctx context.Context, arg GetMCPServerByToolsetIDParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, getMCPServerByToolsetID, arg.ToolsetID, arg.ProjectID)
 	var i McpServer
@@ -702,12 +703,19 @@ func (q *Queries) ListEffectiveMCPServerToolAnnotations(ctx context.Context, arg
 
 const listEnabledMCPServersByToolsetID = `-- name: ListEnabledMCPServersByToolsetID :many
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
-FROM mcp_servers
-WHERE toolset_id = $1::uuid
-  AND project_id = $2
-  AND deleted IS FALSE
-  AND visibility <> 'disabled'
-ORDER BY created_at, id
+FROM mcp_servers ms
+WHERE ms.toolset_id = $1::uuid
+  AND ms.project_id = $2
+  AND ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND (
+    ms.id = ms.toolset_id
+    OR NOT EXISTS (
+      SELECT 1 FROM mcp_servers c
+      WHERE c.id = ms.toolset_id AND c.project_id = ms.project_id AND c.deleted IS FALSE
+    )
+  )
+ORDER BY ms.created_at, ms.id
 LIMIT 2
 `
 
@@ -718,6 +726,8 @@ type ListEnabledMCPServersByToolsetIDParams struct {
 
 // At most two rows are needed: zero means the legacy route has no attributable
 // wrapper, one is unambiguous, and two means callers must reject attribution.
+// A live canonical wrapper (id = toolset id) is the toolset's hosting wrapper,
+// so other toolset-backed servers are candidates only when it is absent.
 func (q *Queries) ListEnabledMCPServersByToolsetID(ctx context.Context, arg ListEnabledMCPServersByToolsetIDParams) ([]McpServer, error) {
 	rows, err := q.db.Query(ctx, listEnabledMCPServersByToolsetID, arg.ToolsetID, arg.ProjectID)
 	if err != nil {
@@ -1640,6 +1650,75 @@ func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServer
 		return nil, err
 	}
 	return items, nil
+}
+
+const syncHostedMCPServer = `-- name: SyncHostedMCPServer :one
+UPDATE mcp_servers
+SET
+    name = $1,
+    slug = $2,
+    visibility = $3,
+    user_session_issuer_id = $4,
+    remote_session_issuer_id = CASE
+        WHEN $4::uuid IS NULL THEN NULL
+        ELSE remote_session_issuer_id
+    END,
+    tool_variations_group_id = $5,
+    network_access_mode = $6,
+    updated_at = clock_timestamp()
+WHERE id = $7
+  AND project_id = $8
+  AND toolset_id = $7
+  AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+`
+
+type SyncHostedMCPServerParams struct {
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	Visibility            string
+	UserSessionIssuerID   uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	NetworkAccessMode     pgtype.Text
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+// Projects a toolset's hosting columns onto its canonical wrapper (id = toolset id).
+// Unsetting the issuer clears the derived remote issuer, which no resync can reach.
+func (q *Queries) SyncHostedMCPServer(ctx context.Context, arg SyncHostedMCPServerParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, syncHostedMCPServer,
+		arg.Name,
+		arg.Slug,
+		arg.Visibility,
+		arg.UserSessionIssuerID,
+		arg.ToolVariationsGroupID,
+		arg.NetworkAccessMode,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.NetworkAccessMode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const updateMCPServer = `-- name: UpdateMCPServer :one

@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
@@ -21,13 +23,15 @@ import { Loader2 } from "lucide-react";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useState } from "react";
 import { AssistantMCPServersSection } from "./AssistantMCPServersSection";
+import { AssistantIdentitySettings } from "./AssistantIdentitySettings";
 import { AssistantOverviewSettings } from "./AssistantOverviewSettings";
+import { useRBAC } from "@/hooks/useRBAC";
 import { AssistantSkillsSection } from "./AssistantSkillsSection";
 import { AssistantTriggersList } from "./AssistantTriggersList";
 import { Section } from "./PanelSection";
 import { useAssistantDraft } from "./useAssistantDraft";
 
-const DETAIL_TABS = ["overview", "sessions", "triggers"] as const;
+const DETAIL_TABS = ["overview", "identity", "sessions", "triggers"] as const;
 type DetailTab = (typeof DETAIL_TABS)[number];
 
 function toDetailTab(value: string): DetailTab {
@@ -36,10 +40,25 @@ function toDetailTab(value: string): DetailTab {
     : "overview";
 }
 
+function instructionsActionLabel(
+  canWrite: boolean,
+  hasInstructions: boolean,
+): string {
+  if (!canWrite) return "View";
+  return hasInstructions ? "Expand & edit" : "Add";
+}
+
 export function AssistantDraftPanel(): JSX.Element {
   const draft = useAssistantDraft();
+  const identityFlag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   const routes = useRoutes();
   const project = useProject();
+  const { hasScope } = useRBAC();
+  const canWrite = hasScope(
+    "assistant:write",
+    draft.assistantId ?? project.id,
+    project.id,
+  );
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
@@ -97,25 +116,33 @@ export function AssistantDraftPanel(): JSX.Element {
         <Text variant="body" className="truncate font-medium">
           {a?.name ?? "Loading…"}
         </Text>
-        <Button
-          variant="tertiary"
-          size="sm"
-          className="shrink-0"
-          aria-label="Delete assistant"
-          onClick={() => {
-            if (!draft.assistantId) return;
-            if (!confirm("Delete this assistant? This cannot be undone."))
-              return;
-            del.mutate({ request: { id: draft.assistantId } });
-          }}
-          disabled={del.isPending}
+        <RequireScope
+          scope="assistant:write"
+          resourceId={draft.assistantId ?? project.id}
+          projectId={project.id}
+          level="component"
+          reason="You don't have permission to delete assistants."
         >
-          {del.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Icon name="trash" className="h-3 w-3" />
-          )}
-        </Button>
+          <Button
+            variant="tertiary"
+            size="sm"
+            className="shrink-0"
+            aria-label="Delete assistant"
+            onClick={() => {
+              if (!draft.assistantId) return;
+              if (!confirm("Delete this assistant? This cannot be undone."))
+                return;
+              del.mutate({ request: { id: draft.assistantId } });
+            }}
+            disabled={del.isPending}
+          >
+            {del.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Icon name="trash" className="h-3 w-3" />
+            )}
+          </Button>
+        </RequireScope>
       </div>
 
       {!a ? (
@@ -124,13 +151,20 @@ export function AssistantDraftPanel(): JSX.Element {
         </Stack>
       ) : (
         <Tabs
-          value={activeTab}
+          value={
+            activeTab === "identity" && identityFlag.status !== "enabled"
+              ? "overview"
+              : activeTab
+          }
           onValueChange={(value) => void setActiveTab(toDetailTab(value))}
           className="flex min-h-0 flex-1 flex-col"
         >
           <div className="border-border border-b px-4">
             <PageTabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
+              {identityFlag.status === "enabled" && (
+                <PageTabsTrigger value="identity">Identity</PageTabsTrigger>
+              )}
               <PageTabsTrigger value="sessions">Sessions</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
             </PageTabsList>
@@ -156,7 +190,7 @@ export function AssistantDraftPanel(): JSX.Element {
                     onClick={() => setEditingInstructions(true)}
                   >
                     <Icon name="pencil" className="h-3 w-3" />
-                    {a.instructions ? "Expand & edit" : "Add"}
+                    {instructionsActionLabel(canWrite, !!a.instructions)}
                   </Button>
                 }
               >
@@ -193,6 +227,17 @@ export function AssistantDraftPanel(): JSX.Element {
           </TabsContent>
 
           <TabsContent
+            value="identity"
+            className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+          >
+            <AssistantIdentitySettings
+              key={a.id}
+              assistant={a}
+              onUpdated={() => void draft.refetchAssistant()}
+            />
+          </TabsContent>
+
+          <TabsContent
             value="sessions"
             className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
           >
@@ -211,6 +256,7 @@ export function AssistantDraftPanel(): JSX.Element {
       {a && (
         <EditInstructionsDialog
           assistant={a}
+          canWrite={canWrite}
           open={editingInstructions}
           onOpenChange={setEditingInstructions}
           onUpdated={() => void draft.refetchAssistant()}

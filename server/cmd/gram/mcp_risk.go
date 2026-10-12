@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -91,6 +92,7 @@ func newMCPRiskEvaluator(
 	completions gramopenrouter.CompletionClient,
 	publishers *background.Publishers,
 	shadowMCPClient *shadowmcp.Client,
+	toolIOLogsEnabled telemetry.FeatureChecker,
 ) (*mcpriskscan.Evaluator, *risk.Scanner, error) {
 	var piiScanner ra.PIIScanner
 	if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
@@ -132,7 +134,7 @@ func newMCPRiskEvaluator(
 		risk.NewMCPPolicyScanner(scanner, shadowMCPClient),
 		publishers.RiskFindings,
 		mcpriskscan.DefaultPolicyConfig,
-		mcpriskscan.WithMCPFindingEvidenceWriter(risk.NewMCPFindingEvidenceStore(db, enc)),
+		mcpriskscan.WithMCPFindingEvidenceWriter(risk.NewMCPFindingEvidenceStore(db, enc), toolIOLogsEnabled),
 	)
 	return evaluator, scanner, nil
 }

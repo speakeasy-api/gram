@@ -15,7 +15,7 @@ const (
 	// No fetch was attempted.
 	OutcomeInvalidURL Outcome = "invalid_url"
 
-	// OutcomeUnreachable means Gram could not obtain an HTTP 200 body from
+	// OutcomeUnreachable means Speakeasy could not obtain an HTTP 200 body from
 	// the URL: connection failure, timeout, non-200 status (including a
 	// redirect, which §5 forbids following), or a body over the size cap.
 	OutcomeUnreachable Outcome = "unreachable"

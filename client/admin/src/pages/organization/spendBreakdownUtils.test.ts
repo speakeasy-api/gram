@@ -108,3 +108,76 @@ describe("spend chart arithmetic", () => {
     ]);
   });
 });
+
+describe("server-bucketed spend chart data", () => {
+  it("charts billing-cycle buckets as returned instead of regrouping by calendar month", () => {
+    const cycle = (from: Date, to: Date, costUsd: string) => ({
+      from,
+      to,
+      quantity: "1",
+      costUsd,
+    });
+    const data = {
+      window: {
+        from: new Date(Date.UTC(2026, 7, 25)),
+        to: new Date(Date.UTC(2026, 9, 25)),
+      },
+      queriedAt: new Date(Date.UTC(2026, 9, 7, 12)),
+      products: [
+        product({
+          buckets: [
+            cycle(
+              new Date(Date.UTC(2026, 7, 25)),
+              new Date(Date.UTC(2026, 8, 25)),
+              "3",
+            ),
+            cycle(
+              new Date(Date.UTC(2026, 8, 25)),
+              new Date(Date.UTC(2026, 9, 25)),
+              "2",
+            ),
+          ],
+        }),
+      ],
+    };
+
+    const perCycle = spendChartData(
+      data,
+      new Set(["agent_session_storage"]),
+      "bucket",
+      false,
+    );
+    expect(
+      perCycle.points.map(({ from, to, exactCostUsd, inProgress }) => ({
+        from,
+        to,
+        exactCostUsd,
+        inProgress,
+      })),
+    ).toEqual([
+      {
+        from: "2026-08-25T00:00:00.000Z",
+        to: "2026-09-25T00:00:00.000Z",
+        exactCostUsd: "3",
+        inProgress: false,
+      },
+      {
+        from: "2026-09-25T00:00:00.000Z",
+        to: "2026-10-25T00:00:00.000Z",
+        exactCostUsd: "2",
+        inProgress: true,
+      },
+    ]);
+
+    const cumulative = spendChartData(
+      data,
+      new Set(["agent_session_storage"]),
+      "bucket",
+      true,
+    );
+    expect(cumulative.points.map((point) => point.exactCostUsd)).toEqual([
+      "3",
+      "5",
+    ]);
+  });
+});

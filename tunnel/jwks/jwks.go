@@ -24,7 +24,7 @@ const Path = "/.well-known/jwks.json"
 
 // Set is an immutable public key set and its cacheable HTTP representation.
 type Set struct {
-	keyIDs   map[string]bool
+	keys     map[string]*rsa.PublicKey
 	document []byte
 	etag     string
 }
@@ -33,7 +33,7 @@ type Set struct {
 // an empty key set for gateways without local caller-assertion configuration.
 func Parse(publicPEM string) (*Set, error) {
 	keys := make([]jose.JSONWebKey, 0)
-	seen := make(map[string]bool)
+	seen := make(map[string]*rsa.PublicKey)
 	for remaining := bytes.TrimSpace([]byte(publicPEM)); len(remaining) > 0; {
 		block, rest := pem.Decode(remaining)
 		if block == nil {
@@ -52,9 +52,9 @@ func Parse(publicPEM string) (*Set, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !seen[key.KeyID] {
+		if _, ok := seen[key.KeyID]; !ok {
 			keys = append(keys, key)
-			seen[key.KeyID] = true
+			seen[key.KeyID] = pub
 		}
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i].KeyID < keys[j].KeyID })
@@ -63,7 +63,7 @@ func Parse(publicPEM string) (*Set, error) {
 		return nil, fmt.Errorf("encode public JWKS: %w", err)
 	}
 	digest := sha256.Sum256(document)
-	return &Set{keyIDs: seen, document: document, etag: `"` + base64.RawURLEncoding.EncodeToString(digest[:]) + `"`}, nil
+	return &Set{keys: seen, document: document, etag: `"` + base64.RawURLEncoding.EncodeToString(digest[:]) + `"`}, nil
 }
 
 // PublicKey identifies an RSA verification key by its RFC 7638 SHA-256 thumbprint.
@@ -79,7 +79,16 @@ func PublicKey(key *rsa.PublicKey) (jose.JSONWebKey, error) {
 }
 
 // Contains reports whether the bundle publishes the given key ID.
-func (s *Set) Contains(keyID string) bool { return s.keyIDs[keyID] }
+func (s *Set) Contains(keyID string) bool {
+	_, ok := s.keys[keyID]
+	return ok
+}
+
+// Key returns the verification key with keyID.
+func (s *Set) Key(keyID string) (*rsa.PublicKey, bool) {
+	key, ok := s.keys[keyID]
+	return key, ok
+}
 
 // ServeHTTP serves the public bundle without requiring authentication.
 func (s *Set) ServeHTTP(w http.ResponseWriter, r *http.Request) {

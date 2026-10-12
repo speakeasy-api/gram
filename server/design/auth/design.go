@@ -253,4 +253,81 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "info")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SessionInfo"}`)
 	})
+
+	Method("transferOut", func() {
+		Description("Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.")
+
+		// A top-level browser navigation reaches this endpoint. It authenticates
+		// the session itself so that a missing session redirects to a login page
+		// instead of returning an error the browser would show as is.
+		NoSecurity()
+
+		Payload(func() {
+			Attribute("target_host", String, "The target platform host to transfer the session to (e.g. ai.speakeasy.com)")
+			Attribute("nonce", String, "The browser binding nonce from the target host's transferIn start mode")
+			Attribute("redirect", String, "Optional URL path to redirect to after the transfer completes on the target host")
+			Attribute("session_token", String, "The session to transfer. Defaults to the session cookie.")
+			// Not Required: a missing parameter must reach the handler, which
+			// sends the browser to a login page instead of a 400 error.
+		})
+
+		Result(func() {
+			Attribute("location", String, "The URL to redirect to: the target host's transferIn callback with the transfer code, or a login page when the transfer cannot continue")
+			Required("location")
+		})
+
+		HTTP(func() {
+			GET("/rpc/auth.transferOut")
+			Param("target_host")
+			Param("nonce")
+			Param("redirect")
+			security.SessionHeader()
+
+			Response(StatusTemporaryRedirect, func() {
+				Header("location:Location", String, func() {
+				})
+			})
+		})
+
+		Meta("openapi:operationId", "authTransferOut")
+		Meta("openapi:extension:x-speakeasy-name-override", "transferOut")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
+	})
+
+	Method("transferIn", func() {
+		Description("Steps 1/3 and 3/3 of a cross-domain session transfer, on the target platform host. Step 1/3 (start: source_host, no code) sets a short-lived cookie that binds the transfer to this browser and redirects to Step 2/3, transferOut on the source host. Step 3/3 (callback: code, no source_host) redeems the one-time code that transferOut issued, checks it against that cookie, and sets a new session cookie on this host. The cookie exists because a code alone would let anyone who holds one sign another person into the code's account (login CSRF). A request with both or neither, and any failed check, lands on this host's login page with a signin_error code; a failed callback never starts a new transfer. See the flow diagram in server/internal/auth/transfer.go.")
+
+		NoSecurity()
+
+		Payload(func() {
+			Attribute("source_host", String, "Start mode: the platform host that holds the session to move here (e.g. app.getgram.ai)")
+			Attribute("code", String, "Callback mode: the opaque one-time transfer code from the source host's transferOut endpoint")
+			Attribute("redirect", String, "Optional URL path to land on once the session is established on this host")
+		})
+
+		Result(func() {
+			Attribute("location", String, "The URL to redirect to: the source host's transferOut (start mode), the requested page (callback mode), or this host's login page when a check fails")
+			Attribute("session_token", String, "The new authentication session on this host. Set only when callback mode succeeds.")
+			Attribute("session_cookie", String, "The new authentication session on this host. Set only when callback mode succeeds.")
+			Required("location")
+		})
+
+		HTTP(func() {
+			GET("/rpc/auth.transferIn")
+			Param("source_host")
+			Param("code")
+			Param("redirect")
+
+			Response(StatusTemporaryRedirect, func() {
+				Header("location:Location", String, func() {
+				})
+				security.WriteSessionCookie()
+				security.SessionHeader()
+			})
+		})
+
+		Meta("openapi:operationId", "authTransferIn")
+		Meta("openapi:extension:x-speakeasy-name-override", "transferIn")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"disabled": true}`)
+	})
 })

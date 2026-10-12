@@ -8,6 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // connectionRows is a connection with its Okta subtype and managed client.
@@ -19,6 +20,15 @@ type connectionRows struct {
 
 func (r connectionRows) clientIDSubmitted() bool {
 	return r.Managed != nil && r.Managed.ClientID != PlaceholderClientID(r.Connection.Provider, r.Connection.ID)
+}
+
+// authMethod is the managed client's authentication, or the listing mode's
+// before provisioning and after revocation.
+func (r connectionRows) authMethod() remotesessions.TokenEndpointAuthMethod {
+	if r.Managed == nil || r.Managed.AuthMethod == "" {
+		return listingAuthMethod(r.Okta.ListingMode)
+	}
+	return r.Managed.AuthMethod
 }
 
 func (r connectionRows) jwksURL() string {
@@ -87,7 +97,7 @@ func buildConnectionView(r connectionRows, agent AgentObservation) *gen.OktaIden
 		missing = missingScopes(granted)
 	}
 
-	checklist := OktaChecklist(r.Okta.ListingMode, ChecklistSignal{
+	checklist := OktaChecklist(r.authMethod(), ChecklistSignal{
 		Checked:           r.checked() && r.lastError() == nil,
 		ClientIDSubmitted: r.clientIDSubmitted(),
 		DPoPBound:         r.Okta.DpopRequired,
@@ -116,7 +126,7 @@ func buildConnectionView(r connectionRows, agent AgentObservation) *gen.OktaIden
 		OrgURL:              r.Okta.OrgUrl,
 		IssuerURL:           r.Okta.IssuerUrl,
 		ListingMode:         r.Okta.ListingMode,
-		JwksURL:             r.jwksURL(),
+		JwksURL:             conv.PtrEmpty(r.jwksURL()),
 		ClientID:            clientID,
 		ClientIDSubmitted:   r.clientIDSubmitted(),
 		DpopRequired:        r.Okta.DpopRequired,

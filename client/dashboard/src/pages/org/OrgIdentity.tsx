@@ -108,7 +108,7 @@ function WorkOSPortalButton({
   intent: "sso" | "dsync" | "domain_verification";
   errorFallback: string;
   label?: string;
-  /** Adds an external-link icon, for spots where leaving Gram is not obvious. */
+  /** Adds an external-link icon, for spots where leaving Speakeasy is not obvious. */
   external?: boolean;
   /** Primary when opening the portal is the card's first-run action. */
   variant?: "primary" | "secondary";

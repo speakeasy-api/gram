@@ -13,8 +13,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -127,6 +130,7 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 			PluginID:       created.ID,
 			OrganizationID: organizationID,
 			PrincipalUrn:   urn.PrincipalWildcard,
+			InstallMode:    string(installmode.Default),
 		}); err != nil {
 			return nil, fmt.Errorf("assign default plugin to org: %w", err)
 		}
@@ -399,6 +403,38 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 	}
 	s := id.String()
 	return s[len(s)-4:]
+}
+
+// AttachToDefaultAndRolePluginsAudited attaches a newly eligible server to the
+// Default plugin and matching role-audience plugins in the caller's transaction.
+// Callers enqueue publication only after commit; the returned bool reports
+// whether the Default plugin was lazily created.
+func AttachToDefaultAndRolePluginsAudited(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (bool, error) {
+	outcome, err := AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params, guard)
+	return outcome.PluginCreated, err
+}
+
+// AttachToDefaultAndRolePluginsAuditedWithOutcome also reports whether the
+// server joined the Default plugin, independently of role-audience delivery.
+func AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (DefaultPluginAttachOutcome, error) {
+	if err := admission.LockProject(ctx, dbtx, params.ProjectID); err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("lock eligible server admission: %w", err)
+	}
+	containsPlatform, err := roledelivery.ContainsPlatformTools(ctx, dbtx, params.OrganizationID, params.ProjectID, params.ToolsetID, params.McpServerID)
+	if err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("classify automatic plugin attachment: %w", err)
+	}
+	if containsPlatform {
+		return DefaultPluginAttachOutcome{Attached: false, PluginCreated: false}, nil
+	}
+	outcome, err := AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params)
+	if err != nil {
+		return DefaultPluginAttachOutcome{}, err
+	}
+	if _, err := roledelivery.Eligible(ctx, dbtx, params.OrganizationID, params.ProjectID, params.ToolsetID, params.McpServerID, guard); err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("deliver newly eligible server: %w", err)
+	}
+	return outcome, nil
 }
 
 // AttachToDefaultPluginAudited runs AttachToDefaultPlugin and records the

@@ -127,7 +127,7 @@ func TestBuildAssistantClientMetadataDocument(t *testing.T) {
 	var got map[string]any
 	require.NoError(t, json.Unmarshal(body, &got))
 	require.Equal(t, clientID, got["client_id"])
-	require.Equal(t, "Gram Assistant: Support Bot", got["client_name"])
+	require.Equal(t, "Speakeasy Assistant: Support Bot", got["client_name"])
 	require.Equal(t, clientURI, got["client_uri"])
 	require.Equal(t, []any{redirectURI}, got["redirect_uris"])
 	require.Equal(t, []any{"authorization_code"}, got["grant_types"])
@@ -138,7 +138,7 @@ func TestBuildAssistantClientMetadataDocument(t *testing.T) {
 func TestBuildAssistantClientMetadataDocumentOmitsEmptyClientURI(t *testing.T) {
 	t.Parallel()
 
-	doc := buildAssistantClientMetadataDocument("https://gram.example.com/.well-known/oauth-client/assistants/abc", "Gram Assistant", "", "https://gram.example.com/callback")
+	doc := buildAssistantClientMetadataDocument("https://gram.example.com/.well-known/oauth-client/assistants/abc", "Speakeasy Assistant", "", "https://gram.example.com/callback")
 	body, err := json.Marshal(doc)
 	require.NoError(t, err)
 	var got map[string]any
@@ -456,7 +456,7 @@ func TestHandleMCPAuthCallbackInvalidClientRetiresCIMDClient(t *testing.T) {
 	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
 
 	service := newCIMDAuthTestService(t, conn)
-	service.core.assistantTokens = assistanttokens.New("test-jwt-secret", conn, nil)
+	service.core.assistantTokens = assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
 	service.signaler = &stubWorkflowSignaler{signalledThreads: nil}
 	redirectURI := "https://gram.example.com/rpc/assistantMcpAuth/" + assistantID.String() + "/oauth/callback"
 	cimd, err := service.getOrRegisterMCPAuthClient(
@@ -523,7 +523,7 @@ func TestHandleAssistantClientMetadataDocumentServesDocument(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	wantClientID := AssistantClientMetadataDocumentURL(service.core.serverURL, assistantID)
 	require.Equal(t, wantClientID, got["client_id"])
-	require.Equal(t, "Gram Assistant: Assistant", got["client_name"])
+	require.Equal(t, "Speakeasy Assistant: Assistant", got["client_name"])
 	require.Equal(t, "https://app.getgram.ai/acme/projects/project/assistants/"+assistantID.String(), got["client_uri"])
 	require.Equal(t, []any{service.core.serverURL.JoinPath("rpc", "assistantMcpAuth", assistantID.String(), "oauth", "callback").String()}, got["redirect_uris"])
 	require.Equal(t, "none", got["token_endpoint_auth_method"])

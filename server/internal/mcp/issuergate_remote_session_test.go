@@ -2,6 +2,8 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // The texts the issuer gate returns for an accepted bearer whose upstream
@@ -162,7 +165,7 @@ func TestHandleToken_RefreshProceedsWhileUpstreamUnavailable(t *testing.T) {
 	})
 
 	// Many clients read a failed refresh as a sign-out, so an upstream blip
-	// must not cost the user their Gram session, and Gram's refresh must not
+	// must not cost the user their Speakeasy session, and Speakeasy's refresh must not
 	// wait on the upstream to find out.
 	refreshed := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, refreshed.err)
@@ -171,7 +174,7 @@ func TestHandleToken_RefreshProceedsWhileUpstreamUnavailable(t *testing.T) {
 }
 
 // The runtime and the token endpoint must agree: once a refresh the gate ran
-// fails for good and the gate answers invalid_token, the client's Gram
+// fails for good and the gate answers invalid_token, the client's Speakeasy
 // refresh is refused rather than handing it a token for the same rejection.
 func TestIssuerGate_UpstreamInvalidGrantRefusesTheFollowingRefresh(t *testing.T) {
 	t.Parallel()
@@ -376,4 +379,53 @@ func pointRemoteSessionTokenEndpoint(t *testing.T, ctx context.Context, ti *test
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rows)
+}
+
+// Shared issuers mint both refreshable and access-only resource tokens. The
+// challenge must use stored issuance policy on both cache misses and hits.
+func TestServePublic_SharedSessionReconnectUsesIssuancePolicy(t *testing.T) {
+	t.Parallel()
+	sum := sha256.Sum256([]byte("test-refresh"))
+	for _, tc := range []struct {
+		name        string
+		hash        pgtype.Text
+		refreshable bool
+	}{
+		{"refreshable", conv.ToPGText(base64.RawURLEncoding.EncodeToString(sum[:])), true},
+		{"id-jag", conv.ToPGText("id-jag:assertion-session"), false},
+		{"dashboard", conv.ToPGText("dashboard-mint:session"), false},
+		{"without refresh token", pgtype.Text{}, false},
+		{"unknown marker", conv.ToPGText("future:session"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			authCtx := requireProjectAuthContext(t, ctx)
+			fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "shared-policy")
+			setIssuerMode(t, ctx, ti, fixture.UserSessionIssuer.ID, "shared", "")
+			subject := urn.NewUserSubject("shared-policy-user")
+			token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+				Subject: subject, Audience: ti.serverURL.JoinPath("mcp", fixture.Toolset.McpSlug.String).String(),
+				Issuer: ti.serverURL.String() + "/oauth/usi/" + fixture.UserSessionIssuer.ID.String(), Lifetime: time.Hour,
+			})
+			require.NoError(t, err)
+			now := time.Now()
+			_, err = usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{
+				UserSessionIssuerID: fixture.UserSessionIssuer.ID, SubjectUrn: subject, Jti: jti,
+				RefreshTokenHash: tc.hash, ExpiresAt: conv.ToPGTimestamptz(now.Add(time.Hour)),
+				RefreshExpiresAt: conv.ToPGTimestamptz(now.Add(time.Hour)),
+			})
+			require.NoError(t, err)
+			for range 2 {
+				w, err := servePublicHTTP(t, t.Context(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), token, nil)
+				require.Equal(t, reconnectDescription, requireOopsCode(t, err, oops.CodeUnauthorized))
+				challenge := w.Header().Get("WWW-Authenticate")
+				if tc.refreshable {
+					require.Contains(t, challenge, `error="invalid_token"`)
+				} else {
+					require.NotContains(t, challenge, "error=")
+				}
+			}
+		})
+	}
 }

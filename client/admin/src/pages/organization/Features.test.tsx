@@ -32,7 +32,6 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 
 const ORG = anOrganization();
 const FEATURES: ProductFeatures = {
-  automaticRoleDistribution: false,
   aiPlatformPushIntegrationsEnabled: false,
   authzChallengeLoggingEnabled: true,
   consentToolFilteringEnabled: false,
@@ -49,6 +48,7 @@ const FEATURES: ProductFeatures = {
   scimEnabled: false,
   sessionCaptureEnabled: false,
   sessionPortabilityEnabled: false,
+  signalsIntelligenceEnabled: false,
   skillCaptureMetadataOnly: false,
   skillsEnabled: true,
   ssoEnabled: true,
@@ -56,7 +56,6 @@ const FEATURES: ProductFeatures = {
 };
 
 const FEATURES_RESPONSE = {
-  automatic_role_distribution: false,
   ai_platform_push_integrations_enabled: false,
   authz_challenge_logging_enabled: true,
   consent_tool_filtering_enabled: false,
@@ -73,6 +72,7 @@ const FEATURES_RESPONSE = {
   scim_enabled: false,
   session_capture_enabled: false,
   session_portability_enabled: false,
+  signals_intelligence_enabled: false,
   skill_capture_metadata_only: false,
   skills_enabled: true,
   sso_enabled: true,
@@ -80,11 +80,6 @@ const FEATURES_RESPONSE = {
 };
 
 const TOGGLE_FEATURES = [
-  {
-    featureName: "automatic-role-distribution",
-    enabledKey: "automaticRoleDistribution",
-    label: "Automatic role distribution",
-  },
   {
     featureName: "ai_platform_push_integrations",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
@@ -124,6 +119,11 @@ const TOGGLE_FEATURES = [
     featureName: "session_portability",
     enabledKey: "sessionPortabilityEnabled",
     label: "Session Portability",
+  },
+  {
+    featureName: "signals_intelligence",
+    enabledKey: "signalsIntelligenceEnabled",
+    label: "Signals Intelligence",
   },
   { featureName: "sso", enabledKey: "ssoEnabled", label: "SSO" },
   { featureName: "scim", enabledKey: "scimEnabled", label: "SCIM" },
@@ -186,10 +186,7 @@ beforeEach(() => {
       enabled: boolean;
       feature_name: string;
     };
-    const responseKey =
-      body.feature_name === "automatic-role-distribution"
-        ? "automatic_role_distribution"
-        : `${body.feature_name}_enabled`;
+    const responseKey = `${body.feature_name}_enabled`;
     return jsonResponse({
       ...FEATURES_RESPONSE,
       [responseKey]: body.enabled,

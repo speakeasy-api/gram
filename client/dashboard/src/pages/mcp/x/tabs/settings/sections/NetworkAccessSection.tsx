@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { Stack } from "@/components/ui/Stack";
 import { useOrganization } from "@/contexts/Auth";
 import {
   endpointUsesPrivateIngress,
@@ -106,7 +107,7 @@ export function NetworkAccessSection({
     return null;
   }
 
-  return (
+  const section = (
     <NetworkAccessSectionContent
       server={mcpServer ?? metaMcpServer}
       mcpServer={mcpServer}
@@ -116,6 +117,16 @@ export function NetworkAccessSection({
       canReadIngress={canManageIngress}
     />
   );
+
+  if (toolset) {
+    return (
+      <Stack gap={0} className="mb-8">
+        {section}
+      </Stack>
+    );
+  }
+
+  return section;
 }
 
 function hostedToolsetEndpoint(

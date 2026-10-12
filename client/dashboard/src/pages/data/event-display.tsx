@@ -15,7 +15,7 @@ export function EventKindBadge({
   );
 }
 
-// Sources canonicalized from Gram's own services (e.g. gram-server) carry the
+// Sources canonicalized from Speakeasy's own services (e.g. gram-server) carry the
 // Speakeasy mark; everything else routes through the shared agent-provider
 // icon set (claude-code, litellm, ...), which falls back to a globe. The
 // match is exact-or-hyphenated so unrelated services that merely start with

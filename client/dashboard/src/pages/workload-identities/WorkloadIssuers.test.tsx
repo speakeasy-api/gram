@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { WorkloadIssuersPage } from "./WorkloadIssuers";
+import { claudeTagPlatform } from "./setup/catalogFixture";
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -35,6 +36,7 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     workloadIssuers: {
       issuerDetail: { href: (id: string) => `/access-hub/${id}` },
+      catalogPlatform: { href: (key: string) => `/access-hub/catalog/${key}` },
     },
   }),
 }));
@@ -69,6 +71,22 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
   }),
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
+vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
+  useWorkloadPlatforms: () => ({
+    data: { platforms: [claudeTagPlatform] },
+    isPending: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/workloadCustomFlows.js", async () => {
+  const { customFlows } = await import("./custom/customFlowsFixture");
+  return {
+    useWorkloadCustomFlows: () => ({
+      data: customFlows,
+      isPending: false,
+      isError: false,
+    }),
+  };
+});
 vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
   useRegisterWorkloadIssuerMutation: () => ({
     mutate: vi.fn(),
@@ -194,11 +212,28 @@ it("leaves the issuer and keys URLs to the platform's own page", () => {
   }
 });
 
-it("opens on the catalog, which is empty until presets exist", () => {
+it("opens on the catalog, offering platforms not yet trusted", () => {
   renderPageOnCatalog();
 
   // Catalog leads: an operator arrives asking which platform they are
   // connecting, so presets are the first thing shown.
-  expect(screen.getByText("No catalog platforms yet")).toBeTruthy();
-  expect(screen.queryAllByRole("link")).toHaveLength(0);
+  expect(screen.getByText("Claude Tag")).toBeTruthy();
+  expect(screen.getByText("Set up")).toBeTruthy();
+  expect(screen.queryByText("Connected")).toBeNull();
+  expect(screen.getByRole("link").getAttribute("href")).toBe(
+    "/access-hub/catalog/claude-tag",
+  );
+});
+
+it("offers hand registration only on the Custom tab", () => {
+  renderPageOnCatalog();
+  expect(
+    screen.queryByRole("button", { name: "Register new access" }),
+  ).toBeNull();
+
+  cleanup();
+  renderPage();
+  expect(
+    screen.getByRole("button", { name: "Register new access" }),
+  ).toBeTruthy();
 });

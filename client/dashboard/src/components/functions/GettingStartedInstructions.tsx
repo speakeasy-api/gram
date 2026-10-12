@@ -5,16 +5,20 @@ import { Stack } from "@/components/ui/Stack";
 export function GettingStartedInstructions(): JSX.Element {
   const commands = [
     {
+      label: "Install the Speakeasy CLI",
+      command: "brew install speakeasy-api/tap/cli",
+    },
+    {
       label: "Create a new function project",
-      command: "npm create @gram-ai/function@latest",
+      command: "speakeasy functions init",
     },
     {
       label: "Build your functions",
-      command: "npm run build",
+      command: "speakeasy functions build",
     },
     {
       label: "Deploy your functions",
-      command: "npm run push",
+      command: "speakeasy functions push",
     },
   ];
 

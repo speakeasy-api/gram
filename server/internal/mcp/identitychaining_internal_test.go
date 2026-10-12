@@ -219,3 +219,25 @@ func TestMetaMemberChainer_TunneledMemberRoutesByOwnIssuer(t *testing.T) {
 	require.Empty(t, token)
 	require.Len(t, chainer.requests, 1, "a tunnel without a derived issuer never chains")
 }
+
+func TestUpstreamTokenPresent_SelfCredential(t *testing.T) {
+	t.Parallel()
+
+	issuer := uuid.New()
+	tokens := map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer: {Token: "self-token", CredentialOwner: remotesessions.CredentialOwnerSelf},
+	}
+	require.True(t, upstreamTokenPresent(tokens, "https://upstream.example.test/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true}))
+	require.False(t, upstreamTokenPresent(tokens, "https://upstream.example.test/mcp", false, uuid.NullUUID{UUID: uuid.New(), Valid: true}))
+
+	unavailable := map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer: {CredentialOwner: remotesessions.CredentialOwnerSelf, ClientCredentialErr: remotesessions.ErrClientCredentialMisconfigured},
+	}
+	require.True(t, upstreamTokenPresent(unavailable, "https://upstream.example.test/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true}), "routing must report the failure rather than chain around it")
+
+	audienceBound := map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer: {Token: "self-token", Resource: "https://upstream.example.test/mcp/", CredentialOwner: remotesessions.CredentialOwnerSelf},
+	}
+	require.True(t, upstreamTokenPresent(audienceBound, "https://upstream.example.test/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true}), "a self credential requested for this upstream is present")
+	require.False(t, upstreamTokenPresent(audienceBound, "https://sibling.example.test/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true}), "a self credential requested for a sibling upstream is not")
+}

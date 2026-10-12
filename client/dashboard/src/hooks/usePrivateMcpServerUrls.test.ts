@@ -105,7 +105,7 @@ describe("privateMcpEndpointUrls", () => {
 });
 
 describe("privateMcpInstallPageUrls", () => {
-  it("hosts private install pages on Gram instead of the tailnet", () => {
+  it("hosts private install pages on Speakeasy instead of the tailnet", () => {
     expect(privateMcpInstallPageUrls(onlineIngress, endpoints)).toEqual([
       "https://api.example.com/mcp/platform-server/install?network=private",
     ]);

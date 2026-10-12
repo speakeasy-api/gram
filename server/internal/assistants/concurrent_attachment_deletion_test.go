@@ -12,8 +12,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -30,10 +30,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				svc, ctx, projectID, conn := newRBACServiceWithConn(t, "deletion_waits_"+kind+"_"+mutation)
 				ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 				defer cancel()
-				ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
-					Scope:    authz.ScopeProjectWrite,
-					Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
-				})
+				ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 				ts, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 					OrganizationID: "org-test", ProjectID: projectID, Name: "Example tools", Slug: "example-tools",
 					McpSlug: pgtype.Text{String: "example-tools-endpoint", Valid: true}, McpEnabled: true,
@@ -147,7 +144,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					require.NoError(t, err)
 				}
 				id := uuid.MustParse(assistantID)
-				require.NoError(t, writeAssistantToolsets(ctx, tx, id, projectID, resolved))
+				require.NoError(t, writeAssistantToolsets(ctx, tx, newTestAuditLogger(), hostedmcp.Actor{UserID: "user-test", Email: nil}, id, projectID, resolved))
 				require.NoError(t, writeAssistantMcpServers(ctx, tx, id, projectID, resolvedServers))
 				counts, err := testrepo.New(tx).CountAssistantAttachments(ctx, testrepo.CountAssistantAttachmentsParams{
 					ProjectID: projectID, AssistantID: id,

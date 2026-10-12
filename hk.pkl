@@ -91,7 +91,13 @@ hooks {
   ["pre-commit"] {
     fix = true
     stash = "git"
-    steps = linters
+    steps = (linters) {
+      // Diff-based, so it only makes sense against the staged change. CI runs
+      // the same task against the PR merge base.
+      ["brand"] {
+        check = "mise run -q lint:brand --staged"
+      }
+    }
   }
   ["fix"] {
     fix = true

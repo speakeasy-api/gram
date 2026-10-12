@@ -86,15 +86,21 @@ func TestSupportedSetsReturnCopies(t *testing.T) {
 	require.Equal(t, mcpversions.Version20250326, mcpversions.SupportedConsentToolset()[0], "SupportedConsentToolset must not hand out a mutable view of package state")
 }
 
-// TestSupportedSetsExclude20260728 pins the current ceiling: advertising
-// 2026-07-28 is its own project, and adding it to a set is the entire
-// behavioral switch for that work — it must not happen by accident.
-func TestSupportedSetsExclude20260728(t *testing.T) {
+// TestSupportedSetsAdvertise20260728 pins which surfaces serve 2026-07-28.
+// Adding a revision to a set is the entire behavioral switch for that
+// revision on that surface, so the sets must not move by accident. The
+// consent surface stays on the handshake revisions: its pinned client opens
+// with initialize and its server implements no 2026-07-28 method.
+func TestSupportedSetsAdvertise20260728(t *testing.T) {
 	t.Parallel()
 
-	require.NotContains(t, mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
-	require.NotContains(t, mcpversions.SupportedPlatformToolset(), mcpversions.Version20260728)
-	require.NotContains(t, mcpversions.SupportedMetaServer(), mcpversions.Version20260728)
+	for _, supported := range [][]string{
+		mcpversions.SupportedHostedToolset(),
+		mcpversions.SupportedPlatformToolset(),
+		mcpversions.SupportedMetaServer(),
+	} {
+		require.Equal(t, mcpversions.Version20260728, supported[len(supported)-1])
+	}
 	require.NotContains(t, mcpversions.SupportedConsentToolset(), mcpversions.Version20260728)
 }
 
@@ -112,6 +118,9 @@ func TestNegotiateEchoesEverySupportedVersion(t *testing.T) {
 
 	supported := mcpversions.SupportedHostedToolset()
 	for _, v := range supported {
+		if !mcpversions.DefinesMethod(mcpversions.MethodInitialize, v) {
+			continue
+		}
 		require.Equal(t, v, negotiate(t, v, supported))
 	}
 }
@@ -131,10 +140,10 @@ func TestNegotiateAnswersUnsupportedWithTheNewestSupported(t *testing.T) {
 
 	supported := mcpversions.SupportedHostedToolset()
 
-	// The expected value is pinned rather than derived from the set, so
-	// raising the ceiling breaks this test and forces choosing new out-of-set
-	// inputs that keep the fallback arm exercised.
-	require.Equal(t, mcpversions.Version20251125, negotiate(t, mcpversions.Version20260728, supported), "known but unsupported")
+	// The expected value is pinned rather than derived from the set: it is
+	// the newest revision defining initialize, which answers any proposal
+	// outside the handshake revisions.
+	require.Equal(t, mcpversions.Version20251125, negotiate(t, mcpversions.Version20260728, supported), "supported but without initialize")
 	require.Equal(t, mcpversions.Version20251125, negotiate(t, "1999-12-31", supported), "well-formed but unrecognized")
 	require.Equal(t, mcpversions.Version20251125, negotiate(t, "garbage", supported), "not a version at all")
 }
@@ -173,8 +182,12 @@ func TestResolveDefaultsAnAbsentDeclaration(t *testing.T) {
 func TestResolveDefaultsAnUnsupportedDeclaration(t *testing.T) {
 	t.Parallel()
 
-	got := mcpversions.Resolve(mcpversions.Version20260728, mcpversions.SupportedHostedToolset())
-	require.Equal(t, mcpversions.Version20260728, got.Declared)
+	got := mcpversions.Resolve(mcpversions.Version20260728, mcpversions.SupportedConsentToolset())
+	require.Equal(t, mcpversions.Version20260728, got.Declared, "known but unsupported")
+	require.Equal(t, mcpversions.DefaultInEffect, got.InEffect)
+
+	got = mcpversions.Resolve("2099-01-01", mcpversions.SupportedHostedToolset())
+	require.Equal(t, "2099-01-01", got.Declared, "well-formed but unrecognized")
 	require.Equal(t, mcpversions.DefaultInEffect, got.InEffect)
 }
 
@@ -283,14 +296,12 @@ func TestSanitizePreservesUnknownButWellFormedValues(t *testing.T) {
 }
 
 // TestSupportedMetaServerSpansFloorToCeiling pins the meta surface's range
-// to the hosted surface's: same installed base, same 2025-11-25 ceiling
-// until the 2026-07-28 integration completes everywhere at once.
+// to the hosted surface's: same installed base of ordinary MCP clients, same
+// floor and ceiling.
 func TestSupportedMetaServerSpansFloorToCeiling(t *testing.T) {
 	t.Parallel()
 
-	set := mcpversions.SupportedMetaServer()
-	require.Equal(t, mcpversions.Version20241105, set[0])
-	require.Equal(t, mcpversions.Version20251125, set[len(set)-1])
+	require.Equal(t, mcpversions.SupportedHostedToolset(), mcpversions.SupportedMetaServer())
 
 	mcpversions.SupportedMetaServer()[0] = "mutated"
 	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedMetaServer()[0], "SupportedMetaServer must not hand out a mutable view of package state")
@@ -335,31 +346,9 @@ func TestAtLeast_SplitsAtTheStatelessBoundary(t *testing.T) {
 	}
 }
 
-// TestAtLeast_NoSupportedSetIsModernYet records that every
-// revision-conditional branch keyed on the 2026-07-28 boundary is unreachable
-// in production until a surface advertises that revision, and fails the day one
-// does, which is when those branches need their own end-to-end coverage.
-func TestAtLeast_NoSupportedSetIsModernYet(t *testing.T) {
-	t.Parallel()
-
-	for _, supported := range [][]string{
-		mcpversions.SupportedHostedToolset(),
-		mcpversions.SupportedPlatformToolset(),
-		mcpversions.SupportedMetaServer(),
-		mcpversions.SupportedConsentToolset(),
-	} {
-		for _, v := range supported {
-			require.Falsef(t, mcpversions.AtLeast(v, mcpversions.Version20260728),
-				"revision %s is now served, so the version-conditional wire behavior it gates is reachable for the first time. "+
-					"That behavior currently has unit coverage only: give the modern error codes and HTTP statuses end-to-end "+
-					"coverage on every surface, then delete this test.", v)
-		}
-	}
-}
-
 func TestNegotiateSkipsRevisionsWithoutInitialize(t *testing.T) {
 	t.Parallel()
-	supported := append(mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
+	supported := mcpversions.SupportedHostedToolset()
 	for _, tc := range []struct{ requested, want string }{
 		{"", mcpversions.DefaultInEffect},
 		{mcpversions.Version20241105, mcpversions.Version20241105},

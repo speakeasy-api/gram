@@ -1071,6 +1071,43 @@ func BuildListAudienceOptionsPayload(accessListAudienceOptionsApikeyToken string
 	return v, nil
 }
 
+// BuildExplainResourceAccessPayload builds the payload for the access
+// explainResourceAccess endpoint from CLI flags.
+func BuildExplainResourceAccessPayload(accessExplainResourceAccessResourceKind string, accessExplainResourceAccessResourceID string, accessExplainResourceAccessUserID string, accessExplainResourceAccessSessionToken string) (*access.ExplainResourceAccessPayload, error) {
+	var err error
+	var resourceKind string
+	{
+		resourceKind = accessExplainResourceAccessResourceKind
+		if !(resourceKind == "mcp") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("resource_kind", resourceKind, []any{"mcp"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var resourceID string
+	{
+		resourceID = accessExplainResourceAccessResourceID
+	}
+	var userID string
+	{
+		userID = accessExplainResourceAccessUserID
+	}
+	var sessionToken *string
+	{
+		if accessExplainResourceAccessSessionToken != "" {
+			sessionToken = &accessExplainResourceAccessSessionToken
+		}
+	}
+	v := &access.ExplainResourceAccessPayload{}
+	v.ResourceKind = resourceKind
+	v.ResourceID = resourceID
+	v.UserID = userID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildRequestAccessPayload builds the payload for the access requestAccess
 // endpoint from CLI flags.
 func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {

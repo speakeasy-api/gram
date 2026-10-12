@@ -38,7 +38,7 @@ func NewAccessRoleAssignmentReceiptStore(db *pgxpool.Pool) *AccessRoleAssignment
 	return &AccessRoleAssignmentReceiptStore{db: db, now: time.Now}
 }
 
-func (s *AccessRoleAssignmentReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedAccessRoleAssignment, mutate AccessRoleAssignmentTransaction) (OperationReceipt, error) {
+func (s *AccessRoleAssignmentReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedAccessRoleAssignment, charge func(context.Context) error, mutate AccessRoleAssignmentTransaction) (OperationReceipt, error) {
 	if s == nil || s.db == nil || s.now == nil || mutate == nil || idempotencyKey == "" || len(idempotencyKey) > 128 {
 		return OperationReceipt{}, accessRoleMutationInvalid("The access role assignment receipt request is invalid.")
 	}
@@ -47,7 +47,7 @@ func (s *AccessRoleAssignmentReceiptStore) Execute(ctx context.Context, principa
 		return OperationReceipt{}, accessRoleMutationInvalid("The access role assignment could not be normalized.")
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-access-role-assignment-v1\x00"), payload...))
-	return executeMutationReceipt(ctx, mutationReceiptExecution[AccessRoleAssignmentReceiptResult]{
+	return executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[AccessRoleAssignmentReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationAssignMCPAccessRole,
 		IdempotencyKey: idempotencyKey, InputHash: hex.EncodeToString(digest[:]), Label: "access role assignment",
 		Invalid: func(cause error) error {

@@ -510,6 +510,40 @@ describe("review panel", () => {
     );
   });
 
+  it("prefills an unconfirmed server with its authorization server issuer", () => {
+    availableApp();
+    show([
+      {
+        ...row(0),
+        authorizationServerIssuer: "https://auth.example.com",
+      },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Review setup" }));
+    expect(issuerInput().value).toBe("https://auth.example.com");
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps the saved audience over the issuer and ignores an unusable issuer", () => {
+    availableApp();
+    show([
+      savedRow(0, { authorizationServerIssuer: "https://auth.example.com" }),
+      {
+        ...row(1),
+        resourceIndicator: "https://other.example.com",
+        authorizationServerIssuer: "http://insecure.example.com",
+      },
+    ]);
+    const rows = screen.getAllByRole("row");
+    fireEvent.click(
+      within(rows[1]!).getByRole("button", { name: "Review / edit" }),
+    );
+    expect(issuerInput().value).toBe("https://issuer.example.com/saved");
+    fireEvent.click(
+      within(rows[2]!).getByRole("button", { name: "Review setup" }),
+    );
+    expect(issuerInput().value).toBe("");
+  });
+
   it("does not prefill another server from a cleared snapshot with the same resource", () => {
     availableApp();
     const first = confirmedRow();
