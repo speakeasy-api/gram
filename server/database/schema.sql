@@ -2205,6 +2205,10 @@ CREATE TABLE IF NOT EXISTS json_web_keys (
   activated_at timestamptz,
   retired_at timestamptz,
   revoked_at timestamptz,
+  -- Set once a revoked Speakeasy-managed key's KMS version is disabled and its
+  -- signer grant removed. NULL on a revoked internal session issuer key means
+  -- that cleanup is still pending and the sweep retries it.
+  kms_disabled_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,

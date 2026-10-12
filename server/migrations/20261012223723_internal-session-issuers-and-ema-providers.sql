@@ -1,3 +1,5 @@
+-- Modify "json_web_keys" table
+ALTER TABLE "json_web_keys" ADD COLUMN "kms_disabled_at" timestamptz NULL;
 -- Create "internal_session_issuers" table
 CREATE TABLE "internal_session_issuers" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
