@@ -51,7 +51,7 @@ func TestCheckoutCommitReadsHeadAndUncommittedCode(t *testing.T) {
 	dir := benchRepo(t)
 	clean, err := checkoutCommit(t.Context(), dir)
 	require.NoError(t, err)
-	require.Equal(t, runCommit{SHA: strings.TrimSpace(runGit(t, dir, "rev-parse", "HEAD")), Subject: "chore: first", Uncommitted: ""}, clean)
+	require.Equal(t, runCommit{SHA: strings.TrimSpace(runGit(t, dir, "rev-parse", "HEAD")), Subject: "chore: first", Uncommitted: false}, clean)
 
 	tests := []struct {
 		name        string
@@ -72,50 +72,9 @@ func TestCheckoutCommitReadsHeadAndUncommittedCode(t *testing.T) {
 			got, err := checkoutCommit(t.Context(), dir)
 			require.NoError(t, err)
 			require.Equal(t, strings.TrimSpace(runGit(t, dir, "rev-parse", "HEAD")), got.SHA)
-			require.Equal(t, tc.uncommitted, got.Uncommitted != "")
+			require.Equal(t, tc.uncommitted, got.Uncommitted)
 		})
 	}
-}
-
-func TestCheckoutCommitTellsUncommittedChangesApart(t *testing.T) {
-	t.Parallel()
-
-	dir := benchRepo(t)
-	writeRepoFile(t, dir, "server/main.go", "package main\n\nfunc a() {}\n")
-	first, err := checkoutCommit(t.Context(), dir)
-	require.NoError(t, err)
-	writeRepoFile(t, dir, "server/main.go", "package main\n\nfunc b() {}\n")
-	second, err := checkoutCommit(t.Context(), dir)
-	require.NoError(t, err)
-	require.Len(t, first.Uncommitted, uncommittedHexLen)
-	require.Equal(t, first.SHA, second.SHA)
-	require.False(t, first.sameCode(second), "another uncommitted edit is other code")
-}
-
-func TestCheckoutCommitHashesAnUntrackedSymlinkByItsTarget(t *testing.T) {
-	t.Parallel()
-
-	dir := benchRepo(t)
-	outside := t.TempDir()
-	secret := filepath.Join(outside, "secret")
-	require.NoError(t, os.WriteFile(secret, []byte("v1"), 0o600))
-	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "server", "dir-link")))
-	require.NoError(t, os.Symlink(secret, filepath.Join(dir, "server", "file-link")))
-	linked, err := checkoutCommit(t.Context(), dir)
-	require.NoError(t, err, "a symlink to a directory must not stop the run")
-	require.NotEmpty(t, linked.Uncommitted)
-
-	require.NoError(t, os.WriteFile(secret, []byte("v2"), 0o600))
-	edited, err := checkoutCommit(t.Context(), dir)
-	require.NoError(t, err)
-	require.Equal(t, linked, edited, "a symlink counts by its target path, not the file it points to")
-
-	link := filepath.Join(dir, "server", "file-link")
-	require.NoError(t, os.Remove(link))
-	require.NoError(t, os.Symlink(filepath.Join(outside, "other"), link))
-	retargeted, err := checkoutCommit(t.Context(), dir)
-	require.NoError(t, err)
-	require.NotEqual(t, linked.Uncommitted, retargeted.Uncommitted, "a new target path is other code")
 }
 
 // startRun makes a run of commit that started at started.
@@ -132,25 +91,25 @@ func TestPickRunDirStartsANewRunUnlessResuming(t *testing.T) {
 
 	runs := filepath.Join(t.TempDir(), "runs")
 	start := time.Date(2026, 10, 12, 15, 30, 0, 0, time.UTC)
-	edited := runCommit{SHA: mainCommit.SHA, Subject: mainCommit.Subject, Uncommitted: "9f8e7d6c"}
+	edited := runCommit{SHA: mainCommit.SHA, Subject: mainCommit.Subject, Uncommitted: true}
 
 	first := startRun(t, runs, mainCommit, start)
 	second := startRun(t, runs, mainCommit, start)
 	require.NotEqual(t, first, second, "every run gets its own directory, even at the same instant")
 	require.True(t, strings.HasPrefix(filepath.Base(first), "20261012T153000.000000000Z-"))
 
-	latest := startRun(t, runs, mainCommit, start.Add(time.Millisecond))
-	other := startRun(t, runs, fixtureCommit, start.Add(time.Hour))
-	startRun(t, runs, edited, start.Add(2*time.Hour))
+	startRun(t, runs, mainCommit, start.Add(time.Millisecond))
+	latest := startRun(t, runs, edited, start.Add(time.Hour))
+	other := startRun(t, runs, fixtureCommit, start.Add(2*time.Hour))
 
 	resumed, err := pickRunDir(runs, mainCommit, true, start.Add(3*time.Hour))
 	require.NoError(t, err)
-	require.Equal(t, latest, resumed, "resuming skips newer runs of other code")
+	require.Equal(t, latest, resumed, "resuming skips newer runs of other commits and ignores uncommitted changes")
 	resumedOther, err := pickRunDir(runs, fixtureCommit, true, start.Add(3*time.Hour))
 	require.NoError(t, err)
 	require.Equal(t, other, resumedOther)
 
-	unknown := runCommit{SHA: "0000000000aa", Subject: "chore: never run", Uncommitted: ""}
+	unknown := runCommit{SHA: "0000000000aa", Subject: "chore: never run", Uncommitted: false}
 	fresh, err := pickRunDir(runs, unknown, true, start.Add(4*time.Hour))
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(filepath.Base(fresh), "20261012T193000.000000000Z-"), "resuming code that never ran starts a new run")
@@ -164,16 +123,16 @@ func TestPickRunDirStopsAtAnUnreadableManifest(t *testing.T) {
 	startRun(t, runs, mainCommit, start)
 	broken := startRun(t, runs, mainCommit, start.Add(time.Minute))
 	require.NoError(t, os.WriteFile(filepath.Join(broken, manifestFile), []byte(`{"commit": {`), 0o600))
-	_, err := os.MkdirTemp(runs, start.Add(time.Hour).Format(runIDLayout)+"-")
-	require.NoError(t, err, "a run still being claimed has no manifest yet")
+	claiming := filepath.Join(runs, start.Add(time.Hour).Format(runIDLayout)+"-claiming")
+	require.NoError(t, os.Mkdir(claiming, 0o750), "a run still being claimed has no manifest yet")
 
-	_, err = pickRunDir(runs, mainCommit, true, start.Add(2*time.Hour))
+	_, err := pickRunDir(runs, mainCommit, true, start.Add(2*time.Hour))
 	require.ErrorContains(t, err, "parse run manifest", "resuming must not skip past the broken latest run to an older one")
 }
 
 func TestRunCommitName(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "1a2b3c4d5e", runCommit{SHA: "1a2b3c4d5e6f7a8b", Subject: "", Uncommitted: ""}.name())
-	require.Equal(t, "1a2b3c4d5e + uncommitted", runCommit{SHA: "1a2b3c4d5e6f7a8b", Subject: "", Uncommitted: "9f8e7d6c"}.name())
+	require.Equal(t, "1a2b3c4d5e", runCommit{SHA: "1a2b3c4d5e6f7a8b", Subject: "", Uncommitted: false}.name())
+	require.Equal(t, "1a2b3c4d5e + uncommitted", runCommit{SHA: "1a2b3c4d5e6f7a8b", Subject: "", Uncommitted: true}.name())
 }

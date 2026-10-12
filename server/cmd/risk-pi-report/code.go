@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -15,20 +13,16 @@ import (
 )
 
 const (
-	// fixturesPath holds the fixtures. An uncommitted fixture edit leaves the
-	// measured code unchanged, so a resumed run scores just the edited cases.
+	// fixturesPath holds the fixtures. Editing them does not mark a checkout
+	// as uncommitted.
 	fixturesPath = "server/internal/scanners/promptinjection/testdata"
-
-	// uncommittedHexLen is the length of an uncommitted change's hash.
-	uncommittedHexLen = 8
 
 	// runIDLayout starts a run's directory name with its start time, to the
 	// nanosecond and fixed width, so runs sort oldest first.
 	runIDLayout = "20060102T150405.000000000Z"
 )
 
-// runCommit is the code a run measured: a commit, plus any change the
-// checkout had outside the fixtures that the commit lacks.
+// runCommit is the commit a run measured.
 type runCommit struct {
 	// SHA is the commit's full hash.
 	SHA string `json:"sha"`
@@ -36,15 +30,9 @@ type runCommit struct {
 	// Subject is the commit's subject line.
 	Subject string `json:"subject"`
 
-	// Uncommitted hashes the checkout's changes outside the fixtures that the
-	// commit lacks; empty for a clean checkout.
-	Uncommitted string `json:"uncommitted,omitempty"`
-}
-
-// sameCode reports whether c and other are the same code. The subject only
-// labels a commit.
-func (c runCommit) sameCode(other runCommit) bool {
-	return c.SHA == other.SHA && c.Uncommitted == other.Uncommitted
+	// Uncommitted reports that the checkout had changes outside the fixtures
+	// that the commit lacks. It only labels the run; resuming ignores it.
+	Uncommitted bool `json:"uncommitted,omitempty"`
 }
 
 // name is how progress lines refer to the run: the commit's short hash,
@@ -54,7 +42,7 @@ func (c runCommit) name() string {
 	if len(name) > 10 {
 		name = name[:10]
 	}
-	if c.Uncommitted != "" {
+	if c.Uncommitted {
 		name += " + uncommitted"
 	}
 	return name
@@ -74,74 +62,13 @@ func checkoutCommit(ctx context.Context, dir string) (runCommit, error) {
 	if err != nil {
 		return commit, err
 	}
-	uncommitted, err := uncommittedCode(ctx, root)
+	status, err := git(ctx, root, "status", "--porcelain", "--", ".", ":(exclude)"+fixturesPath)
 	if err != nil {
 		return commit, err
 	}
 	commit.SHA, commit.Subject, _ = strings.Cut(strings.TrimSpace(head), "\x00")
-	if uncommitted != nil {
-		commit.Uncommitted = fmt.Sprintf("%x", sha256.Sum256(uncommitted))[:uncommittedHexLen]
-	}
+	commit.Uncommitted = strings.TrimSpace(status) != ""
 	return commit, nil
-}
-
-// uncommittedCode returns the checkout's changes outside the fixtures that
-// HEAD lacks: the diff of tracked files, and the name and content hash of
-// each untracked file. It returns nil for a clean checkout.
-func uncommittedCode(ctx context.Context, root string) ([]byte, error) {
-	exclude := ":(exclude)" + fixturesPath
-	diff, err := git(ctx, root, "diff", "--binary", "--no-color", "--no-ext-diff", "HEAD", "--", ".", exclude)
-	if err != nil {
-		return nil, err
-	}
-	untracked, err := git(ctx, root, "ls-files", "-z", "--others", "--exclude-standard", "--", ".", exclude)
-	if err != nil {
-		return nil, err
-	}
-	var changes bytes.Buffer
-	changes.WriteString(diff)
-	for name := range strings.SplitSeq(untracked, "\x00") {
-		if name == "" {
-			continue
-		}
-		content, err := untrackedContent(filepath.Join(root, name))
-		if err != nil {
-			return nil, err
-		}
-		sum := sha256.Sum256(content)
-		changes.WriteString(name)
-		changes.WriteByte(0)
-		changes.Write(sum[:])
-	}
-	if changes.Len() == 0 {
-		return nil, nil
-	}
-	return changes.Bytes(), nil
-}
-
-// untrackedContent is what an untracked path contributes to the uncommitted
-// hash, as git would store it: a symlink's target rather than the file it
-// points to, a nested repository's name only, and a file's bytes.
-func untrackedContent(path string) ([]byte, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return nil, fmt.Errorf("stat untracked file: %w", err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		target, err := os.Readlink(path)
-		if err != nil {
-			return nil, fmt.Errorf("read untracked symlink: %w", err)
-		}
-		return []byte(target), nil
-	}
-	if info.IsDir() {
-		return nil, nil
-	}
-	content, err := os.ReadFile(path) // #nosec G304 -- git lists the file inside the checkout.
-	if err != nil {
-		return nil, fmt.Errorf("read untracked file: %w", err)
-	}
-	return content, nil
 }
 
 // git runs a git command in dir, or in the working directory when dir is
@@ -160,8 +87,8 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 }
 
 // pickRunDir returns the run directory to write under runs: a new run, or
-// with resume the most recent run of the same code. Resuming with no such run
-// starts a new one.
+// with resume the most recent run of the same commit. Resuming with no such
+// run starts a new one.
 func pickRunDir(runs string, commit runCommit, resume bool, now time.Time) (string, error) {
 	if !resume {
 		return newRunDir(runs, now)
@@ -191,7 +118,7 @@ func newRunDir(runs string, now time.Time) (string, error) {
 }
 
 // latestRunOf returns the most recently started run under runs that measured
-// commit's code, or empty when there is none. A run without a manifest is
+// commit, or empty when there is none. A run without a manifest is
 // skipped; an unreadable one is an error, so resuming never quietly falls back
 // to an older run.
 func latestRunOf(runs string, commit runCommit) (string, error) {
@@ -215,7 +142,7 @@ func latestRunOf(runs string, commit runCommit) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if manifest.Commit.sameCode(commit) {
+		if manifest.Commit.SHA == commit.SHA {
 			return dir, nil
 		}
 	}
