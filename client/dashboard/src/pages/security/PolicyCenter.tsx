@@ -1840,14 +1840,27 @@ export function ActionPicker({
   setFormAction,
   flagOnlySelected = false,
   mcpScoped = false,
+  pinnedAction,
 }: {
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   flagOnlySelected?: boolean;
   mcpScoped?: boolean;
+  /** Pins the picker to one action and shows `reason` on every other option.
+   *  For policies whose action the server refuses to change at all. */
+  pinnedAction?: { value: PolicyAction; reason: string };
 }): JSX.Element {
+  // A pin means the server refuses any change, so it outranks the source and
+  // scope rules.
+  const disabledReason = (action: PolicyAction): string | undefined =>
+    pinnedAction && action !== pinnedAction.value
+      ? pinnedAction.reason
+      : actionDisabledReason(action, flagOnlySelected, mcpScoped);
+
   let actionValue = formAction;
-  if (flagOnlySelected) {
+  if (pinnedAction) {
+    actionValue = pinnedAction.value;
+  } else if (flagOnlySelected) {
     actionValue = "flag";
   } else if (mcpScoped) {
     actionValue = mcpCompatibleAction(formAction);
@@ -1858,10 +1871,7 @@ export function ActionPicker({
       value={actionValue}
       onValueChange={(value) => {
         const action = value as PolicyAction;
-        if (
-          actionDisabledReason(action, flagOnlySelected, mcpScoped) !==
-          undefined
-        ) {
+        if (disabledReason(action) !== undefined) {
           return;
         }
         setFormAction(action);
@@ -1869,11 +1879,7 @@ export function ActionPicker({
       className="space-y-2.5"
     >
       {ACTION_OPTIONS.map((opt) => {
-        const reason = actionDisabledReason(
-          opt.value,
-          flagOnlySelected,
-          mcpScoped,
-        );
+        const reason = disabledReason(opt.value);
         const disabled = reason !== undefined;
         const selected = actionValue === opt.value;
 
