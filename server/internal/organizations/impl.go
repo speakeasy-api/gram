@@ -1318,7 +1318,7 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		return nil, portalLinkError(intent, err).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
 	}
 	if strings.TrimSpace(link) == "" {
-		return nil, oops.E(oops.CodeGatewayError, nil, "WorkOS did not return a %s setup link. Try again in a few minutes.", portalIntentLabel(intent)).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
+		return nil, oops.E(oops.CodeGatewayError, nil, "%s setup could not be started right now. Try again in a few minutes.", portalIntentLabel(intent)).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
 	}
 
 	return &gen.GenerateWorkOSAdminPortalLinkResult{
@@ -1326,8 +1326,8 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 	}, nil
 }
 
-// portalIntentLabel names an Admin Portal intent the way the dashboard does, so
-// a failure message reads as the thing the admin was trying to set up.
+// portalIntentLabel names an Admin Portal intent as the thing the admin was
+// trying to set up. Capitalized because every message below opens with it.
 func portalIntentLabel(intent workos.PortalIntent) string {
 	switch intent {
 	case workos.PortalIntentDSync:
@@ -1335,21 +1335,27 @@ func portalIntentLabel(intent workos.PortalIntent) string {
 	case workos.PortalIntentSSO:
 		return "Single Sign-On"
 	case workos.PortalIntentDomainVerification:
-		return "domain verification"
+		return "Domain verification"
 	case workos.PortalIntentAuditLogs:
-		return "audit log export"
+		return "Audit log export"
 	case workos.PortalIntentLogStreams:
-		return "log streaming"
+		return "Log streaming"
 	default:
 		return string(intent)
 	}
 }
 
 // portalLinkError turns a failed Admin Portal link request into something the
-// admin can act on. WorkOS's response body is never forwarded — it carries
-// organization identifiers and request detail that belong in our logs, not in
-// a toast — so each outcome is mapped to the next step that unblocks the admin,
-// and an unrecognized one still names a step instead of failing silently.
+// admin can act on.
+//
+// The messages describe the admin's setup and their next step, never our
+// dependency on WorkOS: that it was WorkOS rather than Gram that refused, and
+// whether it refused on credentials or on a missing record, is a distinction
+// only we can act on, and naming it hands the reader a dead end. WorkOS is
+// named in this flow only where the admin's next action is in the WorkOS tab.
+// The failing status still decides which branch runs — it is what separates
+// "wait and retry" from "verify a domain" from "we have to fix this" — and the
+// cause, which carries WorkOS's response body, goes to the log and the span.
 //
 // Only error codes declared in the shared Goa error responses are used: an
 // undeclared code encodes as a bare status the SDK cannot parse, which would
@@ -1359,29 +1365,29 @@ func portalLinkError(intent workos.PortalIntent, cause error) *oops.ShareableErr
 
 	var apiErr *workos.APIError
 	if !errors.As(cause, &apiErr) {
-		return oops.E(oops.CodeGatewayError, cause, "could not reach WorkOS to start %s setup. Try again in a few minutes.", label)
+		return oops.E(oops.CodeGatewayError, cause, "%s setup could not be started right now. Try again in a few minutes.", label)
 	}
 
 	switch {
 	case apiErr.StatusCode == http.StatusNotFound:
-		return oops.E(oops.CodeBadRequest, cause, "this organization no longer exists in WorkOS, so %s setup cannot start. Contact Speakeasy support to relink it.", label)
+		return oops.E(oops.CodeBadRequest, cause, "%s setup is not available for this organization. Contact Speakeasy support.", label)
 	case apiErr.StatusCode == http.StatusUnauthorized, apiErr.StatusCode == http.StatusForbidden:
-		return oops.E(oops.CodeUnexpected, cause, "Speakeasy is not authorized to start %s setup in WorkOS. Contact Speakeasy support.", label)
+		return oops.E(oops.CodeUnexpected, cause, "%s setup could not be started. Contact Speakeasy support.", label)
 	case apiErr.StatusCode == http.StatusTooManyRequests:
-		return oops.E(oops.CodeGatewayError, cause, "WorkOS is rate limiting %s setup. Wait a moment and try again.", label)
+		return oops.E(oops.CodeGatewayError, cause, "Too many %s setup attempts. Wait a minute, then try again.", label)
 	case apiErr.StatusCode >= http.StatusInternalServerError:
-		return oops.E(oops.CodeGatewayError, cause, "WorkOS could not start %s setup right now. Try again in a few minutes.", label)
+		return oops.E(oops.CodeGatewayError, cause, "%s setup could not be started right now. Try again in a few minutes.", label)
 	case apiErr.StatusCode >= http.StatusBadRequest && intent == workos.PortalIntentSSO:
-		// WorkOS refuses an SSO portal session for an organization with no
-		// verified domain, which is the one precondition an admin can clear
-		// without support. No equivalent precondition is established for the
-		// other intents, so they get the generic next step rather than advice
-		// that may send the admin somewhere irrelevant.
-		return oops.E(oops.CodeBadRequest, cause, "WorkOS rejected the %s setup request. Verify a domain for this organization, then try again.", label)
+		// A missing verified domain is the one precondition an admin can clear
+		// without support, and it is the common cause of a refused SSO portal
+		// session. No equivalent precondition is established for the other
+		// intents, so they get the generic next step rather than advice that
+		// may send the admin somewhere irrelevant.
+		return oops.E(oops.CodeBadRequest, cause, "Verify a domain for this organization before setting up %s.", label)
 	case apiErr.StatusCode >= http.StatusBadRequest:
-		return oops.E(oops.CodeBadRequest, cause, "WorkOS rejected the %s setup request. Contact Speakeasy support if it keeps failing.", label)
+		return oops.E(oops.CodeBadRequest, cause, "%s setup could not be started. Contact Speakeasy support if it keeps failing.", label)
 	default:
-		return oops.E(oops.CodeGatewayError, cause, "could not start %s setup. Try again, and contact Speakeasy support if it keeps failing.", label)
+		return oops.E(oops.CodeGatewayError, cause, "%s setup could not be started. Try again, and contact Speakeasy support if it keeps failing.", label)
 	}
 }
 

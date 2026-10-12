@@ -91,7 +91,7 @@ function StatusUnavailableAlert({
       <div className="text-sm">
         <p className="font-medium">Setup status unavailable</p>
         <p className="mt-1">
-          We could not read your identity provider setup from WorkOS, so the
+          We could not check which of these steps are already done, so the
           states below may be out of date.
         </p>
         <Button

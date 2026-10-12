@@ -504,7 +504,7 @@ describe("IdentityProviderStep failure feedback", () => {
 
   it("passes the server's explanation of a refused portal link straight through", () => {
     const message =
-      "WorkOS rejected the Directory Sync setup request. Contact Speakeasy support if it keeps failing.";
+      "Directory Sync setup could not be started. Contact Speakeasy support if it keeps failing.";
     portal.mutate.mockImplementation(() =>
       portal.options?.onError?.(new Error(message)),
     );

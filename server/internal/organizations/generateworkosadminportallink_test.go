@@ -314,6 +314,12 @@ func requirePortalLinkFailure(t *testing.T, err error, code oops.Code, wantMessa
 	require.Equal(t, code, oopsErr.Code)
 	require.Equal(t, wantMessage, oopsErr.Error())
 	require.NotContains(t, oopsErr.Error(), "org_01SECRET", "the WorkOS response body must not reach the client")
+	// These messages reach an admin mid-setup. Which upstream refused, and on
+	// what, is ours to act on, so naming it here only spends the reader's
+	// attention on a dead end. This flow names WorkOS only where the admin's
+	// next action is in the WorkOS tab, and by then we have a link to send
+	// them to — which is exactly what every branch here failed to get.
+	require.NotContains(t, oopsErr.Error(), "WorkOS", "a failure the admin cannot act on must not be explained in terms of our upstream")
 }
 
 func TestService_GenerateWorkOSAdminPortalLink_SSORejectedNeedsVerifiedDomain(t *testing.T) {
@@ -327,7 +333,7 @@ func TestService_GenerateWorkOSAdminPortalLink_SSORejectedNeedsVerifiedDomain(t 
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "sso",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "WorkOS rejected the Single Sign-On setup request. Verify a domain for this organization, then try again.")
+	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "Verify a domain for this organization before setting up Single Sign-On.")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -345,7 +351,7 @@ func TestService_GenerateWorkOSAdminPortalLink_DSyncRejectedKeepsGenericNextStep
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "dsync",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "WorkOS rejected the Directory Sync setup request. Contact Speakeasy support if it keeps failing.")
+	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "Directory Sync setup could not be started. Contact Speakeasy support if it keeps failing.")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -363,7 +369,7 @@ func TestService_GenerateWorkOSAdminPortalLink_DomainVerificationRejectedKeepsGe
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "domain_verification",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "WorkOS rejected the domain verification setup request. Contact Speakeasy support if it keeps failing.")
+	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "Domain verification setup could not be started. Contact Speakeasy support if it keeps failing.")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -379,7 +385,7 @@ func TestService_GenerateWorkOSAdminPortalLink_DSyncOrganizationMissingInWorkOS(
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "dsync",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "this organization no longer exists in WorkOS, so Directory Sync setup cannot start. Contact Speakeasy support to relink it.")
+	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "Directory Sync setup is not available for this organization. Contact Speakeasy support.")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -395,7 +401,7 @@ func TestService_GenerateWorkOSAdminPortalLink_DSyncCredentialsRejected(t *testi
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "dsync",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeUnexpected, "Speakeasy is not authorized to start Directory Sync setup in WorkOS. Contact Speakeasy support.")
+	requirePortalLinkFailure(t, err, oops.CodeUnexpected, "Directory Sync setup could not be started. Contact Speakeasy support.")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -411,7 +417,7 @@ func TestService_GenerateWorkOSAdminPortalLink_DSyncRateLimited(t *testing.T) {
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "dsync",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "WorkOS is rate limiting Directory Sync setup. Wait a moment and try again.")
+	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "Too many Directory Sync setup attempts. Wait a minute, then try again.")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -427,11 +433,15 @@ func TestService_GenerateWorkOSAdminPortalLink_DSyncUpstreamFailure(t *testing.T
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "dsync",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "WorkOS could not start Directory Sync setup right now. Try again in a few minutes.")
+	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "Directory Sync setup could not be started right now. Try again in a few minutes.")
 
 	ti.orgs.AssertExpectations(t)
 }
 
+// Unreachable, a 5xx and a blank link are three different upstream faults and
+// one situation for the admin: nothing they did is wrong and the only move is
+// to wait. They are expected to answer identically; the branches stay separate
+// because the logged cause and the span differ.
 func TestService_GenerateWorkOSAdminPortalLink_DSyncUnreachable(t *testing.T) {
 	t.Parallel()
 
@@ -443,7 +453,7 @@ func TestService_GenerateWorkOSAdminPortalLink_DSyncUnreachable(t *testing.T) {
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "dsync",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "could not reach WorkOS to start Directory Sync setup. Try again in a few minutes.")
+	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "Directory Sync setup could not be started right now. Try again in a few minutes.")
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -461,7 +471,7 @@ func TestService_GenerateWorkOSAdminPortalLink_DSyncBlankLink(t *testing.T) {
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "dsync",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "WorkOS did not return a Directory Sync setup link. Try again in a few minutes.")
+	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "Directory Sync setup could not be started right now. Try again in a few minutes.")
 
 	ti.orgs.AssertExpectations(t)
 }
