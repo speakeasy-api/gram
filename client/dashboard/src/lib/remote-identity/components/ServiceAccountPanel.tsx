@@ -496,7 +496,7 @@ function SigningKeySteps({
             >
               <div className="flex flex-col gap-1">
                 <Text small className="font-medium">
-                  Provider-issued
+                  Provider-created
                 </Text>
                 <Text muted small>
                   You create an app in {providerName}, and {providerName} issues
@@ -506,7 +506,7 @@ function SigningKeySteps({
               </div>
               <div className="flex flex-col gap-1">
                 <Text small className="font-medium">
-                  Speakeasy-issued
+                  Speakeasy-created
                 </Text>
                 <Text muted small>
                   Speakeasy creates the client and publishes a client ID
@@ -526,7 +526,7 @@ function SigningKeySteps({
           disabled={disabled || created !== null}
           className="grid-cols-1 sm:grid-cols-2"
         >
-          <RadioCard value="provider" title="Provider-issued">
+          <RadioCard value="provider" title="Provider-created">
             Create the app in {providerName} first.
           </RadioCard>
           <RadioCard
@@ -534,7 +534,7 @@ function SigningKeySteps({
             disabled
             title={
               <span className="flex flex-wrap items-center gap-2">
-                Speakeasy-issued
+                Speakeasy-created
                 <AvailabilityBadge />
               </span>
             }
