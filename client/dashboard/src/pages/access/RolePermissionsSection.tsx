@@ -65,6 +65,7 @@ function mcpTabLabel(
 export function RolePermissionsSection({
   groups,
   selectedScopes,
+  blockOnlyScopes = new Set(),
   disabled,
   onToggleScope,
   renderScopeRule,
@@ -75,6 +76,12 @@ export function RolePermissionsSection({
 }: {
   groups: ScopeGroup[];
   selectedScopes: Set<string>;
+  /**
+   * Selected permissions the role only takes away. A block is stored as its
+   * own scope (mcp:blocked_read) but edited on its base permission's row, so
+   * without this the row reads as the role granting that permission.
+   */
+  blockOnlyScopes?: ReadonlySet<string>;
   disabled?: boolean;
   onToggleScope: (scope: Scope) => void;
   /** Right-hand side of a row: the rule chips that narrow this permission. */
@@ -207,14 +214,17 @@ export function RolePermissionsSection({
                           </div>
                           {/* A tick marks what the role already has; a
                                 checkbox implied a second, separate state. */}
-                          {selectedScopes.has(scope.slug) && (
-                            <>
-                              {/* cmdk owns aria-selected on its items, so
+                          {/* A block-only permission is not granted yet, so
+                                picking it adds the grant beside the block. */}
+                          {selectedScopes.has(scope.slug) &&
+                            !blockOnlyScopes.has(scope.slug) && (
+                              <>
+                                {/* cmdk owns aria-selected on its items, so
                                     ownership is spoken as text instead. */}
-                              <span className="sr-only">Already added</span>
-                              <Check className="mt-0.5 h-4 w-4 shrink-0" />
-                            </>
-                          )}
+                                <span className="sr-only">Already added</span>
+                                <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                              </>
+                            )}
                         </CommandItem>
                       ))}
                     </CommandGroup>
@@ -263,6 +273,11 @@ export function RolePermissionsSection({
                           >
                             {scope.slug}
                           </Text>
+                          {blockOnlyScopes.has(scope.slug) && (
+                            <Badge variant="destructive" size="sm">
+                              Blocked
+                            </Badge>
+                          )}
                           {markAgentIneligible &&
                             scope.agentEligible === false && (
                               <Badge variant="neutral" size="sm">
@@ -281,25 +296,30 @@ export function RolePermissionsSection({
                             {rule}
                           </div>
                         )}
-                        {MCP_ADMIN_SCOPES.has(scope.slug) && (
-                          <Alert
-                            iconName="lock"
-                            alignTop
-                            className="mt-2 text-xs"
-                          >
-                            Also allows connecting to these servers with every
-                            tool.
-                            {renderMcpAccess &&
-                              " They show as locked on the MCP access tab."}
-                          </Alert>
-                        )}
+                        {MCP_ADMIN_SCOPES.has(scope.slug) &&
+                          !blockOnlyScopes.has(scope.slug) && (
+                            <Alert
+                              iconName="lock"
+                              alignTop
+                              className="mt-2 text-xs"
+                            >
+                              Also allows connecting to these servers with every
+                              tool.
+                              {renderMcpAccess &&
+                                " They show as locked on the MCP access tab."}
+                            </Alert>
+                          )}
                       </div>
                       <Button
                         variant="tertiary"
                         size="sm"
                         disabled={disabled}
                         onClick={() => onToggleScope(scope.slug as Scope)}
-                        aria-label={`Remove ${scope.slug}`}
+                        aria-label={
+                          blockOnlyScopes.has(scope.slug)
+                            ? `Remove block on ${scope.slug}`
+                            : `Remove ${scope.slug}`
+                        }
                       >
                         <Button.LeftIcon>
                           <X className="h-4 w-4" />
