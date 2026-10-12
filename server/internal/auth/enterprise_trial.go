@@ -71,6 +71,12 @@ func (s *Service) armEnterpriseTrialTx(ctx context.Context, tx pgx.Tx, org orgRe
 	return ArmEnterpriseTrialTx(ctx, tx, org, userID, actorEmail, s.trialBundleSeeder, s.auditLogger)
 }
 
+// SetOrganizationFeatureSeederForTest replaces the baseline entitlement seeder.
+// Tests use it to force self-serve trial arming to fail.
+func (s *Service) SetOrganizationFeatureSeederForTest(seeder OrganizationFeatureSeeder) {
+	s.organizationSeeder = seeder
+}
+
 // organizationEligibleForSelfServeTrial reports whether login may grant this
 // organization the same enterprise trial a zero-organization signup receives.
 // Prospects created in the admin app stay behind the book-a-demo gate, and so

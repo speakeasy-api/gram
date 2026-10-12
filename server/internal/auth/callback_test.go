@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -1228,6 +1229,44 @@ func TestCallback_LoginDoesNotArmTrialForPaidOrganization(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, org.Whitelisted)
 	require.Equal(t, "pro", org.GramAccountType)
+}
+
+func TestCallback_LoginContinuesWhenSelfServeTrialArmingFails(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "trial-arm-fails@example.com"
+		organizationID = "org-trial-arm-fails"
+	)
+	userInfo := &MockUserInfo{
+		UserID:        "user_01TRIAL_ARM_FAILS",
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 organizationID,
+		Name:               "Gated Org",
+		Slug:               organizationID,
+		WorkosID:           nil,
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+	instance.service.SetOrganizationFeatureSeederForTest(func(context.Context, pgx.Tx, string) error {
+		return errors.New("seed failed")
+	})
+
+	result, err := instance.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
+	require.NotEmpty(t, result.SessionToken)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.False(t, org.Whitelisted)
+
+	_, err = trialsRepo.New(instance.conn).GetTrial(ctx, organizationID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestCallback_ReactivatedSignupPrefersExistingWhitelistedOrg(t *testing.T) {

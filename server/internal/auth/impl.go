@@ -540,7 +540,15 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	// stored, so the first authenticated request already sees it.
 	orgMetadata, trialArmed, err := s.armSelfServeTrialForExistingOrganization(ctx, orgMetadata, userID, userInfo.Email)
 	if err != nil {
-		return redirectWithError(authErrInit, err)
+		// The arming transaction rolls back, so the organization is unchanged.
+		// Login still completes: a seeding or trial write must not turn into a
+		// sign-in error for an account that already has an organization.
+		logger.ErrorContext(ctx, "self-serve trial was not armed; login continues",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgMetadata.ID),
+			attr.SlogUserID(userID),
+		)
+		trialArmed = false
 	}
 	if trialArmed {
 		if err := s.trialNotifier.TrialStarted(ctx, orgMetadata.ID); err != nil {
