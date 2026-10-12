@@ -29,14 +29,14 @@ import (
 // activity per hour); each extra page costs one activity, at most
 // internalSessionIssuerKeySweepMaxPages-1 more per hour (~4,400 worst case).
 const (
-	internalSessionIssuerKeySweepWorkflowID   = "v1:internal-session-issuer-key-sweep" //nolint:gosec // A workflow ID, not a credential.
-	internalSessionIssuerKeySweepInterval     = time.Hour
-	internalSessionIssuerKeySweepCatchup      = internalSessionIssuerKeySweepInterval - time.Second
-	internalSessionIssuerKeySweepRunTimeout   = 55 * time.Minute
+	internalSessionIssuerKeySweepWorkflowID = "v1:internal-session-issuer-key-sweep" //nolint:gosec // A workflow ID, not a credential.
+	internalSessionIssuerKeySweepInterval   = time.Hour
+	internalSessionIssuerKeySweepCatchup    = internalSessionIssuerKeySweepInterval - time.Second
+	internalSessionIssuerKeySweepRunTimeout = 55 * time.Minute
 	// A page stops starting organizations after this, well inside its
 	// StartToClose timeout.
-	internalSessionIssuerKeySweepPageBudget = 8 * time.Minute
-	internalSessionIssuerKeySweepMaxPages   = 3
+	internalSessionIssuerKeySweepPageBudget   = 8 * time.Minute
+	internalSessionIssuerKeySweepMaxPages     = 3
 	InternalSessionIssuerKeySweepActivityName = "SweepInternalSessionIssuerKeys"
 )
 
