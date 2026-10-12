@@ -370,27 +370,6 @@ func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (in
 	return column_1, err
 }
 
-const countAnalyzedMessages = `-- name: CountAnalyzedMessages :one
-SELECT COUNT(DISTINCT rr.chat_message_id)::BIGINT
-FROM risk_results rr
-WHERE rr.project_id = $1
-  AND rr.risk_policy_id = $2
-  AND rr.risk_policy_version = $3
-`
-
-type CountAnalyzedMessagesParams struct {
-	ProjectID         uuid.UUID
-	RiskPolicyID      uuid.UUID
-	RiskPolicyVersion int64
-}
-
-func (q *Queries) CountAnalyzedMessages(ctx context.Context, arg CountAnalyzedMessagesParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countAnalyzedMessages, arg.ProjectID, arg.RiskPolicyID, arg.RiskPolicyVersion)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const countEnabledRegexExclusionsInScope = `-- name: CountEnabledRegexExclusionsInScope :one
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
@@ -434,34 +413,6 @@ func (q *Queries) CountFalsePositiveRiskResults(ctx context.Context, projectID u
 	return column_1, err
 }
 
-const countFindingsByPolicy = `-- name: CountFindingsByPolicy :one
-SELECT COUNT(*)::BIGINT
-FROM risk_results
-WHERE project_id = $1
-  AND risk_policy_id = $2
-  AND risk_policy_version = $3
-  AND found IS TRUE
-  AND excluded_at IS NULL
-  AND false_positive_at IS NULL
-  AND skill_version_id IS NULL
-`
-
-type CountFindingsByPolicyParams struct {
-	ProjectID         uuid.UUID
-	RiskPolicyID      uuid.UUID
-	RiskPolicyVersion int64
-}
-
-// Reported next to CountAnalyzedMessages, so it stays message-scoped: a
-// skill-anchored finding has no message behind it and would inflate the
-// numerator over a denominator that never counted it. (cubic)
-func (q *Queries) CountFindingsByPolicy(ctx context.Context, arg CountFindingsByPolicyParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countFindingsByPolicy, arg.ProjectID, arg.RiskPolicyID, arg.RiskPolicyVersion)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const countRiskResultsByPolicyID = `-- name: CountRiskResultsByPolicyID :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results
@@ -476,19 +427,6 @@ type CountRiskResultsByPolicyIDParams struct {
 
 func (q *Queries) CountRiskResultsByPolicyID(ctx context.Context, arg CountRiskResultsByPolicyIDParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countRiskResultsByPolicyID, arg.RiskPolicyID, arg.ProjectID)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const countTotalMessages = `-- name: CountTotalMessages :one
-SELECT COUNT(*)::BIGINT
-FROM chat_messages cm
-WHERE cm.project_id = $1
-`
-
-func (q *Queries) CountTotalMessages(ctx context.Context, projectID uuid.NullUUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countTotalMessages, projectID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err

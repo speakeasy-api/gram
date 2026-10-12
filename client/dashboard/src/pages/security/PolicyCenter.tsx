@@ -68,10 +68,6 @@ import {
 import { useRiskReleaseSessionQuarantineMutation } from "@gram/client/react-query/riskReleaseSessionQuarantine.js";
 import { useRiskPoliciesDeleteMutation } from "@gram/client/react-query/riskPoliciesDelete.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import {
-  useRiskPoliciesStatus,
-  invalidateAllRiskPoliciesStatus,
-} from "@gram/client/react-query/riskPoliciesStatus.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { SessionQuarantine } from "@gram/client/models/components/sessionquarantine.js";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -614,7 +610,6 @@ function PolicyCenterContent() {
     [data?.policies, nlEnabled],
   );
 
-  const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
   const [activeTab] = useQueryState(
@@ -638,7 +633,6 @@ function PolicyCenterContent() {
 
   const invalidate = useCallback(() => {
     void invalidateAllRiskListPolicies(queryClient);
-    void invalidateAllRiskPoliciesStatus(queryClient);
   }, [queryClient]);
 
   const createMutation = useRiskCreatePolicyMutation({
@@ -695,16 +689,6 @@ function PolicyCenterContent() {
         routes.policyCenter.detail.goTo(row.policy.id);
       },
     },
-    ...(row.kind === "risk"
-      ? [
-          {
-            label: "View Progress",
-            onClick: () => {
-              setTimeout(() => setRunPanelPolicy(row.policy), 0);
-            },
-          },
-        ]
-      : []),
     {
       label: policyEnabledActionLabel(row.policy.enabled),
       disabled: toggleEnabledMutation.isPending,
@@ -799,7 +783,7 @@ function PolicyCenterContent() {
     `Total policies: ${policyRows.length}.`,
     `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
     `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
-    "Available risk tools: listRiskPolicies, getRiskPolicy, getRiskPolicyStatus, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
+    "Available risk tools: listRiskPolicies, getRiskPolicy, listRiskResultsForAgent (finding-level with match redaction), listRiskResultsByChat, listShadowMCPApprovals.",
     "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
   ].join(" ");
 
@@ -1169,18 +1153,6 @@ function PolicyCenterContent() {
         />
       )}
       {activeTab === "quarantines" && quarantinesBody}
-
-      {/* View Run Panel */}
-      <Sheet
-        open={!!runPanelPolicy}
-        onOpenChange={(open) => {
-          if (!open) setRunPanelPolicy(null);
-        }}
-      >
-        <SheetContent side="right" className="sm:max-w-md">
-          {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
-        </SheetContent>
-      </Sheet>
 
       {/* Delete Policy Confirmation */}
       <Dialog
@@ -1667,135 +1639,6 @@ function AudiencePrincipalRow({
         </span>
       </span>
     </label>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  RunPanel                                                                  */
-/* -------------------------------------------------------------------------- */
-
-function RunPanel({ policy }: { policy: RiskPolicy }) {
-  const {
-    data: status,
-    isLoading,
-    refetch,
-    isFetching,
-  } = useRiskPoliciesStatus({ id: policy.id }, undefined, {
-    refetchInterval: 5000,
-  });
-
-  const pct =
-    status && status.totalMessages > 0
-      ? Math.round((status.analyzedMessages / status.totalMessages) * 100)
-      : 0;
-
-  return (
-    <>
-      <SheetHeader className="px-6 pt-6">
-        <SheetTitle>{policy.name}</SheetTitle>
-        <SheetDescription>
-          Analysis progress and workflow status
-        </SheetDescription>
-      </SheetHeader>
-
-      <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-          </div>
-        ) : status ? (
-          <>
-            {/* Status + Version row */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="border-border border p-3">
-                <p className="text-muted-foreground mb-1 text-xs font-medium">
-                  Status
-                </p>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "inline-block h-2.5 w-2.5 rounded-full",
-                      status.workflowStatus === "running" &&
-                        "bg-success-default animate-pulse",
-                      status.workflowStatus === "sleeping" &&
-                        "bg-warning-default",
-                      status.workflowStatus === "not_started" &&
-                        "bg-muted-foreground",
-                    )}
-                  />
-                  <span className="text-sm font-medium capitalize">
-                    {status.workflowStatus === "not_started"
-                      ? "Idle"
-                      : status.workflowStatus}
-                  </span>
-                </div>
-              </div>
-              <div className="border-border border p-3">
-                <p className="text-muted-foreground mb-1 text-xs font-medium">
-                  Version
-                </p>
-                <p className="text-sm font-medium">v{status.policyVersion}</p>
-              </div>
-            </div>
-
-            {/* Progress */}
-            <div className="border-border border p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-medium">Analysis Progress</p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="tertiary"
-                    onClick={() => {
-                      void refetch();
-                    }}
-                    disabled={isFetching}
-                    className="h-6 w-6"
-                  >
-                    <Button.Icon>
-                      <RefreshCw
-                        className={cn("h-3 w-3", isFetching && "animate-spin")}
-                      />
-                    </Button.Icon>
-                  </Button>
-                  <span className="text-muted-foreground text-xs font-medium">
-                    {pct}%
-                  </span>
-                </div>
-              </div>
-              <div className="bg-muted mb-2 h-2 overflow-hidden">
-                <div
-                  className="bg-primary h-full transition-all duration-500"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <p className="text-muted-foreground text-xs">
-                {status.analyzedMessages.toLocaleString()} of{" "}
-                {status.totalMessages.toLocaleString()} messages analyzed
-                {status.pendingMessages > 0 && (
-                  <span>
-                    {" "}
-                    &middot; {status.pendingMessages.toLocaleString()} pending
-                  </span>
-                )}
-              </p>
-            </div>
-
-            {/* Findings */}
-            <div className="border-border border p-4">
-              <p className="text-muted-foreground mb-1 text-xs font-medium">
-                Findings
-              </p>
-              <p className="text-3xl font-bold tracking-tight">
-                {status.findingsCount.toLocaleString()}
-              </p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                secrets detected across all messages
-              </p>
-            </div>
-          </>
-        ) : null}
-      </div>
-    </>
   );
 }
 

@@ -383,77 +383,12 @@ func TestListRiskResults_ByChatIDPrefersMessageIdentity(t *testing.T) {
 	require.Equal(t, "carol@example.com", *byChat.Results[0].UserID)
 }
 
-func TestGetRiskPolicyStatus_WithAnalyzedMessages(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Status Detail")})
-	require.NoError(t, err)
-
-	policyID, _ := uuid.Parse(policy.ID)
-
-	// Seed 2 messages, analyze 1.
-	_, msg1 := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msg1, true)
-
-	status, err := ti.service.GetRiskPolicyStatus(ctx, &gen.GetRiskPolicyStatusPayload{ID: policy.ID})
-	require.NoError(t, err)
-	require.Equal(t, int64(2), status.TotalMessages)
-	require.Equal(t, int64(1), status.AnalyzedMessages)
-	require.Equal(t, int64(1), status.PendingMessages)
-	require.Equal(t, int64(1), status.FindingsCount)
-	require.Equal(t, "running", status.WorkflowStatus)
-}
-
-func TestGetRiskPolicyStatus_AllAnalyzed(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Complete")})
-	require.NoError(t, err)
-
-	policyID, _ := uuid.Parse(policy.ID)
-
-	_, msg1 := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msg1, false)
-
-	status, err := ti.service.GetRiskPolicyStatus(ctx, &gen.GetRiskPolicyStatusPayload{ID: policy.ID})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), status.TotalMessages)
-	require.Equal(t, int64(1), status.AnalyzedMessages)
-	require.Equal(t, int64(0), status.PendingMessages)
-	require.Equal(t, "sleeping", status.WorkflowStatus)
-}
-
 func TestListRiskResults_Unauthorized(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 	ctx = withExactAccessGrants(t, ctx, ti.conn)
 
 	_, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestGetRiskPolicyStatus_Unauthorized(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-	ctx = withExactAccessGrants(t, ctx, ti.conn)
-
-	_, err := ti.service.GetRiskPolicyStatus(ctx, &gen.GetRiskPolicyStatusPayload{ID: uuid.New().String()})
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)

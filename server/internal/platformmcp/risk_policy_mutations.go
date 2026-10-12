@@ -748,7 +748,7 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 			return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
 		}
 	}
-	currentPolicy := policycore.Project(current, nil, nil)
+	currentPolicy := policycore.Project(current, nil)
 	if err := policycore.ValidateMCPScope(currentPolicy.MCPScope, params.Sources, params.Action); err != nil {
 		return policycore.UpdateMutation{}, nil, &RiskMutationError{Code: "invalid_request", Message: err.Error(), Cause: ErrRiskMutationInvalid}
 	}
@@ -824,7 +824,7 @@ func (s *riskPolicyMutationService) buildDetectionScopes(input []riskDetectionSc
 }
 
 func (s *riskPolicyMutationService) validatePreservedDetectionScopes(current riskrepo.RiskPolicy, sources, entities []string) error {
-	policy := policycore.Project(current, nil, nil)
+	policy := policycore.Project(current, nil)
 	for _, scope := range policy.DetectionScopes {
 		include := valueOrEmpty(scope.ScopeInclude)
 		exempt := valueOrEmpty(scope.ScopeExempt)
@@ -910,7 +910,7 @@ func canonicalJSONEqual(a, b []byte) bool {
 }
 
 func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string, matched bool) (CreateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience))
 	if err != nil {
 		return CreateRiskPolicyReceiptResult{}, err
 	}
@@ -926,7 +926,7 @@ func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db 
 }
 
 func (s *riskPolicyMutationService) updateReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string) (UpdateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience))
 	if err != nil {
 		return UpdateRiskPolicyReceiptResult{}, err
 	}
