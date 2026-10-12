@@ -58,8 +58,8 @@ func TestParseHostedMCPWrappersFlagsRejectsBadInput(t *testing.T) {
 	require.ErrorContains(t, err, "invalid -cursor")
 	_, err = parseHostedMCPWrappersFlags([]string{"-limit=-1"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "nonnegative")
-	_, err = parseHostedMCPWrappersFlags([]string{"-move-dependents"}, hostedMCPWrappersGetenv, io.Discard)
-	require.Error(t, err)
+	_, err = parseHostedMCPWrappersFlags([]string{"-readers-cut-over"}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "only applies to -move-dependents")
 	_, err = parseHostedMCPWrappersFlags([]string{"extra"}, hostedMCPWrappersGetenv, io.Discard)
 	require.ErrorContains(t, err, "positional")
 }
@@ -140,4 +140,24 @@ func TestRunHostedMCPWrappersWritesReportEvenWhenSummaryFails(t *testing.T) {
 	require.NoError(t, err)
 	var decoded hostedmcpbackfill.Report
 	require.NoError(t, json.Unmarshal(got, &decoded), "the report must be written before the summary")
+}
+
+func TestParseHostedMCPWrappersFlagsMoveDependents(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := parseHostedMCPWrappersFlags([]string{"-move-dependents"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.True(t, cfg.options.MoveDependents)
+	require.False(t, cfg.options.Apply)
+
+	_, err = parseHostedMCPWrappersFlags([]string{"-move-dependents", "-apply"}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "-readers-cut-over")
+
+	_, err = parseHostedMCPWrappersFlags([]string{"-move-dependents", "-apply", "-readers-cut-over"}, hostedMCPWrappersGetenv, io.Discard)
+	require.ErrorContains(t, err, "-report")
+
+	cfg, err = parseHostedMCPWrappersFlags([]string{"-move-dependents", "-apply", "-readers-cut-over", "-report=/tmp/r.json"}, hostedMCPWrappersGetenv, io.Discard)
+	require.NoError(t, err)
+	require.True(t, cfg.options.MoveDependents)
+	require.True(t, cfg.options.Apply)
 }

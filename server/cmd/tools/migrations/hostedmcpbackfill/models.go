@@ -23,6 +23,33 @@ type McpEndpoint struct {
 	Deleted         bool
 }
 
+type McpEnvironmentConfig struct {
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	McpMetadataID     uuid.UUID
+	VariableName      string
+	HeaderDisplayName pgtype.Text
+	ProvidedBy        string
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+type McpMetadatum struct {
+	ID                        uuid.UUID
+	ToolsetID                 uuid.NullUUID
+	McpServerID               uuid.NullUUID
+	ProjectID                 uuid.UUID
+	ExternalDocumentationUrl  pgtype.Text
+	ExternalDocumentationText pgtype.Text
+	LogoID                    uuid.NullUUID
+	Instructions              pgtype.Text
+	HeaderDisplayNames        []byte
+	DefaultEnvironmentID      uuid.NullUUID
+	InstallationOverrideUrl   pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
 type McpServer struct {
 	ID                    uuid.UUID
 	ProjectID             uuid.UUID

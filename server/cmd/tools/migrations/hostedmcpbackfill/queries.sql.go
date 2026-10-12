@@ -12,6 +12,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const assistantMcpServerExists = `-- name: AssistantMcpServerExists :one
+SELECT EXISTS (
+  SELECT 1
+  FROM assistant_mcp_servers
+  WHERE assistant_id = $1 AND mcp_server_id = $2 AND project_id = $3
+)
+`
+
+type AssistantMcpServerExistsParams struct {
+	AssistantID uuid.UUID
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) AssistantMcpServerExists(ctx context.Context, arg AssistantMcpServerExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, assistantMcpServerExists, arg.AssistantID, arg.McpServerID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const countFreshIDServers = `-- name: CountFreshIDServers :one
 SELECT count(*)
 FROM mcp_servers
@@ -28,6 +49,19 @@ type CountFreshIDServersParams struct {
 
 func (q *Queries) CountFreshIDServers(ctx context.Context, arg CountFreshIDServersParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countFreshIDServers, arg.ProjectID, arg.ToolsetID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countOutboxFixture = `-- name: CountOutboxFixture :one
+SELECT count(*)
+FROM publish_outbox
+WHERE organization_id = $1
+`
+
+func (q *Queries) CountOutboxFixture(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOutboxFixture, organizationID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -59,6 +93,73 @@ func (q *Queries) EndpointAddressHeldElsewhere(ctx context.Context, arg Endpoint
 	return exists, err
 }
 
+const getAssistantToolsetOwner = `-- name: GetAssistantToolsetOwner :one
+SELECT assistant_id
+FROM assistant_toolsets
+WHERE id = $1 AND project_id = $2 AND toolset_id = $3
+`
+
+type GetAssistantToolsetOwnerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+func (q *Queries) GetAssistantToolsetOwner(ctx context.Context, arg GetAssistantToolsetOwnerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getAssistantToolsetOwner, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var assistant_id uuid.UUID
+	err := row.Scan(&assistant_id)
+	return assistant_id, err
+}
+
+const getLiveCanonicalWrapper = `-- name: GetLiveCanonicalWrapper :one
+SELECT
+  ms.id,
+  ms.name,
+  ms.slug,
+  ms.visibility,
+  EXISTS (
+    SELECT 1
+    FROM mcp_endpoints AS me
+    WHERE me.mcp_server_id = ms.id
+      AND me.project_id = ms.project_id
+      AND me.custom_domain_id IS NULL
+      AND me.deleted IS FALSE
+  ) AS has_platform_endpoint
+FROM mcp_servers AS ms
+WHERE ms.id = $1::uuid
+  AND ms.project_id = $2
+  AND ms.toolset_id = $1::uuid
+  AND ms.deleted IS FALSE
+FOR SHARE OF ms
+`
+
+type GetLiveCanonicalWrapperParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetLiveCanonicalWrapperRow struct {
+	ID                  uuid.UUID
+	Name                pgtype.Text
+	Slug                pgtype.Text
+	Visibility          string
+	HasPlatformEndpoint bool
+}
+
+func (q *Queries) GetLiveCanonicalWrapper(ctx context.Context, arg GetLiveCanonicalWrapperParams) (GetLiveCanonicalWrapperRow, error) {
+	row := q.db.QueryRow(ctx, getLiveCanonicalWrapper, arg.ToolsetID, arg.ProjectID)
+	var i GetLiveCanonicalWrapperRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Visibility,
+		&i.HasPlatformEndpoint,
+	)
+	return i, err
+}
+
 const getServerIdentity = `-- name: GetServerIdentity :one
 SELECT id, toolset_id, deleted
 FROM mcp_servers
@@ -82,6 +183,72 @@ func (q *Queries) GetServerIdentity(ctx context.Context, arg GetServerIdentityPa
 	var i GetServerIdentityRow
 	err := row.Scan(&i.ID, &i.ToolsetID, &i.Deleted)
 	return i, err
+}
+
+const listAssistantMcpServersFixture = `-- name: ListAssistantMcpServersFixture :many
+SELECT id, assistant_id, mcp_server_id
+FROM assistant_mcp_servers
+WHERE project_id = $1
+ORDER BY id
+`
+
+type ListAssistantMcpServersFixtureRow struct {
+	ID          uuid.UUID
+	AssistantID uuid.UUID
+	McpServerID uuid.UUID
+}
+
+func (q *Queries) ListAssistantMcpServersFixture(ctx context.Context, projectID uuid.UUID) ([]ListAssistantMcpServersFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listAssistantMcpServersFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssistantMcpServersFixtureRow
+	for rows.Next() {
+		var i ListAssistantMcpServersFixtureRow
+		if err := rows.Scan(&i.ID, &i.AssistantID, &i.McpServerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAssistantToolsetsFixture = `-- name: ListAssistantToolsetsFixture :many
+SELECT id, assistant_id, toolset_id
+FROM assistant_toolsets
+WHERE project_id = $1
+ORDER BY id
+`
+
+type ListAssistantToolsetsFixtureRow struct {
+	ID          uuid.UUID
+	AssistantID uuid.UUID
+	ToolsetID   uuid.UUID
+}
+
+func (q *Queries) ListAssistantToolsetsFixture(ctx context.Context, projectID uuid.UUID) ([]ListAssistantToolsetsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listAssistantToolsetsFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAssistantToolsetsFixtureRow
+	for rows.Next() {
+		var i ListAssistantToolsetsFixtureRow
+		if err := rows.Scan(&i.ID, &i.AssistantID, &i.ToolsetID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAuditActorsFixture = `-- name: ListAuditActorsFixture :many
@@ -161,6 +328,54 @@ func (q *Queries) ListCandidateToolsets(ctx context.Context, arg ListCandidateTo
 	return items, nil
 }
 
+const listDependentToolsets = `-- name: ListDependentToolsets :many
+SELECT DISTINCT d.toolset_id::uuid AS toolset_id
+FROM (
+  SELECT m.toolset_id, m.project_id
+  FROM mcp_metadata AS m
+  WHERE m.toolset_id IS NOT NULL
+  UNION ALL
+  SELECT ps.toolset_id, pl.project_id
+  FROM plugin_servers AS ps
+  JOIN plugins AS pl ON pl.id = ps.plugin_id
+  WHERE ps.toolset_id IS NOT NULL AND ps.deleted IS FALSE
+  UNION ALL
+  SELECT a.toolset_id, a.project_id
+  FROM assistant_toolsets AS a
+) AS d
+WHERE ($1::uuid IS NULL OR d.project_id = $1::uuid)
+  AND d.toolset_id > $2::uuid
+ORDER BY 1
+LIMIT $3::int
+`
+
+type ListDependentToolsetsParams struct {
+	ProjectID uuid.NullUUID
+	AfterID   uuid.UUID
+	PageSize  int32
+}
+
+// Live toolset-keyed dependents, grouped by the toolset they point at.
+func (q *Queries) ListDependentToolsets(ctx context.Context, arg ListDependentToolsetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDependentToolsets, arg.ProjectID, arg.AfterID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var toolset_id uuid.UUID
+		if err := rows.Scan(&toolset_id); err != nil {
+			return nil, err
+		}
+		items = append(items, toolset_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEndpointsFixture = `-- name: ListEndpointsFixture :many
 SELECT id, project_id, custom_domain_id, mcp_server_id, meta_mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
 FROM mcp_endpoints
@@ -190,6 +405,147 @@ func (q *Queries) ListEndpointsFixture(ctx context.Context, projectID uuid.UUID)
 			&i.DeletedAt,
 			&i.Deleted,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnvironmentConfigsFixture = `-- name: ListEnvironmentConfigsFixture :many
+SELECT id, mcp_metadata_id, variable_name
+FROM mcp_environment_configs
+WHERE project_id = $1
+ORDER BY id
+`
+
+type ListEnvironmentConfigsFixtureRow struct {
+	ID            uuid.UUID
+	McpMetadataID uuid.UUID
+	VariableName  string
+}
+
+func (q *Queries) ListEnvironmentConfigsFixture(ctx context.Context, projectID uuid.UUID) ([]ListEnvironmentConfigsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listEnvironmentConfigsFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEnvironmentConfigsFixtureRow
+	for rows.Next() {
+		var i ListEnvironmentConfigsFixtureRow
+		if err := rows.Scan(&i.ID, &i.McpMetadataID, &i.VariableName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMetadataEnvironmentConfigs = `-- name: ListMetadataEnvironmentConfigs :many
+SELECT id, project_id, mcp_metadata_id, variable_name, header_display_name, provided_by, created_at, updated_at
+FROM mcp_environment_configs
+WHERE mcp_metadata_id = $1 AND project_id = $2
+ORDER BY variable_name
+`
+
+type ListMetadataEnvironmentConfigsParams struct {
+	McpMetadataID uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+func (q *Queries) ListMetadataEnvironmentConfigs(ctx context.Context, arg ListMetadataEnvironmentConfigsParams) ([]McpEnvironmentConfig, error) {
+	rows, err := q.db.Query(ctx, listMetadataEnvironmentConfigs, arg.McpMetadataID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpEnvironmentConfig
+	for rows.Next() {
+		var i McpEnvironmentConfig
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.McpMetadataID,
+			&i.VariableName,
+			&i.HeaderDisplayName,
+			&i.ProvidedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMetadataFixture = `-- name: ListMetadataFixture :many
+SELECT id, toolset_id, mcp_server_id
+FROM mcp_metadata
+WHERE project_id = $1
+ORDER BY id
+`
+
+type ListMetadataFixtureRow struct {
+	ID          uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+}
+
+func (q *Queries) ListMetadataFixture(ctx context.Context, projectID uuid.UUID) ([]ListMetadataFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listMetadataFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMetadataFixtureRow
+	for rows.Next() {
+		var i ListMetadataFixtureRow
+		if err := rows.Scan(&i.ID, &i.ToolsetID, &i.McpServerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginServersFixture = `-- name: ListPluginServersFixture :many
+SELECT ps.id, ps.toolset_id, ps.mcp_server_id
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE pl.project_id = $1
+ORDER BY ps.id
+`
+
+type ListPluginServersFixtureRow struct {
+	ID          uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+}
+
+func (q *Queries) ListPluginServersFixture(ctx context.Context, projectID uuid.UUID) ([]ListPluginServersFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listPluginServersFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPluginServersFixtureRow
+	for rows.Next() {
+		var i ListPluginServersFixtureRow
+		if err := rows.Scan(&i.ID, &i.ToolsetID, &i.McpServerID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -246,6 +602,57 @@ func (q *Queries) ListServersFixture(ctx context.Context, projectID uuid.UUID) (
 	return items, nil
 }
 
+const listToolsetDependents = `-- name: ListToolsetDependents :many
+SELECT d.table_name::text AS table_name, d.id::uuid AS id, d.project_id::uuid AS project_id
+FROM (
+  SELECT 'mcp_metadata' AS table_name, m.id, m.project_id
+  FROM mcp_metadata AS m
+  WHERE m.toolset_id = $1::uuid
+  UNION ALL
+  SELECT 'plugin_servers', ps.id, pl.project_id
+  FROM plugin_servers AS ps
+  JOIN plugins AS pl ON pl.id = ps.plugin_id
+  WHERE ps.toolset_id = $1::uuid AND ps.deleted IS FALSE
+  UNION ALL
+  SELECT 'assistant_toolsets', a.id, a.project_id
+  FROM assistant_toolsets AS a
+  WHERE a.toolset_id = $1::uuid
+) AS d
+WHERE $2::uuid IS NULL OR d.project_id = $2::uuid
+ORDER BY 1, 2
+`
+
+type ListToolsetDependentsParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+type ListToolsetDependentsRow struct {
+	TableName string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ListToolsetDependents(ctx context.Context, arg ListToolsetDependentsParams) ([]ListToolsetDependentsRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetDependents, arg.ToolsetID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetDependentsRow
+	for rows.Next() {
+		var i ListToolsetDependentsRow
+		if err := rows.Scan(&i.TableName, &i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const liveCustomDomainExists = `-- name: LiveCustomDomainExists :one
 SELECT EXISTS (
   SELECT 1
@@ -286,12 +693,318 @@ func (q *Queries) LiveProjectExists(ctx context.Context, arg LiveProjectExistsPa
 	return exists, err
 }
 
+const lockAssistantForMove = `-- name: LockAssistantForMove :exec
+SELECT id
+FROM assistants
+WHERE id = $1 AND project_id = $2
+FOR NO KEY UPDATE
+`
+
+type LockAssistantForMoveParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Same row lock as UpdateAssistant, so an in-flight edit of the attachments finishes first.
+func (q *Queries) LockAssistantForMove(ctx context.Context, arg LockAssistantForMoveParams) error {
+	_, err := q.db.Exec(ctx, lockAssistantForMove, arg.ID, arg.ProjectID)
+	return err
+}
+
+const lockAssistantToolset = `-- name: LockAssistantToolset :one
+SELECT id, assistant_id
+FROM assistant_toolsets
+WHERE id = $1 AND project_id = $2 AND toolset_id = $3
+FOR UPDATE
+`
+
+type LockAssistantToolsetParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.UUID
+}
+
+type LockAssistantToolsetRow struct {
+	ID          uuid.UUID
+	AssistantID uuid.UUID
+}
+
+func (q *Queries) LockAssistantToolset(ctx context.Context, arg LockAssistantToolsetParams) (LockAssistantToolsetRow, error) {
+	row := q.db.QueryRow(ctx, lockAssistantToolset, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var i LockAssistantToolsetRow
+	err := row.Scan(&i.ID, &i.AssistantID)
+	return i, err
+}
+
+const lockDependentToolset = `-- name: LockDependentToolset :one
+SELECT t.id, t.project_id, t.organization_id, t.mcp_slug, t.deleted, p.deleted AS project_deleted
+FROM toolsets AS t
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = t.organization_id
+WHERE t.id = $1 AND t.project_id = $2
+FOR NO KEY UPDATE OF t
+`
+
+type LockDependentToolsetParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type LockDependentToolsetRow struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	McpSlug        pgtype.Text
+	Deleted        bool
+	ProjectDeleted bool
+}
+
+func (q *Queries) LockDependentToolset(ctx context.Context, arg LockDependentToolsetParams) (LockDependentToolsetRow, error) {
+	row := q.db.QueryRow(ctx, lockDependentToolset, arg.ID, arg.ProjectID)
+	var i LockDependentToolsetRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.McpSlug,
+		&i.Deleted,
+		&i.ProjectDeleted,
+	)
+	return i, err
+}
+
 const lockToolsetBackfill = `-- name: LockToolsetBackfill :exec
 SELECT pg_advisory_xact_lock(hashtextextended('hosted-mcp-backfill:' || $1::text, 0))
 `
 
 func (q *Queries) LockToolsetBackfill(ctx context.Context, toolsetID string) error {
 	_, err := q.db.Exec(ctx, lockToolsetBackfill, toolsetID)
+	return err
+}
+
+const lockToolsetKeyedMetadata = `-- name: LockToolsetKeyedMetadata :one
+SELECT id, toolset_id, mcp_server_id, project_id, external_documentation_url, external_documentation_text, logo_id, instructions, header_display_names, default_environment_id, installation_override_url, created_at, updated_at
+FROM mcp_metadata
+WHERE id = $1 AND project_id = $2 AND toolset_id = $3
+FOR UPDATE
+`
+
+type LockToolsetKeyedMetadataParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.NullUUID
+}
+
+func (q *Queries) LockToolsetKeyedMetadata(ctx context.Context, arg LockToolsetKeyedMetadataParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockToolsetKeyedMetadata, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var i McpMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const lockToolsetKeyedPluginServer = `-- name: LockToolsetKeyedPluginServer :one
+SELECT ps.id, ps.plugin_id, ps.display_name, ps.policy, ps.sort_order, pl.name AS plugin_name, pl.slug AS plugin_slug
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.id = $1
+  AND pl.project_id = $2
+  AND ps.toolset_id = $3
+  AND ps.deleted IS FALSE
+FOR UPDATE OF ps
+`
+
+type LockToolsetKeyedPluginServerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	ToolsetID uuid.NullUUID
+}
+
+type LockToolsetKeyedPluginServerRow struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	DisplayName string
+	Policy      string
+	SortOrder   int32
+	PluginName  string
+	PluginSlug  string
+}
+
+func (q *Queries) LockToolsetKeyedPluginServer(ctx context.Context, arg LockToolsetKeyedPluginServerParams) (LockToolsetKeyedPluginServerRow, error) {
+	row := q.db.QueryRow(ctx, lockToolsetKeyedPluginServer, arg.ID, arg.ProjectID, arg.ToolsetID)
+	var i LockToolsetKeyedPluginServerRow
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.DisplayName,
+		&i.Policy,
+		&i.SortOrder,
+		&i.PluginName,
+		&i.PluginSlug,
+	)
+	return i, err
+}
+
+const moveAssistantToolset = `-- name: MoveAssistantToolset :execrows
+WITH moved AS (
+  DELETE FROM assistant_toolsets AS at
+  WHERE at.id = $2 AND at.project_id = $3 AND at.toolset_id = $1::uuid
+  RETURNING at.id, at.assistant_id, at.environment_id, at.project_id, at.created_at
+)
+INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, environment_id, project_id, created_at)
+SELECT moved.id, moved.assistant_id, $1::uuid, moved.environment_id, moved.project_id, moved.created_at
+FROM moved
+`
+
+type MoveAssistantToolsetParams struct {
+	McpServerID uuid.UUID
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Same id, environment and created_at, so the attachment is the same row in its new table.
+func (q *Queries) MoveAssistantToolset(ctx context.Context, arg MoveAssistantToolsetParams) (int64, error) {
+	result, err := q.db.Exec(ctx, moveAssistantToolset, arg.McpServerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const rekeyMetadata = `-- name: RekeyMetadata :one
+UPDATE mcp_metadata
+SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3 AND toolset_id = $1
+RETURNING id, toolset_id, mcp_server_id, project_id, external_documentation_url, external_documentation_text, logo_id, instructions, header_display_names, default_environment_id, installation_override_url, created_at, updated_at
+`
+
+type RekeyMetadataParams struct {
+	McpServerID uuid.NullUUID
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) RekeyMetadata(ctx context.Context, arg RekeyMetadataParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, rekeyMetadata, arg.McpServerID, arg.ID, arg.ProjectID)
+	var i McpMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const rekeyPluginServer = `-- name: RekeyPluginServer :execrows
+UPDATE plugin_servers AS ps
+SET toolset_id = NULL, mcp_server_id = $1, updated_at = clock_timestamp()
+FROM plugins AS pl
+WHERE ps.id = $2
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = $3
+  AND ps.toolset_id = $1
+  AND ps.deleted IS FALSE
+`
+
+type RekeyPluginServerParams struct {
+	McpServerID uuid.NullUUID
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) RekeyPluginServer(ctx context.Context, arg RekeyPluginServerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rekeyPluginServer, arg.McpServerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const seedAssistantFixture = `-- name: SeedAssistantFixture :exec
+INSERT INTO assistants (id, project_id, organization_id, name, model, instructions)
+VALUES ($1, $2, $3, $4, 'model', '')
+`
+
+type SeedAssistantFixtureParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Name           string
+}
+
+func (q *Queries) SeedAssistantFixture(ctx context.Context, arg SeedAssistantFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAssistantFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Name,
+	)
+	return err
+}
+
+const seedAssistantMcpServerFixture = `-- name: SeedAssistantMcpServerFixture :exec
+INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type SeedAssistantMcpServerFixtureParams struct {
+	ID          uuid.UUID
+	AssistantID uuid.UUID
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) SeedAssistantMcpServerFixture(ctx context.Context, arg SeedAssistantMcpServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAssistantMcpServerFixture,
+		arg.ID,
+		arg.AssistantID,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	return err
+}
+
+const seedAssistantToolsetFixture = `-- name: SeedAssistantToolsetFixture :exec
+INSERT INTO assistant_toolsets (id, assistant_id, toolset_id, project_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type SeedAssistantToolsetFixtureParams struct {
+	ID          uuid.UUID
+	AssistantID uuid.UUID
+	ToolsetID   uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) SeedAssistantToolsetFixture(ctx context.Context, arg SeedAssistantToolsetFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAssistantToolsetFixture,
+		arg.ID,
+		arg.AssistantID,
+		arg.ToolsetID,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -341,6 +1054,50 @@ func (q *Queries) SeedEndpointFixture(ctx context.Context, arg SeedEndpointFixtu
 	return err
 }
 
+const seedEnvironmentConfigFixture = `-- name: SeedEnvironmentConfigFixture :exec
+INSERT INTO mcp_environment_configs (id, project_id, mcp_metadata_id, variable_name)
+VALUES ($1, $2, $3, $4)
+`
+
+type SeedEnvironmentConfigFixtureParams struct {
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	McpMetadataID uuid.UUID
+	VariableName  string
+}
+
+func (q *Queries) SeedEnvironmentConfigFixture(ctx context.Context, arg SeedEnvironmentConfigFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedEnvironmentConfigFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.McpMetadataID,
+		arg.VariableName,
+	)
+	return err
+}
+
+const seedMetadataFixture = `-- name: SeedMetadataFixture :exec
+INSERT INTO mcp_metadata (id, toolset_id, mcp_server_id, project_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type SeedMetadataFixtureParams struct {
+	ID          uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) SeedMetadataFixture(ctx context.Context, arg SeedMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedMetadataFixture,
+		arg.ID,
+		arg.ToolsetID,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
 
 INSERT INTO organization_metadata (id, name, slug)
@@ -356,6 +1113,54 @@ type SeedOrganizationFixtureParams struct {
 // TEST FIXTURE ONLY: every query below is for package tests and may create impossible states.
 func (q *Queries) SeedOrganizationFixture(ctx context.Context, arg SeedOrganizationFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedOrganizationFixture, arg.ID, arg.Name, arg.Slug)
+	return err
+}
+
+const seedPluginFixture = `-- name: SeedPluginFixture :exec
+INSERT INTO plugins (id, organization_id, project_id, name, slug)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type SeedPluginFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+}
+
+func (q *Queries) SeedPluginFixture(ctx context.Context, arg SeedPluginFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedPluginFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.Slug,
+	)
+	return err
+}
+
+const seedPluginServerFixture = `-- name: SeedPluginServerFixture :exec
+INSERT INTO plugin_servers (id, plugin_id, toolset_id, mcp_server_id, display_name)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type SeedPluginServerFixtureParams struct {
+	ID          uuid.UUID
+	PluginID    uuid.UUID
+	ToolsetID   uuid.NullUUID
+	McpServerID uuid.NullUUID
+	DisplayName string
+}
+
+func (q *Queries) SeedPluginServerFixture(ctx context.Context, arg SeedPluginServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedPluginServerFixture,
+		arg.ID,
+		arg.PluginID,
+		arg.ToolsetID,
+		arg.McpServerID,
+		arg.DisplayName,
+	)
 	return err
 }
 
@@ -446,6 +1251,51 @@ func (q *Queries) SeedToolsetFixture(ctx context.Context, arg SeedToolsetFixture
 	return err
 }
 
+const serverKeyedMetadataExists = `-- name: ServerKeyedMetadataExists :one
+SELECT EXISTS (
+  SELECT 1
+  FROM mcp_metadata
+  WHERE mcp_server_id = $1 AND project_id = $2
+)
+`
+
+type ServerKeyedMetadataExistsParams struct {
+	McpServerID uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ServerKeyedMetadataExists(ctx context.Context, arg ServerKeyedMetadataExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, serverKeyedMetadataExists, arg.McpServerID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const serverKeyedPluginServerExists = `-- name: ServerKeyedPluginServerExists :one
+SELECT EXISTS (
+  SELECT 1
+  FROM plugin_servers AS ps
+  JOIN plugins AS pl ON pl.id = ps.plugin_id
+  WHERE ps.plugin_id = $1
+    AND pl.project_id = $2
+    AND ps.mcp_server_id = $3
+    AND ps.deleted IS FALSE
+)
+`
+
+type ServerKeyedPluginServerExistsParams struct {
+	PluginID    uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.NullUUID
+}
+
+func (q *Queries) ServerKeyedPluginServerExists(ctx context.Context, arg ServerKeyedPluginServerExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, serverKeyedPluginServerExists, arg.PluginID, arg.ProjectID, arg.McpServerID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const serverSlugHeldElsewhere = `-- name: ServerSlugHeldElsewhere :one
 SELECT EXISTS (
   SELECT 1
@@ -482,5 +1332,20 @@ type SoftDeleteProjectFixtureParams struct {
 
 func (q *Queries) SoftDeleteProjectFixture(ctx context.Context, arg SoftDeleteProjectFixtureParams) error {
 	_, err := q.db.Exec(ctx, softDeleteProjectFixture, arg.ID, arg.OrganizationID)
+	return err
+}
+
+const softDeleteToolsetFixture = `-- name: SoftDeleteToolsetFixture :exec
+UPDATE toolsets SET deleted_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2
+`
+
+type SoftDeleteToolsetFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) SoftDeleteToolsetFixture(ctx context.Context, arg SoftDeleteToolsetFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteToolsetFixture, arg.ID, arg.ProjectID)
 	return err
 }

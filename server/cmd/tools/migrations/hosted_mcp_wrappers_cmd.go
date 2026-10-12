@@ -25,10 +25,12 @@ type hostedMCPWrappersConfig struct {
 	options    hostedmcpbackfill.Options
 }
 
-// Stdout carries counts only, so the transcript never holds tenant ids.
+// Stdout carries counts and the resume cursor only, never slugs or names.
 type hostedMCPWrappersSummary struct {
 	Mode                  string                            `json:"mode"`
+	Phase                 string                            `json:"phase"`
 	Scanned               int                               `json:"scanned"`
+	Toolsets              int                               `json:"toolsets"`
 	Writes                int                               `json:"writes"`
 	Outcomes              map[hostedmcpbackfill.Outcome]int `json:"outcomes"`
 	FreshIDServersPresent int                               `json:"fresh_id_servers_present"`
@@ -45,6 +47,8 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	cursor := fs.String("cursor", "", "resume after this toolset id")
 	limit := fs.Int("limit", 0, "max toolsets to process; 0 means all")
 	reportPath := fs.String("report", "", "per-row JSON report path")
+	moveDependents := fs.Bool("move-dependents", false, "re-key toolset-keyed mcp_metadata, plugin_servers and assistant_toolsets onto the canonical wrapper")
+	readersCutOver := fs.Bool("readers-cut-over", false, "confirm AIM-16 (readers and toolset-keyed writers cut over) is deployed; required for -move-dependents -apply")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return hostedMCPWrappersConfig{}, fmt.Errorf("parse flags: %w", err)
@@ -57,16 +61,28 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	if *limit < 0 {
 		return hostedMCPWrappersConfig{}, errors.New("limit must be nonnegative")
 	}
+	// Readers on main before AIM-16 only find toolset-keyed rows, so a moved row would vanish from them.
+	if *moveDependents && *apply && !*readersCutOver {
+		return hostedMCPWrappersConfig{}, errors.New("-move-dependents -apply requires -readers-cut-over: deploy the AIM-16 read cutover first")
+	}
+	// The report is the only exact list of moved rows, which a rollback needs.
+	if *moveDependents && *apply && *reportPath == "" {
+		return hostedMCPWrappersConfig{}, errors.New("-move-dependents -apply requires -report")
+	}
+	if *readersCutOver && !*moveDependents {
+		return hostedMCPWrappersConfig{}, errors.New("-readers-cut-over only applies to -move-dependents")
+	}
 
 	cfg := hostedMCPWrappersConfig{
 		dbURL:      getenv("GRAM_DATABASE_URL"),
 		reportPath: *reportPath,
 		options: hostedmcpbackfill.Options{
-			ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			Cursor:    uuid.Nil,
-			Limit:     *limit,
-			PageSize:  0,
-			Apply:     *apply,
+			ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			Cursor:         uuid.Nil,
+			Limit:          *limit,
+			PageSize:       0,
+			Apply:          *apply,
+			MoveDependents: *moveDependents,
 		},
 	}
 	if cfg.dbURL == "" {
@@ -120,7 +136,7 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 
 	report, runErr := hostedmcpbackfill.NewRunner(pool, cfg.options).Run(ctx)
 	summary := hostedMCPWrappersSummary{
-		Mode: report.Mode, Scanned: report.Scanned, Writes: report.Writes, Outcomes: report.Outcomes,
+		Mode: report.Mode, Phase: report.Phase, Scanned: report.Scanned, Toolsets: report.Toolsets, Writes: report.Writes, Outcomes: report.Outcomes,
 		FreshIDServersPresent: report.FreshIDServersPresent, LastCursor: report.LastCursor, ReportPath: cfg.reportPath,
 	}
 	code := 0
