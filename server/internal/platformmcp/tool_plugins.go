@@ -112,7 +112,7 @@ func registerPluginTools(reg *Registrar, plugins *PluginsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_my_mcp_connection_status",
 		Title:       "Check My MCP Connection",
-		Description: "Check only your current authorization state for one exact MCP server. Returns a bounded state and the canonical MCP endpoint for reconnecting through the existing client-owned OAuth flow. Never returns tokens, OAuth codes, secrets, account identities, upstream-granted scopes, raw sessions, provider diagnostics, or other users' connections.",
+		Description: "Check only your current authorization state for one exact MCP server. Returns a bounded state and the canonical MCP endpoint for reconnecting through the existing client-owned OAuth flow. Reason identity_chaining means an active credential from your organization's identity provider; identity_chaining_configured means it will supply access on your first call, so try the server before reconnecting. Never returns tokens, OAuth codes, secrets, account identities, upstream-granted scopes, raw sessions, provider diagnostics, or other users' connections.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPReadOrConnect}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMyMCPStatusInput) (*mcp.CallToolResult, GetMyMCPConnectionStatusOutput, error) {
 		return principalToolCall(ctx, memberMCPStatusToolResult, func(principal Principal) (GetMyMCPConnectionStatusOutput, error) {

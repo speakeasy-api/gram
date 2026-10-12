@@ -97,6 +97,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
 	case "retry_delegation":
 		return s.retryFederatedDelegation(w, r, endpoint, challengeState)
+	case "identity_chaining_check":
+		return s.serveIdentityChainingCheck(w, r, endpoint, challengeState)
 	}
 
 	bound, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
@@ -253,7 +255,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil
 
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", or "retry_delegation"`).LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", "retry_delegation", or "identity_chaining_check"`).LogError(ctx, logger)
 	}
 }
 
