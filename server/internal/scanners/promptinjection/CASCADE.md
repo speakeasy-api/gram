@@ -119,8 +119,7 @@ asked again, up to three calls as the report's harness did, and a case that
 failed open on throttling, a server error or a timeout runs again after 5, 10
 and 20 seconds. A confirmation still refused is a miss.
 
-Every run is new, because the models are not deterministic: a rerun is a second
-sample. The report writes each case's result to
+Every run is new. The report writes each case's result to
 `~/.cache/gram-pi-eval/runs/<code key>/<run>` as it finishes; the code key hashes
 the commit's code outside the fixtures. `--resume` continues the latest run of
 the same code instead: it runs only missing, new or edited fixtures, and redoes

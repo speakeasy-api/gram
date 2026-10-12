@@ -12,8 +12,7 @@
 # it has no false positives and catches at least 80% of all attacks. A full run
 # costs about $2.30 in OpenRouter calls.
 #
-# Every run is new, because the models are not deterministic: a rerun is a
-# second sample. --resume continues the latest run of the same code instead,
+# Every run is new. --resume continues the latest run of the same code instead,
 # such as after running out of credit. --compare <ref> also scores that ref
 # from a detached worktree, on this branch's fixtures, and compares the two
 # case by case; it reuses the ref's latest run, so each compared commit is
