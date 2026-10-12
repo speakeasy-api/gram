@@ -123,7 +123,7 @@ func toolsCallInterceptorNames(p *proxy.Proxy) []string {
 func TestProxyManagerAttachesTunnelMetricsOnlyToTunnelTargets(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
-	manager := NewProxyManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager := NewProxyManager(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	manager.TunnelMetrics = metrics.New()
 	source, server := uuid.NewString(), uuid.NewString()
 	build := func(source string) *proxy.Proxy {

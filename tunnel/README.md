@@ -98,7 +98,7 @@ into 1-minute buckets for 1 hour, 15-minute buckets for 24 hours, and hourly
 buckets for 7 days.
 Missing samples remain gaps. Metrics are best-effort.
 
-Gram servers record request metrics and serve history automatically. Deploy the
+Speakeasy servers record request metrics and serve history automatically. Deploy the
 metrics schema and Pub/Sub topology/IAM before the server. These switches control
 ingestion, gateway reporting and the dashboard:
 
