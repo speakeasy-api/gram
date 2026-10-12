@@ -180,6 +180,8 @@ GRAM_AUTHZ_ISSUER_URL = "http://localhost:{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
 OPENROUTER_DEV_KEY = "unset"
 ## Evaluate local sigint messages when the platform inference key is configured.
 GRAM_SIGINT_ACK_ONLY = "false"
+## Log created chat messages into agent_events through the OTel pipeline.
+GRAM_CHAT_EVENTS_BRIDGE = "true"
 ## The dev-idp is a top-level project (dev-idp/) backed by SQLite.
 ## GRAM_DEVIDP_PORT is auto-remapped by `mise work:init` for parallel worktrees.
 GRAM_DEVIDP_HOST = "localhost"

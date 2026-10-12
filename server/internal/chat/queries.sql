@@ -281,6 +281,26 @@ JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 WHERE m.project_id = @project_id::uuid AND m.id = ANY(@ids::uuid[])
 ORDER BY m.seq;
 
+-- name: ListMessagesForAgentEvents :many
+-- One tenant-pinned read per batch of created-message events. The bridge logs
+-- the message text, so content is read here; attribution follows the same
+-- current-ownership rules as GetImportedSessionObservations.
+SELECT m.id, m.chat_id, m.role, m.content, m.content_raw, m.content_asset_url,
+       m.message_id, m.model, m.source, m.origin, m.created_at,
+       COALESCE(NULLIF(m.user_id, ''), c.user_id, '')::text AS user_id,
+       COALESCE(m.external_user_id, c.external_user_id, '')::text AS external_user_id,
+       COALESCE(u.email,
+         CASE WHEN m.external_user_id LIKE '%@%' THEN m.external_user_id END,
+         CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END, '')::text AS user_email,
+       c.external_chat_id, c.inference_session_id, c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = m.project_id
+LEFT JOIN users u ON u.id = COALESCE(NULLIF(m.user_id, ''), c.user_id)
+WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.id = ANY(@ids::uuid[]);
+
 -- name: UpsertCorrelatedChatMessage :one
 -- Returns persisted metering fields and distinguishes initial inserts from
 -- native-hook promotions, which must not emit another storage reading.

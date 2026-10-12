@@ -3552,6 +3552,91 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 	return items, nil
 }
 
+const listMessagesForAgentEvents = `-- name: ListMessagesForAgentEvents :many
+SELECT m.id, m.chat_id, m.role, m.content, m.content_raw, m.content_asset_url,
+       m.message_id, m.model, m.source, m.origin, m.created_at,
+       COALESCE(NULLIF(m.user_id, ''), c.user_id, '')::text AS user_id,
+       COALESCE(m.external_user_id, c.external_user_id, '')::text AS external_user_id,
+       COALESCE(u.email,
+         CASE WHEN m.external_user_id LIKE '%@%' THEN m.external_user_id END,
+         CASE WHEN c.external_user_id LIKE '%@%' THEN c.external_user_id END, '')::text AS user_email,
+       c.external_chat_id, c.inference_session_id, c.organization_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+JOIN projects p ON p.id = m.project_id
+LEFT JOIN users u ON u.id = COALESCE(NULLIF(m.user_id, ''), c.user_id)
+WHERE m.project_id = $1::uuid AND p.organization_id = $2
+  AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.id = ANY($3::uuid[])
+`
+
+type ListMessagesForAgentEventsParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+type ListMessagesForAgentEventsRow struct {
+	ID                 uuid.UUID
+	ChatID             uuid.UUID
+	Role               string
+	Content            string
+	ContentRaw         []byte
+	ContentAssetUrl    pgtype.Text
+	MessageID          pgtype.Text
+	Model              pgtype.Text
+	Source             pgtype.Text
+	Origin             pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UserID             string
+	ExternalUserID     string
+	UserEmail          string
+	ExternalChatID     pgtype.Text
+	InferenceSessionID pgtype.Text
+	OrganizationID     string
+}
+
+// One tenant-pinned read per batch of created-message events. The bridge logs
+// the message text, so content is read here; attribution follows the same
+// current-ownership rules as GetImportedSessionObservations.
+func (q *Queries) ListMessagesForAgentEvents(ctx context.Context, arg ListMessagesForAgentEventsParams) ([]ListMessagesForAgentEventsRow, error) {
+	rows, err := q.db.Query(ctx, listMessagesForAgentEvents, arg.ProjectID, arg.OrganizationID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMessagesForAgentEventsRow
+	for rows.Next() {
+		var i ListMessagesForAgentEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.MessageID,
+			&i.Model,
+			&i.Source,
+			&i.Origin,
+			&i.CreatedAt,
+			&i.UserID,
+			&i.ExternalUserID,
+			&i.UserEmail,
+			&i.ExternalChatID,
+			&i.InferenceSessionID,
+			&i.OrganizationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskWindowedMessages = `-- name: ListRiskWindowedMessages :many
 WITH ordered AS (
   SELECT

@@ -22,6 +22,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -181,6 +182,36 @@ func TestLogRelayHandlerGroupsByProvenanceAndCachesDestinations(t *testing.T) {
 	slices.Sort(groupedBodies["b"])
 	require.Equal(t, []string{"a-1", "a-2", "a-3", "a-4"}, groupedBodies["a"])
 	require.Equal(t, []string{"b-1"}, groupedBodies["b"])
+}
+
+func TestLogRelayHandlerDoesNotRelayChatMessageRecords(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+	handler := newLogRelayTestHandler(t, testenv.NewMeterProvider(t))
+	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, map[string]string{"X-Customer": "a"}, true)
+
+	bridged := relayTestLogRecord("bridged", testLogOrganizationID, testLogProjectID, 0)
+	bridged.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), dialect.ChatLogScope),
+	})
+	other := relayTestLogRecord("other-scope", testLogOrganizationID, testLogProjectID, 0)
+	other.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.anthropic.claude_code.events"),
+	})
+	messages, failures := logRelayTestMessages(bridged, other, relayTestLogRecord("unscoped", testLogOrganizationID, testLogProjectID, 0))
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+
+	requests := capture.snapshot()
+	require.Len(t, requests, 1)
+	bodies := relayRequestLogBodies(requests[0].request)
+	slices.Sort(bodies)
+	require.Equal(t, []string{"other-scope", "unscoped"}, bodies)
 }
 
 func TestLogRelayHandlerRightSizesLargeBatchWithoutMixingOrganizations(t *testing.T) {

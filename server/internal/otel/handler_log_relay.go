@@ -23,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -115,6 +117,10 @@ func (h *LogRelayHandler) HandleBatchWithResult(
 
 func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMessage) error {
 	logger := h.logger
+	messages, excluded := withoutChatMessageRecords(messages)
+	if excluded > 0 {
+		h.recordDroppedLogs(ctx, excluded, relayReasonExcluded)
+	}
 	groups, invalid := groupLogsByProvenance(messages)
 	if invalid > 0 {
 		h.recordDroppedLogs(ctx, invalid, relayReasonInvalid)
@@ -236,6 +242,29 @@ func (h *LogRelayHandler) recordFailedLogs(ctx context.Context, count int, reaso
 	}
 
 	h.recordsFailed.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
+}
+
+// withoutChatMessageRecords drops what the chat message bridge logged: a
+// customer's destination already received those words from the producer that
+// captured them, or never consented to a product-internal copy.
+func withoutChatMessageRecords(messages []logRelayMessage) ([]logRelayMessage, int) {
+	kept := make([]logRelayMessage, 0, len(messages))
+	for _, message := range messages {
+		if isChatMessageRecord(message.record) {
+			continue
+		}
+		kept = append(kept, message)
+	}
+	return kept, len(messages) - len(kept)
+}
+
+func isChatMessageRecord(record *otelv1.LogRecord) bool {
+	for _, kv := range record.GetAttributes() {
+		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) {
+			return kv.GetValue().GetStringValue() == dialect.ChatLogScope
+		}
+	}
+	return false
 }
 
 func groupLogsByProvenance(messages []logRelayMessage) ([]logProvenanceGroup, int) {

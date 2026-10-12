@@ -3,7 +3,6 @@ package telemetry
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,13 +10,13 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	otelrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 )
 
 // SessionObservedHandler projects imported transcript evidence through the
 // same enriched telemetry writer as hook events. Capture is not usage: these
 // events deliberately carry no token, cost, completion, or tool-call counts.
+// The agent_events row for the same message comes from the chat message
+// bridge, which logs every created message through the OTel pipeline.
 type SessionObservedHandler struct {
 	db     chatrepo.DBTX
 	logger *Logger
@@ -43,7 +42,6 @@ func (h *SessionObservedHandler) HandleBatch(ctx context.Context, messages []*te
 		observations[messageID] = msg
 	}
 	var logs []LogParams
-	var events []otelrepo.AgentEventRow
 	enabledOrgs := make(map[string]bool)
 	for projectID, ids := range byProject {
 		rows, err := chatrepo.New(h.db).GetImportedSessionObservations(ctx, chatrepo.GetImportedSessionObservationsParams{ProjectID: uuid.NullUUID{UUID: projectID, Valid: true}, MessageIds: ids})
@@ -72,44 +70,19 @@ func (h *SessionObservedHandler) HandleBatch(ctx context.Context, messages []*te
 				resourceAttributes: nil,
 				userSnapshot:       snapshot,
 				Attributes: map[attr.Key]any{
-					attr.EventSourceKey:              string(EventSourceHook),
-					attr.HookSourceKey:               row.Source.String,
-					attr.HookEventKey:                "session.observed",
-					attr.GenAIConversationIDKey:      row.ChatID.String(),
-					attr.ExternalUserIDKey:           row.ExternalUserID,
-					attr.GenAIResponseModelKey:       row.Model.String,
-					attr.GenAIProviderNameKey:        observed.GetProvider(),
-					attr.HookHostnameKey:             observed.GetHookHostname(),
-					attr.AccountTypeKey:              observed.GetAccountType(),
-					attr.BillingModeKey:              observed.GetBillingMode(),
-					attr.Key("gram.chat.message.id"): row.ID.String(),
+					attr.EventSourceKey:         string(EventSourceHook),
+					attr.HookSourceKey:          row.Source.String,
+					attr.HookEventKey:           "session.observed",
+					attr.GenAIConversationIDKey: row.ChatID.String(),
+					attr.ExternalUserIDKey:      row.ExternalUserID,
+					attr.GenAIResponseModelKey:  row.Model.String,
+					attr.GenAIProviderNameKey:   observed.GetProvider(),
+					attr.HookHostnameKey:        observed.GetHookHostname(),
+					attr.AccountTypeKey:         observed.GetAccountType(),
+					attr.BillingModeKey:         observed.GetBillingMode(),
+					attr.ChatMessageIDKey:       row.ID.String(),
 				},
 			})
-			// The analytics catalog reads agent_events. Use the provider's
-			// conversation ID there, matching normalized OTEL event identity.
-			sessionID := conv.Default(row.ExternalChatID.String, row.ChatID.String())
-			if strings.HasPrefix(sessionID, "anthropic-inference:") {
-				sessionID = row.ChatID.String()
-			}
-			hydrated := h.logger.hydrateUserInfo(ctx, logs[len(logs)-1])
-			var event otelrepo.AgentEventRow
-			event.OrganizationID, event.ProjectID = row.OrganizationID, projectID.String()
-			event.OccurredAtUnixNano, event.ObservedAtUnixNano = row.CreatedAt.Time.UnixNano(), time.Now().UnixNano()
-			event.RecordID, event.EventID = "transcript:"+row.ID.String(), "transcript:"+row.ID.String()
-			event.SessionID = sessionID
-			event.RawEventName, event.Source = "session.observed", "transcript"
-			event.Surface, event.Provider, event.Model = row.Source.String, observed.GetProvider(), row.Model.String
-			event.UserID, event.UserEmail = hydrated.UserInfo.UserID(), hydrated.UserInfo.Email()
-			event.ExternalUserID = row.ExternalUserID
-			event.AccountType, event.BillingMode = observed.GetAccountType(), observed.GetBillingMode()
-			event.Roles, event.Groups = hydrated.userSnapshot.Roles, hydrated.userSnapshot.Groups
-			event.DepartmentName = hydrated.userSnapshot.Attributes.DepartmentName
-			event.DivisionName = hydrated.userSnapshot.Attributes.DivisionName
-			event.JobTitle = hydrated.userSnapshot.Attributes.JobTitle
-			event.EmployeeType = hydrated.userSnapshot.Attributes.EmployeeType
-			event.CostCenterName = hydrated.userSnapshot.Attributes.CostCenterName
-			event.Attributes, event.ResourceAttributes, event.ScopeAttributes = "{}", "{}", "{}"
-			events = append(events, event)
 		}
 	}
 	// Ack only after ClickHouse commits, not when its async buffer accepts the
@@ -120,9 +93,6 @@ func (h *SessionObservedHandler) HandleBatch(ctx context.Context, messages []*te
 	}
 	if written != len(logs) {
 		return fmt.Errorf("incomplete imported session telemetry: wrote %d of %d observations", written, len(logs))
-	}
-	if err := otelrepo.New(h.logger.chConn).InsertAgentEvents(ctx, events); err != nil {
-		return fmt.Errorf("write imported agent session observations: %w", err)
 	}
 	return nil
 }

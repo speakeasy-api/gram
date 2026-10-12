@@ -1,0 +1,21 @@
+edition = "2024";
+
+package gram.conversation.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1;conversationv1";
+
+// AgentEventsBridge logs created messages into the OTel pipeline. Transient
+// failures retry within retention, without a DLQ.
+message AgentEventsBridge {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.conversation.v1.MessageEvent"
+    retention: { seconds: 345600 /* 4 days */ }
+    ack_deadline: { seconds: 60 }
+    retry_policy: {
+      minimum_backoff: { seconds: 10 }
+      maximum_backoff: { seconds: 600 }
+    }
+  };
+}

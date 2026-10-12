@@ -200,7 +200,12 @@ const (
 	ChatIDKey            = attribute.Key("gram.chat.id")
 	ChatExternalIDKey    = attribute.Key("gram.chat.external_id")
 	ChatContentPartIDKey = attribute.Key("gram.chat.content_part_id")
-	MessageIDKey         = attribute.Key("gram.message.id")
+	ChatMessageIDKey     = attribute.Key("gram.chat.message.id")
+	// ChatMessageKeyKey is the content-derived identity of a chat message
+	// (chat.MessageTextKey), the event_id every capture lane collapses on.
+	ChatMessageKeyKey = attribute.Key("gram.chat.message.key")
+	ChatRoleKey       = attribute.Key("gram.chat.role")
+	MessageIDKey      = attribute.Key("gram.message.id")
 	// Chat-analysis score event attributes: stamped on the synthetic
 	// chat_analysis:work_units:score telemetry rows the chat analysis
 	// publisher emits once per scored session, and read back by
@@ -695,6 +700,7 @@ const (
 	HookErrorKey                = attribute.Key("gram.hook.error")
 	HookIsInterruptKey          = attribute.Key("gram.hook.is_interrupt")
 	HookSourceKey               = attribute.Key("gram.hook.source")
+	HookTurnIDKey               = attribute.Key("gram.hook.turn_id")
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
@@ -1166,6 +1172,9 @@ func SlogHookEvent(v string) slog.Attr      { return slog.String(string(HookEven
 func HookSource(v string) attribute.KeyValue { return HookSourceKey.String(v) }
 func SlogHookSource(v string) slog.Attr      { return slog.String(string(HookSourceKey), v) }
 
+func HookTurnID(v string) attribute.KeyValue { return HookTurnIDKey.String(v) }
+func SlogHookTurnID(v string) slog.Attr      { return slog.String(string(HookTurnIDKey), v) }
+
 func HookBlockReason(v string) attribute.KeyValue { return HookBlockReasonKey.String(v) }
 func SlogHookBlockReason(v string) slog.Attr      { return slog.String(string(HookBlockReasonKey), v) }
 
@@ -1544,6 +1553,15 @@ func SlogAssetURL(v string) slog.Attr      { return slog.String(string(AssetURLK
 
 func ChatID(v string) attribute.KeyValue { return ChatIDKey.String(v) }
 func SlogChatID(v string) slog.Attr      { return slog.String(string(ChatIDKey), v) }
+
+func ChatMessageID(v string) attribute.KeyValue { return ChatMessageIDKey.String(v) }
+func SlogChatMessageID(v string) slog.Attr      { return slog.String(string(ChatMessageIDKey), v) }
+
+func ChatMessageKey(v string) attribute.KeyValue { return ChatMessageKeyKey.String(v) }
+func SlogChatMessageKey(v string) slog.Attr      { return slog.String(string(ChatMessageKeyKey), v) }
+
+func ChatRole(v string) attribute.KeyValue { return ChatRoleKey.String(v) }
+func SlogChatRole(v string) slog.Attr      { return slog.String(string(ChatRoleKey), v) }
 func SlogChatExternalID(v string) slog.Attr {
 	return slog.String(string(ChatExternalIDKey), v)
 }

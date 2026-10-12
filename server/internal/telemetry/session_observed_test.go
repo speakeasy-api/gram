@@ -90,10 +90,9 @@ func TestImportedSessionObservationReachesUserAndSessionAnalytics(t *testing.T) 
 	var observedLogs uint64
 	require.NoError(t, ti.chConn.QueryRow(ctx, `SELECT count() FROM telemetry_logs WHERE gram_project_id = ? AND toString(attributes.gram.hook.event) = 'session.observed' AND user_email = ?`, ti.projectID, "person@example.test").Scan(&observedLogs))
 	require.Positive(t, observedLogs, "observations must carry an event marker and current stored email")
-	var sessions, records uint64
-	require.NoError(t, ti.chConn.QueryRow(ctx, `SELECT uniqExact(session_id), uniqExact(record_id) FROM agent_events WHERE organization_id = ? AND project_id = ?`, ti.orgID, ti.projectID).Scan(&sessions, &records))
-	require.EqualValues(t, 1, sessions)
-	require.EqualValues(t, 1, records)
+	var events uint64
+	require.NoError(t, ti.chConn.QueryRow(ctx, `SELECT count() FROM agent_events WHERE organization_id = ? AND project_id = ?`, ti.orgID, ti.projectID).Scan(&events))
+	require.Zero(t, events, "agent_events rows come from the chat message bridge, not from this handler")
 	for _, window := range []time.Duration{time.Hour, repo.SessionSummaryMinWindow + 24*time.Hour} {
 		sessions, err := ti.chClient.ListSessions(ctx, repo.ListSessionsParams{
 			ProjectIDs: []string{ti.projectID}, TimeStart: now.Add(-window).UnixNano(), TimeEnd: now.Add(time.Hour).UnixNano(), SortBy: "message_count", Limit: 10,

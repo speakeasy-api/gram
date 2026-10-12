@@ -1514,6 +1514,20 @@ pubsub:
         name: gram-authz-v1-challenge
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-conversation-v1-agent-events-bridge
+      topic_proto_message: gram-conversation-v1-message-event
+    name: gram-conversation-v1-agent-events-bridge
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-conversation-v1-message-event
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading-ch-writer
       topic_proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading-ch-writer

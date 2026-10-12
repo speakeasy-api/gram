@@ -15,8 +15,10 @@ import (
 
 	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
+	"github.com/speakeasy-api/gram/server/internal/chatevents"
 	"github.com/speakeasy-api/gram/server/internal/classifier/jev"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 
 	"cloud.google.com/go/pubsub/v2"
@@ -28,6 +30,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	"golang.org/x/sync/errgroup"
@@ -297,6 +301,12 @@ func newStreamsCommand() *cli.Command {
 			Usage:   "Temporarily drain the sensor evaluation subscription: acknowledge all messages without evaluation or reading publication",
 			EnvVars: []string{"GRAM_SIGINT_ACK_ONLY"},
 		},
+		&cli.BoolFlag{
+			Name:    "chat-events-bridge",
+			Usage:   "Log created chat messages into agent_events through the OTel pipeline",
+			EnvVars: []string{"GRAM_CHAT_EVENTS_BRIDGE"},
+			Value:   true,
+		},
 		&cli.StringFlag{
 			Name:     "assets-backend",
 			Usage:    "Asset storage backend for conversation snapshots",
@@ -481,9 +491,10 @@ func newStreamsCommand() *cli.Command {
 				riskMeterPub  gcp.Publisher[*meteringv1.MeterReading]
 				sessionLogPub gcp.Publisher[*telemetryv1.LogRecord]
 				readingsPub   gcp.Publisher[*sigintv1.Reading]
+				inboundLogPub gcp.Publisher[*otelv1.InboundLogRecord]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub, readingsPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub, readingsPub, inboundLogPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -522,6 +533,18 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create sensor readings publisher: %w", err)
 			}
+
+			inboundLogPublishSettings := pubsub.DefaultPublishSettings
+			inboundLogPublishSettings.Timeout = 10 * time.Second
+			inboundLogPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.InboundLogRecord{}, gcp.WithPubSubPublishSettings(&inboundLogPublishSettings))
+			if err != nil {
+				return fmt.Errorf("create chat events log publisher: %w", err)
+			}
+			chatEventsLogger := otelpub.NewLogger(inboundLogPub, resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String("gram-server")), chatevents.Scope)
+			shutdownFuncs = append(shutdownFuncs, func(context.Context) error {
+				chatEventsLogger.Close()
+				return nil
+			})
 
 			sensorClassifier, err := jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key"))))
 			if err != nil {
@@ -795,6 +818,10 @@ func newStreamsCommand() *cli.Command {
 						})
 					}
 					mustReceiveBatchWithResult(rg, &conversationv1.MessageEvent{}, &sigintv1.Evaluator{}, handler, gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				}
+				if c.Bool("chat-events-bridge") {
+					chatEventsHandler := chatevents.NewHandler(logger, chatevents.NewRepository(db), assetStorage, newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs), chatEventsLogger)
+					mustReceiveBatchWithResult(rg, &conversationv1.MessageEvent{}, &conversationv1.AgentEventsBridge{}, chatEventsHandler, gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
 				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
