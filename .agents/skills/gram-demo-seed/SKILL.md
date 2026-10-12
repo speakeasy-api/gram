@@ -77,7 +77,7 @@ build-tagged (`demoseed_safety`): running the package without the tag reports
   demo org; postflight asserts fail the run on missing or leaked rows.
 - **clickhouse.sql** runs scoped `ALTER TABLE … DELETE` on the telemetry
   source, **every MV target** (enumerate them by grepping `MATERIALIZED
-VIEW` in `server/clickhouse/schema.sql`), and the org-keyed tables, then
+  VIEW` in `server/clickhouse/schema.sql`), and the org-keyed tables, then
   inserts fresh rows; the MVs repopulate summaries on INSERT. Postflight
   `throwIf` statements at the bottom of the script fail the run — the
   Postgres postflight `RAISE` asserts likewise sit at the end of
@@ -103,7 +103,7 @@ twice with tampering in between, and fails on:
    must be scoped by the demo org id, demo project id, or ids derived from
    them; every ClickHouse delete by `organization_id` or `gram_project_id`.
    Failure reads `table X: … touched another tenant's rows` / `a pre-existing
-row of another tenant was modified or deleted`.
+   row of another tenant was modified or deleted`.
 2. **Data that survives a rerun uncleaned, or unstable counts.** New inserts
    need a matching delete (or an upsert) so the run stays idempotent —
    failure reads `reseed is not cleaning up or not idempotent`. Any NEW
