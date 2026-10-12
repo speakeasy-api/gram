@@ -1137,15 +1137,24 @@ func (q *Queries) ManagedClientIDInUse(ctx context.Context, arg ManagedClientIDI
 
 const managedKeyResourceExists = `-- name: ManagedKeyResourceExists :one
 SELECT EXISTS (
- SELECT 1 FROM gcp_kms_keys AS k
+ SELECT 1
+ FROM gcp_kms_keys AS k
+ JOIN external_keys AS ek ON ek.id = k.external_key_id AND ek.provider = k.external_keys_provider
  WHERE k.resource_name = $1
+   AND ek.organization_id = $2::text
 )
 `
 
+type ManagedKeyResourceExistsParams struct {
+	ResourceName   string
+	OrganizationID string
+}
+
 // Include tombstones and every organization: resource names are random and
 // global, so a reference anywhere means the key must never be disabled.
-func (q *Queries) ManagedKeyResourceExists(ctx context.Context, resourceName string) (bool, error) {
-	row := q.db.QueryRow(ctx, managedKeyResourceExists, resourceName)
+// Whether the organization has an external key row for this KMS resource.
+func (q *Queries) ManagedKeyResourceExists(ctx context.Context, arg ManagedKeyResourceExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, managedKeyResourceExists, arg.ResourceName, arg.OrganizationID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

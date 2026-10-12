@@ -5998,11 +5998,19 @@ func (q *Queries) SoftDeleteAttachmentSourceFixture(ctx context.Context, id uuid
 const softDeleteExternalCredentialFixture = `-- name: SoftDeleteExternalCredentialFixture :exec
 UPDATE external_credentials SET deleted_at = clock_timestamp()
 WHERE id = $1
+  AND organization_id IS NOT DISTINCT FROM $2::text
+  AND project_id IS NULL
 `
 
-// Test-only soft delete of an external credential.
-func (q *Queries) SoftDeleteExternalCredentialFixture(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, softDeleteExternalCredentialFixture, id)
+type SoftDeleteExternalCredentialFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Test-only soft delete of an external credential in its tier: a NULL
+// organization_id names the platform tier.
+func (q *Queries) SoftDeleteExternalCredentialFixture(ctx context.Context, arg SoftDeleteExternalCredentialFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteExternalCredentialFixture, arg.ID, arg.OrganizationID)
 	return err
 }
 

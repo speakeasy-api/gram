@@ -122,10 +122,14 @@ WHERE id = @id AND organization_id = @organization_id AND state = 'pending' AND 
 
 -- Include tombstones and every organization: resource names are random and
 -- global, so a reference anywhere means the key must never be disabled.
+-- Whether the organization has an external key row for this KMS resource.
 -- name: ManagedKeyResourceExists :one
 SELECT EXISTS (
- SELECT 1 FROM gcp_kms_keys AS k
+ SELECT 1
+ FROM gcp_kms_keys AS k
+ JOIN external_keys AS ek ON ek.id = k.external_key_id AND ek.provider = k.external_keys_provider
  WHERE k.resource_name = @resource_name
+   AND ek.organization_id = @organization_id::text
 );
 
 -- Test fixture: age a pending publication relative to the database clock.
