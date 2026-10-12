@@ -546,6 +546,21 @@ UPDATE platform_mcp_setup_handoffs
 SET expires_at = clock_timestamp() - interval '1 second'
 WHERE id = @id;
 
+-- name: ExpirePlatformMCPOperationReceiptFixture :one
+-- Test-only fixture expiring an idempotency receipt by the database clock,
+-- the clock both the replay pre-check and the locked path judge expiry with.
+UPDATE platform_mcp_operation_receipts
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+RETURNING expires_at;
+
+-- name: ListPlatformMCPOperationReceiptIDsFixture :many
+-- Test-only inspection of which receipts an organization still holds.
+SELECT id
+FROM platform_mcp_operation_receipts
+WHERE organization_id = @organization_id
+ORDER BY id;
+
 -- name: GetPlatformMCPReadinessFingerprintFixture :one
 -- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
 SELECT provider_authorization_fingerprint
@@ -1562,7 +1577,8 @@ WHERE remote_session_issuers.id = @id
 -- name: SetPreparationFixtureIssuerCapability :exec
 UPDATE remote_session_issuers
 SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer']
+    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer'],
+    metadata_fetched_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureClientGrants :exec

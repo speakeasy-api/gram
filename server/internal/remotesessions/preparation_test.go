@@ -42,6 +42,17 @@ func TestPreparationEligibility(t *testing.T) {
 		})
 	}
 }
+func TestIssuerPreparationEligibilityRequiresDiscovery(t *testing.T) {
+	t.Parallel()
+	issuer := repo.RemoteSessionIssuer{AuthorizationGrantProfilesSupported: []string{oauthwire.GrantProfileIDJAG}, GrantTypesSupported: []string{oauthwire.GrantTypeJWTBearer}}
+	require.Equal(t, PreparationStateIncompleteMetadata, IssuerPreparationEligibility(issuer), "a declared advertisement is not discovery evidence")
+	require.Equal(t, PreparationStateIncompleteMetadata, IssuerPreparationEligibility(repo.RemoteSessionIssuer{}), "an undiscovered issuer needs discovery, not another provider")
+	issuer.MetadataFetchedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	require.Equal(t, preparationEligible, IssuerPreparationEligibility(issuer))
+	issuer.AuthorizationGrantProfilesSupported = nil
+	require.Equal(t, PreparationStateUnsupportedProfile, IssuerPreparationEligibility(issuer))
+}
+
 func TestPreparationCanonicalResourceAndScopes(t *testing.T) {
 	t.Parallel()
 	in := PreparationInput{UserSessionIssuerID: uuid.New(), RemoteSessionIssuerID: uuid.New(), Resource: "https://resource.example.com/mcp/", Scopes: []string{"write", "read", "read"}}

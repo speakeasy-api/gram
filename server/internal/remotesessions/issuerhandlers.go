@@ -132,6 +132,8 @@ type discoveryResult struct {
 	unreadable string
 	// unreadableErr retains the upstream status and cause for refresh failures.
 	unreadableErr *discoveryError
+	// originFallback reports that an origin-root candidate supplied any adopted member.
+	originFallback bool
 }
 
 // metadataFamily is the discovery specification a well-known URL follows.
@@ -424,15 +426,7 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txRepo := repo.New(dbtx)
-
-	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+	params := repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                           uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 		OrganizationID:                      conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:                                payload.Slug,
@@ -474,7 +468,21 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		MetadataLastError:                          "",
 		MetadataLastErrorUrl:                       "",
-	})
+	}
+	if err := s.preflightCreateDiscoverySlug(ctx, logger, &params); err != nil {
+		return nil, err
+	}
+	s.recordCreateDiscovery(ctx, logger, tunnelID, &params, time.Now())
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, params)
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) {
 			return nil, oops.E(oops.CodeConflict, err, "an issuer with this slug already exists").LogError(ctx, logger)
@@ -1262,6 +1270,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	var untrustedErr *untrustedDocumentError
 	var primary, fallback *rfc8414Document
 	var primaryFamily metadataFamily
+	originFallback, fallbackFromOrigin := false, false
 	// unreadable records, per family, the first candidate that could not be
 	// read at all rather than one that definitively has no document. Such a
 	// candidate may be hiding fields the merge would have captured, whichever
@@ -1317,6 +1326,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 		if doc.AuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
 			if primary == nil && fallback == nil {
 				fallback = &doc
+				fallbackFromOrigin = candidate.fallback
 			}
 			continue
 		}
@@ -1324,6 +1334,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 		if primary == nil {
 			primary = &doc
 			primaryFamily = candidate.family
+			originFallback = candidate.fallback
 			continue
 		}
 		// Only a document naming the same issuer may contribute: an
@@ -1331,6 +1342,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 		// tenant, and one naming no issuer cannot be tied to this one.
 		if doc.Issuer != "" && doc.Issuer == primary.Issuer {
 			union := mergeIssuerMetadata(*primary, doc)
+			originFallback = originFallback || (candidate.fallback && !bytes.Equal(union.raw, primary.raw))
 			primary = &union
 			break
 		}
@@ -1346,10 +1358,11 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 			partialURL = partialErr.WellKnownURL
 		}
 		result := discoveryResult{
-			doc:           *primary,
-			warnings:      collectDiscoveryWarnings(issuerURL, *primary),
-			unreadable:    partialURL,
-			unreadableErr: partialErr,
+			doc:            *primary,
+			warnings:       collectDiscoveryWarnings(issuerURL, *primary),
+			unreadable:     partialURL,
+			unreadableErr:  partialErr,
+			originFallback: originFallback,
 		}
 		if result.unreadable != "" {
 			result.warnings = append(result.warnings, unreadableCandidateMessage(result.unreadable, result.unreadableErr))
@@ -1367,7 +1380,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 	// issuer has. With a candidate unread, the real document may be behind
 	// the outage, so the run is transient rather than a verdict on the issuer.
 	if fallback != nil && unreadableErr == nil {
-		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: "", unreadableErr: nil}, nil
+		return discoveryResult{doc: *fallback, warnings: collectDiscoveryWarnings(issuerURL, *fallback), unreadable: "", unreadableErr: nil, originFallback: fallbackFromOrigin}, nil
 	}
 	if unreadableErr != nil {
 		return discoveryResult{}, unreadableErr

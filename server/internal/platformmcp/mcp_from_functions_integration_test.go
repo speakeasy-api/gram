@@ -491,7 +491,13 @@ func TestCreateMCPFromFunctionsChargesOutsideAnyTransaction(t *testing.T) {
 	charges := len(*acquired)
 	_, err = fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, input)
 	require.NoError(t, err)
-	require.Len(t, *acquired, charges, "a replay is not charged")
+	// The replay itself is free, but re-sending its publish and index signals
+	// is charged once (see chargeRerun), and that charge is outside any
+	// transaction too.
+	require.Len(t, *acquired, 2*charges, "a replay is charged only for the signals it re-sends")
+	for _, held := range *acquired {
+		require.Zero(t, held, "the replay's charge is never consulted while a connection, transaction, or receipt lock is held")
+	}
 }
 
 // The tool is a second caller of the dashboard's authoring path, so what it

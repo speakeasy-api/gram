@@ -6,6 +6,7 @@ import { useCreateDashboardMutation } from "@gram/client/react-query/createDashb
 import { invalidateAllDashboard } from "@gram/client/react-query/dashboard.js";
 import { invalidateAllDashboards } from "@gram/client/react-query/dashboards.js";
 import { useDeleteDashboardMutation } from "@gram/client/react-query/deleteDashboard.js";
+import { useDuplicateBuiltInDashboardMutation } from "@gram/client/react-query/duplicateBuiltInDashboard.js";
 import { useDuplicateDashboardMutation } from "@gram/client/react-query/duplicateDashboard.js";
 import { useRemoveDashboardWidgetMutation } from "@gram/client/react-query/removeDashboardWidget.js";
 import { useSaveDashboardFiltersMutation } from "@gram/client/react-query/saveDashboardFilters.js";
@@ -37,6 +38,8 @@ export function useDashboardMutations(): {
   addWidget: (id: string, widgetId: string, then?: () => void) => void;
   removeWidget: (id: string, placementId: string, then?: () => void) => void;
   duplicate: (id: string, then?: (copy: Dashboard) => void) => void;
+  /** Make a project dashboard from a Speakeasy-built one, by its slug. */
+  duplicateBuiltIn: (slug: string, then?: (copy: Dashboard) => void) => void;
   remove: (id: string, then?: () => void) => void;
   /** Any write is in flight, a layout save included, so dialogs and menus wait. */
   pending: boolean;
@@ -75,6 +78,9 @@ export function useDashboardMutations(): {
     onError: fail("remove the widget from"),
   });
   const duplicateMutation = useDuplicateDashboardMutation({
+    onError: fail("duplicate"),
+  });
+  const duplicateBuiltInMutation = useDuplicateBuiltInDashboardMutation({
     onError: fail("duplicate"),
   });
   const deleteMutation = useDeleteDashboardMutation({
@@ -146,6 +152,16 @@ export function useDashboardMutations(): {
           },
         },
       ),
+    duplicateBuiltIn: (slug, then) =>
+      duplicateBuiltInMutation.mutate(
+        { request: { duplicateBuiltInDashboardRequestBody: { slug } } },
+        {
+          onSuccess: (copy) => {
+            then?.(copy);
+            void refresh();
+          },
+        },
+      ),
     remove: (id, then) =>
       deleteMutation.mutate(
         { request: { id } },
@@ -163,6 +179,7 @@ export function useDashboardMutations(): {
       addMutation.isPending ||
       removeMutation.isPending ||
       duplicateMutation.isPending ||
+      duplicateBuiltInMutation.isPending ||
       deleteMutation.isPending ||
       layoutMutation.isPending,
     saving: layoutMutation.isPending,

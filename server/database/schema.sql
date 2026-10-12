@@ -10641,3 +10641,93 @@ CREATE INDEX IF NOT EXISTS chat_message_participants_chat_id_idx
 ON chat_message_participants (chat_id);
 CREATE INDEX IF NOT EXISTS chat_message_participants_message_id_idx
 ON chat_message_participants (message_id);
+
+-- API deletion is soft. Required ownership/reference columns intentionally
+-- prevent physical parent deletion until memberships and owned rows are removed
+-- child-first; ON DELETE SET NULL follows the repository's FK convention.
+CREATE TABLE IF NOT EXISTS sigint_custom_signals (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  classifier_criteria TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT sigint_custom_signals_pkey PRIMARY KEY (id),
+  CONSTRAINT sigint_custom_signals_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_custom_signals_project_id_id_key
+ON sigint_custom_signals (project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_custom_signals_project_id_slug_key
+ON sigint_custom_signals (project_id, slug);
+
+CREATE INDEX IF NOT EXISTS sigint_custom_signals_project_id_id_idx
+ON sigint_custom_signals (project_id, id) WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS sigint_sensors (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  instructions TEXT,
+  mode TEXT NOT NULL,
+  -- CEL predicate over the message; roles use lowercase domain values.
+  match_expression TEXT NOT NULL DEFAULT 'message.role == "user"',
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT sigint_sensors_pkey PRIMARY KEY (id),
+  CONSTRAINT sigint_sensors_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_sensors_project_id_id_key
+ON sigint_sensors (project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_sensors_project_id_slug_key
+ON sigint_sensors (project_id, slug);
+
+CREATE INDEX IF NOT EXISTS sigint_sensors_project_id_id_idx
+ON sigint_sensors (project_id, id) WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS sigint_sensor_signals (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  sensor_id uuid NOT NULL,
+  signal_id uuid NOT NULL,
+  sort_order INTEGER NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT sigint_sensor_signals_pkey PRIMARY KEY (id),
+  CONSTRAINT sigint_sensor_signals_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT sigint_sensor_signals_project_id_sensor_id_fkey FOREIGN KEY (project_id, sensor_id) REFERENCES sigint_sensors (project_id, id) ON DELETE SET NULL,
+  CONSTRAINT sigint_sensor_signals_project_id_signal_id_fkey FOREIGN KEY (project_id, signal_id) REFERENCES sigint_custom_signals (project_id, id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_sensor_signals_project_id_sensor_id_signal_id_key
+ON sigint_sensor_signals (project_id, sensor_id, signal_id) WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_project_id_sensor_id_sort_order_idx
+ON sigint_sensor_signals (project_id, sensor_id, sort_order, id) WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_project_id_signal_id_idx
+ON sigint_sensor_signals (project_id, signal_id) WHERE deleted IS FALSE;
+
+-- Foreign-key checks must also locate soft-deleted memberships.
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_sensor_reference_idx
+ON sigint_sensor_signals (project_id, sensor_id);
+
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_signal_reference_idx
+ON sigint_sensor_signals (project_id, signal_id);

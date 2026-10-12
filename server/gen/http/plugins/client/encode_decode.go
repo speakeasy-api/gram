@@ -5153,6 +5153,7 @@ func unmarshalPluginAssignmentResponseBodyToPluginsPluginAssignment(v *PluginAss
 	res := &plugins.PluginAssignment{
 		ID:           *v.ID,
 		PrincipalUrn: *v.PrincipalUrn,
+		InstallMode:  *v.InstallMode,
 		CreatedAt:    *v.CreatedAt,
 	}
 

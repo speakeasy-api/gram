@@ -330,6 +330,9 @@ export function AttachRemoteIdentityProviderSheet({
           jwksUri: jwksUri.trim() || undefined,
           scopesSupported: discoveredSnapshot?.scopesSupported ?? [],
           grantTypesSupported: discoveredSnapshot?.grantTypesSupported ?? [],
+          // Omitted without discovery: the server treats any value as discovered.
+          authorizationGrantProfilesSupported:
+            discoveredSnapshot?.authorizationGrantProfilesSupported,
           responseTypesSupported:
             discoveredSnapshot?.responseTypesSupported ?? [],
           tokenEndpointAuthMethodsSupported:

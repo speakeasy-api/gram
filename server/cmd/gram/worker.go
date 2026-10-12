@@ -208,6 +208,7 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		internalCatalogFlag(),
 		&cli.StringFlag{
 			Name:     "tunnel-forward-token",
 			Usage:    "Shared secret presented to the tunnel gateway forward listener to authenticate gram-worker",
@@ -488,7 +489,7 @@ func newWorkerCommand() *cli.Command {
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
 				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
-					WithDistributionAdmission(admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger)))
+					WithDistributionAdmission(admission.NewGuard())
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}

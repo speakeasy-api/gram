@@ -42,6 +42,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Budgets / spend controls                                       | PG `spend_rules` ×2 + `spend_rule_events` ×4, calibrated to CH usage (breach+warning per rule); usage MV already fed by existing rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `[~]`  |
 | Toolsets / MCP / Sources / Deployments / Playground            | PG deployment stack: asset + completed deployment + 8 `http_tool_definitions` (urns match telemetry, doc slug `acme`) + 4 toolsets (+versions); each toolset with an `mcp_slug` also owns a canonical `mcp_servers` wrapper (id = toolset id) and one platform `mcp_endpoints` row at its slug                                                                                                                                                                                                                                                                                                                                                                                                 | `[~]`  |
 | Prompts                                                        | PG `prompt_templates` ×2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `[~]`  |
+| Signals Intelligence (`/signals-intelligence`)                 | PG `sigint_custom_signals` ×9 + `sigint_sensors` ×4 + `sigint_sensor_signals` ×9; org `signals_intelligence` feature exposes the configuration page                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `[~]`  |
 | Skills                                                         | PG `skills` ×3 + `skill_versions` + 1 open edit suggestion with diff                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `[~]`  |
 | Shadow MCP                                                     | CH `shadow_mcp_inventory_urls` ×15 + `hooks:` telemetry rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `[~]`  |
 | Directory dimensions                                           | PG `directory_users`/`directory_groups`/memberships mirroring the CH `user.attributes.*` profiles                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `[~]`  |
@@ -154,23 +155,24 @@ which carries a scope override (`read`), shown on its Overview and editable on i
 Settings tab; the Scope fallback row reads Every advertised scope. Its client
 has no scopes of its own and is flagged as a legacy callback client. Platform admins see the legacy callback warning with its
 Migrate button on the client's pages and the compatibility-mode switch on its
-Settings tab; everyone else sees neither. Browser verification: `[~]`.
+Overview tab; everyone else sees neither. Browser verification: `[~]`.
 
 Linear's protected resource (`https://mcp.linear.app/mcp`) has a PG
 `remote_protected_resources` row read two hours before the seed ran,
 advertising `read` and `write`, with a scope pin of `read`. What the server's
 Identity panel (`remoteMcp.getServerScopes`) shows depends on the
 `remote-session-live-resource-scopes` rollout flag. Off, the pin picker is
-read-only and says pins are not enabled for the organization; because a pin is
-seeded, a "Clear pinned scopes" button is shown (clearing is allowed, adding is
-not), and logins request the issuer override. On (the demo org is enrolled),
-Linear's seeded client has no scopes of its own, so the pin decides and the
-panel reads "Sign-ins request these scopes." The advertised `read` and `write`
-are offered as picker options. With the flag on, the Team Access tab shows a
-"Scopes requested from" card listing the pinned `read`, with an Edit scopes
-link for members with `mcp:write` on every server sharing the URL. With it
-off, logins use the identity provider's override (also `read`), so the card
-still shows, with the source line "Set by the identity provider's override."
+hidden and logins request the issuer override; the panel shows the read-only
+"Requested at sign-in" summary instead (`read`, "Set by the identity
+provider's override."). On (the demo org is enrolled), Linear's seeded client
+has no scopes of its own, so the pin decides and the panel reads "Sign-ins
+request these scopes." The advertised `read` and `write` are offered as picker
+options. When the pin does not decide, the picker's status line also names
+what sign-ins request, e.g. "Not used for this connection. Sign-ins request
+read, set by the identity provider's override." The extra sentence drops while
+the pin has unsaved edits. Members with only `mcp:read` on the server see no
+picker; instead the same read-only summary lists what the connected client
+requests (`read`, with "Pinned for this MCP server's URL." with the flag on).
 Browser verification: `[~]`.
 
 ### Upstream session validation outcomes

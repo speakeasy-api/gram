@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // PlatformCleanupPageSize bounds discovery and exact-ID cleanup requests.
@@ -22,21 +21,6 @@ const PlatformCleanupPageSize = 100
 // returned plugin IDs in this same transaction, then commit both atomically.
 // Ambiguous provenance is preserved even when its membership ID is supplied.
 func ApplyPlatformCleanup(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID, membershipIDs []uuid.UUID) ([]uuid.UUID, error) {
-	return applyPlatformCleanup(ctx, tx, org, projectID, membershipIDs, urn.NewSystemPrincipal("automatic-role-distribution"))
-}
-
-// ApplyPlatformCleanupAsUser applies the same exact-ID safeguards as
-// ApplyPlatformCleanup, attributing removals to the initiating maintenance operator.
-// Publication must still be requested in the same transaction.
-func ApplyPlatformCleanupAsUser(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID, membershipIDs []uuid.UUID, actorID string) ([]uuid.UUID, error) {
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, actorID)
-	if _, err := actor.Value(); err != nil {
-		return nil, fmt.Errorf("invalid cleanup actor: %w", err)
-	}
-	return applyPlatformCleanup(ctx, tx, org, projectID, membershipIDs, actor)
-}
-
-func applyPlatformCleanup(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID, membershipIDs []uuid.UUID, actor urn.Principal) ([]uuid.UUID, error) {
 	if err := validateCleanupScope(org, projectID); err != nil {
 		return nil, err
 	}
@@ -96,7 +80,7 @@ func applyPlatformCleanup(ctx context.Context, tx pgx.Tx, org string, projectID 
 		if err != nil {
 			return nil, fmt.Errorf("remove platform cleanup membership: %w", err)
 		}
-		if err := auditChangeAs(ctx, tx, org, projectID, membership.PluginID, removed, false, actor); err != nil {
+		if err := auditChange(ctx, tx, org, projectID, membership.PluginID, removed, false); err != nil {
 			return nil, err
 		}
 		removedPlugins = append(removedPlugins, membership.PluginID)

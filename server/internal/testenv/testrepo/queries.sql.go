@@ -1166,6 +1166,22 @@ func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePr
 	return err
 }
 
+const expirePlatformMCPOperationReceiptFixture = `-- name: ExpirePlatformMCPOperationReceiptFixture :one
+UPDATE platform_mcp_operation_receipts
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = $1
+RETURNING expires_at
+`
+
+// Test-only fixture expiring an idempotency receipt by the database clock,
+// the clock both the replay pre-check and the locked path judge expiry with.
+func (q *Queries) ExpirePlatformMCPOperationReceiptFixture(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, expirePlatformMCPOperationReceiptFixture, id)
+	var expires_at pgtype.Timestamptz
+	err := row.Scan(&expires_at)
+	return expires_at, err
+}
+
 const expirePlatformMCPSetupHandoffFixture = `-- name: ExpirePlatformMCPSetupHandoffFixture :exec
 UPDATE platform_mcp_setup_handoffs
 SET expires_at = clock_timestamp() - interval '1 second'
@@ -3336,6 +3352,34 @@ func (q *Queries) ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx co
 	return items, nil
 }
 
+const listPlatformMCPOperationReceiptIDsFixture = `-- name: ListPlatformMCPOperationReceiptIDsFixture :many
+SELECT id
+FROM platform_mcp_operation_receipts
+WHERE organization_id = $1
+ORDER BY id
+`
+
+// Test-only inspection of which receipts an organization still holds.
+func (q *Queries) ListPlatformMCPOperationReceiptIDsFixture(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPOperationReceiptIDsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublishOutboxRows = `-- name: ListPublishOutboxRows :many
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, retry_after, locked_until, lease_token, created_at
@@ -5473,7 +5517,8 @@ func (q *Queries) SetPreparationFixtureInteractiveClient(ctx context.Context, ar
 const setPreparationFixtureIssuerCapability = `-- name: SetPreparationFixtureIssuerCapability :exec
 UPDATE remote_session_issuers
 SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer']
+    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer'],
+    metadata_fetched_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2
 `
 

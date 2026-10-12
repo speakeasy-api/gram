@@ -69,6 +69,9 @@ type SetPluginAssignmentsRequestBody struct {
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
 	// List of principal URNs to assign.
 	PrincipalUrns []string `form:"principal_urns" json:"principal_urns" xml:"principal_urns"`
+	// Install mode per principal URN in principal_urns. A principal missing from
+	// this map keeps its current mode, or gets `default` when it is newly assigned.
+	InstallModes map[string]string `form:"install_modes,omitempty" json:"install_modes,omitempty" xml:"install_modes,omitempty"`
 }
 
 // RotateObservabilityCredentialRequestBody is the type of the "plugins"
@@ -4567,7 +4570,11 @@ type PluginAssignmentResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
-	CreatedAt    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// How the device agent installs the plugin for this audience. `required`:
+	// installed, and the user can't turn it off. `default`: installed, and the
+	// user can turn it off. `available`: not installed until the user turns it on.
+	InstallMode *string `form:"install_mode,omitempty" json:"install_mode,omitempty" xml:"install_mode,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
 // PluginAudienceResponseBody is used to define fields on response body types.
@@ -4701,6 +4708,14 @@ func NewSetPluginAssignmentsRequestBody(p *plugins.SetPluginAssignmentsPayload) 
 		}
 	} else {
 		body.PrincipalUrns = []string{}
+	}
+	if p.InstallModes != nil {
+		body.InstallModes = make(map[string]string, len(p.InstallModes))
+		for key, val := range p.InstallModes {
+			tk := key
+			tv := val
+			body.InstallModes[tk] = tv
+		}
 	}
 	return body
 }
@@ -14255,11 +14270,19 @@ func ValidatePluginAssignmentResponseBody(body *PluginAssignmentResponseBody) (e
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
+	if body.InstallMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("install_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.InstallMode != nil {
+		if !(*body.InstallMode == "required" || *body.InstallMode == "default" || *body.InstallMode == "available") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.install_mode", *body.InstallMode, []any{"required", "default", "available"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

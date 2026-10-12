@@ -206,7 +206,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	// Record explicit manual setup independently of automatic readiness.
 	manual := selected != uuid.Nil && (in.Mechanism == PreparationMechanismManual || in.Mechanism == "")
-	eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported)
+	eligibility := IssuerPreparationEligibility(issuer)
 	if !manual && eligibility != preparationEligible {
 		return preparationResult(b, issuer, client, eligibility), nil
 	}

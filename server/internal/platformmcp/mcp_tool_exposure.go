@@ -170,7 +170,16 @@ type MCPToolExposureMutationOutput struct {
 	// reported separately in RemovedPluginIDs.
 	Distributions      []MCPDistribution `json:"distributions"`
 	PublicationRequest string            `json:"publication_request"`
-	PublishSignal      string            `json:"publish_signal"`
+	// PublishSignal reports the best-effort publish signal sent after the
+	// commit, when the publication request was not already durably enqueued.
+	//   not_requested         — no signal was needed
+	//   best_effort_requested — the publish was signalled
+	//   unavailable           — nothing could signal on this deployment, or a
+	//                           replay could not check the retry allowance
+	//   request_failed        — signalling was attempted and failed
+	//   rate_limited          — a replay of a committed change found the
+	//                           allowance spent, so it did not signal again
+	PublishSignal string `json:"publish_signal"`
 	// IndexSignal reports whether the tool-search index rebuild this change
 	// needs was scheduled. It matters beyond bookkeeping: a dynamic-mode server
 	// refuses tools/list outright while its current version has no index, so
@@ -180,8 +189,11 @@ type MCPToolExposureMutationOutput struct {
 	//   not_required   — this version needs no index (it exposes no tools, or
 	//                    nothing serves it from the index), and dynamic mode
 	//                    serves it without one
-	//   unavailable    — nothing could schedule a rebuild on this deployment
+	//   unavailable    — nothing could schedule a rebuild on this deployment,
+	//                    or a replay could not check the retry allowance
 	//   request_failed — scheduling was attempted and failed
+	//   rate_limited   — a replay of a committed change found the allowance
+	//                    spent, so the rebuild was not scheduled again
 	IndexSignal string                  `json:"index_signal"`
 	Receipt     RiskMutationToolReceipt `json:"receipt"`
 }
@@ -508,13 +520,6 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 	if err != nil {
 		return MCPToolExposureMutationOutput{}, err
 	}
-	// Charged after validation and authorization and before anything is read
-	// or written, matching the other Platform MCP mutations: a refused or
-	// unauthorized call must not consume the allowance, and no lock is taken
-	// until the write is paid for.
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return MCPToolExposureMutationOutput{}, toolExposureBudgetError(err, "Changing which tools an MCP server exposes was asked for too often just now.")
-	}
 	// The fresh target read, the version check and the tool-name check all
 	// happen inside the receipt transaction. Doing any of them here would
 	// defeat replay: a retry of a change that already committed would report a
@@ -531,7 +536,16 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-tool-exposure-v1\x00"+operation+"\x00"), payload...))
 
-	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[toolExposureReceipt]{
+	// Charged after validation and authorization, so a refused or unauthorized
+	// call never consumes the allowance, and only when no completed receipt
+	// answers the request; see executeChargedMutationReceipt.
+	charge := func(ctx context.Context) error {
+		if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			return toolExposureBudgetError(err, "Changing which tools an MCP server exposes was asked for too often just now.")
+		}
+		return nil
+	}
+	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[toolExposureReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: input.IdempotencyKey, InputHash: hex.EncodeToString(digest[:]), Label: "MCP tool exposure",
 		Invalid: func(error) error { return toolExposureInvalid("The tool exposure request is invalid.") },
@@ -686,10 +700,10 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 	if err := json.Unmarshal(receipt.ResultPayload, &stored); err != nil {
 		return MCPToolExposureMutationOutput{}, toolExposureUnavailable(err)
 	}
-	return s.finish(ctx, principal, project, mcpID, stored, receipt), nil
+	return s.finish(ctx, principal, project, mcpID, stored, receipt, charge), nil
 }
 
-func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal, project ResolvedProject, mcpID uuid.UUID, stored toolExposureReceipt, receipt OperationReceipt) MCPToolExposureMutationOutput {
+func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal, project ResolvedProject, mcpID uuid.UUID, stored toolExposureReceipt, receipt OperationReceipt, charge func(context.Context) error) MCPToolExposureMutationOutput {
 	output := MCPToolExposureMutationOutput{
 		Outcome: stored.Outcome, Applied: stored.Applied, Unchanged: stored.Unchanged,
 		RemovedPluginIDs: stored.RemovedPluginIDs,
@@ -702,8 +716,15 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	if output.Unchanged == nil {
 		output.Unchanged = []string{}
 	}
-	if stored.Outcome == "applied" && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		if s.publisher == nil {
+	applied := stored.Outcome == "applied"
+	var rerunErr error
+	if applied {
+		rerunErr = chargeRerun(ctx, receipt, charge)
+	}
+	if applied && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
+		if rerunErr != nil {
+			output.PublishSignal = skippedRerun(ctx, s.logger, rerunErr)
+		} else if s.publisher == nil {
 			output.PublishSignal = "unavailable"
 		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
 			output.PublishSignal = "request_failed"
@@ -732,7 +753,9 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	// concurrent repoint lands, which would rebuild one this change never
 	// touched and leave the one it did touch unindexed. Only a real change
 	// needs it — a no-op created no version.
-	if stored.Outcome == "applied" {
+	if applied && rerunErr != nil {
+		output.IndexSignal = skippedRerun(ctx, s.logger, rerunErr)
+	} else if applied {
 		output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
 	}
 	exposure, err := s.Exposure(ctx, principal, project.ID, mcpID)

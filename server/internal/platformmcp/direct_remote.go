@@ -91,7 +91,7 @@ func (s *GuardianDirectRemoteInspector) Inspect(ctx context.Context, rawURL stri
 	if s == nil || s.policy == nil {
 		return DirectRemoteInspection{}, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 	}
-	return s.inspect(ctx, rawURL, s.policy.Client())
+	return s.inspect(ctx, rawURL, s.policy.Client(guardian.WithInternalCatalog()))
 }
 
 // inspect uses the supplied Guardian client for both MCP and metadata requests.
@@ -102,7 +102,7 @@ func (s *GuardianDirectRemoteInspector) inspect(ctx context.Context, rawURL stri
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, directRemoteProbeDeadline)
 	defer cancel()
-	if _, err := s.policy.ValidateHTTPSURL(probeCtx, canonicalURL); err != nil {
+	if _, err := s.policy.ValidateHTTPSURL(probeCtx, canonicalURL, guardian.WithInternalCatalog()); err != nil {
 		return DirectRemoteInspection{}, directRemoteValidationError(probeCtx, err)
 	}
 
@@ -287,7 +287,7 @@ func (rt *directRemoteRoundTripper) roundTrip(req *http.Request) (*http.Response
 	if err != nil {
 		return nil, setupFailure(SetupCategoryUnsafeTargetOrRedirect, ErrDirectRemoteRejected)
 	}
-	validated, err := rt.policy.ValidateHTTPSURL(rt.ctx, target)
+	validated, err := rt.policy.ValidateHTTPSURL(rt.ctx, target, guardian.WithInternalCatalog())
 	if err != nil {
 		return nil, directRemoteValidationError(rt.ctx, err)
 	}
@@ -511,7 +511,7 @@ func directRemoteGetJSON(ctx context.Context, policy *guardian.Policy, client di
 	if err != nil {
 		return nil, 0, err
 	}
-	if _, err := policy.ValidateHTTPSURL(ctx, canonicalURL); err != nil {
+	if _, err := policy.ValidateHTTPSURL(ctx, canonicalURL, guardian.WithInternalCatalog()); err != nil {
 		return nil, 0, ErrDirectRemoteRejected
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, canonicalURL, nil)

@@ -48,7 +48,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -64,6 +63,7 @@ import (
 )
 
 type Service struct {
+	tracerProvider       trace.TracerProvider
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -101,6 +101,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
 	return &Service{
+		tracerProvider:           tracerProvider,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpservers"),
 		logger:                   logger,
 		db:                       db,
@@ -113,7 +114,7 @@ func NewService(
 		assets:                   assetsService,
 		revoker:                  revoker,
 		networkAccessEligibility: networkAccessEligibility,
-		distributionAdmission:    admission.NewGuard(nil, nil),
+		distributionAdmission:    admission.NewGuard(),
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
 	}
 }
@@ -675,9 +676,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, err
 	}
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	rollout, rolloutErr = s.distributionRollout(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -743,9 +741,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 	if payload.Visibility == VisibilityPublic && existing.Visibility != VisibilityPublic {
-		if err := s.distributionAdmission.CheckPublicVisibility(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID); err != nil {
+		if err := s.distributionAdmission.CheckPublicVisibility(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID); err != nil {
 			switch {
-			case errors.Is(err, admission.ErrApprovalRequired), errors.Is(err, admission.ErrDistributionDisabled):
+			case errors.Is(err, admission.ErrApprovalRequired):
 				return nil, oops.E(oops.CodeConflict, err, "direct-remote public visibility is not admitted")
 			case errors.Is(err, admission.ErrUnavailable):
 				return nil, oops.E(oops.CodeUnavailable, err, "direct-remote public visibility admission unavailable")
@@ -764,7 +762,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			}
 			proposedURL = remote.Url
 		}
-		if err := s.checkDistributionAdmission(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, proposedURL, backendChanged); err != nil {
+		if err := s.checkDistributionAdmission(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, proposedURL, backendChanged); err != nil {
 			return nil, err
 		}
 	}
@@ -860,7 +858,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// publishability there).
 	attached, pluginCreated := false, false
 	if existing.Visibility == VisibilityDisabled && updated.Visibility != VisibilityDisabled {
-		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated, rollout, rolloutErr)
+		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated)
 		if err != nil {
 			return nil, err
 		}
@@ -915,7 +913,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 // callers should enqueue the publish for it, but only after their own
 // transaction commits, since this runs pre-commit and the DB writes could
 // still roll back.
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer, rollout admission.RolloutConfig, rolloutErr error) (bool, bool, error) {
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server repo.McpServer) (bool, bool, error) {
 	endpoints, err := mcpendpointsrepo.New(dbtx).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
 		ProjectID:   *authCtx.ProjectID,
 		McpServerID: server.ID,
@@ -927,15 +925,20 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		return false, false, nil
 	}
 
-	if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
-		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+	admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return false, false, oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely").LogError(ctx, s.logger)
+	}
+	if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(admissionCtx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
+		if errors.Is(err, admission.ErrApprovalRequired) {
 			return false, false, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
 		}
 		return false, false, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
 	}
 
-	ctx = roledelivery.WithProjectAdmission(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, rollout, rolloutErr)
-	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	// Role plugins are checked by the same guard inside the attachment, so the
+	// administrator's write must be marked there too.
+	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(admissionCtx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -943,7 +946,7 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		DisplayName:    ServerDisplayName(server),
 	}, s.distributionAdmission)
 	if err != nil {
-		if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+		if errors.Is(err, admission.ErrApprovalRequired) {
 			return false, false, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
 		}
 		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
@@ -1054,6 +1057,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		ProjectID:      *authCtx.ProjectID,
 		ActorUserID:    authCtx.UserID,
 		ActorEmail:     authCtx.Email,
+		TracerProvider: s.tracerProvider,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete mcp server").LogError(ctx, logger)
@@ -1162,6 +1166,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
 	s.revoker.RevokeAllDetached(ctx, orphanCreds)
+
+	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
+	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, tombstoned.DeletedRiskPolicies)
 
 	if err := s.reconcileMcpServerCustomDomains(ctx, tombstone.RootDomainIDs(lockedServer.RootEndpoints)); err != nil {
 		return err

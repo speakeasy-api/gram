@@ -3,8 +3,8 @@ package otel
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -18,13 +18,12 @@ import (
 // time the consumer observed it, so the same record always yields the same
 // row and golden tests can pin the projection.
 //
-// The dialects that know each producer's vocabulary take the inbound record
-// types, while a consumer on the normalized topics holds the outbound ones.
-// The two are wire-compatible by construction (the inbound protos are kept as
-// carbon copies), so the builders round-trip the record back to its inbound
-// shape, exactly the way the transform handler goes the other direction, and
-// hand that to the dialect. That keeps every dialect method on one type
-// family and costs one marshal per record.
+// Every column the transform's column enrichers fill arrives on the record
+// as a canonical speakeasy.agent.<column> attribute, for logs and spans
+// alike, and the builders copy it from there; neither asks a dialect. There
+// is no dialect fallback: the transform and this writer deploy together, and
+// a record that reached the normalized topic before the enrichers ran lands
+// with those columns empty, which is accepted.
 
 // agentEventRowFromLog maps a normalized log record to its agent_events row.
 // A non-empty skipReason marks the record unprocessable; redelivery cannot
@@ -65,11 +64,6 @@ func agentEventRowFromLog(record *otelv1.LogRecord, observedAtUnixNano int64) (c
 		recordID = minted
 	}
 
-	inbound, err := inboundLogFromRecord(record)
-	if err != nil {
-		return zero, "convert_inbound"
-	}
-
 	attributes, err := logEventAttributesJSON(record.GetAttributes())
 	if err != nil {
 		return zero, "encode_log_attributes"
@@ -84,27 +78,26 @@ func agentEventRowFromLog(record *otelv1.LogRecord, observedAtUnixNano int64) (c
 	}
 
 	var enrichment rowEnrichment
+	var columns canonicalColumns
 	for _, kv := range record.GetAttributes() {
-		enrichment.absorb(kv.GetKey(), logEventAnyValue(kv.GetValue()))
+		value := logEventAnyValue(kv.GetValue())
+		enrichment.read(kv.GetKey(), value)
+		columns.read(kv.GetKey(), value)
 	}
 
-	d := dialect.ForLog(inbound)
-	row := agentEventRow(logAnswers{d: d, record: inbound}, enrichment)
+	row := agentEventRow(columns, enrichment)
 	row.OrganizationID = organizationID
 	row.ProjectID = record.GetProvenance().GetProjectId()
 	row.OccurredAtUnixNano = occurredNano
 	row.ObservedAtUnixNano = observedNano
 	row.RecordID = recordID
 	row.EventID = subjectOrRecordID(row.EventID, recordID)
-	row.Source = canonicalEventSource(logEventServiceName(record))
-	row.InputContent = contentJSON(d.InputContent(inbound))
-	row.OutputContent = contentJSON(d.OutputContent(inbound))
 	row.Attributes = attributes
 	row.ResourceAttributes = resourceAttributes
 	row.ScopeAttributes = scopeAttributes
 
-	// Text is the record in words. When the dialect found none and could not
-	// classify the record, a string body is the closest thing the producer
+	// Text is the record in words. When the transform found none and could
+	// not classify the record, a string body is the closest thing the producer
 	// offered, unless the body is just the event name again.
 	if row.Text == "" && row.EventType == dialect.EventTypeUnclassified {
 		if body := record.GetBody(); body.HasStringValue() && !dialect.BodyRepeatsEventName(body.GetStringValue(), row.RawEventName) {
@@ -148,11 +141,6 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 		return zero, "missing_observed_time"
 	}
 
-	inbound, err := inboundSpanFromSpan(span)
-	if err != nil {
-		return zero, "convert_inbound"
-	}
-
 	attributes, err := spanEventAttributesJSON(span.GetAttributes())
 	if err != nil {
 		return zero, "encode_span_attributes"
@@ -167,166 +155,54 @@ func agentEventRowFromSpan(span *otelv1.Span, observedAtUnixNano int64) (chrepo.
 	}
 
 	var enrichment rowEnrichment
+	var columns canonicalColumns
 	for _, kv := range span.GetAttributes() {
-		enrichment.absorb(kv.GetKey(), spanEventAnyValue(kv.GetValue()))
+		value := spanEventAnyValue(kv.GetValue())
+		enrichment.read(kv.GetKey(), value)
+		columns.read(kv.GetKey(), value)
 	}
 
-	d := dialect.ForSpan(inbound)
 	recordID := traceID + ":" + spanID
-	row := agentEventRow(spanAnswers{d: d, span: inbound}, enrichment)
+	row := agentEventRow(columns, enrichment)
 	row.OrganizationID = organizationID
 	row.ProjectID = span.GetProvenance().GetProjectId()
 	row.OccurredAtUnixNano = startNano
 	row.ObservedAtUnixNano = observedNano
 	row.RecordID = recordID
 	row.EventID = subjectOrRecordID(row.EventID, recordID)
-	row.Source = canonicalEventSource(spanEventServiceName(span))
-	row.InputContent = contentJSON(d.InputContent(inbound))
-	row.OutputContent = contentJSON(d.OutputContent(inbound))
 	row.Attributes = attributes
 	row.ResourceAttributes = resourceAttributes
 	row.ScopeAttributes = scopeAttributes
 	return row, ""
 }
 
-// answers is what a dialect says about one record, one question at a time.
-// A dialect answers (key, value, err), where the key names the attribute the
-// answer was read from. The row keeps only values the producer stated: an
-// empty key or a read error is absent, never a guess, so the adapters below
-// reduce every answer to its value or the zero value.
-type answers interface {
-	SessionID() string
-	ExternalUserEmail() string
-	ExternalUserID() string
-	Provider() string
-	Surface() string
-	EventName() string
-	EventType() string
-	SubjectID() string
-	TurnID() string
-	Model() string
-	ToolName() string
-	Outcome() string
-	OutcomeMessage() string
-	Text() string
-	QuerySource() string
-	SkillName() string
-	AgentName() string
-	MCPServerName() string
-	MCPToolName() string
-	ExternalOrgID() string
-	DurationNano() int64
-	InputTokens() int64
-	OutputTokens() int64
-	CacheReadTokens() int64
-	CacheWriteTokens() int64
-	CostUSD() float64
-}
-
-type logAnswers struct {
-	d      dialect.LogDialect
-	record *otelv1.InboundLogRecord
-}
-
-func (a logAnswers) SessionID() string         { return stated(a.d.SessionID(a.record)) }
-func (a logAnswers) ExternalUserEmail() string { return stated(a.d.ExternalUserEmail(a.record)) }
-func (a logAnswers) ExternalUserID() string    { return stated(a.d.ExternalUserID(a.record)) }
-func (a logAnswers) Provider() string          { return stated(a.d.Provider(a.record)) }
-func (a logAnswers) Surface() string           { return stated(a.d.Surface(a.record)) }
-func (a logAnswers) EventName() string         { return stated(a.d.EventName(a.record)) }
-func (a logAnswers) EventType() string         { return stated(a.d.EventType(a.record)) }
-func (a logAnswers) SubjectID() string         { return stated(a.d.SubjectID(a.record)) }
-func (a logAnswers) TurnID() string            { return stated(a.d.TurnID(a.record)) }
-func (a logAnswers) Model() string             { return stated(a.d.Model(a.record)) }
-func (a logAnswers) ToolName() string          { return stated(a.d.ToolName(a.record)) }
-func (a logAnswers) Outcome() string           { return stated(a.d.Outcome(a.record)) }
-func (a logAnswers) OutcomeMessage() string    { return stated(a.d.OutcomeMessage(a.record)) }
-func (a logAnswers) Text() string              { return stated(a.d.Text(a.record)) }
-func (a logAnswers) QuerySource() string       { return stated(a.d.QuerySource(a.record)) }
-func (a logAnswers) SkillName() string         { return stated(a.d.SkillName(a.record)) }
-func (a logAnswers) AgentName() string         { return stated(a.d.AgentName(a.record)) }
-func (a logAnswers) MCPServerName() string     { return stated(a.d.MCPServerName(a.record)) }
-func (a logAnswers) MCPToolName() string       { return stated(a.d.MCPToolName(a.record)) }
-func (a logAnswers) ExternalOrgID() string     { return stated(a.d.ExternalOrgID(a.record)) }
-func (a logAnswers) DurationNano() int64       { return stated(a.d.DurationNano(a.record)) }
-func (a logAnswers) InputTokens() int64        { return stated(a.d.InputTokens(a.record)) }
-func (a logAnswers) OutputTokens() int64       { return stated(a.d.OutputTokens(a.record)) }
-func (a logAnswers) CacheReadTokens() int64    { return stated(a.d.CacheReadTokens(a.record)) }
-func (a logAnswers) CacheWriteTokens() int64   { return stated(a.d.CacheWriteTokens(a.record)) }
-func (a logAnswers) CostUSD() float64          { return stated(a.d.CostUSD(a.record)) }
-
-type spanAnswers struct {
-	d    dialect.SpanDialect
-	span *otelv1.InboundSpan
-}
-
-func (a spanAnswers) SessionID() string         { return stated(a.d.SessionID(a.span)) }
-func (a spanAnswers) ExternalUserEmail() string { return stated(a.d.ExternalUserEmail(a.span)) }
-func (a spanAnswers) ExternalUserID() string    { return stated(a.d.ExternalUserID(a.span)) }
-func (a spanAnswers) Provider() string          { return stated(a.d.Provider(a.span)) }
-func (a spanAnswers) Surface() string           { return stated(a.d.Surface(a.span)) }
-func (a spanAnswers) EventName() string         { return stated(a.d.EventName(a.span)) }
-func (a spanAnswers) EventType() string         { return stated(a.d.EventType(a.span)) }
-func (a spanAnswers) SubjectID() string         { return stated(a.d.SubjectID(a.span)) }
-func (a spanAnswers) TurnID() string            { return stated(a.d.TurnID(a.span)) }
-func (a spanAnswers) Model() string             { return stated(a.d.Model(a.span)) }
-func (a spanAnswers) ToolName() string          { return stated(a.d.ToolName(a.span)) }
-func (a spanAnswers) Outcome() string           { return stated(a.d.Outcome(a.span)) }
-func (a spanAnswers) OutcomeMessage() string    { return stated(a.d.OutcomeMessage(a.span)) }
-func (a spanAnswers) Text() string              { return stated(a.d.Text(a.span)) }
-func (a spanAnswers) QuerySource() string       { return stated(a.d.QuerySource(a.span)) }
-func (a spanAnswers) SkillName() string         { return stated(a.d.SkillName(a.span)) }
-func (a spanAnswers) AgentName() string         { return stated(a.d.AgentName(a.span)) }
-func (a spanAnswers) MCPServerName() string     { return stated(a.d.MCPServerName(a.span)) }
-func (a spanAnswers) MCPToolName() string       { return stated(a.d.MCPToolName(a.span)) }
-func (a spanAnswers) ExternalOrgID() string     { return stated(a.d.ExternalOrgID(a.span)) }
-func (a spanAnswers) DurationNano() int64       { return stated(a.d.DurationNano(a.span)) }
-func (a spanAnswers) InputTokens() int64        { return stated(a.d.InputTokens(a.span)) }
-func (a spanAnswers) OutputTokens() int64       { return stated(a.d.OutputTokens(a.span)) }
-func (a spanAnswers) CacheReadTokens() int64    { return stated(a.d.CacheReadTokens(a.span)) }
-func (a spanAnswers) CacheWriteTokens() int64   { return stated(a.d.CacheWriteTokens(a.span)) }
-func (a spanAnswers) CostUSD() float64          { return stated(a.d.CostUSD(a.span)) }
-
-// stated keeps a dialect's answer only when it stated one: an empty key or
-// a read error means absent, never a guess.
-func stated[T any](key string, value T, err error) T {
-	var zero T
-	if err != nil || key == "" {
-		return zero
-	}
-	return value
-}
-
-// agentEventRow lays down the parts of a row that come from what the
-// dialect said and what the pipeline stamped, leaving tenancy, timing and
-// delivery identity to the caller. Pipeline-resolved attribution wins over
-// what the dialect infers.
-func agentEventRow(a answers, enrichment rowEnrichment) chrepo.AgentEventRow {
-	provider := enrichment.provider
-	if provider == "" {
-		provider = a.Provider()
-	}
-
+// agentEventRow lays down the parts of a row that come from the canonical
+// columns the transform wrote and what the pipeline stamped, leaving
+// tenancy, timing and delivery identity to the caller. Each column has
+// exactly one source. The deprecated content columns are written empty on
+// purpose: text carries the words and the attributes carry the structure.
+func agentEventRow(columns canonicalColumns, enrichment rowEnrichment) chrepo.AgentEventRow {
 	return chrepo.AgentEventRow{
 		OrganizationID:     "",
 		ProjectID:          "",
 		OccurredAtUnixNano: 0,
 		ObservedAtUnixNano: 0,
 		RecordID:           "",
-		SessionID:          a.SessionID(),
-		TurnID:             a.TurnID(),
-		EventID:            a.SubjectID(),
-		EventType:          a.EventType(),
-		RawEventName:       a.EventName(),
-		Source:             "",
-		Provider:           provider,
-		Surface:            a.Surface(),
+		SessionID:          columns.sessionID,
+		TurnID:             columns.turnID,
+		EventID:            columns.eventID,
+		EventType:          columns.eventType,
+		RawEventName:       columns.rawEventName,
+		Name:               columns.name,
+		Source:             columns.source,
+		Provider:           columns.provider,
+		Surface:            columns.surface,
 		UserID:             enrichment.userID,
-		UserEmail:          a.ExternalUserEmail(),
-		ExternalUserID:     a.ExternalUserID(),
+		UserEmail:          columns.userEmail,
+		ExternalUserID:     columns.externalUserID,
 		AccountType:        enrichment.accountType,
 		BillingMode:        enrichment.billingMode,
-		ExternalOrgID:      a.ExternalOrgID(),
+		ExternalOrgID:      columns.externalOrgID,
 		DeviceID:           enrichment.deviceID,
 		DepartmentName:     enrichment.departmentName,
 		DivisionName:       enrichment.divisionName,
@@ -335,24 +211,24 @@ func agentEventRow(a answers, enrichment rowEnrichment) chrepo.AgentEventRow {
 		CostCenterName:     enrichment.costCenterName,
 		Roles:              enrichment.roles,
 		Groups:             enrichment.groups,
-		Model:              a.Model(),
-		QuerySource:        a.QuerySource(),
-		SkillName:          a.SkillName(),
-		AgentName:          a.AgentName(),
-		MCPServerName:      a.MCPServerName(),
-		MCPToolName:        a.MCPToolName(),
-		ToolName:           a.ToolName(),
-		Text:               a.Text(),
-		Outcome:            a.Outcome(),
-		OutcomeMessage:     a.OutcomeMessage(),
-		DurationNano:       a.DurationNano(),
+		Model:              columns.model,
+		QuerySource:        columns.querySource,
+		SkillName:          columns.skillName,
+		AgentName:          columns.agentName,
+		MCPServerName:      columns.mcpServerName,
+		MCPToolName:        columns.mcpToolName,
+		ToolName:           columns.toolName,
+		Text:               columns.text,
+		Outcome:            columns.outcome,
+		OutcomeMessage:     columns.outcomeMessage,
+		DurationNano:       columns.durationNano,
 		InputContent:       "",
 		OutputContent:      "",
-		InputTokens:        a.InputTokens(),
-		OutputTokens:       a.OutputTokens(),
-		CacheReadTokens:    a.CacheReadTokens(),
-		CacheWriteTokens:   a.CacheWriteTokens(),
-		CostUSD:            a.CostUSD(),
+		InputTokens:        columns.inputTokens,
+		OutputTokens:       columns.outputTokens,
+		CacheReadTokens:    columns.cacheReadTokens,
+		CacheWriteTokens:   columns.cacheWriteTokens,
+		CostUSD:            columns.costUSD,
 		Attributes:         "",
 		ResourceAttributes: "",
 		ScopeAttributes:    "",
@@ -382,78 +258,104 @@ func mintedRecordID(record *otelv1.LogRecord) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func inboundLogFromRecord(record *otelv1.LogRecord) (*otelv1.InboundLogRecord, error) {
-	encoded, err := proto.Marshal(record)
-	if err != nil {
-		return nil, fmt.Errorf("marshal log record: %w", err)
-	}
-	inbound := &otelv1.InboundLogRecord{}
-	if err := proto.Unmarshal(encoded, inbound); err != nil {
-		return nil, fmt.Errorf("unmarshal log record as gram.otel.v1.InboundLogRecord: %w", err)
-	}
+// canonicalColumns is what the transform's column enrichers wrote onto the
+// record: one value per agent_events column they fill, read back from the
+// speakeasy.agent.* keys. A key the transform did not write reads as the
+// zero value, which the row stores as "not stated"; there is no dialect
+// fallback.
+type canonicalColumns struct {
+	eventType    string
+	rawEventName string
+	source       string
+	provider     string
+	surface      string
 
-	// The transform rewrote the instrumentation scope to Speakeasy's own and kept
-	// the producer's under an attribute. Dialects recognise a producer by its
-	// scope name, so put the original back before asking them anything.
-	if original := logOriginalScopeName(record); original != "" {
-		if inbound.GetScope() == nil {
-			inbound.SetScope((&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: &original}).Build())
-		} else {
-			inbound.GetScope().SetName(original)
-		}
-	}
-	return inbound, nil
+	sessionID      string
+	turnID         string
+	eventID        string
+	userEmail      string
+	externalUserID string
+	externalOrgID  string
+
+	model          string
+	querySource    string
+	skillName      string
+	agentName      string
+	mcpServerName  string
+	mcpToolName    string
+	name           string
+	toolName       string
+	text           string
+	outcome        string
+	outcomeMessage string
+	durationNano   int64
+
+	inputTokens      int64
+	outputTokens     int64
+	cacheReadTokens  int64
+	cacheWriteTokens int64
+	costUSD          float64
 }
 
-func logOriginalScopeName(record *otelv1.LogRecord) string {
-	for _, kv := range record.GetAttributes() {
-		if kv.GetKey() == string(OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
-			return kv.GetValue().GetStringValue()
-		}
+func (c *canonicalColumns) read(key string, value any) {
+	switch key {
+	case string(enrich.AgentEventTypeKey):
+		c.eventType = enrichmentString(value)
+	case string(enrich.AgentRawEventNameKey):
+		c.rawEventName = enrichmentString(value)
+	case string(enrich.AgentSourceKey):
+		c.source = enrichmentString(value)
+	case string(enrich.AgentProviderKey):
+		c.provider = enrichmentString(value)
+	case string(enrich.AgentSurfaceKey):
+		c.surface = enrichmentString(value)
+	case string(enrich.AgentSessionIDKey):
+		c.sessionID = enrichmentString(value)
+	case string(enrich.AgentTurnIDKey):
+		c.turnID = enrichmentString(value)
+	case string(enrich.AgentEventIDKey):
+		c.eventID = enrichmentString(value)
+	case string(enrich.AgentUserEmailKey):
+		c.userEmail = enrichmentString(value)
+	case string(enrich.AgentExternalUserIDKey):
+		c.externalUserID = enrichmentString(value)
+	case string(enrich.AgentExternalOrgIDKey):
+		c.externalOrgID = enrichmentString(value)
+	case string(enrich.AgentModelKey):
+		c.model = enrichmentString(value)
+	case string(enrich.AgentQuerySourceKey):
+		c.querySource = enrichmentString(value)
+	case string(enrich.AgentSkillNameKey):
+		c.skillName = enrichmentString(value)
+	case string(enrich.AgentAgentNameKey):
+		c.agentName = enrichmentString(value)
+	case string(enrich.AgentMCPServerNameKey):
+		c.mcpServerName = enrichmentString(value)
+	case string(enrich.AgentMCPToolNameKey):
+		c.mcpToolName = enrichmentString(value)
+	case string(enrich.AgentNameKey):
+		c.name = enrichmentString(value)
+	case string(enrich.AgentToolNameKey):
+		c.toolName = enrichmentString(value)
+	case string(enrich.AgentTextKey):
+		c.text = enrichmentString(value)
+	case string(enrich.AgentOutcomeKey):
+		c.outcome = enrichmentString(value)
+	case string(enrich.AgentOutcomeMessageKey):
+		c.outcomeMessage = enrichmentString(value)
+	case string(enrich.AgentDurationNanoKey):
+		c.durationNano = enrichmentInt64(value)
+	case string(enrich.AgentInputTokensKey):
+		c.inputTokens = enrichmentInt64(value)
+	case string(enrich.AgentOutputTokensKey):
+		c.outputTokens = enrichmentInt64(value)
+	case string(enrich.AgentCacheReadTokensKey):
+		c.cacheReadTokens = enrichmentInt64(value)
+	case string(enrich.AgentCacheWriteTokensKey):
+		c.cacheWriteTokens = enrichmentInt64(value)
+	case string(enrich.AgentCostUSDKey):
+		c.costUSD = enrichmentFloat64(value)
 	}
-	return ""
-}
-
-func inboundSpanFromSpan(span *otelv1.Span) (*otelv1.InboundSpan, error) {
-	encoded, err := proto.Marshal(span)
-	if err != nil {
-		return nil, fmt.Errorf("marshal span: %w", err)
-	}
-	inbound := &otelv1.InboundSpan{}
-	if err := proto.Unmarshal(encoded, inbound); err != nil {
-		return nil, fmt.Errorf("unmarshal span as gram.otel.v1.InboundSpan: %w", err)
-	}
-
-	if original := spanOriginalScopeName(span); original != "" {
-		if inbound.GetScope() == nil {
-			inbound.SetScope((&otelv1.InboundSpan_InstrumentationScope_builder{Name: &original}).Build())
-		} else {
-			inbound.GetScope().SetName(original)
-		}
-	}
-	return inbound, nil
-}
-
-func spanOriginalScopeName(span *otelv1.Span) string {
-	for _, kv := range span.GetAttributes() {
-		if kv.GetKey() == string(OriginalInstrumentationScopeNameKey) && kv.GetValue().HasStringValue() {
-			return kv.GetValue().GetStringValue()
-		}
-	}
-	return ""
-}
-
-// contentJSON renders the dialect's normalized messages for a content column.
-// Absent or unreadable content is an empty column, never an invented one.
-func contentJSON[E any, M ~[]E](_ string, messages M, err error) string {
-	if err != nil || len(messages) == 0 {
-		return ""
-	}
-	encoded, err := json.Marshal(messages)
-	if err != nil {
-		return ""
-	}
-	return string(encoded)
 }
 
 // rowEnrichment is what the transform pipeline stamped onto the record
@@ -462,7 +364,6 @@ func contentJSON[E any, M ~[]E](_ string, messages M, err error) string {
 // the enrichers put it.
 type rowEnrichment struct {
 	userID      string
-	provider    string
 	accountType string
 	billingMode string
 	deviceID    string
@@ -477,19 +378,17 @@ type rowEnrichment struct {
 }
 
 var (
-	directoryDepartmentNameKey = DirectoryAttribute("department_name")
-	directoryDivisionNameKey   = DirectoryAttribute("division_name")
-	directoryJobTitleKey       = DirectoryAttribute("job_title")
-	directoryEmployeeTypeKey   = DirectoryAttribute("employee_type")
-	directoryCostCenterNameKey = DirectoryAttribute("cost_center_name")
+	directoryDepartmentNameKey = enrich.DirectoryAttribute("department_name")
+	directoryDivisionNameKey   = enrich.DirectoryAttribute("division_name")
+	directoryJobTitleKey       = enrich.DirectoryAttribute("job_title")
+	directoryEmployeeTypeKey   = enrich.DirectoryAttribute("employee_type")
+	directoryCostCenterNameKey = enrich.DirectoryAttribute("cost_center_name")
 )
 
-func (e *rowEnrichment) absorb(key string, value any) {
+func (e *rowEnrichment) read(key string, value any) {
 	switch key {
 	case string(attr.UserIDKey):
 		e.userID = enrichmentString(value)
-	case string(attr.ProviderKey):
-		e.provider = enrichmentString(value)
 	case string(attr.AccountTypeKey):
 		e.accountType = enrichmentString(value)
 	case string(attr.BillingModeKey):
@@ -506,9 +405,9 @@ func (e *rowEnrichment) absorb(key string, value any) {
 		e.employeeType = enrichmentString(value)
 	case string(directoryCostCenterNameKey):
 		e.costCenterName = enrichmentString(value)
-	case string(GramUserRolesKey):
+	case string(enrich.GramUserRolesKey):
 		e.roles = enrichmentStrings(value)
-	case string(DirectoryGroupNamesKey):
+	case string(enrich.DirectoryGroupNamesKey):
 		e.groups = enrichmentStrings(value)
 	}
 }
@@ -516,6 +415,29 @@ func (e *rowEnrichment) absorb(key string, value any) {
 func enrichmentString(value any) string {
 	text, _ := value.(string)
 	return text
+}
+
+// enrichmentInt64 reads an integer column the transform wrote. The OTLP
+// value may arrive as an integer or, through some producers, as a double.
+func enrichmentInt64(value any) int64 {
+	switch v := value.(type) {
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	}
+	return 0
+}
+
+// enrichmentFloat64 reads a floating-point column the transform wrote.
+func enrichmentFloat64(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case int64:
+		return float64(v)
+	}
+	return 0
 }
 
 func enrichmentStrings(value any) []string {

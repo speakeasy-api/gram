@@ -126,15 +126,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		return nil, err
 	}
 
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	txRepo := repo.New(dbtx)
-
-	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+	params := repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                           projectID,
 		OrganizationID:                      conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:                                payload.Slug,
@@ -176,7 +168,21 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		MetadataLastError:                          "",
 		MetadataLastErrorUrl:                       "",
-	})
+	}
+	if err := s.preflightCreateDiscoverySlug(ctx, logger, &params); err != nil {
+		return nil, err
+	}
+	s.recordCreateDiscovery(ctx, logger, tunnelID, &params, time.Now())
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	issuer, err := txRepo.CreateRemoteSessionIssuer(ctx, params)
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) || isGlobalRemoteSessionIssuerSlugConflict(err) {
 			return nil, oops.E(oops.CodeConflict, err, "an issuer with this slug already exists").LogError(ctx, logger)

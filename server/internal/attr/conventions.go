@@ -12,6 +12,21 @@ import (
 type Key = attribute.Key
 
 const (
+	// SigintSensorIDKey identifies the sensor configuration responsible for an evaluation.
+	SigintSensorIDKey = attribute.Key("gram.sigint.sensor.id")
+
+	// SigintSensorModeKey identifies the sensor's classification mode.
+	SigintSensorModeKey = attribute.Key("gram.sigint.sensor.mode")
+
+	// ClassifierErrorKey preserves classifier failure details without input or provider bodies.
+	ClassifierErrorKey = attribute.Key("gram.classifier.error")
+
+	// SigintEventIDKey identifies the logical event independently of transport delivery.
+	SigintEventIDKey = attribute.Key("gram.sigint.event.id")
+
+	// SigintEventKindKey namespaces the event identity within its tenant.
+	SigintEventKindKey = attribute.Key("gram.sigint.event.kind")
+
 	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
 	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
 	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
@@ -807,6 +822,7 @@ const (
 	OTELSpanEnricherNameKey   = attribute.Key("gram.otel.span_enricher_name")
 	OTELLogEnricherNameKey    = attribute.Key("gram.otel.log_enricher_name")
 	OTELMetricEnricherNameKey = attribute.Key("gram.otel.metric_enricher_name")
+	OTELSignalKey             = attribute.Key("gram.otel.signal")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -904,6 +920,7 @@ const (
 	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
 
 	RemoteMCPProxyInterceptorKey       = attribute.Key("gram.remote_mcp.proxy.interceptor")
+	RemoteMCPConfiguredHeaderNameKey   = attribute.Key("gram.remote_mcp.configured_header.name")
 	RemoteMCPProxyRemoteStatusCodeKey  = attribute.Key("gram.remote_mcp.proxy.remote_status_code")
 	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
@@ -948,7 +965,25 @@ const (
 )
 
 func WideEvent() attribute.KeyValue { return WideEventKey.Bool(true) }
-func SlogWideEvent() slog.Attr      { return slog.Bool(string(WideEventKey), true) }
+
+// SlogSigintSensorID identifies the sensor configuration responsible for an evaluation.
+func SlogSigintSensorID(v string) slog.Attr { return slog.String(string(SigintSensorIDKey), v) }
+
+// SlogSigintSensorMode identifies the sensor's classification mode.
+func SlogSigintSensorMode(v string) slog.Attr { return slog.String(string(SigintSensorModeKey), v) }
+
+// SlogClassifierError records the classifier's safe operation and question failures.
+func SlogClassifierError(err error) slog.Attr {
+	return slog.String(string(ClassifierErrorKey), err.Error())
+}
+
+// SlogSigintEventID identifies the logical event independently of transport delivery.
+func SlogSigintEventID(v string) slog.Attr { return slog.String(string(SigintEventIDKey), v) }
+
+// SlogSigintEventKind namespaces the event identity within its tenant.
+func SlogSigintEventKind(v string) slog.Attr { return slog.String(string(SigintEventKindKey), v) }
+
+func SlogWideEvent() slog.Attr { return slog.Bool(string(WideEventKey), true) }
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
 func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageKey), v.Error()) }
@@ -1119,6 +1154,8 @@ func OTELLogEnricherName(v string) attribute.KeyValue { return OTELLogEnricherNa
 func OTELMetricEnricherName(v string) attribute.KeyValue { return OTELMetricEnricherNameKey.String(v) }
 
 func OTELSpanEnricherName(v string) attribute.KeyValue { return OTELSpanEnricherNameKey.String(v) }
+
+func OTELSignal[V ~string](v V) attribute.KeyValue { return OTELSignalKey.String(string(v)) }
 func SlogOTELSpanEnricherName(v string) slog.Attr {
 	return slog.String(string(OTELSpanEnricherNameKey), v)
 }
@@ -2455,6 +2492,13 @@ func UserSessionClientMigratedCount(v int64) attribute.KeyValue {
 
 func SlogUserSessionClientMigratedCount(v int64) slog.Attr {
 	return slog.Int64(string(UserSessionClientMigratedCountKey), v)
+}
+
+func RemoteMCPConfiguredHeaderName(v string) attribute.KeyValue {
+	return RemoteMCPConfiguredHeaderNameKey.String(v)
+}
+func SlogRemoteMCPConfiguredHeaderName(v string) slog.Attr {
+	return slog.String(string(RemoteMCPConfiguredHeaderNameKey), v)
 }
 
 func RemoteMCPServerID(v string) attribute.KeyValue { return RemoteMCPServerIDKey.String(v) }

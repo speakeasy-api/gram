@@ -49,18 +49,30 @@ type QueryOrderBy struct {
 type ChartType string
 
 const (
-	ChartLine   ChartType = "line"
-	ChartArea   ChartType = "area"
-	ChartBar    ChartType = "bar"
-	ChartRanked ChartType = "ranked"
-	ChartTable  ChartType = "table"
-	ChartNumber ChartType = "number"
+	ChartLine        ChartType = "line"
+	ChartArea        ChartType = "area"
+	ChartBar         ChartType = "bar"
+	ChartStackedBar  ChartType = "stacked_bar"
+	ChartStackedArea ChartType = "stacked_area"
+	ChartRanked      ChartType = "ranked"
+	ChartTable       ChartType = "table"
+	ChartNumber      ChartType = "number"
 )
 
 // normalize returns the type lowercased, the form it is checked and stored
 // in, so "Line" is checked as a line chart.
 func (t ChartType) normalize() ChartType {
 	return ChartType(strings.ToLower(string(t)))
+}
+
+// stackable reports whether a query's measures can be stacked: exactly one,
+// and one whose values add up across the groups it is broken down by.
+func stackable(measures []QueryMeasure) bool {
+	if len(measures) != 1 {
+		return false
+	}
+	op := strings.ToLower(measures[0].Op)
+	return op == "count" || op == string(analytics.AggregationSum)
 }
 
 // Visualization is how a widget's question is drawn. The chart vocabulary
@@ -207,9 +219,15 @@ func validateVisualization(visualization Visualization, query Query) string {
 	// stores the type lowercased.
 	chart := visualization.Type.normalize()
 	switch chart {
-	case ChartLine, ChartArea, ChartBar:
+	case ChartLine, ChartArea, ChartBar, ChartStackedBar, ChartStackedArea:
 		if !grained || !aggregated {
 			return fmt.Sprintf("unsatisfiable: a %s chart draws a timeseries, so its query needs a grain and at least one measure", chart)
+		}
+		// A stack adds its bands up, and folds the smallest into one Other
+		// band by adding them, so only a measure whose values add can be
+		// stacked: an average of averages is not a number anyone asked for.
+		if (chart == ChartStackedBar || chart == ChartStackedArea) && !stackable(query.Measures) {
+			return fmt.Sprintf("unsatisfiable: a %s chart adds its bands up, so its query needs one measure that is a count or a sum", chart)
 		}
 	case ChartNumber:
 		if !aggregated || grained || len(query.Dimensions) > 0 {
