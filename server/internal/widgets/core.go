@@ -31,10 +31,19 @@ var ErrVersionChanged = errors.New("widget changed since it was read")
 
 // Input is a widget as a caller wants it saved.
 type Input struct {
-	Name          string         `json:"name"`
-	Description   *string        `json:"description"`
-	Dataset       string         `json:"dataset"`
-	Query         map[string]any `json:"query"`
+	// Name is the display name, 1 to 200 characters.
+	Name string `json:"name"`
+
+	// Description says what the widget is for, at most 2000 characters.
+	Description *string `json:"description"`
+
+	// Dataset is the catalog dataset the widget asks.
+	Dataset string `json:"dataset"`
+
+	// Query is the question, validated against the catalog.
+	Query map[string]any `json:"query"`
+
+	// Visualization is how the question is drawn, checked against the query.
 	Visualization map[string]any `json:"visualization"`
 }
 
@@ -149,8 +158,7 @@ func (s *Service) CreateInTx(ctx context.Context, tx pgx.Tx, input Input) (Snaps
 
 // DuplicateInTx copies a widget into a new one the caller owns, inside the
 // caller's transaction. A non-empty expectedVersion refuses the copy when the
-// source changed since it was read. The source is locked so it cannot change
-// between that check and the copy.
+// source changed since it was read.
 func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, id string, expectedVersion string) (Snapshot, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
@@ -161,7 +169,7 @@ func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, id string, expec
 		return Snapshot{}, err
 	}
 
-	source, err := s.lockWidget(ctx, repo.New(tx), *authCtx.ProjectID, widgetID, expectedVersion)
+	source, err := s.sourceWidget(ctx, repo.New(tx), *authCtx.ProjectID, widgetID, expectedVersion)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -371,6 +379,23 @@ func (s *Service) lockWidget(ctx context.Context, queries *repo.Queries, project
 	}
 	if expectedVersion != "" && Version(row) != expectedVersion {
 		return repo.Widget{}, oops.E(oops.CodeConflict, ErrVersionChanged, "widget changed since it was read")
+	}
+	return row, nil
+}
+
+// sourceWidget loads the widget a duplicate copies. With an expected version
+// the source is locked, so it cannot change between the version check and
+// the copy; without one it is read as it stands, which is all a copy needs.
+func (s *Service) sourceWidget(ctx context.Context, queries *repo.Queries, projectID, widgetID uuid.UUID, expectedVersion string) (repo.Widget, error) {
+	if expectedVersion != "" {
+		return s.lockWidget(ctx, queries, projectID, widgetID, expectedVersion)
+	}
+	row, err := queries.GetWidget(ctx, repo.GetWidgetParams{ProjectID: projectID, ID: widgetID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return repo.Widget{}, oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return repo.Widget{}, oops.E(oops.CodeUnexpected, err, "load widget").LogError(ctx, s.logger)
 	}
 	return row, nil
 }

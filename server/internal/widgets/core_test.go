@@ -45,10 +45,9 @@ func TestCheckEnforcesNameAndDescriptionLimits(t *testing.T) {
 		"long name":        {Name: long[:201], Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()},
 		"long description": {Name: "ok", Description: &long, Dataset: "sessions", Query: validQuery(), Visualization: barChart()},
 	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			requireOopsCode(t, ti.service.Check(ctx, input), oops.CodeBadRequest)
-		})
+		err := ti.service.Check(ctx, input)
+		require.Error(t, err, name)
+		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
 	require.NoError(t, ti.service.Check(ctx, widgets.Input{Name: long[:200], Description: new(long[:2000]), Dataset: "sessions", Query: validQuery(), Visualization: barChart()}))
 }

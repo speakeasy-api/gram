@@ -48,7 +48,7 @@ func registerWidgetTools(reg *Registrar, service *WidgetService) {
 		Name:  saveWidgetToolName,
 		Title: "Save an Explore Widget",
 		Description: "Create a widget, or replace every field of an existing one when widget_id is given. The query is checked against the analytics catalog and the visualization against the query before anything is saved; an invalid widget is refused naming what is wrong. Build the query with describe_analytics_catalog, and try it with run_analytics_query first. " +
-			"An update reaches every dashboard the widget is on; the preview names them. Only a widget's creator, or someone with write access to the project, can update it. " +
+			"An update reaches every dashboard the widget is on; the preview names them. " +
 			widgetWriteNote + widgetAccessNote,
 		// Replacing a widget overwrites the one every dashboard shows.
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
@@ -56,24 +56,24 @@ func registerWidgetTools(reg *Registrar, service *WidgetService) {
 	duplicate := &mcp.Tool{
 		Name:  duplicateWidgetToolName,
 		Title: "Duplicate an Explore Widget",
-		Description: "Copy a widget into a new one the caller owns, named \"<name> (copy)\": the way to change a teammate's widget without redrawing theirs. A widget that no longer works cannot be duplicated until it is fixed. " +
+		Description: "Copy a widget into a new one the caller owns, named \"<name> (copy)\": the way to start from a teammate's widget and change the copy rather than the widget their dashboards show. A widget that no longer works cannot be duplicated until it is fixed. " +
 			widgetWriteNote + widgetAccessNote,
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false), OpenWorldHint: new(false)},
 	}
 	remove := &mcp.Tool{
 		Name:  deleteWidgetToolName,
 		Title: "Delete an Explore Widget",
-		Description: "Delete a widget. It comes off every dashboard it is on, and the dashboards stay; the preview names those dashboards and the result says which ones lost it. Only a widget's creator, or someone with write access to the project, can delete it. " +
+		Description: "Delete a widget. It comes off every dashboard it is on, and the dashboards stay; the preview names those dashboards and the result says which ones lost it. " +
 			widgetWriteNote + widgetAccessNote,
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}
 
 	if !service.valid() {
-		addTool(reg, list, readMeta, unavailableWidgetHandler[ListWidgetsInput, ListWidgetsOutput]())
-		addTool(reg, get, readMeta, unavailableWidgetHandler[GetWidgetInput, GetWidgetOutput]())
-		addTool(reg, save, writeMeta, unavailableWidgetHandler[SaveWidgetInput, WidgetWriteOutput]())
-		addTool(reg, duplicate, writeMeta, unavailableWidgetHandler[WidgetTargetInput, WidgetWriteOutput]())
-		addTool(reg, remove, writeMeta, unavailableWidgetHandler[WidgetTargetInput, WidgetWriteOutput]())
+		addTool(reg, list, readMeta, unavailableWidgetHandler[listWidgetsInput, listWidgetsOutput]())
+		addTool(reg, get, readMeta, unavailableWidgetHandler[getWidgetInput, getWidgetOutput]())
+		addTool(reg, save, writeMeta, unavailableWidgetHandler[saveWidgetInput, widgetWriteOutput]())
+		addTool(reg, duplicate, writeMeta, unavailableWidgetHandler[widgetTargetInput, widgetWriteOutput]())
+		addTool(reg, remove, writeMeta, unavailableWidgetHandler[widgetTargetInput, widgetWriteOutput]())
 		return
 	}
 
@@ -116,7 +116,7 @@ func widgetToolResult(err error) (*mcp.CallToolResult, bool) {
 	if result, ok := externalAuthorizationToolResult(err); ok {
 		return result, true
 	}
-	refusal, ok := errors.AsType[*WidgetToolError](err)
+	refusal, ok := errors.AsType[*widgetToolError](err)
 	if !ok {
 		return nil, false
 	}

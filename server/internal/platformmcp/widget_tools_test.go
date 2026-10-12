@@ -40,7 +40,7 @@ type widgetToolsFixture struct {
 	logs       *bytes.Buffer
 }
 
-// newWidgetToolsFixture registers the widget tools against a real database,
+// newWidgetToolsFixture registers the widget tools against a service database,
 // with Explore on and a caller holding project read and write.
 func newWidgetToolsFixture(t *testing.T) (context.Context, *widgetToolsFixture) {
 	t.Helper()
@@ -58,7 +58,7 @@ func newWidgetToolsFixture(t *testing.T) (context.Context, *widgetToolsFixture) 
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	management := widgets.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger())
-	service := NewWidgetService(slog.New(slog.NewJSONHandler(logs, nil)), management, NewPostgresReader(logger, db), engine, flags, "test-widget-tools-key")
+	service := NewWidgetService(slog.New(slog.NewJSONHandler(logs, nil)), management, NewPostgresReader(logger, db), engine, flags, NewPostgresOrganizationSlugResolver(db), "test-widget-tools-key")
 	require.NotNil(t, service)
 
 	reg := newRegistrar(newTestMCPServer())
@@ -105,9 +105,9 @@ func widgetCall[Out any](t *testing.T, f *widgetToolsFixture, ctx context.Contex
 	return out
 }
 
-func (f *widgetToolsFixture) write(t *testing.T, ctx context.Context, tool string, arguments any) WidgetWriteOutput {
+func (f *widgetToolsFixture) write(t *testing.T, ctx context.Context, tool string, arguments any) widgetWriteOutput {
 	t.Helper()
-	return widgetCall[WidgetWriteOutput](t, f, ctx, tool, arguments)
+	return widgetCall[widgetWriteOutput](t, f, ctx, tool, arguments)
 }
 
 // scopedContext is the context the widgets service sees from the tools: the
@@ -161,7 +161,7 @@ func saveArguments(projectID string, name string) map[string]any {
 }
 
 // confirmed turns a preview's arguments into its confirmation.
-func confirmed(arguments map[string]any, preview WidgetWriteOutput, key string) map[string]any {
+func confirmed(arguments map[string]any, preview widgetWriteOutput, key string) map[string]any {
 	out := make(map[string]any, len(arguments)+4)
 	maps.Copy(out, arguments)
 	out["confirmed"], out["expected_version"], out["preview_token"], out["idempotency_key"] = true, preview.Version, preview.PreviewToken, key
@@ -268,7 +268,7 @@ func TestSaveWidgetPreviewsThenCreatesOnceAndReplays(t *testing.T) {
 	require.Equal(t, widgetSnapshotPreview, preview.SnapshotScope)
 	require.Equal(t, "Sessions by user", preview.Widget.Name)
 
-	listed := widgetCall[ListWidgetsOutput](t, f, ctx, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
+	listed := widgetCall[listWidgetsOutput](t, f, ctx, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
 	require.Empty(t, listed.Widgets, "a preview saves nothing")
 
 	request := confirmed(arguments, preview, "create-sessions-by-user")
@@ -280,7 +280,7 @@ func TestSaveWidgetPreviewsThenCreatesOnceAndReplays(t *testing.T) {
 	require.NotEmpty(t, created.ReceiptID)
 	require.Equal(t, created.Widget.Version, created.Version)
 
-	got := widgetCall[GetWidgetOutput](t, f, ctx, getWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID}).Widget
+	got := widgetCall[getWidgetOutput](t, f, ctx, getWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID}).Widget
 	require.Equal(t, "Sessions by user", got.Name)
 	require.Equal(t, "sessions", got.Dataset)
 	require.Equal(t, "bar", got.Visualization["type"])
@@ -292,7 +292,7 @@ func TestSaveWidgetPreviewsThenCreatesOnceAndReplays(t *testing.T) {
 	require.Equal(t, created.Widget.ID, replayed.Widget.ID)
 	require.Equal(t, created.ReceiptID, replayed.ReceiptID)
 
-	listed = widgetCall[ListWidgetsOutput](t, f, ctx, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
+	listed = widgetCall[listWidgetsOutput](t, f, ctx, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
 	require.Len(t, listed.Widgets, 1, "the replay wrote nothing")
 	require.Equal(t, "bar", listed.Widgets[0].ChartType)
 	require.Equal(t, &f.principal.UserID, listed.Widgets[0].CreatedByUserID)
@@ -401,6 +401,8 @@ func TestWidgetWritesRefuseANonCreatorWithoutProjectWrite(t *testing.T) {
 	}{
 		{saveWidgetToolName, update},
 		{deleteWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": false}},
+		// A confirmation is refused the same way, before its token is checked.
+		{deleteWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": true, "expected_version": existing.Version, "preview_token": "forged", "idempotency_key": "member-delete"}},
 	} {
 		_, err := f.invoke(t, member, call.tool, call.arguments)
 		require.Equal(t, "permission_denied", requireWidgetRefusal(t, err).Code, call.tool)
@@ -429,10 +431,10 @@ func TestDeleteWidgetReportsTheDashboardsThatLostIt(t *testing.T) {
 
 	arguments := map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": false}
 	preview := f.write(t, ctx, deleteWidgetToolName, arguments)
-	require.Equal(t, []WidgetDashboardRef{{ID: dashboard.ID.String(), Name: "Ops"}}, preview.Dashboards)
+	require.Equal(t, []widgetDashboardRef{{ID: dashboard.ID.String(), Name: "Ops"}}, preview.Dashboards)
 
 	deleted := f.write(t, ctx, deleteWidgetToolName, confirmed(arguments, preview, "delete-placed"))
-	require.Equal(t, []WidgetDashboardRef{{ID: dashboard.ID.String(), Name: "Ops"}}, deleted.Dashboards)
+	require.Equal(t, []widgetDashboardRef{{ID: dashboard.ID.String(), Name: "Ops"}}, deleted.Dashboards)
 	require.Equal(t, widgetSnapshotDeleted, deleted.SnapshotScope)
 
 	replayed := f.write(t, ctx, deleteWidgetToolName, confirmed(arguments, preview, "delete-placed"))
@@ -441,6 +443,50 @@ func TestDeleteWidgetReportsTheDashboardsThatLostIt(t *testing.T) {
 
 	_, err = f.invoke(t, ctx, getWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID})
 	require.Equal(t, "not_found", requireWidgetRefusal(t, err).Code)
+}
+
+func TestDeleteWidgetRefusesAStaleVersion(t *testing.T) {
+	t.Parallel()
+	ctx, f := newWidgetToolsFixture(t)
+	existing := f.createDirectly(t, ctx, "Original")
+
+	arguments := map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": false}
+	preview := f.write(t, ctx, deleteWidgetToolName, arguments)
+
+	scoped := f.scopedContext(t, ctx)
+	_, err := f.management.UpdateWidget(scoped, &genwidgets.UpdateWidgetPayload{ID: existing.Widget.ID, Name: "Edited meanwhile", Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart(), SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+
+	_, err = f.invoke(t, ctx, deleteWidgetToolName, confirmed(arguments, preview, "delete-stale"))
+	require.Equal(t, "version_changed", requireWidgetRefusal(t, err).Code)
+	_, err = f.management.Read(scoped, existing.Widget.ID)
+	require.NoError(t, err, "the widget was not deleted")
+}
+
+// unreadableWidgets writes through the service service but fails every read, as
+// a post-commit verification read can.
+type unreadableWidgets struct{ widgetManagement }
+
+func (unreadableWidgets) Read(context.Context, string) (widgets.Snapshot, error) {
+	return widgets.Snapshot{}, errors.New("read replica unavailable")
+}
+
+func TestSaveWidgetReportsAnUnverifiedCommit(t *testing.T) {
+	t.Parallel()
+	ctx, f := newWidgetToolsFixture(t)
+	service := f.service.widgets
+	f.service.widgets = unreadableWidgets{widgetManagement: service}
+
+	arguments := saveArguments(f.project.ID.String(), "Committed blind")
+	preview := f.write(t, ctx, saveWidgetToolName, arguments)
+	committed := f.write(t, ctx, saveWidgetToolName, confirmed(arguments, preview, "blind"))
+	require.Equal(t, widgetSnapshotVerificationUnavailable, committed.SnapshotScope)
+	require.NotEmpty(t, committed.ReceiptID)
+	require.Nil(t, committed.Widget)
+
+	all, err := service.ReadAll(f.scopedContext(t, ctx))
+	require.NoError(t, err)
+	require.Len(t, all, 1, "the write committed")
 }
 
 func TestDuplicateWidgetCopiesIntoTheCaller(t *testing.T) {
