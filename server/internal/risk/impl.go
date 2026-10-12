@@ -858,7 +858,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
-	mcpScope := policycore.Project(current, nil, nil).MCPScope
+	mcpScope := policycore.Project(current, nil).MCPScope
 	mcpScopeJSON := current.McpScope
 	if payload.McpScope != nil {
 		mcpScope, mcpScopeJSON, err = s.normalizeMCPScope(ctx, *authCtx.ProjectID, payload.McpScope)
@@ -3735,7 +3735,7 @@ func findingToMatch(f scanners.Finding) *gen.TestDetectionRuleMatch {
 // policyToType converts an already-loaded database row to the API type,
 // enriching it through the shared transport-neutral policy core.
 func (s *Service) policyToType(ctx context.Context, row repo.RiskPolicy) (*types.RiskPolicy, error) {
-	policy, err := s.policies.ProjectWithProgress(ctx, row)
+	policy, err := s.policies.ProjectWithAudience(ctx, row)
 	if err != nil {
 		return nil, fmt.Errorf("project risk policy: %w", err)
 	}

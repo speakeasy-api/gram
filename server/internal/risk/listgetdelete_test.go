@@ -62,6 +62,34 @@ func TestGetRiskPolicy_Success(t *testing.T) {
 	require.Equal(t, "Get Me", got.Name)
 }
 
+func TestGetRiskPolicy_OmitsAnalysisProgress(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("No Progress")})
+	require.NoError(t, err)
+	require.Nil(t, created.PendingMessages)
+	require.Nil(t, created.TotalMessages)
+
+	seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+
+	got, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Nil(t, got.PendingMessages, "single-policy reads must not count project messages")
+	require.Nil(t, got.TotalMessages, "single-policy reads must not count project messages")
+
+	status, err := ti.service.GetRiskPolicyStatus(ctx, &gen.GetRiskPolicyStatusPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), status.TotalMessages)
+	require.Equal(t, int64(2), status.PendingMessages)
+}
+
 func TestGetRiskPolicy_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
