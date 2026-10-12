@@ -213,6 +213,38 @@ func (q *Queries) ListSSOSignInOrganizationsForUser(ctx context.Context, userID 
 	return items, nil
 }
 
+const listUserOrganizationIDs = `-- name: ListUserOrganizationIDs :many
+SELECT r.organization_id
+FROM organization_user_relationships AS r
+WHERE r.user_id = $1
+UNION
+SELECT si.organization_id
+FROM sso_sign_ins AS si
+WHERE si.user_id = $1
+`
+
+// Self-scoped: every organization the user belongs or belonged to, or has a
+// recorded sign-in in.
+func (q *Queries) ListUserOrganizationIDs(ctx context.Context, userID pgtype.Text) ([]string, error) {
+	rows, err := q.db.Query(ctx, listUserOrganizationIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockUserSSOSignIns = `-- name: LockUserSSOSignIns :many
 SELECT id
 FROM sso_sign_ins
@@ -417,7 +449,8 @@ INSERT INTO sso_sign_ins (
             (
                 SELECT min(prior.authenticated_at)
                 FROM sso_sign_ins AS prior
-                WHERE prior.user_id = $2
+                WHERE prior.organization_id = ANY($6::text[])
+                  AND prior.user_id = $2
                   AND prior.workos_session_id = $3
             ),
             $5::timestamptz
@@ -436,6 +469,7 @@ type UpsertSSOSignInParams struct {
 	WorkosSessionID      string
 	AuthenticationMethod string
 	AuthenticatedAt      pgtype.Timestamptz
+	OrganizationIds      []string
 }
 
 type UpsertSSOSignInRow struct {
@@ -454,6 +488,7 @@ func (q *Queries) UpsertSSOSignIn(ctx context.Context, arg UpsertSSOSignInParams
 		arg.WorkosSessionID,
 		arg.AuthenticationMethod,
 		arg.AuthenticatedAt,
+		arg.OrganizationIds,
 	)
 	var i UpsertSSOSignInRow
 	err := row.Scan(&i.ID, &i.RevokedAt)

@@ -100,7 +100,17 @@ func Record(ctx context.Context, db repo.DBTX, p RecordParams) (Recorded, error)
 	if p.OrganizationID == "" || p.UserID == "" || p.WorkOSSessionID == "" {
 		return none, nil
 	}
-	row, err := repo.New(db).UpsertSSOSignIn(ctx, repo.UpsertSSOSignInParams{
+	q := repo.New(db)
+	// A WorkOS session's first sign-in time carries across the user's organizations.
+	organizationIDs, err := q.ListUserOrganizationIDs(ctx, conv.ToPGText(p.UserID))
+	if err != nil {
+		return none, fmt.Errorf("list user organizations: %w", err)
+	}
+	if !slices.Contains(organizationIDs, p.OrganizationID) {
+		organizationIDs = append(organizationIDs, p.OrganizationID)
+	}
+	row, err := q.UpsertSSOSignIn(ctx, repo.UpsertSSOSignInParams{
+		OrganizationIds:      organizationIDs,
 		OrganizationID:       p.OrganizationID,
 		UserID:               p.UserID,
 		WorkosSessionID:      p.WorkOSSessionID,

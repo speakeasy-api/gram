@@ -20,7 +20,8 @@ INSERT INTO sso_sign_ins (
             (
                 SELECT min(prior.authenticated_at)
                 FROM sso_sign_ins AS prior
-                WHERE prior.user_id = @user_id
+                WHERE prior.organization_id = ANY(@organization_ids::text[])
+                  AND prior.user_id = @user_id
                   AND prior.workos_session_id = @workos_session_id
             ),
             @authenticated_at::timestamptz
@@ -103,6 +104,17 @@ WHERE organization_id = ANY(@organization_ids::text[])
   AND workos_session_id = @workos_session_id
   AND revoked_at IS NULL
 RETURNING id, organization_id;
+
+-- name: ListUserOrganizationIDs :many
+-- Self-scoped: every organization the user belongs or belonged to, or has a
+-- recorded sign-in in.
+SELECT r.organization_id
+FROM organization_user_relationships AS r
+WHERE r.user_id = @user_id
+UNION
+SELECT si.organization_id
+FROM sso_sign_ins AS si
+WHERE si.user_id = @user_id;
 
 -- name: ListSSOSignInOrganizationsForUser :many
 -- Self-scoped: the organizations the caller has ever signed in to, including
