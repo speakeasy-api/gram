@@ -2037,7 +2037,7 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 	server, err := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	if err == nil {
 		mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
-		if modeErr != nil || !server.ToolsetID.Valid || server.ToolsetID.UUID != toolset.ID || server.Visibility == "disabled" || !mode.Allows(networkaccess.SurfacePublic) || server.UserSessionIssuerID != toolset.UserSessionIssuerID || (server.Visibility == "public") != toolset.McpIsPublic {
+		if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) || !CanonicalWrapperMatchesToolset(&server, &toolset) {
 			return nil, fmt.Errorf("%w: hosted MCP policy denies public access", errToolsetNotFound)
 		}
 	} else if !errors.Is(err, pgx.ErrNoRows) {
