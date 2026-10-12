@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"reflect"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -38,6 +39,9 @@ const (
 // defaultPageSize bounds each candidate page; rows are processed one transaction at a time regardless.
 const defaultPageSize = 100
 
+// defaultLockTimeout bounds each dependent move's lock waits; a timeout stops the run as transient.
+const defaultLockTimeout = 5 * time.Second
+
 // Outcome classifies what the run did, or would do, for one toolset.
 type Outcome string
 
@@ -58,7 +62,12 @@ const (
 	OutcomeMoved            Outcome = "moved"
 	OutcomeBlockedTwin      Outcome = "blocked_twin"
 	OutcomeBlockedNoWrapper Outcome = "blocked_no_wrapper"
-	// OutcomeBlockedUnattachable is an assistant attachment whose wrapper the assistant write path rejects.
+	// OutcomeWouldMoveCollapsingTwin and OutcomeMovedCollapsedTwin moved the toolset-keyed row after removing its server-keyed twin.
+	OutcomeWouldMoveCollapsingTwin Outcome = "would_move_collapsing_twin"
+	OutcomeMovedCollapsedTwin      Outcome = "moved_collapsed_twin"
+	// OutcomeCommitUnknown is a move whose commit errored after the server may have committed it.
+	OutcomeCommitUnknown Outcome = "commit_unknown"
+	// OutcomeBlockedUnattachable is an assistant attachment the assistants reader does not dial (toolset MCP off or no mcp slug).
 	OutcomeBlockedUnattachable Outcome = "blocked_unattachable"
 	OutcomeOrphaned            Outcome = "orphaned"
 )
@@ -82,6 +91,12 @@ type Options struct {
 
 	// MoveDependents re-keys toolset-keyed dependents onto the canonical wrapper instead of syncing wrappers.
 	MoveDependents bool
+
+	// Journal receives each dependent move before and after its commit; required to apply MoveDependents.
+	Journal Journal
+
+	// LockTimeout bounds each dependent move's lock waits; 0 selects defaultLockTimeout.
+	LockTimeout time.Duration
 }
 
 // RowReport carries ids and slugs only, never names or emails.
@@ -114,6 +129,9 @@ type RowReport struct {
 
 	// DomainsToReconcile are custom domains whose root the sync cleared; they need a domain reconcile.
 	DomainsToReconcile []uuid.UUID `json:"domains_to_reconcile,omitempty"`
+
+	// CollapsedTwin is the server-keyed row a dependent move removed, as rollback needs it.
+	CollapsedTwin *CollapsedTwin `json:"collapsed_twin,omitempty"`
 }
 
 // Report summarizes a run.
@@ -151,6 +169,9 @@ type Runner struct {
 func NewRunner(pool *pgxpool.Pool, options Options) *Runner {
 	if options.PageSize <= 0 {
 		options.PageSize = defaultPageSize
+	}
+	if options.LockTimeout <= 0 {
+		options.LockTimeout = defaultLockTimeout
 	}
 	return &Runner{pool: pool, audit: audit.NewLogger(audit.WithoutOutbox()), options: options}
 }
@@ -233,7 +254,7 @@ func loadCanonical(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset)
 func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsetsRow) (RowReport, error) {
 	row := RowReport{
 		ToolsetID: candidate.ID, Table: "", RowID: nil, ProjectID: candidate.ProjectID, McpSlug: "", CustomDomainID: nil, Outcome: "", Reason: "",
-		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil,
+		Wrote: false, LiveEndpoints: 0, FreshIDServers: 0, DomainsToReconcile: nil, CollapsedTwin: nil,
 	}
 
 	tx, err := r.pool.Begin(ctx)

@@ -103,27 +103,18 @@ FROM (
 WHERE sqlc.narg('project_id')::uuid IS NULL OR d.project_id = sqlc.narg('project_id')::uuid
 ORDER BY 1, 2;
 
+-- name: SetMoveLockTimeout :exec
+SELECT set_config('lock_timeout', @lock_timeout::text, true);
+
 -- name: LockDependentToolset :one
-SELECT t.id, t.project_id, t.organization_id, t.mcp_slug, t.deleted, p.deleted AS project_deleted
+SELECT t.id, t.project_id, t.organization_id, t.mcp_slug, t.mcp_enabled, t.deleted, p.deleted AS project_deleted
 FROM toolsets AS t
 JOIN projects AS p ON p.id = t.project_id AND p.organization_id = t.organization_id
 WHERE t.id = @id AND t.project_id = @project_id
 FOR NO KEY UPDATE OF t;
 
 -- name: GetLiveCanonicalWrapper :one
-SELECT
-  ms.id,
-  ms.name,
-  ms.slug,
-  ms.visibility,
-  EXISTS (
-    SELECT 1
-    FROM mcp_endpoints AS me
-    WHERE me.mcp_server_id = ms.id
-      AND me.project_id = ms.project_id
-      AND me.custom_domain_id IS NULL
-      AND me.deleted IS FALSE
-  ) AS has_platform_endpoint
+SELECT ms.id, ms.name, ms.slug
 FROM mcp_servers AS ms
 WHERE ms.id = @toolset_id::uuid
   AND ms.project_id = @project_id
@@ -137,12 +128,21 @@ FROM mcp_metadata
 WHERE id = @id AND project_id = @project_id AND toolset_id = @toolset_id
 FOR UPDATE;
 
--- name: ServerKeyedMetadataExists :one
-SELECT EXISTS (
-  SELECT 1
-  FROM mcp_metadata
-  WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id
-);
+-- name: LockServerKeyedMetadataTwin :one
+SELECT m.id, to_jsonb(m)::jsonb AS row_json
+FROM mcp_metadata AS m
+WHERE m.mcp_server_id = @mcp_server_id AND m.project_id = @project_id
+FOR UPDATE;
+
+-- name: MetadataEnvironmentConfigsJSON :one
+SELECT COALESCE(jsonb_agg(to_jsonb(c) ORDER BY c.variable_name), '[]'::jsonb)::jsonb AS configs
+FROM mcp_environment_configs AS c
+WHERE c.mcp_metadata_id = @mcp_metadata_id AND c.project_id = @project_id;
+
+-- name: DeleteMetadataTwin :execrows
+-- Cascades to the twin's mcp_environment_configs, which the journal records.
+DELETE FROM mcp_metadata
+WHERE id = @id AND project_id = @project_id AND mcp_server_id = @mcp_server_id;
 
 -- name: RekeyMetadata :one
 UPDATE mcp_metadata
@@ -166,16 +166,32 @@ WHERE ps.id = @id
   AND ps.deleted IS FALSE
 FOR UPDATE OF ps;
 
--- name: ServerKeyedPluginServerExists :one
-SELECT EXISTS (
-  SELECT 1
-  FROM plugin_servers AS ps
-  JOIN plugins AS pl ON pl.id = ps.plugin_id
-  WHERE ps.plugin_id = @plugin_id
-    AND pl.project_id = @project_id
-    AND ps.mcp_server_id = @mcp_server_id
-    AND ps.deleted IS FALSE
-);
+-- name: LockServerKeyedPluginServerTwin :one
+SELECT
+  ps.id,
+  to_jsonb(ps)::jsonb AS row_json,
+  EXISTS (
+    SELECT 1
+    FROM platform_mcp_distributions AS d
+    WHERE d.project_id = pl.project_id AND d.plugin_server_id = ps.id
+  ) AS distributed
+FROM plugin_servers AS ps
+JOIN plugins AS pl ON pl.id = ps.plugin_id
+WHERE ps.plugin_id = @plugin_id
+  AND pl.project_id = @project_id
+  AND ps.mcp_server_id = @mcp_server_id
+  AND ps.deleted IS FALSE
+FOR UPDATE OF ps;
+
+-- name: SoftDeletePluginServerTwin :execrows
+UPDATE plugin_servers AS ps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM plugins AS pl
+WHERE ps.id = @id
+  AND pl.id = ps.plugin_id
+  AND pl.project_id = @project_id
+  AND ps.mcp_server_id = @mcp_server_id
+  AND ps.deleted IS FALSE;
 
 -- name: RekeyPluginServer :execrows
 UPDATE plugin_servers AS ps
@@ -192,7 +208,7 @@ SELECT assistant_id
 FROM assistant_toolsets
 WHERE id = @id AND project_id = @project_id AND toolset_id = @toolset_id;
 
--- name: LockAssistantForMove :exec
+-- name: LockAssistantForMove :one
 -- Same row lock as UpdateAssistant, so an in-flight edit of the attachments finishes first.
 SELECT id
 FROM assistants
@@ -205,12 +221,15 @@ FROM assistant_toolsets
 WHERE id = @id AND project_id = @project_id AND toolset_id = @toolset_id
 FOR UPDATE;
 
--- name: AssistantMcpServerExists :one
-SELECT EXISTS (
-  SELECT 1
-  FROM assistant_mcp_servers
-  WHERE assistant_id = @assistant_id AND mcp_server_id = @mcp_server_id AND project_id = @project_id
-);
+-- name: LockAssistantMcpServerTwin :one
+SELECT ams.id, to_jsonb(ams)::jsonb AS row_json
+FROM assistant_mcp_servers AS ams
+WHERE ams.assistant_id = @assistant_id AND ams.mcp_server_id = @mcp_server_id AND ams.project_id = @project_id
+FOR UPDATE;
+
+-- name: DeleteAssistantMcpServerTwin :execrows
+DELETE FROM assistant_mcp_servers
+WHERE id = @id AND project_id = @project_id AND mcp_server_id = @mcp_server_id;
 
 -- name: MoveAssistantToolset :execrows
 -- Same id, environment and created_at, so the attachment is the same row in its new table.
@@ -256,6 +275,10 @@ WHERE id = @id AND organization_id = @organization_id;
 INSERT INTO mcp_endpoints (id, project_id, custom_domain_id, mcp_server_id, slug)
 VALUES (@id, @project_id, @custom_domain_id, @mcp_server_id, @slug);
 
+-- name: SoftDeleteEndpointFixture :exec
+UPDATE mcp_endpoints SET deleted_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id;
+
 -- name: ListServersFixture :many
 SELECT *
 FROM mcp_servers
@@ -275,8 +298,25 @@ WHERE organization_id = @organization_id
 ORDER BY seq;
 
 -- name: SeedMetadataFixture :exec
-INSERT INTO mcp_metadata (id, toolset_id, mcp_server_id, project_id)
-VALUES (@id, @toolset_id, @mcp_server_id, @project_id);
+INSERT INTO mcp_metadata (id, toolset_id, mcp_server_id, project_id, default_environment_id, instructions)
+VALUES (@id, @toolset_id, @mcp_server_id, @project_id, @default_environment_id, @instructions);
+
+-- name: SeedEnvironmentFixture :exec
+INSERT INTO environments (id, organization_id, project_id, name, slug)
+VALUES (@id, @organization_id, @project_id, @name, @slug);
+
+-- name: SeedDistributionReferenceFixture :exec
+WITH registration AS (
+  INSERT INTO platform_mcp_catalog_registrations (organization_id, project_id, source_kind, catalog_provider, catalog_reference)
+  VALUES (@organization_id, @project_id, 'fixture', 'fixture', 'fixture')
+  RETURNING id
+)
+INSERT INTO platform_mcp_distributions (
+  organization_id, project_id, registration_id, default_plugin_id, plugin_server_id, state, version,
+  attachment_was_created, user_id, acting_surface
+)
+SELECT @organization_id, @project_id, registration.id, @plugin_id, @plugin_server_id, 'active', 1, FALSE, 'user_fixture', 'dashboard'
+FROM registration;
 
 -- name: SeedEnvironmentConfigFixture :exec
 INSERT INTO mcp_environment_configs (id, project_id, mcp_metadata_id, variable_name)
@@ -295,8 +335,8 @@ INSERT INTO assistants (id, project_id, organization_id, name, model, instructio
 VALUES (@id, @project_id, @organization_id, @name, 'model', '');
 
 -- name: SeedAssistantToolsetFixture :exec
-INSERT INTO assistant_toolsets (id, assistant_id, toolset_id, project_id)
-VALUES (@id, @assistant_id, @toolset_id, @project_id);
+INSERT INTO assistant_toolsets (id, assistant_id, toolset_id, project_id, environment_id)
+VALUES (@id, @assistant_id, @toolset_id, @project_id, @environment_id);
 
 -- name: SeedAssistantMcpServerFixture :exec
 INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
@@ -307,7 +347,7 @@ UPDATE toolsets SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id;
 
 -- name: ListMetadataFixture :many
-SELECT id, toolset_id, mcp_server_id
+SELECT id, toolset_id, mcp_server_id, default_environment_id, instructions
 FROM mcp_metadata
 WHERE project_id = @project_id
 ORDER BY id;
@@ -319,23 +359,46 @@ WHERE project_id = @project_id
 ORDER BY id;
 
 -- name: ListPluginServersFixture :many
-SELECT ps.id, ps.toolset_id, ps.mcp_server_id
+SELECT ps.id, ps.toolset_id, ps.mcp_server_id, ps.deleted
 FROM plugin_servers AS ps
 JOIN plugins AS pl ON pl.id = ps.plugin_id
 WHERE pl.project_id = @project_id
 ORDER BY ps.id;
 
 -- name: ListAssistantToolsetsFixture :many
-SELECT id, assistant_id, toolset_id
+SELECT id, assistant_id, toolset_id, environment_id
 FROM assistant_toolsets
 WHERE project_id = @project_id
 ORDER BY id;
 
 -- name: ListAssistantMcpServersFixture :many
-SELECT id, assistant_id, mcp_server_id
+SELECT id, assistant_id, mcp_server_id, environment_id
 FROM assistant_mcp_servers
 WHERE project_id = @project_id
 ORDER BY id;
+
+-- name: ListAuditSnapshotsFixture :many
+SELECT action, before_snapshot, after_snapshot, metadata
+FROM audit_logs
+WHERE organization_id = @organization_id
+ORDER BY seq;
+
+-- name: RollbackMetadataMoveFixture :execrows
+-- The runbook's rollback statements, run from journal values.
+UPDATE mcp_metadata SET mcp_server_id = NULL, toolset_id = @toolset_id::uuid
+WHERE id = @id AND project_id = @project_id AND mcp_server_id = @toolset_id::uuid;
+
+-- name: RestoreMetadataTwinFixture :exec
+INSERT INTO mcp_metadata
+SELECT (r).* FROM jsonb_populate_record(NULL::mcp_metadata, @row_json::jsonb) AS r
+WHERE r.project_id = @project_id::uuid
+ON CONFLICT (id) DO NOTHING;
+
+-- name: RestoreEnvironmentConfigsFixture :exec
+INSERT INTO mcp_environment_configs
+SELECT (c).* FROM jsonb_populate_recordset(NULL::mcp_environment_configs, @rows_json::jsonb) AS c
+WHERE c.project_id = @project_id::uuid
+ON CONFLICT (id) DO NOTHING;
 
 -- name: CountOutboxFixture :one
 SELECT count(*)

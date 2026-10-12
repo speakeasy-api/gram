@@ -20,9 +20,10 @@ import (
 )
 
 type hostedMCPWrappersConfig struct {
-	dbURL      string
-	reportPath string
-	options    hostedmcpbackfill.Options
+	dbURL       string
+	reportPath  string
+	journalPath string
+	options     hostedmcpbackfill.Options
 }
 
 // Stdout carries counts and the resume cursor only, never slugs or names.
@@ -36,6 +37,7 @@ type hostedMCPWrappersSummary struct {
 	FreshIDServersPresent int                               `json:"fresh_id_servers_present"`
 	LastCursor            uuid.UUID                         `json:"last_cursor"`
 	ReportPath            string                            `json:"report_path,omitempty"`
+	JournalPath           string                            `json:"journal_path,omitempty"`
 }
 
 // parseHostedMCPWrappersFlags returns flag.ErrHelp, with usage written to helpOut, when -h is passed.
@@ -46,7 +48,7 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	project := fs.String("project", "", "project_id (uuid) to scope the run")
 	cursor := fs.String("cursor", "", "resume after this toolset id")
 	limit := fs.Int("limit", 0, "max toolsets to process; 0 means all")
-	reportPath := fs.String("report", "", "per-row JSON report path")
+	reportPath := fs.String("report", "", "per-row JSON report path; -apply refuses an existing file, and -move-dependents -apply also writes <report>.journal.jsonl")
 	moveDependents := fs.Bool("move-dependents", false, "re-key toolset-keyed mcp_metadata, plugin_servers and assistant_toolsets onto the canonical wrapper")
 	readersCutOver := fs.Bool("readers-cut-over", false, "confirm AIM-16 phase A (dual-key readers) and phase B (writers switched to the server key) are both fully deployed; required for -move-dependents -apply")
 	if err := fs.Parse(args); err != nil {
@@ -74,8 +76,9 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	}
 
 	cfg := hostedMCPWrappersConfig{
-		dbURL:      getenv("GRAM_DATABASE_URL"),
-		reportPath: *reportPath,
+		dbURL:       getenv("GRAM_DATABASE_URL"),
+		reportPath:  *reportPath,
+		journalPath: "",
 		options: hostedmcpbackfill.Options{
 			ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			Cursor:         uuid.Nil,
@@ -83,7 +86,12 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 			PageSize:       0,
 			Apply:          *apply,
 			MoveDependents: *moveDependents,
+			Journal:        nil,
+			LockTimeout:    0,
 		},
+	}
+	if *moveDependents && *apply {
+		cfg.journalPath = *reportPath + ".journal.jsonl"
 	}
 	if cfg.dbURL == "" {
 		return cfg, errors.New("missing $GRAM_DATABASE_URL")
@@ -114,16 +122,28 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 		log.Printf("invalid hosted-mcp-wrappers configuration: %v", err)
 		return 2
 	}
-	// Open the report before any apply, so a bad path cannot strand committed rows without one.
-	// Truncate only when writing, so a failed run keeps the previous report.
+	// Open the report and journal before any apply, so a bad path cannot strand committed rows without them.
+	// An apply never reuses a path, so each batch keeps its own record; a dry run truncates only when writing.
 	var reportFile *os.File
 	if cfg.reportPath != "" {
-		reportFile, err = os.OpenFile(cfg.reportPath, os.O_CREATE|os.O_WRONLY, 0o600) // #nosec G304 -- operator-supplied report path
+		reportFile, err = openHostedMCPWrappersOutput(cfg.reportPath, cfg.options.Apply)
 		if err != nil {
 			log.Printf("open hosted-mcp-wrappers report: %v", err)
 			return 2
 		}
 		defer o11y.NoLogDefer(reportFile.Close)
+	}
+	if cfg.journalPath != "" {
+		journalFile, err := openHostedMCPWrappersOutput(cfg.journalPath, true)
+		if err != nil {
+			log.Printf("open hosted-mcp-wrappers journal: %v", err)
+			if err := os.Remove(cfg.reportPath); err != nil {
+				log.Printf("remove hosted-mcp-wrappers report: %v", err)
+			}
+			return 2
+		}
+		defer o11y.NoLogDefer(journalFile.Close)
+		cfg.options.Journal = hostedmcpbackfill.NewFileJournal(journalFile)
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -137,7 +157,7 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	report, runErr := hostedmcpbackfill.NewRunner(pool, cfg.options).Run(ctx)
 	summary := hostedMCPWrappersSummary{
 		Mode: report.Mode, Phase: report.Phase, Scanned: report.Scanned, Toolsets: report.Toolsets, Writes: report.Writes, Outcomes: report.Outcomes,
-		FreshIDServersPresent: report.FreshIDServersPresent, LastCursor: report.LastCursor, ReportPath: cfg.reportPath,
+		FreshIDServersPresent: report.FreshIDServersPresent, LastCursor: report.LastCursor, ReportPath: cfg.reportPath, JournalPath: cfg.journalPath,
 	}
 	code := 0
 	// The report is the record of committed rows, so write it before anything that can fail.
@@ -154,12 +174,24 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	if runErr != nil {
 		code = 1
 		if cfg.options.Apply {
-			log.Printf("hosted-mcp-wrappers stopped early: %v; resume with -cursor %s", runErr, report.LastCursor)
+			log.Printf("hosted-mcp-wrappers stopped early: %v; resume with -cursor %s and a new -report path", runErr, report.LastCursor)
 		} else {
 			log.Printf("hosted-mcp-wrappers stopped early: %v; dry-run cursors commit nothing, so rerun without -cursor", runErr)
 		}
 	}
 	return code
+}
+
+func openHostedMCPWrappersOutput(path string, exclusive bool) (*os.File, error) {
+	flags := os.O_CREATE | os.O_WRONLY
+	if exclusive {
+		flags |= os.O_EXCL
+	}
+	f, err := os.OpenFile(path, flags, 0o600) // #nosec G304 -- operator-supplied report path
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	return f, nil
 }
 
 func writeHostedMCPWrappersReport(f *os.File, report hostedmcpbackfill.Report) error {

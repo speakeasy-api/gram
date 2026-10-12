@@ -95,11 +95,60 @@ func TestRunHostedMCPWrappersKeepsPreviousReportWhenConnectFails(t *testing.T) {
 		}
 		return ""
 	}
-	code := runHostedMCPWrappers([]string{"-apply", "-report", report}, io.Discard, getenv)
+	code := runHostedMCPWrappers([]string{"-report", report}, io.Discard, getenv)
 	require.Equal(t, 1, code)
 	got, err := os.ReadFile(report)
 	require.NoError(t, err)
 	require.Equal(t, "previous run", string(got), "a run that never wrote must keep the previous report")
+}
+
+func TestRunHostedMCPWrappersApplyRefusesAnExistingReport(t *testing.T) {
+	t.Parallel()
+
+	report := filepath.Join(t.TempDir(), "report.json")
+	require.NoError(t, os.WriteFile(report, []byte("previous batch"), 0o600))
+	code := runHostedMCPWrappers([]string{"-apply", "-report", report}, io.Discard, hostedMCPWrappersGetenv)
+	require.Equal(t, 2, code, "an apply must not overwrite another batch's report")
+	got, err := os.ReadFile(report)
+	require.NoError(t, err)
+	require.Equal(t, "previous batch", string(got))
+}
+
+func TestRunHostedMCPWrappersMoveApplyRefusesAnExistingJournal(t *testing.T) {
+	t.Parallel()
+
+	report := filepath.Join(t.TempDir(), "report.json")
+	journal := report + ".journal.jsonl"
+	require.NoError(t, os.WriteFile(journal, []byte("previous batch\n"), 0o600))
+	code := runHostedMCPWrappers([]string{"-move-dependents", "-apply", "-readers-cut-over", "-report", report}, io.Discard, hostedMCPWrappersGetenv)
+	require.Equal(t, 2, code, "an apply must not append to another batch's journal")
+	got, err := os.ReadFile(journal)
+	require.NoError(t, err)
+	require.Equal(t, "previous batch\n", string(got))
+	_, err = os.Stat(report)
+	require.ErrorIs(t, err, os.ErrNotExist, "the refused run leaves no report behind")
+}
+
+func TestFileJournalAppendsOneLinePerRecord(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "journal.jsonl")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	journal := hostedmcpbackfill.NewFileJournal(f)
+	rowID, toolsetID := uuid.New(), uuid.New()
+	require.NoError(t, journal.Append(hostedmcpbackfill.JournalRecord{Event: hostedmcpbackfill.JournalIntent, RowID: rowID, ToolsetID: toolsetID}))
+	require.NoError(t, journal.Append(hostedmcpbackfill.JournalRecord{Event: hostedmcpbackfill.JournalCommitted, RowID: rowID, ToolsetID: toolsetID}))
+	require.NoError(t, f.Close())
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	lines := bytes.Split(bytes.TrimSpace(got), []byte("\n"))
+	require.Len(t, lines, 2)
+	var first hostedmcpbackfill.JournalRecord
+	require.NoError(t, json.Unmarshal(lines[0], &first))
+	require.Equal(t, hostedmcpbackfill.JournalIntent, first.Event)
+	require.Equal(t, rowID, first.RowID)
 }
 
 func TestWriteHostedMCPWrappersReportReplacesPreviousContent(t *testing.T) {
@@ -160,4 +209,5 @@ func TestParseHostedMCPWrappersFlagsMoveDependents(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, cfg.options.MoveDependents)
 	require.True(t, cfg.options.Apply)
+	require.Equal(t, "/tmp/r.json.journal.jsonl", cfg.journalPath)
 }

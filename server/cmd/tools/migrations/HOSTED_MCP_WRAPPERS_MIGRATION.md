@@ -44,7 +44,7 @@ Stdout carries the mode, phase, outcome counts, rows scanned, toolsets walked, w
 2. Dev: `-apply`; rerun `-apply` and confirm `writes` is 0 and every row is `already_complete` (or a repeated `dead_custom_domain` / `blocked_*`).
 3. Prod: dry run with `-report`. Review every `blocked_*` row and the `fresh_id_servers_present` count before going on.
 4. Prod canary: `-apply -project <PROJECT_ID>`; confirm the project's hosted servers still serve through their endpoints.
-5. Prod: `-apply -limit N` in batches, resuming with `-cursor` from the summary's `last_cursor`.
+5. Prod: `-apply -limit N` in batches, resuming with `-cursor` from the summary's `last_cursor`. Give each batch its own `-report` path: an `-apply` refuses an existing file.
 6. Prod: a final unfiltered `-apply` must report `writes: 0`.
 
 Failed runs exit nonzero; rows commit one toolset at a time, and an `-apply` run prints the resume cursor (a dry run commits nothing, so its cursor is never reused).
@@ -64,22 +64,42 @@ Re-keys the toolset-keyed rows that hang off a hosted toolset onto its canonical
 | `plugin_servers`     | In place, live rows only. Same row id, so platform distributions referencing the member keep it. Soft-deleted rows are left. |
 | `assistant_toolsets` | Moved to `assistant_mcp_servers` with the same id, environment and `created_at`; the `assistant_toolsets` row is removed.    |
 
-Candidates are walked in toolset id order; `-cursor` and `-limit` count toolsets (the summary's `toolsets`), while `scanned` and `writes` count dependent rows. Each dependent row runs in its own transaction, locking in the writers' order: the wrapper backfill's advisory lock, the toolset row, the assistant (for an attachment), the dependent row, then the wrapper `FOR SHARE`. Metadata and plugin member moves are audited as `system:hosted-mcp-dependent-move` without webhook events (the metadata update carries full before/after snapshots; the plugin member update carries `mcp_server_urn` and `previous_toolset_urn`); assistant attachment changes are not audited on any path. Report rows carry `table` and `row_id`.
+Candidates are walked in toolset id order; `-cursor` and `-limit` count toolsets (the summary's `toolsets`), while `scanned` and `writes` count dependent rows. Each dependent row runs in its own transaction with `SET LOCAL lock_timeout` (5s), locking in the writers' order: the wrapper backfill's advisory lock, the toolset row, the assistant (for an attachment), the dependent row, then the wrapper `FOR SHARE`, then any server-keyed twin. A lock timeout stops the run like any other transient error. Metadata and plugin member moves are audited as `system:hosted-mcp-dependent-move` without webhook events (the metadata update carries full before/after snapshots; the plugin member update carries `mcp_server_urn` and `previous_toolset_urn`); assistant attachment changes are not audited on any path. Report rows carry `table` and `row_id`.
 
-| Outcome                | Meaning                                                                                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `would_move` / `moved` | Row re-keyed onto the wrapper.                                                                                                                                          |
-| `blocked_twin`         | A server-keyed row for the wrapper already exists (metadata, plugin member, or assistant attachment); untouched.                                                        |
-| `blocked_no_wrapper`   | No live canonical wrapper: run the wrapper phase first, unless the reason says the toolset has no `mcp_slug` (it never gets one) or is not in the row's project.        |
-| `blocked_unattachable` | Assistant attachment whose wrapper is disabled or has no Speakeasy-hosted endpoint; the assistant write path rejects such servers, so moving it would block every save. |
-| `orphaned`             | The toolset or its project is deleted; the row is left as is.                                                                                                           |
-| `skipped`              | The row changed concurrently; rerun.                                                                                                                                    |
+### Twins
+
+A twin is a server-keyed row for the same wrapper next to the toolset-keyed one (the same plugin, the same assistant, or the wrapper's metadata). Phase A readers (#7435 plugins, #7436 assistants, #7437 metadata) prefer the toolset-keyed row, so that row is what users see today, and the move keeps it: in the same transaction it snapshots the twin, removes it, then moves the toolset-keyed row with its id, environment, env configs, distributions and `created_at`.
+
+- `mcp_metadata`: the twin is deleted, and its `mcp_environment_configs` cascade with it; the toolset-keyed row's configs win.
+- `plugin_servers`: the twin is soft-deleted like a member removal and audited as `plugin:server_remove`. A twin referenced by a platform distribution blocks the row (`blocked_twin`) instead.
+- `assistant_mcp_servers`: the twin is deleted; the toolset-keyed attachment's environment wins.
+
+The report and journal rows carry `collapsed_twin`: the twin's table, id, `deletion` (`deleted` or `soft_deleted`), its full row (`to_jsonb`), and for metadata its env configs.
+
+| Outcome                                               | Meaning                                                                                                                                      |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `would_move` / `moved`                                | Row re-keyed onto the wrapper.                                                                                                               |
+| `would_move_collapsing_twin` / `moved_collapsed_twin` | Twin removed, then the row re-keyed; see `collapsed_twin`.                                                                                   |
+| `blocked_twin`                                        | The plugin twin is referenced by a platform distribution, or a twin appeared outside the collapse (a concurrent writer); untouched, rerun.   |
+| `blocked_no_wrapper`                                  | No live canonical wrapper: run the wrapper phase first, unless the reason says the toolset has no `mcp_slug` or is not in the row's project. |
+| `blocked_unattachable`                                | Assistant attachment the assistants reader does not dial (toolset MCP off, or no `mcp_slug`); left until the toolset is dialed again.        |
+| `orphaned`                                            | The toolset, its project, or the attachment's assistant is gone from the row's project; the row is left as is.                               |
+| `skipped`                                             | The row changed concurrently; rerun.                                                                                                         |
+| `commit_unknown`                                      | The commit errored after the server may have committed; the run stops. The journal intent covers the row either way.                         |
+
+Only the three twin unique constraints (`mcp_metadata_mcp_server_id_key`, `plugin_servers_plugin_id_mcp_server_id_key`, `assistant_mcp_servers_assistant_id_mcp_server_id_key`) map to `blocked_twin`; any other unique violation stops the run.
 
 A rerun after a full apply scans only the rows left behind (`orphaned`, `blocked_*`) and writes nothing, provided no toolset-keyed writer is still live (see below).
 
+### Journal
+
+`-move-dependents -apply` writes `<report>.journal.jsonl` next to the report. For each row it appends and fsyncs an `intent` record before the commit, then a `committed` (or `commit_unknown`) record after. Each record carries `project_id`, `toolset_id`, `row_id`, `outcome`, `from` and `to` (table, column, key) and `collapsed_twin`. A crash between the two leaves an `intent` alone: that row may or may not have committed, and the rollback statements are written so that replaying them for a row that never committed changes nothing. An `-apply` refuses an existing report or journal path, so every batch keeps its own pair.
+
 ### Precondition: AIM-16 phases A and B deployed
 
-`-move-dependents -apply` refuses to run without `-readers-cut-over` and `-report`. The flag is the operator's confirmation that AIM-16 phase A (dual-key readers) and phase B (writers switched to the server key) are both fully deployed; the command cannot see what is deployed. Phase A keeps writing today's toolset-keyed shape so old pods stay compatible, and phase B flips the writers later, so the move must run after phase B to settle at `writes: 0`. AIM-16 cannot be rolled back once a move has been applied.
+`-move-dependents -apply` refuses to run without `-readers-cut-over` and `-report`. The flag is the operator's confirmation that AIM-16 phase A (dual-key readers: #7435 plugins, #7436 assistants, #7437 metadata) and phase B (writers switched to the server key) are both fully deployed; the command cannot see what is deployed. Phase A keeps writing today's toolset-keyed shape so old pods stay compatible, and phase B flips the writers later, so the move must run after phase B to settle at `writes: 0`.
+
+Assistants phase B is the specific prerequisite: a phase A assistant save writes hosted servers back to `assistant_toolsets`, so it reverses a move. Under #7435 a toolset rename also renames toolset-keyed plugin entries; a moved member follows the wrapper name instead (`SyncMcpServerDisplayName`).
 
 On main before AIM-16 these readers find only toolset-keyed rows, so a moved row would disappear from them:
 
@@ -87,33 +107,53 @@ On main before AIM-16 these readers find only toolset-keyed rows, so a moved row
 - Plugins: generated packages lose a moved member's user-header environment configs (`ListPluginEnvironmentConfigsForProject`) and drop it when the wrapper has no usable endpoint; the compatibility reason codes switch to the server set; Platform MCP plugin servers report it as an `mcp_server` backend; the dashboard's plugin banner and plugin detail page match hosted members by `toolsetId` only.
 - Assistants: the runtime id changes from the toolset slug to the wrapper slug, and a custom-domain-only toolset is skipped.
 
-These writers create a toolset-keyed twin after a move, which the next run reports as `blocked_twin`, so AIM-16 phase B must switch them to the server key: `setMcpMetadata` by `toolset_slug`, toolset MCP re-enable attaching to the default plugin, and assistant updates that send the toolset slug.
+These writers create a toolset-keyed twin after a move, which the next run collapses, so AIM-16 phase B must switch them to the server key: `setMcpMetadata` by `toolset_slug`, toolset MCP re-enable attaching to the default plugin, and assistant updates that send the toolset slug.
 
 Unaffected or already server-keyed: plugin membership probes, role delivery, Platform MCP server identities, toolset delete (the wrapper tombstone removes moved rows), and `mcp_server_id` metadata reads. Platform MCP inventory and connection settings start listing moved members. A wrapper rename now reaches a moved member's auto-derived display name through `SyncMcpServerDisplayName`.
 
 ### Run book
 
-1. After AIM-16 phases A and B are both fully deployed: dev dry run with `-move-dependents -report`; dev `-apply -readers-cut-over -report`.
-2. Prod dry run; review every `blocked_*` and `orphaned` row.
-3. Prod canary: `-apply -readers-cut-over -report -project <PROJECT_ID>`.
-4. Prod in batches with `-limit N`, resuming each batch with `-cursor` from the previous `last_cursor`; stuck toolsets stay listed, so restarting without a cursor repeats them.
+1. After AIM-16 phases A and B are both fully deployed: dev dry run with `-move-dependents -report <path>`; dev `-apply -readers-cut-over -report <new path>`.
+2. Prod dry run; review every `blocked_*`, `orphaned` and `would_move_collapsing_twin` row (the twin's contents are discarded).
+3. Prod canary on `<PROJECT_ID>`: download every plugin package in the project (`downloadPluginPackage`) and unpack it; `-apply -readers-cut-over -report <path> -project <PROJECT_ID>`; download and unpack again and diff. Any difference stops the rollout; roll the project back from its journal.
+4. Prod in batches with `-limit N`, resuming each batch with `-cursor` from the previous `last_cursor` and a new `-report` path; stuck toolsets stay listed, so restarting without a cursor repeats them.
 5. A final unfiltered apply must report `writes: 0`.
 
-Keep every `-apply` report: it is the only exact list of moved rows.
+Keep every `-apply` report and journal: the journals are the exact list of moved rows and removed twins.
 
 ### Rollback
 
-Ids are preserved, so a move is reversed by re-keying the reported `row_id`s back (`<ROW_ID>`, `<TOOLSET_ID>` from the report):
+Order matters:
 
-```sql
-UPDATE mcp_metadata SET mcp_server_id = NULL, toolset_id = '<TOOLSET_ID>' WHERE id = '<ROW_ID>' AND mcp_server_id = '<TOOLSET_ID>';
-UPDATE plugin_servers SET mcp_server_id = NULL, toolset_id = '<TOOLSET_ID>' WHERE id = '<ROW_ID>' AND mcp_server_id = '<TOOLSET_ID>';
-WITH moved AS (
-  DELETE FROM assistant_mcp_servers WHERE id = '<ROW_ID>' AND mcp_server_id = '<TOOLSET_ID>'
-  RETURNING id, assistant_id, environment_id, project_id, created_at
-)
-INSERT INTO assistant_toolsets (id, assistant_id, toolset_id, environment_id, project_id, created_at)
-SELECT id, assistant_id, '<TOOLSET_ID>', environment_id, project_id, created_at FROM moved;
+1. Roll code back to AIM-16 phase A, never below it: phase A reads both keys, so moved rows stay visible, and phase B writers stop.
+2. Roll the data back from the journals, newest batch first, one project at a time.
+3. Only then roll below phase A if needed.
+
+Ids are preserved, so every statement is keyed by journal values and guarded on the moved shape, so replaying it for a row that never committed, or twice, changes nothing. Generate the SQL for one project from a journal with this `jq` program (`rollback.jq`), then review and run it in one transaction:
+
+```jq
+def q: "'" + (if type == "string" then . else tojson end | gsub("'"; "''")) + "'";
+reverse[]
+| select(.event == "intent" and .project_id == $p)
+| ($p | q) as $proj | (.row_id | q) as $row | (.to.id | q) as $key | .collapsed_twin as $twin
+| if .from.table == "mcp_metadata" then
+    "UPDATE mcp_metadata SET mcp_server_id = NULL, toolset_id = \($key) WHERE id = \($row) AND project_id = \($proj) AND mcp_server_id = \($key);",
+    ($twin // empty
+      | "INSERT INTO mcp_metadata SELECT (r).* FROM jsonb_populate_record(NULL::mcp_metadata, \(.row | q)::jsonb) AS r WHERE r.project_id = \($proj) ON CONFLICT (id) DO NOTHING;",
+        "INSERT INTO mcp_environment_configs SELECT (c).* FROM jsonb_populate_recordset(NULL::mcp_environment_configs, \(.environment_configs // [] | q)::jsonb) AS c WHERE c.project_id = \($proj) ON CONFLICT (id) DO NOTHING;")
+  elif .from.table == "plugin_servers" then
+    "UPDATE plugin_servers AS ps SET mcp_server_id = NULL, toolset_id = \($key), updated_at = clock_timestamp() FROM plugins AS pl WHERE ps.id = \($row) AND pl.id = ps.plugin_id AND pl.project_id = \($proj) AND ps.mcp_server_id = \($key) AND ps.deleted IS FALSE;",
+    ($twin // empty
+      | "UPDATE plugin_servers AS ps SET deleted_at = NULL, updated_at = clock_timestamp() FROM plugins AS pl WHERE ps.id = \(.id | q) AND pl.id = ps.plugin_id AND pl.project_id = \($proj) AND ps.deleted_at IS NOT NULL;")
+  else
+    "WITH moved AS (DELETE FROM assistant_mcp_servers WHERE id = \($row) AND project_id = \($proj) AND mcp_server_id = \($key) RETURNING id, assistant_id, environment_id, project_id, created_at) INSERT INTO assistant_toolsets (id, assistant_id, toolset_id, environment_id, project_id, created_at) SELECT id, assistant_id, \($key), environment_id, project_id, created_at FROM moved;",
+    ($twin // empty
+      | "INSERT INTO assistant_mcp_servers SELECT (r).* FROM jsonb_populate_record(NULL::assistant_mcp_servers, \(.row | q)::jsonb) AS r WHERE r.project_id = \($proj) ON CONFLICT (id) DO NOTHING;")
+  end
 ```
 
-A reversal fails on a unique index if a toolset-keyed twin was written since; resolve that row first.
+```
+jq -r -s --arg p <PROJECT_ID> -f rollback.jq <journal> > rollback-<PROJECT_ID>.sql
+```
+
+`reverse` replays rows newest first, and within a row the moved row is re-keyed before its twin is restored, so the twin's unique key is free again. A statement that fails on a unique index means a toolset-keyed twin was written after the move; resolve that row by hand.
