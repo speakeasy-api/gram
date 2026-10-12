@@ -113,9 +113,9 @@ Unaffected or already server-keyed: plugin membership probes, role delivery, Pla
 
 ### Run book
 
-1. After AIM-16 phases A and B are both fully deployed: dev dry run with `-move-dependents -report <path>`; dev `-apply -readers-cut-over -report <new path>`.
+1. After AIM-16 phases A and B are both fully deployed: dev dry run with `-move-dependents -report <path>`; dev `-apply -move-dependents -readers-cut-over -report <new path>`.
 2. Prod dry run; review every `blocked_*`, `orphaned` and `would_move_collapsing_twin` row (the twin's contents are discarded).
-3. Prod canary on `<PROJECT_ID>`: download every plugin package in the project (`downloadPluginPackage`) and unpack it; `-apply -readers-cut-over -report <path> -project <PROJECT_ID>`; download and unpack again and diff. Any difference stops the rollout; roll the project back from its journal.
+3. Prod canary on `<PROJECT_ID>`: download every plugin package in the project (`downloadPluginPackage`) and unpack it; `-apply -move-dependents -readers-cut-over -report <path> -project <PROJECT_ID>`; download and unpack again and diff. Any difference stops the rollout; roll the project back from its journal.
 4. Prod in batches with `-limit N`, resuming each batch with `-cursor` from the previous `last_cursor` and a new `-report` path; stuck toolsets stay listed, so restarting without a cursor repeats them.
 5. A final unfiltered apply must report `writes: 0`.
 
