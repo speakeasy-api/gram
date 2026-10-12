@@ -1019,8 +1019,8 @@ type EmaVendorIdentityProvider struct {
 	ID                           uuid.UUID
 	OrganizationID               string
 	VendorIssuer                 string
-	ProviderKind                 string
 	IdentityProviderConnectionID uuid.NullUUID
+	InternalSessionIssuerID      uuid.NullUUID
 	Position                     int32
 	CreatedAt                    pgtype.Timestamptz
 	UpdatedAt                    pgtype.Timestamptz
@@ -1345,6 +1345,17 @@ type IdentityProviderConnection struct {
 	Deleted        bool
 }
 
+type InternalSessionIssuer struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	JsonWebKeySetID uuid.UUID
+	DisabledAt      pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type JsonWebKey struct {
 	ID                 uuid.UUID
 	OrganizationID     string
@@ -1371,7 +1382,6 @@ type JsonWebKeySet struct {
 	ExternalKeyID                uuid.UUID
 	Name                         string
 	IdentityProviderConnectionID uuid.NullUUID
-	ManagedEmaIssuer             pgtype.Bool
 	CreatedAt                    pgtype.Timestamptz
 	UpdatedAt                    pgtype.Timestamptz
 	DeletedAt                    pgtype.Timestamptz
