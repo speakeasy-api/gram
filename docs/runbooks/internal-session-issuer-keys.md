@@ -39,7 +39,9 @@ Never destroy a version a live row still references. The next sweep re-runs both
 
 ## Public discovery traffic
 
-The discovery and JWKS routes are unauthenticated. Each process caches every document, including "not found", for 10 seconds, and metadata routes read only the issuer row, so a flood reaches the database at most once per document per process per window. Volumetric abuse is left to edge rate limiting on `/oauth/idp/org/*` and the matching `/.well-known/*` paths. Add an edge rule there if traffic grows.
+The discovery and JWKS routes are unauthenticated. Each process caches up to 4,096 documents, including "not found", for 10 seconds, and concurrent misses for one document share a single read. Metadata routes read only the issuer row.
+
+So repeated requests for the same document reach the database about once per process per 10 seconds. Requests spread over many distinct organization ids still read once per id, and can evict each other once there are more than 4,096. Volumetric abuse is left to edge rate limiting on `/oauth/idp/org/*` and the matching `/.well-known/*` paths. Add an edge rule there if traffic grows.
 
 ## IAM assumptions
 

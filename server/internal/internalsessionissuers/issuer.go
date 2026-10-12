@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goahttp "goa.design/goa/v3/http"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
@@ -98,7 +99,7 @@ type discoveryDocument struct {
 
 // AttachDiscovery mounts the public discovery and JWKS documents.
 func AttachDiscovery(mux goahttp.Muxer, db *pgxpool.Pool, logger *slog.Logger) {
-	h := &handler{db: db, logger: logger, cache: expirable.NewLRU[documentKey, cachedDocument](documentCacheSize, nil, documentCacheTTL)}
+	h := &handler{db: db, logger: logger, cache: expirable.NewLRU[documentKey, cachedDocument](documentCacheSize, nil, documentCacheTTL), flights: singleflight.Group{}}
 	const path = "/oauth/idp/org/{organizationID}"
 	for _, route := range []string{
 		path,
@@ -119,6 +120,8 @@ type handler struct {
 	db     *pgxpool.Pool
 	logger *slog.Logger
 	cache  *expirable.LRU[documentKey, cachedDocument]
+	// flights collapses concurrent misses for one document into one read.
+	flights singleflight.Group
 }
 
 type documentKey struct {
@@ -138,14 +141,29 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 	key := documentKey{organizationID: chi.URLParam(r, "organizationID"), keys: keys}
 	cached, ok := h.cache.Get(key)
 	if !ok {
-		body, err := h.render(ctx, key)
-		switch {
-		case errors.Is(err, ErrNotFound):
-		case err != nil:
+		flight := fmt.Sprintf("%t/%s", key.keys, key.organizationID)
+		loaded, err, _ := h.flights.Do(flight, func() (any, error) {
+			if cached, ok := h.cache.Get(key); ok {
+				return cached, nil
+			}
+			// The flight outlives any one caller, so it ignores their cancellation.
+			body, err := h.render(context.WithoutCancel(ctx), key)
+			switch {
+			case errors.Is(err, ErrNotFound):
+			case err != nil:
+				return nil, err
+			}
+			document := cachedDocument{body: body}
+			h.cache.Add(key, document)
+			return document, nil
+		})
+		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "load issuer document").LogError(ctx, h.logger)
 		}
-		cached = cachedDocument{body: body}
-		h.cache.Add(key, cached)
+		cached, ok = loaded.(cachedDocument)
+		if !ok {
+			return oops.E(oops.CodeUnexpected, nil, "load issuer document").LogError(ctx, h.logger)
+		}
 	}
 	if cached.body == nil {
 		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", notFoundMaxAge))
