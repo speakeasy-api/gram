@@ -519,14 +519,20 @@ WHERE u.organization_id = @organization_id
 ORDER BY u.slug, u.id;
 
 -- name: ListVendorIdentityProviders :many
--- The organization's ordered identity provider policy for one vendor issuer,
--- including rows whose connection has since been deleted (shown as stale).
-SELECT p.id, p.provider_kind, p.identity_provider_connection_id, p.position,
-  (p.identity_provider_connection_id IS NOT NULL AND (c.id IS NULL OR c.deleted IS TRUE))::boolean AS connection_deleted
-FROM ema_vendor_identity_providers AS p
-LEFT JOIN identity_provider_connections AS c
-  ON c.organization_id = p.organization_id
- AND c.id = p.identity_provider_connection_id
+-- The organization's ordered ID-JAG suppliers for one vendor issuer, including
+-- rows whose supplier was deleted or disabled (shown as unavailable).
+SELECT p.id, p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
+  (
+    (p.remote_session_issuer_id IS NOT NULL AND (r.id IS NULL OR r.deleted IS TRUE))
+    OR (p.internal_session_issuer_id IS NOT NULL AND (i.id IS NULL OR i.deleted IS TRUE OR i.disabled_at IS NOT NULL))
+  )::boolean AS provider_unavailable
+FROM remote_session_ema_providers AS p
+LEFT JOIN remote_session_issuers AS r
+  ON r.organization_id = p.organization_id
+ AND r.id = p.remote_session_issuer_id
+LEFT JOIN internal_session_issuers AS i
+  ON i.organization_id = p.organization_id
+ AND i.id = p.internal_session_issuer_id
 WHERE p.organization_id = @organization_id
   AND p.vendor_issuer = @vendor_issuer
   AND p.deleted IS FALSE
@@ -534,25 +540,57 @@ ORDER BY p.position;
 
 -- name: DeleteVendorIdentityProviders :execrows
 -- Retires the organization's policy for one vendor issuer before a replace.
-UPDATE ema_vendor_identity_providers
+UPDATE remote_session_ema_providers
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND vendor_issuer = @vendor_issuer
   AND deleted IS FALSE;
 
 -- name: InsertVendorIdentityProvider :exec
-INSERT INTO ema_vendor_identity_providers (
-  organization_id, vendor_issuer, provider_kind, identity_provider_connection_id, position
+INSERT INTO remote_session_ema_providers (
+  organization_id, vendor_issuer, remote_session_issuer_id, internal_session_issuer_id, position
 ) VALUES (
-  @organization_id, @vendor_issuer, @provider_kind, @identity_provider_connection_id, @position
+  @organization_id, @vendor_issuer, @remote_session_issuer_id, @internal_session_issuer_id, @position
 );
 
--- name: GetLiveIdentityProviderConnection :one
--- A live connection of the organization, for validating policy references.
-SELECT id, provider
-FROM identity_provider_connections
-WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
+-- name: ListExternalIDJAGSuppliers :many
+-- The organization's external ID-JAG suppliers: live organization-level remote
+-- session issuers that a live organization user session issuer trusts, since
+-- identity chaining exchanges at the endpoint's trusted issuer.
+SELECT DISTINCT r.id, r.created_at
+FROM remote_session_issuers AS r
+JOIN user_session_issuers AS u
+  ON u.organization_id = r.organization_id
+ AND u.trusted_remote_session_issuer_id = r.id
+ AND u.project_id IS NULL
+ AND u.deleted IS FALSE
+WHERE r.organization_id = @organization_id
+  AND r.project_id IS NULL
+  AND r.deleted IS FALSE
+ORDER BY r.created_at, r.id;
+
+-- name: IsExternalIDJAGSupplier :one
+-- Whether id names one of the organization's external ID-JAG suppliers.
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_issuers AS r
+  JOIN user_session_issuers AS u
+    ON u.organization_id = r.organization_id
+   AND u.trusted_remote_session_issuer_id = r.id
+   AND u.project_id IS NULL
+   AND u.deleted IS FALSE
+  WHERE r.organization_id = @organization_id
+    AND r.id = @id
+    AND r.project_id IS NULL
+    AND r.deleted IS FALSE
+) AS supplier;
 
 -- name: LockOrganizationVendorIdentityProviders :exec
 -- Serializes policy replaces for one organization.
-SELECT pg_advisory_xact_lock(hashtextextended('ema_vendor_identity_providers:' || @organization_id::text, 0));
+SELECT pg_advisory_xact_lock(hashtextextended('remote_session_ema_providers:' || @organization_id::text, 0));
+
+-- name: GetLiveInternalSessionIssuer :one
+-- The organization's live Speakeasy issuer, and whether it is turned off.
+SELECT id, (disabled_at IS NOT NULL)::boolean AS disabled
+FROM internal_session_issuers
+WHERE organization_id = @organization_id AND deleted IS FALSE;

@@ -2711,6 +2711,507 @@ func DecodeListApplicationsResponse(decoder func(*http.Response) goahttp.Decoder
 	}
 }
 
+// BuildGetVendorIdentityProvidersRequest instantiates a HTTP request object
+// with method and path set to call the "identityProviderConnections" service
+// "getVendorIdentityProviders" endpoint
+func (c *Client) BuildGetVendorIdentityProvidersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetVendorIdentityProvidersIdentityProviderConnectionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identityProviderConnections", "getVendorIdentityProviders", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetVendorIdentityProvidersRequest returns an encoder for requests sent
+// to the identityProviderConnections getVendorIdentityProviders server.
+func EncodeGetVendorIdentityProvidersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identityproviderconnections.GetVendorIdentityProvidersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identityProviderConnections", "getVendorIdentityProviders", "*identityproviderconnections.GetVendorIdentityProvidersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("vendor_issuer", p.VendorIssuer)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetVendorIdentityProvidersResponse returns a decoder for responses
+// returned by the identityProviderConnections getVendorIdentityProviders
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeGetVendorIdentityProvidersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeGetVendorIdentityProvidersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetVendorIdentityProvidersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			res := NewGetVendorIdentityProvidersVendorIdentityProvidersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetVendorIdentityProvidersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			return nil, NewGetVendorIdentityProvidersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetVendorIdentityProvidersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			return nil, NewGetVendorIdentityProvidersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetVendorIdentityProvidersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			return nil, NewGetVendorIdentityProvidersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetVendorIdentityProvidersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			return nil, NewGetVendorIdentityProvidersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetVendorIdentityProvidersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			return nil, NewGetVendorIdentityProvidersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetVendorIdentityProvidersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			return nil, NewGetVendorIdentityProvidersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetVendorIdentityProvidersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			return nil, NewGetVendorIdentityProvidersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetVendorIdentityProvidersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+				}
+				err = ValidateGetVendorIdentityProvidersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+				}
+				return nil, NewGetVendorIdentityProvidersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetVendorIdentityProvidersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+				}
+				err = ValidateGetVendorIdentityProvidersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+				}
+				return nil, NewGetVendorIdentityProvidersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "getVendorIdentityProviders", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetVendorIdentityProvidersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			return nil, NewGetVendorIdentityProvidersGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetVendorIdentityProvidersUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			err = ValidateGetVendorIdentityProvidersUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "getVendorIdentityProviders", err)
+			}
+			return nil, NewGetVendorIdentityProvidersUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "getVendorIdentityProviders", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetVendorIdentityProvidersRequest instantiates a HTTP request object
+// with method and path set to call the "identityProviderConnections" service
+// "setVendorIdentityProviders" endpoint
+func (c *Client) BuildSetVendorIdentityProvidersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetVendorIdentityProvidersIdentityProviderConnectionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("identityProviderConnections", "setVendorIdentityProviders", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetVendorIdentityProvidersRequest returns an encoder for requests sent
+// to the identityProviderConnections setVendorIdentityProviders server.
+func EncodeSetVendorIdentityProvidersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*identityproviderconnections.SetVendorIdentityProvidersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("identityProviderConnections", "setVendorIdentityProviders", "*identityproviderconnections.SetVendorIdentityProvidersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetVendorIdentityProvidersRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetVendorIdentityProvidersResponse returns a decoder for responses
+// returned by the identityProviderConnections setVendorIdentityProviders
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeSetVendorIdentityProvidersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeSetVendorIdentityProvidersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetVendorIdentityProvidersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			res := NewSetVendorIdentityProvidersVendorIdentityProvidersResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetVendorIdentityProvidersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			return nil, NewSetVendorIdentityProvidersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetVendorIdentityProvidersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			return nil, NewSetVendorIdentityProvidersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetVendorIdentityProvidersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			return nil, NewSetVendorIdentityProvidersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetVendorIdentityProvidersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			return nil, NewSetVendorIdentityProvidersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetVendorIdentityProvidersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			return nil, NewSetVendorIdentityProvidersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetVendorIdentityProvidersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			return nil, NewSetVendorIdentityProvidersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetVendorIdentityProvidersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			return nil, NewSetVendorIdentityProvidersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetVendorIdentityProvidersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+				}
+				err = ValidateSetVendorIdentityProvidersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+				}
+				return nil, NewSetVendorIdentityProvidersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetVendorIdentityProvidersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+				}
+				err = ValidateSetVendorIdentityProvidersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+				}
+				return nil, NewSetVendorIdentityProvidersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "setVendorIdentityProviders", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetVendorIdentityProvidersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			return nil, NewSetVendorIdentityProvidersGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SetVendorIdentityProvidersUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			err = ValidateSetVendorIdentityProvidersUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("identityProviderConnections", "setVendorIdentityProviders", err)
+			}
+			return nil, NewSetVendorIdentityProvidersUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("identityProviderConnections", "setVendorIdentityProviders", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalIdentityProviderConnectionActiveKeyResponseBodyToIdentityproviderconnectionsIdentityProviderConnectionActiveKey
 // builds a value of type
 // *identityproviderconnections.IdentityProviderConnectionActiveKey from a
@@ -2870,6 +3371,45 @@ func unmarshalIdentityProviderConnectionReconcileRunResponseBodyToIdentityprovid
 	res.SkippedAppIds = make([]string, len(v.SkippedAppIds))
 	for i, val := range v.SkippedAppIds {
 		res.SkippedAppIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalVendorIdentityProviderResponseBodyToIdentityproviderconnectionsVendorIdentityProvider
+// builds a value of type *identityproviderconnections.VendorIdentityProvider
+// from a value of type *VendorIdentityProviderResponseBody.
+func unmarshalVendorIdentityProviderResponseBodyToIdentityproviderconnectionsVendorIdentityProvider(v *VendorIdentityProviderResponseBody) *identityproviderconnections.VendorIdentityProvider {
+	res := &identityproviderconnections.VendorIdentityProvider{
+		Kind:                    *v.Kind,
+		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
+		InternalSessionIssuerID: v.InternalSessionIssuerID,
+		Unavailable:             *v.Unavailable,
+	}
+
+	return res
+}
+
+// marshalIdentityproviderconnectionsVendorIdentityProviderInputToVendorIdentityProviderInputRequestBody
+// builds a value of type *VendorIdentityProviderInputRequestBody from a value
+// of type *identityproviderconnections.VendorIdentityProviderInput.
+func marshalIdentityproviderconnectionsVendorIdentityProviderInputToVendorIdentityProviderInputRequestBody(v *identityproviderconnections.VendorIdentityProviderInput) *VendorIdentityProviderInputRequestBody {
+	res := &VendorIdentityProviderInputRequestBody{
+		Kind:                  v.Kind,
+		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
+	}
+
+	return res
+}
+
+// marshalVendorIdentityProviderInputRequestBodyToIdentityproviderconnectionsVendorIdentityProviderInput
+// builds a value of type
+// *identityproviderconnections.VendorIdentityProviderInput from a value of
+// type *VendorIdentityProviderInputRequestBody.
+func marshalVendorIdentityProviderInputRequestBodyToIdentityproviderconnectionsVendorIdentityProviderInput(v *VendorIdentityProviderInputRequestBody) *identityproviderconnections.VendorIdentityProviderInput {
+	res := &identityproviderconnections.VendorIdentityProviderInput{
+		Kind:                  v.Kind,
+		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
 	}
 
 	return res

@@ -218,7 +218,7 @@ func (q *Queries) CreateOktaIdentityProviderConnection(ctx context.Context, arg 
 }
 
 const deleteVendorIdentityProviders = `-- name: DeleteVendorIdentityProviders :execrows
-UPDATE ema_vendor_identity_providers
+UPDATE remote_session_ema_providers
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND vendor_issuer = $2
@@ -349,27 +349,22 @@ func (q *Queries) GetIdentityProviderConnectionIncludingDeleted(ctx context.Cont
 	return i, err
 }
 
-const getLiveIdentityProviderConnection = `-- name: GetLiveIdentityProviderConnection :one
-SELECT id, provider
-FROM identity_provider_connections
-WHERE organization_id = $1 AND id = $2 AND deleted IS FALSE
+const getLiveInternalSessionIssuer = `-- name: GetLiveInternalSessionIssuer :one
+SELECT id, (disabled_at IS NOT NULL)::boolean AS disabled
+FROM internal_session_issuers
+WHERE organization_id = $1 AND deleted IS FALSE
 `
 
-type GetLiveIdentityProviderConnectionParams struct {
-	OrganizationID string
-	ID             uuid.UUID
-}
-
-type GetLiveIdentityProviderConnectionRow struct {
+type GetLiveInternalSessionIssuerRow struct {
 	ID       uuid.UUID
-	Provider string
+	Disabled bool
 }
 
-// A live connection of the organization, for validating policy references.
-func (q *Queries) GetLiveIdentityProviderConnection(ctx context.Context, arg GetLiveIdentityProviderConnectionParams) (GetLiveIdentityProviderConnectionRow, error) {
-	row := q.db.QueryRow(ctx, getLiveIdentityProviderConnection, arg.OrganizationID, arg.ID)
-	var i GetLiveIdentityProviderConnectionRow
-	err := row.Scan(&i.ID, &i.Provider)
+// The organization's live Speakeasy issuer, and whether it is turned off.
+func (q *Queries) GetLiveInternalSessionIssuer(ctx context.Context, organizationID string) (GetLiveInternalSessionIssuerRow, error) {
+	row := q.db.QueryRow(ctx, getLiveInternalSessionIssuer, organizationID)
+	var i GetLiveInternalSessionIssuerRow
+	err := row.Scan(&i.ID, &i.Disabled)
 	return i, err
 }
 
@@ -757,30 +752,59 @@ func (q *Queries) GetPlatformGcpIamCredentialForProvisioning(ctx context.Context
 }
 
 const insertVendorIdentityProvider = `-- name: InsertVendorIdentityProvider :exec
-INSERT INTO ema_vendor_identity_providers (
-  organization_id, vendor_issuer, provider_kind, identity_provider_connection_id, position
+INSERT INTO remote_session_ema_providers (
+  organization_id, vendor_issuer, remote_session_issuer_id, internal_session_issuer_id, position
 ) VALUES (
   $1, $2, $3, $4, $5
 )
 `
 
 type InsertVendorIdentityProviderParams struct {
-	OrganizationID               string
-	VendorIssuer                 string
-	ProviderKind                 string
-	IdentityProviderConnectionID uuid.NullUUID
-	Position                     int32
+	OrganizationID          string
+	VendorIssuer            string
+	RemoteSessionIssuerID   uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	Position                int32
 }
 
 func (q *Queries) InsertVendorIdentityProvider(ctx context.Context, arg InsertVendorIdentityProviderParams) error {
 	_, err := q.db.Exec(ctx, insertVendorIdentityProvider,
 		arg.OrganizationID,
 		arg.VendorIssuer,
-		arg.ProviderKind,
-		arg.IdentityProviderConnectionID,
+		arg.RemoteSessionIssuerID,
+		arg.InternalSessionIssuerID,
 		arg.Position,
 	)
 	return err
+}
+
+const isExternalIDJAGSupplier = `-- name: IsExternalIDJAGSupplier :one
+SELECT EXISTS (
+  SELECT 1
+  FROM remote_session_issuers AS r
+  JOIN user_session_issuers AS u
+    ON u.organization_id = r.organization_id
+   AND u.trusted_remote_session_issuer_id = r.id
+   AND u.project_id IS NULL
+   AND u.deleted IS FALSE
+  WHERE r.organization_id = $1
+    AND r.id = $2
+    AND r.project_id IS NULL
+    AND r.deleted IS FALSE
+) AS supplier
+`
+
+type IsExternalIDJAGSupplierParams struct {
+	OrganizationID pgtype.Text
+	ID             uuid.UUID
+}
+
+// Whether id names one of the organization's external ID-JAG suppliers.
+func (q *Queries) IsExternalIDJAGSupplier(ctx context.Context, arg IsExternalIDJAGSupplierParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isExternalIDJAGSupplier, arg.OrganizationID, arg.ID)
+	var supplier bool
+	err := row.Scan(&supplier)
+	return supplier, err
 }
 
 const keySetAttached = `-- name: KeySetAttached :one
@@ -805,6 +829,48 @@ func (q *Queries) KeySetAttached(ctx context.Context, arg KeySetAttachedParams) 
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listExternalIDJAGSuppliers = `-- name: ListExternalIDJAGSuppliers :many
+SELECT DISTINCT r.id, r.created_at
+FROM remote_session_issuers AS r
+JOIN user_session_issuers AS u
+  ON u.organization_id = r.organization_id
+ AND u.trusted_remote_session_issuer_id = r.id
+ AND u.project_id IS NULL
+ AND u.deleted IS FALSE
+WHERE r.organization_id = $1
+  AND r.project_id IS NULL
+  AND r.deleted IS FALSE
+ORDER BY r.created_at, r.id
+`
+
+type ListExternalIDJAGSuppliersRow struct {
+	ID        uuid.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
+// The organization's external ID-JAG suppliers: live organization-level remote
+// session issuers that a live organization user session issuer trusts, since
+// identity chaining exchanges at the endpoint's trusted issuer.
+func (q *Queries) ListExternalIDJAGSuppliers(ctx context.Context, organizationID pgtype.Text) ([]ListExternalIDJAGSuppliersRow, error) {
+	rows, err := q.db.Query(ctx, listExternalIDJAGSuppliers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalIDJAGSuppliersRow
+	for rows.Next() {
+		var i ListExternalIDJAGSuppliersRow
+		if err := rows.Scan(&i.ID, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOktaSignInClients = `-- name: ListOktaSignInClients :many
@@ -990,12 +1056,18 @@ func (q *Queries) ListParkedConnectionKeySets(ctx context.Context, arg ListParke
 }
 
 const listVendorIdentityProviders = `-- name: ListVendorIdentityProviders :many
-SELECT p.id, p.provider_kind, p.identity_provider_connection_id, p.position,
-  (p.identity_provider_connection_id IS NOT NULL AND (c.id IS NULL OR c.deleted IS TRUE))::boolean AS connection_deleted
-FROM ema_vendor_identity_providers AS p
-LEFT JOIN identity_provider_connections AS c
-  ON c.organization_id = p.organization_id
- AND c.id = p.identity_provider_connection_id
+SELECT p.id, p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
+  (
+    (p.remote_session_issuer_id IS NOT NULL AND (r.id IS NULL OR r.deleted IS TRUE))
+    OR (p.internal_session_issuer_id IS NOT NULL AND (i.id IS NULL OR i.deleted IS TRUE OR i.disabled_at IS NOT NULL))
+  )::boolean AS provider_unavailable
+FROM remote_session_ema_providers AS p
+LEFT JOIN remote_session_issuers AS r
+  ON r.organization_id = p.organization_id
+ AND r.id = p.remote_session_issuer_id
+LEFT JOIN internal_session_issuers AS i
+  ON i.organization_id = p.organization_id
+ AND i.id = p.internal_session_issuer_id
 WHERE p.organization_id = $1
   AND p.vendor_issuer = $2
   AND p.deleted IS FALSE
@@ -1008,15 +1080,15 @@ type ListVendorIdentityProvidersParams struct {
 }
 
 type ListVendorIdentityProvidersRow struct {
-	ID                           uuid.UUID
-	ProviderKind                 string
-	IdentityProviderConnectionID uuid.NullUUID
-	Position                     int32
-	ConnectionDeleted            bool
+	ID                      uuid.UUID
+	RemoteSessionIssuerID   uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	Position                int32
+	ProviderUnavailable     bool
 }
 
-// The organization's ordered identity provider policy for one vendor issuer,
-// including rows whose connection has since been deleted (shown as stale).
+// The organization's ordered ID-JAG suppliers for one vendor issuer, including
+// rows whose supplier was deleted or disabled (shown as unavailable).
 func (q *Queries) ListVendorIdentityProviders(ctx context.Context, arg ListVendorIdentityProvidersParams) ([]ListVendorIdentityProvidersRow, error) {
 	rows, err := q.db.Query(ctx, listVendorIdentityProviders, arg.OrganizationID, arg.VendorIssuer)
 	if err != nil {
@@ -1028,10 +1100,10 @@ func (q *Queries) ListVendorIdentityProviders(ctx context.Context, arg ListVendo
 		var i ListVendorIdentityProvidersRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.ProviderKind,
-			&i.IdentityProviderConnectionID,
+			&i.RemoteSessionIssuerID,
+			&i.InternalSessionIssuerID,
 			&i.Position,
-			&i.ConnectionDeleted,
+			&i.ProviderUnavailable,
 		); err != nil {
 			return nil, err
 		}
@@ -1183,7 +1255,7 @@ func (q *Queries) LockOktaTokenCredential(ctx context.Context, arg LockOktaToken
 }
 
 const lockOrganizationVendorIdentityProviders = `-- name: LockOrganizationVendorIdentityProviders :exec
-SELECT pg_advisory_xact_lock(hashtextextended('ema_vendor_identity_providers:' || $1::text, 0))
+SELECT pg_advisory_xact_lock(hashtextextended('remote_session_ema_providers:' || $1::text, 0))
 `
 
 // Serializes policy replaces for one organization.

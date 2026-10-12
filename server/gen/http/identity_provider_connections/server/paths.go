@@ -56,3 +56,13 @@ func SyncApplicationsIdentityProviderConnectionsPath() string {
 func ListApplicationsIdentityProviderConnectionsPath() string {
 	return "/rpc/identityProviderConnections.listApplications"
 }
+
+// GetVendorIdentityProvidersIdentityProviderConnectionsPath returns the URL path to the identityProviderConnections service getVendorIdentityProviders HTTP endpoint.
+func GetVendorIdentityProvidersIdentityProviderConnectionsPath() string {
+	return "/rpc/identityProviderConnections.getVendorIdentityProviders"
+}
+
+// SetVendorIdentityProvidersIdentityProviderConnectionsPath returns the URL path to the identityProviderConnections service setVendorIdentityProviders HTTP endpoint.
+func SetVendorIdentityProvidersIdentityProviderConnectionsPath() string {
+	return "/rpc/identityProviderConnections.setVendorIdentityProviders"
+}

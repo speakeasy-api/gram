@@ -323,3 +323,78 @@ func BuildListApplicationsPayload(identityProviderConnectionsListApplicationsID 
 
 	return v, nil
 }
+
+// BuildGetVendorIdentityProvidersPayload builds the payload for the
+// identityProviderConnections getVendorIdentityProviders endpoint from CLI
+// flags.
+func BuildGetVendorIdentityProvidersPayload(identityProviderConnectionsGetVendorIdentityProvidersVendorIssuer string, identityProviderConnectionsGetVendorIdentityProvidersSessionToken string) (*identityproviderconnections.GetVendorIdentityProvidersPayload, error) {
+	var vendorIssuer string
+	{
+		vendorIssuer = identityProviderConnectionsGetVendorIdentityProvidersVendorIssuer
+	}
+	var sessionToken *string
+	{
+		if identityProviderConnectionsGetVendorIdentityProvidersSessionToken != "" {
+			sessionToken = &identityProviderConnectionsGetVendorIdentityProvidersSessionToken
+		}
+	}
+	v := &identityproviderconnections.GetVendorIdentityProvidersPayload{}
+	v.VendorIssuer = vendorIssuer
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetVendorIdentityProvidersPayload builds the payload for the
+// identityProviderConnections setVendorIdentityProviders endpoint from CLI
+// flags.
+func BuildSetVendorIdentityProvidersPayload(identityProviderConnectionsSetVendorIdentityProvidersBody string, identityProviderConnectionsSetVendorIdentityProvidersSessionToken string) (*identityproviderconnections.SetVendorIdentityProvidersPayload, error) {
+	var err error
+	var body SetVendorIdentityProvidersRequestBody
+	{
+		err = json.Unmarshal([]byte(identityProviderConnectionsSetVendorIdentityProvidersBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"vendor_issuer\": \"abc123\"\n   }'")
+		}
+		if body.Providers == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
+		}
+		if len(body.Providers) > 10 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.providers", body.Providers, len(body.Providers), 10, false))
+		}
+		for _, e := range body.Providers {
+			if e != nil {
+				if err2 := ValidateVendorIdentityProviderInputRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if identityProviderConnectionsSetVendorIdentityProvidersSessionToken != "" {
+			sessionToken = &identityProviderConnectionsSetVendorIdentityProvidersSessionToken
+		}
+	}
+	v := &identityproviderconnections.SetVendorIdentityProvidersPayload{
+		VendorIssuer: body.VendorIssuer,
+	}
+	if body.Providers != nil {
+		v.Providers = make([]*identityproviderconnections.VendorIdentityProviderInput, len(body.Providers))
+		for i, val := range body.Providers {
+			if val == nil {
+				v.Providers[i] = nil
+				continue
+			}
+			v.Providers[i] = marshalVendorIdentityProviderInputRequestBodyToIdentityproviderconnectionsVendorIdentityProviderInput(val)
+		}
+	} else {
+		v.Providers = []*identityproviderconnections.VendorIdentityProviderInput{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

@@ -14,6 +14,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -140,4 +141,36 @@ func TestXAAIdentityInspectorCallbackUsesRecordedOrigin(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, callback, "a recorded callback origin needs no pinned outbound origin")
 	require.Equal(t, "https://recorded.example.test"+remotesessions.FederatedIDPCallbackPath(f.trustedClient), *callback)
+}
+
+// orderedGovernor also reports the per-vendor identity provider order.
+type orderedGovernor struct {
+	*recordingGovernor
+	kinds []remotesessions.EMAProviderKind
+}
+
+func (g orderedGovernor) Providers(context.Context, identitychaining.Request) []remotesessions.EMAProviderKind {
+	return g.kinds
+}
+
+func TestXAAIdentityInspectorReportsProviderOrder(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_inspector_providers")
+	require.NoError(t, err)
+	f := seedXAAInspectorFixture(t, ctx, conn, pgtype.Text{})
+	bindXAAInspectorUpstream(t, ctx, conn, f, f.issuerA)
+
+	governor := orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, kinds: []remotesessions.EMAProviderKind{remotesessions.EMAProviderSpeakeasy, remotesessions.EMAProviderExternal}}
+	inspector := &postgresXAAIdentityInspector{db: conn, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
+	chaining, _, err := inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
+	require.NoError(t, err)
+	require.True(t, chaining.Served)
+	require.Equal(t, []string{"speakeasy", "external"}, chaining.Providers)
+
+	unserved := orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, kinds: []remotesessions.EMAProviderKind{remotesessions.EMAProviderExternal}}
+	inspector.governor = unserved
+	chaining, _, err = inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
+	require.NoError(t, err)
+	require.Empty(t, chaining.Providers, "no order is reported when chaining does not serve the upstream")
 }

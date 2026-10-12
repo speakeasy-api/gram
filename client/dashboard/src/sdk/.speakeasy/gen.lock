@@ -296,11 +296,13 @@ trackedFiles:
   src/funcs/hooksUploadSkillContent.ts: {}
   src/funcs/identityProviderConnectionsCreate.ts: {}
   src/funcs/identityProviderConnectionsGet.ts: {}
+  src/funcs/identityProviderConnectionsGetVendorIdentityProviders.ts: {}
   src/funcs/identityProviderConnectionsListApplications.ts: {}
   src/funcs/identityProviderConnectionsRecordAgent.ts: {}
   src/funcs/identityProviderConnectionsReplaceClientSecret.ts: {}
   src/funcs/identityProviderConnectionsRevoke.ts: {}
   src/funcs/identityProviderConnectionsSetSetupMethod.ts: {}
+  src/funcs/identityProviderConnectionsSetVendorIdentityProviders.ts: {}
   src/funcs/identityProviderConnectionsSubmitClientId.ts: {}
   src/funcs/identityProviderConnectionsSyncApplications.ts: {}
   src/funcs/identityProviderConnectionsVerify.ts: {}
@@ -1729,6 +1731,7 @@ trackedFiles:
   src/models/components/setuptaskassignee.ts: {}
   src/models/components/setuptaskassigneeinput.ts: {}
   src/models/components/setusersessionissuerrequestbody.ts: {}
+  src/models/components/setvendoridentityprovidersrequestbody.ts: {}
   src/models/components/shadowmcpaccesssummary.ts: {}
   src/models/components/shadowmcpinventoryapprovalrequest.ts: {}
   src/models/components/shadowmcpinventoryrequestsummary.ts: {}
@@ -1975,6 +1978,9 @@ trackedFiles:
   src/models/components/validatekeyorganization.ts: {}
   src/models/components/validatekeyproject.ts: {}
   src/models/components/validatekeyresult.ts: {}
+  src/models/components/vendoridentityprovider.ts: {}
+  src/models/components/vendoridentityproviderinput.ts: {}
+  src/models/components/vendoridentityprovidersresult.ts: {}
   src/models/components/verifycimdurlresult.ts: {}
   src/models/components/verifycredentialresult.ts: {}
   src/models/components/verifyidentityproviderconnectionrequestbody.ts: {}
@@ -2355,6 +2361,7 @@ trackedFiles:
   src/models/operations/getusersessionclient.ts: {}
   src/models/operations/getusersessionissuer.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
+  src/models/operations/getvendoridentityproviders.ts: {}
   src/models/operations/getwidget.ts: {}
   src/models/operations/getworkloadcustomflows.ts: {}
   src/models/operations/getworkunitstrend.ts: {}
@@ -2677,6 +2684,7 @@ trackedFiles:
   src/models/operations/settoolsetenvironmentlink.ts: {}
   src/models/operations/settoolsettoolvariationsgroup.ts: {}
   src/models/operations/settoolsetusersessionissuer.ts: {}
+  src/models/operations/setvendoridentityproviders.ts: {}
   src/models/operations/shareskill.ts: {}
   src/models/operations/skillfeedback.ts: {}
   src/models/operations/startmcpresearch.ts: {}
@@ -3697,6 +3705,7 @@ trackedFiles:
   src/react-query/setToolsetEnvironmentLink.ts: {}
   src/react-query/setToolsetToolVariationsGroup.ts: {}
   src/react-query/setToolsetUserSessionIssuer.ts: {}
+  src/react-query/setVendorIdentityProviders.ts: {}
   src/react-query/shadowMCPInventory.core.ts: {}
   src/react-query/shadowMCPInventory.ts: {}
   src/react-query/shadowMCPInventoryServer.core.ts: {}
@@ -3890,6 +3899,8 @@ trackedFiles:
   src/react-query/userSessions.ts: {}
   src/react-query/validateAPIKey.core.ts: {}
   src/react-query/validateAPIKey.ts: {}
+  src/react-query/vendorIdentityProviders.core.ts: {}
+  src/react-query/vendorIdentityProviders.ts: {}
   src/react-query/verifyGcpIamCredential.ts: {}
   src/react-query/verifyGcpIamPlatformCredential.ts: {}
   src/react-query/verifyGcpKmsKey.ts: {}
@@ -8251,6 +8262,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getVendorIdentityProviders:
+    speakeasy-default-get-vendor-identity-providers:
+      parameters:
+        query:
+          vendor_issuer: "<value>"
+      responses:
+        "200":
+          application/json: {"is_default": false, "providers": [], "vendor_issuer": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getWidget:
     speakeasy-default-get-widget:
       parameters:
@@ -12062,6 +12085,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  setVendorIdentityProviders:
+    speakeasy-default-set-vendor-identity-providers:
+      requestBody:
+        application/json: {"providers": [{"kind": "external"}], "vendor_issuer": "<value>"}
+      responses:
+        "200":
+          application/json: {"is_default": false, "providers": [{"kind": "external", "unavailable": true}], "vendor_issuer": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   shareSkill:
     speakeasy-default-share-skill:
       requestBody:

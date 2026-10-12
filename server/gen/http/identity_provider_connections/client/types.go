@@ -88,6 +88,16 @@ type SyncApplicationsRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 }
 
+// SetVendorIdentityProvidersRequestBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP request body.
+type SetVendorIdentityProvidersRequestBody struct {
+	// The vendor authorization server issuer (RFC 8414).
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// Providers in the order they are tried. Each provider at most once.
+	Providers []*VendorIdentityProviderInputRequestBody `form:"providers" json:"providers" xml:"providers"`
+}
+
 // CreateResponseBody is the type of the "identityProviderConnections" service
 // "create" endpoint HTTP response body.
 type CreateResponseBody struct {
@@ -603,6 +613,34 @@ type ListApplicationsResponseBody struct {
 	Sync         *IdentityProviderConnectionApplicationsSyncResponseBody `form:"sync,omitempty" json:"sync,omitempty" xml:"sync,omitempty"`
 	// Omitted before the first run.
 	LastRun *IdentityProviderConnectionReconcileRunResponseBody `form:"last_run,omitempty" json:"last_run,omitempty" xml:"last_run,omitempty"`
+}
+
+// GetVendorIdentityProvidersResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body.
+type GetVendorIdentityProvidersResponseBody struct {
+	// The vendor authorization server issuer, normalized: lowercase scheme and
+	// host, no trailing slash.
+	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
+	// No order is saved, so every available supplier applies: external issuers
+	// first, then the Speakeasy issuer when it is on.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Providers in the order they are tried. When is_default, the default order.
+	Providers []*VendorIdentityProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
+}
+
+// SetVendorIdentityProvidersResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body.
+type SetVendorIdentityProvidersResponseBody struct {
+	// The vendor authorization server issuer, normalized: lowercase scheme and
+	// host, no trailing slash.
+	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
+	// No order is saved, so every available supplier applies: external issuers
+	// first, then the Speakeasy issuer when it is on.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// Providers in the order they are tried. When is_default, the default order.
+	Providers []*VendorIdentityProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
 // CreateFailedPreconditionResponseBody is the type of the
@@ -2921,6 +2959,424 @@ type ListApplicationsUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetVendorIdentityProvidersUnauthorizedResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "unauthorized" error.
+type GetVendorIdentityProvidersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersForbiddenResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "forbidden" error.
+type GetVendorIdentityProvidersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersBadRequestResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "bad_request" error.
+type GetVendorIdentityProvidersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersNotFoundResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "not_found" error.
+type GetVendorIdentityProvidersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersConflictResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "conflict" error.
+type GetVendorIdentityProvidersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersUnsupportedMediaResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "unsupported_media" error.
+type GetVendorIdentityProvidersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersInvalidResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "invalid" error.
+type GetVendorIdentityProvidersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersInvariantViolationResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "invariant_violation" error.
+type GetVendorIdentityProvidersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersUnexpectedResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "unexpected" error.
+type GetVendorIdentityProvidersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersGatewayErrorResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "gateway_error" error.
+type GetVendorIdentityProvidersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetVendorIdentityProvidersUnavailableResponseBody is the type of the
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// HTTP response body for the "unavailable" error.
+type GetVendorIdentityProvidersUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersUnauthorizedResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "unauthorized" error.
+type SetVendorIdentityProvidersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersForbiddenResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "forbidden" error.
+type SetVendorIdentityProvidersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersBadRequestResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "bad_request" error.
+type SetVendorIdentityProvidersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersNotFoundResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "not_found" error.
+type SetVendorIdentityProvidersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersConflictResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "conflict" error.
+type SetVendorIdentityProvidersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersUnsupportedMediaResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "unsupported_media" error.
+type SetVendorIdentityProvidersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersInvalidResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "invalid" error.
+type SetVendorIdentityProvidersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersInvariantViolationResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "invariant_violation" error.
+type SetVendorIdentityProvidersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersUnexpectedResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "unexpected" error.
+type SetVendorIdentityProvidersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersGatewayErrorResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "gateway_error" error.
+type SetVendorIdentityProvidersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetVendorIdentityProvidersUnavailableResponseBody is the type of the
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// HTTP response body for the "unavailable" error.
+type SetVendorIdentityProvidersUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // IdentityProviderConnectionActiveKeyResponseBody is used to define fields on
 // response body types.
 type IdentityProviderConnectionActiveKeyResponseBody struct {
@@ -3078,6 +3534,34 @@ type IdentityProviderConnectionReconcileRunResponseBody struct {
 	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
 }
 
+// VendorIdentityProviderResponseBody is used to define fields on response body
+// types.
+type VendorIdentityProviderResponseBody struct {
+	// external is an organization-level remote session issuer; speakeasy is the
+	// organization's Speakeasy issuer.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// Remote session issuer ID for external suppliers.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's Speakeasy issuer for the speakeasy supplier.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// The supplier was deleted or turned off, so this entry is skipped until the
+	// order is saved again.
+	Unavailable *bool `form:"unavailable,omitempty" json:"unavailable,omitempty" xml:"unavailable,omitempty"`
+}
+
+// VendorIdentityProviderInputRequestBody is used to define fields on request
+// body types.
+type VendorIdentityProviderInputRequestBody struct {
+	// external is an organization-level remote session issuer that exchanges the
+	// user's identity for an ID-JAG, such as an Okta authorization server;
+	// speakeasy is the organization's Speakeasy issuer, which must exist.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// Remote session issuer ID. Required for external; omitted for speakeasy. Must
+	// be an organization-level issuer that an organization user session issuer
+	// trusts.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+}
+
 // NewCreateRequestBody builds the HTTP request body from the payload of the
 // "create" endpoint of the "identityProviderConnections" service.
 func NewCreateRequestBody(p *identityproviderconnections.CreatePayload) *CreateRequestBody {
@@ -3157,6 +3641,28 @@ func NewRevokeRequestBody(p *identityproviderconnections.RevokePayload) *RevokeR
 func NewSyncApplicationsRequestBody(p *identityproviderconnections.SyncApplicationsPayload) *SyncApplicationsRequestBody {
 	body := &SyncApplicationsRequestBody{
 		ID: p.ID,
+	}
+	return body
+}
+
+// NewSetVendorIdentityProvidersRequestBody builds the HTTP request body from
+// the payload of the "setVendorIdentityProviders" endpoint of the
+// "identityProviderConnections" service.
+func NewSetVendorIdentityProvidersRequestBody(p *identityproviderconnections.SetVendorIdentityProvidersPayload) *SetVendorIdentityProvidersRequestBody {
+	body := &SetVendorIdentityProvidersRequestBody{
+		VendorIssuer: p.VendorIssuer,
+	}
+	if p.Providers != nil {
+		body.Providers = make([]*VendorIdentityProviderInputRequestBody, len(p.Providers))
+		for i, val := range p.Providers {
+			if val == nil {
+				body.Providers[i] = nil
+				continue
+			}
+			body.Providers[i] = marshalIdentityproviderconnectionsVendorIdentityProviderInputToVendorIdentityProviderInputRequestBody(val)
+		}
+	} else {
+		body.Providers = []*VendorIdentityProviderInputRequestBody{}
 	}
 	return body
 }
@@ -5489,6 +5995,386 @@ func NewListApplicationsUnavailable(body *ListApplicationsUnavailableResponseBod
 	return v
 }
 
+// NewGetVendorIdentityProvidersVendorIdentityProvidersResultOK builds a
+// "identityProviderConnections" service "getVendorIdentityProviders" endpoint
+// result from a HTTP "OK" response.
+func NewGetVendorIdentityProvidersVendorIdentityProvidersResultOK(body *GetVendorIdentityProvidersResponseBody) *identityproviderconnections.VendorIdentityProvidersResult {
+	v := &identityproviderconnections.VendorIdentityProvidersResult{
+		VendorIssuer: *body.VendorIssuer,
+		IsDefault:    *body.IsDefault,
+	}
+	v.Providers = make([]*identityproviderconnections.VendorIdentityProvider, len(body.Providers))
+	for i, val := range body.Providers {
+		if val == nil {
+			v.Providers[i] = nil
+			continue
+		}
+		v.Providers[i] = unmarshalVendorIdentityProviderResponseBodyToIdentityproviderconnectionsVendorIdentityProvider(val)
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersUnauthorized builds a
+// identityProviderConnections service getVendorIdentityProviders endpoint
+// unauthorized error.
+func NewGetVendorIdentityProvidersUnauthorized(body *GetVendorIdentityProvidersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersForbidden builds a identityProviderConnections
+// service getVendorIdentityProviders endpoint forbidden error.
+func NewGetVendorIdentityProvidersForbidden(body *GetVendorIdentityProvidersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersBadRequest builds a identityProviderConnections
+// service getVendorIdentityProviders endpoint bad_request error.
+func NewGetVendorIdentityProvidersBadRequest(body *GetVendorIdentityProvidersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersNotFound builds a identityProviderConnections
+// service getVendorIdentityProviders endpoint not_found error.
+func NewGetVendorIdentityProvidersNotFound(body *GetVendorIdentityProvidersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersConflict builds a identityProviderConnections
+// service getVendorIdentityProviders endpoint conflict error.
+func NewGetVendorIdentityProvidersConflict(body *GetVendorIdentityProvidersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersUnsupportedMedia builds a
+// identityProviderConnections service getVendorIdentityProviders endpoint
+// unsupported_media error.
+func NewGetVendorIdentityProvidersUnsupportedMedia(body *GetVendorIdentityProvidersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersInvalid builds a identityProviderConnections
+// service getVendorIdentityProviders endpoint invalid error.
+func NewGetVendorIdentityProvidersInvalid(body *GetVendorIdentityProvidersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersInvariantViolation builds a
+// identityProviderConnections service getVendorIdentityProviders endpoint
+// invariant_violation error.
+func NewGetVendorIdentityProvidersInvariantViolation(body *GetVendorIdentityProvidersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersUnexpected builds a identityProviderConnections
+// service getVendorIdentityProviders endpoint unexpected error.
+func NewGetVendorIdentityProvidersUnexpected(body *GetVendorIdentityProvidersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersGatewayError builds a
+// identityProviderConnections service getVendorIdentityProviders endpoint
+// gateway_error error.
+func NewGetVendorIdentityProvidersGatewayError(body *GetVendorIdentityProvidersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetVendorIdentityProvidersUnavailable builds a
+// identityProviderConnections service getVendorIdentityProviders endpoint
+// unavailable error.
+func NewGetVendorIdentityProvidersUnavailable(body *GetVendorIdentityProvidersUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersVendorIdentityProvidersResultOK builds a
+// "identityProviderConnections" service "setVendorIdentityProviders" endpoint
+// result from a HTTP "OK" response.
+func NewSetVendorIdentityProvidersVendorIdentityProvidersResultOK(body *SetVendorIdentityProvidersResponseBody) *identityproviderconnections.VendorIdentityProvidersResult {
+	v := &identityproviderconnections.VendorIdentityProvidersResult{
+		VendorIssuer: *body.VendorIssuer,
+		IsDefault:    *body.IsDefault,
+	}
+	v.Providers = make([]*identityproviderconnections.VendorIdentityProvider, len(body.Providers))
+	for i, val := range body.Providers {
+		if val == nil {
+			v.Providers[i] = nil
+			continue
+		}
+		v.Providers[i] = unmarshalVendorIdentityProviderResponseBodyToIdentityproviderconnectionsVendorIdentityProvider(val)
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersUnauthorized builds a
+// identityProviderConnections service setVendorIdentityProviders endpoint
+// unauthorized error.
+func NewSetVendorIdentityProvidersUnauthorized(body *SetVendorIdentityProvidersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersForbidden builds a identityProviderConnections
+// service setVendorIdentityProviders endpoint forbidden error.
+func NewSetVendorIdentityProvidersForbidden(body *SetVendorIdentityProvidersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersBadRequest builds a identityProviderConnections
+// service setVendorIdentityProviders endpoint bad_request error.
+func NewSetVendorIdentityProvidersBadRequest(body *SetVendorIdentityProvidersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersNotFound builds a identityProviderConnections
+// service setVendorIdentityProviders endpoint not_found error.
+func NewSetVendorIdentityProvidersNotFound(body *SetVendorIdentityProvidersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersConflict builds a identityProviderConnections
+// service setVendorIdentityProviders endpoint conflict error.
+func NewSetVendorIdentityProvidersConflict(body *SetVendorIdentityProvidersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersUnsupportedMedia builds a
+// identityProviderConnections service setVendorIdentityProviders endpoint
+// unsupported_media error.
+func NewSetVendorIdentityProvidersUnsupportedMedia(body *SetVendorIdentityProvidersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersInvalid builds a identityProviderConnections
+// service setVendorIdentityProviders endpoint invalid error.
+func NewSetVendorIdentityProvidersInvalid(body *SetVendorIdentityProvidersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersInvariantViolation builds a
+// identityProviderConnections service setVendorIdentityProviders endpoint
+// invariant_violation error.
+func NewSetVendorIdentityProvidersInvariantViolation(body *SetVendorIdentityProvidersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersUnexpected builds a identityProviderConnections
+// service setVendorIdentityProviders endpoint unexpected error.
+func NewSetVendorIdentityProvidersUnexpected(body *SetVendorIdentityProvidersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersGatewayError builds a
+// identityProviderConnections service setVendorIdentityProviders endpoint
+// gateway_error error.
+func NewSetVendorIdentityProvidersGatewayError(body *SetVendorIdentityProvidersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetVendorIdentityProvidersUnavailable builds a
+// identityProviderConnections service setVendorIdentityProviders endpoint
+// unavailable error.
+func NewSetVendorIdentityProvidersUnavailable(body *SetVendorIdentityProvidersUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateCreateResponseBody runs the validations defined on CreateResponseBody
 func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	if body.ID == nil {
@@ -6432,6 +7318,50 @@ func ValidateListApplicationsResponseBody(body *ListApplicationsResponseBody) (e
 	if body.LastRun != nil {
 		if err2 := ValidateIdentityProviderConnectionReconcileRunResponseBody(body.LastRun); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersResponseBody runs the validations defined
+// on GetVendorIdentityProvidersResponseBody
+func ValidateGetVendorIdentityProvidersResponseBody(body *GetVendorIdentityProvidersResponseBody) (err error) {
+	if body.VendorIssuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendor_issuer", "body"))
+	}
+	if body.IsDefault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
+	}
+	if body.Providers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
+	}
+	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateVendorIdentityProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersResponseBody runs the validations defined
+// on SetVendorIdentityProvidersResponseBody
+func ValidateSetVendorIdentityProvidersResponseBody(body *SetVendorIdentityProvidersResponseBody) (err error) {
+	if body.VendorIssuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendor_issuer", "body"))
+	}
+	if body.IsDefault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
+	}
+	if body.Providers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
+	}
+	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateVendorIdentityProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -9389,6 +10319,538 @@ func ValidateListApplicationsUnavailableResponseBody(body *ListApplicationsUnava
 	return
 }
 
+// ValidateGetVendorIdentityProvidersUnauthorizedResponseBody runs the
+// validations defined on getVendorIdentityProviders_unauthorized_response_body
+func ValidateGetVendorIdentityProvidersUnauthorizedResponseBody(body *GetVendorIdentityProvidersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersForbiddenResponseBody runs the validations
+// defined on getVendorIdentityProviders_forbidden_response_body
+func ValidateGetVendorIdentityProvidersForbiddenResponseBody(body *GetVendorIdentityProvidersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersBadRequestResponseBody runs the
+// validations defined on getVendorIdentityProviders_bad_request_response_body
+func ValidateGetVendorIdentityProvidersBadRequestResponseBody(body *GetVendorIdentityProvidersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersNotFoundResponseBody runs the validations
+// defined on getVendorIdentityProviders_not_found_response_body
+func ValidateGetVendorIdentityProvidersNotFoundResponseBody(body *GetVendorIdentityProvidersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersConflictResponseBody runs the validations
+// defined on getVendorIdentityProviders_conflict_response_body
+func ValidateGetVendorIdentityProvidersConflictResponseBody(body *GetVendorIdentityProvidersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersUnsupportedMediaResponseBody runs the
+// validations defined on
+// getVendorIdentityProviders_unsupported_media_response_body
+func ValidateGetVendorIdentityProvidersUnsupportedMediaResponseBody(body *GetVendorIdentityProvidersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersInvalidResponseBody runs the validations
+// defined on getVendorIdentityProviders_invalid_response_body
+func ValidateGetVendorIdentityProvidersInvalidResponseBody(body *GetVendorIdentityProvidersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersInvariantViolationResponseBody runs the
+// validations defined on
+// getVendorIdentityProviders_invariant_violation_response_body
+func ValidateGetVendorIdentityProvidersInvariantViolationResponseBody(body *GetVendorIdentityProvidersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersUnexpectedResponseBody runs the
+// validations defined on getVendorIdentityProviders_unexpected_response_body
+func ValidateGetVendorIdentityProvidersUnexpectedResponseBody(body *GetVendorIdentityProvidersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersGatewayErrorResponseBody runs the
+// validations defined on getVendorIdentityProviders_gateway_error_response_body
+func ValidateGetVendorIdentityProvidersGatewayErrorResponseBody(body *GetVendorIdentityProvidersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetVendorIdentityProvidersUnavailableResponseBody runs the
+// validations defined on getVendorIdentityProviders_unavailable_response_body
+func ValidateGetVendorIdentityProvidersUnavailableResponseBody(body *GetVendorIdentityProvidersUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersUnauthorizedResponseBody runs the
+// validations defined on setVendorIdentityProviders_unauthorized_response_body
+func ValidateSetVendorIdentityProvidersUnauthorizedResponseBody(body *SetVendorIdentityProvidersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersForbiddenResponseBody runs the validations
+// defined on setVendorIdentityProviders_forbidden_response_body
+func ValidateSetVendorIdentityProvidersForbiddenResponseBody(body *SetVendorIdentityProvidersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersBadRequestResponseBody runs the
+// validations defined on setVendorIdentityProviders_bad_request_response_body
+func ValidateSetVendorIdentityProvidersBadRequestResponseBody(body *SetVendorIdentityProvidersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersNotFoundResponseBody runs the validations
+// defined on setVendorIdentityProviders_not_found_response_body
+func ValidateSetVendorIdentityProvidersNotFoundResponseBody(body *SetVendorIdentityProvidersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersConflictResponseBody runs the validations
+// defined on setVendorIdentityProviders_conflict_response_body
+func ValidateSetVendorIdentityProvidersConflictResponseBody(body *SetVendorIdentityProvidersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersUnsupportedMediaResponseBody runs the
+// validations defined on
+// setVendorIdentityProviders_unsupported_media_response_body
+func ValidateSetVendorIdentityProvidersUnsupportedMediaResponseBody(body *SetVendorIdentityProvidersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersInvalidResponseBody runs the validations
+// defined on setVendorIdentityProviders_invalid_response_body
+func ValidateSetVendorIdentityProvidersInvalidResponseBody(body *SetVendorIdentityProvidersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersInvariantViolationResponseBody runs the
+// validations defined on
+// setVendorIdentityProviders_invariant_violation_response_body
+func ValidateSetVendorIdentityProvidersInvariantViolationResponseBody(body *SetVendorIdentityProvidersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersUnexpectedResponseBody runs the
+// validations defined on setVendorIdentityProviders_unexpected_response_body
+func ValidateSetVendorIdentityProvidersUnexpectedResponseBody(body *SetVendorIdentityProvidersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersGatewayErrorResponseBody runs the
+// validations defined on setVendorIdentityProviders_gateway_error_response_body
+func ValidateSetVendorIdentityProvidersGatewayErrorResponseBody(body *SetVendorIdentityProvidersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetVendorIdentityProvidersUnavailableResponseBody runs the
+// validations defined on setVendorIdentityProviders_unavailable_response_body
+func ValidateSetVendorIdentityProvidersUnavailableResponseBody(body *SetVendorIdentityProvidersUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateIdentityProviderConnectionActiveKeyResponseBody runs the validations
 // defined on IdentityProviderConnectionActiveKeyResponseBody
 func ValidateIdentityProviderConnectionActiveKeyResponseBody(body *IdentityProviderConnectionActiveKeyResponseBody) (err error) {
@@ -9663,6 +11125,41 @@ func ValidateIdentityProviderConnectionReconcileRunResponseBody(body *IdentityPr
 		if !(*body.Error == "rate_limited" || *body.Error == "credential_rejected" || *body.Error == "okta_unreachable" || *body.Error == "client_unavailable" || *body.Error == "superseded" || *body.Error == "discarded" || *body.Error == "interrupted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.error", *body.Error, []any{"rate_limited", "credential_rejected", "okta_unreachable", "client_unavailable", "superseded", "discarded", "interrupted"}))
 		}
+	}
+	return
+}
+
+// ValidateVendorIdentityProviderResponseBody runs the validations defined on
+// VendorIdentityProviderResponseBody
+func ValidateVendorIdentityProviderResponseBody(body *VendorIdentityProviderResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Unavailable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unavailable", "body"))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "external" || *body.Kind == "speakeasy") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"external", "speakeasy"}))
+		}
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.InternalSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.internal_session_issuer_id", *body.InternalSessionIssuerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateVendorIdentityProviderInputRequestBody runs the validations defined
+// on VendorIdentityProviderInputRequestBody
+func ValidateVendorIdentityProviderInputRequestBody(body *VendorIdentityProviderInputRequestBody) (err error) {
+	if !(body.Kind == "external" || body.Kind == "speakeasy") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"external", "speakeasy"}))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
 	return
 }

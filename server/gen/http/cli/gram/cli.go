@@ -147,7 +147,7 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
-		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
+		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications|get-vendor-identity-providers|set-vendor-identity-providers)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -1585,6 +1585,14 @@ func ParseEndpoint(
 		identityProviderConnectionsListApplicationsIDFlag             = identityProviderConnectionsListApplicationsFlags.String("id", "REQUIRED", "")
 		identityProviderConnectionsListApplicationsIncludeRemovedFlag = identityProviderConnectionsListApplicationsFlags.String("include-removed", "", "")
 		identityProviderConnectionsListApplicationsSessionTokenFlag   = identityProviderConnectionsListApplicationsFlags.String("session-token", "", "")
+
+		identityProviderConnectionsGetVendorIdentityProvidersFlags            = flag.NewFlagSet("get-vendor-identity-providers", flag.ExitOnError)
+		identityProviderConnectionsGetVendorIdentityProvidersVendorIssuerFlag = identityProviderConnectionsGetVendorIdentityProvidersFlags.String("vendor-issuer", "REQUIRED", "")
+		identityProviderConnectionsGetVendorIdentityProvidersSessionTokenFlag = identityProviderConnectionsGetVendorIdentityProvidersFlags.String("session-token", "", "")
+
+		identityProviderConnectionsSetVendorIdentityProvidersFlags            = flag.NewFlagSet("set-vendor-identity-providers", flag.ExitOnError)
+		identityProviderConnectionsSetVendorIdentityProvidersBodyFlag         = identityProviderConnectionsSetVendorIdentityProvidersFlags.String("body", "REQUIRED", "")
+		identityProviderConnectionsSetVendorIdentityProvidersSessionTokenFlag = identityProviderConnectionsSetVendorIdentityProvidersFlags.String("session-token", "", "")
 
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
@@ -5291,6 +5299,8 @@ func ParseEndpoint(
 	identityProviderConnectionsRevokeFlags.Usage = identityProviderConnectionsRevokeUsage
 	identityProviderConnectionsSyncApplicationsFlags.Usage = identityProviderConnectionsSyncApplicationsUsage
 	identityProviderConnectionsListApplicationsFlags.Usage = identityProviderConnectionsListApplicationsUsage
+	identityProviderConnectionsGetVendorIdentityProvidersFlags.Usage = identityProviderConnectionsGetVendorIdentityProvidersUsage
+	identityProviderConnectionsSetVendorIdentityProvidersFlags.Usage = identityProviderConnectionsSetVendorIdentityProvidersUsage
 
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
@@ -7134,6 +7144,12 @@ func ParseEndpoint(
 
 			case "list-applications":
 				epf = identityProviderConnectionsListApplicationsFlags
+
+			case "get-vendor-identity-providers":
+				epf = identityProviderConnectionsGetVendorIdentityProvidersFlags
+
+			case "set-vendor-identity-providers":
+				epf = identityProviderConnectionsSetVendorIdentityProvidersFlags
 
 			}
 
@@ -10150,6 +10166,12 @@ func ParseEndpoint(
 			case "list-applications":
 				endpoint = c.ListApplications()
 				data, err = identityproviderconnectionsc.BuildListApplicationsPayload(*identityProviderConnectionsListApplicationsIDFlag, *identityProviderConnectionsListApplicationsIncludeRemovedFlag, *identityProviderConnectionsListApplicationsSessionTokenFlag)
+			case "get-vendor-identity-providers":
+				endpoint = c.GetVendorIdentityProviders()
+				data, err = identityproviderconnectionsc.BuildGetVendorIdentityProvidersPayload(*identityProviderConnectionsGetVendorIdentityProvidersVendorIssuerFlag, *identityProviderConnectionsGetVendorIdentityProvidersSessionTokenFlag)
+			case "set-vendor-identity-providers":
+				endpoint = c.SetVendorIdentityProviders()
+				data, err = identityproviderconnectionsc.BuildSetVendorIdentityProvidersPayload(*identityProviderConnectionsSetVendorIdentityProvidersBodyFlag, *identityProviderConnectionsSetVendorIdentityProvidersSessionTokenFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18243,6 +18265,8 @@ func identityProviderConnectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    revoke: Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    sync-applications: Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    list-applications: List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    get-vendor-identity-providers: Get the order in which identity providers issue ID-JAGs for one vendor authorization server. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    set-vendor-identity-providers: Replace the order in which identity providers issue ID-JAGs for one vendor authorization server. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external connections first, then Speakeasy. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s identity-provider-connections COMMAND --help\n", os.Args[0])
@@ -18447,6 +18471,46 @@ func identityProviderConnectionsListApplicationsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections list-applications --id \"550e8400-e29b-41d4-a716-446655440000\" --include-removed false --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsGetVendorIdentityProvidersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections get-vendor-identity-providers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -vendor-issuer STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the order in which identity providers issue ID-JAGs for one vendor authorization server. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -vendor-issuer STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections get-vendor-identity-providers --vendor-issuer \"abc123\" --session-token \"abc123\"")
+}
+
+func identityProviderConnectionsSetVendorIdentityProvidersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections set-vendor-identity-providers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the order in which identity providers issue ID-JAGs for one vendor authorization server. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external connections first, then Speakeasy. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections set-vendor-identity-providers --body '{\n      \"providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"vendor_issuer\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its

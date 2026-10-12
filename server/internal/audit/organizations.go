@@ -47,8 +47,10 @@ const (
 	ActionOrganizationDisabled         Action = "organization:disabled"
 	ActionOrganizationEnabled          Action = "organization:enabled"
 	ActionOrganizationWhitelistUpdated Action = "organization:whitelist_updated"
-	ActionOrganizationPaygActivated    Action = "organization:payg_activated"
-	ActionOrganizationPaygDeactivated  Action = "organization:payg_deactivated"
+
+	ActionOrganizationEMAVendorIdentityProvidersUpdated Action = "organization:ema_vendor_identity_providers_updated"
+	ActionOrganizationPaygActivated                     Action = "organization:payg_activated"
+	ActionOrganizationPaygDeactivated                   Action = "organization:payg_deactivated"
 )
 
 type LogOrganizationSetupTaskUpdatedEvent struct {
@@ -1125,4 +1127,50 @@ func (l *Logger) LogOrganizationPaygDeactivated(ctx context.Context, dbtx repo.D
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationBillingV1})
+}
+
+// OrganizationEMAVendorIdentityProvidersSnapshot is one vendor's identity
+// provider order. An empty order means the default applies.
+type OrganizationEMAVendorIdentityProvidersSnapshot struct {
+	VendorIssuer string                                  `json:"vendor_issuer"`
+	Providers    []OrganizationEMAVendorIdentityProvider `json:"providers"`
+}
+
+// OrganizationEMAVendorIdentityProvider is one provider in the order.
+type OrganizationEMAVendorIdentityProvider struct {
+	Kind                    string `json:"kind"`
+	RemoteSessionIssuerID   string `json:"remote_session_issuer_id,omitempty"`
+	InternalSessionIssuerID string `json:"internal_session_issuer_id,omitempty"`
+}
+
+type LogOrganizationEMAVendorIdentityProvidersUpdatedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	OrganizationSnapshotBefore *OrganizationEMAVendorIdentityProvidersSnapshot
+	OrganizationSnapshotAfter  *OrganizationEMAVendorIdentityProvidersSnapshot
+}
+
+func (l *Logger) LogOrganizationEMAVendorIdentityProvidersUpdated(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEMAVendorIdentityProvidersUpdatedEvent) error {
+	before, err := marshalAuditPayload(event.OrganizationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal vendor identity providers before snapshot: %w", err)
+	}
+	after, err := marshalAuditPayload(event.OrganizationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal vendor identity providers after snapshot: %w", err)
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.ToPGTextEmpty(""),
+		Action: string(ActionOrganizationEMAVendorIdentityProvidersUpdated), SubjectID: event.OrganizationID, SubjectType: "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName), SubjectSlug: conv.ToPGTextEmpty(event.OrganizationSlug),
+		Metadata: nil, BeforeSnapshot: before, AfterSnapshot: after,
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEMAVendorIdentityProvidersV1})
 }

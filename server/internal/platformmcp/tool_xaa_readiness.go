@@ -98,8 +98,15 @@ type GetXAAReadinessOutput struct {
 }
 
 type XAAIdentityChaining struct {
-	Served   bool                         `json:"served" jsonschema:"true when exactly one ready binding serves this server's upstream at runtime"`
-	Bindings []XAAIdentityChainingBinding `json:"bindings"`
+	Served    bool                         `json:"served" jsonschema:"true when exactly one ready binding serves this server's upstream at runtime and the vendor allows at least one identity provider"`
+	Providers []string                     `json:"providers" jsonschema:"identity providers tried in order for this server's vendor (external, speakeasy); the next is tried when one fails. Empty when not served"`
+	Bindings  []XAAIdentityChainingBinding `json:"bindings"`
+}
+
+// identityChainingProviders is implemented by governors that report the
+// per-vendor identity provider order.
+type identityChainingProviders interface {
+	Providers(ctx context.Context, req identitychaining.Request) []remotesessions.EMAProviderKind
 }
 
 type XAAIdentityChainingBinding struct {
@@ -286,7 +293,7 @@ type postgresXAAIdentityInspector struct {
 }
 
 func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organizationID string, projectID, serverID, remoteSessionIssuerID uuid.UUID, resource string) (XAAIdentityChaining, *string, error) {
-	out := XAAIdentityChaining{Served: false, Bindings: []XAAIdentityChainingBinding{}}
+	out := XAAIdentityChaining{Served: false, Providers: []string{}, Bindings: []XAAIdentityChainingBinding{}}
 	server, err := mcpserversrepo.New(i.db).GetMCPServerByLiveProjectForOrganization(ctx, mcpserversrepo.GetMCPServerByLiveProjectForOrganizationParams{OrganizationID: organizationID, ID: serverID, ProjectID: projectID})
 	if err != nil {
 		return out, nil, fmt.Errorf("load XAA readiness server: %w", err)
@@ -331,6 +338,11 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 	}
 	if i.governor != nil && routable {
 		_, out.Served = i.governor.Serves(ctx, req)
+		if lister, ok := i.governor.(identityChainingProviders); ok && out.Served {
+			for _, kind := range lister.Providers(ctx, req) {
+				out.Providers = append(out.Providers, string(kind))
+			}
+		}
 	}
 	return out, callback, nil
 }
