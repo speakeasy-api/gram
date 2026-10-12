@@ -27,6 +27,10 @@ export const FEATURE_FLAGS = {
   // to the policy editor mode.
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
   riskWatchdog: "gram-risk-watchdog",
+  // UI-only rollout gate for folding Shadow AI into Security and Policy: the
+  // Shadow AI policy kind in Guardrails, the Watchdog decision tile and the
+  // retired Shadow AI nav entry. Not enforced server-side.
+  shadowAiGuardrails: "gram-shadow-ai-guardrails",
   tunneledMcp: "gram-tunneled-mcp",
   userSessionsDashboard: "user-sessions-dashboard",
 } as const;

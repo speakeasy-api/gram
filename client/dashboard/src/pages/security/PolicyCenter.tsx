@@ -24,6 +24,8 @@ import {
 import { Text } from "@/components/ui/Text";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
 import { Badge } from "@/components/ui/Badge";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Button } from "@/components/ui/Button";
 import {
   DropdownMenu,
@@ -81,6 +83,7 @@ import {
   type RuleCategory,
   type PolicyAction,
 } from "./policy-data";
+import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
@@ -503,6 +506,29 @@ function PolicyNameCell({ row }: { row: PolicyRow }): JSX.Element {
   );
 }
 
+/** How the policy decides, for the Type column: Built-in, Prompt-based or
+ *  Shadow AI. */
+function PolicyTypeBadge({ policy }: { policy: RiskPolicy }): JSX.Element {
+  return (
+    <Badge variant="neutral">
+      <Badge.Text>{POLICY_TYPE_LABEL[policyTypeOf(policy)]}</Badge.Text>
+    </Badge>
+  );
+}
+
+const POLICY_TYPE_COLUMN: Column<PolicyRow> = {
+  key: "type",
+  header: "Type",
+  // Wide enough for the longest badge ("SHADOW AI") at the table's
+  // narrowest supported width; the Action column already clips at 0.7fr.
+  width: "1fr",
+  render: (row) => (
+    <span className="inline-flex">
+      <PolicyTypeBadge policy={row.policy} />
+    </span>
+  ),
+};
+
 /** Compact relative date for the policy table's Created/Updated columns, with
  *  the exact timestamp on hover. */
 function PolicyDateCell({ date }: { date: Date }): JSX.Element {
@@ -588,6 +614,10 @@ function PolicyCenterContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
+  // The Type column arrives with the Shadow AI fold-in: until the flag is on,
+  // "Shadow AI" is not vocabulary the page uses anywhere.
+  const showPolicyType =
+    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
   const {
     data: quarantinesData,
     isLoading: quarantinesLoading,
@@ -794,6 +824,7 @@ function PolicyCenterContent() {
       width: "3fr",
       render: (row) => <PolicyNameCell row={row} />,
     },
+    ...(showPolicyType ? [POLICY_TYPE_COLUMN] : []),
     {
       key: "action",
       header: "Action",
