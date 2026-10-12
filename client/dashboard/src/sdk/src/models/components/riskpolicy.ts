@@ -122,7 +122,7 @@ export type RiskPolicy = {
    */
   name: string;
   /**
-   * Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).
+   * Deprecated: always omitted. Use riskPoliciesStatus for message-analysis progress.
    */
   pendingMessages?: number | undefined;
   /**
@@ -162,7 +162,7 @@ export type RiskPolicy = {
    */
   sources: Array<string>;
   /**
-   * Total number of messages in the project. Populated on single-policy reads; omitted from list responses.
+   * Deprecated: always omitted. Use riskPoliciesStatus for message-analysis progress.
    */
   totalMessages?: number | undefined;
   /**

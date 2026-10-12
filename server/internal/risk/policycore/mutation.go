@@ -263,7 +263,7 @@ func (c *Core) createPolicyInTransaction(ctx context.Context, tx pgx.Tx, input C
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		Actor:          input.Actor,
-		Policy:         AuditSnapshot(Project(row, audience, nil)),
+		Policy:         AuditSnapshot(Project(row, audience)),
 	}); err != nil {
 		return MutationResult{}, mutationError("log risk policy create", err)
 	}
@@ -373,7 +373,7 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 		return MutationResult{}, mutationError("load risk policy audience snapshot", err)
 	}
 	if input.ValidateLocked != nil {
-		validated, err := input.ValidateLocked(ctx, tx, Project(locked, currentAudience, nil))
+		validated, err := input.ValidateLocked(ctx, tx, Project(locked, currentAudience))
 		if err != nil {
 			return MutationResult{}, err
 		}
@@ -486,8 +486,8 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		Actor:          input.Actor,
-		Before:         AuditSnapshot(Project(locked, currentAudience, nil)),
-		After:          AuditSnapshot(Project(row, audience, nil)),
+		Before:         AuditSnapshot(Project(locked, currentAudience)),
+		After:          AuditSnapshot(Project(row, audience)),
 	}); err != nil {
 		return MutationResult{}, mutationError("log risk policy update", err)
 	}
