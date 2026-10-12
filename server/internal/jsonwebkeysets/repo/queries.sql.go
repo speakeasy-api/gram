@@ -469,7 +469,7 @@ func (q *Queries) GetJsonWebKeySet(ctx context.Context, arg GetJsonWebKeySetPara
 }
 
 const getOrganizationEMAIssuerKeys = `-- name: GetOrganizationEMAIssuerKeys :one
-SELECT COALESCE(jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL), '[]'::jsonb)::jsonb AS keys
+SELECT isi.issuer, COALESCE(jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL), '[]'::jsonb)::jsonb AS keys
 FROM internal_session_issuers AS isi
 JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
 JOIN json_web_key_sets AS s
@@ -484,7 +484,7 @@ LEFT JOIN json_web_keys AS k
    OR (k.state = 'retired' AND k.retired_at > clock_timestamp() - make_interval(secs => $1::integer)))
 WHERE isi.organization_id = $2::text
   AND isi.deleted IS FALSE
-GROUP BY isi.id
+GROUP BY isi.id, isi.issuer
 `
 
 type GetOrganizationEMAIssuerKeysParams struct {
@@ -492,16 +492,21 @@ type GetOrganizationEMAIssuerKeysParams struct {
 	OrganizationID        string
 }
 
-// Public verification keys of the organization's issuer, served whether or
-// not signing is disabled. Pending keys are published before activation; a
-// retired key stays only for the overlap window, then drops out even before
-// it is revoked. Ordered by immutable key id so the document and its ETag are
-// stable.
-func (q *Queries) GetOrganizationEMAIssuerKeys(ctx context.Context, arg GetOrganizationEMAIssuerKeysParams) ([]byte, error) {
+type GetOrganizationEMAIssuerKeysRow struct {
+	Issuer string
+	Keys   []byte
+}
+
+// The organization's pinned issuer URL and its public verification keys,
+// served whether or not signing is disabled. Pending keys are published before
+// activation; a retired key stays only for the overlap window, then drops out
+// even before it is revoked. Ordered by immutable key id so the document and
+// its ETag are stable.
+func (q *Queries) GetOrganizationEMAIssuerKeys(ctx context.Context, arg GetOrganizationEMAIssuerKeysParams) (GetOrganizationEMAIssuerKeysRow, error) {
 	row := q.db.QueryRow(ctx, getOrganizationEMAIssuerKeys, arg.RetiredOverlapSeconds, arg.OrganizationID)
-	var keys []byte
-	err := row.Scan(&keys)
-	return keys, err
+	var i GetOrganizationEMAIssuerKeysRow
+	err := row.Scan(&i.Issuer, &i.Keys)
+	return i, err
 }
 
 const getOrganizationInternalSessionIssuer = `-- name: GetOrganizationInternalSessionIssuer :one
@@ -529,6 +534,34 @@ func (q *Queries) GetOrganizationInternalSessionIssuer(ctx context.Context, orga
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const hasExpiredEMAIssuerKeys = `-- name: HasExpiredEMAIssuerKeys :one
+SELECT EXISTS (
+  SELECT 1
+  FROM internal_session_issuers AS isi
+  JOIN json_web_keys AS k
+    ON k.organization_id = isi.organization_id
+   AND k.json_web_key_set_id = isi.json_web_key_set_id
+  WHERE isi.organization_id = $1
+    AND isi.deleted IS FALSE
+    AND k.state = 'retired'
+    AND k.deleted IS FALSE
+    AND k.retired_at <= clock_timestamp() - make_interval(secs => $2::integer)
+)
+`
+
+type HasExpiredEMAIssuerKeysParams struct {
+	OrganizationID string
+	OverlapSeconds int32
+}
+
+// Cheap check before the sweep takes the issuer lock.
+func (q *Queries) HasExpiredEMAIssuerKeys(ctx context.Context, arg HasExpiredEMAIssuerKeysParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasExpiredEMAIssuerKeys, arg.OrganizationID, arg.OverlapSeconds)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const jsonWebKeyKidExistsInSet = `-- name: JsonWebKeyKidExistsInSet :one
@@ -674,6 +707,47 @@ func (q *Queries) ListJsonWebKeys(ctx context.Context, arg ListJsonWebKeysParams
 	return items, nil
 }
 
+const listOrganizationsWithExpiredEMAIssuerKeys = `-- name: ListOrganizationsWithExpiredEMAIssuerKeys :many
+SELECT DISTINCT isi.organization_id
+FROM internal_session_issuers AS isi
+JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE isi.deleted IS FALSE
+  AND k.state = 'retired'
+  AND k.deleted IS FALSE
+  AND k.retired_at <= clock_timestamp() - make_interval(secs => $1::integer)
+ORDER BY isi.organization_id
+LIMIT $2
+`
+
+type ListOrganizationsWithExpiredEMAIssuerKeysParams struct {
+	OverlapSeconds   int32
+	MaxOrganizations int32
+}
+
+// System sweep: organizations whose issuer has retired keys past the overlap.
+// Returns only organization ids; each is then swept org-qualified.
+func (q *Queries) ListOrganizationsWithExpiredEMAIssuerKeys(ctx context.Context, arg ListOrganizationsWithExpiredEMAIssuerKeysParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithExpiredEMAIssuerKeys, arg.OverlapSeconds, arg.MaxOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockExternalKeyForJwksWrite = `-- name: LockExternalKeyForJwksWrite :one
 SELECT ek.id, ek.provider, ek.algorithm, ek.identity_provider_connection_id,
   is_internal_session_issuer_external_key(ek.organization_id, ek.id) AS ema_issuer_managed
@@ -803,10 +877,11 @@ SELECT id
 FROM organization_metadata
 WHERE id = $1
   AND disabled_at IS NULL
-FOR UPDATE
+FOR NO KEY UPDATE
 `
 
-// Serializes issuer creation per organization.
+// Serializes issuer creation per organization. NO KEY UPDATE leaves the
+// organization's foreign-key-checked inserts unblocked.
 func (q *Queries) LockOrganizationForEMAIssuer(ctx context.Context, organizationID string) (string, error) {
 	row := q.db.QueryRow(ctx, lockOrganizationForEMAIssuer, organizationID)
 	var id string

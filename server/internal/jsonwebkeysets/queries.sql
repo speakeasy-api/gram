@@ -325,13 +325,14 @@ JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at 
 WHERE isi.organization_id = @organization_id
   AND isi.deleted IS FALSE;
 
--- Serializes issuer creation per organization.
+-- Serializes issuer creation per organization. NO KEY UPDATE leaves the
+-- organization's foreign-key-checked inserts unblocked.
 -- name: LockOrganizationForEMAIssuer :one
 SELECT id
 FROM organization_metadata
 WHERE id = @organization_id
   AND disabled_at IS NULL
-FOR UPDATE;
+FOR NO KEY UPDATE;
 
 -- The issuer URL is pinned here and never recomputed from configuration.
 -- name: CreateInternalSessionIssuer :one
@@ -374,13 +375,13 @@ WHERE json_web_key_sets.id = @id
   AND json_web_key_sets.deleted IS FALSE
 RETURNING *;
 
--- Public verification keys of the organization's issuer, served whether or
--- not signing is disabled. Pending keys are published before activation; a
--- retired key stays only for the overlap window, then drops out even before
--- it is revoked. Ordered by immutable key id so the document and its ETag are
--- stable.
+-- The organization's pinned issuer URL and its public verification keys,
+-- served whether or not signing is disabled. Pending keys are published before
+-- activation; a retired key stays only for the overlap window, then drops out
+-- even before it is revoked. Ordered by immutable key id so the document and
+-- its ETag are stable.
 -- name: GetOrganizationEMAIssuerKeys :one
-SELECT COALESCE(jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL), '[]'::jsonb)::jsonb AS keys
+SELECT isi.issuer, COALESCE(jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL), '[]'::jsonb)::jsonb AS keys
 FROM internal_session_issuers AS isi
 JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
 JOIN json_web_key_sets AS s
@@ -395,7 +396,7 @@ LEFT JOIN json_web_keys AS k
    OR (k.state = 'retired' AND k.retired_at > clock_timestamp() - make_interval(secs => @retired_overlap_seconds::integer)))
 WHERE isi.organization_id = @organization_id::text
   AND isi.deleted IS FALSE
-GROUP BY isi.id;
+GROUP BY isi.id, isi.issuer;
 
 -- Retired issuer keys stop being published once nothing they signed can still
 -- verify. Uses the database clock.
@@ -411,3 +412,33 @@ WHERE json_web_key_set_id = @json_web_key_set_id
   AND deleted IS FALSE
   AND retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer)
 RETURNING *;
+
+-- Cheap check before the sweep takes the issuer lock.
+-- name: HasExpiredEMAIssuerKeys :one
+SELECT EXISTS (
+  SELECT 1
+  FROM internal_session_issuers AS isi
+  JOIN json_web_keys AS k
+    ON k.organization_id = isi.organization_id
+   AND k.json_web_key_set_id = isi.json_web_key_set_id
+  WHERE isi.organization_id = @organization_id
+    AND isi.deleted IS FALSE
+    AND k.state = 'retired'
+    AND k.deleted IS FALSE
+    AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer)
+);
+
+-- System sweep: organizations whose issuer has retired keys past the overlap.
+-- Returns only organization ids; each is then swept org-qualified.
+-- name: ListOrganizationsWithExpiredEMAIssuerKeys :many
+SELECT DISTINCT isi.organization_id
+FROM internal_session_issuers AS isi
+JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE isi.deleted IS FALSE
+  AND k.state = 'retired'
+  AND k.deleted IS FALSE
+  AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer)
+ORDER BY isi.organization_id
+LIMIT @max_organizations;

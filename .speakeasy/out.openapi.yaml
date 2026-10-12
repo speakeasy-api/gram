@@ -26753,6 +26753,264 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListIntegrations
+  /rpc/internalSessionIssuers.get:
+    get:
+      description: 'Read the organization''s internal session issuer: its state, the issuer URI to register with supported services and its published keys. Requires org:read.'
+      operationId: getInternalSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: get internalSessionIssuers
+      tags:
+        - internalSessionIssuers
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: InternalSessionIssuer
+  /rpc/internalSessionIssuers.rotate:
+    post:
+      description: 'Rotate the issuer''s signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked at once and a fresh key activated immediately. Requires org:admin.'
+      operationId: rotateInternalSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: rotate internalSessionIssuers
+      tags:
+        - internalSessionIssuers
+      x-speakeasy-name-override: rotate
+      x-speakeasy-react-hook:
+        name: RotateInternalSessionIssuer
+  /rpc/internalSessionIssuers.setEnabled:
+    post:
+      description: Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin.
+      operationId: setInternalSessionIssuerEnabled
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetEnabledRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setEnabled internalSessionIssuers
+      tags:
+        - internalSessionIssuers
+      x-speakeasy-name-override: setEnabled
+      x-speakeasy-react-hook:
+        name: SetInternalSessionIssuerEnabled
   /rpc/jsonWebKeySets.activateKey:
     post:
       description: Make a published key the set's active signing key, retiring the previously active key in the same operation. The key must be pending or retired; activating the already-active key is a no-op. Requires org:admin.
@@ -27025,170 +27283,6 @@ paths:
       x-speakeasy-name-override: delete
       x-speakeasy-react-hook:
         name: DeleteJsonWebKeySet
-  /rpc/jsonWebKeySets.disableOrganizationEnterpriseIssuer:
-    post:
-      description: Stop Speakeasy signing with the organization's enterprise authorization issuer and discard cached service tokens. The issuer URI and its published keys stay; enabling again resumes signing. Requires org:admin.
-      operationId: disableOrganizationEnterpriseIssuer
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationEnterpriseIssuer'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: disableOrganizationEnterpriseIssuer jsonWebKeySets
-      tags:
-        - jsonWebKeySets
-      x-speakeasy-name-override: disableOrganizationEnterpriseIssuer
-      x-speakeasy-react-hook:
-        name: DisableOrganizationEnterpriseIssuer
-  /rpc/jsonWebKeySets.enableOrganizationEnterpriseIssuer:
-    post:
-      description: Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key, or re-enable a disabled one. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.
-      operationId: enableOrganizationEnterpriseIssuer
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationEnterpriseIssuer'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: enableOrganizationEnterpriseIssuer jsonWebKeySets
-      tags:
-        - jsonWebKeySets
-      x-speakeasy-name-override: enableOrganizationEnterpriseIssuer
-      x-speakeasy-react-hook:
-        name: EnableOrganizationEnterpriseIssuer
   /rpc/jsonWebKeySets.get:
     get:
       description: Get a JSON Web Key Set by ID. Requires org:read.
@@ -27371,88 +27465,6 @@ paths:
       x-speakeasy-name-override: getDeletePreflight
       x-speakeasy-react-hook:
         name: JsonWebKeySetDeletePreflight
-  /rpc/jsonWebKeySets.getOrganizationEnterpriseIssuer:
-    get:
-      description: 'Read the organization''s enterprise authorization issuer: the permanent issuer URI to register with supported services, its published keys and whether signing is available. Requires org:read.'
-      operationId: getOrganizationEnterpriseIssuer
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationEnterpriseIssuer'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: getOrganizationEnterpriseIssuer jsonWebKeySets
-      tags:
-        - jsonWebKeySets
-      x-speakeasy-name-override: getOrganizationEnterpriseIssuer
-      x-speakeasy-react-hook:
-        name: OrganizationEnterpriseIssuer
   /rpc/jsonWebKeySets.list:
     get:
       description: List the organization's JSON Web Key Sets. Requires org:read.
@@ -27731,94 +27743,6 @@ paths:
       x-speakeasy-name-override: publishKey
       x-speakeasy-react-hook:
         name: PublishJsonWebKey
-  /rpc/jsonWebKeySets.replaceOrganizationEnterpriseIssuerKey:
-    post:
-      description: 'Compromise response: revoke one issuer key immediately and, if it was active, activate a fresh key at once. The issuer URI does not change; services stop accepting the revoked key once their key cache refreshes. Requires org:admin.'
-      operationId: replaceOrganizationEnterpriseIssuerKey
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ReplaceOrganizationEnterpriseIssuerKeyRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationEnterpriseIssuer'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: replaceOrganizationEnterpriseIssuerKey jsonWebKeySets
-      tags:
-        - jsonWebKeySets
-      x-speakeasy-name-override: replaceOrganizationEnterpriseIssuerKey
-      x-speakeasy-react-hook:
-        name: ReplaceOrganizationEnterpriseIssuerKey
   /rpc/jsonWebKeySets.retireKey:
     post:
       description: 'Take the set''s active key out of signing use without withdrawing it: the key stays published so tokens already signed with it keep verifying. The key must be active. This is the graceful wind-down; use revoke when the key must stop verifying too. Requires org:admin.'
@@ -28001,94 +27925,6 @@ paths:
       x-speakeasy-name-override: revokeKey
       x-speakeasy-react-hook:
         name: RevokeJsonWebKey
-  /rpc/jsonWebKeySets.rotateOrganizationEnterpriseIssuer:
-    post:
-      description: Rotate the issuer's signing key without changing its URI. The first call publishes a new key and returns rotation_ready_at; call again with the same active_kid after that time to activate it. The previous key stays published briefly so services can still verify it. Requires org:admin.
-      operationId: rotateOrganizationEnterpriseIssuer
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RotateOrganizationEnterpriseIssuerRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationEnterpriseIssuer'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: rotateOrganizationEnterpriseIssuer jsonWebKeySets
-      tags:
-        - jsonWebKeySets
-      x-speakeasy-name-override: rotateOrganizationEnterpriseIssuer
-      x-speakeasy-react-hook:
-        name: RotateOrganizationEnterpriseIssuer
   /rpc/jsonWebKeySets.update:
     post:
       description: 'Update a JSON Web Key Set''s name and backing external key. Requires org:admin. Both fields are replaced, not patched. Re-pointing the backing key is how rotation begins: point the set at the new external key, then publish a key from it. Already-published keys are unaffected — each keeps signing with the external key it was minted from.'
@@ -90489,6 +90325,53 @@ components:
       required:
         - version
         - created_at
+    InternalSessionIssuer:
+      type: object
+      properties:
+        issuer:
+          type: string
+          description: Issuer URI to register with supported services. It never changes.
+        jwks_uri:
+          type: string
+          description: Public verification keys.
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalSessionIssuerKey'
+          description: Published keys.
+        rotation_ready_at:
+          type: string
+          description: When a pending rotation can be activated.
+          format: date-time
+        state:
+          type: string
+          description: 'unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing.'
+          enum:
+            - unavailable
+            - entitlement_required
+            - setup_required
+            - enabled
+            - disabled
+            - signing_paused
+      required:
+        - state
+        - keys
+    InternalSessionIssuerKey:
+      type: object
+      properties:
+        kid:
+          type: string
+          description: Key ID.
+        state:
+          type: string
+          description: Lifecycle state.
+          enum:
+            - pending
+            - active
+            - retired
+      required:
+        - kid
+        - state
     InterruptTurnRequestBody:
       type: object
       properties:
@@ -95705,54 +95588,6 @@ components:
         - trusted_user_session_issuers
         - can_delete
         - ema_binding_count
-    OrganizationEnterpriseIssuer:
-      type: object
-      properties:
-        available:
-          type: boolean
-          description: Whether issuer provisioning is available for this organization.
-        enabled:
-          type: boolean
-          description: Whether the organization's issuer is provisioned and signing is not disabled.
-        issuer:
-          type: string
-          description: Issuer URI to register with supported services. It never changes.
-        jwks_uri:
-          type: string
-          description: Public verification keys.
-        keys:
-          type: array
-          items:
-            $ref: '#/components/schemas/OrganizationEnterpriseIssuerKey'
-          description: Published keys, newest first.
-        rotation_ready_at:
-          type: string
-          description: When a pending rotation can be activated.
-          format: date-time
-        signing_enabled:
-          type: boolean
-          description: Whether Speakeasy is currently allowed to sign with the issuer on this deployment.
-      required:
-        - available
-        - enabled
-        - signing_enabled
-        - keys
-    OrganizationEnterpriseIssuerKey:
-      type: object
-      properties:
-        kid:
-          type: string
-          description: Key ID.
-        state:
-          type: string
-          description: Lifecycle state.
-          enum:
-            - pending
-            - active
-            - retired
-      required:
-        - kid
-        - state
     OrganizationEntry:
       type: object
       properties:
@@ -99140,14 +98975,6 @@ components:
       required:
         - id
         - client_secret
-    ReplaceOrganizationEnterpriseIssuerKeyRequestBody:
-      type: object
-      properties:
-        kid:
-          type: string
-          description: The key ID to revoke.
-      required:
-        - kid
     ReportAIScanRequestBody:
       type: object
       properties:
@@ -101412,14 +101239,16 @@ components:
         - previous_keys
         - previous_keys_retired
         - marketplace_republished
-    RotateOrganizationEnterpriseIssuerRequestBody:
+    RotateRequestBody:
       type: object
       properties:
         active_kid:
           type: string
-          description: The key ID currently active, as last read.
-      required:
-        - active_kid
+          description: The key ID currently active, as last read. Required unless compromised is set.
+        compromised:
+          type: boolean
+          description: Revoke every current key immediately instead of rotating gradually.
+          default: false
     RotateTunneledMcpServerKeyForm:
       type: object
       properties:
@@ -102585,6 +102414,14 @@ components:
       required:
         - source_kind
         - role_urn
+    SetEnabledRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether Speakeasy may sign with the issuer.
+      required:
+        - enabled
     SetIdentityProviderConnectionSetupMethodRequestBody:
       type: object
       properties:
@@ -111738,6 +111575,8 @@ tags:
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
     description: Explore third-party tools in Speakeasy.
+  - name: internalSessionIssuers
+    description: 'Manage the organization''s internal session issuer: the permanent issuer URI Speakeasy signs enterprise-managed authorization assertions with, and its signing keys.'
   - name: jsonWebKeySets
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys

@@ -18,23 +18,18 @@ import (
 
 // Server lists the jsonWebKeySets service endpoint HTTP handlers.
 type Server struct {
-	Mounts                                 []*MountPoint
-	GetOrganizationEnterpriseIssuer        http.Handler
-	EnableOrganizationEnterpriseIssuer     http.Handler
-	DisableOrganizationEnterpriseIssuer    http.Handler
-	RotateOrganizationEnterpriseIssuer     http.Handler
-	ReplaceOrganizationEnterpriseIssuerKey http.Handler
-	CreateSet                              http.Handler
-	UpdateSet                              http.Handler
-	ListSets                               http.Handler
-	GetSet                                 http.Handler
-	GetSetDeletePreflight                  http.Handler
-	DeleteSet                              http.Handler
-	ListKeys                               http.Handler
-	PublishKey                             http.Handler
-	ActivateKey                            http.Handler
-	RetireKey                              http.Handler
-	RevokeKey                              http.Handler
+	Mounts                []*MountPoint
+	CreateSet             http.Handler
+	UpdateSet             http.Handler
+	ListSets              http.Handler
+	GetSet                http.Handler
+	GetSetDeletePreflight http.Handler
+	DeleteSet             http.Handler
+	ListKeys              http.Handler
+	PublishKey            http.Handler
+	ActivateKey           http.Handler
+	RetireKey             http.Handler
+	RevokeKey             http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -64,11 +59,6 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"GetOrganizationEnterpriseIssuer", "GET", "/rpc/jsonWebKeySets.getOrganizationEnterpriseIssuer"},
-			{"EnableOrganizationEnterpriseIssuer", "POST", "/rpc/jsonWebKeySets.enableOrganizationEnterpriseIssuer"},
-			{"DisableOrganizationEnterpriseIssuer", "POST", "/rpc/jsonWebKeySets.disableOrganizationEnterpriseIssuer"},
-			{"RotateOrganizationEnterpriseIssuer", "POST", "/rpc/jsonWebKeySets.rotateOrganizationEnterpriseIssuer"},
-			{"ReplaceOrganizationEnterpriseIssuerKey", "POST", "/rpc/jsonWebKeySets.replaceOrganizationEnterpriseIssuerKey"},
 			{"CreateSet", "POST", "/rpc/jsonWebKeySets.create"},
 			{"UpdateSet", "POST", "/rpc/jsonWebKeySets.update"},
 			{"ListSets", "GET", "/rpc/jsonWebKeySets.list"},
@@ -81,22 +71,17 @@ func New(
 			{"RetireKey", "POST", "/rpc/jsonWebKeySets.retireKey"},
 			{"RevokeKey", "POST", "/rpc/jsonWebKeySets.revokeKey"},
 		},
-		GetOrganizationEnterpriseIssuer:        NewGetOrganizationEnterpriseIssuerHandler(e.GetOrganizationEnterpriseIssuer, mux, decoder, encoder, errhandler, formatter),
-		EnableOrganizationEnterpriseIssuer:     NewEnableOrganizationEnterpriseIssuerHandler(e.EnableOrganizationEnterpriseIssuer, mux, decoder, encoder, errhandler, formatter),
-		DisableOrganizationEnterpriseIssuer:    NewDisableOrganizationEnterpriseIssuerHandler(e.DisableOrganizationEnterpriseIssuer, mux, decoder, encoder, errhandler, formatter),
-		RotateOrganizationEnterpriseIssuer:     NewRotateOrganizationEnterpriseIssuerHandler(e.RotateOrganizationEnterpriseIssuer, mux, decoder, encoder, errhandler, formatter),
-		ReplaceOrganizationEnterpriseIssuerKey: NewReplaceOrganizationEnterpriseIssuerKeyHandler(e.ReplaceOrganizationEnterpriseIssuerKey, mux, decoder, encoder, errhandler, formatter),
-		CreateSet:                              NewCreateSetHandler(e.CreateSet, mux, decoder, encoder, errhandler, formatter),
-		UpdateSet:                              NewUpdateSetHandler(e.UpdateSet, mux, decoder, encoder, errhandler, formatter),
-		ListSets:                               NewListSetsHandler(e.ListSets, mux, decoder, encoder, errhandler, formatter),
-		GetSet:                                 NewGetSetHandler(e.GetSet, mux, decoder, encoder, errhandler, formatter),
-		GetSetDeletePreflight:                  NewGetSetDeletePreflightHandler(e.GetSetDeletePreflight, mux, decoder, encoder, errhandler, formatter),
-		DeleteSet:                              NewDeleteSetHandler(e.DeleteSet, mux, decoder, encoder, errhandler, formatter),
-		ListKeys:                               NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
-		PublishKey:                             NewPublishKeyHandler(e.PublishKey, mux, decoder, encoder, errhandler, formatter),
-		ActivateKey:                            NewActivateKeyHandler(e.ActivateKey, mux, decoder, encoder, errhandler, formatter),
-		RetireKey:                              NewRetireKeyHandler(e.RetireKey, mux, decoder, encoder, errhandler, formatter),
-		RevokeKey:                              NewRevokeKeyHandler(e.RevokeKey, mux, decoder, encoder, errhandler, formatter),
+		CreateSet:             NewCreateSetHandler(e.CreateSet, mux, decoder, encoder, errhandler, formatter),
+		UpdateSet:             NewUpdateSetHandler(e.UpdateSet, mux, decoder, encoder, errhandler, formatter),
+		ListSets:              NewListSetsHandler(e.ListSets, mux, decoder, encoder, errhandler, formatter),
+		GetSet:                NewGetSetHandler(e.GetSet, mux, decoder, encoder, errhandler, formatter),
+		GetSetDeletePreflight: NewGetSetDeletePreflightHandler(e.GetSetDeletePreflight, mux, decoder, encoder, errhandler, formatter),
+		DeleteSet:             NewDeleteSetHandler(e.DeleteSet, mux, decoder, encoder, errhandler, formatter),
+		ListKeys:              NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
+		PublishKey:            NewPublishKeyHandler(e.PublishKey, mux, decoder, encoder, errhandler, formatter),
+		ActivateKey:           NewActivateKeyHandler(e.ActivateKey, mux, decoder, encoder, errhandler, formatter),
+		RetireKey:             NewRetireKeyHandler(e.RetireKey, mux, decoder, encoder, errhandler, formatter),
+		RevokeKey:             NewRevokeKeyHandler(e.RevokeKey, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -105,11 +90,6 @@ func (s *Server) Service() string { return "jsonWebKeySets" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.GetOrganizationEnterpriseIssuer = m(s.GetOrganizationEnterpriseIssuer)
-	s.EnableOrganizationEnterpriseIssuer = m(s.EnableOrganizationEnterpriseIssuer)
-	s.DisableOrganizationEnterpriseIssuer = m(s.DisableOrganizationEnterpriseIssuer)
-	s.RotateOrganizationEnterpriseIssuer = m(s.RotateOrganizationEnterpriseIssuer)
-	s.ReplaceOrganizationEnterpriseIssuerKey = m(s.ReplaceOrganizationEnterpriseIssuerKey)
 	s.CreateSet = m(s.CreateSet)
 	s.UpdateSet = m(s.UpdateSet)
 	s.ListSets = m(s.ListSets)
@@ -128,11 +108,6 @@ func (s *Server) MethodNames() []string { return jsonwebkeysets.MethodNames[:] }
 
 // Mount configures the mux to serve the jsonWebKeySets endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountGetOrganizationEnterpriseIssuerHandler(mux, h.GetOrganizationEnterpriseIssuer)
-	MountEnableOrganizationEnterpriseIssuerHandler(mux, h.EnableOrganizationEnterpriseIssuer)
-	MountDisableOrganizationEnterpriseIssuerHandler(mux, h.DisableOrganizationEnterpriseIssuer)
-	MountRotateOrganizationEnterpriseIssuerHandler(mux, h.RotateOrganizationEnterpriseIssuer)
-	MountReplaceOrganizationEnterpriseIssuerKeyHandler(mux, h.ReplaceOrganizationEnterpriseIssuerKey)
 	MountCreateSetHandler(mux, h.CreateSet)
 	MountUpdateSetHandler(mux, h.UpdateSet)
 	MountListSetsHandler(mux, h.ListSets)
@@ -149,277 +124,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the jsonWebKeySets endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
-}
-
-// MountGetOrganizationEnterpriseIssuerHandler configures the mux to serve the
-// "jsonWebKeySets" service "getOrganizationEnterpriseIssuer" endpoint.
-func MountGetOrganizationEnterpriseIssuerHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/rpc/jsonWebKeySets.getOrganizationEnterpriseIssuer", f)
-}
-
-// NewGetOrganizationEnterpriseIssuerHandler creates a HTTP handler which loads
-// the HTTP request and calls the "jsonWebKeySets" service
-// "getOrganizationEnterpriseIssuer" endpoint.
-func NewGetOrganizationEnterpriseIssuerHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetOrganizationEnterpriseIssuerRequest(mux, decoder)
-		encodeResponse = EncodeGetOrganizationEnterpriseIssuerResponse(encoder)
-		encodeError    = EncodeGetOrganizationEnterpriseIssuerError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationEnterpriseIssuer")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "jsonWebKeySets")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountEnableOrganizationEnterpriseIssuerHandler configures the mux to serve
-// the "jsonWebKeySets" service "enableOrganizationEnterpriseIssuer" endpoint.
-func MountEnableOrganizationEnterpriseIssuerHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/jsonWebKeySets.enableOrganizationEnterpriseIssuer", f)
-}
-
-// NewEnableOrganizationEnterpriseIssuerHandler creates a HTTP handler which
-// loads the HTTP request and calls the "jsonWebKeySets" service
-// "enableOrganizationEnterpriseIssuer" endpoint.
-func NewEnableOrganizationEnterpriseIssuerHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeEnableOrganizationEnterpriseIssuerRequest(mux, decoder)
-		encodeResponse = EncodeEnableOrganizationEnterpriseIssuerResponse(encoder)
-		encodeError    = EncodeEnableOrganizationEnterpriseIssuerError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "enableOrganizationEnterpriseIssuer")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "jsonWebKeySets")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountDisableOrganizationEnterpriseIssuerHandler configures the mux to serve
-// the "jsonWebKeySets" service "disableOrganizationEnterpriseIssuer" endpoint.
-func MountDisableOrganizationEnterpriseIssuerHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/jsonWebKeySets.disableOrganizationEnterpriseIssuer", f)
-}
-
-// NewDisableOrganizationEnterpriseIssuerHandler creates a HTTP handler which
-// loads the HTTP request and calls the "jsonWebKeySets" service
-// "disableOrganizationEnterpriseIssuer" endpoint.
-func NewDisableOrganizationEnterpriseIssuerHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeDisableOrganizationEnterpriseIssuerRequest(mux, decoder)
-		encodeResponse = EncodeDisableOrganizationEnterpriseIssuerResponse(encoder)
-		encodeError    = EncodeDisableOrganizationEnterpriseIssuerError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "disableOrganizationEnterpriseIssuer")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "jsonWebKeySets")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountRotateOrganizationEnterpriseIssuerHandler configures the mux to serve
-// the "jsonWebKeySets" service "rotateOrganizationEnterpriseIssuer" endpoint.
-func MountRotateOrganizationEnterpriseIssuerHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/jsonWebKeySets.rotateOrganizationEnterpriseIssuer", f)
-}
-
-// NewRotateOrganizationEnterpriseIssuerHandler creates a HTTP handler which
-// loads the HTTP request and calls the "jsonWebKeySets" service
-// "rotateOrganizationEnterpriseIssuer" endpoint.
-func NewRotateOrganizationEnterpriseIssuerHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeRotateOrganizationEnterpriseIssuerRequest(mux, decoder)
-		encodeResponse = EncodeRotateOrganizationEnterpriseIssuerResponse(encoder)
-		encodeError    = EncodeRotateOrganizationEnterpriseIssuerError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "rotateOrganizationEnterpriseIssuer")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "jsonWebKeySets")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountReplaceOrganizationEnterpriseIssuerKeyHandler configures the mux to
-// serve the "jsonWebKeySets" service "replaceOrganizationEnterpriseIssuerKey"
-// endpoint.
-func MountReplaceOrganizationEnterpriseIssuerKeyHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/jsonWebKeySets.replaceOrganizationEnterpriseIssuerKey", f)
-}
-
-// NewReplaceOrganizationEnterpriseIssuerKeyHandler creates a HTTP handler
-// which loads the HTTP request and calls the "jsonWebKeySets" service
-// "replaceOrganizationEnterpriseIssuerKey" endpoint.
-func NewReplaceOrganizationEnterpriseIssuerKeyHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeReplaceOrganizationEnterpriseIssuerKeyRequest(mux, decoder)
-		encodeResponse = EncodeReplaceOrganizationEnterpriseIssuerKeyResponse(encoder)
-		encodeError    = EncodeReplaceOrganizationEnterpriseIssuerKeyError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "replaceOrganizationEnterpriseIssuerKey")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "jsonWebKeySets")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
 }
 
 // MountCreateSetHandler configures the mux to serve the "jsonWebKeySets"

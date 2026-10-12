@@ -17,26 +17,6 @@ import (
 
 // Client lists the jsonWebKeySets service endpoint HTTP clients.
 type Client struct {
-	// GetOrganizationEnterpriseIssuer Doer is the HTTP client used to make
-	// requests to the getOrganizationEnterpriseIssuer endpoint.
-	GetOrganizationEnterpriseIssuerDoer goahttp.Doer
-
-	// EnableOrganizationEnterpriseIssuer Doer is the HTTP client used to make
-	// requests to the enableOrganizationEnterpriseIssuer endpoint.
-	EnableOrganizationEnterpriseIssuerDoer goahttp.Doer
-
-	// DisableOrganizationEnterpriseIssuer Doer is the HTTP client used to make
-	// requests to the disableOrganizationEnterpriseIssuer endpoint.
-	DisableOrganizationEnterpriseIssuerDoer goahttp.Doer
-
-	// RotateOrganizationEnterpriseIssuer Doer is the HTTP client used to make
-	// requests to the rotateOrganizationEnterpriseIssuer endpoint.
-	RotateOrganizationEnterpriseIssuerDoer goahttp.Doer
-
-	// ReplaceOrganizationEnterpriseIssuerKey Doer is the HTTP client used to make
-	// requests to the replaceOrganizationEnterpriseIssuerKey endpoint.
-	ReplaceOrganizationEnterpriseIssuerKeyDoer goahttp.Doer
-
 	// CreateSet Doer is the HTTP client used to make requests to the createSet
 	// endpoint.
 	CreateSetDoer goahttp.Doer
@@ -101,11 +81,6 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetOrganizationEnterpriseIssuerDoer:        doer,
-		EnableOrganizationEnterpriseIssuerDoer:     doer,
-		DisableOrganizationEnterpriseIssuerDoer:    doer,
-		RotateOrganizationEnterpriseIssuerDoer:     doer,
-		ReplaceOrganizationEnterpriseIssuerKeyDoer: doer,
 		CreateSetDoer:             doer,
 		UpdateSetDoer:             doer,
 		ListSetsDoer:              doer,
@@ -122,130 +97,6 @@ func NewClient(
 		host:                      host,
 		decoder:                   dec,
 		encoder:                   enc,
-	}
-}
-
-// GetOrganizationEnterpriseIssuer returns an endpoint that makes HTTP requests
-// to the jsonWebKeySets service getOrganizationEnterpriseIssuer server.
-func (c *Client) GetOrganizationEnterpriseIssuer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetOrganizationEnterpriseIssuerRequest(c.encoder)
-		decodeResponse = DecodeGetOrganizationEnterpriseIssuerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetOrganizationEnterpriseIssuerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetOrganizationEnterpriseIssuerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("jsonWebKeySets", "getOrganizationEnterpriseIssuer", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// EnableOrganizationEnterpriseIssuer returns an endpoint that makes HTTP
-// requests to the jsonWebKeySets service enableOrganizationEnterpriseIssuer
-// server.
-func (c *Client) EnableOrganizationEnterpriseIssuer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeEnableOrganizationEnterpriseIssuerRequest(c.encoder)
-		decodeResponse = DecodeEnableOrganizationEnterpriseIssuerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildEnableOrganizationEnterpriseIssuerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.EnableOrganizationEnterpriseIssuerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("jsonWebKeySets", "enableOrganizationEnterpriseIssuer", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// DisableOrganizationEnterpriseIssuer returns an endpoint that makes HTTP
-// requests to the jsonWebKeySets service disableOrganizationEnterpriseIssuer
-// server.
-func (c *Client) DisableOrganizationEnterpriseIssuer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeDisableOrganizationEnterpriseIssuerRequest(c.encoder)
-		decodeResponse = DecodeDisableOrganizationEnterpriseIssuerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDisableOrganizationEnterpriseIssuerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.DisableOrganizationEnterpriseIssuerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("jsonWebKeySets", "disableOrganizationEnterpriseIssuer", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// RotateOrganizationEnterpriseIssuer returns an endpoint that makes HTTP
-// requests to the jsonWebKeySets service rotateOrganizationEnterpriseIssuer
-// server.
-func (c *Client) RotateOrganizationEnterpriseIssuer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeRotateOrganizationEnterpriseIssuerRequest(c.encoder)
-		decodeResponse = DecodeRotateOrganizationEnterpriseIssuerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRotateOrganizationEnterpriseIssuerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.RotateOrganizationEnterpriseIssuerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("jsonWebKeySets", "rotateOrganizationEnterpriseIssuer", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ReplaceOrganizationEnterpriseIssuerKey returns an endpoint that makes HTTP
-// requests to the jsonWebKeySets service
-// replaceOrganizationEnterpriseIssuerKey server.
-func (c *Client) ReplaceOrganizationEnterpriseIssuerKey() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeReplaceOrganizationEnterpriseIssuerKeyRequest(c.encoder)
-		decodeResponse = DecodeReplaceOrganizationEnterpriseIssuerKeyResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildReplaceOrganizationEnterpriseIssuerKeyRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ReplaceOrganizationEnterpriseIssuerKeyDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("jsonWebKeySets", "replaceOrganizationEnterpriseIssuerKey", err)
-		}
-		return decodeResponse(resp)
 	}
 }
 

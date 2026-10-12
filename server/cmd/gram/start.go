@@ -66,7 +66,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations"
-	"github.com/speakeasy-api/gram/server/internal/emaissuer"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/external"
@@ -80,6 +79,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/keys"
@@ -1679,12 +1679,10 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			keySetsService := jsonwebkeysets.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient))
-			if identityProviderProvisioner != nil {
-				keySetsService.SetEnterpriseIssuer(identityProviderProvisioner, newEMAIssuerSigner(logger, c, db, gcpIdentity, kmsSigningClients))
-			}
-			jsonwebkeysets.Attach(mux, keySetsService)
-			emaissuer.Attach(mux, db, logger)
+			jsonwebkeysets.Attach(mux, jsonwebkeysets.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
+			issuerGate := newInternalSessionIssuerGate(c, db, productFeatures, featureFlags, identityProviderProvisioner != nil)
+			internalsessionissuers.Attach(mux, internalsessionissuers.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, issuerGate, internalSessionIssuerManager(identityProviderProvisioner), ratelimit.NewRedisStore(redisClient)))
+			internalsessionissuers.AttachDiscovery(mux, db, logger)
 			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner, encryptionClient), encryptionClient, identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
 			oktaresourceconnections.Attach(mux, oktaresourceconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags))
 			registryValidator, err := mcpregistry.LoadValidator()
@@ -1829,7 +1827,7 @@ func newStartCommand() *cli.Command {
 				ServerURL:                 serverURL,
 				CallbackOrigin:            callbackOrigins.ForNewClient(true),
 				OutboundCallbackOrigin:    callbackOrigins.Outbound,
-				EnterpriseIssuerAvailable: identityProviderProvisioner != nil,
+				IssuerGate:                issuerGate,
 				DashboardURL:              siteURL,
 				Environment:               c.String("environment"),
 				JWTSigningKey:             c.String(usersessions.JWTSigningKeyFlag),

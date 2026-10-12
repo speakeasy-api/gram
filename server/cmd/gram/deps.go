@@ -69,7 +69,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
-	"github.com/speakeasy-api/gram/server/internal/emaissuer"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -78,6 +77,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/lake"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -1775,11 +1775,19 @@ func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog
 	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
 }
 
-// newEMAIssuerSigner signs as organizations' enterprise authorization issuers,
-// pinned to the provisioning service account and honoring the kill switch.
-func newEMAIssuerSigner(logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory) *emaissuer.Signer {
-	return emaissuer.NewSigner(logger, db, gcpIdentity, kmsSigningClients, emaissuer.SignerConfig{
-		Disabled:      c.Bool(emaIssuerSigningDisabledFlag),
-		ManagedSigner: c.String(identityProviderSigningServiceAccount),
+// newInternalSessionIssuerGate reports what each organization may do with its
+// issuer, honoring the startup kill switch.
+func newInternalSessionIssuerGate(c *cli.Context, db *pgxpool.Pool, productFeatures *productfeatures.Client, featureFlags feature.Provider, provisioning bool) *internalsessionissuers.Gate {
+	return internalsessionissuers.NewGate(db, productFeatures, featureFlags, internalsessionissuers.GateConfig{
+		Provisioning:  provisioning,
+		SigningPaused: c.Bool(internalSessionIssuerSigningPausedFlag),
 	})
+}
+
+// internalSessionIssuerManager keeps a nil provisioner a nil interface.
+func internalSessionIssuerManager(provisioner *identityproviderconnections.Provisioner) internalsessionissuers.Manager {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
 }

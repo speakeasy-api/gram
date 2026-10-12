@@ -22,84 +22,6 @@ var _ = Service("jsonWebKeySets", func() {
 	Security(security.Session)
 	shared.DeclareErrorResponses()
 
-	Method("getOrganizationEnterpriseIssuer", func() {
-		Description("Read the organization's enterprise authorization issuer: the permanent issuer URI to register with supported services, its published keys and whether signing is available. Requires org:read.")
-		Payload(func() { security.SessionPayload() })
-		Result(OrganizationEnterpriseIssuer)
-		HTTP(func() {
-			GET("/rpc/jsonWebKeySets.getOrganizationEnterpriseIssuer")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-		Meta("openapi:operationId", "getOrganizationEnterpriseIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "getOrganizationEnterpriseIssuer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationEnterpriseIssuer"}`)
-	})
-
-	Method("enableOrganizationEnterpriseIssuer", func() {
-		Description("Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key, or re-enable a disabled one. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.")
-		Payload(func() { security.SessionPayload() })
-		Result(OrganizationEnterpriseIssuer)
-		HTTP(func() {
-			POST("/rpc/jsonWebKeySets.enableOrganizationEnterpriseIssuer")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-		Meta("openapi:operationId", "enableOrganizationEnterpriseIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "enableOrganizationEnterpriseIssuer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnableOrganizationEnterpriseIssuer"}`)
-	})
-
-	Method("disableOrganizationEnterpriseIssuer", func() {
-		Description("Stop Speakeasy signing with the organization's enterprise authorization issuer and discard cached service tokens. The issuer URI and its published keys stay; enabling again resumes signing. Requires org:admin.")
-		Payload(func() { security.SessionPayload() })
-		Result(OrganizationEnterpriseIssuer)
-		HTTP(func() {
-			POST("/rpc/jsonWebKeySets.disableOrganizationEnterpriseIssuer")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-		Meta("openapi:operationId", "disableOrganizationEnterpriseIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "disableOrganizationEnterpriseIssuer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DisableOrganizationEnterpriseIssuer"}`)
-	})
-
-	Method("rotateOrganizationEnterpriseIssuer", func() {
-		Description("Rotate the issuer's signing key without changing its URI. The first call publishes a new key and returns rotation_ready_at; call again with the same active_kid after that time to activate it. The previous key stays published briefly so services can still verify it. Requires org:admin.")
-		Payload(func() {
-			Attribute("active_kid", String, "The key ID currently active, as last read.")
-			Required("active_kid")
-			security.SessionPayload()
-		})
-		Result(OrganizationEnterpriseIssuer)
-		HTTP(func() {
-			POST("/rpc/jsonWebKeySets.rotateOrganizationEnterpriseIssuer")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-		Meta("openapi:operationId", "rotateOrganizationEnterpriseIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "rotateOrganizationEnterpriseIssuer")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateOrganizationEnterpriseIssuer"}`)
-	})
-
-	Method("replaceOrganizationEnterpriseIssuerKey", func() {
-		Description("Compromise response: revoke one issuer key immediately and, if it was active, activate a fresh key at once. The issuer URI does not change; services stop accepting the revoked key once their key cache refreshes. Requires org:admin.")
-		Payload(func() {
-			Attribute("kid", String, "The key ID to revoke.")
-			Required("kid")
-			security.SessionPayload()
-		})
-		Result(OrganizationEnterpriseIssuer)
-		HTTP(func() {
-			POST("/rpc/jsonWebKeySets.replaceOrganizationEnterpriseIssuerKey")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-		Meta("openapi:operationId", "replaceOrganizationEnterpriseIssuerKey")
-		Meta("openapi:extension:x-speakeasy-name-override", "replaceOrganizationEnterpriseIssuerKey")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReplaceOrganizationEnterpriseIssuerKey"}`)
-	})
-
 	Method("createSet", func() {
 		Description("Create a JSON Web Key Set backed by an organization external key, minting and publishing the set's first key straight to active. Reads the backing key's public half from the customer's KMS and refuses when the key's real algorithm disagrees with the one recorded against it. Rate limited per organization. Requires org:admin.")
 
@@ -384,27 +306,4 @@ var _ = Service("jsonWebKeySets", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "revokeKey")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeJsonWebKey"}`)
 	})
-})
-
-// OrganizationEnterpriseIssuer is an organization's public trust anchor, never a signing capability.
-var OrganizationEnterpriseIssuer = Type("OrganizationEnterpriseIssuer", func() {
-	Attribute("available", Boolean, "Whether issuer provisioning is available for this organization.")
-	Attribute("enabled", Boolean, "Whether the organization's issuer is provisioned and signing is not disabled.")
-	Attribute("signing_enabled", Boolean, "Whether Speakeasy is currently allowed to sign with the issuer on this deployment.")
-	Attribute("issuer", String, "Issuer URI to register with supported services. It never changes.")
-	Attribute("jwks_uri", String, "Public verification keys.")
-	Attribute("keys", ArrayOf(OrganizationEnterpriseIssuerKey), "Published keys, newest first.")
-	Attribute("rotation_ready_at", String, "When a pending rotation can be activated.", func() {
-		Format(FormatDateTime)
-	})
-	Required("available", "enabled", "signing_enabled", "keys")
-})
-
-// OrganizationEnterpriseIssuerKey is one published issuer key.
-var OrganizationEnterpriseIssuerKey = Type("OrganizationEnterpriseIssuerKey", func() {
-	Attribute("kid", String, "Key ID.")
-	Attribute("state", String, "Lifecycle state.", func() {
-		Enum("pending", "active", "retired")
-	})
-	Required("kid", "state")
 })

@@ -23,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/emaissuer"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -53,9 +52,6 @@ type Service struct {
 	kmsClients      gcpkms.SigningClientFactory
 	productFeatures *productfeatures.Client
 	mintLimiter     *ratelimit.Limiter
-	// Enterprise authorization issuer; unset where the deployment can't provision.
-	issuerManager EnterpriseIssuerManager
-	issuerSigner  *emaissuer.Signer
 }
 
 var (
@@ -91,8 +87,6 @@ func NewService(
 		mintLimiter: ratelimit.New(mintStore, "jwks-mint",
 			ratelimit.PerMinute(mintRatePerMin).WithBurst(mintRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
-		issuerManager: nil,
-		issuerSigner:  nil,
 	}
 }
 

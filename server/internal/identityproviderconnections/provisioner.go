@@ -2045,6 +2045,9 @@ func reconcilePublication(ctx context.Context, check func(context.Context) (bool
 }
 
 func (p *Provisioner) publicationAbsent(ctx context.Context, organizationID string, connectionID uuid.UUID, resourceName string) (bool, error) {
+	if connectionID == uuid.Nil {
+		return p.emaPublicationAbsent(ctx, organizationID, resourceName)
+	}
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin publication reconciliation: %w", err)

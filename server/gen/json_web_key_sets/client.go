@@ -15,163 +15,34 @@ import (
 
 // Client is the "jsonWebKeySets" service client.
 type Client struct {
-	GetOrganizationEnterpriseIssuerEndpoint        goa.Endpoint
-	EnableOrganizationEnterpriseIssuerEndpoint     goa.Endpoint
-	DisableOrganizationEnterpriseIssuerEndpoint    goa.Endpoint
-	RotateOrganizationEnterpriseIssuerEndpoint     goa.Endpoint
-	ReplaceOrganizationEnterpriseIssuerKeyEndpoint goa.Endpoint
-	CreateSetEndpoint                              goa.Endpoint
-	UpdateSetEndpoint                              goa.Endpoint
-	ListSetsEndpoint                               goa.Endpoint
-	GetSetEndpoint                                 goa.Endpoint
-	GetSetDeletePreflightEndpoint                  goa.Endpoint
-	DeleteSetEndpoint                              goa.Endpoint
-	ListKeysEndpoint                               goa.Endpoint
-	PublishKeyEndpoint                             goa.Endpoint
-	ActivateKeyEndpoint                            goa.Endpoint
-	RetireKeyEndpoint                              goa.Endpoint
-	RevokeKeyEndpoint                              goa.Endpoint
+	CreateSetEndpoint             goa.Endpoint
+	UpdateSetEndpoint             goa.Endpoint
+	ListSetsEndpoint              goa.Endpoint
+	GetSetEndpoint                goa.Endpoint
+	GetSetDeletePreflightEndpoint goa.Endpoint
+	DeleteSetEndpoint             goa.Endpoint
+	ListKeysEndpoint              goa.Endpoint
+	PublishKeyEndpoint            goa.Endpoint
+	ActivateKeyEndpoint           goa.Endpoint
+	RetireKeyEndpoint             goa.Endpoint
+	RevokeKeyEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "jsonWebKeySets" service client given the endpoints.
-func NewClient(getOrganizationEnterpriseIssuer, enableOrganizationEnterpriseIssuer, disableOrganizationEnterpriseIssuer, rotateOrganizationEnterpriseIssuer, replaceOrganizationEnterpriseIssuerKey, createSet, updateSet, listSets, getSet, getSetDeletePreflight, deleteSet, listKeys, publishKey, activateKey, retireKey, revokeKey goa.Endpoint) *Client {
+func NewClient(createSet, updateSet, listSets, getSet, getSetDeletePreflight, deleteSet, listKeys, publishKey, activateKey, retireKey, revokeKey goa.Endpoint) *Client {
 	return &Client{
-		GetOrganizationEnterpriseIssuerEndpoint:        getOrganizationEnterpriseIssuer,
-		EnableOrganizationEnterpriseIssuerEndpoint:     enableOrganizationEnterpriseIssuer,
-		DisableOrganizationEnterpriseIssuerEndpoint:    disableOrganizationEnterpriseIssuer,
-		RotateOrganizationEnterpriseIssuerEndpoint:     rotateOrganizationEnterpriseIssuer,
-		ReplaceOrganizationEnterpriseIssuerKeyEndpoint: replaceOrganizationEnterpriseIssuerKey,
-		CreateSetEndpoint:                              createSet,
-		UpdateSetEndpoint:                              updateSet,
-		ListSetsEndpoint:                               listSets,
-		GetSetEndpoint:                                 getSet,
-		GetSetDeletePreflightEndpoint:                  getSetDeletePreflight,
-		DeleteSetEndpoint:                              deleteSet,
-		ListKeysEndpoint:                               listKeys,
-		PublishKeyEndpoint:                             publishKey,
-		ActivateKeyEndpoint:                            activateKey,
-		RetireKeyEndpoint:                              retireKey,
-		RevokeKeyEndpoint:                              revokeKey,
+		CreateSetEndpoint:             createSet,
+		UpdateSetEndpoint:             updateSet,
+		ListSetsEndpoint:              listSets,
+		GetSetEndpoint:                getSet,
+		GetSetDeletePreflightEndpoint: getSetDeletePreflight,
+		DeleteSetEndpoint:             deleteSet,
+		ListKeysEndpoint:              listKeys,
+		PublishKeyEndpoint:            publishKey,
+		ActivateKeyEndpoint:           activateKey,
+		RetireKeyEndpoint:             retireKey,
+		RevokeKeyEndpoint:             revokeKey,
 	}
-}
-
-// GetOrganizationEnterpriseIssuer calls the "getOrganizationEnterpriseIssuer"
-// endpoint of the "jsonWebKeySets" service.
-// GetOrganizationEnterpriseIssuer may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) GetOrganizationEnterpriseIssuer(ctx context.Context, p *GetOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error) {
-	var ires any
-	ires, err = c.GetOrganizationEnterpriseIssuerEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*OrganizationEnterpriseIssuer), nil
-}
-
-// EnableOrganizationEnterpriseIssuer calls the
-// "enableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
-// service.
-// EnableOrganizationEnterpriseIssuer may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) EnableOrganizationEnterpriseIssuer(ctx context.Context, p *EnableOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error) {
-	var ires any
-	ires, err = c.EnableOrganizationEnterpriseIssuerEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*OrganizationEnterpriseIssuer), nil
-}
-
-// DisableOrganizationEnterpriseIssuer calls the
-// "disableOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
-// service.
-// DisableOrganizationEnterpriseIssuer may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) DisableOrganizationEnterpriseIssuer(ctx context.Context, p *DisableOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error) {
-	var ires any
-	ires, err = c.DisableOrganizationEnterpriseIssuerEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*OrganizationEnterpriseIssuer), nil
-}
-
-// RotateOrganizationEnterpriseIssuer calls the
-// "rotateOrganizationEnterpriseIssuer" endpoint of the "jsonWebKeySets"
-// service.
-// RotateOrganizationEnterpriseIssuer may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) RotateOrganizationEnterpriseIssuer(ctx context.Context, p *RotateOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error) {
-	var ires any
-	ires, err = c.RotateOrganizationEnterpriseIssuerEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*OrganizationEnterpriseIssuer), nil
-}
-
-// ReplaceOrganizationEnterpriseIssuerKey calls the
-// "replaceOrganizationEnterpriseIssuerKey" endpoint of the "jsonWebKeySets"
-// service.
-// ReplaceOrganizationEnterpriseIssuerKey may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) ReplaceOrganizationEnterpriseIssuerKey(ctx context.Context, p *ReplaceOrganizationEnterpriseIssuerKeyPayload) (res *OrganizationEnterpriseIssuer, err error) {
-	var ires any
-	ires, err = c.ReplaceOrganizationEnterpriseIssuerKeyEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*OrganizationEnterpriseIssuer), nil
 }
 
 // CreateSet calls the "createSet" endpoint of the "jsonWebKeySets" service.

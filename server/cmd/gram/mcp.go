@@ -37,10 +37,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	"github.com/speakeasy-api/gram/server/internal/emaissuer"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -77,6 +77,8 @@ func mcpServerFlags() []cli.Flag {
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
+		// Identity chaining runs here, so the issuer kill switch must too.
+		internalSessionIssuerSigningPausedCLIFlag(),
 	)
 }
 
@@ -421,7 +423,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
-	emaissuer.Attach(mux, db, logger)
+	internalsessionissuers.AttachDiscovery(mux, db, logger)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	xmcp.Attach(mux, runtime.XMCP, runtime.Metadata)
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)

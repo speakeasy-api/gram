@@ -16,9 +16,6 @@ const (
 	ActionJsonWebKeySetCreate Action = "json_web_key_set:create"
 	ActionJsonWebKeySetUpdate Action = "json_web_key_set:update"
 	ActionJsonWebKeySetDelete Action = "json_web_key_set:delete"
-	// The organization's enterprise authorization issuer, backed by one set.
-	ActionJsonWebKeySetEnableIssuer  Action = "json_web_key_set:enable_issuer"
-	ActionJsonWebKeySetDisableIssuer Action = "json_web_key_set:disable_issuer"
 )
 
 // JsonWebKeySetSnapshot is the audited state of a JSON Web Key Set. The set
@@ -141,52 +138,6 @@ func (l *Logger) LogJsonWebKeySetDelete(ctx context.Context, dbtx repo.DBTX, eve
 		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
 
 		Action: string(ActionJsonWebKeySetDelete),
-
-		SubjectID:          event.SetURN.ID.String(),
-		SubjectType:        string(subjectTypeJsonWebKeySet),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.SetName),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
-
-		Metadata:       nil,
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
-	}
-
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.JsonWebKeySetV1})
-}
-
-// LogJsonWebKeySetIssuerEvent records an organization enabling or disabling
-// signing with its enterprise authorization issuer.
-type LogJsonWebKeySetIssuerEvent struct {
-	OrganizationID string
-
-	Actor            urn.Principal
-	ActorDisplayName *string
-	ActorSlug        *string
-
-	SetURN  urn.JsonWebKeySet
-	SetName string
-}
-
-func (l *Logger) LogJsonWebKeySetEnableIssuer(ctx context.Context, dbtx repo.DBTX, event LogJsonWebKeySetIssuerEvent) error {
-	return l.logJsonWebKeySetIssuer(ctx, dbtx, ActionJsonWebKeySetEnableIssuer, event)
-}
-
-func (l *Logger) LogJsonWebKeySetDisableIssuer(ctx context.Context, dbtx repo.DBTX, event LogJsonWebKeySetIssuerEvent) error {
-	return l.logJsonWebKeySetIssuer(ctx, dbtx, ActionJsonWebKeySetDisableIssuer, event)
-}
-
-func (l *Logger) logJsonWebKeySetIssuer(ctx context.Context, dbtx repo.DBTX, action Action, event LogJsonWebKeySetIssuerEvent) error {
-	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
-
-		Action: string(action),
 
 		SubjectID:          event.SetURN.ID.String(),
 		SubjectType:        string(subjectTypeJsonWebKeySet),
