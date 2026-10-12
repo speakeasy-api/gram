@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-jose/go-jose/v4"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goahttp "goa.design/goa/v3/http"
@@ -43,6 +44,14 @@ const MaxAssertionLifetime = RetiredKeyOverlap - ActivationDelay
 
 // notFoundMaxAge briefly caches a missing issuer so probes stay cheap.
 const notFoundMaxAge = 30
+
+// Public documents are cached per process, found or not, so unauthenticated
+// traffic reaches the database at most once per document per window. The
+// window stays well under CacheTTL so revocations reach verifiers on time.
+const (
+	documentCacheTTL  = 10 * time.Second
+	documentCacheSize = 4096
+)
 
 var (
 	// ErrNotFound is returned when an organization has no live issuer.
@@ -89,7 +98,7 @@ type discoveryDocument struct {
 
 // AttachDiscovery mounts the public discovery and JWKS documents.
 func AttachDiscovery(mux goahttp.Muxer, db *pgxpool.Pool, logger *slog.Logger) {
-	h := &handler{db: db, logger: logger}
+	h := &handler{db: db, logger: logger, cache: expirable.NewLRU[documentKey, cachedDocument](documentCacheSize, nil, documentCacheTTL)}
 	const path = "/oauth/idp/org/{organizationID}"
 	for _, route := range []string{
 		path,
@@ -109,7 +118,16 @@ func AttachDiscovery(mux goahttp.Muxer, db *pgxpool.Pool, logger *slog.Logger) {
 type handler struct {
 	db     *pgxpool.Pool
 	logger *slog.Logger
+	cache  *expirable.LRU[documentKey, cachedDocument]
 }
+
+type documentKey struct {
+	organizationID string
+	keys           bool
+}
+
+// cachedDocument is a rendered document; a nil body means no issuer.
+type cachedDocument struct{ body []byte }
 
 func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error {
 	ctx := r.Context()
@@ -117,29 +135,58 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 	if customdomains.FromContext(ctx) != nil {
 		return oops.E(oops.CodeNotFound, nil, "issuer not found")
 	}
-	issuer, set, err := PublicKeys(ctx, h.db, chi.URLParam(r, "organizationID"))
-	switch {
-	case errors.Is(err, ErrNotFound):
+	key := documentKey{organizationID: chi.URLParam(r, "organizationID"), keys: keys}
+	cached, ok := h.cache.Get(key)
+	if !ok {
+		body, err := h.render(ctx, key)
+		switch {
+		case errors.Is(err, ErrNotFound):
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "load issuer document").LogError(ctx, h.logger)
+		}
+		cached = cachedDocument{body: body}
+		h.cache.Add(key, cached)
+	}
+	if cached.body == nil {
 		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", notFoundMaxAge))
 		return oops.E(oops.CodeNotFound, nil, "issuer not found")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "load issuer keys").LogError(ctx, h.logger)
 	}
-	jwksURI, err := JWKSURI(issuer)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "stored issuer is not a URL").LogError(ctx, h.logger)
-	}
-	var document any = discoveryDocument{Issuer: issuer, JWKSURI: jwksURI}
 	contentType := "application/json"
 	if keys {
-		document = set
 		contentType = "application/jwk-set+json"
+	}
+	return httpcache.WriteCacheableJSON(ctx, w, r, h.logger, contentType, int(CacheTTL/time.Second), cached.body)
+}
+
+// render builds a document. Metadata needs only the issuer; keys are read
+// for the JWKS document alone.
+func (h *handler) render(ctx context.Context, key documentKey) ([]byte, error) {
+	var document any
+	if key.keys {
+		_, set, err := PublicKeys(ctx, h.db, key.organizationID)
+		if err != nil {
+			return nil, err
+		}
+		document = set
+	} else {
+		issuer, err := repo.New(h.db).GetOrganizationInternalSessionIssuerURL(ctx, key.organizationID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, ErrNotFound
+		case err != nil:
+			return nil, fmt.Errorf("load issuer: %w", err)
+		}
+		jwksURI, err := JWKSURI(issuer)
+		if err != nil {
+			return nil, err
+		}
+		document = discoveryDocument{Issuer: issuer, JWKSURI: jwksURI}
 	}
 	body, err := json.Marshal(document)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encode issuer document").LogError(ctx, h.logger)
+		return nil, fmt.Errorf("encode issuer document: %w", err)
 	}
-	return httpcache.WriteCacheableJSON(ctx, w, r, h.logger, contentType, int(CacheTTL/time.Second), body)
+	return body, nil
 }
 
 // PublicKeys returns the organization's pinned issuer and its published keys:
