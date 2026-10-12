@@ -52,6 +52,17 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	bystander, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken: nil, Name: "Bystander", Description: nil, ToolUrns: []string{}, ResourceUrns: nil,
+		DefaultEnvironmentSlug: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	kept, err := plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID: other.ID, ToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, McpServerID: uuid.NullUUID{UUID: uuid.MustParse(bystander.ID), Valid: true},
+		DisplayName: "Bystander", Policy: "required", SortOrder: 1,
+	})
+	require.NoError(t, err)
+
 	rename := updateToolsetPayload(created.Slug)
 	rename.Name = new("Renamed Toolset")
 	_, err = ti.service.UpdateToolset(ctx, rename)
@@ -60,19 +71,20 @@ func TestToolsetsService_PluginEntriesFollowRenameAndDelete(t *testing.T) {
 	for _, pluginID := range []uuid.UUID{defaultPlugin.ID, other.ID} {
 		servers, err := plugins.ListPluginServers(ctx, pluginID)
 		require.NoError(t, err)
-		require.Len(t, servers, 1)
-		require.Equal(t, "Renamed Toolset", servers[0].DisplayName, "a toolset rename reaches entries keyed either way")
+		require.Contains(t, displayNames(servers), "Renamed Toolset", "a toolset rename reaches its entries")
 	}
 
 	beforeRemovals, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerRemove)
 	require.NoError(t, err)
 	require.NoError(t, ti.service.DeleteToolset(ctx, &gen.DeleteToolsetPayload{Slug: created.Slug}))
 
-	for _, pluginID := range []uuid.UUID{defaultPlugin.ID, other.ID} {
-		servers, err := plugins.ListPluginServers(ctx, pluginID)
-		require.NoError(t, err)
-		require.Empty(t, servers, "deleting the toolset detaches entries keyed either way")
-	}
+	defaultServers, err := plugins.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.NotContains(t, displayNames(defaultServers), "Renamed Toolset", "deleting the toolset detaches its entries")
+	otherServers, err := plugins.ListPluginServers(ctx, other.ID)
+	require.NoError(t, err)
+	require.Len(t, otherServers, 1, "another server's entry stays")
+	require.Equal(t, kept.ID, otherServers[0].ID)
 	afterRemovals, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerRemove)
 	require.NoError(t, err)
 	require.Equal(t, beforeRemovals+2, afterRemovals)
@@ -115,4 +127,12 @@ func TestToolsetsService_ReenableDoesNotTwinLegacyEntry(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, servers, 1, "the toolset-keyed entry already covers the canonical server")
 	require.Equal(t, toolsetID, servers[0].ToolsetID.UUID)
+}
+
+func displayNames(servers []pluginsrepo.PluginServer) []string {
+	names := make([]string, 0, len(servers))
+	for _, server := range servers {
+		names = append(names, server.DisplayName)
+	}
+	return names
 }

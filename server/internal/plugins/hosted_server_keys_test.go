@@ -200,3 +200,53 @@ func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T)
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(byServer.ID.String()), DisplayName: conv.PtrEmpty("Twin 2"), Policy: "required"})
 	requireConflict(err)
 }
+
+// A server-keyed metadata twin must not add headers to a toolset whose own metadata still serves.
+func TestPluginsService_PublishPlugins_HostedEntryIgnoresMetadataTwin(t *testing.T) {
+	t.Parallel()
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "metadata-twin")
+	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
+	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolset.McpSlug.String)
+
+	meta := mcpmetarepo.New(ti.conn)
+	owned, err := meta.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
+		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl: pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+	twin, err := meta.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
+		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
+		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl: pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+	for _, cfg := range []struct {
+		metadataID uuid.UUID
+		variable   string
+		header     string
+	}{{owned.ID, "OWNED_KEY", "X-Owned"}, {twin.ID, "TWIN_KEY", "X-Twin"}} {
+		_, err = meta.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+			ProjectID: *ac.ProjectID, McpMetadataID: cfg.metadataID, VariableName: cfg.variable,
+			HeaderDisplayName: pgtype.Text{String: cfg.header, Valid: true}, ProvidedBy: "user",
+		})
+		require.NoError(t, err)
+	}
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Metadata Twin"})
+	require.NoError(t, err)
+	addToolsetKeyedEntry(t, ctx, ti, plugin.ID, toolset.ID, "Hosted")
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	config := string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"])
+	require.Contains(t, config, "${user_config.OWNED_KEY}")
+	require.NotContains(t, config, "TWIN_KEY")
+}
