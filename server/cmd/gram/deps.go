@@ -1708,6 +1708,7 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 		SigningCredentialID:   credentialID,
 		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
 		ServerURL:             serverURL,
+		AllowLoopbackIssuer:   c.String("environment") == "local",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build identity provider connections provisioner: %w", err)

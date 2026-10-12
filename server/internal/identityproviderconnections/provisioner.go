@@ -101,6 +101,10 @@ type Config struct {
 	// pinned outbound callback origin: counterparties register the JWKS URL, so
 	// it must not move when the server URL does.
 	ServerURL *url.URL
+
+	// AllowLoopbackIssuer admits a plain-HTTP loopback issuer origin; set
+	// only in local development.
+	AllowLoopbackIssuer bool
 }
 
 // Provisioner creates, rotates, and revokes the managed rows behind a connection.
@@ -2062,7 +2066,7 @@ func (p *Provisioner) publicationAbsent(ctx context.Context, organizationID stri
 	if _, err := q.LockIdentityProviderConnectionForProvisioning(ctx, repo.LockIdentityProviderConnectionForProvisioningParams{ID: connectionID, OrganizationID: organizationID}); err != nil {
 		return false, fmt.Errorf("lock connection for publication reconciliation: %w", err)
 	}
-	referenced, err := q.ManagedKeyResourceExists(ctx, resourceName)
+	referenced, err := q.ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{ResourceName: resourceName, OrganizationID: organizationID})
 	if err != nil {
 		return false, fmt.Errorf("lookup published key resource: %w", err)
 	}
