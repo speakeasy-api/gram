@@ -476,9 +476,9 @@ func TestEMAIssuer_SignEnforcesClaimInvariants(t *testing.T) {
 		"overrides iss": func(c *internalsessionissuers.Claims) {
 			c.Extra = map[string]any{"iss": "https://attacker.example.com"}
 		},
-		"overrides iat":     func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"iat": 1} },
-		"overrides sub":     func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"sub": "someone-else"} },
-		"overrides email":   func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"email": "someone-else@example.com"} },
+		"overrides iat":   func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"iat": 1} },
+		"overrides sub":   func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"sub": "someone-else"} },
+		"overrides email": func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"email": "someone-else@example.com"} },
 	} {
 		c := claims()
 		mutate(&c)
