@@ -202,6 +202,18 @@ export function useServiceAccountClientDraft({
     };
   }, [deleteClient]);
 
+  // Hands an unbound client to the unmount cleanup, or deletes it now when
+  // that cleanup has already run, as after a create or a refused commit that
+  // outlives the page. Reports whether the draft still holds it.
+  const holdForCleanup = (unbound: RemoteSessionClient | null): boolean => {
+    if (disposed.current) {
+      if (unbound) void deleteClient(unbound.id);
+      return false;
+    }
+    createdRef.current = unbound;
+    return true;
+  };
+
   // A signing key client made by "Create client" exists before Save binds it,
   // so dropping it from the draft deletes it too.
   const discardCreated = () => {
@@ -278,11 +290,7 @@ export function useServiceAccountClientDraft({
         tokenEndpointAuthAudienceFormat: assertionAudience,
         jsonWebKeySetId,
       });
-      if (disposed.current) {
-        void deleteClient(made.id);
-        return false;
-      }
-      createdRef.current = made;
+      if (!holdForCleanup(made)) return false;
       setCreated(made);
       await invalidateAllRemoteSessionClients(queryClient);
       return true;
@@ -336,7 +344,7 @@ export function useServiceAccountClientDraft({
       } catch (error) {
         if (isExpectedAPIError(error)) {
           discardMadeHere();
-          createdRef.current = created;
+          holdForCleanup(created);
         } else if (madeHere) {
           unsettled.current = { client: madeHere, fields };
         }
@@ -344,7 +352,7 @@ export function useServiceAccountClientDraft({
       }
       if (result.failure) {
         discardMadeHere();
-        createdRef.current = created;
+        holdForCleanup(created);
         throw new Error(
           result.failure.providerMessage ??
             `Couldn't connect this server to ${issuer.name}.`,

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  hasResourcePlaceholder,
+  hasBlankResourceField,
   impersonationInstructions,
+  isKeyVersionResourceName,
   keyRingInstructions,
   keyVersionResourceName,
   type SetupValues,
@@ -101,20 +102,47 @@ describe("impersonationInstructions", () => {
   });
 });
 
-describe("hasResourcePlaceholder", () => {
-  it("flags a key version name with any field left blank", () => {
-    expect(hasResourcePlaceholder(keyVersionResourceName(values))).toBe(false);
+describe("hasBlankResourceField", () => {
+  it("flags any field the key version name needs left blank", () => {
+    expect(hasBlankResourceField(values)).toBe(false);
     for (const field of ["projectId", "location", "keyRing", "keyName"]) {
-      const name = keyVersionResourceName({ ...values, [field]: " " });
-      expect(hasResourcePlaceholder(name)).toBe(true);
+      expect(hasBlankResourceField({ ...values, [field]: " " })).toBe(true);
     }
   });
 
-  it("matches whole path segments, not names that contain a token", () => {
+  it("allows real names spelled like a placeholder", () => {
     expect(
-      hasResourcePlaceholder(
-        "projects/KEY_PROJECT/locations/global/keyRings/ring/cryptoKeys/MY_KEY/cryptoKeyVersions/1",
-      ),
+      hasBlankResourceField({
+        ...values,
+        projectId: "PROJECT_ID",
+        location: "LOCATION",
+        keyRing: "KEY_RING",
+        keyName: "KEY",
+      }),
     ).toBe(false);
+  });
+});
+
+describe("isKeyVersionResourceName", () => {
+  it("accepts a full key version name", () => {
+    expect(isKeyVersionResourceName(keyVersionResourceName(values))).toBe(true);
+    expect(
+      isKeyVersionResourceName(
+        "  projects/p/locations/global/keyRings/ring/cryptoKeys/KEY/cryptoKeyVersions/12  ",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects names with a missing, empty or non-numeric part", () => {
+    for (const name of [
+      "",
+      "projects/p/locations/global/keyRings/ring/cryptoKeys/key",
+      "projects/p/locations/global/keyRings/ring/cryptoKeys/key/cryptoKeyVersions/",
+      "projects/p/locations/global/keyRings/ring/cryptoKeys/key/cryptoKeyVersions/latest",
+      "projects//locations/global/keyRings/ring/cryptoKeys/key/cryptoKeyVersions/1",
+      "projects/p/locations/global/keyRings/ring/cryptoKeys/key/cryptoKeyVersions/1/extra",
+    ]) {
+      expect(isKeyVersionResourceName(name)).toBe(false);
+    }
   });
 });

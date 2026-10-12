@@ -33,9 +33,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Cloud } from "lucide-react";
 import { useState } from "react";
 import {
-  hasResourcePlaceholder,
+  hasBlankResourceField,
   impersonationInstructions,
   keyRingInstructions,
+  isKeyVersionResourceName,
   keyVersionResourceName,
   serviceAccountEmail,
   type SetupInstructions,
@@ -363,13 +364,18 @@ export function KeySetSetupSteps({
 
   const connected = !!credentialId && connectedId === credentialId;
   // A blank field leaves its placeholder in the generated name, which Cloud
-  // KMS would only reject after the key is registered.
-  const resourcePlaceholder =
-    keyChoice === NEW && hasResourcePlaceholder(resourceName);
+  // KMS would only reject after the key is registered. A hand-edited name is
+  // checked for its shape instead, since a real segment may share a
+  // placeholder's spelling.
+  const blankKeyField =
+    keyChoice === NEW &&
+    resourceEdit === null &&
+    hasBlankResourceField(setupValues);
   const keyReady =
     keyChoice !== NEW ||
-    (resourceName.trim().includes("/cryptoKeyVersions/") &&
-      !resourcePlaceholder);
+    (resourceEdit === null
+      ? !blankKeyField
+      : isKeyVersionResourceName(resourceEdit));
   const canFinish =
     connected && keyReady && setName.trim() !== "" && !finishing;
 
@@ -712,7 +718,7 @@ export function KeySetSetupSteps({
                     mono
                   />
                 ) : null}
-                {resourcePlaceholder ? (
+                {blankKeyField ? (
                   <Text small warning>
                     Fill in the placeholders in the key version name to
                     continue.

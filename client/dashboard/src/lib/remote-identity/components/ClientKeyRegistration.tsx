@@ -1,12 +1,8 @@
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
-import type { JSONWebKey } from "@gram/client/models/components/jsonwebkey.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import {
-  buildListJsonWebKeysQuery,
-  useListJsonWebKeys,
-} from "@gram/client/react-query/listJsonWebKeys.js";
+import { buildListJsonWebKeysQuery } from "@gram/client/react-query/listJsonWebKeys.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { clientKeySetUrl } from "../model/serviceAccount";
 import { Copy } from "lucide-react";
@@ -30,16 +26,16 @@ export function ClientKeyRegistration({
   const queryClient = useQueryClient();
   const url = clientKeySetUrl(clientRowId);
 
-  // Fetched up front: Safari refuses a clipboard write that follows an await,
-  // so the click has to have the keys in hand.
-  const keysQuery = useListJsonWebKeys({ setId: keySetId }, SECURITY, {
-    throwOnError: false,
-  });
-
-  // Every key a verifier should trust, as a set even when there is one:
-  // the key that signs now and the one about to, which is what the key set
-  // URL serves. Retired and revoked keys must not be registered again.
-  const keySetText = (keys: JSONWebKey[]): string => {
+  // Always asks the server: cached keys can predate a rotation, and copying
+  // a stale set would register a key the provider then can't verify with.
+  // Copies every key a verifier should trust, as a set even when there is
+  // one: the key that signs now and the one about to, which is what the key
+  // set URL serves. Retired and revoked keys must not be registered again.
+  const fetchKeySetText = async (): Promise<string> => {
+    const { keys } = await queryClient.fetchQuery({
+      ...buildListJsonWebKeysQuery(gramClient, { setId: keySetId }, SECURITY),
+      staleTime: 0,
+    });
     const published = keys
       .filter((key) => key.keyState === "active" || key.keyState === "pending")
       .map((key) => key.publicJwk);
@@ -49,22 +45,13 @@ export function ClientKeyRegistration({
     return JSON.stringify({ keys: published }, null, 2);
   };
 
-  // Joins the prefetch when it is still in flight rather than asking twice.
-  const fetchKeySetText = async (): Promise<string> => {
-    const result = await queryClient.ensureQueryData(
-      buildListJsonWebKeysQuery(gramClient, { setId: keySetId }, SECURITY),
-    );
-    return keySetText(result.keys);
-  };
-
   const copyPublicKey = async () => {
     try {
-      if (keysQuery.data) {
-        await navigator.clipboard.writeText(keySetText(keysQuery.data.keys));
-      } else if (typeof ClipboardItem !== "undefined") {
-        // Not loaded yet: hand the clipboard a promise within the click, so
-        // the write stays tied to the gesture until the keys arrive.
-        const text = fetchKeySetText();
+      const text = fetchKeySetText();
+      if (typeof ClipboardItem !== "undefined") {
+        // Hand the clipboard a promise within the click: Safari refuses a
+        // clipboard write that follows an await, so the write has to start
+        // now and resolve once the keys arrive.
         const blob = text.then(
           (value) => new Blob([value], { type: "text/plain" }),
         );
@@ -79,7 +66,7 @@ export function ClientKeyRegistration({
           throw error;
         }
       } else {
-        await navigator.clipboard.writeText(await fetchKeySetText());
+        await navigator.clipboard.writeText(await text);
       }
       toast.success("Public key copied");
     } catch (error) {

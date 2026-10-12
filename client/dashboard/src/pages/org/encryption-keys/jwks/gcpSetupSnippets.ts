@@ -72,16 +72,19 @@ export function keyVersionResourceName(values: SetupValues): string {
   return `projects/${field("projectId")}/locations/${field("location")}/keyRings/${field("keyRing")}/cryptoKeys/${field("keyName")}/cryptoKeyVersions/1`;
 }
 
-const PLACEHOLDER_SEGMENTS = new Set<string>(
-  Object.values(RESOURCE_PLACEHOLDERS),
-);
+/** A field the generated key version name needs is still blank. */
+export function hasBlankResourceField(values: SetupValues): boolean {
+  return (
+    Object.keys(RESOURCE_PLACEHOLDERS) as (keyof typeof RESOURCE_PLACEHOLDERS)[]
+  ).some((name) => !values[name].trim());
+}
 
-/** A key version name with a blank field still standing in as a placeholder. */
-export function hasResourcePlaceholder(resourceName: string): boolean {
-  return resourceName
-    .trim()
-    .split("/")
-    .some((segment) => PLACEHOLDER_SEGMENTS.has(segment));
+const KEY_VERSION_NAME =
+  /^projects\/[^/\s]+\/locations\/[^/\s]+\/keyRings\/[^/\s]+\/cryptoKeys\/[^/\s]+\/cryptoKeyVersions\/\d+$/;
+
+/** A hand-written name has the shape of a Cloud KMS key version. */
+export function isKeyVersionResourceName(resourceName: string): boolean {
+  return KEY_VERSION_NAME.test(resourceName.trim());
 }
 
 /** Step: create the service account and let Speakeasy impersonate it. */
