@@ -5,6 +5,14 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY updated_at DESC, id DESC;
 
+-- name: ListRecentWidgets :many
+SELECT *
+FROM widgets
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY updated_at DESC, id DESC
+LIMIT @row_limit;
+
 -- name: GetWidget :one
 SELECT *
 FROM widgets
@@ -60,6 +68,14 @@ SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
 FROM dashboard_widgets p
 JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
 WHERE p.project_id = @project_id
+ORDER BY p.widget_id, d.name, d.id;
+
+-- name: ListDashboardsForWidgets :many
+SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = @project_id
+  AND p.widget_id = ANY(@widget_ids::uuid[])
 ORDER BY p.widget_id, d.name, d.id;
 
 -- name: ListDashboardsForWidget :many

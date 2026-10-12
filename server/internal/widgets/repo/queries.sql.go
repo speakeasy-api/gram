@@ -226,6 +226,94 @@ func (q *Queries) ListDashboardsForWidget(ctx context.Context, arg ListDashboard
 	return items, nil
 }
 
+const listDashboardsForWidgets = `-- name: ListDashboardsForWidgets :many
+SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
+FROM dashboard_widgets p
+JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
+WHERE p.project_id = $1
+  AND p.widget_id = ANY($2::uuid[])
+ORDER BY p.widget_id, d.name, d.id
+`
+
+type ListDashboardsForWidgetsParams struct {
+	ProjectID uuid.UUID
+	WidgetIds []uuid.UUID
+}
+
+type ListDashboardsForWidgetsRow struct {
+	WidgetID      uuid.UUID
+	DashboardID   uuid.UUID
+	DashboardName string
+}
+
+func (q *Queries) ListDashboardsForWidgets(ctx context.Context, arg ListDashboardsForWidgetsParams) ([]ListDashboardsForWidgetsRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardsForWidgets, arg.ProjectID, arg.WidgetIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDashboardsForWidgetsRow
+	for rows.Next() {
+		var i ListDashboardsForWidgetsRow
+		if err := rows.Scan(&i.WidgetID, &i.DashboardID, &i.DashboardName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentWidgets = `-- name: ListRecentWidgets :many
+SELECT id, project_id, organization_id, created_by_user_id, name, description, dataset, query, visualization, created_at, updated_at, deleted_at, deleted
+FROM widgets
+WHERE project_id = $1
+  AND deleted IS FALSE
+ORDER BY updated_at DESC, id DESC
+LIMIT $2
+`
+
+type ListRecentWidgetsParams struct {
+	ProjectID uuid.UUID
+	RowLimit  int32
+}
+
+func (q *Queries) ListRecentWidgets(ctx context.Context, arg ListRecentWidgetsParams) ([]Widget, error) {
+	rows, err := q.db.Query(ctx, listRecentWidgets, arg.ProjectID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Widget
+	for rows.Next() {
+		var i Widget
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.CreatedByUserID,
+			&i.Name,
+			&i.Description,
+			&i.Dataset,
+			&i.Query,
+			&i.Visualization,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWidgetDashboards = `-- name: ListWidgetDashboards :many
 SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
 FROM dashboard_widgets p

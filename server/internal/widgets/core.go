@@ -182,12 +182,45 @@ func (s *Service) ReadAll(ctx context.Context) ([]Snapshot, error) {
 		byWidget[row.WidgetID] = append(byWidget[row.WidgetID], &gen.WidgetDashboard{ID: row.DashboardID.String(), Name: row.DashboardName})
 	}
 
+	return s.snapshots(ctx, rows, byWidget), nil
+}
+
+// ReadRecent lists at most limit of the request project's widgets, most
+// recently updated first, reading and validating no more than that.
+func (s *Service) ReadRecent(ctx context.Context, limit int32) ([]Snapshot, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+
+	queries := repo.New(s.db)
+	rows, err := queries.ListRecentWidgets(ctx, repo.ListRecentWidgetsParams{ProjectID: *authCtx.ProjectID, RowLimit: limit})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list widgets").LogError(ctx, s.logger)
+	}
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	placed, err := queries.ListDashboardsForWidgets(ctx, repo.ListDashboardsForWidgetsParams{ProjectID: *authCtx.ProjectID, WidgetIds: ids})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list widget dashboards").LogError(ctx, s.logger)
+	}
+	byWidget := map[uuid.UUID][]*gen.WidgetDashboard{}
+	for _, row := range placed {
+		byWidget[row.WidgetID] = append(byWidget[row.WidgetID], &gen.WidgetDashboard{ID: row.DashboardID.String(), Name: row.DashboardName})
+	}
+
+	return s.snapshots(ctx, rows, byWidget), nil
+}
+
+func (s *Service) snapshots(ctx context.Context, rows []repo.Widget, byWidget map[uuid.UUID][]*gen.WidgetDashboard) []Snapshot {
 	now := s.now()
 	out := make([]Snapshot, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, Snapshot{Widget: s.view(ctx, row, now, byWidget[row.ID]), Version: Version(row)})
 	}
-	return out, nil
+	return out
 }
 
 // Check validates a widget as a save would, without writing it: the query

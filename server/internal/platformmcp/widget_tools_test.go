@@ -513,7 +513,7 @@ func TestSaveWidgetReportsAnUnverifiedCommit(t *testing.T) {
 	require.NotEmpty(t, committed.ReceiptID)
 	require.Nil(t, committed.Widget)
 
-	all, err := service.ReadAll(f.scopedContext(t, ctx))
+	all, err := service.ReadRecent(f.scopedContext(t, ctx), 10)
 	require.NoError(t, err)
 	require.Len(t, all, 1, "the write committed")
 }
@@ -551,7 +551,7 @@ func TestDuplicateWidgetCopiesIntoTheCaller(t *testing.T) {
 
 type failingWidgets struct{ widgetManagement }
 
-func (failingWidgets) ReadAll(context.Context) ([]widgets.Snapshot, error) {
+func (failingWidgets) ReadRecent(context.Context, int32) ([]widgets.Snapshot, error) {
 	return nil, errors.New("pq: relation widgets is on fire")
 }
 

@@ -36,6 +36,22 @@ func TestReadReportsTheVersionAtFullPrecision(t *testing.T) {
 	require.Equal(t, snapshot.Version, all[0].Version)
 }
 
+func TestReadRecentReadsNoMoreThanItsLimit(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	for _, name := range []string{"first", "second", "third"} {
+		_, err := ti.service.CreateWidget(ctx, createPayload(name, validQuery(), barChart()))
+		require.NoError(t, err)
+	}
+
+	recent, err := ti.service.ReadRecent(ctx, 2)
+	require.NoError(t, err)
+	require.Len(t, recent, 2)
+	require.Equal(t, "third", recent[0].Widget.Name)
+	require.Equal(t, "second", recent[1].Widget.Name)
+	require.NotNil(t, recent[0].Widget.Dashboards)
+}
+
 func TestCheckEnforcesNameAndDescriptionLimits(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

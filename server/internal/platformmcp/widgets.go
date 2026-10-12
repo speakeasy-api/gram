@@ -80,7 +80,7 @@ func (e *widgetToolError) Unwrap() error { return e.Cause }
 // widgetManagement is the widgets service as the tools use it: every read
 // and write goes through its authorization, validation and audit.
 type widgetManagement interface {
-	ReadAll(ctx context.Context) ([]widgets.Snapshot, error)
+	ReadRecent(ctx context.Context, limit int32) ([]widgets.Snapshot, error)
 	ReadForChange(ctx context.Context, id string) (widgets.Snapshot, error)
 	Read(ctx context.Context, id string) (widgets.Snapshot, error)
 	Check(ctx context.Context, input widgets.Input) error
@@ -252,7 +252,7 @@ func (s *WidgetService) List(ctx context.Context, principal Principal, input lis
 	if err != nil {
 		return listWidgetsOutput{}, s.boundaryError(ctx, listWidgetsToolName, err)
 	}
-	snapshots, err := s.widgets.ReadAll(ctx)
+	snapshots, err := s.widgets.ReadRecent(ctx, maxListedWidgets+1)
 	if err != nil {
 		return listWidgetsOutput{}, s.boundaryError(ctx, listWidgetsToolName, err)
 	}
