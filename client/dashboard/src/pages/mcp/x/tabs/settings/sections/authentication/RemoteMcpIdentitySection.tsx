@@ -432,6 +432,9 @@ export function RemoteMcpIdentitySectionBody({
     )
       return;
     setConfirmOpen(false);
+    // The draft is reset at most once per save: a reset deletes a created
+    // signing key client, and a second one would delete it again.
+    let draftReset = false;
     try {
       // Binding a service account client replaces the user clients in the
       // same commit, so they are only detached here when nothing is bound.
@@ -441,6 +444,7 @@ export function RemoteMcpIdentitySectionBody({
       if (removingSelf) {
         await detachSelfClient();
         clientDraft.reset();
+        draftReset = true;
       }
       if (oauthFormat) {
         // Bind first, so a failed commit never leaves the server with no
@@ -469,6 +473,7 @@ export function RemoteMcpIdentitySectionBody({
             if (written || authorizationHeader) {
               await detachSelfClient();
               clientDraft.reset();
+              draftReset = true;
             }
           }
         } else if (
@@ -481,7 +486,9 @@ export function RemoteMcpIdentitySectionBody({
       }
       // A signing key client made for the Service Account choice and left
       // behind by a save that chose otherwise is never bound, so it goes.
-      if (!oauthFormat && clientDraft.created) clientDraft.reset();
+      if (!oauthFormat && clientDraft.created && !draftReset) {
+        clientDraft.reset();
+      }
     } catch (error) {
       toast.error(errorMessage(error, "Failed to save identity"));
       return;

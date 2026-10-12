@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { keyRingInstructions, type SetupValues } from "./gcpSetupSnippets";
+import {
+  impersonationInstructions,
+  keyRingInstructions,
+  type SetupValues,
+} from "./gcpSetupSnippets";
 
 const values: SetupValues = {
   projectId: "acme-prod",
@@ -67,5 +71,21 @@ describe("keyRingInstructions", () => {
     const console = text(keyRingInstructions("console", values, "RS256"));
     expect(console).toContain("RSA 2048");
     expect(console).not.toContain("Elliptic Curve");
+  });
+});
+
+describe("impersonationInstructions", () => {
+  it("grants on the account it creates, whatever email later steps use", () => {
+    const edited = {
+      ...values,
+      serviceAccountEmail: "signer@other-project.iam.gserviceaccount.com",
+    };
+    for (const method of ["gcloud", "terraform", "console"] as const) {
+      const out = text(impersonationInstructions(method, edited));
+      expect(out).not.toContain("signer@other-project");
+    }
+    expect(text(impersonationInstructions("gcloud", edited))).toContain(
+      "speakeasy-signer@acme-prod.iam.gserviceaccount.com",
+    );
   });
 });

@@ -70,7 +70,12 @@ export function impersonationInstructions(
   const project = or(values.projectId, "PROJECT_ID");
   const account = or(values.accountId, "SERVICE_ACCOUNT");
   const principal = or(values.speakeasyPrincipal, "SPEAKEASY_PRINCIPAL");
-  const email = serviceAccountEmail(values);
+  // The account this step creates, so the grant always targets it; an email
+  // override names an account that already exists and only feeds later steps.
+  const email = serviceAccountEmail({
+    ...values,
+    serviceAccountEmail: undefined,
+  });
 
   switch (method) {
     case "gcloud":
