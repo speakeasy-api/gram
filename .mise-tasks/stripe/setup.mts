@@ -237,7 +237,8 @@ function assertPortalConfiguration(configuration: StripePortalConfiguration) {
   );
 }
 
-const stripePublishableKeyPattern = /test_mode_pub_key\s*=\s*['"]?(pk_test_[A-Za-z0-9_]+)/;
+const stripePublishableKeyPattern =
+  /test_mode_pub_key\s*=\s*['"]?(pk_test_[A-Za-z0-9_]+)/;
 
 export function publishableKeyFromStripeCLI(configList: string): string {
   return configList.match(stripePublishableKeyPattern)?.[1] ?? "";

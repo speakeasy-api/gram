@@ -766,5 +766,8 @@ test("reads the Stripe CLI test-mode publishable key", () => {
     ),
     "pk_test_example123",
   );
-  assert.equal(publishableKeyFromStripeCLI("test_mode_api_key = sk_test_only"), "");
+  assert.equal(
+    publishableKeyFromStripeCLI("test_mode_api_key = sk_test_only"),
+    "",
+  );
 });
