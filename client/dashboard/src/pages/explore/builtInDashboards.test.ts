@@ -70,6 +70,7 @@ describe("the Speakeasy-built dashboards' cards", () => {
     (_, card) => {
       const spec = specFromWidget(card.dataset, card.query, card.visualization);
       expect(spec).not.toBeNull();
+      expect(spec!.dataset).toBe(card.dataset);
       expect(widgetFromSpec(spec!)).toEqual({
         query: card.query,
         visualization: card.visualization,
