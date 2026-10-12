@@ -1250,10 +1250,13 @@ WITH intended AS (
       WHEN ps.toolset_id IS NOT NULL AND lt.id IS NULL THEN 'mcp_server_missing'
       WHEN ps.toolset_id IS NOT NULL AND (SELECT count(*) FROM mcp_servers ms WHERE ms.toolset_id = lt.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE AND ms.visibility <> 'disabled' AND (ms.id = lt.id OR NOT EXISTS (SELECT 1 FROM mcp_servers c WHERE c.id = lt.id AND c.project_id = p.project_id AND c.deleted IS FALSE))) > 1 THEN 'mcp_server_ambiguous'
       WHEN ps.toolset_id IS NOT NULL AND hw.id IS NULL AND EXISTS (
-        SELECT 1
-        FROM mcp_metadata md
-        JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
-        WHERE (md.toolset_id = lt.id OR md.mcp_server_id = lt.id) AND md.project_id = p.project_id AND ec.provided_by = 'user'
+        SELECT 1 FROM mcp_environment_configs ec
+        WHERE ec.project_id = p.project_id AND ec.provided_by = 'user' AND ec.mcp_metadata_id = (
+          SELECT m.id FROM mcp_metadata m
+          WHERE (m.toolset_id = lt.id OR m.mcp_server_id = lt.id) AND m.project_id = p.project_id
+          ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
+          LIMIT 1
+        )
       ) THEN 'mcp_server_requires_user_header'
       WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.id IS NULL THEN 'mcp_server_missing'
       WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.project_id <> p.project_id THEN 'mcp_server_wrong_project'
@@ -1274,13 +1277,23 @@ WITH intended AS (
 	  ) THEN 'tunneled_backing_requires_user_header'
       WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.toolset_id IS NOT NULL AND (mts.id IS NULL OR mts.project_id <> p.project_id OR mts.deleted IS TRUE OR mts.mcp_enabled IS FALSE) THEN 'toolset_backing_unresolved'
 	  WHEN ps.mcp_server_id IS NOT NULL AND s.toolset_id IS NOT NULL AND s.visibility = 'public' AND mts.mcp_is_public IS FALSE THEN 'toolset_backing_auth_mismatch'
-	  WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND EXISTS (
+      -- Hosted entries read headers from the one metadata row published output uses.
+      WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND (ps.mcp_server_id IS NULL OR s.id = s.toolset_id) AND EXISTS (
+        SELECT 1 FROM mcp_environment_configs ec
+        WHERE ec.project_id = p.project_id AND ec.provided_by = 'user' AND ec.mcp_metadata_id = (
+          SELECT m.id FROM mcp_metadata m
+          WHERE (m.toolset_id = s.toolset_id OR m.mcp_server_id = s.toolset_id) AND m.project_id = p.project_id
+          ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
+          LIMIT 1
+        )
+      ) THEN 'mcp_server_requires_user_header'
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.id IS DISTINCT FROM s.toolset_id AND EXISTS (
 		SELECT 1
 		FROM mcp_metadata md
 		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
 		WHERE md.mcp_server_id = s.id AND md.project_id = p.project_id AND ec.provided_by = 'user'
 	  ) THEN 'mcp_server_requires_user_header'
-	  WHEN COALESCE(ps.mcp_server_id, hw.id) IS NOT NULL AND s.toolset_id IS NOT NULL AND EXISTS (
+	  WHEN ps.mcp_server_id IS NOT NULL AND s.id IS DISTINCT FROM s.toolset_id AND s.toolset_id IS NOT NULL AND EXISTS (
 		SELECT 1
 		FROM mcp_metadata md
 		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id

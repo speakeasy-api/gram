@@ -250,3 +250,50 @@ func TestPluginsService_PublishPlugins_HostedEntryIgnoresMetadataTwin(t *testing
 	require.Contains(t, config, "${user_config.OWNED_KEY}")
 	require.NotContains(t, config, "TWIN_KEY")
 }
+
+// User configs on only the server-keyed twin must not block an entry whose published output reads the toolset-keyed row.
+func TestPluginsService_CompatibilityIgnoresMetadataTwinHeaders(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestPluginsService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createTestToolset(t, ctx, ti.conn, "twin-headers")
+	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID}))
+	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, toolset.McpSlug.String)
+
+	meta := mcpmetarepo.New(ti.conn)
+	_, err := meta.UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
+		ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
+		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl: pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+	twin, err := meta.UpsertMetadataByMcpServerID(ctx, mcpmetarepo.UpsertMetadataByMcpServerIDParams{
+		McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, ProjectID: *ac.ProjectID,
+		ExternalDocumentationUrl: pgtype.Text{Valid: false}, ExternalDocumentationText: pgtype.Text{Valid: false},
+		LogoID: uuid.NullUUID{Valid: false}, Instructions: pgtype.Text{Valid: false}, DefaultEnvironmentID: uuid.NullUUID{Valid: false},
+		InstallationOverrideUrl: pgtype.Text{Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = meta.UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID: *ac.ProjectID, McpMetadataID: twin.ID, VariableName: "TWIN_KEY",
+		HeaderDisplayName: pgtype.Text{String: "X-Twin", Valid: true}, ProvidedBy: "user",
+	})
+	require.NoError(t, err)
+
+	byToolset, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Twin By Toolset"})
+	require.NoError(t, err)
+	addToolsetKeyedEntry(t, ctx, ti, byToolset.ID, toolset.ID, "Hosted")
+	byServer, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Twin By Server"})
+	require.NoError(t, err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: byServer.ID, McpServerID: conv.PtrEmpty(toolset.ID.String()), DisplayName: conv.PtrEmpty("Hosted"), Policy: "required"})
+	require.NoError(t, err)
+
+	issues, err := pluginsrepo.New(ti.conn).ListAgentPluginCompatibilityIssuesForProject(ctx, pluginsrepo.ListAgentPluginCompatibilityIssuesForProjectParams{
+		ProjectID: *ac.ProjectID, PluginIds: []uuid.UUID{uuid.MustParse(byToolset.ID), uuid.MustParse(byServer.ID)},
+	})
+	require.NoError(t, err)
+	require.Empty(t, issues)
+}
