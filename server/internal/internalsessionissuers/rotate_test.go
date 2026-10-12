@@ -140,3 +140,20 @@ func TestRotate_ContainmentWithoutKeyManager(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "disabled", disabled.State)
 }
+
+func TestMinting_FailsClosedWithoutTheRateLimiter(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestServiceWithMintStore(t, true, true)
+	admin := adminCtx(t, ctx)
+	_, err := ti.service.SetEnabled(admin, &gen.SetEnabledPayload{Enabled: true, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+
+	provisionIssuer(t, ctx, ti)
+	view, err := ti.service.Get(readCtx(t, ctx), &gen.GetPayload{SessionToken: nil})
+	require.NoError(t, err)
+	compromised := view.Keys[0].Kid
+	contained, err := ti.service.Rotate(admin, &gen.RotatePayload{ActiveKid: &compromised, Compromised: true, SessionToken: nil})
+	require.NoError(t, err, "revocation never depends on the limiter")
+	require.Equal(t, "keyless", contained.State, "the replacement waits for the limiter")
+	require.Empty(t, contained.Keys)
+}

@@ -285,9 +285,10 @@ func isPending(err error) bool {
 }
 
 func (s *Service) allowMint(ctx context.Context, logger *slog.Logger, organizationID string) error {
+	// Minting creates KMS keys, so it fails closed; revocation never comes here.
 	switch res, limitErr := s.mintLimiter.Allow(ctx, organizationID); {
 	case limitErr != nil:
-		logger.WarnContext(ctx, "issuer rate limiter unavailable, allowing", attr.SlogError(limitErr))
+		return oops.E(oops.CodeUnavailable, limitErr, "issuer key rate limit could not be checked, try again shortly").LogError(ctx, logger)
 	case !res.Allowed:
 		return oops.E(oops.CodeRateLimitExceeded, nil, "issuer key rate limit exceeded, try again shortly")
 	}

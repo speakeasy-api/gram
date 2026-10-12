@@ -52,7 +52,15 @@ const notFoundMaxAge = 30
 const (
 	documentCacheTTL  = 10 * time.Second
 	documentCacheSize = 4096
+	// At most this many distinct documents are read at once per process;
+	// further misses are refused rather than queued on the database pool.
+	documentFillLimit = 16
+	// A read gets this long whatever its callers do.
+	documentFillTimeout = 2 * time.Second
 )
+
+// errDiscoveryBusy refuses a miss while every fill slot is taken.
+var errDiscoveryBusy = errors.New("internalsessionissuers: discovery is busy")
 
 var (
 	// ErrNotFound is returned when an organization has no live issuer.
@@ -65,6 +73,19 @@ var (
 	ErrMisconfigured = errors.New("internalsessionissuers: platform signing is misconfigured")
 )
 
+// SweepProgress is one bounded pass of the system key sweep.
+type SweepProgress struct {
+	// Swept counts organizations visited.
+	Swept int
+	// Pending is the fleet-wide count of revoked keys awaiting KMS cleanup,
+	// or -1 when unknown.
+	Pending int
+	// Next is the organization id to resume after when Done is false.
+	Next string
+	// Done means every organization with work was visited.
+	Done bool
+}
+
 // RotationPendingError means a new key is published and can be activated
 // from ReadyAt, once verifier caches have seen it.
 type RotationPendingError struct{ ReadyAt time.Time }
@@ -74,9 +95,11 @@ func (e *RotationPendingError) Error() string {
 }
 
 // URL is the organization's permanent issuer identifier. It never names a key,
-// so key rotation and replacement never change what vendors trust.
-func URL(origin *url.URL, organizationID string) (*url.URL, error) {
-	if origin == nil || !urls.IsAbsoluteHTTPSOrLoopback(origin.String()) || organizationID == "" {
+// so key rotation and replacement never change what vendors trust. It must be
+// HTTPS; allowLoopback admits plain-HTTP loopback for local development only.
+func URL(origin *url.URL, organizationID string, allowLoopback bool) (*url.URL, error) {
+	valid := origin != nil && (urls.IsAbsoluteHTTPS(origin.String()) || (allowLoopback && urls.IsAbsoluteHTTPSOrLoopback(origin.String())))
+	if !valid || organizationID == "" {
 		return nil, errors.New("internalsessionissuers: issuer origin is unavailable")
 	}
 	return origin.JoinPath("oauth", "idp", "org", organizationID), nil
@@ -99,7 +122,7 @@ type discoveryDocument struct {
 
 // AttachDiscovery mounts the public discovery and JWKS documents.
 func AttachDiscovery(mux goahttp.Muxer, db *pgxpool.Pool, logger *slog.Logger) {
-	h := &handler{db: db, logger: logger, cache: expirable.NewLRU[documentKey, cachedDocument](documentCacheSize, nil, documentCacheTTL), flights: singleflight.Group{}}
+	h := &handler{db: db, logger: logger, cache: expirable.NewLRU[documentKey, cachedDocument](documentCacheSize, nil, documentCacheTTL), flights: singleflight.Group{}, fills: make(chan struct{}, documentFillLimit)}
 	const path = "/oauth/idp/org/{organizationID}"
 	for _, route := range []string{
 		path,
@@ -122,6 +145,8 @@ type handler struct {
 	cache  *expirable.LRU[documentKey, cachedDocument]
 	// flights collapses concurrent misses for one document into one read.
 	flights singleflight.Group
+	// fills bounds concurrent reads across documents.
+	fills chan struct{}
 }
 
 type documentKey struct {
@@ -149,8 +174,17 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 			if cached, ok := h.cache.Get(key); ok {
 				return cached, nil
 			}
-			// The flight outlives any one caller, so it ignores their cancellation.
-			body, err := h.render(context.WithoutCancel(ctx), key)
+			select {
+			case h.fills <- struct{}{}:
+				defer func() { <-h.fills }()
+			default:
+				return nil, errDiscoveryBusy
+			}
+			// The flight outlives any one caller, so it ignores their
+			// cancellation but keeps its own deadline.
+			fillCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), documentFillTimeout)
+			defer cancel()
+			body, err := h.render(fillCtx, key)
 			switch {
 			case errors.Is(err, ErrNotFound):
 			case err != nil:
@@ -160,7 +194,11 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 			h.cache.Add(key, document)
 			return document, nil
 		})
-		if err != nil {
+		switch {
+		case errors.Is(err, errDiscoveryBusy):
+			w.Header().Set("Retry-After", "1")
+			return oops.E(oops.CodeUnavailable, err, "issuer discovery is busy, try again shortly")
+		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "load issuer document").LogError(ctx, h.logger)
 		}
 		cached, ok = loaded.(cachedDocument)

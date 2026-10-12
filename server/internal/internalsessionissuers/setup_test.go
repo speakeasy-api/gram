@@ -8,11 +8,13 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
@@ -105,6 +107,12 @@ func (f failingFeatures) IsFeatureEnabledUncached(ctx context.Context, organizat
 // deployment passes provisioning=false.
 func newTestService(t *testing.T, provisioning bool) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestServiceWithMintStore(t, provisioning, false)
+}
+
+// newTestServiceWithMintStore can give the mint limiter a closed Redis client.
+func newTestServiceWithMintStore(t *testing.T, provisioning, mintStoreDown bool) (context.Context, *testInstance) {
+	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -139,7 +147,14 @@ func newTestService(t *testing.T, provisioning bool) (context.Context, *testInst
 	}
 	gate := internalsessionissuers.NewGate(conn, failingFeatures{Client: features, fail: providersFail}, failingFlags{InMemory: flags, fail: providersFail}, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := internalsessionissuers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, audit.NewLogger(), gate, manager, ratelimit.NewRedisStore(redisClient))
+	mintStore := ratelimit.NewRedisStore(redisClient)
+	if mintStoreDown {
+		// Nothing listens on port 1, so every limiter call fails.
+		down := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", DialTimeout: 100 * time.Millisecond, MaxRetries: -1})
+		t.Cleanup(func() { _ = down.Close() })
+		mintStore = ratelimit.NewRedisStore(down)
+	}
+	service := internalsessionissuers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, audit.NewLogger(), gate, manager, mintStore)
 	return ctx, &testInstance{service: service, conn: conn, features: features, flags: flags, orgID: orgID, providersFail: providersFail}
 }
 
