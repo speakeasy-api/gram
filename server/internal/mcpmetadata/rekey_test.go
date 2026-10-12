@@ -332,6 +332,16 @@ func TestExportMcpMetadata_ByMcpServerID(t *testing.T) {
 
 	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpServerID: new(uuid.NewString())})
 	requireOopsCode(t, err, oops.CodeNotFound)
+
+	freshID, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+		ID:         uuid.New(),
+		ProjectID:  toolset.ProjectID,
+		ToolsetID:  uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpServerID: new(freshID.String())})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestHeaderDisplayNames_PreferToolsetKeyedTwin(t *testing.T) {

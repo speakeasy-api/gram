@@ -758,10 +758,8 @@ func (s *Service) resolveExportToolset(ctx context.Context, projectID uuid.UUID,
 		return toolsets_repo.Toolset{}, nil, oops.E(oops.CodeNotFound, err, "MCP server not found")
 	case err != nil:
 		return toolsets_repo.Toolset{}, nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server").LogError(ctx, s.logger, attr.SlogMcpServerID(serverID.String()))
-	case server.Visibility == mcpservers.VisibilityDisabled:
-		return toolsets_repo.Toolset{}, nil, oops.E(oops.CodeNotFound, nil, "MCP server not found")
-	case !server.ToolsetID.Valid:
-		return toolsets_repo.Toolset{}, nil, oops.E(oops.CodeBadRequest, nil, "export supports toolset-backed MCP servers only")
+	case !isCanonicalWrapper(&server):
+		return toolsets_repo.Toolset{}, nil, oops.E(oops.CodeBadRequest, nil, "export supports canonical toolset-backed MCP servers only")
 	}
 	toolset, err := s.toolsetRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
 		ID:        server.ToolsetID.UUID,
@@ -773,10 +771,7 @@ func (s *Service) resolveExportToolset(ctx context.Context, projectID uuid.UUID,
 	case err != nil:
 		return toolsets_repo.Toolset{}, nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP server toolset").LogError(ctx, s.logger, attr.SlogMcpServerID(serverID.String()))
 	}
-	if server.ID == toolset.ID {
-		return toolset, []uuid.UUID{toolset.ID}, nil
-	}
-	return toolset, []uuid.UUID{server.ID, toolset.ID}, nil
+	return toolset, []uuid.UUID{toolset.ID}, nil
 }
 
 func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.Toolset) []*types.McpExportTool {
