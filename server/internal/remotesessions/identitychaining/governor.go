@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -21,15 +22,18 @@ import (
 // database alone. It never contacts a provider, retires a credential, or
 // acquires a token, so status surfaces can share one.
 type Governor struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	enc    *encryption.Client
-	now    func() time.Time
+	logger     *slog.Logger
+	db         *pgxpool.Pool
+	enc        *encryption.Client
+	delegation *remotesessions.DelegationService
+	now        func() time.Time
 }
 
-// NewGovernor builds a database-only governor; enc verifies stored credentials.
-func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client) *Governor {
-	return &Governor{logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, now: time.Now}
+// NewGovernor builds a database-only governor; enc verifies stored credentials
+// and delegation checks the human's retained delegation against the current
+// trusted registration.
+func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, delegation *remotesessions.DelegationService) *Governor {
+	return &Governor{logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, delegation: delegation, now: time.Now}
 }
 
 // Governs reports whether identity chaining owns the request's upstream: a
@@ -78,8 +82,9 @@ func (g *Governor) Configured(ctx context.Context, organizationID string, projec
 
 // HasUsableCredential reports whether a stored chained credential for req is
 // usable now under the current binding, trusted registration and the human's
-// latest sign-in, and still decrypts as the runtime requires. Faults read as
-// unusable.
+// latest sign-in, and still decrypts as the runtime requires. Like Acquire it
+// first checks the retained delegation, so a rotated trusted registration
+// reads as unusable. Faults read as unusable.
 func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 	if !req.complete() || req.UserID == "" {
 		return false
@@ -97,19 +102,14 @@ func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 		g.logger.WarnContext(ctx, "read identity chaining user session issuer", attr.SlogError(err))
 		return false
 	}
-	authorized, err := q.AuthorizeEMADelegation(ctx, repo.AuthorizeEMADelegationParams{
-		UserSessionIssuerID: req.UserSessionIssuerID,
-		OrganizationID:      conv.ToPGText(req.OrganizationID),
-		TrustedIssuerID:     issuer.TrustedRemoteSessionIssuerID,
-		TrustedClientID:     issuer.TrustedRemoteSessionClientID,
-		ProjectID:           req.ProjectID,
-		UserID:              req.UserID,
-	})
-	if err != nil {
-		g.logger.WarnContext(ctx, "authorize identity chaining delegation", attr.SlogError(err))
+	if g.delegation == nil {
 		return false
 	}
-	if !authorized {
+	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: issuer.TrustedRemoteSessionIssuerID.UUID, ClientID: issuer.TrustedRemoteSessionClientID.UUID, HumanID: req.UserID}
+	if err := g.delegation.Check(ctx, binding, authority{db: g.db, req: req}); err != nil {
+		if errors.Is(err, remotesessions.ErrDelegationTemporary) {
+			g.logger.WarnContext(ctx, "check identity chaining delegation", attr.SlogError(err))
+		}
 		return false
 	}
 	sel.trustedClientID = issuer.TrustedRemoteSessionClientID.UUID

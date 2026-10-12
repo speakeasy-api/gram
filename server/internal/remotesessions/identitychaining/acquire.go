@@ -25,7 +25,7 @@ import (
 func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, Outcome, bool) {
 	var none Token
 	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
-	assertion, err := c.delegation.Resolve(ctx, binding, authority{chainer: c, req: req})
+	assertion, err := c.delegation.Resolve(ctx, binding, authority{db: c.db, req: req})
 	switch {
 	case errors.Is(err, remotesessions.ErrDelegationReauthentication):
 		return none, newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false), false

@@ -317,17 +317,20 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 	if remoteSessionIssuerID == uuid.Nil || resource == "" {
 		return out, callback, nil
 	}
-	results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, remoteSessionIssuerID, resource)
+	req, routable := identitychaining.NewUpstreamRequest(organizationID, projectID, userIssuerID, resource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID)
+	scope := uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true}
+	if routable {
+		scope = req.RemoteSessionIssuerID
+	}
+	results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, resource)
 	if err != nil {
 		return out, nil, fmt.Errorf("inspect XAA readiness identity chaining: %w", err)
 	}
 	for _, r := range results {
 		out.Bindings = append(out.Bindings, XAAIdentityChainingBinding{State: r.State, Stage: r.Stage, Remediation: r.Remediation, Retryable: r.Retryable, GrantSource: r.GrantSource, RequestedScopes: append([]string{}, identitychaining.GrantScopes(r.Scopes)...), ConfiguredScopes: append([]string{}, r.Scopes...)})
 	}
-	if i.governor != nil {
-		if req, ok := identitychaining.NewUpstreamRequest(organizationID, projectID, userIssuerID, resource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID); ok {
-			_, out.Served = i.governor.Serves(ctx, req)
-		}
+	if i.governor != nil && routable {
+		_, out.Served = i.governor.Serves(ctx, req)
 	}
 	return out, callback, nil
 }

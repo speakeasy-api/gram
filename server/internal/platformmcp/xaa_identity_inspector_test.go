@@ -26,6 +26,7 @@ type xaaInspectorFixture struct {
 	issuerA        uuid.UUID
 	issuerB        uuid.UUID
 	trustedClient  uuid.UUID
+	userIssuer     uuid.UUID
 }
 
 // seedXAAInspectorFixture builds a direct remote server stamped with issuer A,
@@ -76,7 +77,29 @@ func seedXAAInspectorFixture(t *testing.T, ctx context.Context, conn *pgxpool.Po
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stamped)
-	return xaaInspectorFixture{organizationID: org, projectID: project.ID, serverID: server.ID, issuerA: issuerA, issuerB: issuerB, trustedClient: trusted.ID}
+	return xaaInspectorFixture{organizationID: org, projectID: project.ID, serverID: server.ID, issuerA: issuerA, issuerB: issuerB, trustedClient: trusted.ID, userIssuer: usi.ID}
+}
+
+// bindXAAInspectorUpstream records a ready binding of the fixture's upstream
+// under issuer.
+func bindXAAInspectorUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f xaaInspectorFixture, issuer uuid.UUID) {
+	t.Helper()
+	q := remotesessionsrepo.New(conn)
+	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		OrganizationID: conv.ToPGText(f.organizationID), ProjectID: conv.ToNullUUID(f.projectID), RemoteSessionIssuerID: issuer, ClientID: "resource-" + uuid.NewString()[:8],
+		ClientIDIssuedAt: conv.ToPGTimestamptz(time.Now().UTC()), TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{},
+	})
+	require.NoError(t, err)
+	key := remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: issuer, Resource: "https://upstream.example.test/mcp"}
+	require.NoError(t, q.EnsureEMABinding(ctx, remotesessionsrepo.EnsureEMABindingParams(key)))
+	current, err := q.GetEMABinding(ctx, key)
+	require.NoError(t, err)
+	_, err = q.SetEMABinding(ctx, remotesessionsrepo.SetEMABindingParams{
+		State: conv.ToPGText(remotesessions.PreparationStateReady), RemoteSessionClientID: uuid.NullUUID{UUID: client.ID, Valid: true},
+		Generation: current.Generation + 1, GrantSource: conv.ToPGText(remotesessions.PreparationGrantSourceAdministratorDeclared),
+		RequestedScopes: []string{"read"}, ID: current.ID, ProjectID: f.projectID, OrganizationID: f.organizationID, ExpectedGeneration: current.Generation,
+	})
+	require.NoError(t, err)
 }
 
 func TestXAAIdentityInspectorServedSelectsDirectUpstreamAcrossIssuers(t *testing.T) {
@@ -85,6 +108,7 @@ func TestXAAIdentityInspectorServedSelectsDirectUpstreamAcrossIssuers(t *testing
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_inspector_served")
 	require.NoError(t, err)
 	f := seedXAAInspectorFixture(t, ctx, conn, pgtype.Text{})
+	bindXAAInspectorUpstream(t, ctx, conn, f, f.issuerB)
 
 	governor := &recordingGovernor{issuer: f.issuerB, serves: true}
 	inspector := &postgresXAAIdentityInspector{db: conn, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
@@ -96,6 +120,12 @@ func TestXAAIdentityInspectorServedSelectsDirectUpstreamAcrossIssuers(t *testing
 	req := governor.recorded()[0]
 	require.False(t, req.RemoteSessionIssuerID.Valid, "a direct upstream selects by resource across issuers, as the runtime does")
 	require.Equal(t, "https://upstream.example.test/mcp", req.UpstreamResource)
+	require.Len(t, chaining.Bindings, 1, "the binding that serves the upstream is reported even under another issuer")
+
+	bindXAAInspectorUpstream(t, ctx, conn, f, f.issuerA)
+	chaining, _, err = inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
+	require.NoError(t, err)
+	require.Len(t, chaining.Bindings, 2, "both issuers' bindings are reported so the ambiguity is visible")
 }
 
 func TestXAAIdentityInspectorCallbackUsesRecordedOrigin(t *testing.T) {

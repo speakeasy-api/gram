@@ -57,7 +57,7 @@ func ReadIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, projec
 // InspectIdentityChainingForTenant reports every live binding naming one
 // upstream, each as the preparation API reports it, for a tenant the caller
 // already authorized. It never mutates or contacts a provider.
-func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, project uuid.UUID, org string, userSessionIssuerID, remoteSessionIssuerID uuid.UUID, upstream string) ([]*PreparationResult, error) {
+func InspectIdentityChainingForTenant(ctx context.Context, db *pgxpool.Pool, project uuid.UUID, org string, userSessionIssuerID uuid.UUID, remoteSessionIssuerID uuid.NullUUID, upstream string) ([]*PreparationResult, error) {
 	tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return nil, fmt.Errorf("begin identity chaining snapshot: %w", err)

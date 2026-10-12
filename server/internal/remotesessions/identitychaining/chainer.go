@@ -81,7 +81,6 @@ const (
 type Chainer struct {
 	Governor
 	challenges *remotesessions.ChallengeManager
-	delegation *remotesessions.DelegationService
 	keys       *jwks.KeyResolver
 	locks      cache.Cache
 	observerMu sync.RWMutex
@@ -93,9 +92,8 @@ type Chainer struct {
 // locks serializes acquisition across processes and shares failures.
 func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, keys *jwks.KeyResolver, locks cache.Cache) *Chainer {
 	return &Chainer{
-		Governor:   *NewGovernor(logger, db, enc),
+		Governor:   *NewGovernor(logger, db, enc, delegation),
 		challenges: challenges,
-		delegation: delegation,
 		keys:       keys,
 		locks:      locks,
 		observerMu: sync.RWMutex{},
