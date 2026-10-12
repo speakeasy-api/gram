@@ -827,12 +827,19 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 	if err := policycore.ValidateMCPScope(currentPolicy.MCPScope, params.Sources, params.Action); err != nil {
 		return policycore.UpdateMutation{}, nil, &RiskMutationError{Code: "invalid_request", Message: err.Error(), Cause: ErrRiskMutationInvalid}
 	}
-	effectiveDisposition := valueOrEmpty(currentPolicy.ShadowMCPDisposition)
-	if effectiveDisposition != "" && shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, params.Sources, params.Action) == "" {
-		// A Platform patch cannot author or remove Shadow MCP URL decisions. Do
-		// not silently drop an effective blocking posture and orphan its URL grants,
-		// including legacy block_all policies with no stored disposition value.
-		return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
+	currentDisposition := shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, current.Sources, current.Action)
+	effectiveDisposition := shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, params.Sources, params.Action)
+	retiresBlockingPosture := currentDisposition != "" && effectiveDisposition == ""
+	// An allow_all policy is its blocked-server list, which enforces nothing
+	// outside the blocking posture; block_all only gives up its exceptions.
+	if retiresBlockingPosture && currentDisposition == shadowmcp.DispositionAllowAll {
+		return policycore.UpdateMutation{}, nil, &RiskMutationError{Code: "invalid_request", Message: risk.ShadowMCPRetiredAllowAllMessage(current.Sources, current.Action, params.Sources, params.Action), Cause: ErrRiskMutationInvalid}
+	}
+	// Retiring block_all retires its allowed-server grants with it. The empty
+	// slice is load-bearing: a nil desired set means "preserve" to the reconciler.
+	var allowedURLs []string
+	if retiresBlockingPosture {
+		allowedURLs = []string{}
 	}
 	if current.PolicyType == "standard" {
 		hasPresidio := slices.Contains(params.Sources, policycatalog.PresidioSource)
@@ -850,7 +857,7 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 	}
 	return policycore.UpdateMutation{
 		Current: current, Params: params, AudiencePrincipals: audiencePrincipals, AudienceChanged: audienceChanged, AudienceDelta: nil,
-		AllowedURLs: nil, AllowedURLsSet: false, BlockedURLs: nil, BlockedURLsSet: false,
+		AllowedURLs: allowedURLs, AllowedURLsSet: retiresBlockingPosture, BlockedURLs: nil, BlockedURLsSet: false,
 		EffectiveDisposition: effectiveDisposition,
 		SupersedeDecisions:   false,
 		ValidateLocked:       nil,

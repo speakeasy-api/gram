@@ -59,6 +59,7 @@ import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
 import {
+  BuiltInDashboardRoute,
   DashboardRoute,
   DashboardsIndex,
   DashboardsRoot,
@@ -852,6 +853,11 @@ const ROUTE_STRUCTURE = {
     indexComponent: DashboardsIndex,
     stage: "preview",
     subPages: {
+      builtIn: {
+        title: "Dashboard",
+        url: "builtin/:slug",
+        component: BuiltInDashboardRoute,
+      },
       detail: {
         title: "Dashboard",
         url: ":dashboardId",
