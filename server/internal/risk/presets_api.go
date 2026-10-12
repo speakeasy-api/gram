@@ -109,6 +109,11 @@ func nonNilStrings(values []string) []string {
 
 var suggestPolicyActions = []string{"flag", "warn", "block", "quarantine"}
 
+// suggestPolicyMaxTokens caps the suggestion completion. The schema bounds the
+// answer to a 4,000-character prompt plus short fields, about 1,200 tokens;
+// the rest is headroom for reasoning models.
+const suggestPolicyMaxTokens = 2048
+
 func (s *Service) suggestRiskPolicyViaLLM(ctx context.Context, orgID, projectID, userID, userEmail, userPrompt string, heuristic presets.Suggestion) (*gen.SuggestRiskPolicyResult, error) {
 	all := presets.All()
 	var catalog strings.Builder
@@ -175,7 +180,7 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		UserEmail:              userEmail,
 		HTTPMetadata:           nil,
 		JSONSchema:             &jsonSchema,
-		MaxTokens:              nil,
+		MaxTokens:              new(suggestPolicyMaxTokens),
 		Reasoning:              nil,
 		DisableResponseHealing: false,
 	})
@@ -217,21 +222,13 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		if instruction == "" {
 			instruction = userPrompt
 		}
-		bespoke := presets.Suggest(instruction)
 		suggestion = presets.Suggestion{
 			Preset:       nil,
-			Draft:        bespoke.Draft,
+			Draft:        presets.BespokeDraft(instruction),
 			Confidence:   0,
-			Rationale:    bespoke.Rationale,
+			Rationale:    presets.BespokeRationale,
 			Alternatives: heuristic.Alternatives,
 		}
-		suggestion.Draft.PresetID = ""
-		suggestion.Draft.PolicyType = presets.PolicyTypePromptBased
-		suggestion.Draft.Sources = nil
-		suggestion.Draft.PresidioEntities = nil
-		suggestion.Draft.Prompt = instruction
-		suggestion.Draft.Action = "flag"
-		suggestion.Draft.Score = 5
 	}
 
 	if name := strings.TrimSpace(parsed.Name); name != "" && policycore.ValidateName(name) == nil {

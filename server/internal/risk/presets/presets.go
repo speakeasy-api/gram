@@ -40,6 +40,11 @@ type Preset struct {
 	// Keywords drive the deterministic suggestion path. Multi-word entries
 	// weigh more than single words because they are less ambiguous.
 	Keywords []string
+
+	// StrongKeywords are single words distinctive enough to pick the preset
+	// on their own, such as "pii". They match whole words only, with an
+	// optional plural, so "secret" does not match "secretary".
+	StrongKeywords []string
 }
 
 var registry = []Preset{
@@ -56,6 +61,7 @@ var registry = []Preset{
 		UserMessage:                  "%{match} looks like a credential. Remove it from the request before continuing.",
 		RequiresApprovedEmailDomains: false,
 		Keywords:                     []string{"secret", "credential", "api key", "access key", "token", "password", "private key", "aws key", "leak"},
+		StrongKeywords:               []string{"secret", "credential", "password"},
 	},
 	{
 		ID:          "customer_pii_egress",
@@ -74,6 +80,7 @@ var registry = []Preset{
 		UserMessage:                  "",
 		RequiresApprovedEmailDomains: false,
 		Keywords:                     []string{"pii", "personal data", "personal information", "customer data", "personally identifiable", "email address", "phone number", "ssn", "social security", "credit card", "card number", "bank account", "passport", "national id", "gdpr", "privacy"},
+		StrongKeywords:               []string{"pii", "ssn", "gdpr"},
 	},
 	{
 		ID:               "destructive_production_actions",
@@ -91,6 +98,7 @@ var registry = []Preset{
 		UserMessage:                  "This looks like a destructive change to a production system. Confirm the target is not production, or ask an administrator to run it.",
 		RequiresApprovedEmailDomains: false,
 		Keywords:                     []string{"destructive", "delete", "deleting", "drop table", "drop database", "truncate", "production", "rm -rf", "force push", "force-push", "irreversible", "wipe", "terminate"},
+		StrongKeywords:               nil,
 	},
 	{
 		ID:                           "unapproved_mcp_servers",
@@ -105,6 +113,7 @@ var registry = []Preset{
 		UserMessage:                  "",
 		RequiresApprovedEmailDomains: false,
 		Keywords:                     []string{"shadow mcp", "shadow", "unapproved", "unknown mcp", "unsanctioned", "third-party mcp", "third party mcp", "allowlist", "allow list", "mcp server", "mcp servers"},
+		StrongKeywords:               nil,
 	},
 	{
 		ID:                           "non_corporate_accounts",
@@ -119,6 +128,7 @@ var registry = []Preset{
 		UserMessage:                  "",
 		RequiresApprovedEmailDomains: true,
 		Keywords:                     []string{"personal account", "non-corporate", "non corporate", "corporate account", "email domain", "gmail", "gmail account", "personal email", "byo", "company account", "work account"},
+		StrongKeywords:               nil,
 	},
 	{
 		ID:                           "prompt_injection",
@@ -133,6 +143,7 @@ var registry = []Preset{
 		UserMessage:                  "",
 		RequiresApprovedEmailDomains: false,
 		Keywords:                     []string{"prompt injection", "injection", "jailbreak", "hidden instruction", "instruction override", "ignore previous", "untrusted content", "untrusted input"},
+		StrongKeywords:               []string{"jailbreak"},
 	},
 }
 
@@ -169,6 +180,7 @@ func (p Preset) clone() Preset {
 	p.Sources = slices.Clone(p.Sources)
 	p.PresidioEntities = slices.Clone(p.PresidioEntities)
 	p.Keywords = slices.Clone(p.Keywords)
+	p.StrongKeywords = slices.Clone(p.StrongKeywords)
 	return p
 }
 
@@ -233,12 +245,12 @@ const minPresetSignal = 2.0
 // unavailable and the whole path for the Platform MCP, whose caller is itself
 // a model that only needs the catalog explained.
 func Suggest(description string) Suggestion {
-	normalized := " " + strings.ToLower(strings.Join(strings.Fields(description), " ")) + " "
+	normalized := normalizeDescription(description)
 	matches := make([]Match, 0, len(registry))
 	for _, preset := range registry {
 		score := 0.0
 		for _, keyword := range preset.Keywords {
-			if !strings.Contains(normalized, " "+strings.ToLower(strings.TrimSpace(keyword))) {
+			if !strings.Contains(normalized, " "+normalizeKeyword(keyword)) {
 				continue
 			}
 			weight := 1.0
@@ -246,6 +258,11 @@ func Suggest(description string) Suggestion {
 				weight = 2
 			}
 			score += weight
+		}
+		for _, keyword := range preset.StrongKeywords {
+			if containsWord(normalized, normalizeKeyword(keyword)) {
+				score += minPresetSignal
+			}
 		}
 		if score < minPresetSignal {
 			continue
@@ -262,9 +279,9 @@ func Suggest(description string) Suggestion {
 	if len(matches) == 0 {
 		return Suggestion{
 			Preset:       nil,
-			Draft:        bespokeDraft(description),
+			Draft:        BespokeDraft(description),
 			Confidence:   0,
-			Rationale:    "No preset matched the description, so it becomes the instruction for a prompt-based guardrail judged by the policy model.",
+			Rationale:    BespokeRationale,
 			Alternatives: nil,
 		}
 	}
@@ -279,7 +296,40 @@ func Suggest(description string) Suggestion {
 	}
 }
 
-func bespokeDraft(description string) Draft {
+// BespokeRationale explains a draft that no preset covers.
+const BespokeRationale = "No preset matched the description, so it becomes the instruction for a prompt-based guardrail judged by the policy model."
+
+// normalizeDescription lowercases a description and turns punctuation into
+// spaces, so a quoted or bracketed word still starts after a space. Hyphens
+// stay, since keywords such as "rm -rf" and "force-push" carry them.
+func normalizeDescription(description string) string {
+	mapped := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' {
+			return unicode.ToLower(r)
+		}
+		return ' '
+	}, description)
+	return " " + strings.Join(strings.Fields(mapped), " ") + " "
+}
+
+func normalizeKeyword(keyword string) string {
+	return strings.ToLower(strings.TrimSpace(keyword))
+}
+
+// containsWord reports whether word, or its plural, appears as a whole word
+// in a normalized description.
+func containsWord(normalized, word string) bool {
+	for _, form := range []string{word, word + "s", word + "es"} {
+		if strings.Contains(normalized, " "+form+" ") {
+			return true
+		}
+	}
+	return false
+}
+
+// BespokeDraft is the prompt-based draft a description becomes when no
+// preset covers it: the description is the judge instruction.
+func BespokeDraft(description string) Draft {
 	instruction := strings.TrimSpace(description)
 	return Draft{
 		PresetID:         "",

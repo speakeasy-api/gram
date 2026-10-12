@@ -123,6 +123,37 @@ func TestSuggestMapsDescriptionsToPresets(t *testing.T) {
 	}
 }
 
+func TestSuggestMatchesShortDescriptions(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		description string
+		preset      string
+	}{
+		{"block secrets", "secrets_and_credentials"},
+		{"block passwords", "secrets_and_credentials"},
+		{`Block "secrets" in prompts`, "secrets_and_credentials"},
+		{"flag PII", "customer_pii_egress"},
+		{"(PII) in tool results", "customer_pii_egress"},
+		{"flag SSNs", "customer_pii_egress"},
+		{"detect jailbreaks", "prompt_injection"},
+	} {
+		t.Run(test.description, func(t *testing.T) {
+			t.Parallel()
+			suggestion := presets.Suggest(test.description)
+			require.NotNil(t, suggestion.Preset)
+			require.Equal(t, test.preset, suggestion.Preset.ID)
+		})
+	}
+}
+
+func TestSuggestMatchesStrongKeywordsAsWholeWords(t *testing.T) {
+	t.Parallel()
+
+	suggestion := presets.Suggest("warn about my secretary's calendar")
+	require.Nil(t, suggestion.Preset)
+}
+
 func TestSuggestIgnoresASingleGenericKeyword(t *testing.T) {
 	t.Parallel()
 

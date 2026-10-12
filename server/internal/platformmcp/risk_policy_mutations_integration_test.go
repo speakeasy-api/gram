@@ -493,6 +493,7 @@ func TestRiskPolicyCreateAcceptsMCPScope(t *testing.T) {
 		"no servers selected":               {map[string]any{"mcp_scope": map[string]any{"tool_annotations": []string{"destructiveHint"}}}, "at least one server"},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			_, _, err := handlers.CreatePolicy(ctx, nil, scoped("rejected-"+name, tc.overrides))
 			var refusal *ToolRefusalError
 			require.ErrorAs(t, err, &refusal)

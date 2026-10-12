@@ -497,7 +497,7 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	normalized := normalizedCreateRiskPolicy{
 		ProjectSlug: project.Slug, PolicyType: input.PolicyType, Name: input.Name, Enabled: enabled,
 		Action: action, Score: score, UserMessage: input.UserMessage,
-		Sources: []string{}, PresidioEntities: []string{}, PresidioScoreThreshold: nil, PromptInjectionRules: []string{}, DisabledRules: []string{}, ApprovedEmailDomains: []string{}, DetectionScopes: []riskDetectionScope{}, PromptDigest: "",
+		Sources: []string{}, PresidioEntities: []string{}, PresidioScoreThreshold: nil, PromptInjectionRules: []string{}, DisabledRules: []string{}, ApprovedEmailDomains: []string{}, DetectionScopes: []riskDetectionScope{}, PromptDigest: "", MCPScope: nil,
 	}
 	params := riskrepo.CreateRiskPolicyParams{
 		ID: uuid.Nil, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: input.Name,
