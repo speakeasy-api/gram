@@ -77,9 +77,9 @@ Candidates are walked in toolset id order; `-cursor` and `-limit` count toolsets
 
 A rerun after a full apply scans only the rows left behind (`orphaned`, `blocked_*`) and writes nothing, provided no toolset-keyed writer is still live (see below).
 
-### Precondition: AIM-16 deployed
+### Precondition: AIM-16 phases A and B deployed
 
-`-move-dependents -apply` refuses to run without `-readers-cut-over` and `-report`. The flag is the operator's confirmation; the command cannot see what is deployed. AIM-16 must cut over both the readers and the toolset-keyed writers, and it cannot be rolled back once a move has been applied.
+`-move-dependents -apply` refuses to run without `-readers-cut-over` and `-report`. The flag is the operator's confirmation that AIM-16 phase A (dual-key readers) and phase B (writers switched to the server key) are both fully deployed; the command cannot see what is deployed. Phase A keeps writing today's toolset-keyed shape so old pods stay compatible, and phase B flips the writers later, so the move must run after phase B to settle at `writes: 0`. AIM-16 cannot be rolled back once a move has been applied.
 
 On main before AIM-16 these readers find only toolset-keyed rows, so a moved row would disappear from them:
 
@@ -87,13 +87,13 @@ On main before AIM-16 these readers find only toolset-keyed rows, so a moved row
 - Plugins: generated packages lose a moved member's user-header environment configs (`ListPluginEnvironmentConfigsForProject`) and drop it when the wrapper has no usable endpoint; the compatibility reason codes switch to the server set; Platform MCP plugin servers report it as an `mcp_server` backend; the dashboard's plugin banner and plugin detail page match hosted members by `toolsetId` only.
 - Assistants: the runtime id changes from the toolset slug to the wrapper slug, and a custom-domain-only toolset is skipped.
 
-These writers create a toolset-keyed twin after a move, which the next run reports as `blocked_twin`, so AIM-16 must cut them over too: `setMcpMetadata` by `toolset_slug`, toolset MCP re-enable attaching to the default plugin, and assistant updates that send the toolset slug.
+These writers create a toolset-keyed twin after a move, which the next run reports as `blocked_twin`, so AIM-16 phase B must switch them to the server key: `setMcpMetadata` by `toolset_slug`, toolset MCP re-enable attaching to the default plugin, and assistant updates that send the toolset slug.
 
 Unaffected or already server-keyed: plugin membership probes, role delivery, Platform MCP server identities, toolset delete (the wrapper tombstone removes moved rows), and `mcp_server_id` metadata reads. Platform MCP inventory and connection settings start listing moved members. A wrapper rename now reaches a moved member's auto-derived display name through `SyncMcpServerDisplayName`.
 
 ### Run book
 
-1. After AIM-16 deploys: dev dry run with `-move-dependents -report`; dev `-apply -readers-cut-over -report`.
+1. After AIM-16 phases A and B are both fully deployed: dev dry run with `-move-dependents -report`; dev `-apply -readers-cut-over -report`.
 2. Prod dry run; review every `blocked_*` and `orphaned` row.
 3. Prod canary: `-apply -readers-cut-over -report -project <PROJECT_ID>`.
 4. Prod in batches with `-limit N`, resuming each batch with `-cursor` from the previous `last_cursor`; stuck toolsets stay listed, so restarting without a cursor repeats them.

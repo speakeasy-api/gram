@@ -48,7 +48,7 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	limit := fs.Int("limit", 0, "max toolsets to process; 0 means all")
 	reportPath := fs.String("report", "", "per-row JSON report path")
 	moveDependents := fs.Bool("move-dependents", false, "re-key toolset-keyed mcp_metadata, plugin_servers and assistant_toolsets onto the canonical wrapper")
-	readersCutOver := fs.Bool("readers-cut-over", false, "confirm AIM-16 (readers and toolset-keyed writers cut over) is deployed; required for -move-dependents -apply")
+	readersCutOver := fs.Bool("readers-cut-over", false, "confirm AIM-16 phase A (dual-key readers) and phase B (writers switched to the server key) are both fully deployed; required for -move-dependents -apply")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return hostedMCPWrappersConfig{}, fmt.Errorf("parse flags: %w", err)
@@ -63,7 +63,7 @@ func parseHostedMCPWrappersFlags(args []string, getenv func(string) string, help
 	}
 	// Readers on main before AIM-16 only find toolset-keyed rows, so a moved row would vanish from them.
 	if *moveDependents && *apply && !*readersCutOver {
-		return hostedMCPWrappersConfig{}, errors.New("-move-dependents -apply requires -readers-cut-over: deploy the AIM-16 read cutover first")
+		return hostedMCPWrappersConfig{}, errors.New("-move-dependents -apply requires -readers-cut-over: deploy AIM-16 phases A and B first")
 	}
 	// The report is the only exact list of moved rows, which a rollback needs.
 	if *moveDependents && *apply && *reportPath == "" {
