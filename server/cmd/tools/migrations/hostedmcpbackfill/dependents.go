@@ -222,6 +222,12 @@ func (r *Runner) moveOne(ctx context.Context, toolsetID uuid.UUID, dep ListTools
 	if err := q.LockToolsetBackfill(ctx, toolsetID.String()); err != nil {
 		return row, fmt.Errorf("advisory lock: %w", err)
 	}
+	// Admission before the toolset row (UpdateToolset order); it also fences distribute inserts.
+	if dep.TableName == tablePluginServers {
+		if err := admission.LockProject(ctx, tx, dep.ProjectID); err != nil {
+			return row, fmt.Errorf("lock project distribution admission: %w", err)
+		}
+	}
 	toolset, err := q.LockDependentToolset(ctx, LockDependentToolsetParams{ID: toolsetID, ProjectID: dep.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -411,10 +417,6 @@ func metadataSnapshot(record McpMetadatum, configs []McpEnvironmentConfig) (*typ
 
 // movePluginServer re-keys in place, so platform distributions referencing the member keep it.
 func (r *Runner) movePluginServer(ctx context.Context, tx pgx.Tx, m *dependentMove) (Outcome, string, error) {
-	// Distribute inserts under this lock, so the twin distribution check cannot race it.
-	if err := admission.LockProject(ctx, tx, m.toolset.ProjectID); err != nil {
-		return "", "", fmt.Errorf("lock project distribution admission: %w", err)
-	}
 	q := New(tx)
 	member, err := q.LockToolsetKeyedPluginServer(ctx, LockToolsetKeyedPluginServerParams{ID: m.rowID, ProjectID: m.toolset.ProjectID, ToolsetID: uuid.NullUUID{UUID: m.toolset.ID, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {
