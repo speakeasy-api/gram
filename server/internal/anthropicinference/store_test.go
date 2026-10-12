@@ -59,6 +59,16 @@ func TestStoreRejectsCrossOrganizationProject(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestStoreRecordsTheAssertedSessionID(t *testing.T) {
+	t.Parallel()
+	store, db, config := newTestStore(t)
+	frame := exampleFrame()
+	saveFrame(t, store, config, frame, "")
+	conversation, err := chatrepo.New(db).GetChat(t.Context(), chatrepo.GetChatParams{ID: conversationID(config, frame), ProjectID: config.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, frame.SessionID, conversation.InferenceSessionID.String)
+}
+
 func TestConversationIdentitySeparatesActorsAndProjects(t *testing.T) {
 	t.Parallel()
 	config := Config{ID: "example", OrganizationID: "org_example", ProjectID: uuid.New(), TenantID: "tenant-example", SigningSecrets: nil}

@@ -476,12 +476,13 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 		OrganizationID: src.cfg.OrganizationID,
 		// NULL when unresolved so the upsert's COALESCE preserves a user
 		// resolved by an earlier event.
-		UserID:         conv.ToPGTextEmpty(userID),
-		ExternalUserID: conv.ToPGTextEmpty(state.latest.Actor.UserID),
-		ExternalChatID: conv.ToPGText(conversationID),
-		Title:          conv.ToPGTextEmpty(state.title),
-		CreatedAt:      conv.ToPGTimestamptz(createdAt),
-		UpdatedAt:      conv.ToPGTimestamptz(createdAt),
+		UserID:             conv.ToPGTextEmpty(userID),
+		ExternalUserID:     conv.ToPGTextEmpty(state.latest.Actor.UserID),
+		ExternalChatID:     conv.ToPGText(conversationID),
+		InferenceSessionID: conv.ToPGTextEmpty(""),
+		Title:              conv.ToPGTextEmpty(state.title),
+		CreatedAt:          conv.ToPGTimestamptz(createdAt),
+		UpdatedAt:          conv.ToPGTimestamptz(createdAt),
 		// Feed titles are authoritative: newest non-null title wins.
 		PreferStoredTitle: false,
 	})

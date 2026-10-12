@@ -564,9 +564,10 @@ func (s *ComplianceImportService) upsertDiscoveredChat(ctx context.Context, cfg 
 		OrganizationID: cfg.OrganizationID,
 		// NULL when unresolved so the upsert's COALESCE preserves a user
 		// resolved by an earlier discovery or the message-page enrichment.
-		UserID:         conv.ToPGTextEmpty(userID),
-		ExternalUserID: conv.ToPGTextEmpty(found.externalUserID),
-		ExternalChatID: conv.ToPGText(found.externalChatID),
+		UserID:             conv.ToPGTextEmpty(userID),
+		ExternalUserID:     conv.ToPGTextEmpty(found.externalUserID),
+		ExternalChatID:     conv.ToPGText(found.externalChatID),
+		InferenceSessionID: conv.ToPGTextEmpty(""),
 		// NULL when the discovery carried no title so the upsert's COALESCE
 		// keeps the title set from the chat's first message page.
 		Title:     conv.ToPGTextEmpty(found.title),
@@ -713,12 +714,13 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 		OrganizationID: cfg.OrganizationID,
 		// NULL when unresolved so the upsert's COALESCE preserves a user
 		// resolved from a prior sync.
-		UserID:         conv.ToPGTextEmpty(userID),
-		ExternalUserID: conv.ToPGTextEmpty(page.User.ID),
-		ExternalChatID: conv.ToPGText(page.ID),
-		Title:          conv.ToPGText(conv.StripNUL(page.Name)),
-		CreatedAt:      conv.ToPGTimestamptz(createdAt),
-		UpdatedAt:      conv.ToPGTimestamptz(updatedAt),
+		UserID:             conv.ToPGTextEmpty(userID),
+		ExternalUserID:     conv.ToPGTextEmpty(page.User.ID),
+		ExternalChatID:     conv.ToPGText(page.ID),
+		InferenceSessionID: conv.ToPGTextEmpty(""),
+		Title:              conv.ToPGText(conv.StripNUL(page.Name)),
+		CreatedAt:          conv.ToPGTimestamptz(createdAt),
+		UpdatedAt:          conv.ToPGTimestamptz(updatedAt),
 		// Feed titles are authoritative: newest non-null title wins.
 		PreferStoredTitle: false,
 	})

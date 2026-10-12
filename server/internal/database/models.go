@@ -561,6 +561,7 @@ type Chat struct {
 	SummaryGeneratedAt          pgtype.Timestamptz
 	InferenceAcceptedCheckpoint []byte
 	InferenceActorKey           []byte
+	InferenceSessionID          pgtype.Text
 	UserAccountID               uuid.NullUUID
 	LitellmProxied              bool
 	Cwd                         pgtype.Text

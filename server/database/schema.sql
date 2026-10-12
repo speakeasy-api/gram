@@ -3813,6 +3813,10 @@ CREATE TABLE IF NOT EXISTS chats (
   -- Lets a transcript delivered without a session id be adopted by the chat
   -- that already holds its prefix, scoped to the same actor.
   inference_actor_key bytea,
+  -- Raw agent session id the Anthropic inference hook asserted (the frame's
+  -- top-level session_id). Client-asserted, so it is a join key for analytics
+  -- only; chat identity stays on external_chat_id.
+  inference_session_id TEXT,
 
   -- Personal-account tracking: the external AI account (user_accounts row) this
   -- session belongs to. Join to user_accounts for provider, account_type

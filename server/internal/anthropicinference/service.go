@@ -394,16 +394,17 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	}
 	externalChatID := "anthropic-inference:" + candidateID.String()
 	conversation, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
-		ID:                candidateID,
-		ProjectID:         config.ProjectID,
-		OrganizationID:    config.OrganizationID,
-		UserID:            conv.ToPGTextEmpty(userID),
-		ExternalUserID:    conv.ToPGTextEmpty(externalUserIDLabel),
-		ExternalChatID:    conv.ToPGText(externalChatID),
-		Title:             conv.ToPGText(chat.DefaultInferenceChatTitle),
-		CreatedAt:         conv.ToPGTimestamptz(now),
-		UpdatedAt:         conv.ToPGTimestamptz(now),
-		PreferStoredTitle: true,
+		ID:                 candidateID,
+		ProjectID:          config.ProjectID,
+		OrganizationID:     config.OrganizationID,
+		UserID:             conv.ToPGTextEmpty(userID),
+		ExternalUserID:     conv.ToPGTextEmpty(externalUserIDLabel),
+		ExternalChatID:     conv.ToPGText(externalChatID),
+		InferenceSessionID: conv.ToPGTextEmpty(frame.SessionID),
+		Title:              conv.ToPGText(chat.DefaultInferenceChatTitle),
+		CreatedAt:          conv.ToPGTimestamptz(now),
+		UpdatedAt:          conv.ToPGTimestamptz(now),
+		PreferStoredTitle:  true,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("upsert inference conversation: %w", err)

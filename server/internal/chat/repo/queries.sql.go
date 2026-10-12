@@ -865,7 +865,7 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 }
 
 const getChat = `-- name: GetChat :one
-SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
+SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.inference_session_id, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
   a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
   coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
     WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
@@ -901,6 +901,7 @@ type GetChatRow struct {
 	SummaryGeneratedAt          pgtype.Timestamptz
 	InferenceAcceptedCheckpoint []byte
 	InferenceActorKey           []byte
+	InferenceSessionID          pgtype.Text
 	UserAccountID               uuid.NullUUID
 	LitellmProxied              bool
 	Cwd                         pgtype.Text
@@ -941,6 +942,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.SummaryGeneratedAt,
 		&i.InferenceAcceptedCheckpoint,
 		&i.InferenceActorKey,
+		&i.InferenceSessionID,
 		&i.UserAccountID,
 		&i.LitellmProxied,
 		&i.Cwd,
@@ -4967,6 +4969,7 @@ INSERT INTO chats (
   , user_id
   , external_user_id
   , external_chat_id
+  , inference_session_id
   , title
   , created_at
   , updated_at
@@ -4981,12 +4984,14 @@ VALUES (
   , $7
   , $8
   , $9
+  , $10
 )
 ON CONFLICT (organization_id, external_chat_id) WHERE external_chat_id IS NOT NULL
 DO UPDATE SET
     project_id = EXCLUDED.project_id
   , user_id = COALESCE(EXCLUDED.user_id, chats.user_id)
   , external_user_id = COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
+  , inference_session_id = COALESCE(EXCLUDED.inference_session_id, chats.inference_session_id)
   -- Two title regimes share this upsert. Feeds with authoritative titles
   -- (ChatGPT conversations, Anthropic compliance) are newest-wins: a non-null
   -- incoming title refreshes the row. Feeds whose titles are DERIVED from
@@ -4994,7 +4999,7 @@ DO UPDATE SET
   -- (@prefer_stored_title): a later poll window derives a mid-session prompt
   -- as its "first", and newest-wins would retitle the chat on every window.
   , title = CASE
-      WHEN $10::bool THEN COALESCE(chats.title, EXCLUDED.title)
+      WHEN $11::bool THEN COALESCE(chats.title, EXCLUDED.title)
       ELSE COALESCE(EXCLUDED.title, chats.title)
     END
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
@@ -5002,16 +5007,17 @@ RETURNING id, title
 `
 
 type UpsertExternalChatParams struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	OrganizationID    string
-	UserID            pgtype.Text
-	ExternalUserID    pgtype.Text
-	ExternalChatID    pgtype.Text
-	Title             pgtype.Text
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	PreferStoredTitle bool
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	OrganizationID     string
+	UserID             pgtype.Text
+	ExternalUserID     pgtype.Text
+	ExternalChatID     pgtype.Text
+	InferenceSessionID pgtype.Text
+	Title              pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	PreferStoredTitle  bool
 }
 
 type UpsertExternalChatRow struct {
@@ -5027,6 +5033,7 @@ func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChat
 		arg.UserID,
 		arg.ExternalUserID,
 		arg.ExternalChatID,
+		arg.InferenceSessionID,
 		arg.Title,
 		arg.CreatedAt,
 		arg.UpdatedAt,

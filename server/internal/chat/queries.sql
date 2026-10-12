@@ -108,6 +108,7 @@ INSERT INTO chats (
   , user_id
   , external_user_id
   , external_chat_id
+  , inference_session_id
   , title
   , created_at
   , updated_at
@@ -119,6 +120,7 @@ VALUES (
   , @user_id
   , @external_user_id
   , @external_chat_id
+  , @inference_session_id
   , @title
   , @created_at
   , @updated_at
@@ -128,6 +130,7 @@ DO UPDATE SET
     project_id = EXCLUDED.project_id
   , user_id = COALESCE(EXCLUDED.user_id, chats.user_id)
   , external_user_id = COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
+  , inference_session_id = COALESCE(EXCLUDED.inference_session_id, chats.inference_session_id)
   -- Two title regimes share this upsert. Feeds with authoritative titles
   -- (ChatGPT conversations, Anthropic compliance) are newest-wins: a non-null
   -- incoming title refreshes the row. Feeds whose titles are DERIVED from

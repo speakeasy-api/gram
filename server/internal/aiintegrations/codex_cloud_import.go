@@ -550,12 +550,13 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID st
 		OrganizationID: src.cfg.OrganizationID,
 		// NULL when unresolved so the upsert's COALESCE preserves a user
 		// resolved by an earlier event.
-		UserID:         conv.ToPGTextEmpty(userID),
-		ExternalUserID: conv.ToPGTextEmpty(state.latest.Actor.UserID),
-		ExternalChatID: conv.ToPGText(sessionID),
-		Title:          conv.ToPGTextEmpty(title),
-		CreatedAt:      conv.ToPGTimestamptz(createdAt),
-		UpdatedAt:      conv.ToPGTimestamptz(createdAt),
+		UserID:             conv.ToPGTextEmpty(userID),
+		ExternalUserID:     conv.ToPGTextEmpty(state.latest.Actor.UserID),
+		ExternalChatID:     conv.ToPGText(sessionID),
+		InferenceSessionID: conv.ToPGTextEmpty(""),
+		Title:              conv.ToPGTextEmpty(title),
+		CreatedAt:          conv.ToPGTimestamptz(createdAt),
+		UpdatedAt:          conv.ToPGTimestamptz(createdAt),
 		// First-wins: the title is DERIVED from the window's first prompt, and
 		// a later poll window would derive a mid-session prompt as its
 		// "first" — newest-wins would retitle the chat on every window.
