@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -217,6 +218,13 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 		if previous.UserSessionIssuerID != toolset.UserSessionIssuerID {
 			if err := resyncIssuers(ctx, tx, toolset, previous.UserSessionIssuerID, toolset.UserSessionIssuerID); err != nil {
 				return nil, err
+			}
+		}
+		if oldName := displayName(previous); oldName != toolset.Name {
+			if _, err := pluginsrepo.New(tx).SyncMcpServerDisplayName(ctx, pluginsrepo.SyncMcpServerDisplayNameParams{
+				NewDisplayName: toolset.Name, ProjectID: toolset.ProjectID, McpServerID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, OldDisplayName: oldName,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "sync hosted MCP plugin display name")
 			}
 		}
 	}
@@ -427,6 +435,18 @@ func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider,
 		RootDomainIDs:       tombstone.RootDomainIDs(locked.RootEndpoints),
 		DeletedRiskPolicies: tombstoned.DeletedRiskPolicies,
 	}, nil
+}
+
+// displayName mirrors mcpservers.ServerDisplayName, the default plugin entry name.
+func displayName(server mcpserversrepo.McpServer) string {
+	switch {
+	case server.Name.Valid && server.Name.String != "":
+		return server.Name.String
+	case server.Slug.Valid && server.Slug.String != "":
+		return server.Slug.String
+	default:
+		return server.ID.String()
+	}
 }
 
 func isRoot(endpoint mcpendpointsrepo.McpEndpoint) bool {

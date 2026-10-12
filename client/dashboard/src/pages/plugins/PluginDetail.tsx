@@ -561,9 +561,11 @@ function PluginDetailContent({
     rolesData?.roles ?? [],
   );
 
-  // Exclude servers already added to the plugin, keyed per backend.
+  // Exclude added servers; a hosted server's canonical mcp_server id is its toolset id.
   const addedToolsetIds = new Set(
-    servers.map((s) => s.toolsetId).filter((id): id is string => !!id),
+    servers
+      .map((s) => s.toolsetId ?? s.mcpServerId)
+      .filter((id): id is string => !!id),
   );
   const addedMcpServerIds = new Set(
     servers.map((s) => s.mcpServerId).filter((id): id is string => !!id),
@@ -595,9 +597,9 @@ function PluginDetailContent({
           <PluginServerCard
             key={server.id}
             server={server}
-            toolset={
-              server.toolsetId ? toolsetById.get(server.toolsetId) : undefined
-            }
+            toolset={toolsetById.get(
+              server.toolsetId ?? server.mcpServerId ?? "",
+            )}
             mcpServer={
               server.mcpServerId
                 ? mcpServerById.get(server.mcpServerId)
@@ -1395,9 +1397,8 @@ function PluginServerCard({
 }) {
   const routes = useRoutes();
 
-  // Remote MCP-backed servers reference an mcp_server; toolset-backed servers
-  // reference a toolset. Exactly one backend is set per row.
-  const isRemote = !!server.mcpServerId;
+  // Hosted rows resolve to their toolset under either key; anything else is remote.
+  const isRemote = !!server.mcpServerId && !toolset;
   // Approximates per-server publish freshness from the project-wide
   // fingerprint: publish itself isn't scoped to a single server, but a
   // server added after the last publish timestamp can't possibly be in the
