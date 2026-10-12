@@ -191,7 +191,9 @@ func newRunDir(runs string, now time.Time) (string, error) {
 }
 
 // latestRunOf returns the most recently started run under runs that measured
-// commit's code, or empty when there is none.
+// commit's code, or empty when there is none. A run without a manifest is
+// skipped; an unreadable one is an error, so resuming never quietly falls back
+// to an older run.
 func latestRunOf(runs string, commit runCommit) (string, error) {
 	entries, err := os.ReadDir(runs)
 	if errors.Is(err, os.ErrNotExist) {
@@ -207,7 +209,13 @@ func latestRunOf(runs string, commit runCommit) (string, error) {
 		}
 		dir := filepath.Join(runs, entry.Name())
 		manifest, err := readManifest(filepath.Join(dir, manifestFile))
-		if err == nil && manifest.Commit.sameCode(commit) {
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if manifest.Commit.sameCode(commit) {
 			return dir, nil
 		}
 	}

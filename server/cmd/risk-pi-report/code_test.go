@@ -156,6 +156,21 @@ func TestPickRunDirStartsANewRunUnlessResuming(t *testing.T) {
 	require.True(t, strings.HasPrefix(filepath.Base(fresh), "20261012T193000.000000000Z-"), "resuming code that never ran starts a new run")
 }
 
+func TestPickRunDirStopsAtAnUnreadableManifest(t *testing.T) {
+	t.Parallel()
+
+	runs := filepath.Join(t.TempDir(), "runs")
+	start := time.Date(2026, 10, 12, 15, 30, 0, 0, time.UTC)
+	startRun(t, runs, mainCommit, start)
+	broken := startRun(t, runs, mainCommit, start.Add(time.Minute))
+	require.NoError(t, os.WriteFile(filepath.Join(broken, manifestFile), []byte(`{"commit": {`), 0o600))
+	_, err := os.MkdirTemp(runs, start.Add(time.Hour).Format(runIDLayout)+"-")
+	require.NoError(t, err, "a run still being claimed has no manifest yet")
+
+	_, err = pickRunDir(runs, mainCommit, true, start.Add(2*time.Hour))
+	require.ErrorContains(t, err, "parse run manifest", "resuming must not skip past the broken latest run to an older one")
+}
+
 func TestRunCommitName(t *testing.T) {
 	t.Parallel()
 
