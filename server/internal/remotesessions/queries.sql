@@ -1302,7 +1302,7 @@ FROM json_web_key_sets
 WHERE json_web_key_sets.id = @id
   AND json_web_key_sets.organization_id = @organization_id
   AND json_web_key_sets.project_id IS NULL
-  AND NOT EXISTS (SELECT 1 FROM internal_session_issuers AS isi WHERE isi.organization_id = json_web_key_sets.organization_id AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND NOT is_internal_session_issuer_key_set(json_web_key_sets.organization_id, json_web_key_sets.id)
   AND json_web_key_sets.deleted IS FALSE
 FOR SHARE OF json_web_key_sets;
 
@@ -4508,7 +4508,7 @@ FROM json_web_key_sets
 WHERE json_web_key_sets.id = @id
   AND json_web_key_sets.organization_id = @organization_id
   AND json_web_key_sets.project_id IS NULL
-  AND NOT EXISTS (SELECT 1 FROM internal_session_issuers AS isi WHERE isi.organization_id = json_web_key_sets.organization_id AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND NOT is_internal_session_issuer_key_set(json_web_key_sets.organization_id, json_web_key_sets.id)
   AND json_web_key_sets.deleted IS FALSE;
 -- Trusted delegation credentials are organization-scoped, never project-scoped.
 -- name: GetTrustedDelegationCredential :one

@@ -66,17 +66,7 @@ JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'gcp_kms'
-  AND NOT EXISTS (
-    SELECT 1 FROM json_web_key_sets AS ema
-    WHERE ema.organization_id = ek.organization_id
-      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
-        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
-      AND (ema.external_key_id = ek.id OR EXISTS (
-        SELECT 1 FROM json_web_keys AS emak
-        WHERE emak.organization_id = ema.organization_id
-          AND emak.json_web_key_set_id = ema.id
-          AND emak.external_key_id = ek.id))
-  )
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE;
 
 -- Loads everything the verify probe needs in one read: the key, its provider
@@ -121,17 +111,7 @@ LEFT JOIN gcp_iam_credentials AS gic
 WHERE ek.id = @id
   AND ek.organization_id = @organization_id
   AND ek.provider = 'gcp_kms'
-  AND NOT EXISTS (
-    SELECT 1 FROM json_web_key_sets AS ema
-    WHERE ema.organization_id = ek.organization_id
-      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
-        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
-      AND (ema.external_key_id = ek.id OR EXISTS (
-        SELECT 1 FROM json_web_keys AS emak
-        WHERE emak.organization_id = ema.organization_id
-          AND emak.json_web_key_set_id = ema.id
-          AND emak.external_key_id = ek.id))
-  )
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE;
 
 -- Keys left behind by a tombstoned identity provider connection are hidden;
@@ -141,17 +121,7 @@ SELECT *
 FROM external_keys AS ek
 WHERE ek.organization_id = @organization_id
   AND ek.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1 FROM json_web_key_sets AS ema
-    WHERE ema.organization_id = ek.organization_id
-      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
-        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
-      AND (ema.external_key_id = ek.id OR EXISTS (
-        SELECT 1 FROM json_web_keys AS emak
-        WHERE emak.organization_id = ema.organization_id
-          AND emak.json_web_key_set_id = ema.id
-          AND emak.external_key_id = ek.id))
-  )
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND (sqlc.narg('provider')::text IS NULL OR ek.provider = sqlc.narg('provider')::text)
   AND NOT EXISTS (
     SELECT 1
@@ -177,17 +147,7 @@ SET external_credential_id = @external_credential_id,
     updated_at = clock_timestamp()
 WHERE external_keys.id = @id
   AND external_keys.organization_id = @organization_id
-  AND NOT EXISTS (
-    SELECT 1 FROM json_web_key_sets AS ema
-    WHERE ema.organization_id = external_keys.organization_id
-      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
-        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
-      AND (ema.external_key_id = external_keys.id OR EXISTS (
-        SELECT 1 FROM json_web_keys AS emak
-        WHERE emak.organization_id = ema.organization_id
-          AND emak.json_web_key_set_id = ema.id
-          AND emak.external_key_id = external_keys.id))
-  )
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
   AND external_keys.deleted IS FALSE
 RETURNING *;
 
@@ -205,17 +165,7 @@ FROM external_keys
 WHERE external_keys.id = @id
   AND external_keys.organization_id = @organization_id
   AND external_keys.provider = @provider
-  AND NOT EXISTS (
-    SELECT 1 FROM json_web_key_sets AS ema
-    WHERE ema.organization_id = external_keys.organization_id
-      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
-        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
-      AND (ema.external_key_id = external_keys.id OR EXISTS (
-        SELECT 1 FROM json_web_keys AS emak
-        WHERE emak.organization_id = ema.organization_id
-          AND emak.json_web_key_set_id = ema.id
-          AND emak.external_key_id = external_keys.id))
-  )
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
   AND external_keys.deleted IS FALSE
 FOR UPDATE OF external_keys;
 
@@ -265,16 +215,6 @@ SET deleted_at = clock_timestamp()
 WHERE external_keys.id = @id
   AND external_keys.organization_id = @organization_id
   AND external_keys.provider = @provider
-  AND NOT EXISTS (
-    SELECT 1 FROM json_web_key_sets AS ema
-    WHERE ema.organization_id = external_keys.organization_id
-      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
-        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
-      AND (ema.external_key_id = external_keys.id OR EXISTS (
-        SELECT 1 FROM json_web_keys AS emak
-        WHERE emak.organization_id = ema.organization_id
-          AND emak.json_web_key_set_id = ema.id
-          AND emak.external_key_id = external_keys.id))
-  )
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
   AND external_keys.deleted IS FALSE
 RETURNING *;
