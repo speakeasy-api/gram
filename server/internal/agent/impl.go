@@ -410,7 +410,7 @@ func (s *Service) attachWorkloadTokenTarget(ctx context.Context, entry *gen.Agen
 		return fmt.Errorf("resolve workload token target: %w", err)
 	}
 	if !ok {
-		s.logger.InfoContext(ctx, "plugin MCP server offers no workload grant; a headless device cannot reach it",
+		s.logger.DebugContext(ctx, "plugin MCP server offers no workload grant; a workload cannot reach it headless",
 			attr.SlogURL(entry.URL),
 		)
 		return nil

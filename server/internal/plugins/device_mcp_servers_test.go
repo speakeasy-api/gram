@@ -64,3 +64,17 @@ func TestRequireHTTPS(t *testing.T) {
 		}
 	}
 }
+
+func TestRequireHTTPS_NeverEchoesCredentials(t *testing.T) {
+	t.Parallel()
+	for _, rawURL := range []string{
+		"https://tok3n-secret@app.getgram.ai/mcp/linear",
+		"https://user:tok3n-secret@app.getgram.ai/mcp/linear",
+		"http://tok3n-secret@app.getgram.ai/mcp/linear",
+		"https://tok3n-secret@app.getgram.ai:bad-port/mcp/linear",
+	} {
+		err := requireHTTPS(rawURL)
+		require.Error(t, err, rawURL)
+		require.NotContains(t, err.Error(), "tok3n-secret", rawURL)
+	}
+}

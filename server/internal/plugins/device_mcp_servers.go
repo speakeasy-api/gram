@@ -4,6 +4,7 @@ import (
 	"errors"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -108,12 +109,17 @@ func requireHTTPS(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	switch {
 	case err != nil:
+		// A *url.Error quotes the raw URL, credentials included; keep only its cause.
+		if urlErr, ok := errors.AsType[*url.Error](err); ok {
+			err = urlErr.Err
+		}
 		return fmt.Errorf("parse MCP server URL: %w", err)
 	case u.Scheme != "https" || u.Host == "":
-		return fmt.Errorf("MCP server URL is not an https URL: %q", u.Redacted())
+		return fmt.Errorf("MCP server URL is not an https URL: %q", u.Scheme+"://"+u.Host)
 	case u.User != nil:
-		// Embedded credentials would travel alongside the device's own.
-		return fmt.Errorf("MCP server URL carries credentials: %q", u.Redacted())
+		// Embedded credentials would travel alongside the device's own. Only the
+		// origin is reported: Redacted masks a password but not a bare username.
+		return fmt.Errorf("MCP server URL carries credentials: %q", u.Scheme+"://"+u.Host)
 	default:
 		return nil
 	}

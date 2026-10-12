@@ -104,6 +104,9 @@ func (s *Service) publicOriginContext(ctx context.Context, rawHost string) (cont
 		baseURL, isPlatform = strings.TrimSuffix(s.serverURL.String(), "/"), true
 	}
 	if isPlatform {
+		// The poll itself may have arrived on a custom domain; that domain must
+		// not scope the lookup of a platform-hosted server.
+		ctx = customdomains.WithContext(ctx, nil)
 		return requestorigin.WithContext(ctx, requestorigin.Origin{
 			Surface:          requestorigin.SurfacePlatform,
 			BaseURL:          baseURL,

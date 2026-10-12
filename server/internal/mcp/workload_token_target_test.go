@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -49,6 +50,25 @@ func TestWorkloadTokenTargetFor_PerEndpointAuthorizationServer(t *testing.T) {
 
 	w := f.exchange(t, f.assertion(t, target.Audience), target.Resource)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// A poll that arrived on a custom domain still resolves a platform-hosted
+// server: the poll's domain must not scope the server lookup.
+func TestWorkloadTokenTargetFor_PollOnCustomDomainResolvesPlatformServer(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+	ctx := customdomains.WithContext(t.Context(), &customdomains.Context{
+		OrganizationID: "org-of-the-poll",
+		Domain:         "mcp.customer.example",
+		DomainID:       uuid.New(),
+	})
+
+	target, ok, err := f.ti.service.WorkloadTokenTargetFor(ctx, f.resource)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, f.resource+"/token", target.TokenEndpoint)
+	require.Equal(t, f.resource, target.Resource)
 }
 
 // A server that is not issuer-gated has no authorization server, so no
