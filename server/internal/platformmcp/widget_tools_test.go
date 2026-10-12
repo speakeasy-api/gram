@@ -315,6 +315,35 @@ func TestSaveWidgetPreviewsThenCreatesOnceAndReplays(t *testing.T) {
 	require.Equal(t, "conflict", requireWidgetRefusal(t, err).Code)
 }
 
+func TestAWidgetPreviewCommitsUnderOneKey(t *testing.T) {
+	t.Parallel()
+	ctx, f := newWidgetToolsFixture(t)
+	existing := f.createDirectly(t, ctx, "Source")
+
+	create := saveArguments(f.project.ID.String(), "Once")
+	duplicate := map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": false}
+	for tool, arguments := range map[string]map[string]any{saveWidgetToolName: create, duplicateWidgetToolName: duplicate} {
+		preview := f.write(t, ctx, tool, arguments)
+		first := f.write(t, ctx, tool, confirmed(arguments, preview, tool+"-first"))
+
+		_, err := f.invoke(t, ctx, tool, confirmed(arguments, preview, tool+"-second"))
+		refusal := requireWidgetRefusal(t, err)
+		require.Equal(t, "preview_used", refusal.Code, tool)
+		require.Equal(t, "preview_token", refusal.Field, tool)
+
+		replayed := f.write(t, ctx, tool, confirmed(arguments, preview, tool+"-first"))
+		require.True(t, replayed.Replayed, tool)
+		require.Equal(t, first.Widget.ID, replayed.Widget.ID, tool)
+
+		again := f.write(t, ctx, tool, arguments)
+		require.NotEqual(t, preview.PreviewToken, again.PreviewToken, "every preview is distinct")
+		f.write(t, ctx, tool, confirmed(arguments, again, tool+"-again"))
+	}
+
+	listed := widgetCall[listWidgetsOutput](t, f, ctx, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
+	require.Len(t, listed.Widgets, 5, "the source, plus two creates and two copies")
+}
+
 func TestSaveWidgetConfirmationNeedsItsPreview(t *testing.T) {
 	t.Parallel()
 	ctx, f := newWidgetToolsFixture(t)
@@ -426,7 +455,7 @@ func TestWidgetWritesRefuseANonCreatorWithoutProjectWrite(t *testing.T) {
 		saveWidgetToolName:   {update, operationUpdateWidget, widgetTokenProposal{WidgetID: existing.Widget.ID, Widget: &widgets.Input{Name: "Hijacked", Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart()}}},
 		deleteWidgetToolName: {remove, operationDeleteWidget, widgetTokenProposal{WidgetID: existing.Widget.ID, Widget: nil}},
 	} {
-		token, err := f.service.previewToken(other, project, request.operation, existing.Version, request.proposal)
+		token, err := f.service.previewToken("test-nonce", other, project, request.operation, existing.Version, request.proposal)
 		require.NoError(t, err)
 		arguments := confirmed(request.arguments, widgetWriteOutput{Version: existing.Version, PreviewToken: token}, "member-"+tool)
 		_, err = f.invoke(t, member, tool, arguments)

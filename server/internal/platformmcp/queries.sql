@@ -647,6 +647,21 @@ WHERE receipt.organization_id = @organization_id
 ORDER BY receipt.created_at DESC, receipt.id DESC
 LIMIT 1;
 
+-- name: PlatformMCPOperationReceiptInputClaimed :one
+-- Whether another idempotency key already holds this exact input for the same
+-- user, project and operation. A write whose input is single-use, such as a
+-- preview token, commits under one key only.
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_operation_receipts
+    WHERE organization_id = @organization_id
+      AND project_id = @project_id
+      AND operation = @operation
+      AND user_id = @user_id
+      AND input_hash = @input_hash
+      AND idempotency_key <> @idempotency_key
+);
+
 -- name: GetUnexpiredPlatformMCPOperationReceipt :one
 -- The unlocked replay pre-check that runs before a write charges its budget.
 -- Same match as GetPlatformMCPOperationReceipt, but expiry is judged here with

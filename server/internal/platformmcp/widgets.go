@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,8 +21,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
@@ -535,7 +538,7 @@ type confirmation struct {
 // preview signs a preview so its confirmation can only commit exactly what
 // was shown, at exactly the version that was read.
 func (s *WidgetService) preview(principal Principal, project ResolvedProject, out widgetWriteOutput, proposal widgetTokenProposal) (widgetWriteOutput, error) {
-	token, err := s.previewToken(principal, project, out.Operation, out.Version, proposal)
+	token, err := s.previewToken(rand.Text(), principal, project, out.Operation, out.Version, proposal)
 	if err != nil {
 		return widgetWriteOutput{}, err
 	}
@@ -543,22 +546,25 @@ func (s *WidgetService) preview(principal Principal, project ResolvedProject, ou
 	return out, nil
 }
 
-func (s *WidgetService) previewToken(principal Principal, project ResolvedProject, operation widgetOperation, version string, proposal widgetTokenProposal) (string, error) {
+// previewToken signs a preview. The nonce makes every preview distinct, so a
+// confirmed preview can be held to one idempotency key.
+func (s *WidgetService) previewToken(nonce string, principal Principal, project ResolvedProject, operation widgetOperation, version string, proposal widgetTokenProposal) (string, error) {
 	data, err := json.Marshal(struct {
+		Nonce        string              `json:"nonce"`
 		Organization string              `json:"organization"`
 		User         string              `json:"user"`
 		Project      string              `json:"project"`
 		Operation    widgetOperation     `json:"operation"`
 		Version      string              `json:"version"`
 		Proposal     widgetTokenProposal `json:"proposal"`
-	}{Organization: principal.OrganizationID, User: principal.UserID, Project: project.ID.String(), Operation: operation, Version: version, Proposal: proposal})
+	}{Nonce: nonce, Organization: principal.OrganizationID, User: principal.UserID, Project: project.ID.String(), Operation: operation, Version: version, Proposal: proposal})
 	if err != nil {
 		return "", fmt.Errorf("encode widget proposal: %w", err)
 	}
 	mac := hmac.New(sha256.New, s.key)
 	_, _ = mac.Write([]byte("platform-widget-authoring-v1\x00"))
 	_, _ = mac.Write(data)
-	return hex.EncodeToString(mac.Sum(nil)), nil
+	return nonce + "." + hex.EncodeToString(mac.Sum(nil)), nil
 }
 
 // confirm checks a confirmation against its preview and runs the write in
@@ -575,7 +581,8 @@ func (s *WidgetService) confirm(ctx context.Context, principal Principal, projec
 	if confirmed.Token == "" {
 		return OperationReceipt{}, widgetInvalid("preview_token", "Preview the change with confirmed:false first and confirm with the preview_token it returns.")
 	}
-	token, err := s.previewToken(principal, project, operation, confirmed.Version, proposal)
+	nonce, _, _ := strings.Cut(confirmed.Token, ".")
+	token, err := s.previewToken(nonce, principal, project, operation, confirmed.Version, proposal)
 	if err != nil {
 		return OperationReceipt{}, err
 	}
@@ -603,8 +610,32 @@ func (s *WidgetService) confirm(ctx context.Context, principal Principal, projec
 			}
 			return encoded, nil
 		},
-		Mutate: mutate,
+		Mutate: func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
+			if err := claimPreview(ctx, tx, principal, project, operation, key, token); err != nil {
+				return widgetReceipt{}, err
+			}
+			return mutate(ctx, tx)
+		},
 	})
+}
+
+// claimPreview holds a preview to the first idempotency key that confirms it;
+// a create or duplicate could otherwise be confirmed again under a new key and
+// write a second widget. It locks on the token so two keys racing for one
+// preview serialize and the loser sees the winner's receipt.
+func claimPreview(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, operation widgetOperation, key string, token string) error {
+	q := platformrepo.New(tx)
+	if err := q.LockPlatformMCPOperationReceipt(ctx, platformrepo.LockPlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, SubjectUrn: userSubjectURN(principal.UserID), ProjectID: project.ID.String(), Operation: string(operation), IdempotencyKey: "preview-token:" + token}); err != nil {
+		return fmt.Errorf("lock widget preview: %w", err)
+	}
+	claimed, err := q.PlatformMCPOperationReceiptInputClaimed(ctx, platformrepo.PlatformMCPOperationReceiptInputClaimedParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, Operation: string(operation), UserID: conv.ToPGText(principal.UserID), InputHash: token, IdempotencyKey: key})
+	if err != nil {
+		return fmt.Errorf("check widget preview: %w", err)
+	}
+	if claimed {
+		return &widgetToolError{Code: "preview_used", Field: "preview_token", Message: "This preview was already confirmed under another idempotency_key. Retry with that key to see its result, or preview again to make another change.", Cause: nil}
+	}
+	return nil
 }
 
 func decodeWidgetReceipt(data []byte) (widgetReceipt, error) {

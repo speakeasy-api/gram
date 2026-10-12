@@ -7236,6 +7236,45 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 	return i, err
 }
 
+const platformMCPOperationReceiptInputClaimed = `-- name: PlatformMCPOperationReceiptInputClaimed :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_operation_receipts
+    WHERE organization_id = $1
+      AND project_id = $2
+      AND operation = $3
+      AND user_id = $4
+      AND input_hash = $5
+      AND idempotency_key <> $6
+)
+`
+
+type PlatformMCPOperationReceiptInputClaimedParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Operation      string
+	UserID         pgtype.Text
+	InputHash      string
+	IdempotencyKey string
+}
+
+// Whether another idempotency key already holds this exact input for the same
+// user, project and operation. A write whose input is single-use, such as a
+// preview token, commits under one key only.
+func (q *Queries) PlatformMCPOperationReceiptInputClaimed(ctx context.Context, arg PlatformMCPOperationReceiptInputClaimedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, platformMCPOperationReceiptInputClaimed,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Operation,
+		arg.UserID,
+		arg.InputHash,
+		arg.IdempotencyKey,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const recordPlatformMCPCatalogExplored = `-- name: RecordPlatformMCPCatalogExplored :execrows
 INSERT INTO platform_mcp_onboarding_milestones (
     organization_id,
