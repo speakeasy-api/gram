@@ -2,6 +2,7 @@ package dashboards_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -175,6 +176,17 @@ func TestListAndGetDashboards(t *testing.T) {
 	require.Len(t, listed.Dashboards[0].Widgets, 1, "the list carries each dashboard's cards")
 	require.Equal(t, second.ID, listed.Dashboards[1].ID)
 	require.Empty(t, listed.Dashboards[1].Widgets)
+
+	// The built-in dashboards come with the list, the same in every project.
+	require.Len(t, listed.BuiltIn, 1)
+	require.Equal(t, "mcp-tools", listed.BuiltIn[0].Slug)
+	require.Equal(t, "MCP & Tools", listed.BuiltIn[0].Name)
+	require.NotEmpty(t, listed.BuiltIn[0].Cards)
+	for _, card := range listed.BuiltIn[0].Cards {
+		require.Equal(t, "tool_calls", card.Dataset, card.Name)
+		require.Equal(t, "7d", card.Query["window"], card.Name)
+		require.NotEmpty(t, card.Visualization["type"], card.Name)
+	}
 
 	got, err := ti.service.GetDashboard(ctx, getPayload(first.ID))
 	require.NoError(t, err)
@@ -726,6 +738,87 @@ func TestDuplicateDashboard(t *testing.T) {
 		ctx, ti := newTestService(t)
 		_, err := ti.service.DuplicateDashboard(ctx, &gen.DuplicateDashboardPayload{ID: uuid.NewString(), SessionToken: nil, ProjectSlugInput: nil})
 		requireOopsCode(t, err, oops.CodeNotFound)
+	})
+}
+
+func TestDuplicateBuiltInDashboard(t *testing.T) {
+	t.Parallel()
+
+	t.Run("it makes the caller's own dashboard, with a saved widget per card at the card's place", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		listed, err := ti.service.ListDashboards(ctx, &gen.ListDashboardsPayload{SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		page := listed.BuiltIn[0]
+
+		memberID := "user_member_" + uuid.NewString()
+		memberCtx := asMember(t, ctx, ti, memberID)
+		widgetsBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWidgetCreate)
+		require.NoError(t, err)
+
+		copied, err := ti.service.DuplicateBuiltInDashboard(memberCtx, &gen.DuplicateBuiltInDashboardPayload{Slug: page.Slug, SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Equal(t, page.Name+" (copy)", copied.Name)
+		require.Equal(t, page.Description, *copied.Description)
+		require.Equal(t, memberID, *copied.CreatedByUserID)
+		require.Nil(t, copied.Filters.Range, "a built-in saves no filters; the copy opens on the defaults")
+		require.Empty(t, copied.Filters.Values)
+		require.Len(t, copied.Widgets, len(page.Cards))
+
+		// Each card is now a saved widget of the member's, named as a copy,
+		// asking the card's question, sitting where the card sat.
+		for _, card := range page.Cards {
+			var placement *gen.DashboardPlacement
+			for _, candidate := range copied.Widgets {
+				if candidate.X == card.X && candidate.Y == card.Y && candidate.W == card.W && candidate.H == card.H {
+					placement = candidate
+				}
+			}
+			require.NotNil(t, placement, "no card at %d,%d for %q", card.X, card.Y, card.Name)
+			widget, err := widgetsrepo.New(ti.conn).GetWidget(ctx, widgetsrepo.GetWidgetParams{ProjectID: ti.projectID, ID: uuid.MustParse(placement.WidgetID)})
+			require.NoError(t, err)
+			require.Equal(t, card.Name+" (copy)", widget.Name)
+			require.Equal(t, memberID, widget.CreatedByUserID.String)
+			require.Equal(t, card.Dataset, widget.Dataset)
+			var query, visualization map[string]any
+			require.NoError(t, json.Unmarshal(widget.Query, &query))
+			require.NoError(t, json.Unmarshal(widget.Visualization, &visualization))
+			require.Equal(t, card.Query, query)
+			require.Equal(t, card.Visualization, visualization)
+		}
+		widgetsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWidgetCreate)
+		require.NoError(t, err)
+		require.Equal(t, widgetsBefore+int64(len(page.Cards)), widgetsAfter, "each widget is audited as a creation")
+
+		record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDashboardCreate)
+		require.NoError(t, err)
+		metadata, err := audittest.DecodeAuditData(record.Metadata)
+		require.NoError(t, err)
+		require.Equal(t, page.Slug, metadata["duplicated_from_built_in"])
+		require.NotContains(t, metadata, "duplicated_from")
+
+		// The copy is the member's to change and delete with membership
+		// alone, and the built-in is still listed.
+		_, err = ti.service.UpdateDashboard(memberCtx, &gen.UpdateDashboardPayload{ID: copied.ID, Name: "Mine", Description: nil, SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.NoError(t, ti.service.DeleteDashboard(memberCtx, &gen.DeleteDashboardPayload{ID: copied.ID, SessionToken: nil, ProjectSlugInput: nil}))
+		listed, err = ti.service.ListDashboards(ctx, &gen.ListDashboardsPayload{SessionToken: nil, ProjectSlugInput: nil})
+		require.NoError(t, err)
+		require.Len(t, listed.BuiltIn, 1)
+	})
+
+	t.Run("it reports an unknown built-in", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		_, err := ti.service.DuplicateBuiltInDashboard(ctx, &gen.DuplicateBuiltInDashboardPayload{Slug: "nothing", SessionToken: nil, ProjectSlugInput: nil})
+		requireOopsCode(t, err, oops.CodeNotFound)
+	})
+
+	t.Run("it needs a signed-in member", func(t *testing.T) {
+		t.Parallel()
+		_, ti := newTestService(t)
+		_, err := ti.service.DuplicateBuiltInDashboard(t.Context(), &gen.DuplicateBuiltInDashboardPayload{Slug: "mcp-tools", SessionToken: nil, ProjectSlugInput: nil})
+		requireOopsCode(t, err, oops.CodeUnauthorized)
 	})
 }
 

@@ -1689,45 +1689,6 @@ func BuildGetRiskAnalysisStatusPayload(riskGetRiskAnalysisStatusApikeyToken stri
 	return v, nil
 }
 
-// BuildGetRiskPolicyStatusPayload builds the payload for the risk
-// getRiskPolicyStatus endpoint from CLI flags.
-func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRiskPolicyStatusApikeyToken string, riskGetRiskPolicyStatusSessionToken string, riskGetRiskPolicyStatusProjectSlugInput string) (*risk.GetRiskPolicyStatusPayload, error) {
-	var err error
-	var id string
-	{
-		id = riskGetRiskPolicyStatusID
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var apikeyToken *string
-	{
-		if riskGetRiskPolicyStatusApikeyToken != "" {
-			apikeyToken = &riskGetRiskPolicyStatusApikeyToken
-		}
-	}
-	var sessionToken *string
-	{
-		if riskGetRiskPolicyStatusSessionToken != "" {
-			sessionToken = &riskGetRiskPolicyStatusSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if riskGetRiskPolicyStatusProjectSlugInput != "" {
-			projectSlugInput = &riskGetRiskPolicyStatusProjectSlugInput
-		}
-	}
-	v := &risk.GetRiskPolicyStatusPayload{}
-	v.ID = id
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildCreateRiskPolicyBypassRequestPayload builds the payload for the risk
 // createRiskPolicyBypassRequest endpoint from CLI flags.
 func BuildCreateRiskPolicyBypassRequestPayload(riskCreateRiskPolicyBypassRequestBody string, riskCreateRiskPolicyBypassRequestSessionToken string, riskCreateRiskPolicyBypassRequestApikeyToken string) (*risk.CreateRiskPolicyBypassRequestPayload, error) {

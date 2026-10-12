@@ -1,7 +1,6 @@
+import { ToolsetSessionsTab } from "./ToolsetSessionsTab";
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
-import { ToolsetAttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
-import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import {
   useMcpMetadataMetadataForm,
@@ -245,11 +244,7 @@ function renderMcpDetailTabContent(
     case "sessions":
       return (
         <RequireScope scope="project:read" level="page">
-          <ClientsAndSessionsTab
-            issuerId={toolset.userSessionIssuerId}
-            authTabPath="authentication"
-            attachedSessions={<ToolsetAttachedUserSessions toolset={toolset} />}
-          />
+          <ToolsetSessionsTab toolset={toolset} />
         </RequireScope>
       );
     case "team-access":

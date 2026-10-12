@@ -5,17 +5,21 @@ import type { AnalyticsQueryResult } from "@gram/client/models/components/analyt
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { JSX, ReactNode } from "react";
 import {
+  additiveOp,
   completeMeasures,
+  drawnChart,
   hasChartShape,
   isRowsMode,
+  isStacked,
   queryDimensions,
   specGrain,
   type ExploreSpec,
+  type MeasureDraft,
 } from "./exploreModel";
 import { CHART_HEIGHT, ResultChart } from "./ResultChart";
 import { ResultNumbers } from "./ResultNumbers";
 import { ResultRanked } from "./ResultRanked";
-import { seriesFromRows, sharedUnit } from "./resultSeries";
+import { seriesFromRows, sharedUnit, type SeriesSet } from "./resultSeries";
 import { ResultTable } from "./ResultTable";
 
 export type RunQuery = UseQueryResult<AnalyticsQueryResult, Error>;
@@ -166,6 +170,18 @@ function ChartOrReason({
   onRangeSelect: ((from: Date, to: Date) => void) | undefined;
 }): JSX.Element {
   const measures = completeMeasures(spec.measures);
+  // Checked before the unit, so what is offered is what lets the stack
+  // draw: several measures of one unit still cannot stack.
+  const stacking = isStacked(spec.chartType) ? stackProblem(measures) : null;
+  if (stacking) {
+    return (
+      <InlineEmptyState
+        icon="chart-line"
+        heading={stacking.heading}
+        description={stacking.description}
+      />
+    );
+  }
   const unit = sharedUnit(dataset, measures);
   if (unit === null) {
     return (
@@ -176,11 +192,13 @@ function ChartOrReason({
       />
     );
   }
+  const drawn = drawnChart(spec);
   const seriesSet = seriesFromRows(
     rows,
     queryDimensions(spec),
     measures,
     dataset,
+    isStacked(drawn),
   );
   return (
     <div
@@ -194,20 +212,79 @@ function ChartOrReason({
         <ResultChart
           seriesSet={seriesSet}
           unit={unit}
-          chartType={spec.chartType}
+          chartType={drawn}
           grain={specGrain(spec)}
           height={height}
           onRangeSelect={onRangeSelect}
         />
       </div>
-      {seriesSet.hidden > 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Showing the {seriesSet.series.length} largest of{" "}
-          {seriesSet.series.length + seriesSet.hidden} series.
-        </p>
-      ) : null}
+      <ChartNote spec={spec} drawn={drawn} seriesSet={seriesSet} />
     </div>
   );
+}
+
+/**
+ * Why a stack cannot draw these measures, or null when it can. A stack is
+ * one measure's composition, and its bands and its Other band add up: a
+ * second measure has no place in it, and an average or a percentile does
+ * not add. The server refuses to save the same shapes.
+ */
+function stackProblem(
+  measures: MeasureDraft[],
+): { heading: string; description: string } | null {
+  if (measures.length !== 1) {
+    return {
+      heading: "A stacked chart stacks one measure",
+      description:
+        "Keep one measure to see what made up its total, or switch to Line.",
+    };
+  }
+  const [measure] = measures;
+  if (measure && !additiveOp(measure.op)) {
+    return {
+      heading: "A stacked chart adds its bands up",
+      description:
+        "Stack a count or a sum, or switch to Line to compare the groups.",
+    };
+  }
+  return null;
+}
+
+/**
+ * The line under a chart that says what the drawing left out: a stack with
+ * nothing to stack by drawn as the plain chart it is, series folded into
+ * Other, or series dropped past the cap.
+ */
+function ChartNote({
+  spec,
+  drawn,
+  seriesSet,
+}: {
+  spec: ExploreSpec;
+  drawn: ExploreSpec["chartType"];
+  seriesSet: SeriesSet;
+}): JSX.Element | null {
+  const note = chartNote(spec, drawn, seriesSet);
+  return note === "" ? null : (
+    <p className="text-muted-foreground text-xs">{note}</p>
+  );
+}
+
+function chartNote(
+  spec: ExploreSpec,
+  drawn: ExploreSpec["chartType"],
+  seriesSet: SeriesSet,
+): string {
+  if (drawn !== spec.chartType && isStacked(spec.chartType)) {
+    return `Stacking needs a Group by, so this is drawn as ${drawn === "bar" ? "a bar" : "an area"} chart.`;
+  }
+  if (seriesSet.hidden === 0) return "";
+  const shown = seriesSet.series.length;
+  if (seriesSet.series.at(-1)?.other) {
+    const named = shown - 1;
+    return `Showing the ${named} largest of ${named + seriesSet.hidden} series; the other ${seriesSet.hidden} are stacked as Other.`;
+  }
+  return `Showing the ${shown} largest of ${shown + seriesSet.hidden} series.`;
 }
 
 // The server names what it refused and where in the request it sat, so its

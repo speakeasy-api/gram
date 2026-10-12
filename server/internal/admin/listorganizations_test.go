@@ -1128,6 +1128,7 @@ func TestListOrganizations_SortsEveryWhitelistedColumn(t *testing.T) {
 		{sort: "name", wantAsc: []string{sortOrgB, sortOrgD, sortOrgA, sortOrgC}},
 		{sort: "slug", wantAsc: []string{sortOrgC, sortOrgA, sortOrgD, sortOrgB}},
 		{sort: "account_type", wantAsc: []string{sortOrgA, sortOrgC, sortOrgB, sortOrgD}},
+		{sort: "account_tier", wantAsc: []string{sortOrgA, sortOrgB, sortOrgC, sortOrgD}},
 		{sort: "member_count", wantAsc: []string{sortOrgD, sortOrgA, sortOrgC, sortOrgB}},
 		{sort: "created_at", wantAsc: []string{sortOrgC, sortOrgB, sortOrgD, sortOrgA}},
 		{sort: "disabled_at", wantAsc: []string{sortOrgB, sortOrgA, sortOrgC, sortOrgD}},
@@ -1138,6 +1139,38 @@ func TestListOrganizations_SortsEveryWhitelistedColumn(t *testing.T) {
 		requireOrder(t, ctx, svc, sortPayload(c.sort, "asc"), c.wantAsc, c.sort+" ascending")
 		requireOrder(t, ctx, svc, sortPayload(c.sort, "desc"), reversed(c.wantAsc), c.sort+" descending")
 	}
+}
+
+// account_tier ranks pro and payg as one tier, so the id decides between them
+// in both directions. The payg id sorts before the pro id, so an arm that ranked
+// payg as its own tier after pro reads as a wrong order.
+func TestListOrganizations_AccountTierRanksPaygWithPro(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	const (
+		paygOrg       = "org_tier_a"
+		proOrg        = "org_tier_b"
+		freeOrg       = "org_tier_c"
+		otherOrg      = "org_tier_d"
+		enterpriseOrg = "org_tier_e"
+	)
+
+	// Seeded out of id order, so an order that merely reflects the physical rows fails.
+	fixtures := []orgFixture{
+		{id: freeOrg, name: "Tier Free", slug: "tier-free", accountType: "free", whitelisted: true},
+		{id: proOrg, name: "Tier Pro", slug: "tier-pro", accountType: "pro", whitelisted: true},
+		{id: otherOrg, name: "Tier Other", slug: "tier-other", accountType: "starter", whitelisted: true},
+		{id: enterpriseOrg, name: "Tier Enterprise", slug: "tier-enterprise", accountType: "enterprise", whitelisted: true},
+		{id: paygOrg, name: "Tier Payg", slug: "tier-payg", accountType: "payg", whitelisted: true},
+	}
+	for _, f := range fixtures {
+		seedOrg(t, ctx, conn, f)
+	}
+
+	requireOrder(t, ctx, svc, sortPayload("account_tier", "asc"), []string{enterpriseOrg, paygOrg, proOrg, freeOrg, otherOrg}, "account_tier ascending")
+	requireOrder(t, ctx, svc, sortPayload("account_tier", "desc"), []string{otherOrg, freeOrg, paygOrg, proOrg, enterpriseOrg}, "account_tier descending")
 }
 
 // A sort value arrives from a URL operators paste to each other, so a value the
@@ -1231,7 +1264,7 @@ func TestListOrganizations_TiesBreakOnIDInBothDirections(t *testing.T) {
 	byID := []string{"org_tie_a", "org_tie_b", "org_tie_c", "org_tie_d"}
 
 	for _, direction := range []string{"asc", "desc"} {
-		for _, sort := range []string{"name", "account_type"} {
+		for _, sort := range []string{"name", "account_type", "account_tier"} {
 			label := sort + " " + direction
 			requireOrder(t, ctx, svc, sortPayload(sort, direction), byID, label)
 			// Repeating the call pins the order down: an unordered tie group can come back either way.

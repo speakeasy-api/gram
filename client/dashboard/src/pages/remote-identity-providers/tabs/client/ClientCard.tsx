@@ -158,7 +158,7 @@ export function ClientCard({
             <InfoField label="Client ID">
               <InfoText mono>{client.clientId}</InfoText>
             </InfoField>
-            <InfoField label="Client Issued At">
+            <InfoField label="Client issued at">
               <InfoText>{formatTimestamp(client.clientIdIssuedAt)}</InfoText>
             </InfoField>
           </div>
@@ -233,7 +233,7 @@ export function ClientCard({
             ) : (
               canEdit && (
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="client-secret">Rotate Client Secret</Label>
+                  <Label htmlFor="client-secret">Rotate client secret</Label>
                   <Input
                     id="client-secret"
                     type="password"
@@ -258,7 +258,7 @@ export function ClientCard({
                     disabled={!canEdit}
                   />
                   <Label id="legacy-callback-mode-label">
-                    Legacy Callback Compatibility Mode
+                    Legacy callback compatibility mode
                   </Label>
                 </div>
                 <Text small muted>

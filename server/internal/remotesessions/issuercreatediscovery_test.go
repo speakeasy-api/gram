@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -546,9 +547,7 @@ func TestCreateRemoteSessionIssuer_RedundantOriginDocumentKeepsPathDiscovery(t *
 					})
 				case "/.well-known/openid-configuration":
 					doc := map[string]any{"issuer": issuer, "authorization_endpoint": server.URL + "/authorize", "token_endpoint": server.URL + "/token"}
-					for k, v := range tc.originExtra {
-						doc[k] = v
-					}
+					maps.Copy(doc, tc.originExtra)
 					w.Header().Set("Content-Type", "application/json")
 					_ = json.NewEncoder(w).Encode(doc)
 				default:

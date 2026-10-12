@@ -208,8 +208,6 @@ type RiskPolicyDetail struct {
 	DetectionScopes        []RiskDetectionScope `json:"detection_scopes"`
 	UserMessage            *string              `json:"user_message,omitempty"`
 	Prompt                 *string              `json:"prompt,omitempty"`
-	PendingMessages        *int64               `json:"pending_messages,omitempty"`
-	TotalMessages          *int64               `json:"total_messages,omitempty"`
 }
 
 type ListRiskPoliciesInput struct {
@@ -437,8 +435,6 @@ func (s *RiskReadService) policyDetail(policy policycore.Policy, shadowDecisions
 		DetectionScopes:        detectionScopes,
 		UserMessage:            policy.UserMessage,
 		Prompt:                 nil,
-		PendingMessages:        policy.PendingMessages,
-		TotalMessages:          policy.TotalMessages,
 	}
 	if policy.PolicyType == "prompt_based" && policy.Prompt != nil && utf8.RuneCountInString(*policy.Prompt) <= 4000 {
 		detail.Prompt = policy.Prompt

@@ -514,13 +514,6 @@ type CreateRiskPolicyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the policy was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Number of messages not yet analyzed at the current policy version. Populated
-	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
-	// for progress).
-	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
-	// Total number of messages in the project. Populated on single-policy reads;
-	// omitted from list responses.
-	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
 // ListRiskPoliciesResponseBody is the type of the "risk" service
@@ -634,13 +627,6 @@ type GetRiskPolicyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the policy was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Number of messages not yet analyzed at the current policy version. Populated
-	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
-	// for progress).
-	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
-	// Total number of messages in the project. Populated on single-policy reads;
-	// omitted from list responses.
-	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
 // UpdateRiskPolicyResponseBody is the type of the "risk" service
@@ -724,13 +710,6 @@ type UpdateRiskPolicyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the policy was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Number of messages not yet analyzed at the current policy version. Populated
-	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
-	// for progress).
-	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
-	// Total number of messages in the project. Populated on single-policy reads;
-	// omitted from list responses.
-	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
 // ListSessionQuarantinesResponseBody is the type of the "risk" service
@@ -984,25 +963,6 @@ type GetRiskAnalysisStatusResponseBody struct {
 	// normal outcome for a long-lived coordinator that rolled its history over, so
 	// treat it like completed. Set only when state is idle.
 	LastRunOutcome *string `form:"last_run_outcome,omitempty" json:"last_run_outcome,omitempty" xml:"last_run_outcome,omitempty"`
-}
-
-// GetRiskPolicyStatusResponseBody is the type of the "risk" service
-// "getRiskPolicyStatus" endpoint HTTP response body.
-type GetRiskPolicyStatusResponseBody struct {
-	// The risk policy ID.
-	PolicyID string `form:"policy_id" json:"policy_id" xml:"policy_id"`
-	// Current policy version.
-	PolicyVersion int64 `form:"policy_version" json:"policy_version" xml:"policy_version"`
-	// Total messages in the project.
-	TotalMessages int64 `form:"total_messages" json:"total_messages" xml:"total_messages"`
-	// Messages analyzed at the current policy version.
-	AnalyzedMessages int64 `form:"analyzed_messages" json:"analyzed_messages" xml:"analyzed_messages"`
-	// Messages not yet analyzed.
-	PendingMessages int64 `form:"pending_messages" json:"pending_messages" xml:"pending_messages"`
-	// Number of findings at the current policy version.
-	FindingsCount int64 `form:"findings_count" json:"findings_count" xml:"findings_count"`
-	// Workflow state: running, sleeping, or not_started.
-	WorkflowStatus string `form:"workflow_status" json:"workflow_status" xml:"workflow_status"`
 }
 
 // CreateRiskPolicyBypassRequestResponseBody is the type of the "risk" service
@@ -6288,191 +6248,6 @@ type GetRiskAnalysisStatusGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRiskPolicyStatusUnauthorizedResponseBody is the type of the "risk"
-// service "getRiskPolicyStatus" endpoint HTTP response body for the
-// "unauthorized" error.
-type GetRiskPolicyStatusUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetRiskPolicyStatusForbiddenResponseBody is the type of the "risk" service
-// "getRiskPolicyStatus" endpoint HTTP response body for the "forbidden" error.
-type GetRiskPolicyStatusForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetRiskPolicyStatusBadRequestResponseBody is the type of the "risk" service
-// "getRiskPolicyStatus" endpoint HTTP response body for the "bad_request"
-// error.
-type GetRiskPolicyStatusBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetRiskPolicyStatusNotFoundResponseBody is the type of the "risk" service
-// "getRiskPolicyStatus" endpoint HTTP response body for the "not_found" error.
-type GetRiskPolicyStatusNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetRiskPolicyStatusConflictResponseBody is the type of the "risk" service
-// "getRiskPolicyStatus" endpoint HTTP response body for the "conflict" error.
-type GetRiskPolicyStatusConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetRiskPolicyStatusUnsupportedMediaResponseBody is the type of the "risk"
-// service "getRiskPolicyStatus" endpoint HTTP response body for the
-// "unsupported_media" error.
-type GetRiskPolicyStatusUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetRiskPolicyStatusInvalidResponseBody is the type of the "risk" service
-// "getRiskPolicyStatus" endpoint HTTP response body for the "invalid" error.
-type GetRiskPolicyStatusInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetRiskPolicyStatusInvariantViolationResponseBody is the type of the "risk"
-// service "getRiskPolicyStatus" endpoint HTTP response body for the
-// "invariant_violation" error.
-type GetRiskPolicyStatusInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetRiskPolicyStatusUnexpectedResponseBody is the type of the "risk" service
-// "getRiskPolicyStatus" endpoint HTTP response body for the "unexpected" error.
-type GetRiskPolicyStatusUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetRiskPolicyStatusGatewayErrorResponseBody is the type of the "risk"
-// service "getRiskPolicyStatus" endpoint HTTP response body for the
-// "gateway_error" error.
-type GetRiskPolicyStatusGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CreateRiskPolicyBypassRequestUnauthorizedResponseBody is the type of the
 // "risk" service "createRiskPolicyBypassRequest" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -11662,13 +11437,6 @@ type RiskPolicyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the policy was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Number of messages not yet analyzed at the current policy version. Populated
-	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
-	// for progress).
-	PendingMessages *int64 `form:"pending_messages,omitempty" json:"pending_messages,omitempty" xml:"pending_messages,omitempty"`
-	// Total number of messages in the project. Populated on single-policy reads;
-	// omitted from list responses.
-	TotalMessages *int64 `form:"total_messages,omitempty" json:"total_messages,omitempty" xml:"total_messages,omitempty"`
 }
 
 // RiskMCPPlatformToolsetResponseBody is used to define fields on response body
@@ -12358,8 +12126,6 @@ func NewCreateRiskPolicyResponseBody(res *types.RiskPolicy) *CreateRiskPolicyRes
 		Version:                res.Version,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
-		PendingMessages:        res.PendingMessages,
-		TotalMessages:          res.TotalMessages,
 	}
 	if res.Sources != nil {
 		body.Sources = make([]string, len(res.Sources))
@@ -12525,8 +12291,6 @@ func NewGetRiskPolicyResponseBody(res *types.RiskPolicy) *GetRiskPolicyResponseB
 		Version:                res.Version,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
-		PendingMessages:        res.PendingMessages,
-		TotalMessages:          res.TotalMessages,
 	}
 	if res.Sources != nil {
 		body.Sources = make([]string, len(res.Sources))
@@ -12613,8 +12377,6 @@ func NewUpdateRiskPolicyResponseBody(res *types.RiskPolicy) *UpdateRiskPolicyRes
 		Version:                res.Version,
 		CreatedAt:              res.CreatedAt,
 		UpdatedAt:              res.UpdatedAt,
-		PendingMessages:        res.PendingMessages,
-		TotalMessages:          res.TotalMessages,
 	}
 	if res.Sources != nil {
 		body.Sources = make([]string, len(res.Sources))
@@ -13054,21 +12816,6 @@ func NewGetRiskAnalysisStatusResponseBody(res *risk.RiskAnalysisStatusResult) *G
 		LastRunStartedAt: res.LastRunStartedAt,
 		LastRunAt:        res.LastRunAt,
 		LastRunOutcome:   res.LastRunOutcome,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusResponseBody builds the HTTP response body from the
-// result of the "getRiskPolicyStatus" endpoint of the "risk" service.
-func NewGetRiskPolicyStatusResponseBody(res *types.RiskPolicyStatus) *GetRiskPolicyStatusResponseBody {
-	body := &GetRiskPolicyStatusResponseBody{
-		PolicyID:         res.PolicyID,
-		PolicyVersion:    res.PolicyVersion,
-		TotalMessages:    res.TotalMessages,
-		AnalyzedMessages: res.AnalyzedMessages,
-		PendingMessages:  res.PendingMessages,
-		FindingsCount:    res.FindingsCount,
-		WorkflowStatus:   res.WorkflowStatus,
 	}
 	return body
 }
@@ -17302,148 +17049,6 @@ func NewGetRiskAnalysisStatusUnexpectedResponseBody(res *goa.ServiceError) *GetR
 // service.
 func NewGetRiskAnalysisStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetRiskAnalysisStatusGatewayErrorResponseBody {
 	body := &GetRiskAnalysisStatusGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusUnauthorizedResponseBody builds the HTTP response body
-// from the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
-func NewGetRiskPolicyStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusUnauthorizedResponseBody {
-	body := &GetRiskPolicyStatusUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusForbiddenResponseBody builds the HTTP response body
-// from the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
-func NewGetRiskPolicyStatusForbiddenResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusForbiddenResponseBody {
-	body := &GetRiskPolicyStatusForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusBadRequestResponseBody builds the HTTP response body
-// from the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
-func NewGetRiskPolicyStatusBadRequestResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusBadRequestResponseBody {
-	body := &GetRiskPolicyStatusBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusNotFoundResponseBody builds the HTTP response body
-// from the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
-func NewGetRiskPolicyStatusNotFoundResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusNotFoundResponseBody {
-	body := &GetRiskPolicyStatusNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusConflictResponseBody builds the HTTP response body
-// from the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
-func NewGetRiskPolicyStatusConflictResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusConflictResponseBody {
-	body := &GetRiskPolicyStatusConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "getRiskPolicyStatus" endpoint of the "risk"
-// service.
-func NewGetRiskPolicyStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusUnsupportedMediaResponseBody {
-	body := &GetRiskPolicyStatusUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusInvalidResponseBody builds the HTTP response body from
-// the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
-func NewGetRiskPolicyStatusInvalidResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusInvalidResponseBody {
-	body := &GetRiskPolicyStatusInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "getRiskPolicyStatus" endpoint of the
-// "risk" service.
-func NewGetRiskPolicyStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusInvariantViolationResponseBody {
-	body := &GetRiskPolicyStatusInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusUnexpectedResponseBody builds the HTTP response body
-// from the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
-func NewGetRiskPolicyStatusUnexpectedResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusUnexpectedResponseBody {
-	body := &GetRiskPolicyStatusUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetRiskPolicyStatusGatewayErrorResponseBody builds the HTTP response body
-// from the result of the "getRiskPolicyStatus" endpoint of the "risk" service.
-func NewGetRiskPolicyStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetRiskPolicyStatusGatewayErrorResponseBody {
-	body := &GetRiskPolicyStatusGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -21946,18 +21551,6 @@ func NewGetRiskMcpServerCountsPayload(from *string, to *string, apikeyToken *str
 // endpoint payload.
 func NewGetRiskAnalysisStatusPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskAnalysisStatusPayload {
 	v := &risk.GetRiskAnalysisStatusPayload{}
-	v.ApikeyToken = apikeyToken
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v
-}
-
-// NewGetRiskPolicyStatusPayload builds a risk service getRiskPolicyStatus
-// endpoint payload.
-func NewGetRiskPolicyStatusPayload(id string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskPolicyStatusPayload {
-	v := &risk.GetRiskPolicyStatusPayload{}
-	v.ID = id
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
