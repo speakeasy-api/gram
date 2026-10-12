@@ -77,24 +77,41 @@ func TestEnabledServerCountMatchesToolsetFlagCount(t *testing.T) {
 	require.Equal(t, int64(4), metrics.PrivateMCPServers)
 }
 
-// A wrapped toolset counts by its wrapper's visibility, not its own flag.
+// A wrapped toolset counts by its wrapper's visibility, not its own flag, in both directions.
 func TestEnabledServerCountReadsWrapperVisibility(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
 	db, err := infra.CloneTestDatabase(t, "enabled_server_count_wrapper")
 	require.NoError(t, err)
 
-	orgID := createCountOrg(t, db)
-	project := createCountProject(t, db, orgID)
-	toolset := createCountToolset(t, db, orgID, project.ID, "flag-enabled", true, false)
-	createWrapper(t, db, project.ID, toolset.ID, toolset.ID, visibility.Disabled)
-	createRemoteServer(t, db, project.ID)
+	cases := []struct {
+		name      string
+		flag      bool
+		vis       string
+		otherProj bool
+		wantCount int64
+	}{
+		{name: "flag-enabled-wrapper-disabled", flag: true, vis: visibility.Disabled, otherProj: false, wantCount: 0},
+		{name: "flag-disabled-wrapper-private", flag: false, vis: visibility.Private, otherProj: false, wantCount: 1},
+		// A canonical-id wrapper in another project is not this toolset's wrapper.
+		{name: "wrapper-in-other-project", flag: false, vis: visibility.Private, otherProj: true, wantCount: 0},
+	}
+	for _, tc := range cases {
+		orgID := createCountOrg(t, db)
+		project := createCountProject(t, db, orgID)
+		toolset := createCountToolset(t, db, orgID, project.ID, tc.name, tc.flag, false)
+		wrapperProject := project.ID
+		if tc.otherProj {
+			wrapperProject = createCountProject(t, db, orgID).ID
+		}
+		createWrapper(t, db, wrapperProject, toolset.ID, toolset.ID, tc.vis)
+		createRemoteServer(t, db, project.ID)
 
-	count, err := usagerepo.New(db).GetEnabledServerCount(ctx, orgID)
-	require.NoError(t, err)
-	require.Zero(t, count)
-	require.Zero(t, collectOrgMetrics(t, db, orgID).TotalEnabledServers)
+		count, err := usagerepo.New(db).GetEnabledServerCount(t.Context(), orgID)
+		require.NoError(t, err, tc.name)
+		require.Equal(t, tc.wantCount, count, tc.name)
+		require.Equal(t, tc.wantCount, collectOrgMetrics(t, db, orgID).TotalEnabledServers, tc.name)
+	}
 }
 
 func collectOrgMetrics(t *testing.T, db *pgxpool.Pool, orgID string) activities.PlatformUsageMetrics {
