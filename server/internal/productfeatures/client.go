@@ -314,14 +314,13 @@ var OrganizationDefaultFeatures = []Feature{
 	FeatureHooksFailOpen,
 }
 
-// SeedOrganizationDefaultsTx enables baseline entitlements for a newly
-// provisioned organization. Call it only on create: EnableFeature inserts a
-// new enabled row after a soft-delete, so replaying this on an existing org
-// would undo an administrator disable.
+// SeedOrganizationDefaultsTx enables baseline entitlements the organization has
+// never had a row for. A soft-deleted row is an administrator choice and stays
+// disabled, so repeating the call does not turn a feature back on.
 func SeedOrganizationDefaultsTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	q := repo.New(tx)
 	for _, feature := range OrganizationDefaultFeatures {
-		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+		if _, err := q.EnableFeatureIfNeverConfigured(ctx, repo.EnableFeatureIfNeverConfiguredParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),
 		}); err != nil {

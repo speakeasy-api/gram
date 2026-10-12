@@ -534,6 +534,20 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
+	// An organization mirrored from an identity-provider membership never takes
+	// the zero-organization signup path, which is the only other place a
+	// self-serve trial is armed. Grant that trial here, before the session is
+	// stored, so the first authenticated request already sees it.
+	orgMetadata, trialArmed, err := s.armSelfServeTrialForExistingOrganization(ctx, orgMetadata, userID, userInfo.Email)
+	if err != nil {
+		return redirectWithError(authErrInit, err)
+	}
+	if trialArmed {
+		if err := s.trialNotifier.TrialStarted(ctx, orgMetadata.ID); err != nil {
+			logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(orgMetadata.ID), attr.SlogUserID(userID))
+		}
+	}
+
 	session.ActiveOrganizationID = activeOrgID
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)

@@ -20,6 +20,7 @@ import (
 	authRepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -1081,6 +1082,15 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 		WorkosID:           nil,
 		UserWorkspaceSlugs: nil,
 	}, gramUserID))
+	expiredAt := time.Now().UTC().Add(-time.Hour)
+	require.NoError(t, trialsRepo.New(instance.conn).InsertTrialFixture(ctx, trialsRepo.InsertTrialFixtureParams{
+		OrganizationID: staleOrgID,
+		Tier:           "enterprise",
+		CreatedAt:      pgtype.Timestamptz{Time: expiredAt.Add(-14 * 24 * time.Hour), Valid: true},
+		EndsAt:         pgtype.Timestamptz{Time: expiredAt, Valid: true},
+		ConvertedAt:    pgtype.Timestamptz{},
+		DemotedAt:      pgtype.Timestamptz{},
+	}))
 	_, err = usersQueries.DisableUser(ctx, usersRepo.DisableUserParams{
 		WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosDeletedAt: conv.ToPGTimestamptz(time.Now().UTC()),
@@ -1097,10 +1107,15 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, staleOrgID, authCtx.ActiveOrganizationID)
-	require.False(t, authCtx.Whitelisted, "ordinary login must not whitelist a gated organization")
+	require.False(t, authCtx.Whitelisted, "an organization that already has a trial lifecycle stays behind the gate")
+
+	trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, staleOrgID)
+	require.NoError(t, err)
+	require.True(t, trial.EndsAt.Valid)
+	require.True(t, trial.EndsAt.Time.Before(time.Now()), "login must not restart a trial that already ended")
 }
 
-func TestCallback_SignupIntentDoesNotWhitelistActiveUserOrg(t *testing.T) {
+func TestCallback_LoginArmsTrialForOrganizationThatNeverTrialled(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -1122,11 +1137,7 @@ func TestCallback_SignupIntentDoesNotWhitelistActiveUserOrg(t *testing.T) {
 		UserWorkspaceSlugs: nil,
 	}, userInfo.UserID))
 
-	ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Should Not Whitelist")
-	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "mock_code",
-		State: &stateParam,
-	})
+	result, err := instance.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
 
 	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
@@ -1134,11 +1145,108 @@ func TestCallback_SignupIntentDoesNotWhitelistActiveUserOrg(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, organizationID, authCtx.ActiveOrganizationID)
-	require.False(t, authCtx.Whitelisted)
+	require.True(t, authCtx.Whitelisted)
+	require.Equal(t, "enterprise", authCtx.AccountType)
 
 	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
 	require.NoError(t, err)
-	require.False(t, org.Whitelisted, "signup intent alone must not bypass the book-a-demo gate")
+	require.True(t, org.Whitelisted)
+	require.Equal(t, "enterprise", org.GramAccountType)
+
+	trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, organizationID)
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", trial.Tier)
+	require.Equal(t, []string{organizationID}, instance.trialNotifier.trialStarted)
+
+	platformMCPEnabled, err := featurerepo.New(instance.conn).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+	})
+	require.NoError(t, err)
+	require.True(t, platformMCPEnabled)
+}
+
+func TestCallback_LoginDoesNotArmTrialForProspect(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "prospect-login@example.com"
+		organizationID = "org-prospect-login"
+	)
+	userInfo := &MockUserInfo{
+		UserID:        "user_01PROSPECT_LOGIN",
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 organizationID,
+		Name:               "Prospect Org",
+		Slug:               organizationID,
+		WorkosID:           nil,
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+	_, err := orgRepo.New(instance.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:             organizationID,
+		Name:           "Prospect Org",
+		Slug:           organizationID,
+		WorkosID:       pgtype.Text{},
+		Whitelisted:    pgtype.Bool{Bool: false, Valid: true},
+		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
+	})
+	require.NoError(t, err)
+
+	result, err := instance.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+
+	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.False(t, authCtx.Whitelisted, "a prospect stays behind the book-a-demo gate")
+
+	_, err = trialsRepo.New(instance.conn).GetTrial(ctx, organizationID)
+	require.Error(t, err)
+	require.Empty(t, instance.trialNotifier.trialStarted)
+}
+
+func TestCallback_LoginDoesNotArmTrialForPaidOrganization(t *testing.T) {
+	t.Parallel()
+
+	const (
+		email          = "paid-gated@example.com"
+		organizationID = "org-paid-gated"
+	)
+	userInfo := &MockUserInfo{
+		UserID:        "user_01PAID_GATED",
+		Email:         email,
+		Organizations: nil,
+	}
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, MockOrganizationEntry{
+		ID:                 organizationID,
+		Name:               "Paid Org",
+		Slug:               organizationID,
+		WorkosID:           nil,
+		UserWorkspaceSlugs: nil,
+	}, userInfo.UserID))
+	require.NoError(t, orgRepo.New(instance.conn).SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+		GramAccountType: "pro",
+		ID:              organizationID,
+	}))
+
+	result, err := instance.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+
+	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.False(t, authCtx.Whitelisted)
+	require.Equal(t, "pro", authCtx.AccountType)
+	require.Empty(t, instance.trialNotifier.trialStarted)
 }
 
 func TestCallback_ReactivatedSignupPrefersExistingWhitelistedOrg(t *testing.T) {

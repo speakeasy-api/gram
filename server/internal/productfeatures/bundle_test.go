@@ -33,6 +33,36 @@ func TestSeedOrganizationDefaultsTx_EnablesLoggingBundle(t *testing.T) {
 	}
 }
 
+func TestSeedOrganizationDefaultsTx_LeavesADisabledDefaultDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	organizationID := activeOrganizationID(t, ctx)
+	seedOrganization(t, ctx, ti.conn, organizationID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	q := featurerepo.New(ti.conn)
+	_, err := q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+	})
+	require.NoError(t, err)
+
+	tx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, productfeatures.SeedOrganizationDefaultsTx(ctx, tx, organizationID))
+	require.NoError(t, tx.Commit(ctx))
+
+	enabled, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "replaying default entitlements must not undo an administrator disable")
+}
+
 func TestOrganizationDefaultFailOpenCanBeDisabled(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProductFeaturesService(t)
