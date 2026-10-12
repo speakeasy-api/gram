@@ -1297,14 +1297,14 @@ FOR UPDATE OF c;
 -- project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are
 -- organization-tier only.
 -- name: LockJsonWebKeySetForClientAttach :one
-SELECT id, identity_provider_connection_id
+SELECT json_web_key_sets.id, json_web_key_sets.identity_provider_connection_id
 FROM json_web_key_sets
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND managed_ema_issuer IS NOT TRUE
-  AND deleted IS FALSE
-FOR SHARE;
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM internal_session_issuers AS isi WHERE isi.organization_id = json_web_key_sets.organization_id AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND json_web_key_sets.deleted IS FALSE
+FOR SHARE OF json_web_key_sets;
 
 -- Sets or clears a project-tier client's key set; a NULL target is the detach.
 -- Unconditional assignment rather than the COALESCE patches
@@ -4503,13 +4503,13 @@ AND ((remote_session_clients.project_id = @project_id AND EXISTS (
 )) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = sqlc.narg('organization_id')));
 
 -- name: ReadEMAJsonWebKeySet :one
-SELECT id
+SELECT json_web_key_sets.id
 FROM json_web_key_sets
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND managed_ema_issuer IS NOT TRUE
-  AND deleted IS FALSE;
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM internal_session_issuers AS isi WHERE isi.organization_id = json_web_key_sets.organization_id AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND json_web_key_sets.deleted IS FALSE;
 -- Trusted delegation credentials are organization-scoped, never project-scoped.
 -- name: GetTrustedDelegationCredential :one
 SELECT s.* FROM trusted_issuer_sessions AS s

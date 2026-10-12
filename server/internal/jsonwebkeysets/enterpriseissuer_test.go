@@ -120,7 +120,12 @@ func TestEnterpriseIssuer_Lifecycle(t *testing.T) {
 	disabled, err := ti.service.DisableOrganizationEnterpriseIssuer(admin, &gen.DisableOrganizationEnterpriseIssuerPayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.False(t, disabled.Enabled)
-	require.Nil(t, disabled.Issuer)
-	_, err = ti.service.RotateOrganizationEnterpriseIssuer(admin, &gen.RotateOrganizationEnterpriseIssuerPayload{ActiveKid: active, SessionToken: nil})
-	requireOopsCode(t, err, oops.CodeNotFound)
+	require.False(t, disabled.SigningEnabled)
+	require.Equal(t, wantIssuer, *disabled.Issuer, "the issuer URI survives disabling")
+	require.Len(t, disabled.Keys, 1, "keys stay published while disabled")
+
+	reenabled, err := ti.service.EnableOrganizationEnterpriseIssuer(admin, &gen.EnableOrganizationEnterpriseIssuerPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.True(t, reenabled.Enabled)
+	require.Equal(t, active, reenabled.Keys[0].Kid, "re-enabling keeps the key")
 }

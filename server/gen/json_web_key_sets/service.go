@@ -23,12 +23,13 @@ type Service interface {
 	// whether signing is available. Requires org:read.
 	GetOrganizationEnterpriseIssuer(context.Context, *GetOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error)
 	// Provision the organization's enterprise authorization issuer with a
-	// dedicated Speakeasy-managed signing key. Idempotent. Requires org:admin and
-	// the SSO entitlement. Does not configure trust at any service or grant access.
+	// dedicated Speakeasy-managed signing key, or re-enable a disabled one.
+	// Idempotent. Requires org:admin and the SSO entitlement. Does not configure
+	// trust at any service or grant access.
 	EnableOrganizationEnterpriseIssuer(context.Context, *EnableOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error)
-	// Withdraw the organization's enterprise authorization issuer: every key is
-	// revoked, signing stops and cached service tokens are discarded. Enabling
-	// again keeps the same issuer URI with a new key. Requires org:admin.
+	// Stop Speakeasy signing with the organization's enterprise authorization
+	// issuer and discard cached service tokens. The issuer URI and its published
+	// keys stay; enabling again resumes signing. Requires org:admin.
 	DisableOrganizationEnterpriseIssuer(context.Context, *DisableOrganizationEnterpriseIssuerPayload) (res *OrganizationEnterpriseIssuer, err error)
 	// Rotate the issuer's signing key without changing its URI. The first call
 	// publishes a new key and returns rotation_ready_at; call again with the same
@@ -280,7 +281,7 @@ type ListSetsPayload struct {
 type OrganizationEnterpriseIssuer struct {
 	// Whether issuer provisioning is available for this organization.
 	Available bool
-	// Whether the organization's issuer is provisioned.
+	// Whether the organization's issuer is provisioned and signing is not disabled.
 	Enabled bool
 	// Whether Speakeasy is currently allowed to sign with the issuer on this
 	// deployment.

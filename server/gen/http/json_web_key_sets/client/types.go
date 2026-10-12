@@ -59,7 +59,7 @@ type UpdateSetRequestBody struct {
 type GetOrganizationEnterpriseIssuerResponseBody struct {
 	// Whether issuer provisioning is available for this organization.
 	Available *bool `form:"available,omitempty" json:"available,omitempty" xml:"available,omitempty"`
-	// Whether the organization's issuer is provisioned.
+	// Whether the organization's issuer is provisioned and signing is not disabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Whether Speakeasy is currently allowed to sign with the issuer on this
 	// deployment.
@@ -80,7 +80,7 @@ type GetOrganizationEnterpriseIssuerResponseBody struct {
 type EnableOrganizationEnterpriseIssuerResponseBody struct {
 	// Whether issuer provisioning is available for this organization.
 	Available *bool `form:"available,omitempty" json:"available,omitempty" xml:"available,omitempty"`
-	// Whether the organization's issuer is provisioned.
+	// Whether the organization's issuer is provisioned and signing is not disabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Whether Speakeasy is currently allowed to sign with the issuer on this
 	// deployment.
@@ -101,7 +101,7 @@ type EnableOrganizationEnterpriseIssuerResponseBody struct {
 type DisableOrganizationEnterpriseIssuerResponseBody struct {
 	// Whether issuer provisioning is available for this organization.
 	Available *bool `form:"available,omitempty" json:"available,omitempty" xml:"available,omitempty"`
-	// Whether the organization's issuer is provisioned.
+	// Whether the organization's issuer is provisioned and signing is not disabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Whether Speakeasy is currently allowed to sign with the issuer on this
 	// deployment.
@@ -122,7 +122,7 @@ type DisableOrganizationEnterpriseIssuerResponseBody struct {
 type RotateOrganizationEnterpriseIssuerResponseBody struct {
 	// Whether issuer provisioning is available for this organization.
 	Available *bool `form:"available,omitempty" json:"available,omitempty" xml:"available,omitempty"`
-	// Whether the organization's issuer is provisioned.
+	// Whether the organization's issuer is provisioned and signing is not disabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Whether Speakeasy is currently allowed to sign with the issuer on this
 	// deployment.
@@ -143,7 +143,7 @@ type RotateOrganizationEnterpriseIssuerResponseBody struct {
 type ReplaceOrganizationEnterpriseIssuerKeyResponseBody struct {
 	// Whether issuer provisioning is available for this organization.
 	Available *bool `form:"available,omitempty" json:"available,omitempty" xml:"available,omitempty"`
-	// Whether the organization's issuer is provisioned.
+	// Whether the organization's issuer is provisioned and signing is not disabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Whether Speakeasy is currently allowed to sign with the issuer on this
 	// deployment.

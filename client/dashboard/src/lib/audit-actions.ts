@@ -106,6 +106,8 @@ export const AUDIT_ACTIONS = [
   "json_web_key:revoke",
   "json_web_key_set:create",
   "json_web_key_set:delete",
+  "json_web_key_set:disable_issuer",
+  "json_web_key_set:enable_issuer",
   "json_web_key_set:update",
   "killswitch:activate",
   "killswitch:change",
@@ -465,6 +467,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated JSON Web Key Set";
     case "json_web_key_set:delete":
       return "deleted JSON Web Key Set";
+    case "json_web_key_set:enable_issuer":
+      return "enabled the enterprise authorization issuer for";
+    case "json_web_key_set:disable_issuer":
+      return "disabled the enterprise authorization issuer for";
     case "json_web_key:publish":
       return "published JSON Web Key";
     case "json_web_key:activate":

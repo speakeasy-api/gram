@@ -33811,7 +33811,7 @@ paths:
                 name: DeleteJsonWebKeySet
     /rpc/jsonWebKeySets.disableOrganizationEnterpriseIssuer:
         post:
-            description: 'Withdraw the organization''s enterprise authorization issuer: every key is revoked, signing stops and cached service tokens are discarded. Enabling again keeps the same issuer URI with a new key. Requires org:admin.'
+            description: Stop Speakeasy signing with the organization's enterprise authorization issuer and discard cached service tokens. The issuer URI and its published keys stay; enabling again resumes signing. Requires org:admin.
             operationId: disableOrganizationEnterpriseIssuer
             parameters:
                 - allowEmptyValue: true
@@ -33892,7 +33892,7 @@ paths:
                 name: DisableOrganizationEnterpriseIssuer
     /rpc/jsonWebKeySets.enableOrganizationEnterpriseIssuer:
         post:
-            description: Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.
+            description: Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key, or re-enable a disabled one. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.
             operationId: enableOrganizationEnterpriseIssuer
             parameters:
                 - allowEmptyValue: true
@@ -104561,7 +104561,7 @@ components:
                     description: Whether issuer provisioning is available for this organization.
                 enabled:
                     type: boolean
-                    description: Whether the organization's issuer is provisioned.
+                    description: Whether the organization's issuer is provisioned and signing is not disabled.
                 issuer:
                     type: string
                     description: Issuer URI to register with supported services. It never changes.

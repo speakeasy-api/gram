@@ -37,7 +37,7 @@ var _ = Service("jsonWebKeySets", func() {
 	})
 
 	Method("enableOrganizationEnterpriseIssuer", func() {
-		Description("Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.")
+		Description("Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key, or re-enable a disabled one. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.")
 		Payload(func() { security.SessionPayload() })
 		Result(OrganizationEnterpriseIssuer)
 		HTTP(func() {
@@ -51,7 +51,7 @@ var _ = Service("jsonWebKeySets", func() {
 	})
 
 	Method("disableOrganizationEnterpriseIssuer", func() {
-		Description("Withdraw the organization's enterprise authorization issuer: every key is revoked, signing stops and cached service tokens are discarded. Enabling again keeps the same issuer URI with a new key. Requires org:admin.")
+		Description("Stop Speakeasy signing with the organization's enterprise authorization issuer and discard cached service tokens. The issuer URI and its published keys stay; enabling again resumes signing. Requires org:admin.")
 		Payload(func() { security.SessionPayload() })
 		Result(OrganizationEnterpriseIssuer)
 		HTTP(func() {
@@ -389,7 +389,7 @@ var _ = Service("jsonWebKeySets", func() {
 // OrganizationEnterpriseIssuer is an organization's public trust anchor, never a signing capability.
 var OrganizationEnterpriseIssuer = Type("OrganizationEnterpriseIssuer", func() {
 	Attribute("available", Boolean, "Whether issuer provisioning is available for this organization.")
-	Attribute("enabled", Boolean, "Whether the organization's issuer is provisioned.")
+	Attribute("enabled", Boolean, "Whether the organization's issuer is provisioned and signing is not disabled.")
 	Attribute("signing_enabled", Boolean, "Whether Speakeasy is currently allowed to sign with the issuer on this deployment.")
 	Attribute("issuer", String, "Issuer URI to register with supported services. It never changes.")
 	Attribute("jwks_uri", String, "Public verification keys.")

@@ -81,14 +81,17 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims map[str
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
 	q := repo.New(s.db)
-	set, err := q.GetOrganizationEMAIssuer(ctx, organizationID)
+	row, err := q.GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return "", ErrNotFound
 	case err != nil:
 		return "", fmt.Errorf("load issuer: %w", err)
 	}
-	key, err := q.GetActiveJsonWebKey(ctx, repo.GetActiveJsonWebKeyParams{JsonWebKeySetID: set.ID, OrganizationID: organizationID})
+	if row.DisabledAt.Valid {
+		return "", ErrDisabled
+	}
+	key, err := q.GetActiveJsonWebKey(ctx, repo.GetActiveJsonWebKeyParams{JsonWebKeySetID: row.JsonWebKeySetID, OrganizationID: organizationID})
 	if err != nil {
 		return "", fmt.Errorf("load active issuer key: %w", err)
 	}

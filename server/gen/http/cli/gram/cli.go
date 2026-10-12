@@ -18603,8 +18603,8 @@ func jsonWebKeySetsUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] json-web-key-sets COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-organization-enterprise-issuer: Read the organization's enterprise authorization issuer: the permanent issuer URI to register with supported services, its published keys and whether signing is available. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    enable-organization-enterprise-issuer: Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.`)
-	fmt.Fprintln(os.Stderr, `    disable-organization-enterprise-issuer: Withdraw the organization's enterprise authorization issuer: every key is revoked, signing stops and cached service tokens are discarded. Enabling again keeps the same issuer URI with a new key. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    enable-organization-enterprise-issuer: Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key, or re-enable a disabled one. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.`)
+	fmt.Fprintln(os.Stderr, `    disable-organization-enterprise-issuer: Stop Speakeasy signing with the organization's enterprise authorization issuer and discard cached service tokens. The issuer URI and its published keys stay; enabling again resumes signing. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    rotate-organization-enterprise-issuer: Rotate the issuer's signing key without changing its URI. The first call publishes a new key and returns rotation_ready_at; call again with the same active_kid after that time to activate it. The previous key stays published briefly so services can still verify it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    replace-organization-enterprise-issuer-key: Compromise response: revoke one issuer key immediately and, if it was active, activate a fresh key at once. The issuer URI does not change; services stop accepting the revoked key once their key cache refreshes. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    create-set: Create a JSON Web Key Set backed by an organization external key, minting and publishing the set's first key straight to active. Reads the backing key's public half from the customer's KMS and refuses when the key's real algorithm disagrees with the one recorded against it. Rate limited per organization. Requires org:admin.`)
@@ -18648,7 +18648,7 @@ func jsonWebKeySetsEnableOrganizationEnterpriseIssuerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.`)
+	fmt.Fprintln(os.Stderr, `Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key, or re-enable a disabled one. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -18666,7 +18666,7 @@ func jsonWebKeySetsDisableOrganizationEnterpriseIssuerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Withdraw the organization's enterprise authorization issuer: every key is revoked, signing stops and cached service tokens are discarded. Enabling again keeps the same issuer URI with a new key. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Stop Speakeasy signing with the organization's enterprise authorization issuer and discard cached service tokens. The issuer URI and its published keys stay; enabling again resumes signing. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)

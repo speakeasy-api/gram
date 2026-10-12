@@ -63,13 +63,17 @@ func issuerKeyEvent(ctx context.Context, organizationID string, key jwksrepo.Jso
 	return event
 }
 
-// EnsureEMAIssuer creates the organization's issuer with one dedicated KMS key,
-// or returns the existing one. Concurrent callers adopt the winner and disable
-// their unused key.
+// EnsureEMAIssuer creates the organization's issuer with one dedicated KMS
+// key, re-enables a disabled one, or returns the live one. Concurrent callers
+// adopt the winner and disable their unused key.
 func (p *Provisioner) EnsureEMAIssuer(ctx context.Context, organizationID string) (uuid.UUID, error) {
-	q := jwksrepo.New(p.db)
-	existing, err := q.GetOrganizationEMAIssuer(ctx, organizationID)
+	existing, err := jwksrepo.New(p.db).GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	if err == nil {
+		if existing.DisabledAt.Valid {
+			if err := p.setEMAIssuerDisabled(ctx, organizationID, false); err != nil {
+				return uuid.Nil, err
+			}
+		}
 		return existing.ID, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -93,7 +97,7 @@ func (p *Provisioner) EnsureEMAIssuer(ctx context.Context, organizationID string
 	if err != nil {
 		p.abandonKey(ctx, logger, kms, uuid.Nil, created.key, signer, err)
 		if _, ok := errors.AsType[*adoptedError](err); ok {
-			return id, nil
+			return p.EnsureEMAIssuer(ctx, organizationID)
 		}
 		return uuid.Nil, err
 	}
@@ -110,9 +114,9 @@ func (p *Provisioner) createEMAIssuerRows(ctx context.Context, organizationID st
 	if _, err := jq.LockOrganizationForEMAIssuer(ctx, organizationID); err != nil {
 		return uuid.Nil, fmt.Errorf("lock issuer organization: %w", err)
 	}
-	existing, err := jq.GetOrganizationEMAIssuer(ctx, organizationID)
+	_, err = jq.GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	if err == nil {
-		return existing.ID, &adoptedError{client: nil}
+		return uuid.Nil, &adoptedError{client: nil}
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, fmt.Errorf("recheck organization issuer: %w", err)
@@ -124,7 +128,11 @@ func (p *Provisioner) createEMAIssuerRows(ctx context.Context, organizationID st
 	if err := requireSigningCredentialUnchanged(ctx, repo.New(tx), signer); err != nil {
 		return uuid.Nil, err
 	}
-	set, err := jq.CreateOrganizationEMAIssuer(ctx, jwksrepo.CreateOrganizationEMAIssuerParams{OrganizationID: organizationID, ExternalKeyID: backing.ID})
+	set, err := jq.CreateJsonWebKeySet(ctx, jwksrepo.CreateJsonWebKeySetParams{OrganizationID: organizationID, ExternalKeyID: backing.ID, Name: emaIssuerKeyName, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("create issuer key set: %w", err)
+	}
+	issuer, err := jq.CreateInternalSessionIssuer(ctx, jwksrepo.CreateInternalSessionIssuerParams{OrganizationID: organizationID, JsonWebKeySetID: set.ID})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("create organization issuer: %w", err)
 	}
@@ -139,10 +147,55 @@ func (p *Provisioner) createEMAIssuerRows(ctx context.Context, organizationID st
 	if err := p.audit.LogJsonWebKeyPublish(ctx, tx, issuerKeyEvent(ctx, organizationID, key, nil, nil)); err != nil {
 		return uuid.Nil, fmt.Errorf("audit organization issuer key: %w", err)
 	}
+	if err := p.audit.LogJsonWebKeySetEnableIssuer(ctx, tx, audit.LogJsonWebKeySetIssuerEvent{OrganizationID: organizationID, Actor: actor, ActorDisplayName: displayName, ActorSlug: nil, SetURN: urn.NewJsonWebKeySet(set.ID), SetName: set.Name}); err != nil {
+		return uuid.Nil, fmt.Errorf("audit issuer enable: %w", err)
+	}
 	if err := commitPublication(ctx, tx, organizationID); err != nil {
 		return uuid.Nil, err
 	}
-	return set.ID, nil
+	return issuer.ID, nil
+}
+
+// setEMAIssuerDisabled flips signing for the organization's issuer and audits
+// a real change. Keys stay published either way.
+func (p *Provisioner) setEMAIssuerDisabled(ctx context.Context, organizationID string, disabled bool) error {
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin issuer update: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	jq := jwksrepo.New(tx)
+	set, err := jq.LockOrganizationEMAIssuerForKeyWrite(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return emaissuer.ErrNotFound
+	case err != nil:
+		return fmt.Errorf("lock issuer: %w", err)
+	}
+	before, err := jq.GetOrganizationInternalSessionIssuer(ctx, organizationID)
+	if err != nil {
+		return fmt.Errorf("read issuer: %w", err)
+	}
+	if before.DisabledAt.Valid == disabled {
+		return nil
+	}
+	if _, err := jq.SetInternalSessionIssuerDisabled(ctx, jwksrepo.SetInternalSessionIssuerDisabledParams{Disabled: disabled, OrganizationID: organizationID}); err != nil {
+		return fmt.Errorf("update issuer: %w", err)
+	}
+	actor, displayName := issuerActor(ctx, organizationID)
+	event := audit.LogJsonWebKeySetIssuerEvent{OrganizationID: organizationID, Actor: actor, ActorDisplayName: displayName, ActorSlug: nil, SetURN: urn.NewJsonWebKeySet(set.ID), SetName: set.Name}
+	if disabled {
+		err = p.audit.LogJsonWebKeySetDisableIssuer(ctx, tx, event)
+	} else {
+		err = p.audit.LogJsonWebKeySetEnableIssuer(ctx, tx, event)
+	}
+	if err != nil {
+		return fmt.Errorf("audit issuer update: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit issuer update: %w", err)
+	}
+	return nil
 }
 
 // RotateEMAIssuer rotates the issuer's signing key in two calls, like
@@ -448,14 +501,14 @@ func (p *Provisioner) ReplaceEMAIssuerKey(ctx context.Context, organizationID, k
 
 func (p *Provisioner) liveEMAIssuerKey(ctx context.Context, organizationID, kid string) (jwksrepo.JsonWebKey, error) {
 	q := jwksrepo.New(p.db)
-	set, err := q.GetOrganizationEMAIssuer(ctx, organizationID)
+	issuer, err := q.GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return jwksrepo.JsonWebKey{}, emaissuer.ErrNotFound
 	case err != nil:
 		return jwksrepo.JsonWebKey{}, fmt.Errorf("read issuer: %w", err)
 	}
-	keys, err := q.ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: set.ID, OrganizationID: organizationID, IncludeRevoked: false})
+	keys, err := q.ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: issuer.JsonWebKeySetID, OrganizationID: organizationID, IncludeRevoked: false})
 	if err != nil {
 		return jwksrepo.JsonWebKey{}, fmt.Errorf("load issuer keys: %w", err)
 	}
@@ -523,51 +576,13 @@ func (p *Provisioner) replaceEMAIssuerKeyRows(ctx context.Context, organizationI
 	return []jwksrepo.JsonWebKey{revoked}, nil
 }
 
-// DisableEMAIssuer withdraws the organization's issuer: every key is revoked
-// and disabled in KMS, discovery stops serving, signing fails, and cached
-// vendor tokens are purged. Enabling again provisions a new key behind the
-// same issuer URL.
+// DisableEMAIssuer stops signing with the organization's issuer and purges
+// cached vendor tokens. Keys stay published, so enabling again resumes with
+// the same issuer URL and keys. Disabling twice is a no-op.
 func (p *Provisioner) DisableEMAIssuer(ctx context.Context, organizationID string) error {
-	tx, err := p.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin issuer disable: %w", err)
+	if err := p.setEMAIssuerDisabled(ctx, organizationID, true); err != nil {
+		return err
 	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	jq := jwksrepo.New(tx)
-	set, err := jq.LockOrganizationEMAIssuerForKeyWrite(ctx, organizationID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return emaissuer.ErrNotFound
-	case err != nil:
-		return fmt.Errorf("lock issuer: %w", err)
-	}
-	keys, err := jq.ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: set.ID, OrganizationID: organizationID, IncludeRevoked: false})
-	if err != nil {
-		return fmt.Errorf("load issuer keys: %w", err)
-	}
-	revoked := make([]jwksrepo.JsonWebKey, 0, len(keys))
-	for _, key := range keys {
-		row, err := jq.RevokeJsonWebKey(ctx, jwksrepo.RevokeJsonWebKeyParams{ID: key.ID, OrganizationID: organizationID})
-		if err != nil {
-			return fmt.Errorf("revoke issuer key: %w", err)
-		}
-		if err := p.audit.LogJsonWebKeyRevoke(ctx, tx, issuerKeyEvent(ctx, organizationID, row, keySnapshot(key), keySnapshot(row))); err != nil {
-			return fmt.Errorf("audit issuer key revocation: %w", err)
-		}
-		revoked = append(revoked, row)
-	}
-	deleted, err := jq.SoftDeleteOrganizationEMAIssuer(ctx, jwksrepo.SoftDeleteOrganizationEMAIssuerParams{ID: set.ID, OrganizationID: organizationID})
-	if err != nil {
-		return fmt.Errorf("withdraw issuer: %w", err)
-	}
-	actor, displayName := issuerActor(ctx, organizationID)
-	if err := p.audit.LogJsonWebKeySetDelete(ctx, tx, audit.LogJsonWebKeySetDeleteEvent{OrganizationID: organizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Actor: actor, ActorDisplayName: displayName, ActorSlug: nil, SetURN: urn.NewJsonWebKeySet(deleted.ID), SetName: deleted.Name}); err != nil {
-		return fmt.Errorf("audit issuer withdrawal: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit issuer disable: %w", err)
-	}
-	p.retireKeyMaterial(ctx, p.logger.With(attr.SlogOrganizationID(organizationID)), organizationID, revoked)
 	p.purgeEMAIssuerTokens(ctx, organizationID)
 	return nil
 }

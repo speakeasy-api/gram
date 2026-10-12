@@ -92,14 +92,19 @@ func publishedIssuerKids(t *testing.T, ctx context.Context, f issuerFixture, org
 func activeIssuerKid(t *testing.T, ctx context.Context, f issuerFixture, orgID string) string {
 	t.Helper()
 	q := jwksrepo.New(f.ti.conn)
-	set, err := q.GetOrganizationEMAIssuer(ctx, orgID)
-	require.NoError(t, err)
-	key, err := q.GetActiveJsonWebKey(ctx, jwksrepo.GetActiveJsonWebKeyParams{JsonWebKeySetID: set.ID, OrganizationID: orgID})
+	key, err := q.GetActiveJsonWebKey(ctx, jwksrepo.GetActiveJsonWebKeyParams{JsonWebKeySetID: issuerKeySet(t, ctx, f, orgID), OrganizationID: orgID})
 	require.NoError(t, err)
 	return key.Kid
 }
 
 // verifyAssertion checks an assertion against the published keys, as a vendor does.
+func issuerKeySet(t *testing.T, ctx context.Context, f issuerFixture, orgID string) uuid.UUID {
+	t.Helper()
+	issuer, err := jwksrepo.New(f.ti.conn).GetOrganizationInternalSessionIssuer(ctx, orgID)
+	require.NoError(t, err)
+	return issuer.JsonWebKeySetID
+}
+
 func verifyAssertion(t *testing.T, ctx context.Context, f issuerFixture, orgID, assertion string) map[string]any {
 	t.Helper()
 	parsed, err := jwt.ParseSigned(assertion, []jose.SignatureAlgorithm{jose.RS256, jose.ES256})
@@ -142,8 +147,9 @@ func TestEMAIssuer_RotateKeepsURLAndOverlaps(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)
 	provisioner, kms := f.provisioner(t)
-	setID, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
 	require.NoError(t, err)
+	setID := issuerKeySet(t, ctx, f, f.ti.orgID)
 	before := activeIssuerKid(t, ctx, f, f.ti.orgID)
 
 	assertion, err := f.signer(t, kms, emaissuer.SignerConfig{}).Sign(ctx, f.ti.orgID, map[string]any{"sub": "user-1"})
@@ -168,9 +174,7 @@ func TestEMAIssuer_RotateKeepsURLAndOverlaps(t *testing.T) {
 	require.NotEqual(t, before, after)
 	require.ElementsMatch(t, []string{before, after}, publishedIssuerKids(t, ctx, f, f.ti.orgID), "retired key verifies during the overlap")
 
-	set, err := jwksrepo.New(f.ti.conn).GetOrganizationEMAIssuer(ctx, f.ti.orgID)
-	require.NoError(t, err)
-	require.Equal(t, setID, set.ID, "rotation keeps one issuer")
+	require.Equal(t, setID, issuerKeySet(t, ctx, f, f.ti.orgID), "rotation keeps one key set")
 	assertion, err = f.signer(t, rotatingKMS, emaissuer.SignerConfig{}).Sign(ctx, f.ti.orgID, map[string]any{"sub": "user-1"})
 	require.NoError(t, err)
 	require.Equal(t, issuerURL(t, f.ti.orgID), verifyAssertion(t, ctx, f, f.ti.orgID, assertion)["iss"], "issuer URL survives rotation")
@@ -216,7 +220,7 @@ func TestEMAIssuer_ReplaceRevokesImmediately(t *testing.T) {
 	require.ErrorIs(t, replacer.ReplaceEMAIssuerKey(ctx, f.ti.orgID, compromised), emaissuer.ErrKeyNotFound)
 }
 
-func TestEMAIssuer_DisableWithdrawsAndReenableKeepsURL(t *testing.T) {
+func TestEMAIssuer_DisableStopsSigningAndReenableResumes(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)
 	provisioner, kms := f.provisioner(t)
@@ -224,21 +228,22 @@ func TestEMAIssuer_DisableWithdrawsAndReenableKeepsURL(t *testing.T) {
 	provisioner.SetEMAIssuerTokenPurger(purger)
 	first, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
 	require.NoError(t, err)
+	kid := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	signer := f.signer(t, kms, emaissuer.SignerConfig{})
 
 	require.NoError(t, provisioner.DisableEMAIssuer(ctx, f.ti.orgID))
-	_, err = emaissuer.PublicKeys(ctx, f.ti.conn, f.ti.orgID)
-	require.ErrorIs(t, err, emaissuer.ErrNotFound)
-	_, err = f.signer(t, kms, emaissuer.SignerConfig{}).Sign(ctx, f.ti.orgID, map[string]any{})
-	require.ErrorIs(t, err, emaissuer.ErrNotFound)
-	require.Equal(t, kms.Created(), kms.Disabled())
+	require.Equal(t, []string{kid}, publishedIssuerKids(t, ctx, f, f.ti.orgID), "discovery keeps serving while disabled")
+	_, err = signer.Sign(ctx, f.ti.orgID, map[string]any{})
+	require.ErrorIs(t, err, emaissuer.ErrDisabled)
+	require.Empty(t, kms.Disabled(), "disabling keeps the key")
 	require.Equal(t, []string{f.ti.orgID}, purger.Purged())
-	require.ErrorIs(t, provisioner.DisableEMAIssuer(ctx, f.ti.orgID), emaissuer.ErrNotFound)
+	require.NoError(t, provisioner.DisableEMAIssuer(ctx, f.ti.orgID), "disabling twice is a no-op")
 
-	reenabler, reenablingKMS := f.provisioner(t)
-	second, err := reenabler.EnsureEMAIssuer(ctx, f.ti.orgID)
+	second, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
 	require.NoError(t, err)
-	require.NotEqual(t, first, second)
-	assertion, err := f.signer(t, reenablingKMS, emaissuer.SignerConfig{}).Sign(ctx, f.ti.orgID, map[string]any{})
+	require.Equal(t, first, second, "re-enabling keeps the issuer")
+	require.Len(t, kms.Created(), 1, "re-enabling creates no key")
+	assertion, err := signer.Sign(ctx, f.ti.orgID, map[string]any{})
 	require.NoError(t, err)
 	require.Equal(t, issuerURL(t, f.ti.orgID), verifyAssertion(t, ctx, f, f.ti.orgID, assertion)["iss"])
 }
@@ -280,10 +285,11 @@ func TestEMAIssuer_HiddenFromCustomerKeyAPIs(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)
 	provisioner, _ := f.provisioner(t)
-	setID, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
 	require.NoError(t, err)
 	jq := jwksrepo.New(f.ti.conn)
-	set, err := jq.GetOrganizationEMAIssuer(ctx, f.ti.orgID)
+	setID := issuerKeySet(t, ctx, f, f.ti.orgID)
+	set, err := jq.LockOrganizationEMAIssuerForKeyWrite(ctx, f.ti.orgID)
 	require.NoError(t, err)
 
 	_, err = jq.GetJsonWebKeySet(ctx, jwksrepo.GetJsonWebKeySetParams{ID: setID, OrganizationID: f.ti.orgID})

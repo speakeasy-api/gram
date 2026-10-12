@@ -69,7 +69,8 @@ WHERE ek.id = @id
   AND NOT EXISTS (
     SELECT 1 FROM json_web_key_sets AS ema
     WHERE ema.organization_id = ek.organization_id
-      AND ema.managed_ema_issuer IS TRUE
+      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
       AND (ema.external_key_id = ek.id OR EXISTS (
         SELECT 1 FROM json_web_keys AS emak
         WHERE emak.organization_id = ema.organization_id
@@ -123,7 +124,8 @@ WHERE ek.id = @id
   AND NOT EXISTS (
     SELECT 1 FROM json_web_key_sets AS ema
     WHERE ema.organization_id = ek.organization_id
-      AND ema.managed_ema_issuer IS TRUE
+      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
       AND (ema.external_key_id = ek.id OR EXISTS (
         SELECT 1 FROM json_web_keys AS emak
         WHERE emak.organization_id = ema.organization_id
@@ -142,7 +144,8 @@ WHERE ek.organization_id = @organization_id
   AND NOT EXISTS (
     SELECT 1 FROM json_web_key_sets AS ema
     WHERE ema.organization_id = ek.organization_id
-      AND ema.managed_ema_issuer IS TRUE
+      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
       AND (ema.external_key_id = ek.id OR EXISTS (
         SELECT 1 FROM json_web_keys AS emak
         WHERE emak.organization_id = ema.organization_id
@@ -177,7 +180,8 @@ WHERE external_keys.id = @id
   AND NOT EXISTS (
     SELECT 1 FROM json_web_key_sets AS ema
     WHERE ema.organization_id = external_keys.organization_id
-      AND ema.managed_ema_issuer IS TRUE
+      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
       AND (ema.external_key_id = external_keys.id OR EXISTS (
         SELECT 1 FROM json_web_keys AS emak
         WHERE emak.organization_id = ema.organization_id
@@ -204,7 +208,8 @@ WHERE external_keys.id = @id
   AND NOT EXISTS (
     SELECT 1 FROM json_web_key_sets AS ema
     WHERE ema.organization_id = external_keys.organization_id
-      AND ema.managed_ema_issuer IS TRUE
+      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
       AND (ema.external_key_id = external_keys.id OR EXISTS (
         SELECT 1 FROM json_web_keys AS emak
         WHERE emak.organization_id = ema.organization_id
@@ -263,7 +268,8 @@ WHERE external_keys.id = @id
   AND NOT EXISTS (
     SELECT 1 FROM json_web_key_sets AS ema
     WHERE ema.organization_id = external_keys.organization_id
-      AND ema.managed_ema_issuer IS TRUE
+      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
       AND (ema.external_key_id = external_keys.id OR EXISTS (
         SELECT 1 FROM json_web_keys AS emak
         WHERE emak.organization_id = ema.organization_id

@@ -20,7 +20,8 @@ SELECT
   EXISTS (
     SELECT 1 FROM json_web_key_sets AS ema
     WHERE ema.organization_id = ek.organization_id
-      AND ema.managed_ema_issuer IS TRUE
+      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
       AND (ema.external_key_id = ek.id OR EXISTS (
         SELECT 1 FROM json_web_keys AS emak
         WHERE emak.organization_id = ema.organization_id
@@ -42,7 +43,8 @@ LEFT JOIN external_credentials AS ec
         OR (ec.organization_id IS NULL AND (ek.identity_provider_connection_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM json_web_key_sets AS ema
     WHERE ema.organization_id = ek.organization_id
-      AND ema.managed_ema_issuer IS TRUE
+      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
       AND (ema.external_key_id = ek.id OR EXISTS (
         SELECT 1 FROM json_web_keys AS emak
         WHERE emak.organization_id = ema.organization_id
@@ -77,7 +79,8 @@ SELECT ek.id, ek.provider, ek.algorithm, ek.identity_provider_connection_id,
   EXISTS (
     SELECT 1 FROM json_web_key_sets AS ema
     WHERE ema.organization_id = ek.organization_id
-      AND ema.managed_ema_issuer IS TRUE
+      AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+        WHERE isi.organization_id = ema.organization_id AND isi.json_web_key_set_id = ema.id)
       AND (ema.external_key_id = ek.id OR EXISTS (
         SELECT 1 FROM json_web_keys AS emak
         WHERE emak.organization_id = ema.organization_id
@@ -99,11 +102,11 @@ RETURNING *;
 -- name: GetJsonWebKeySet :one
 SELECT *
 FROM json_web_key_sets
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND managed_ema_issuer IS NOT TRUE
-  AND deleted IS FALSE;
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM internal_session_issuers AS isi WHERE isi.organization_id = json_web_key_sets.organization_id AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND json_web_key_sets.deleted IS FALSE;
 
 -- Sets left behind by a tombstoned identity provider connection are hidden;
 -- they stay reachable by id so the organization can delete them.
@@ -112,7 +115,7 @@ SELECT *
 FROM json_web_key_sets AS s
 WHERE s.organization_id = @organization_id
   AND s.project_id IS NULL
-  AND s.managed_ema_issuer IS NOT TRUE
+  AND NOT EXISTS (SELECT 1 FROM internal_session_issuers AS isi WHERE isi.organization_id = s.organization_id AND isi.json_web_key_set_id = s.id AND isi.deleted IS FALSE)
   AND s.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1
@@ -128,11 +131,11 @@ UPDATE json_web_key_sets
 SET name = @name,
     external_key_id = @external_key_id,
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND managed_ema_issuer IS NOT TRUE
-  AND deleted IS FALSE
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM internal_session_issuers AS isi WHERE isi.organization_id = json_web_key_sets.organization_id AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND json_web_key_sets.deleted IS FALSE
 RETURNING *;
 
 -- Locks the set row to serialize every key write against every other and
@@ -146,21 +149,21 @@ RETURNING *;
 -- name: LockJsonWebKeySetForKeyWrite :one
 SELECT *
 FROM json_web_key_sets
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND managed_ema_issuer IS NOT TRUE
-  AND deleted IS FALSE
-FOR UPDATE;
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM internal_session_issuers AS isi WHERE isi.organization_id = json_web_key_sets.organization_id AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND json_web_key_sets.deleted IS FALSE
+FOR UPDATE OF json_web_key_sets;
 
 -- name: SoftDeleteJsonWebKeySet :one
 UPDATE json_web_key_sets
 SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND project_id IS NULL
-  AND managed_ema_issuer IS NOT TRUE
-  AND deleted IS FALSE
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM internal_session_issuers AS isi WHERE isi.organization_id = json_web_key_sets.organization_id AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND json_web_key_sets.deleted IS FALSE
 RETURNING *;
 
 -- Soft-deletes every live key in a set alongside the set itself. The foreign
@@ -343,15 +346,14 @@ WHERE organization_id = @organization_id::text
   AND json_web_key_set_id = @json_web_key_set_id::uuid
   AND deleted IS FALSE;
 
--- One live issuer per organization; a disabled organization has none.
--- name: GetOrganizationEMAIssuer :one
-SELECT s.*
-FROM json_web_key_sets AS s
-JOIN organization_metadata AS o ON o.id = s.organization_id AND o.disabled_at IS NULL
-WHERE s.organization_id = @organization_id
-  AND s.managed_ema_issuer IS TRUE
-  AND s.project_id IS NULL
-  AND s.deleted IS FALSE;
+-- The organization's live issuer row, enabled or disabled. A disabled
+-- organization has none.
+-- name: GetOrganizationInternalSessionIssuer :one
+SELECT isi.*
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+WHERE isi.organization_id = @organization_id
+  AND isi.deleted IS FALSE;
 
 -- Serializes issuer creation per organization.
 -- name: LockOrganizationForEMAIssuer :one
@@ -361,60 +363,68 @@ WHERE id = @organization_id
   AND disabled_at IS NULL
 FOR UPDATE;
 
--- name: CreateOrganizationEMAIssuer :one
-INSERT INTO json_web_key_sets (organization_id, external_key_id, name, managed_ema_issuer)
-VALUES (@organization_id, @external_key_id, 'Enterprise authorization issuer', TRUE)
+-- name: CreateInternalSessionIssuer :one
+INSERT INTO internal_session_issuers (organization_id, json_web_key_set_id)
+VALUES (@organization_id, @json_web_key_set_id)
 RETURNING *;
 
--- Serializes every key write on the issuer, like LockJsonWebKeySetForKeyWrite
--- does for customer sets.
--- name: LockOrganizationEMAIssuerForKeyWrite :one
-SELECT *
-FROM json_web_key_sets
+-- Enables or disables signing; discovery keeps serving either way.
+-- name: SetInternalSessionIssuerDisabled :one
+UPDATE internal_session_issuers
+SET disabled_at = CASE WHEN @disabled::boolean THEN COALESCE(disabled_at, clock_timestamp()) ELSE NULL END,
+    updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND managed_ema_issuer IS TRUE
-  AND project_id IS NULL
   AND deleted IS FALSE
-FOR UPDATE;
+RETURNING *;
+
+-- Serializes every key write on the issuer's key set, like
+-- LockJsonWebKeySetForKeyWrite does for customer sets.
+-- name: LockOrganizationEMAIssuerForKeyWrite :one
+SELECT s.*
+FROM json_web_key_sets AS s
+JOIN internal_session_issuers AS isi
+  ON isi.organization_id = s.organization_id
+ AND isi.json_web_key_set_id = s.id
+ AND isi.deleted IS FALSE
+WHERE s.organization_id = @organization_id
+  AND s.project_id IS NULL
+  AND s.deleted IS FALSE
+FOR UPDATE OF s;
 
 -- name: SetOrganizationEMAIssuerBackingKey :one
 UPDATE json_web_key_sets
 SET external_key_id = @external_key_id,
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND managed_ema_issuer IS TRUE
-  AND deleted IS FALSE
+WHERE json_web_key_sets.id = @id
+  AND json_web_key_sets.organization_id = @organization_id
+  AND EXISTS (SELECT 1 FROM internal_session_issuers AS isi
+    WHERE isi.organization_id = json_web_key_sets.organization_id
+      AND isi.json_web_key_set_id = json_web_key_sets.id AND isi.deleted IS FALSE)
+  AND json_web_key_sets.deleted IS FALSE
 RETURNING *;
 
--- name: SoftDeleteOrganizationEMAIssuer :one
-UPDATE json_web_key_sets
-SET deleted_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND managed_ema_issuer IS TRUE
-  AND deleted IS FALSE
-RETURNING *;
-
--- Public verification keys of the organization's live issuer. Pending keys
--- are published before activation; a retired key stays published only for the
--- overlap window, then drops out even before it is revoked. Ordered by
--- immutable key id so the document and its ETag are stable.
+-- Public verification keys of the organization's issuer, served whether or
+-- not signing is disabled. Pending keys are published before activation; a
+-- retired key stays only for the overlap window, then drops out even before
+-- it is revoked. Ordered by immutable key id so the document and its ETag are
+-- stable.
 -- name: GetOrganizationEMAIssuerKeys :one
 SELECT COALESCE(jsonb_agg(k.public_jwk ORDER BY k.id) FILTER (WHERE k.id IS NOT NULL), '[]'::jsonb)::jsonb AS keys
-FROM json_web_key_sets AS s
-JOIN organization_metadata AS o ON o.id = s.organization_id AND o.disabled_at IS NULL
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+JOIN json_web_key_sets AS s
+  ON s.organization_id = isi.organization_id
+ AND s.id = isi.json_web_key_set_id
+ AND s.deleted IS FALSE
 LEFT JOIN json_web_keys AS k
   ON k.organization_id = s.organization_id
  AND k.json_web_key_set_id = s.id
  AND k.deleted IS FALSE
  AND (k.state IN ('pending', 'active')
    OR (k.state = 'retired' AND k.retired_at > clock_timestamp() - make_interval(secs => @retired_overlap_seconds::integer)))
-WHERE s.organization_id = @organization_id::text
-  AND s.managed_ema_issuer IS TRUE
-  AND s.project_id IS NULL
-  AND s.deleted IS FALSE
-GROUP BY s.id;
+WHERE isi.organization_id = @organization_id::text
+  AND isi.deleted IS FALSE
+GROUP BY isi.id;
 
 -- Retired issuer keys stop being published once nothing they signed can still
 -- verify. Uses the database clock.

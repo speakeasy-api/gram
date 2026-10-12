@@ -157,7 +157,7 @@ func (s *Service) issuerView(ctx context.Context, logger *slog.Logger, organizat
 		RotationReadyAt: nil,
 	}
 	q := repo.New(s.db)
-	set, err := q.GetOrganizationEMAIssuer(ctx, organizationID)
+	row, err := q.GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return view, nil
@@ -168,7 +168,7 @@ func (s *Service) issuerView(ctx context.Context, logger *slog.Logger, organizat
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "enterprise authorization issuer origin is unavailable").LogError(ctx, logger)
 	}
-	keys, err := q.ListJsonWebKeys(ctx, repo.ListJsonWebKeysParams{JsonWebKeySetID: set.ID, OrganizationID: organizationID, IncludeRevoked: false})
+	keys, err := q.ListJsonWebKeys(ctx, repo.ListJsonWebKeysParams{JsonWebKeySetID: row.JsonWebKeySetID, OrganizationID: organizationID, IncludeRevoked: false})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading enterprise authorization keys").LogError(ctx, logger)
 	}
@@ -186,8 +186,8 @@ func (s *Service) issuerView(ctx context.Context, logger *slog.Logger, organizat
 		}
 		view.Keys = append(view.Keys, &gensvc.OrganizationEnterpriseIssuerKey{Kid: key.Kid, State: key.State})
 	}
-	view.Enabled = true
-	view.SigningEnabled = s.issuerSigner.Enabled()
+	view.Enabled = !row.DisabledAt.Valid
+	view.SigningEnabled = view.Enabled && s.issuerSigner.Enabled()
 	view.Issuer = new(issuer.String())
 	view.JwksURI = new(issuer.JoinPath("jwks").String())
 	if readyAt != nil {

@@ -25,6 +25,17 @@ type ExternalKey struct {
 	Deleted                      bool
 }
 
+type InternalSessionIssuer struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	JsonWebKeySetID uuid.UUID
+	DisabledAt      pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type JsonWebKey struct {
 	ID                 uuid.UUID
 	OrganizationID     string

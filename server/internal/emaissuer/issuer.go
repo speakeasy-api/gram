@@ -35,6 +35,8 @@ const RetiredKeyOverlap = 10 * time.Minute
 var (
 	// ErrNotFound is returned when an organization has no live issuer.
 	ErrNotFound = errors.New("emaissuer: organization has no issuer")
+	// ErrDisabled means the organization disabled signing; discovery still serves.
+	ErrDisabled = errors.New("emaissuer: organization disabled its issuer")
 	// ErrKeyNotFound means the named kid is not a live issuer key.
 	ErrKeyNotFound = errors.New("emaissuer: issuer key not found")
 	// ErrUnknownKid means a rotation named a kid never published by the issuer.
