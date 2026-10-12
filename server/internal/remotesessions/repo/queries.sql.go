@@ -6244,7 +6244,7 @@ const listEMABindingsForUpstream = `-- name: ListEMABindingsForUpstream :many
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
-  AND remote_session_issuer_id = $4
+  AND ($4::uuid IS NULL OR remote_session_issuer_id = $4::uuid)
   AND rtrim(resource, '/') = $5::text
   AND state IS DISTINCT FROM 'unlinked'
 ORDER BY id
@@ -6254,11 +6254,13 @@ type ListEMABindingsForUpstreamParams struct {
 	ProjectID             uuid.UUID
 	OrganizationID        string
 	UserSessionIssuerID   uuid.UUID
-	RemoteSessionIssuerID uuid.UUID
+	RemoteSessionIssuerID uuid.NullUUID
 	UpstreamResource      string
 }
 
-// Live bindings, in any state, naming one upstream under one issuer pair.
+// Live bindings, in any state, naming one upstream under the same issuer
+// selection as ListEMAChainingBindings: a direct upstream passes no issuer and
+// reads every issuer's bindings, a tunneled upstream passes its own.
 func (q *Queries) ListEMABindingsForUpstream(ctx context.Context, arg ListEMABindingsForUpstreamParams) ([]RemoteSessionEmaBinding, error) {
 	rows, err := q.db.Query(ctx, listEMABindingsForUpstream,
 		arg.ProjectID,

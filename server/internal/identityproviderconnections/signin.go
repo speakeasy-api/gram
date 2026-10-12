@@ -165,6 +165,7 @@ func (r *SignInReader) readClient(ctx context.Context, q *repo.Queries, organiza
 	setup.ClientReady = client.TokenEndpointAuthMethod.String == string(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT) &&
 		client.TokenEndpointAuthAudienceFormat.String == string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint) &&
 		client.JsonWebKeySetID.Valid &&
+		client.ActiveKid.Valid &&
 		!slices.ContainsFunc(SignInScopes, func(scope string) bool { return !slices.Contains(client.Scope, scope) })
 	setup.RedirectURI = remotesessions.FederatedIDPCallbackURL(origin, client.ID)
 	setup.JWKSURL = remotesessions.ClientJSONWebKeySetURL(origin, client.ID)

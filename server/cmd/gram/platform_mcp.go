@@ -845,7 +845,7 @@ func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityC
 	if config.RemoteChallengeManager == nil {
 		return nil
 	}
-	return identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption)
+	return identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
 }
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {

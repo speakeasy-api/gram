@@ -90,6 +90,9 @@ func TestPreparationAudit_EnableScopesAndUnlink(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, in.ClientID.String(), record.SubjectID)
 	require.Equal(t, "downstream-client", record.SubjectDisplay)
+	metadata, err = audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "unlinked", metadata["state"], "the disable event records the committed state")
 }
 
 func TestPreparationAudit_UnlinkWithoutBindingRecordsNothing(t *testing.T) {
