@@ -378,9 +378,12 @@ type PostgresReader struct {
 	shadowAI                  *ShadowAIService
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
+	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
+	widgets                   *WidgetService
+	dashboards                *DashboardsService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -411,9 +414,12 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		shadowAI:                  nil,
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
+		reviewLinks:               nil,
 		toolExposure:              nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
+		widgets:                   nil,
+		dashboards:                nil,
 	}
 }
 
@@ -511,6 +517,15 @@ func (r *PostgresReader) WithReviewRequests(service MCPReviewRequestService, bud
 	return r
 }
 
+// WithShadowMCPReviewLinks lets review-request tools return the dashboard page
+// where a request is reviewed.
+func (r *PostgresReader) WithShadowMCPReviewLinks(links ShadowMCPReviewLinker) *PostgresReader {
+	if r != nil && links != nil {
+		r.reviewLinks = links
+	}
+	return r
+}
+
 func (r *PostgresReader) WithShadowDecisions(service *ShadowDecisionService) *PostgresReader {
 	if r != nil && service != nil && service.valid() {
 		r.shadowDecisions = service
@@ -548,6 +563,15 @@ func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget O
 func (r *PostgresReader) WithAnalytics(service *AnalyticsService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.analytics = service
+	}
+	return r
+}
+
+// WithDashboards attaches the dashboard tools. A nil or incomplete service
+// leaves them listed with the same contract, answering unavailable.
+func (r *PostgresReader) WithDashboards(service *DashboardsService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.dashboards = service
 	}
 	return r
 }

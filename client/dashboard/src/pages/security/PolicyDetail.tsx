@@ -88,6 +88,8 @@ import {
 import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
+  SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+  shadowMCPAllowAllPostureLocked,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
   shadowMCPDecisionConflicts,
@@ -2070,6 +2072,7 @@ export function ActionStep({
   setScore,
   flagOnlySelected = false,
   mcpScoped = false,
+  pinnedAction,
   shadowMCPAllowedServers,
 }: {
   action: PolicyAction;
@@ -2086,6 +2089,7 @@ export function ActionStep({
   setScore: React.Dispatch<React.SetStateAction<number>>;
   flagOnlySelected?: boolean;
   mcpScoped?: boolean;
+  pinnedAction?: { value: PolicyAction; reason: string };
   shadowMCPAllowedServers?: ReactNode;
 }): JSX.Element {
   return (
@@ -2101,6 +2105,7 @@ export function ActionStep({
             setFormAction={setAction}
             flagOnlySelected={flagOnlySelected}
             mcpScoped={mcpScoped}
+            pinnedAction={pinnedAction}
           />
           {shadowMCPAllowedServers}
           <PolicyAudiencePicker
@@ -3751,6 +3756,10 @@ export function StandardPolicyEditor({
   const originalHasShadowMCPBlockConfiguration = policy
     ? isShadowMCPBlockConfiguration(policy.sources, policy.action)
     : false;
+  // An allow_all policy cannot stop detecting Shadow MCP or stop denying: its
+  // blocked-server list would have nothing to enforce, and the server rejects
+  // the save. Pin both controls so that shows up here, not in an error toast.
+  const allowAllPostureLocked = shadowMCPAllowAllPostureLocked(policy);
 
   useEffect(() => {
     if (
@@ -4150,10 +4159,11 @@ export function StandardPolicyEditor({
                         category={cat}
                         selected={selectedCategories.has(cat)}
                         disabledRules={disabledRules}
-                        disabledReason={builtInRuleDisabledReason(
-                          cat,
-                          selectedCategories,
-                        )}
+                        disabledReason={
+                          allowAllPostureLocked && cat === "shadow_mcp"
+                            ? SHADOW_MCP_ALLOW_ALL_LOCK_REASON
+                            : builtInRuleDisabledReason(cat, selectedCategories)
+                        }
                         mode={mode}
                         onToggle={(checked) => toggleCategory(cat, checked)}
                         onCustomize={() => customizeCategoryRules(cat)}
@@ -4223,6 +4233,14 @@ export function StandardPolicyEditor({
             setScore={setScore}
             flagOnlySelected={flagOnlySelected}
             mcpScoped={mcpScope.mode === "mcp"}
+            pinnedAction={
+              allowAllPostureLocked
+                ? {
+                    value: "block",
+                    reason: SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+                  }
+                : undefined
+            }
             shadowMCPAllowedServers={
               targetIsShadowMCPBlock ? (
                 <div className="grid gap-5 lg:grid-cols-3 lg:items-start">

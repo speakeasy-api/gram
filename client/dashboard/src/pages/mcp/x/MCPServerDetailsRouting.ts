@@ -1,4 +1,5 @@
 import type { useRoutes } from "@/routes";
+import type { TabValue as ToolsetTabValue } from "../MCPDetailsRouting";
 
 const VALID_TABS = [
   "overview",
@@ -103,5 +104,44 @@ export function mcpServerTabHref(
       return routes.mcp.x.sessions.href(mcpServerSlug);
     case "settings":
       return routes.mcp.x.settings.href(mcpServerSlug);
+  }
+}
+
+// A hosted toolset's canonical wrapper shares the toolset's id; it is managed on the toolset page.
+export function isCanonicalHostedWrapper(server: {
+  id: string;
+  toolsetId?: string | undefined;
+}): boolean {
+  return server.toolsetId !== undefined && server.id === server.toolsetId;
+}
+
+export function toolsetTabForServerPath(
+  pathname: string,
+  mcpServerSlug: string,
+  hash: string,
+): ToolsetTabValue | undefined {
+  const segment =
+    tabSegmentFromPath(pathname, mcpServerSlug) ?? hash.replace("#", "");
+  switch (segment) {
+    case "inspect":
+    case LEGACY_TOOLS_TAB:
+      return "tools";
+    case LEGACY_AUTHENTICATION_TAB:
+      return "authentication";
+    case "team-access":
+      return "team-access";
+    case "sessions":
+      return "sessions";
+    case "settings":
+      if (hash === `#${LEGACY_AUTHENTICATION_TAB}`) return "authentication";
+      // Other settings sections have no anchor on the toolset page. Keep their
+      // deep links on the server page, where the section can render and scroll.
+      if (hash && hash !== "#settings") return undefined;
+      return "settings";
+    // The toolset page has no guardrails tab.
+    case "guardrails":
+      return undefined;
+    default:
+      return "overview";
   }
 }

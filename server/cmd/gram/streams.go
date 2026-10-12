@@ -81,7 +81,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -270,6 +269,7 @@ func newStreamsCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		internalCatalogFlag(),
 		&cli.StringFlag{
 			Name:    "site-url",
 			Usage:   "The URL of the dashboard site, used to deep link from growth activity events",
@@ -554,7 +554,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
-			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
+			promptInjectionScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completionsClient, guardianPolicy, openRouter, db).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
@@ -745,7 +745,7 @@ func newStreamsCommand() *cli.Command {
 				mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
 
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
-				roleDistributionGuard := admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger))
+				roleDistributionGuard := admission.NewGuard()
 				roleDistributionHandler := roledistribution.NewHandler(logger, roledistribution.Processors{
 					Setup: func(ctx context.Context, roleURN, organizationID string) (bool, error) {
 						return roledistribution.ProcessRoleDistributionSetup(ctx, db, plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}, roleDistributionGuard, roleURN, organizationID)

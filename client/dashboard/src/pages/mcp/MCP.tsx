@@ -24,8 +24,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Plus } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Outlet } from "react-router";
+import { useCallback, useMemo } from "react";
+import { Outlet, useSearchParams } from "react-router";
 import { useToolsets } from "../toolsets/useToolsets";
 import { McpTabs } from "./McpTabs";
 import { MCPEmptyState } from "./MCPEmptyState";
@@ -175,7 +175,27 @@ function MCPOverview() {
     return grouped;
   }, [endpointsResult]);
 
-  const [search, setSearch] = useState("");
+  // The search term lives in the URL so it survives navigating to a server and
+  // back again.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get("q") ?? "";
+  const setSearch = useCallback(
+    (value: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (value) {
+            next.set("q", value);
+          } else {
+            next.delete("q");
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   const [viewMode, setViewMode] = useViewMode();
   const mcpFilters = useMcpDimensionFilters(MCP_FILTERS);
 

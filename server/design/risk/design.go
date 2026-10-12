@@ -958,35 +958,6 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskAnalysisStatus"}`)
 	})
 
-	Method("getRiskPolicyStatus", func() {
-		Description("Get the analysis status of a risk policy including progress and workflow state.")
-
-		Payload(func() {
-			security.ByKeyPayload()
-			security.SessionPayload()
-			security.ProjectPayload()
-			Attribute("id", String, "The policy ID.", func() {
-				Format(FormatUUID)
-			})
-			Required("id")
-		})
-
-		Result(shared.RiskPolicyStatus)
-
-		HTTP(func() {
-			GET("/rpc/risk.getPolicyStatus")
-			security.ByKeyHeader()
-			security.SessionHeader()
-			security.ProjectHeader()
-			Param("id")
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getRiskPolicyStatus")
-		Meta("openapi:extension:x-speakeasy-group", "risk.policies")
-		Meta("openapi:extension:x-speakeasy-name-override", "status")
-	})
-
 	Method("createRiskPolicyBypassRequest", func() {
 		Description("Create or refresh a risk policy bypass request from a signed request URL token.")
 		Security(security.Session)

@@ -4,6 +4,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +22,7 @@ func TestPreparationInheritedGrantPublicationPreservesForbidden(t *testing.T) {
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	issuer, err := repo.New(ti.conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), Slug: "inherited-publication", Issuer: "https://issuer.example.com", TokenEndpoint: conv.ToPGText("https://issuer.example.com/token"), ScopesSupported: []string{"openid"}, GrantTypesSupported: []string{oauthwire.GrantTypeJWTBearer}, AuthorizationGrantProfilesSupported: []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, ResponseTypesSupported: []string{"code"}, TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+		MetadataFetchedAt: conv.ToPGTimestamptz(time.Now()),
 	})
 	require.NoError(t, err)
 	in.RemoteSessionIssuerID = issuer.ID

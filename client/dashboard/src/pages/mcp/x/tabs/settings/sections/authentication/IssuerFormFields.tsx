@@ -283,12 +283,14 @@ export function TokenEndpointAuthMethodField({
   value,
   onChange,
   allowPrivateKeyJwt = false,
+  disabled = false,
 }: {
   value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "";
   onChange: (
     value: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
   ) => void;
   allowPrivateKeyJwt?: boolean;
+  disabled?: boolean;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -300,6 +302,7 @@ export function TokenEndpointAuthMethodField({
         onValueChange={(next) =>
           onChange(next as CreateRemoteSessionClientFormTokenEndpointAuthMethod)
         }
+        disabled={disabled}
       >
         <SelectTrigger>
           <SelectValue placeholder="client_secret_basic (default)" />
@@ -344,9 +347,11 @@ export function TokenEndpointAuthMethodField({
 export function ClientAssertionAudienceField({
   value,
   onChange,
+  disabled = false,
 }: {
   value: AuthAudienceFormat;
   onChange: (value: AuthAudienceFormat) => void;
+  disabled?: boolean;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -356,6 +361,7 @@ export function ClientAssertionAudienceField({
       <Select
         value={value}
         onValueChange={(next) => onChange(next as AuthAudienceFormat)}
+        disabled={disabled}
       >
         <SelectTrigger>
           <SelectValue />

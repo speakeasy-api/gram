@@ -53,7 +53,7 @@ func TestPreparationEvidence_CIMDUnknownRequiresConfirmation(t *testing.T) {
 
 func TestPreparationEvidence_ManualRecordsEvidenceWithoutDiscoveryReadiness(t *testing.T) {
 	t.Parallel()
-	for _, state := range []string{"unsupported_profile", "transient_failure"} {
+	for _, state := range []string{"incomplete_metadata", "transient_failure"} {
 		t.Run(state, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestService(t)
@@ -75,7 +75,7 @@ func TestPreparationEvidence_ManualRecordsEvidenceWithoutDiscoveryReadiness(t *t
 			current, err := ti.service.ReadIdentityChaining(ctx, in)
 			require.NoError(t, err)
 			require.Equal(t, result, current)
-			if state == "unsupported_profile" {
+			if state == "incomplete_metadata" {
 				preparationAdvertise(t, ctx, ti, issuer)
 				current, err = ti.service.ReadIdentityChaining(ctx, in)
 				require.NoError(t, err)

@@ -13,11 +13,18 @@ import (
 func TestProxyBuildOption_ToolsCallIdentityCoverage(t *testing.T) {
 	t.Parallel()
 
-	manager := &ProxyManager{scanEvaluator: mcpriskscan.NewNoop(testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), testenv.NewLogger(t))}
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	// Build through the production constructor so every interceptor that is
+	// copied per target is initialized, rather than relying on a partial manager.
+	manager := NewProxyManager(logger, tracerProvider, meterProvider,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		mcpriskscan.NewNoop(tracerProvider, meterProvider, logger), nil)
 	build := func(options ...BuildOption) *proxy.Proxy {
 		return manager.BuildTarget(
 			testenv.NewLogger(t),
-			proxy.ServerIdentity{},
+			proxy.ServerIdentity{McpServerID: "server-test"},
 			"https://example.com/mcp",
 			nil,
 			"public",
@@ -50,6 +57,20 @@ func TestProxyBuildOption_ToolsCallIdentityCoverage(t *testing.T) {
 	require.True(t, hasUserInterceptor(defaultProxy, "tools-call-identity-coverage"), "client-facing proxies census tools/call by default")
 	require.True(t, hasUserInterceptor(defaultProxy, "tools-call-otel-counter"), "attempt accounting runs before typed params decode")
 	require.False(t, hasTypedInterceptor(defaultProxy, "tools-call-otel-counter"), "typed params decode must not gate attempt accounting")
+
+	toolUsage, ok := defaultProxy.ToolsCallResponseInterceptors[0].(*ToolsCallUsageTrackingInterceptor)
+	require.True(t, ok)
+	require.NotNil(t, toolUsage)
+	require.NotSame(t, manager.toolsCallUsageTrackingInterceptor, toolUsage)
+	require.Equal(t, "server-test", toolUsage.mcpServerID)
+	require.Empty(t, manager.toolsCallUsageTrackingInterceptor.mcpServerID)
+
+	resourceUsage, ok := defaultProxy.ResourcesReadResponseInterceptors[0].(*ResourcesReadUsageTrackingInterceptor)
+	require.True(t, ok)
+	require.NotNil(t, resourceUsage)
+	require.NotSame(t, manager.resourcesReadUsageTrackingInterceptor, resourceUsage)
+	require.Equal(t, "server-test", resourceUsage.mcpServerID)
+	require.Empty(t, manager.resourcesReadUsageTrackingInterceptor.mcpServerID)
 
 	withoutCoverage := build(WithoutToolsCallIdentityCoverage())
 	require.False(t, hasUserInterceptor(withoutCoverage, "tools-call-identity-coverage"), "synthetic meta-member exchanges opt out")

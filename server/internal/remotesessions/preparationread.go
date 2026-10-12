@@ -73,7 +73,7 @@ func readIdentityChainingSnapshot(ctx context.Context, q *repo.Queries, project 
 	b, err := q.GetEMABinding(ctx, repo.GetEMABindingParams{ProjectID: project, OrganizationID: org, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource})
 	if errors.Is(err, pgx.ErrNoRows) {
 		state := PreparationStateConfigurationRequired
-		if eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported); eligibility != preparationEligible {
+		if eligibility := IssuerPreparationEligibility(issuer); eligibility != preparationEligible {
 			state = eligibility
 		} else if preparationMetadataTransient(issuer) {
 			state = PreparationStateTransientFailure
@@ -108,7 +108,7 @@ func readIdentityChainingSnapshot(ctx context.Context, q *repo.Queries, project 
 	if b.RemoteSessionClientID.Valid && preparationBindingGrantSource(b.GrantSource) == PreparationGrantSourceProviderReturned {
 		return preparationResult(b, issuer, client, preparationRegistrationReadiness(ctx, q, client, issuer, org, true)), nil
 	}
-	eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported)
+	eligibility := IssuerPreparationEligibility(issuer)
 	if eligibility != preparationEligible {
 		return preparationResult(b, issuer, client, eligibility), nil
 	}
