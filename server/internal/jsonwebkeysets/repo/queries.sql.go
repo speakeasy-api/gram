@@ -113,6 +113,25 @@ func (q *Queries) CascadeSoftDeleteJsonWebKeys(ctx context.Context, arg CascadeS
 	return items, nil
 }
 
+const countPendingEMAIssuerKMSCleanup = `-- name: CountPendingEMAIssuerKMSCleanup :one
+SELECT count(*)::bigint
+FROM internal_session_issuers AS isi
+JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE k.state = 'revoked'
+  AND k.kms_disabled_at IS NULL
+`
+
+// System metric: revoked issuer keys still awaiting KMS cleanup, fleet-wide.
+// Returns a count only.
+func (q *Queries) CountPendingEMAIssuerKMSCleanup(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingEMAIssuerKMSCleanup)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countRemoteSessionClientsForJsonWebKeySet = `-- name: CountRemoteSessionClientsForJsonWebKeySet :one
 SELECT COUNT(*)
 FROM remote_session_clients
@@ -734,24 +753,28 @@ FROM internal_session_issuers AS isi
 JOIN json_web_keys AS k
   ON k.organization_id = isi.organization_id
  AND k.json_web_key_set_id = isi.json_web_key_set_id
-WHERE (k.state = 'retired'
-    AND k.deleted IS FALSE
-    AND k.retired_at <= clock_timestamp() - make_interval(secs => $1::integer))
-   OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL)
+WHERE isi.organization_id > $1::text
+  AND ((isi.deleted IS FALSE
+      AND k.state = 'retired'
+      AND k.deleted IS FALSE
+      AND k.retired_at <= clock_timestamp() - make_interval(secs => $2::integer))
+    OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL))
 ORDER BY isi.organization_id
-LIMIT $2
+LIMIT $3
 `
 
 type ListOrganizationsWithPendingEMAIssuerWorkParams struct {
-	OverlapSeconds   int32
-	MaxOrganizations int32
+	AfterOrganizationID string
+	OverlapSeconds      int32
+	MaxOrganizations    int32
 }
 
-// System sweep: organizations whose issuer has retired keys past the overlap,
-// or revoked keys whose KMS cleanup is still pending. Returns only
-// organization ids; each is then swept org-qualified.
+// System sweep: organizations whose live issuer has retired keys past the
+// overlap, or with revoked keys from any issuer row whose KMS cleanup is still
+// pending. Paged by organization id so every organization is reached each
+// run. Returns only organization ids; each is then swept org-qualified.
 func (q *Queries) ListOrganizationsWithPendingEMAIssuerWork(ctx context.Context, arg ListOrganizationsWithPendingEMAIssuerWorkParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listOrganizationsWithPendingEMAIssuerWork, arg.OverlapSeconds, arg.MaxOrganizations)
+	rows, err := q.db.Query(ctx, listOrganizationsWithPendingEMAIssuerWork, arg.AfterOrganizationID, arg.OverlapSeconds, arg.MaxOrganizations)
 	if err != nil {
 		return nil, err
 	}

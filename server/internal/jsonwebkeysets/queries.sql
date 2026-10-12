@@ -428,21 +428,35 @@ SELECT EXISTS (
     AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer)
 );
 
--- System sweep: organizations whose issuer has retired keys past the overlap,
--- or revoked keys whose KMS cleanup is still pending. Returns only
--- organization ids; each is then swept org-qualified.
+-- System sweep: organizations whose live issuer has retired keys past the
+-- overlap, or with revoked keys from any issuer row whose KMS cleanup is still
+-- pending. Paged by organization id so every organization is reached each
+-- run. Returns only organization ids; each is then swept org-qualified.
 -- name: ListOrganizationsWithPendingEMAIssuerWork :many
 SELECT DISTINCT isi.organization_id
 FROM internal_session_issuers AS isi
 JOIN json_web_keys AS k
   ON k.organization_id = isi.organization_id
  AND k.json_web_key_set_id = isi.json_web_key_set_id
-WHERE (k.state = 'retired'
-    AND k.deleted IS FALSE
-    AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer))
-   OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL)
+WHERE isi.organization_id > @after_organization_id::text
+  AND ((isi.deleted IS FALSE
+      AND k.state = 'retired'
+      AND k.deleted IS FALSE
+      AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer))
+    OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL))
 ORDER BY isi.organization_id
 LIMIT @max_organizations;
+
+-- System metric: revoked issuer keys still awaiting KMS cleanup, fleet-wide.
+-- Returns a count only.
+-- name: CountPendingEMAIssuerKMSCleanup :one
+SELECT count(*)::bigint
+FROM internal_session_issuers AS isi
+JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE k.state = 'revoked'
+  AND k.kms_disabled_at IS NULL;
 
 -- Revoked issuer keys whose KMS version is not yet confirmed disabled, from
 -- any issuer row the organization ever had.

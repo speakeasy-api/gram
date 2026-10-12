@@ -28,8 +28,8 @@ const emaIssuerKeyName = "Speakeasy issuer"
 // emaIssuerKMSPrefix names the issuer's KMS keys.
 const emaIssuerKMSPrefix = "emaissuer"
 
-// sweepOrganizationLimit bounds one system sweep; the next run takes the rest.
-const sweepOrganizationLimit = 500
+// sweepOrganizationPage is how many organizations one sweep query returns.
+const sweepOrganizationPage = 500
 
 // EMAIssuerTokenPurger drops vendor tokens obtained with an organization's
 // issuer, so disabling it or a compromised rotation cuts access at once.
@@ -371,21 +371,37 @@ func (p *Provisioner) revokeExpiredIssuerKeysNow(ctx context.Context, organizati
 }
 
 // SweepAllEMAIssuerKeys sweeps every organization with expired keys or
-// pending KMS cleanup, up to a batch.
+// pending KMS cleanup, paging by organization id so a run reaches all of
+// them and failing organizations can't starve the rest. pending is the
+// fleet-wide count of revoked keys still awaiting KMS cleanup afterwards, or
+// -1 when it could not be read.
 func (p *Provisioner) SweepAllEMAIssuerKeys(ctx context.Context) (swept, pending int, err error) {
-	organizations, err := jwksrepo.New(p.db).ListOrganizationsWithPendingEMAIssuerWork(ctx, jwksrepo.ListOrganizationsWithPendingEMAIssuerWorkParams{OverlapSeconds: int32(internalsessionissuers.RetiredKeyOverlap / time.Second), MaxOrganizations: sweepOrganizationLimit})
-	if err != nil {
-		return 0, 0, fmt.Errorf("list organizations with issuer key work: %w", err)
-	}
+	q := jwksrepo.New(p.db)
 	var errs []error
-	for _, organizationID := range organizations {
-		left, err := p.SweepEMAIssuerKeys(ctx, organizationID)
-		pending += left
-		if err != nil && !errors.Is(err, internalsessionissuers.ErrNotFound) {
-			errs = append(errs, fmt.Errorf("sweep organization issuer keys: %w", err))
+	after := ""
+	for {
+		organizations, err := q.ListOrganizationsWithPendingEMAIssuerWork(ctx, jwksrepo.ListOrganizationsWithPendingEMAIssuerWorkParams{AfterOrganizationID: after, OverlapSeconds: int32(internalsessionissuers.RetiredKeyOverlap / time.Second), MaxOrganizations: p.sweepPage})
+		if err != nil {
+			errs = append(errs, fmt.Errorf("list organizations with issuer key work: %w", err))
+			break
 		}
+		for _, organizationID := range organizations {
+			if _, err := p.SweepEMAIssuerKeys(ctx, organizationID); err != nil && !errors.Is(err, internalsessionissuers.ErrNotFound) {
+				errs = append(errs, fmt.Errorf("sweep organization issuer keys: %w", err))
+			}
+		}
+		swept += len(organizations)
+		if len(organizations) < int(p.sweepPage) || ctx.Err() != nil {
+			break
+		}
+		after = organizations[len(organizations)-1]
 	}
-	return len(organizations), pending, errors.Join(errs...)
+	count, err := q.CountPendingEMAIssuerKMSCleanup(ctx)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("count pending issuer kms cleanup: %w", err))
+		return swept, -1, errors.Join(errs...)
+	}
+	return swept, int(count), errors.Join(errs...)
 }
 
 // activateEMAIssuerKey retires any active key, activates next and re-points

@@ -31,7 +31,7 @@ const (
 
 // InternalSessionIssuerKeySweeper retires expired issuer keys and finishes
 // pending KMS cleanup across organizations. pending counts revoked keys whose
-// KMS version is still enabled after the sweep.
+// KMS version is still enabled after the sweep, or is -1 when unknown.
 type InternalSessionIssuerKeySweeper interface {
 	SweepAllEMAIssuerKeys(ctx context.Context) (swept, pending int, err error)
 }
@@ -82,7 +82,9 @@ func (a *InternalSessionIssuerKeySweepActivities) Sweep(ctx context.Context) (in
 		return 0, nil
 	}
 	swept, pending, err := a.sweeper.SweepAllEMAIssuerKeys(ctx)
-	if a.pending != nil {
+	// The count is fleet-wide and read after the sweep, so it stays accurate
+	// when some organizations failed; -1 means it could not be read.
+	if a.pending != nil && pending >= 0 {
 		a.pending.Record(ctx, int64(pending))
 	}
 	if pending > 0 {

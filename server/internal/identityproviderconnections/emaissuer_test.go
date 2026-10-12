@@ -605,3 +605,100 @@ func TestEMAIssuer_CompromisedReplacementFailureLeavesIssuerKeyless(t *testing.T
 	require.NoError(t, replacer.ProvisionEMAIssuerKey(ctx, f.ti.orgID))
 	require.NotEqual(t, compromised, activeIssuerKid(t, ctx, f, f.ti.orgID))
 }
+
+// rotateFully runs a routine rotation through activation and returns the new active kid.
+func rotateFully(t *testing.T, ctx context.Context, f issuerFixture, rotator *identityproviderconnections.Provisioner, orgID, active string) string {
+	t.Helper()
+	var pending *internalsessionissuers.RotationPendingError
+	require.ErrorAs(t, rotator.RotateEMAIssuer(ctx, orgID, active), &pending)
+	setID := issuerKeySet(t, ctx, f, orgID)
+	require.NoError(t, repo.New(f.ti.conn).BackdatePendingRotationPublication(ctx, repo.BackdatePendingRotationPublicationParams{JsonWebKeySetID: setID, OrganizationID: orgID, AgeSeconds: int32(internalsessionissuers.ActivationDelay / time.Second)}))
+	require.NoError(t, rotator.RotateEMAIssuer(ctx, orgID, active))
+	return activeIssuerKid(t, ctx, f, orgID)
+}
+
+func TestEMAIssuer_CompromiseOfARetiredKeyStillContains(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, _ := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	compromised := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	rotator, _ := f.provisioner(t)
+	current := rotateFully(t, ctx, f, rotator, f.ti.orgID, compromised)
+	require.ElementsMatch(t, []string{compromised, current}, publishedIssuerKids(t, ctx, f, f.ti.orgID), "the retired key is still published")
+
+	containment, err := f.lifecycle().Contain(ctx, f.ti.orgID, &compromised)
+	require.NoError(t, err)
+	require.False(t, containment.Coalesced, "a retired but published key is not already contained")
+	require.Len(t, containment.Revoked, 2)
+	require.Empty(t, publishedIssuerKids(t, ctx, f, f.ti.orgID))
+
+	containment, err = f.lifecycle().Contain(ctx, f.ti.orgID, &compromised)
+	require.NoError(t, err)
+	require.Empty(t, containment.Revoked, "a keyless issuer has nothing left to revoke")
+	replacer, _ := f.provisioner(t)
+	require.NoError(t, replacer.ProvisionEMAIssuerKey(ctx, f.ti.orgID))
+	containment, err = f.lifecycle().Contain(ctx, f.ti.orgID, &compromised)
+	require.NoError(t, err)
+	require.True(t, containment.Coalesced, "once revoked, repeats naming it coalesce")
+}
+
+func TestEMAIssuer_SweepSkipsTombstonedIssuersButFinishesTheirCleanup(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, kms := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	first := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	rotator, _ := f.provisioner(t)
+	second := rotateFully(t, ctx, f, rotator, f.ti.orgID, first)
+	setID := issuerKeySet(t, ctx, f, f.ti.orgID)
+	q := repo.New(f.ti.conn)
+	expire := func() {
+		require.NoError(t, q.BackdateRetiredJsonWebKeys(ctx, repo.BackdateRetiredJsonWebKeysParams{JsonWebKeySetID: setID, OrganizationID: f.ti.orgID, AgeSeconds: int32(internalsessionissuers.RetiredKeyOverlap/time.Second) + 1}))
+	}
+	expire()
+	// The first key is revoked with its KMS cleanup left pending.
+	sweeper, sweeperKMS := f.provisioner(t)
+	sweeperKMS.failDisable(errors.New("kms unavailable"))
+	_, _, err = sweeper.SweepAllEMAIssuerKeys(ctx)
+	require.Error(t, err)
+	// The second key retires and expires too, then the issuer is tombstoned.
+	nextRotator, nextKMS := f.provisioner(t)
+	nextKMS.failDisable(errors.New("kms unavailable"))
+	rotateFully(t, ctx, f, nextRotator, f.ti.orgID, second)
+	expire()
+	require.NoError(t, testrepo.New(f.ti.conn).TombstoneInternalSessionIssuerFixture(ctx, f.ti.orgID))
+
+	sweeperKMS.failDisable(nil)
+	swept, pending, err := sweeper.SweepAllEMAIssuerKeys(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, swept, "pending cleanup is finished even for a tombstoned issuer")
+	require.Zero(t, pending)
+	require.Equal(t, kms.Created(), sweeperKMS.Disabled(), "only the revoked key's version is disabled")
+	swept, _, err = sweeper.SweepAllEMAIssuerKeys(ctx)
+	require.NoError(t, err)
+	require.Zero(t, swept, "a tombstoned issuer's retired keys are never listed, so it is not swept forever")
+}
+
+func TestEMAIssuer_SweepPagesThroughEveryOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	organizations := []string{f.ti.orgID, createOrganization(t, ctx, f.ti.conn), createOrganization(t, ctx, f.ti.conn)}
+	for _, orgID := range organizations {
+		provisioner, _ := f.provisioner(t)
+		_, err := provisioner.EnsureEMAIssuer(ctx, orgID)
+		require.NoError(t, err)
+		kid := activeIssuerKid(t, ctx, f, orgID)
+		_, err = f.lifecycle().Contain(ctx, orgID, &kid)
+		require.NoError(t, err)
+	}
+	sweeper, kms := f.provisioner(t)
+	sweeper.SetSweepPage(1)
+	swept, pending, err := sweeper.SweepAllEMAIssuerKeys(ctx)
+	require.NoError(t, err)
+	require.Equal(t, len(organizations), swept, "one run reaches every page")
+	require.Zero(t, pending)
+	require.Len(t, kms.Disabled(), len(organizations))
+}

@@ -6199,6 +6199,17 @@ func (q *Queries) SuspendAttachmentAgentFixture(ctx context.Context, arg Suspend
 	return result.RowsAffected(), nil
 }
 
+const tombstoneInternalSessionIssuerFixture = `-- name: TombstoneInternalSessionIssuerFixture :exec
+UPDATE internal_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = $1::text
+`
+
+// Test-only tombstone of an organization's internal session issuer.
+func (q *Queries) TombstoneInternalSessionIssuerFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, tombstoneInternalSessionIssuerFixture, organizationID)
+	return err
+}
+
 const transferAttachmentToReplacementOwnerFixture = `-- name: TransferAttachmentToReplacementOwnerFixture :execrows
 UPDATE agents SET owner_user_id = 'replacement-owner' WHERE id = $1 AND organization_id = $2
 `

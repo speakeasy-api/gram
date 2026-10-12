@@ -113,6 +113,8 @@ type Provisioner struct {
 	cfg         Config
 	// emaTokenPurger drops vendor tokens obtained with a disabled issuer.
 	emaTokenPurger EMAIssuerTokenPurger
+	// sweepPage is how many organizations one sweep query returns.
+	sweepPage int32
 }
 
 // NewProvisioner wires a provisioner over the shared identity resolver, KMS
@@ -143,6 +145,7 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.
 		audit:          auditLogger,
 		cfg:            cfg,
 		emaTokenPurger: nil,
+		sweepPage:      sweepOrganizationPage,
 	}, nil
 }
 

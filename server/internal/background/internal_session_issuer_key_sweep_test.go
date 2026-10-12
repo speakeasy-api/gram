@@ -66,3 +66,21 @@ func TestInternalSessionIssuerKeySweepReportsPendingCleanup(t *testing.T) {
 	}
 	require.Equal(t, []int64{2}, pending, "keys still awaiting kms cleanup are reported")
 }
+
+func TestInternalSessionIssuerKeySweepSkipsUnknownPendingCount(t *testing.T) {
+	t.Parallel()
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	failure := errors.New("database unavailable")
+
+	_, err := NewInternalSessionIssuerKeySweepActivities(testenv.NewLogger(t), meterProvider, stubIssuerKeySweeper{swept: 0, pending: -1, err: failure}).Sweep(t.Context())
+	require.ErrorIs(t, err, failure)
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			require.NotEqual(t, "gram.internal_session_issuer.kms_cleanup.pending", m.Name, "an unknown count records nothing")
+		}
+	}
+}
