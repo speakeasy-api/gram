@@ -2,6 +2,7 @@ package identitychaining
 
 import (
 	"bytes"
+	"net/url"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -24,11 +26,12 @@ import (
 // chainStoreFixture is one tenant with a trusted IdP, a resource client bound
 // to an upstream by a ready binding, and a human with a retained delegation.
 type chainStoreFixture struct {
-	db        *pgxpool.Pool
-	chainer   *Chainer
-	req       Request
-	sel       selection
-	sessionID uuid.UUID
+	db         *pgxpool.Pool
+	chainer    *Chainer
+	req        Request
+	sel        selection
+	sessionID  uuid.UUID
+	configHash string
 }
 
 func newChainStoreFixture(t *testing.T) chainStoreFixture {
@@ -61,17 +64,30 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	resourceIssuer, resourceClient := prepareResourceClient(t, db, enc, org, testResourceIssuer, testResourceIssuer+"/token", testResourceClient, "resource-secret")
 	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://api.resource.example.test"}
 	binding, generation := bindResource(t, db, req, resourceIssuer, resourceClient, testResource, remotesessions.PreparationStateReady)
+	trusted, err := repo.New(db).GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{OrganizationID: org, IssuerID: idpIssuer, ClientID: idpClient})
+	require.NoError(t, err)
+	configHash := remotesessions.FederatedDelegationConfigurationHash(org, trusted.RemoteSessionIssuer, trusted.RemoteSessionClient)
 	session, err := repo.New(db).UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
 		OrganizationID: org, ClientID: idpClient, IssuerID: idpIssuer, SubjectUrn: urn.NewUserSubject(human).String(), ExpectedGeneration: 0,
-		ObservationStatus: pgtype.Text{String: "assertion_only", Valid: true},
+		CredentialConfigHash: pgtype.Text{String: configHash, Valid: true},
+		ObservationStatus:    pgtype.Text{String: "assertion_only", Valid: true},
 	})
 	require.NoError(t, err)
 
-	chainer := &Chainer{Governor: Governor{logger: testenv.NewLogger(t), db: db, enc: enc, now: time.Now}, challenges: nil, delegation: nil, keys: nil, locks: nil}
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	serverURL, err := url.Parse("https://gram.example.test")
+	require.NoError(t, err)
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), db, enc, policy, nil, nil, serverURL)
+	delegation := remotesessions.NewDelegationService(db, enc, challenges)
+	chainer := &Chainer{Governor: Governor{logger: logger, db: db, enc: enc, delegation: delegation, now: time.Now}, challenges: nil, keys: nil, locks: nil}
 	return chainStoreFixture{
-		db:      db,
-		chainer: chainer,
-		req:     req,
+		db:         db,
+		chainer:    chainer,
+		configHash: configHash,
+		req:        req,
 		sel: selection{
 			bindingID: binding, generation: generation, remoteIssuerID: resourceIssuer, clientID: resourceClient,
 			externalClientID: testResourceClient, issuer: testResourceIssuer, resource: testResource,
@@ -185,7 +201,8 @@ func (f chainStoreFixture) signIn(t *testing.T, at time.Time, status string) {
 	}
 	_, err = q.UpsertTrustedDelegationCredential(t.Context(), repo.UpsertTrustedDelegationCredentialParams{
 		OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: subject, ExpectedGeneration: current.CredentialGeneration.Int64,
-		ObservationStatus: pgtype.Text{String: status, Valid: true}, CredentialObtainedAt: obtained,
+		CredentialConfigHash: pgtype.Text{String: f.configHash, Valid: true},
+		ObservationStatus:    pgtype.Text{String: status, Valid: true}, CredentialObtainedAt: obtained,
 	})
 	require.NoError(t, err)
 }
@@ -336,7 +353,7 @@ func TestStore_Authorize(t *testing.T) {
 func TestStore_AuthorityRejectsSubstitutedBinding(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	authority := authority{chainer: f.chainer, req: f.req}
+	authority := authority{db: f.db, req: f.req}
 	valid := remotesessions.DelegationBinding{OrganizationID: f.req.OrganizationID, IssuerID: f.sel.trustedIssuerID, ClientID: f.sel.trustedClientID, HumanID: f.req.UserID}
 	require.NoError(t, authority.AuthorizeDelegation(t.Context(), valid))
 	for name, b := range map[string]remotesessions.DelegationBinding{

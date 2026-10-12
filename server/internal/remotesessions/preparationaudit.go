@@ -118,7 +118,7 @@ func (s *Service) auditIdentityChainingDisable(ctx context.Context, tx pgx.Tx, b
 		return err
 	}
 	disabled := before
-	disabled.Generation = after.Generation
+	disabled.Generation, disabled.State = after.Generation, after.State
 	return s.auditIdentityChaining(ctx, tx, identityChainingAuditDisable, disabled, before.RemoteSessionClientID.UUID, external, nil)
 }
 

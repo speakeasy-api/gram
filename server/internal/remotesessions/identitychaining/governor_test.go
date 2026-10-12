@@ -5,17 +5,19 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestGovernor_ServesOnlyAnUnambiguousBinding(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 
 	issuer, ok := g.Serves(t.Context(), f.req)
 	require.True(t, ok)
@@ -35,7 +37,7 @@ func TestGovernor_ServesOnlyAnUnambiguousBinding(t *testing.T) {
 func TestGovernor_Configured(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 
 	require.True(t, g.Configured(t.Context(), f.req.OrganizationID, f.req.ProjectID, f.req.UserSessionIssuerID))
 	require.False(t, g.Configured(t.Context(), f.req.OrganizationID, f.req.ProjectID, uuid.New()))
@@ -45,7 +47,7 @@ func TestGovernor_Configured(t *testing.T) {
 func TestGovernor_HasUsableCredential(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 	require.False(t, g.HasUsableCredential(t.Context(), f.req), "no credential stored yet")
 
 	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("downstream-token")))
@@ -53,7 +55,7 @@ func TestGovernor_HasUsableCredential(t *testing.T) {
 
 	rotated, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x24}, 32))
 	require.NoError(t, err)
-	require.False(t, NewGovernor(testenv.NewLogger(t), f.db, rotated).HasUsableCredential(t.Context(), f.req), "a credential the runtime cannot decrypt is unusable")
+	require.False(t, NewGovernor(testenv.NewLogger(t), f.db, rotated, f.chainer.delegation).HasUsableCredential(t.Context(), f.req), "a credential the runtime cannot decrypt is unusable")
 
 	other := f.req
 	other.UserID = "user-other"
@@ -63,6 +65,23 @@ func TestGovernor_HasUsableCredential(t *testing.T) {
 	require.False(t, g.HasUsableCredential(t.Context(), f.req))
 	require.Len(t, f.credentials(t), 1)
 	require.False(t, f.credentials(t)[0].Deleted, "a status read never retires a credential")
+}
+
+func TestGovernor_TrustedRegistrationRotationRetiresUsableCredential(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("downstream-token")))
+	require.True(t, g.HasUsableCredential(t.Context(), f.req))
+
+	rotated, err := f.chainer.enc.Encrypt([]byte("rotated-secret"))
+	require.NoError(t, err)
+	_, err = repo.New(f.db).UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
+		ClientSecretEncrypted: pgtype.Text{String: rotated, Valid: true}, ID: f.sel.trustedClientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.False(t, g.HasUsableCredential(t.Context(), f.req), "an unexpired token minted under the previous trusted registration is not usable")
+	require.False(t, NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, nil).HasUsableCredential(t.Context(), f.req), "without a delegation check nothing is usable")
 }
 
 func TestNewRequest(t *testing.T) {
@@ -88,7 +107,7 @@ func TestNewRequest(t *testing.T) {
 func TestGovernor_EmptyCredentialIsUnusable(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("")))
 	require.False(t, g.HasUsableCredential(t.Context(), f.req), "an empty decrypted token is unusable and must not panic")
 }
@@ -97,7 +116,7 @@ func TestInspectIdentityChainingForTenant(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 
-	results, err := remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, f.sel.remoteIssuerID, f.req.UpstreamResource+"/")
+	results, err := remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource+"/")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, remotesessions.PreparationStateReady, results[0].State)
@@ -105,14 +124,14 @@ func TestInspectIdentityChainingForTenant(t *testing.T) {
 	require.Equal(t, []string{"read"}, results[0].Scopes)
 
 	f.addSlashVariantBinding(t, remotesessions.PreparationStateUnknownGrants)
-	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, f.sel.remoteIssuerID, f.req.UpstreamResource)
+	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource)
 	require.NoError(t, err)
 	require.Len(t, results, 2, "inspection reports bindings in every live state")
 
 	for _, suffix := range []string{"//", "///", "////", "/////"} {
 		bindResource(t, f.db, f.req, f.sel.remoteIssuerID, f.sel.clientID, "https://api.resource.example.test"+suffix, remotesessions.PreparationStateUnknownGrants)
 	}
-	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, f.sel.remoteIssuerID, f.req.UpstreamResource)
+	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource)
 	require.NoError(t, err)
 	require.Len(t, results, 6, "inspection never truncates the binding list")
 
@@ -120,11 +139,11 @@ func TestInspectIdentityChainingForTenant(t *testing.T) {
 		project uuid.UUID
 		org     string
 	}{{uuid.New(), f.req.OrganizationID}, {f.req.ProjectID, "org-" + uuid.NewString()}} {
-		results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, foreign.project, foreign.org, f.req.UserSessionIssuerID, f.sel.remoteIssuerID, f.req.UpstreamResource)
+		results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, foreign.project, foreign.org, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource)
 		require.NoError(t, err)
 		require.Empty(t, results, "another tenant never reads these bindings")
 	}
-	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.New(), f.req.UpstreamResource)
+	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: uuid.New(), Valid: true}, f.req.UpstreamResource)
 	require.NoError(t, err)
 	require.Empty(t, results)
 }
