@@ -14,12 +14,15 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAttachOrganizationRemoteSessionClientKeySetMutation } from "@gram/client/react-query/attachOrganizationRemoteSessionClientKeySet.js";
 import { useDetachOrganizationRemoteSessionClientKeySetMutation } from "@gram/client/react-query/detachOrganizationRemoteSessionClientKeySet.js";
-import { buildListJsonWebKeySetsQuery } from "@gram/client/react-query/listJsonWebKeySets";
+import { invalidateAllListJsonWebKeySets } from "@gram/client/react-query/listJsonWebKeySets";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { buildOrganizationRemoteSessionClientsQuery } from "@gram/client/react-query/organizationRemoteSessionClients.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useResolveKeySet } from "@/lib/remote-identity";
+import {
+  useCustomerManagedKeys,
+  useOrganizationKeySets,
+  useResolveKeySet,
+} from "@/lib/remote-identity";
 import { ExternalKeySelect } from "@/pages/org/encryption-keys/jwks/ExternalKeySelect";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -63,21 +66,10 @@ export function KeySetField({
   const gramClient = useGramContext();
   const queryClient = useQueryClient();
 
-  const { data: features, isLoading: featuresLoading } = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { staleTime: 30_000, throwOnError: false },
-  );
-  const entitled =
-    !featuresLoading && features?.customerManagedEncryptionKeysEnabled === true;
-
+  const { entitled } = useCustomerManagedKeys();
   // Keyed by organization so a switch never offers the previous one's sets.
-  const setsQuery = buildListJsonWebKeySetsQuery(gramClient);
-  const { data: setsData, isPending: setsPending } = useQuery({
-    ...setsQuery,
-    queryKey: [...setsQuery.queryKey, { organizationId: organization.id }],
-    enabled: entitled,
-  });
+  const { data: setsData, isPending: setsPending } =
+    useOrganizationKeySets(entitled);
   const sets = setsData?.sets ?? [];
 
   // AIM-64 establishes that Speakeasy may hold more than one client at the same
@@ -127,7 +119,7 @@ export function KeySetField({
     await invalidateAllOrganizationRemoteSessionClient(queryClient, {
       refetchType: "all",
     });
-    await queryClient.invalidateQueries({ queryKey: setsQuery.queryKey });
+    await invalidateAllListJsonWebKeySets(queryClient);
   };
 
   const startedIn = organization.id;
@@ -162,28 +154,36 @@ export function KeySetField({
         madeSet?.name !== newSetName ||
         madeSet.externalKeyId !== newSetKeyId
       ) {
-        jsonWebKeySetId = await resolveKeySet({
-          kind: "new",
-          name: newSetName,
-          externalKeyId: newSetKeyId,
-        });
+        try {
+          jsonWebKeySetId = await resolveKeySet({
+            kind: "new",
+            name: newSetName,
+            externalKeyId: newSetKeyId,
+          });
+        } catch (error) {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to create key set",
+          );
+          return;
+        }
         setMadeSet({
           id: jsonWebKeySetId,
           name: newSetName,
           externalKeyId: newSetKeyId,
         });
       }
-      await attach.mutateAsync({
-        request: { attachKeySetForm: { id: client.id, jsonWebKeySetId } },
-      });
+      try {
+        await attach.mutateAsync({
+          request: { attachKeySetForm: { id: client.id, jsonWebKeySetId } },
+        });
+      } catch {
+        // The attach mutation's onError has already reported it.
+        return;
+      }
       setMadeSet(null);
       setNewSetOpen(false);
       setNewSetName("");
       setNewSetKeyId("");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create key set",
-      );
     } finally {
       setCreatingSet(false);
     }

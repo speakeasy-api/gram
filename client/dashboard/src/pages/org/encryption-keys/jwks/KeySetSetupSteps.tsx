@@ -39,6 +39,7 @@ import {
   type SetupInstructions,
   type SetupMethod,
   type SetupValues,
+  type SigningAlgorithm,
 } from "./gcpSetupSnippets";
 
 const SECURITY = { sessionHeaderGramSession: "" };
@@ -59,6 +60,14 @@ function readMethod(): SetupMethod {
 
 function message(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+// Why a service account didn't verify, and which grant to check.
+function impersonationFailure(
+  detail: string | undefined,
+  grant: string,
+): string {
+  return `${detail ? `${detail} ` : ""}Check ${grant}. New grants can take a minute or two to apply.`;
 }
 
 // What a failed key probe means, and which earlier step fixes it.
@@ -175,7 +184,7 @@ export function KeySetSetupSteps({
   const [keyChoice, setKeyChoice] = useState<string>(NEW);
   const [resourceEdit, setResourceEdit] = useState<string | null>(null);
   const resourceName = resourceEdit ?? keyVersionResourceName(setupValues);
-  const [algorithm, setAlgorithm] = useState<"ES256" | "RS256">("ES256");
+  const [algorithm, setAlgorithm] = useState<SigningAlgorithm>("ES256");
   const [setName, setSetName] = useState(defaultName);
   // A key registered by an earlier attempt, reused while its name is unchanged.
   const [registered, setRegistered] = useState<{
@@ -201,24 +210,40 @@ export function KeySetSetupSteps({
   const connect = async () => {
     setConnecting(true);
     setConnectError(null);
+    let id: string;
     try {
-      let id = connectedId;
-      if (!id) {
-        const created = await client.externalCredentials.createGcpIam(
-          {
-            createGcpIamCredentialForm: {
-              name: email.split("@")[0] || email,
-              impersonateServiceAccount: email.trim(),
-            },
+      const created = await client.externalCredentials.createGcpIam(
+        {
+          createGcpIamCredentialForm: {
+            name: email.split("@")[0] || email,
+            impersonateServiceAccount: email.trim(),
           },
-          SECURITY,
-        );
-        id = created.id;
-        await Promise.all([
-          invalidateAllListExternalCredentials(queryClient),
-          invalidateAllListGcpIamCredentials(queryClient),
-        ]);
-      }
+        },
+        SECURITY,
+      );
+      id = created.id;
+      await Promise.all([
+        invalidateAllListExternalCredentials(queryClient),
+        invalidateAllListGcpIamCredentials(queryClient),
+      ]);
+    } catch (error) {
+      setConnectError(message(error, "Couldn't connect the service account."));
+      return;
+    } finally {
+      setConnecting(false);
+    }
+    if (!isCurrentOrganization()) return;
+    // Kept until it verifies, so "Verify again" re-probes this credential
+    // rather than creating another, even when the probe itself fails.
+    setPendingCredentialId(id);
+    await verifyCredential(id, "the impersonation grant above");
+  };
+  // Verifies Speakeasy can impersonate the credential's service account, and
+  // says which grant to check when it can't.
+  const verifyCredential = async (id: string, grant: string) => {
+    setConnecting(true);
+    setConnectError(null);
+    try {
       const verified = await client.externalCredentials.verifyGcpIam(
         { id },
         SECURITY,
@@ -226,42 +251,33 @@ export function KeySetSetupSteps({
       if (!isCurrentOrganization()) return;
       if (verified.verified) {
         setConnectedId(id);
-      } else {
-        // Keep the credential so "Verify again" re-probes the same one.
-        setConnectedId(null);
-        setPendingCredentialId(id);
-        setConnectError(
-          `${verified.detail ? `${verified.detail} ` : ""}Check the impersonation grant above. New grants can take a minute or two to apply.`,
-        );
-      }
-    } catch (error) {
-      setConnectError(message(error, "Couldn't connect the service account."));
-    } finally {
-      setConnecting(false);
-    }
-  };
-  const verifyAgain = async () => {
-    if (!pendingCredentialId) return;
-    setConnecting(true);
-    setConnectError(null);
-    try {
-      const verified = await client.externalCredentials.verifyGcpIam(
-        { id: pendingCredentialId },
-        SECURITY,
-      );
-      if (verified.verified) {
-        setConnectedId(pendingCredentialId);
         setPendingCredentialId(null);
       } else {
-        setConnectError(
-          `${verified.detail ? `${verified.detail} ` : ""}Check the impersonation grant above. New grants can take a minute or two to apply.`,
-        );
+        setConnectError(impersonationFailure(verified.detail, grant));
       }
     } catch (error) {
       setConnectError(message(error, "Couldn't verify the service account."));
     } finally {
       setConnecting(false);
     }
+  };
+  const verifyAgain = () => {
+    if (pendingCredentialId) {
+      void verifyCredential(
+        pendingCredentialId,
+        "the impersonation grant above",
+      );
+    }
+  };
+  // A connected service account is verified again when picked: its grant may
+  // have been revoked since it was connected.
+  const verifyExisting = (id: string) =>
+    void verifyCredential(id, "the service account's impersonation grant");
+  const chooseCredential = (choice: string | null) => {
+    setCredentialChoice(choice);
+    setConnectedId(null);
+    setConnectError(null);
+    if (choice && choice !== NEW) verifyExisting(choice);
   };
 
   const finish = async () => {
@@ -328,7 +344,7 @@ export function KeySetSetupSteps({
     }
   };
 
-  const connected = !!credentialId && (usingExisting || !!connectedId);
+  const connected = !!credentialId && connectedId === credentialId;
   const keyReady =
     keyChoice !== NEW ||
     (resourceName.trim().includes("/cryptoKeyVersions/") &&
@@ -342,9 +358,9 @@ export function KeySetSetupSteps({
   const accountSteps = choosingCredential || usingExisting ? 1 : 2;
   const keyRingStep = 2 + accountSteps;
   const keyStep = keyRingStep + 1;
-  const usedCredential = credentials.find(
-    (credential) => credential.id === credentialChoice,
-  );
+  const credentialName =
+    credentials.find((credential) => credential.id === credentialChoice)
+      ?.name ?? "a connected service account";
 
   return (
     <>
@@ -407,7 +423,7 @@ export function KeySetSetupSteps({
               <RadioRows
                 label="Service account"
                 value={null}
-                onValueChange={setCredentialChoice}
+                onValueChange={chooseCredential}
                 rows={[
                   ...credentials.map((credential) => ({
                     value: credential.id,
@@ -425,17 +441,43 @@ export function KeySetSetupSteps({
           ) : null}
 
           {usingExisting ? (
-            <Step index={2} done title="Use a connected service account">
+            <Step
+              index={2}
+              done={connected}
+              title="Use a connected service account"
+            >
               <Text muted small>
-                Using {usedCredential?.name ?? "a connected service account"}.{" "}
-                <button
-                  type="button"
-                  onClick={() => setCredentialChoice(null)}
-                  className="hover:text-foreground underline underline-offset-2"
-                >
-                  Change
-                </button>
+                {connecting ? (
+                  <>Verifying {credentialName}…</>
+                ) : (
+                  <>
+                    Using {credentialName}.{" "}
+                    <button
+                      type="button"
+                      onClick={() => chooseCredential(null)}
+                      className="hover:text-foreground underline underline-offset-2"
+                    >
+                      Change
+                    </button>
+                  </>
+                )}
               </Text>
+              {connectError ? (
+                <>
+                  <Alert variant="error" dismissible={false}>
+                    {connectError}
+                  </Alert>
+                  <div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => verifyExisting(credentialChoice!)}
+                    >
+                      <Button.Text>Verify again</Button.Text>
+                    </Button>
+                  </div>
+                </>
+              ) : null}
             </Step>
           ) : null}
 
@@ -492,9 +534,15 @@ export function KeySetSetupSteps({
                   id="setup-email"
                   label="Service account email"
                   value={email}
-                  onChange={setEmailEdit}
+                  onChange={(next) => {
+                    setEmailEdit(next);
+                    // A corrected email is a different service account, so
+                    // the next attempt connects it rather than re-probing.
+                    setPendingCredentialId(null);
+                    setConnectError(null);
+                  }}
                   mono
-                  disabled={!!connectedId || !!pendingCredentialId}
+                  disabled={!!connectedId || connecting}
                 />
                 {connectError ? (
                   <Alert variant="error" dismissible={false}>
@@ -516,7 +564,7 @@ export function KeySetSetupSteps({
                         email.includes("PROJECT_ID")
                       }
                       onClick={() =>
-                        void (pendingCredentialId ? verifyAgain() : connect())
+                        pendingCredentialId ? verifyAgain() : void connect()
                       }
                     >
                       <Button.Text>
@@ -542,9 +590,26 @@ export function KeySetSetupSteps({
             {connected ? (
               <>
                 <Text muted small>
-                  The key must be an asymmetric signing key: EC P-256 with
-                  SHA-256, or RSA 2048 with PKCS#1 v1.5 and SHA-256.
+                  The key must be an asymmetric signing key. Pick its algorithm
+                  before you create it; the instructions follow the choice.
                 </Text>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Algorithm</Label>
+                  <SegmentedControl
+                    value={algorithm}
+                    onChange={setAlgorithm}
+                    options={[
+                      {
+                        value: "ES256" as const,
+                        label: "EC P-256 (ES256)",
+                      },
+                      {
+                        value: "RS256" as const,
+                        label: "RSA 2048 (RS256)",
+                      },
+                    ]}
+                  />
+                </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field
                     id="setup-location"
@@ -575,7 +640,11 @@ export function KeySetSetupSteps({
                   />
                 ) : null}
                 <Instructions
-                  instructions={keyRingInstructions(method, setupValues)}
+                  instructions={keyRingInstructions(
+                    method,
+                    setupValues,
+                    algorithm,
+                  )}
                 />
               </>
             ) : (
@@ -614,32 +683,13 @@ export function KeySetSetupSteps({
                   />
                 ) : null}
                 {keyChoice === NEW ? (
-                  <>
-                    <Field
-                      id="setup-resource"
-                      label="Key version resource name"
-                      value={resourceName}
-                      onChange={setResourceEdit}
-                      mono
-                    />
-                    <div className="flex flex-col gap-1.5">
-                      <Label>Algorithm</Label>
-                      <SegmentedControl
-                        value={algorithm}
-                        onChange={setAlgorithm}
-                        options={[
-                          {
-                            value: "ES256" as const,
-                            label: "EC P-256 (ES256)",
-                          },
-                          {
-                            value: "RS256" as const,
-                            label: "RSA 2048 (RS256)",
-                          },
-                        ]}
-                      />
-                    </div>
-                  </>
+                  <Field
+                    id="setup-resource"
+                    label="Key version resource name"
+                    value={resourceName}
+                    onChange={setResourceEdit}
+                    mono
+                  />
                 ) : null}
                 <Field
                   id="setup-set-name"

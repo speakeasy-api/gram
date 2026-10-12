@@ -74,7 +74,7 @@ export type {
 export { ServiceAccountPanel } from "./components/ServiceAccountPanel";
 export { useServiceAccountClientDraft } from "./drafts/useServiceAccountClientDraft";
 export { useCustomerManagedKeys } from "./queries/useCustomerManagedKeys";
-export { useResolveKeySet } from "./queries/useKeySets";
+export { useOrganizationKeySets, useResolveKeySet } from "./queries/useKeySets";
 export { AvailabilityBadge } from "./components/AvailabilityBadge";
 export { ClientKeyRegistration } from "./components/ClientKeyRegistration";
 export { KeySetPicker } from "./components/KeySetPicker";

@@ -224,7 +224,13 @@ function OAuthClientFields({
 }): JSX.Element {
   const bound = draft.showingBound(format) ? draft.boundClient : undefined;
   const providerName = draft.issuer?.name ?? "the identity provider";
-  const locked = disabled || draft.saving || draft.created !== null;
+  // The client being created reads the provider and these fields, so they
+  // hold still until the request settles.
+  const locked =
+    disabled ||
+    draft.saving ||
+    draft.creating ||
+    (format === "signing-key" && draft.created !== null);
   // Everything after the provider depends on it (its name, token endpoint and
   // scopes), so nothing else shows until one that can issue a token is picked.
   const providerChosen = !!bound || draft.issuerUsable;
@@ -551,7 +557,7 @@ function SigningKeySteps({
               onChange={draft.setClientId}
               placeholder={`Paste the client ID from ${providerName}`}
               className="font-mono"
-              disabled={disabled || created !== null}
+              disabled={disabled || draft.creating || created !== null}
               noAutofill
             />
           </div>

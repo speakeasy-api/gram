@@ -377,6 +377,26 @@ function connectClient(): void {
   });
 }
 
+// A service account client (credential_owner self) bound to this server.
+function boundSelfClient(): void {
+  mocks.clients.mockReturnValue({
+    items: [
+      {
+        id: "self-client-1",
+        clientId: "service-client",
+        credentialOwner: "self",
+        tokenEndpointAuthMethod: "client_secret_basic",
+        remoteSessionIssuerId: "provider-1",
+        userSessionIssuerIds: ["user-session-issuer-1"],
+        scope: [],
+      },
+    ],
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+}
+
 function autoConfigurableProvider(): void {
   mocks.issuers.mockReturnValue({
     data: {
@@ -2039,6 +2059,60 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(dialog.textContent).toContain(
       "removes the static Authorization credential",
     );
+  });
+
+  it("asks to remove the service account client when No Identity is saved", async () => {
+    boundSelfClient();
+
+    renderIdentity();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Remove the service account client?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "requests will be rejected until you save a new identity",
+    );
+    expect(dialog.textContent).not.toContain("new credential");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.detach).toHaveBeenCalledWith({
+        request: {
+          attachUserSessionIssuerForm: {
+            id: "self-client-1",
+            userSessionIssuerId: "user-session-issuer-1",
+          },
+        },
+      }),
+    );
+  });
+
+  it("confirms replacing the service account client with User Identity", async () => {
+    boundSelfClient();
+    autoConfigurableProvider();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      within(screen.getByRole("dialog")).getByText(
+        "Replace the connected client?",
+      ),
+    ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    // The commit replaces the bound client, so it is not detached first.
+    expect(mocks.detach).not.toHaveBeenCalled();
   });
 
   it("lets Custom Headers own a credential row it already removed", async () => {

@@ -12,6 +12,26 @@ export type SetupValues = {
   keyName: string;
 };
 
+/** The JWS algorithm the Cloud KMS key signs with. */
+export type SigningAlgorithm = "ES256" | "RS256";
+
+// How each algorithm is spelled by gcloud, Terraform and the console.
+const KMS_ALGORITHMS: Record<
+  SigningAlgorithm,
+  { gcloud: string; terraform: string; console: string }
+> = {
+  ES256: {
+    gcloud: "ec-sign-p256-sha256",
+    terraform: "EC_SIGN_P256_SHA256",
+    console: "Elliptic Curve P-256 – SHA256",
+  },
+  RS256: {
+    gcloud: "rsa-sign-pkcs1-2048-sha256",
+    terraform: "RSA_SIGN_PKCS1_2048_SHA256",
+    console: "RSA 2048 – PKCS#1 v1.5 – SHA256",
+  },
+};
+
 /** Either code to run, or console steps to follow. */
 export type SetupInstructions =
   | { kind: "code"; language: string; code: string }
@@ -95,12 +115,14 @@ export function impersonationInstructions(
 export function keyRingInstructions(
   method: SetupMethod,
   values: SetupValues,
+  algorithm: SigningAlgorithm,
 ): SetupInstructions {
   const project = or(values.projectId, "PROJECT_ID");
   const location = or(values.location, "LOCATION");
   const keyRing = or(values.keyRing, "KEY_RING");
   const key = or(values.keyName, "KEY");
   const email = serviceAccountEmail(values);
+  const kmsAlgorithm = KMS_ALGORITHMS[algorithm];
 
   switch (method) {
     case "gcloud":
@@ -115,7 +137,7 @@ export function keyRingInstructions(
           `gcloud kms keys create ${key} \\`,
           `  --keyring=${keyRing} --location=${location} --project=${project} \\`,
           `  --purpose=asymmetric-signing \\`,
-          `  --default-algorithm=ec-sign-p256-sha256`,
+          `  --default-algorithm=${kmsAlgorithm.gcloud}`,
           ``,
           `gcloud kms keyrings add-iam-policy-binding ${keyRing} \\`,
           `  --location=${location} --project=${project} \\`,
@@ -140,7 +162,7 @@ export function keyRingInstructions(
           `  purpose  = "ASYMMETRIC_SIGN"`,
           ``,
           `  version_template {`,
-          `    algorithm = "EC_SIGN_P256_SHA256"`,
+          `    algorithm = "${kmsAlgorithm.terraform}"`,
           `  }`,
           `}`,
           ``,
@@ -157,7 +179,7 @@ export function keyRingInstructions(
         steps: [
           `In the Google Cloud console, open Security › Key Management for project ${project}.`,
           `Use key ring ${keyRing} in ${location}, or create it.`,
-          `In it, use or create key ${key} with purpose Asymmetric sign and algorithm Elliptic Curve P-256 – SHA256 (or RSA 2048 – PKCS#1 v1.5 – SHA256).`,
+          `In it, use or create key ${key} with purpose Asymmetric sign and algorithm ${kmsAlgorithm.console}.`,
           `On the key ring, choose Permissions › Grant access, add ${email}, and give it the Cloud KMS CryptoKey Signer/Verifier role.`,
         ],
       };

@@ -145,7 +145,8 @@ export function ClientCard({
           scope,
           // Only sent when it changed: the API refuses an empty audience, so
           // an untouched blank field must not fail every save. Emptying a
-          // saved one still sends "" to clear it.
+          // saved one sends "", which the API refuses; it has no way to
+          // clear an audience yet.
           audience:
             audience.trim() !== (client.audience ?? "")
               ? audience.trim()

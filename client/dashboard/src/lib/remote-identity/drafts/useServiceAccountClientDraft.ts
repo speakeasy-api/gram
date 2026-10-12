@@ -124,8 +124,9 @@ export function useServiceAccountClientDraft({
       ?.jsonWebKeySetId ?? null;
   const suggestionLoading = siblingsQuery.isLoading && !siblingsQuery.isError;
 
-  const reset = useCallback(() => {
-    setIssuerPick(null);
+  // Everything typed for a provider's registration, which a different
+  // provider would not recognize.
+  const clearRegistration = useCallback(() => {
     setClientId("");
     setClientSecret("");
     setSecretMethod("client_secret_basic");
@@ -135,13 +136,17 @@ export function useServiceAccountClientDraft({
     setKeySource(null);
     setKeySet(null);
     setCreated(null);
-    setReplacing(false);
   }, []);
+
+  const reset = useCallback(() => {
+    setIssuerPick(null);
+    clearRegistration();
+    setReplacing(false);
+  }, [clearRegistration]);
 
   const pickIssuer = (id: string) => {
     setIssuerPick(id);
-    setKeySet(null);
-    setCreated(null);
+    clearRegistration();
   };
 
   const issuerUsable = !!issuer?.tokenEndpoint;
@@ -209,14 +214,17 @@ export function useServiceAccountClientDraft({
   const save = async (format: ServiceAccountOAuthFormat): Promise<boolean> => {
     if (!canSave(format) || !issuer) return false;
     setSaving(true);
+    // A client secret client is made by this Save, so a failed commit deletes
+    // it rather than leaving a copy behind for every retry.
+    let madeHere: RemoteSessionClient | null = null;
     try {
-      const target =
-        format === "client-secret"
-          ? await createSelfClient({
-              tokenEndpointAuthMethod: secretMethod,
-              clientSecret: clientSecret.trim(),
-            })
-          : created!;
+      if (format === "client-secret") {
+        madeHere = await createSelfClient({
+          tokenEndpointAuthMethod: secretMethod,
+          clientSecret: clientSecret.trim(),
+        });
+      }
+      const target = madeHere ?? created!;
       const result =
         await client.remoteSessions.commitServerIdentityConfiguration({
           commitServerIdentityConfigurationForm: {
@@ -232,10 +240,16 @@ export function useServiceAccountClientDraft({
             `Couldn't connect this server to ${issuer.name}.`,
         );
       }
+      madeHere = null;
       await invalidateAllRemoteSessionClients(queryClient);
       reset();
       return true;
     } finally {
+      if (madeHere) {
+        await client.remoteSessionClients
+          .delete({ id: madeHere.id })
+          .catch(() => undefined);
+      }
       setSaving(false);
     }
   };
