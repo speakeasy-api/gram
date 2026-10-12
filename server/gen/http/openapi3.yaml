@@ -79078,7 +79078,7 @@ paths:
                 name: createCustomerSession
     /rpc/usage.createStripeCheckout:
         post:
-            description: Create a Stripe Checkout link for starting PAYG billing
+            description: Create an embedded Stripe Checkout session for starting PAYG billing
             operationId: createStripeCheckout
             parameters:
                 - allowEmptyValue: true
@@ -79093,7 +79093,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                type: string
+                                $ref: '#/components/schemas/StripeEmbeddedCheckout'
                     description: OK response.
                 "400":
                     content:
@@ -114082,6 +114082,18 @@ components:
             required:
                 - id
                 - days
+        StripeEmbeddedCheckout:
+            type: object
+            properties:
+                client_secret:
+                    type: string
+                    description: Client secret Stripe.js uses to mount embedded Checkout
+                publishable_key:
+                    type: string
+                    description: Stripe publishable key used to load Stripe.js
+            required:
+                - client_secret
+                - publishable_key
         StripeSubscription:
             type: object
             properties:

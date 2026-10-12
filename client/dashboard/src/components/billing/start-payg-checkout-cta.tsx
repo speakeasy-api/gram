@@ -2,6 +2,7 @@ import {
   type PaygCheckoutEligibility,
   usePaygCheckoutAccess,
 } from "@/components/billing/payg-checkout-access";
+import { PaygCheckoutMount } from "@/components/billing/payg-checkout-mount";
 import {
   PAYG_CHECKOUT_ERROR_MESSAGE,
   useStartPaygCheckout,
@@ -18,8 +19,8 @@ const CTA_LABEL = "Start pay as you go";
  * checkout session for a card.
  *
  * Shared by the billing page, the sidebar trial card, and the dashboard
- * lockout gate so the gating, the single-flight mutation, and the navigation
- * rules can only be changed in one place. Several surfaces can be mounted at
+ * lockout gate so the gating, the single-flight mutation, and the embedded
+ * checkout can only be changed in one place. Several surfaces can be mounted at
  * once, so the single-flight lock is organization-scoped module state rather
  * than per-instance — see `payg-checkout-lock`. Every gate is opt-in: a flag
  * that is loading, disabled, unregistered, or errored renders nothing, as does
@@ -40,7 +41,7 @@ export function StartPaygCheckoutCTA({
   eligibility?: PaygCheckoutEligibility;
 }): JSX.Element | null {
   const { eligible, activeOrganizationId } = usePaygCheckoutAccess(eligibility);
-  const { startCheckout, isPending, error } =
+  const { startCheckout, dismissCheckout, isPending, error, session } =
     useStartPaygCheckout(activeOrganizationId);
 
   if (!eligible) return null;
@@ -60,6 +61,7 @@ export function StartPaygCheckoutCTA({
           {PAYG_CHECKOUT_ERROR_MESSAGE}
         </Text>
       ) : null}
+      <PaygCheckoutMount session={session} onClose={dismissCheckout} />
     </div>
   );
 }

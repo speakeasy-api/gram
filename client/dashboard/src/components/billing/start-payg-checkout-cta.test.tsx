@@ -45,15 +45,26 @@ vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
   },
 }));
 
+vi.mock("./payg-embedded-checkout-dialog", () => ({
+  PaygEmbeddedCheckoutDialog: ({ clientSecret }: { clientSecret: string }) => (
+    <div role="dialog">Checkout {clientSecret}</div>
+  ),
+}));
+
 import {
   isPaygCheckoutLocked,
   resetPaygCheckoutLocks,
 } from "./payg-checkout-lock";
 import { StartPaygCheckoutCTA } from "./start-payg-checkout-cta";
 
+type CheckoutSession = {
+  clientSecret: string;
+  publishableKey: string;
+};
+
 /** The callbacks React Query drops when the calling mount goes away. */
 type MutateCallbacks = {
-  onSuccess: (link: string) => void;
+  onSuccess: (session: CheckoutSession) => void;
   onError: (error: unknown) => void;
 };
 
@@ -61,7 +72,7 @@ type MutateCallbacks = {
 type CheckoutHookOptions = {
   onMutate?: () => unknown;
   onSettled?: (
-    data: string | undefined,
+    data: CheckoutSession | undefined,
     error: unknown,
     variables: unknown,
     context: unknown,
@@ -95,7 +106,10 @@ function settle(context: unknown) {
 }
 
 const DAY = 24 * 60 * 60 * 1000;
-const CHECKOUT_URL = "https://checkout.stripe.test/c/pay/session";
+const CHECKOUT_SESSION: CheckoutSession = {
+  clientSecret: "cs_test_secret",
+  publishableKey: "pk_test_publishable",
+};
 const ORGANIZATION_ID = "org-under-test";
 const OTHER_ORGANIZATION_ID = "org-switched-to";
 
@@ -112,12 +126,12 @@ const activeTrial = () => ({
   endsAt: new Date(Date.now() + 11 * DAY),
 });
 
-/** Resolves the mutation with `link` the way React Query would. */
-function resolveWith(link: string) {
+/** Resolves the mutation with `session` the way React Query would. */
+function resolveWith(session: CheckoutSession) {
   mocks.mutate.mockImplementation(
     (_variables: unknown, callbacks: MutateCallbacks) => {
       const context = hookOptions()?.onMutate?.();
-      callbacks.onSuccess(link);
+      callbacks.onSuccess(session);
       settle(context);
     },
   );
@@ -142,8 +156,6 @@ const ctas = () =>
 const alert = () => screen.queryByRole("alert");
 
 describe("StartPaygCheckoutCTA", () => {
-  const assign = vi.fn();
-
   beforeEach(() => {
     // The hoisted mocks are shared across tests; call counts have to start
     // from zero or the single-flight assertions read stale clicks.
@@ -157,10 +169,6 @@ describe("StartPaygCheckoutCTA", () => {
     mocks.isPending.mockReturnValue(false);
     dispatchedContext = undefined;
     stayPending();
-    assign.mockReset();
-    vi.spyOn(window.location, "assign").mockImplementation((url) => {
-      assign(url);
-    });
   });
 
   afterEach(() => {
@@ -258,14 +266,16 @@ describe("StartPaygCheckoutCTA", () => {
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
 
-  it("hands off to Stripe in the same tab on success", () => {
-    resolveWith(CHECKOUT_URL);
+  it("opens embedded checkout on this page", async () => {
+    resolveWith(CHECKOUT_SESSION);
     render(<StartPaygCheckoutCTA />);
 
     fireEvent.click(cta()!);
 
     expect(mocks.mutate).toHaveBeenCalledTimes(1);
-    expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
+    expect((await screen.findByRole("dialog")).textContent).toContain(
+      CHECKOUT_SESSION.clientSecret,
+    );
     expect(alert()).toBeNull();
   });
 
@@ -324,7 +334,7 @@ describe("StartPaygCheckoutCTA", () => {
   // React Query only runs the callbacks passed to `mutate` while the mount that
   // dispatched them still has listeners, so a lock released from there alone
   // would stay held forever once a navigation unmounts the CTA mid-checkout.
-  it("releases the lock when the CTA unmounts before the checkout settles", () => {
+  it("releases the lock when the CTA unmounts before the checkout settles", async () => {
     // The checkout stays in flight for as long as the CTA is mounted.
     stayPending();
     const { unmount } = render(<StartPaygCheckoutCTA />);
@@ -336,7 +346,7 @@ describe("StartPaygCheckoutCTA", () => {
     // Only the mutation-level callback survives the unmount.
     settle(dispatchedContext);
 
-    resolveWith(CHECKOUT_URL);
+    resolveWith(CHECKOUT_SESSION);
     render(<StartPaygCheckoutCTA />);
 
     const button = cta()!;
@@ -344,14 +354,14 @@ describe("StartPaygCheckoutCTA", () => {
     fireEvent.click(button);
 
     expect(mocks.mutate).toHaveBeenCalledTimes(2);
-    expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
   // React Query hands a pending mutation whatever options rendered last, so an
   // organization switch mid-checkout would release the lock on the organization
   // switched *to* and wedge the one that actually started the checkout. The
   // dispatching organization has to come back through the mutation context.
-  it("releases the dispatching organization after an organization switch", () => {
+  it("releases the dispatching organization after an organization switch", async () => {
     stayPending();
     const { rerender } = render(<StartPaygCheckoutCTA />);
 
@@ -372,7 +382,7 @@ describe("StartPaygCheckoutCTA", () => {
     expect(isPaygCheckoutLocked(OTHER_ORGANIZATION_ID)).toBe(false);
 
     // Switching back finds the first organization usable, not wedged.
-    resolveWith(CHECKOUT_URL);
+    resolveWith(CHECKOUT_SESSION);
     sessionFor(ORGANIZATION_ID);
     rerender(<StartPaygCheckoutCTA />);
 
@@ -381,7 +391,7 @@ describe("StartPaygCheckoutCTA", () => {
     fireEvent.click(button);
 
     expect(mocks.mutate).toHaveBeenCalledTimes(2);
-    expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
   it("disables the button while the mutation is pending", () => {
@@ -392,22 +402,32 @@ describe("StartPaygCheckoutCTA", () => {
     expect(cta()!.hasAttribute("disabled")).toBe(true);
   });
 
-  // A link the dashboard would refuse to open is a failure, not a navigation.
   it.each([
-    ["an insecure checkout link", "http://checkout.stripe.test/c/pay/session"],
-    ["an unsafe scheme", "javascript:alert(1)"],
-    ["a protocol-relative link", "//evil.test/checkout"],
-    ["an empty link", ""],
-  ])("stays in-page and reports %s", (_name, link) => {
-    resolveWith(link);
+    [
+      "a missing client secret",
+      { clientSecret: "", publishableKey: "pk_test_publishable" },
+    ],
+    [
+      "a hosted checkout link",
+      {
+        clientSecret: "https://checkout.stripe.test/c/pay/session",
+        publishableKey: "pk_test_publishable",
+      },
+    ],
+    [
+      "a missing publishable key",
+      { clientSecret: "cs_test_secret", publishableKey: "" },
+    ],
+  ])("stays closed and reports %s", (_name, session) => {
+    resolveWith(session);
     render(<StartPaygCheckoutCTA />);
 
     fireEvent.click(cta()!);
 
-    expect(assign).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(alert()?.textContent).toMatch(/couldn't start checkout/i);
     expect(mocks.capture).toHaveBeenCalledWith("payg_checkout_error", {
-      error: "unusable checkout link",
+      error: "unusable checkout session",
     });
   });
 
@@ -417,25 +437,25 @@ describe("StartPaygCheckoutCTA", () => {
 
     fireEvent.click(cta()!);
 
-    expect(assign).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(alert()?.textContent).toMatch(/couldn't start checkout/i);
     expect(mocks.capture).toHaveBeenCalledWith("payg_checkout_error", {
       error: "stripe unavailable",
     });
   });
 
-  it("retries after a failure and clears the error", () => {
+  it("retries after a failure and clears the error", async () => {
     rejectWith(new Error("stripe unavailable"));
     render(<StartPaygCheckoutCTA />);
 
     fireEvent.click(cta()!);
     expect(alert()).not.toBeNull();
 
-    resolveWith(CHECKOUT_URL);
+    resolveWith(CHECKOUT_SESSION);
     fireEvent.click(cta()!);
 
     expect(mocks.mutate).toHaveBeenCalledTimes(2);
-    expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
     expect(alert()).toBeNull();
   });
 
@@ -468,8 +488,8 @@ describe("StartPaygCheckoutCTA", () => {
       expect(cta()).toBeNull();
     });
 
-    it("starts checkout through the same mutation", () => {
-      resolveWith(CHECKOUT_URL);
+    it("starts checkout through the same mutation", async () => {
+      resolveWith(CHECKOUT_SESSION);
       render(<StartPaygCheckoutCTA eligibility="gated" />);
 
       fireEvent.click(
@@ -477,7 +497,7 @@ describe("StartPaygCheckoutCTA", () => {
       );
 
       expect(mocks.mutate).toHaveBeenCalledTimes(1);
-      expect(assign).toHaveBeenCalledWith(CHECKOUT_URL);
+      expect(await screen.findByRole("dialog")).toBeTruthy();
     });
 
     // The in-app surfaces stay trial-only: a walled-off organization has no

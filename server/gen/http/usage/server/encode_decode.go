@@ -2429,9 +2429,9 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 // by the usage createStripeCheckout endpoint.
 func EncodeCreateStripeCheckoutResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(string)
+		res, _ := v.(*usage.StripeEmbeddedCheckout)
 		enc := encoder(ctx, w)
-		body := res
+		body := NewCreateStripeCheckoutResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}

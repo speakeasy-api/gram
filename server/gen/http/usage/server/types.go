@@ -193,6 +193,15 @@ type GetUsageTiersResponseBody struct {
 	Enterprise *TierLimitsResponseBody `form:"enterprise" json:"enterprise" xml:"enterprise"`
 }
 
+// CreateStripeCheckoutResponseBody is the type of the "usage" service
+// "createStripeCheckout" endpoint HTTP response body.
+type CreateStripeCheckoutResponseBody struct {
+	// Client secret Stripe.js uses to mount embedded Checkout
+	ClientSecret string `form:"client_secret" json:"client_secret" xml:"client_secret"`
+	// Stripe publishable key used to load Stripe.js
+	PublishableKey string `form:"publishable_key" json:"publishable_key" xml:"publishable_key"`
+}
+
 // GetStripeSubscriptionResponseBody is the type of the "usage" service
 // "getStripeSubscription" endpoint HTTP response body.
 type GetStripeSubscriptionResponseBody struct {
@@ -4152,6 +4161,16 @@ func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseB
 	}
 	if res.Enterprise != nil {
 		body.Enterprise = marshalUsageTierLimitsToTierLimitsResponseBody(res.Enterprise)
+	}
+	return body
+}
+
+// NewCreateStripeCheckoutResponseBody builds the HTTP response body from the
+// result of the "createStripeCheckout" endpoint of the "usage" service.
+func NewCreateStripeCheckoutResponseBody(res *usage.StripeEmbeddedCheckout) *CreateStripeCheckoutResponseBody {
+	body := &CreateStripeCheckoutResponseBody{
+		ClientSecret:   res.ClientSecret,
+		PublishableKey: res.PublishableKey,
 	}
 	return body
 }

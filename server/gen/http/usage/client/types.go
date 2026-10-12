@@ -189,6 +189,15 @@ type GetUsageTiersResponseBody struct {
 	Enterprise *TierLimitsResponseBody `form:"enterprise,omitempty" json:"enterprise,omitempty" xml:"enterprise,omitempty"`
 }
 
+// CreateStripeCheckoutResponseBody is the type of the "usage" service
+// "createStripeCheckout" endpoint HTTP response body.
+type CreateStripeCheckoutResponseBody struct {
+	// Client secret Stripe.js uses to mount embedded Checkout
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// Stripe publishable key used to load Stripe.js
+	PublishableKey *string `form:"publishable_key,omitempty" json:"publishable_key,omitempty" xml:"publishable_key,omitempty"`
+}
+
 // GetStripeSubscriptionResponseBody is the type of the "usage" service
 // "getStripeSubscription" endpoint HTTP response body.
 type GetStripeSubscriptionResponseBody struct {
@@ -5955,6 +5964,17 @@ func NewCreateCheckoutGatewayError(body *CreateCheckoutGatewayErrorResponseBody)
 	return v
 }
 
+// NewCreateStripeCheckoutStripeEmbeddedCheckoutOK builds a "usage" service
+// "createStripeCheckout" endpoint result from a HTTP "OK" response.
+func NewCreateStripeCheckoutStripeEmbeddedCheckoutOK(body *CreateStripeCheckoutResponseBody) *usage.StripeEmbeddedCheckout {
+	v := &usage.StripeEmbeddedCheckout{
+		ClientSecret:   *body.ClientSecret,
+		PublishableKey: *body.PublishableKey,
+	}
+
+	return v
+}
+
 // NewCreateStripeCheckoutUnauthorized builds a usage service
 // createStripeCheckout endpoint unauthorized error.
 func NewCreateStripeCheckoutUnauthorized(body *CreateStripeCheckoutUnauthorizedResponseBody) *goa.ServiceError {
@@ -7384,6 +7404,18 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 		if err2 := ValidateTierLimitsResponseBody(body.Enterprise); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateCreateStripeCheckoutResponseBody runs the validations defined on
+// CreateStripeCheckoutResponseBody
+func ValidateCreateStripeCheckoutResponseBody(body *CreateStripeCheckoutResponseBody) (err error) {
+	if body.ClientSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_secret", "body"))
+	}
+	if body.PublishableKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("publishable_key", "body"))
 	}
 	return
 }

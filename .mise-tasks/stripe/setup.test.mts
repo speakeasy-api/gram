@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   provisionCatalog,
   preflightLocalSetup,
+  publishableKeyFromStripeCLI,
   setupStripe,
 } from "./setup.mts";
 import { execFileSync } from "node:child_process";
@@ -757,3 +758,13 @@ for (const [first, second] of [
     });
   }
 }
+
+test("reads the Stripe CLI test-mode publishable key", () => {
+  assert.equal(
+    publishableKeyFromStripeCLI(
+      "test_mode_pub_key = 'pk_test_example123'\ntest_mode_api_key = 'sk_test_example'",
+    ),
+    "pk_test_example123",
+  );
+  assert.equal(publishableKeyFromStripeCLI("test_mode_api_key = sk_test_only"), "");
+});

@@ -127,7 +127,7 @@ func (f *fakeStripeAPI) updateCustomer(_ context.Context, id string, params *str
 func (f *fakeStripeAPI) createCheckoutSession(_ context.Context, params *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error) {
 	f.calls++
 	f.checkoutSessionParams = params
-	return &stripesdk.CheckoutSession{ID: "cs_test", URL: "https://checkout.stripe.test/session"}, f.err
+	return &stripesdk.CheckoutSession{ID: "cs_test", URL: "https://checkout.stripe.test/session", ClientSecret: "cs_test_secret"}, f.err
 }
 
 func (f *fakeStripeAPI) expireCheckoutSession(_ context.Context, id string, _ *stripesdk.CheckoutSessionExpireParams) (*stripesdk.CheckoutSession, error) {
@@ -437,6 +437,8 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 	require.Equal(t, "always", stripesdk.StringValue(params.PaymentMethodCollection))
 	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.SuccessURL))
 	require.Equal(t, "https://app.example.test/the-customer/billing", stripesdk.StringValue(params.CancelURL))
+	require.Nil(t, params.UIMode)
+	require.Nil(t, params.ReturnURL)
 	require.Len(t, params.LineItems, 3)
 	require.Equal(t, "price_tum", stripesdk.StringValue(params.LineItems[0].Price))
 	require.Equal(t, "price_mcp_egress", stripesdk.StringValue(params.LineItems[1].Price))
@@ -452,6 +454,31 @@ func TestCreateCheckoutSessionBuildsMeteredSubscription(t *testing.T) {
 	require.Nil(t, params.SubscriptionData.ProrationBehavior)
 	require.Equal(t, "<ORG_ID>", params.SubscriptionData.Metadata[organizationIDMetadataKey])
 	require.Equal(t, "the-customer", params.SubscriptionData.Metadata[organizationSlugMetadataKey])
+}
+
+func TestCreateCheckoutSessionEmbeddedPage(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
+	returnURL := "https://app.example.test/the-customer/billing?session_id={CHECKOUT_SESSION_ID}"
+
+	session, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID:         "cus_test",
+		OrganizationID:     "<ORG_ID>",
+		OrganizationSlug:   "the-customer",
+		ReturnURL:          returnURL,
+		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:          time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cs_test_secret", session.ClientSecret)
+	require.Equal(t, string(stripesdk.CheckoutSessionUIModeEmbeddedPage), stripesdk.StringValue(api.checkoutSessionParams.UIMode))
+	require.Equal(t, returnURL, stripesdk.StringValue(api.checkoutSessionParams.ReturnURL))
+	require.Equal(t, string(stripesdk.CheckoutSessionRedirectOnCompletionIfRequired), stripesdk.StringValue(api.checkoutSessionParams.RedirectOnCompletion))
+	require.Nil(t, api.checkoutSessionParams.SuccessURL)
+	require.Nil(t, api.checkoutSessionParams.CancelURL)
 }
 
 func TestCreateCheckoutSessionWithoutTrialStartsImmediately(t *testing.T) {

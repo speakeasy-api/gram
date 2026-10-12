@@ -2858,14 +2858,19 @@ func DecodeCreateStripeCheckoutResponse(decoder func(*http.Response) goahttp.Dec
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body string
+				body CreateStripeCheckoutResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("usage", "createStripeCheckout", err)
 			}
-			return body, nil
+			err = ValidateCreateStripeCheckoutResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createStripeCheckout", err)
+			}
+			res := NewCreateStripeCheckoutStripeEmbeddedCheckoutOK(&body)
+			return res, nil
 		case http.StatusUnauthorized:
 			var (
 				body CreateStripeCheckoutUnauthorizedResponseBody
