@@ -11,6 +11,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAttachOrganizationRemoteSessionClientKeySetMutation } from "@gram/client/react-query/attachOrganizationRemoteSessionClientKeySet.js";
 import { useDetachOrganizationRemoteSessionClientKeySetMutation } from "@gram/client/react-query/detachOrganizationRemoteSessionClientKeySet.js";
@@ -176,8 +177,13 @@ export function KeySetField({
         await attach.mutateAsync({
           request: { attachKeySetForm: { id: client.id, jsonWebKeySetId } },
         });
-      } catch {
-        // The attach mutation's onError has already reported it.
+      } catch (error) {
+        // The attach mutation's onError has already reported it. A 404 means
+        // the set (or the client) is gone, likely deleted elsewhere, so drop the
+        // cached set: reusing its id would fail the same way on every retry.
+        if (error instanceof GramError && error.statusCode === 404) {
+          setMadeSet(null);
+        }
         return;
       }
       setMadeSet(null);
