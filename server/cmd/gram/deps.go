@@ -1791,3 +1791,11 @@ func internalSessionIssuerManager(provisioner *identityproviderconnections.Provi
 	}
 	return provisioner
 }
+
+// issuerKeySweeper keeps a nil provisioner a nil interface.
+func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) background.InternalSessionIssuerKeySweeper {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}

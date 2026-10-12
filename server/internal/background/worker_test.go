@@ -117,6 +117,7 @@ func TestWorkers_RegisterSchedulesSkipsFleetWideOnPreviewQueue(t *testing.T) {
 	want := []string{
 		slackDirectorySweepScheduleID(env.Queue()),
 		oktaApplicationSyncCoordinatorScheduleID(queue),
+		internalSessionIssuerKeySweepScheduleID(queue),
 		fmt.Sprintf("v1:trusted-delegation-cleanup:%s", queue),
 		fmt.Sprintf("v1:tenant-dimensions-sync:%s", queue),
 		indexToolsetSweepScheduleID(queue),
@@ -139,7 +140,7 @@ func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
 		var err error
 		ids, err = scheduleIDs(ctx, env.Client())
 		assert.NoError(c, err)
-		assert.Len(c, ids, 28, "all unconditional schedules should be registered")
+		assert.Len(c, ids, 29, "all unconditional schedules should be registered")
 		assert.Contains(c, ids, fmt.Sprintf("v1:trusted-delegation-cleanup:%s", env.Queue()), "delegation cleanup is an unconditional schedule")
 		assert.Contains(c, ids, fmt.Sprintf("v1:mcp-finding-evidence-cleanup:%s", env.Queue()), "MCP finding evidence cleanup is an unconditional schedule")
 	}, 30*time.Second, 250*time.Millisecond)
