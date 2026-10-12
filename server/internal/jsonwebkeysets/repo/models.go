@@ -38,6 +38,7 @@ type JsonWebKey struct {
 	ActivatedAt        pgtype.Timestamptz
 	RetiredAt          pgtype.Timestamptz
 	RevokedAt          pgtype.Timestamptz
+	KmsDisabledAt      pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
