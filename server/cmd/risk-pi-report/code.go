@@ -9,22 +9,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
 
 const (
-	// fixturesPath is left out of the code key, so a commit that only edits
-	// fixtures reuses every unedited case's record.
+	// fixturesPath holds the fixtures. An uncommitted fixture edit leaves the
+	// measured code unchanged, so a resumed run scores just the edited cases.
 	fixturesPath = "server/internal/scanners/promptinjection/testdata"
 
-	// codeKeyHexLen and uncommittedKeyHexLen are the lengths of the code key's
-	// two parts: the committed code, and the uncommitted changes when present.
-	codeKeyHexLen        = 12
-	uncommittedKeyHexLen = 8
+	// uncommittedHexLen is the length of an uncommitted change's hash.
+	uncommittedHexLen = 8
+
+	// runIDLayout starts a run's directory name with its start time, to the
+	// nanosecond and fixed width, so runs sort oldest first.
+	runIDLayout = "20060102T150405.000000000Z"
 )
 
-// runCommit names the commit whose code produced a run.
+// runCommit is the code a run measured: a commit, plus any change the
+// checkout had outside the fixtures that the commit lacks.
 type runCommit struct {
 	// SHA is the commit's full hash.
 	SHA string `json:"sha"`
@@ -32,9 +36,15 @@ type runCommit struct {
 	// Subject is the commit's subject line.
 	Subject string `json:"subject"`
 
-	// Uncommitted reports that the code had changes outside the fixtures that
-	// the commit lacks.
-	Uncommitted bool `json:"uncommitted,omitempty"`
+	// Uncommitted hashes the checkout's changes outside the fixtures that the
+	// commit lacks; empty for a clean checkout.
+	Uncommitted string `json:"uncommitted,omitempty"`
+}
+
+// sameCode reports whether c and other are the same code. The subject only
+// labels a commit.
+func (c runCommit) sameCode(other runCommit) bool {
+	return c.SHA == other.SHA && c.Uncommitted == other.Uncommitted
 }
 
 // name is how progress lines refer to the run: the commit's short hash,
@@ -44,67 +54,35 @@ func (c runCommit) name() string {
 	if len(name) > 10 {
 		name = name[:10]
 	}
-	if c.Uncommitted {
+	if c.Uncommitted != "" {
 		name += " + uncommitted"
 	}
 	return name
 }
 
-// measured is the code a run measures.
-type measured struct {
-	// key names the run directory. Code that differs outside the fixtures
-	// gets another key.
-	key string
-
-	// commit is the checkout's HEAD.
-	commit runCommit
-}
-
-// measuredCode reads the git checkout that holds dir, or the working
+// checkoutCommit reads the git checkout that holds dir, or the working
 // directory when dir is empty. The binary must be built from that checkout,
 // so the checkout's code is the code it runs.
-func measuredCode(ctx context.Context, dir string) (measured, error) {
-	var code measured
+func checkoutCommit(ctx context.Context, dir string) (runCommit, error) {
+	var commit runCommit
 	root, err := git(ctx, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return code, err
+		return commit, err
 	}
 	root = strings.TrimSpace(root)
-	tree, err := git(ctx, root, "ls-tree", "-r", "-z", "--full-tree", "HEAD")
-	if err != nil {
-		return code, err
-	}
 	head, err := git(ctx, root, "log", "-1", "--format=%H%x00%s", "HEAD")
 	if err != nil {
-		return code, err
+		return commit, err
 	}
 	uncommitted, err := uncommittedCode(ctx, root)
 	if err != nil {
-		return code, err
+		return commit, err
 	}
-
-	sha, subject, _ := strings.Cut(strings.TrimSpace(head), "\x00")
-	code.commit = runCommit{SHA: sha, Subject: subject, Uncommitted: uncommitted != nil}
-	code.key = shortHash([]byte(withoutFixtures(tree)), codeKeyHexLen)
+	commit.SHA, commit.Subject, _ = strings.Cut(strings.TrimSpace(head), "\x00")
 	if uncommitted != nil {
-		code.key += "-" + shortHash(uncommitted, uncommittedKeyHexLen)
+		commit.Uncommitted = fmt.Sprintf("%x", sha256.Sum256(uncommitted))[:uncommittedHexLen]
 	}
-	return code, nil
-}
-
-// withoutFixtures drops the fixtures' entries from a NUL-separated
-// `git ls-tree -r -z` listing.
-func withoutFixtures(tree string) string {
-	var kept strings.Builder
-	for entry := range strings.SplitSeq(tree, "\x00") {
-		_, path, _ := strings.Cut(entry, "\t")
-		if entry == "" || strings.HasPrefix(path, fixturesPath+"/") {
-			continue
-		}
-		kept.WriteString(entry)
-		kept.WriteByte(0)
-	}
-	return kept.String()
+	return commit, nil
 }
 
 // uncommittedCode returns the checkout's changes outside the fixtures that
@@ -141,9 +119,9 @@ func uncommittedCode(ctx context.Context, root string) ([]byte, error) {
 	return changes.Bytes(), nil
 }
 
-// untrackedContent is what an untracked path contributes to the code key, as
-// git would store it: a symlink's target rather than the file it points to, a
-// nested repository's name only, and a file's bytes.
+// untrackedContent is what an untracked path contributes to the uncommitted
+// hash, as git would store it: a symlink's target rather than the file it
+// points to, a nested repository's name only, and a file's bytes.
 func untrackedContent(path string) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -166,10 +144,6 @@ func untrackedContent(path string) ([]byte, error) {
 	return content, nil
 }
 
-func shortHash(b []byte, n int) string {
-	return fmt.Sprintf("%x", sha256.Sum256(b))[:n]
-}
-
 // git runs a git command in dir, or in the working directory when dir is
 // empty, and returns its output.
 func git(ctx context.Context, dir string, args ...string) (string, error) {
@@ -185,63 +159,62 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 	return string(out), nil
 }
 
-// runIDLayout starts a run's directory name with its start time, to the
-// nanosecond and fixed width, so a code key's runs sort oldest first.
-const runIDLayout = "20060102T150405.000000000Z"
-
-// pickRunDir returns the run directory to write under codeDir, which holds
-// one code key's runs: a new run, or with resume the latest one. Resuming
-// with no earlier run starts a new one.
-func pickRunDir(codeDir string, resume bool, now time.Time) (string, error) {
+// pickRunDir returns the run directory to write under runs: a new run, or
+// with resume the most recent run of the same code. Resuming with no such run
+// starts a new one.
+func pickRunDir(runs string, commit runCommit, resume bool, now time.Time) (string, error) {
 	if !resume {
-		return newRunDir(codeDir, now)
+		return newRunDir(runs, now)
 	}
-	latest, err := latestRunDir(codeDir)
+	latest, err := latestRunOf(runs, commit)
 	if err != nil {
 		return "", err
 	}
 	if latest != "" {
 		return latest, nil
 	}
-	fmt.Fprintln(os.Stderr, "no earlier run of this code to resume; starting a new run")
-	return newRunDir(codeDir, now)
+	fmt.Fprintf(os.Stderr, "no earlier run of %s to resume; starting a new run\n", commit.name())
+	return newRunDir(runs, now)
 }
 
-// newRunDir makes the directory of a run that starts at now.
-func newRunDir(codeDir string, now time.Time) (string, error) {
-	if err := os.MkdirAll(codeDir, 0o750); err != nil {
-		return "", fmt.Errorf("create code dir: %w", err)
+// newRunDir makes the directory of a run that starts at now. The suffix
+// keeps two runs that start at the same instant apart.
+func newRunDir(runs string, now time.Time) (string, error) {
+	if err := os.MkdirAll(runs, 0o750); err != nil {
+		return "", fmt.Errorf("create runs dir: %w", err)
 	}
-	dir, err := os.MkdirTemp(codeDir, now.UTC().Format(runIDLayout)+"-")
+	dir, err := os.MkdirTemp(runs, now.UTC().Format(runIDLayout)+"-")
 	if err != nil {
 		return "", fmt.Errorf("create run dir: %w", err)
 	}
 	return dir, nil
 }
 
-// latestRunDir returns the most recently started run under codeDir, or empty
-// when there is none.
-func latestRunDir(codeDir string) (string, error) {
-	entries, err := os.ReadDir(codeDir)
+// latestRunOf returns the most recently started run under runs that measured
+// commit's code, or empty when there is none.
+func latestRunOf(runs string, commit runCommit) (string, error) {
+	entries, err := os.ReadDir(runs)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("list runs: %w", err)
 	}
-	latest := ""
-	for _, entry := range entries {
-		if entry.IsDir() && entry.Name() > latest {
-			latest = entry.Name()
+	// ReadDir sorts by name, which is start time.
+	for _, entry := range slices.Backward(entries) {
+		if !entry.IsDir() {
+			continue
+		}
+		dir := filepath.Join(runs, entry.Name())
+		manifest, err := readManifest(filepath.Join(dir, manifestFile))
+		if err == nil && manifest.Commit.sameCode(commit) {
+			return dir, nil
 		}
 	}
-	if latest == "" {
-		return "", nil
-	}
-	return filepath.Join(codeDir, latest), nil
+	return "", nil
 }
 
-// runsDir holds every run, one directory per code key.
+// runsDir holds every run, one directory each.
 func runsDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

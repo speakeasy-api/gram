@@ -1,9 +1,9 @@
 // Command risk-pi-report scores the prompt-injection detector this checkout
 // ships on the labelled fixtures. Each call starts a new run and writes one
-// record per case under ~/.cache/gram-pi-eval/runs/<code key>/<run>, where the
-// code key hashes the checkout's code outside the fixtures. With -resume it
-// continues the latest run of the same code instead: it runs only missing, new
-// or edited cases and cases the run could not fund.
+// record per case under ~/.cache/gram-pi-eval/runs/<run>. With -resume it
+// continues the most recent run of the same commit and uncommitted changes
+// instead: it runs only missing, new or edited cases and cases the run could
+// not fund.
 //
 // Run it from the checkout it was built from, such as with
 // `go run ./server/cmd/risk-pi-report` at the repository root.
@@ -131,7 +131,7 @@ func run(ctx context.Context, corpusDir string, resume bool) error {
 	if err != nil {
 		return err
 	}
-	code, err := measuredCode(ctx, "")
+	commit, err := checkoutCommit(ctx, "")
 	if err != nil {
 		return err
 	}
@@ -139,11 +139,11 @@ func run(ctx context.Context, corpusDir string, resume bool) error {
 	if err != nil {
 		return err
 	}
-	runDir, err := pickRunDir(filepath.Join(runs, code.key), resume, time.Now())
+	runDir, err := pickRunDir(runs, commit, resume, time.Now())
 	if err != nil {
 		return err
 	}
-	return runRecords(ctx, options{runDir: runDir, commit: code.commit}, corpus)
+	return runRecords(ctx, options{runDir: runDir, commit: commit}, corpus)
 }
 
 // corpusOrder lists the fixture files that load first, in this order, so

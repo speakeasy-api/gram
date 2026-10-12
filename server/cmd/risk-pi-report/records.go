@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -93,13 +92,11 @@ type caseRecord struct {
 	LatencyMS float64 `json:"latency_ms"`
 }
 
-// runManifest describes a run directory: when it started and the commits
-// whose code it measured.
+// runManifest describes a run directory: the code it measured and when.
 type runManifest struct {
-	// Commits lists the commits whose code produced the run, in the order the
-	// run first measured each. Resuming at a commit that differs only in
-	// fixtures adds that commit.
-	Commits []runCommit `json:"commits"`
+	// Commit is the code the run measured. Resuming the run needs the same
+	// code.
+	Commit runCommit `json:"commit"`
 
 	// Started is when the run began.
 	Started time.Time `json:"started"`
@@ -441,16 +438,18 @@ func lockRunDir(dir string) (func(), error) {
 }
 
 // claimRunDir records commit in the run's manifest before any case runs, so a
-// crashed run still names its code.
+// crashed run still names its code. It refuses a run of other code, so one
+// run never mixes two versions of the detector.
 func claimRunDir(dir string, commit runCommit, now time.Time) error {
 	path := filepath.Join(dir, manifestFile)
 	manifest, err := readManifest(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if !slices.Contains(manifest.Commits, commit) {
-		manifest.Commits = append(manifest.Commits, commit)
+	if manifest.Commit.SHA != "" && !manifest.Commit.sameCode(commit) {
+		return fmt.Errorf("run %s measured %s, not this checkout's %s; start a new run", dir, manifest.Commit.name(), commit.name())
 	}
+	manifest.Commit = commit
 	if manifest.Started.IsZero() {
 		manifest.Started = now.UTC()
 	}
