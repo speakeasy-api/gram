@@ -3089,6 +3089,10 @@ ON sso_sign_ins (organization_id, workos_session_id);
 CREATE INDEX IF NOT EXISTS sso_sign_ins_organization_id_user_id_idx
 ON sso_sign_ins (organization_id, user_id);
 
+-- Finds a WorkOS session's earliest sign-in across the user's orgs.
+CREATE INDEX IF NOT EXISTS sso_sign_ins_user_id_workos_session_id_idx
+ON sso_sign_ins (user_id, workos_session_id);
+
 -- Composite FK target so a grant can only link to a sign-in in its own org.
 CREATE UNIQUE INDEX IF NOT EXISTS sso_sign_ins_organization_id_id_key
 ON sso_sign_ins (organization_id, id);
