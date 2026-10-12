@@ -154,6 +154,9 @@ export function toolsetFacets(
     pluginIds: [
       ...new Set([
         ...(membership.byToolsetId.get(toolset.id) ?? []),
+        ...(membership.byMcpServerId.get(
+          serverIds?.get(toolset.id) ?? toolset.id,
+        ) ?? []),
         ...(membership.byMcpServerId.get(toolset.id) ?? []),
       ]),
     ],

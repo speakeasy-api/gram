@@ -196,6 +196,12 @@ WHERE id = @id
 -- canonical wrapper share one id, so either key finds the other's row.
 SELECT * FROM plugin_servers
 WHERE plugin_id = @plugin_id
+  AND EXISTS (
+    SELECT 1 FROM plugins
+    WHERE plugins.id = plugin_servers.plugin_id
+      AND plugins.project_id = @project_id
+      AND plugins.organization_id = @organization_id
+  )
   AND (toolset_id = COALESCE(sqlc.narg('toolset_id')::uuid, sqlc.narg('mcp_server_id')::uuid)
     OR mcp_server_id = COALESCE(sqlc.narg('mcp_server_id')::uuid, sqlc.narg('toolset_id')::uuid))
   AND deleted IS FALSE

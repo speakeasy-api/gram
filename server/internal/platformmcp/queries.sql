@@ -3212,7 +3212,8 @@ LEFT JOIN LATERAL (
      AND plugin.organization_id = @organization_id
      AND plugin.deleted IS FALSE
     WHERE membership.deleted IS FALSE
-      AND ((@target_kind::text = 'mcp_server' AND membership.mcp_server_id = server.id)
+      AND ((@target_kind::text = 'mcp_server' AND (membership.mcp_server_id = server.id
+          OR (membership.toolset_id = server.id AND server.toolset_id = membership.toolset_id)))
         OR (@target_kind::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
 ) memberships ON TRUE
 WHERE project.id = @project_id
@@ -3314,7 +3315,7 @@ WHERE p.id = @plugin_id
 -- name: ListPlatformMCPPluginServers :many
 -- Member-facing compatibility projection. It deliberately omits membership and
 -- backend IDs, which are administrative identity and must not cross this path.
--- A toolset-keyed row reads through its canonical wrapper (same id) when one exists.
+-- A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists.
 SELECT
     ps.id,
     ps.display_name,
@@ -3332,7 +3333,7 @@ LEFT JOIN mcp_servers s
   ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR s.toolset_id = ps.toolset_id)
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
   ON t.id = ps.toolset_id
   AND t.project_id = p.project_id
@@ -3412,7 +3413,7 @@ LEFT JOIN mcp_servers s
   ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
-  AND (ps.mcp_server_id IS NOT NULL OR s.toolset_id = ps.toolset_id)
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
   ON t.id = ps.toolset_id
   AND t.project_id = p.project_id

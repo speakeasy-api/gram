@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -60,4 +61,18 @@ func TestGetPluginReadsToolsetKeyedEntryThroughCanonicalServer(t *testing.T) {
 	require.Equal(t, "toolset", got.Servers[1].Backend, "a toolset with no canonical server keeps its toolset backend")
 	require.Equal(t, legacy.ID.String(), got.Servers[1].TargetID)
 	require.Equal(t, legacy.McpSlug.String, got.Servers[1].MCPSlug)
+
+	settings, err := platformrepo.New(conn).GetPlatformMCPConnectionSettings(ctx, platformrepo.GetPlatformMCPConnectionSettingsParams{
+		TargetKind: "mcp_server", TargetID: hosted.ID, OrganizationID: principal.OrganizationID, ProjectID: project.ID,
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(settings.PluginMemberships), plugin.ID.String(), "connection settings list the toolset-keyed entry")
+
+	_, err = conn.Exec(ctx, "UPDATE mcp_servers SET visibility = 'disabled' WHERE id = $1 AND project_id = $2", hosted.ID, project.ID)
+	require.NoError(t, err)
+	got, err = service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
+	require.NoError(t, err)
+	require.Equal(t, "toolset", got.Servers[0].Backend, "a disabled canonical server falls back to the toolset, as generation does")
+	require.Equal(t, hosted.McpSlug.String, got.Servers[0].MCPSlug)
+	require.True(t, got.Servers[0].Enabled)
 }

@@ -1398,7 +1398,10 @@ function PluginServerCard({
   const routes = useRoutes();
 
   // Hosted rows resolve to their toolset under either key; anything else is remote.
-  const isRemote = !!server.mcpServerId && !toolset;
+  const isRemote =
+    !!server.mcpServerId &&
+    !toolset &&
+    (!!mcpServer || (!isLoading && !metadataUnavailable));
   // Approximates per-server publish freshness from the project-wide
   // fingerprint: publish itself isn't scoped to a single server, but a
   // server added after the last publish timestamp can't possibly be in the
