@@ -24,6 +24,17 @@ vi.mock("@/contexts/Auth", () => ({
   }),
 }));
 
+vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
+  useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
+}));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    remoteIdentityProviders: { clientDetail: { goTo: vi.fn() } },
+  }),
+}));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: vi.fn() }),
 }));
@@ -43,6 +54,10 @@ vi.mock("@/lib/proxyRegisterUpstreamClient", () => ({
 
 vi.mock("@gram/client/react-query/organizationRemoteSessionClients.js", () => ({
   invalidateAllOrganizationRemoteSessionClients: vi.fn(() => Promise.resolve()),
+  buildOrganizationRemoteSessionClientsQuery: () => ({
+    queryKey: ["organizationRemoteSessionClients"],
+    queryFn: () => Promise.resolve({ result: { items: [] } }),
+  }),
 }));
 
 vi.mock("@gram/client/react-query/organizationRemoteSessionIssuers.js", () => ({

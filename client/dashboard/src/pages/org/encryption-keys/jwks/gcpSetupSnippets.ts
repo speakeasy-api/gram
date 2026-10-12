@@ -1,0 +1,165 @@
+/** How the operator prefers to make the grants in their own cloud account. */
+export type SetupMethod = "gcloud" | "terraform" | "console";
+
+export type SetupValues = {
+  projectId: string;
+  /** The short name of the service account Speakeasy impersonates. */
+  accountId: string;
+  /** The principal Speakeasy itself runs as, granted the right to impersonate. */
+  speakeasyPrincipal: string;
+  location: string;
+  keyRing: string;
+  keyName: string;
+};
+
+/** Either code to run, or console steps to follow. */
+export type SetupInstructions =
+  | { kind: "code"; language: string; code: string }
+  | { kind: "steps"; steps: string[] };
+
+const IMPERSONATION_ROLE = "roles/iam.serviceAccountTokenCreator";
+const SIGNING_ROLE = "roles/cloudkms.signerVerifier";
+
+// Typed values fill the snippets; blank ones stay as obvious placeholders so a
+// copied command never silently runs against an empty string.
+function or(value: string, placeholder: string): string {
+  return value.trim() || placeholder;
+}
+
+export function serviceAccountEmail(values: SetupValues): string {
+  return `${or(values.accountId, "SERVICE_ACCOUNT")}@${or(values.projectId, "PROJECT_ID")}.iam.gserviceaccount.com`;
+}
+
+export function keyVersionResourceName(values: SetupValues): string {
+  return `projects/${or(values.projectId, "PROJECT_ID")}/locations/${or(values.location, "LOCATION")}/keyRings/${or(values.keyRing, "KEY_RING")}/cryptoKeys/${or(values.keyName, "KEY")}/cryptoKeyVersions/1`;
+}
+
+/** Step: create the service account and let Speakeasy impersonate it. */
+export function impersonationInstructions(
+  method: SetupMethod,
+  values: SetupValues,
+): SetupInstructions {
+  const project = or(values.projectId, "PROJECT_ID");
+  const account = or(values.accountId, "SERVICE_ACCOUNT");
+  const principal = or(values.speakeasyPrincipal, "SPEAKEASY_PRINCIPAL");
+  const email = serviceAccountEmail(values);
+
+  switch (method) {
+    case "gcloud":
+      return {
+        kind: "code",
+        language: "sh",
+        code: [
+          `gcloud iam service-accounts create ${account} \\`,
+          `  --project=${project} \\`,
+          `  --display-name="Speakeasy signer"`,
+          ``,
+          `gcloud iam service-accounts add-iam-policy-binding ${email} \\`,
+          `  --project=${project} \\`,
+          `  --member="serviceAccount:${principal}" \\`,
+          `  --role="${IMPERSONATION_ROLE}"`,
+        ].join("\n"),
+      };
+    case "terraform":
+      return {
+        kind: "code",
+        language: "hcl",
+        code: [
+          `resource "google_service_account" "speakeasy_signer" {`,
+          `  project      = "${project}"`,
+          `  account_id   = "${account}"`,
+          `  display_name = "Speakeasy signer"`,
+          `}`,
+          ``,
+          `resource "google_service_account_iam_member" "speakeasy_impersonation" {`,
+          `  service_account_id = google_service_account.speakeasy_signer.name`,
+          `  role               = "${IMPERSONATION_ROLE}"`,
+          `  member             = "serviceAccount:${principal}"`,
+          `}`,
+        ].join("\n"),
+      };
+    case "console":
+      return {
+        kind: "steps",
+        steps: [
+          `In the Google Cloud console, open IAM & Admin › Service Accounts for project ${project}.`,
+          `Create a service account named ${account}. Skip the optional role grants.`,
+          `Open the new account, go to Principals with access, and choose Grant access.`,
+          `Add ${principal} as the principal with the Service Account Token Creator role, then save.`,
+        ],
+      };
+  }
+}
+
+/** Step: let the service account sign with keys in the key ring. */
+export function keyRingInstructions(
+  method: SetupMethod,
+  values: SetupValues,
+): SetupInstructions {
+  const project = or(values.projectId, "PROJECT_ID");
+  const location = or(values.location, "LOCATION");
+  const keyRing = or(values.keyRing, "KEY_RING");
+  const key = or(values.keyName, "KEY");
+  const email = serviceAccountEmail(values);
+
+  switch (method) {
+    case "gcloud":
+      return {
+        kind: "code",
+        language: "sh",
+        code: [
+          `# Skip these two if the key ring and key already exist.`,
+          `gcloud kms keyrings create ${keyRing} \\`,
+          `  --location=${location} --project=${project}`,
+          ``,
+          `gcloud kms keys create ${key} \\`,
+          `  --keyring=${keyRing} --location=${location} --project=${project} \\`,
+          `  --purpose=asymmetric-signing \\`,
+          `  --default-algorithm=ec-sign-p256-sha256`,
+          ``,
+          `gcloud kms keyrings add-iam-policy-binding ${keyRing} \\`,
+          `  --location=${location} --project=${project} \\`,
+          `  --member="serviceAccount:${email}" \\`,
+          `  --role="${SIGNING_ROLE}"`,
+        ].join("\n"),
+      };
+    case "terraform":
+      return {
+        kind: "code",
+        language: "hcl",
+        code: [
+          `resource "google_kms_key_ring" "speakeasy" {`,
+          `  project  = "${project}"`,
+          `  name     = "${keyRing}"`,
+          `  location = "${location}"`,
+          `}`,
+          ``,
+          `resource "google_kms_crypto_key" "speakeasy_signing" {`,
+          `  name     = "${key}"`,
+          `  key_ring = google_kms_key_ring.speakeasy.id`,
+          `  purpose  = "ASYMMETRIC_SIGN"`,
+          ``,
+          `  version_template {`,
+          `    algorithm = "EC_SIGN_P256_SHA256"`,
+          `  }`,
+          `}`,
+          ``,
+          `resource "google_kms_key_ring_iam_member" "speakeasy_signer" {`,
+          `  key_ring_id = google_kms_key_ring.speakeasy.id`,
+          `  role        = "${SIGNING_ROLE}"`,
+          `  member      = "serviceAccount:${email}"`,
+          `}`,
+        ].join("\n"),
+      };
+    case "console":
+      return {
+        kind: "steps",
+        steps: [
+          `In the Google Cloud console, open Security › Key Management for project ${project}.`,
+          `Use key ring ${keyRing} in ${location}, or create it.`,
+          `In it, use or create key ${key} with purpose Asymmetric sign and algorithm Elliptic Curve P-256 – SHA256 (or RSA 2048 – PKCS#1 v1.5 – SHA256).`,
+          `On the key ring, choose Permissions › Grant access, add ${email}, and give it the Cloud KMS CryptoKey Signer/Verifier role.`,
+        ],
+      };
+  }
+}

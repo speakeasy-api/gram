@@ -17,6 +17,9 @@ import { OverviewTab } from "./OverviewTab";
 const mutation = vi.hoisted(() => ({ mutate: vi.fn() }));
 const auth = vi.hoisted(() => ({ isPlatformAdmin: false, isOrgAdmin: true }));
 
+vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
+  useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
+}));
 vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ name }: { name: string }) => <span>{name}</span>,
 }));

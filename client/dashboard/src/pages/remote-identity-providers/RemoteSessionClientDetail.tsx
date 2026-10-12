@@ -1,3 +1,5 @@
+import { Badge } from "@/components/ui/Badge";
+import { Bot } from "lucide-react";
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -125,6 +127,14 @@ export default function RemoteSessionClientDetail(): JSX.Element {
                 projectId={client.projectId}
                 organizationId={client.organizationId}
               />
+            )}
+            {client?.credentialOwner === "self" && (
+              <Badge variant="information" size="sm">
+                <Badge.LeftIcon>
+                  <Bot />
+                </Badge.LeftIcon>
+                <Badge.Text>Service account</Badge.Text>
+              </Badge>
             )}
           </div>
           <Heading variant="h1" className="break-all normal-case">

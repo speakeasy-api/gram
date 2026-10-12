@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
   Select,
@@ -17,12 +19,16 @@ import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react
 import { buildOrganizationRemoteSessionClientsQuery } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useResolveKeySet } from "@/lib/remote-identity";
+import { ExternalKeySelect } from "@/pages/org/encryption-keys/jwks/ExternalKeySelect";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 // The Select cannot carry an empty string as a value, so "no set attached" gets
 // a sentinel. Chosen to be impossible as a uuid.
 const NONE = "__none__";
+// Opens the inline form that creates a set from a Google Cloud KMS key.
+const NEW_SET = "__new__";
 
 // KeySetField picks the JSON Web Key Set this client signs private_key_jwt
 // assertions with. It sits beside the token endpoint authentication method
@@ -134,7 +140,36 @@ export function KeySetField({
     onError: onError(startedIn),
   });
 
-  const pending = attach.isPending || detach.isPending;
+  const resolveKeySet = useResolveKeySet();
+  const [newSetOpen, setNewSetOpen] = useState(false);
+  const [newSetName, setNewSetName] = useState("");
+  const [newSetKeyId, setNewSetKeyId] = useState("");
+  const [creatingSet, setCreatingSet] = useState(false);
+
+  const createAndAttach = async () => {
+    setCreatingSet(true);
+    try {
+      const jsonWebKeySetId = await resolveKeySet({
+        kind: "new",
+        name: newSetName,
+        externalKeyId: newSetKeyId,
+      });
+      await attach.mutateAsync({
+        request: { attachKeySetForm: { id: client.id, jsonWebKeySetId } },
+      });
+      setNewSetOpen(false);
+      setNewSetName("");
+      setNewSetKeyId("");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create key set",
+      );
+    } finally {
+      setCreatingSet(false);
+    }
+  };
+
+  const pending = attach.isPending || detach.isPending || creatingSet;
   const selected = client.jsonWebKeySetId ?? NONE;
 
   useEffect(() => {
@@ -144,6 +179,11 @@ export function KeySetField({
   if (!entitled) return null;
 
   const handleChange = (next: string) => {
+    if (next === NEW_SET) {
+      setNewSetOpen(true);
+      return;
+    }
+    setNewSetOpen(false);
     if (next === selected) return;
 
     if (next === NONE) {
@@ -187,13 +227,54 @@ export function KeySetField({
                 " · used by another client here"}
             </SelectItem>
           ))}
+          <SelectItem value={NEW_SET}>Set up a new key set…</SelectItem>
         </SelectContent>
       </Select>
-      {sets.length === 0 && !setsPending ? (
+      {newSetOpen ? (
+        <div className="bg-muted/20 flex flex-col gap-3 border p-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="client-new-key-set-name">Name</Label>
+            <Input
+              id="client-new-key-set-name"
+              value={newSetName}
+              onChange={setNewSetName}
+              placeholder="Production signing keys"
+              disabled={pending}
+            />
+          </div>
+          <ExternalKeySelect
+            label="Google Cloud KMS key"
+            value={newSetKeyId}
+            onChange={setNewSetKeyId}
+            disabled={pending}
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={
+                pending || newSetName.trim() === "" || newSetKeyId === ""
+              }
+              onClick={() => void createAndAttach()}
+            >
+              <Button.Text>
+                {creatingSet ? "Creating…" : "Create and attach"}
+              </Button.Text>
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => setNewSetOpen(false)}
+            >
+              <Button.Text>Cancel</Button.Text>
+            </Button>
+          </div>
+        </div>
+      ) : sets.length === 0 && !setsPending ? (
         <Text small muted>
-          No signing key sets yet. Create one under Encryption Keys to let this
-          client authenticate with a signed assertion instead of a shared
-          secret.
+          No signing key sets yet. Set up a new one from a Google Cloud KMS key
+          to let this client authenticate with a signed assertion instead of a
+          shared secret.
         </Text>
       ) : (
         <Text small muted>

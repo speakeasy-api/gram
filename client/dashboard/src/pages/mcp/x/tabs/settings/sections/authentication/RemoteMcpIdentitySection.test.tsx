@@ -48,6 +48,9 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
+vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
+  useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
+}));
 vi.mock("sonner", () => ({
   toast: {
     success: mocks.toastSuccess,
@@ -507,6 +510,14 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
+
+// A static credential format, picked from the Service Account panel's Static
+// group so it can't be confused with the Manual identity mode.
+function staticFormat(name: string): HTMLElement {
+  return within(
+    screen.getByRole("radiogroup", { name: "Static credential" }),
+  ).getByRole("radio", { name: new RegExp(`^${name}`) });
+}
 
 describe("RemoteMcpIdentitySectionBody", () => {
   it("names the three identity modes after the upstream service", () => {
@@ -1690,7 +1701,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
   it("labels Basic and Manual credential inputs without exposing their values", () => {
     const { container } = renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Basic" }));
+    fireEvent.click(staticFormat("Basic"));
 
     fireEvent.change(screen.getByLabelText("Username"), {
       target: { value: "operator" },
@@ -1704,7 +1715,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(container.textContent).not.toContain("basic-secret");
     expect(container.textContent).not.toContain("b3BlcmF0b3I6YmFzaWMtc2VjcmV0");
 
-    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
+    fireEvent.click(staticFormat("Manual"));
     fireEvent.change(screen.getByLabelText("Header value"), {
       target: { value: "Custom manual-secret" },
     });
@@ -1751,7 +1762,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
   it("keeps password managers out of the credential fields", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Basic" }));
+    fireEvent.click(staticFormat("Basic"));
 
     // A username next to a password is exactly the shape a manager treats as a
     // login form, but these are credentials for the upstream service.
@@ -1771,13 +1782,16 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("keeps Client Credentials visible but unselectable", () => {
+  it("keeps Signing key visible but unselectable without KMS", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
 
-    expect(screen.getByText("Coming soon")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: /Client credentials/ }));
-    // Still on Bearer: the segment advertises the roadmap, it does not switch.
+    expect(screen.getByText("Requires KMS")).toBeDefined();
+    const signingKey = within(
+      screen.getByRole("radiogroup", { name: "OAuth credential" }),
+    ).getByRole("radio", { name: /^Signing key/ }) as HTMLButtonElement;
+    expect(signingKey.disabled).toBe(true);
+    // Still on Bearer: the option advertises KMS signing, it does not switch.
     expect(screen.getByLabelText("Token")).toBeDefined();
   });
 
