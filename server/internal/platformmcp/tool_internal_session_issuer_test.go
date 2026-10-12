@@ -99,6 +99,10 @@ func TestInternalSessionIssuerToolStates(t *testing.T) {
 	status = read()
 	require.Equal(t, internalsessionissuers.StateUnavailable, status.State)
 	require.Empty(t, status.Issuer, "a rolled-back organization sees no issuer")
+	require.NoError(t, internalsessionissuers.NewLifecycle(pool, audit.NewLogger()).SetDisabled(ctx, principal.OrganizationID, true))
+	status = read()
+	require.Equal(t, internalsessionissuers.StateDisabled, status.State)
+	require.Empty(t, status.Issuer, "rollback hides a disabled issuer too")
 
 	// Missing deployment configuration must not leak a stored issuer.
 	reader.WithInternalSessionIssuer(nil)

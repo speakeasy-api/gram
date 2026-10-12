@@ -57,7 +57,8 @@ func registerInternalSessionIssuerTool(reg *Registrar, reader Reader) {
 		}
 		status.State = current.State
 		status.NextStep = internalSessionIssuerNextSteps[current.State]
-		if current.Issuer != nil && current.State != internalsessionissuers.StateUnavailable {
+		// Rolling back the issuer hides it, whatever the organization's own state.
+		if current.Issuer != nil && current.RolledOut && current.State != internalsessionissuers.StateUnavailable {
 			status.Issuer = current.Issuer.Issuer
 		}
 		return nil, status, nil
