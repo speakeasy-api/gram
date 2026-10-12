@@ -196,7 +196,8 @@ func TestClaimRunDirListsEachCommitOnce(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	require.NoError(t, claimRunDir(dir, mainCommit, time.Now().Add(-time.Hour)))
+	started := time.Now().Add(-time.Hour)
+	require.NoError(t, claimRunDir(dir, mainCommit, started))
 	now := time.Now()
 	require.NoError(t, claimRunDir(dir, fixtureCommit, now))
 	require.NoError(t, claimRunDir(dir, mainCommit, now))
@@ -204,6 +205,7 @@ func TestClaimRunDirListsEachCommitOnce(t *testing.T) {
 	got, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
 	require.Equal(t, []runCommit{mainCommit, fixtureCommit}, got.Commits)
+	require.WithinDuration(t, started, got.Started, time.Second, "a resumed run keeps its start time")
 	require.WithinDuration(t, now, got.Updated, time.Second)
 }
 

@@ -97,10 +97,14 @@ const runIds = () => DATA.runs.map((r) => r.id);
 const runOf = (id) => DATA.runs.find((r) => r.id === id);
 const latest = (r) => { const cs = (r && r.manifest.commits) || []; return cs[cs.length - 1] || null; };
 function role(id) { return id === DATA.change ? "this change" : id === DATA.base ? "base" : ""; }
+const when = (r) => (r && r.manifest.started ? new Date(r.manifest.started).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+// shortName names a run by its commit and start time; runs of the same code
+// differ only in the time.
 function shortName(id) {
-  const c = latest(runOf(id));
+  const r = runOf(id), c = latest(r);
   const sha = c ? c.sha.slice(0, 10) + (c.uncommitted ? "+" : "") : id.slice(0, 10);
-  return role(id) ? `${role(id)} (${sha})` : sha;
+  const name = [sha, when(r)].filter(Boolean).join(" · ");
+  return role(id) ? `${role(id)} (${name})` : name;
 }
 function pair() {
   const ids = runIds();

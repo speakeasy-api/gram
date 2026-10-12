@@ -1,8 +1,9 @@
 // Command risk-pi-report scores the prompt-injection detector this checkout
-// ships on the labelled fixtures. It writes one record per case under
-// ~/.cache/gram-pi-eval/runs/<code key>, where the code key hashes the
-// checkout's code outside the fixtures. A rerun resumes: it runs only new or
-// edited cases and cases a previous run could not fund.
+// ships on the labelled fixtures. Each call starts a new run and writes one
+// record per case under ~/.cache/gram-pi-eval/runs/<code key>/<run>, where the
+// code key hashes the checkout's code outside the fixtures. With -resume it
+// continues the latest run of the same code instead: it runs only missing, new
+// or edited cases and cases the run could not fund.
 //
 // `risk-pi-report view` shows every cached run and applies the merge gate to
 // this checkout's run.
@@ -22,6 +23,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
@@ -130,6 +132,7 @@ func dispatch(ctx context.Context, args []string) error {
 func runMeasure(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("risk-pi-report", flag.ExitOnError)
 	corpusDir := flags.String("corpus-dir", defaultCorpusDir, "directory of prompt-injection JSONL fixtures to score; defaults to this checkout's")
+	resume := flags.Bool("resume", false, "continue the latest run of this checkout's code instead of starting a new one")
 	_ = flags.Parse(args) // ExitOnError exits on a bad flag.
 	// A command this version does not know must not start a paid run.
 	if flags.NArg() > 0 {
@@ -149,7 +152,11 @@ func runMeasure(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return runRecords(ctx, options{runDir: filepath.Join(runs, code.key), commit: code.commit}, corpus)
+	runDir, err := pickRunDir(filepath.Join(runs, code.key), *resume, time.Now())
+	if err != nil {
+		return err
+	}
+	return runRecords(ctx, options{runDir: runDir, commit: code.commit}, corpus)
 }
 
 // corpusOrder lists the fixture files that load first, in this order, so

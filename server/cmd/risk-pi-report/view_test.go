@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// writeRun writes a run named id under runs, measured by commit, updated at
-// updated, holding records.
-func writeRun(t *testing.T, runs, id string, commit runCommit, updated time.Time, records ...caseRecord) {
+// writeRun writes the run id, "<code key>/<run>", under runs, measured by
+// commit and started at started, holding records.
+func writeRun(t *testing.T, runs, id string, commit runCommit, started time.Time, records ...caseRecord) {
 	t.Helper()
-	dir := filepath.Join(runs, id)
+	dir := filepath.Join(runs, filepath.FromSlash(id))
 	require.NoError(t, os.MkdirAll(dir, 0o750))
 	lines := make([]string, 0, len(records))
 	for _, rec := range records {
@@ -24,7 +24,7 @@ func writeRun(t *testing.T, runs, id string, commit runCommit, updated time.Time
 		lines = append(lines, string(raw))
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, casesFile), []byte(strings.Join(lines, "\n")), 0o600))
-	manifest, err := json.Marshal(runManifest{Commits: []runCommit{commit}, Updated: updated})
+	manifest, err := json.Marshal(runManifest{Commits: []runCommit{commit}, Started: started, Updated: started})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, manifestFile), manifest, 0o600))
 }
@@ -45,26 +45,52 @@ func TestBuildViewDataListsEveryRunAndJoinsCases(t *testing.T) {
 	caught, fixed, pending := recordsCase("caught", "malicious", "DAN"), recordsCase("fixed", "benign", ""), recordsCase("pending", "malicious", "")
 	runs := t.TempDir()
 	now := time.Now()
-	writeRun(t, runs, "base-key", baseCommit, now.Add(-2*time.Hour), viewRecord(caught, statusClear), viewRecord(fixed, statusFlagged), viewRecord(pending, statusFlagged))
-	writeRun(t, runs, "change-key", changeCommit, now.Add(-3*time.Hour), viewRecord(caught, statusFlagged), viewRecord(fixed, statusClear))
-	writeRun(t, runs, "older-key", olderCommit, now, viewRecord(caught, statusFlagged))
-	require.NoError(t, os.MkdirAll(filepath.Join(runs, "no-manifest"), 0o750))
+	writeRun(t, runs, "base-key/r1", baseCommit, now.Add(-2*time.Hour), viewRecord(caught, statusClear), viewRecord(fixed, statusFlagged), viewRecord(pending, statusFlagged))
+	writeRun(t, runs, "change-key/r1", changeCommit, now.Add(-3*time.Hour), viewRecord(caught, statusFlagged), viewRecord(fixed, statusClear))
+	writeRun(t, runs, "older-key/r1", olderCommit, now, viewRecord(caught, statusFlagged))
+	require.NoError(t, os.MkdirAll(filepath.Join(runs, "change-key", "no-manifest"), 0o750))
+	oldLayout := filepath.Join(runs, "old-layout-key")
+	require.NoError(t, os.MkdirAll(oldLayout, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(oldLayout, manifestFile), []byte(`{"commits":[{"sha":"dddddddddddd"}]}`), 0o600), "a run from before per-run directories")
 
 	src := viewSource{runsDir: runs, corpus: []labeledCase{caught, fixed, pending}, change: "change-key", base: baseCommit.SHA[:8]}
 	data, err := buildViewData(src, time.Unix(0, 0))
 	require.NoError(t, err)
-	require.Equal(t, "change-key", data.Change)
-	require.Equal(t, "base-key", data.Base, "the base run is found by an abbreviated commit")
+	require.Equal(t, "change-key/r1", data.Change)
+	require.Equal(t, "base-key/r1", data.Base, "the base run is found by an abbreviated commit")
 	ids := make([]string, 0, len(data.Runs))
 	for _, r := range data.Runs {
 		ids = append(ids, r.ID)
 	}
-	require.Equal(t, []string{"change-key", "base-key", "older-key"}, ids, "the change and base lead; a run without a manifest is left out")
+	require.Equal(t, []string{"change-key/r1", "base-key/r1", "older-key/r1"}, ids, "the change and base lead; a run without a manifest is left out")
 	require.Equal(t, 2, data.Runs[1].RequiredCaught)
-	require.Nil(t, data.Cases[2].Results["change-key"])
-	require.Equal(t, statusFlagged, data.Cases[2].Results["base-key"].Status)
+	require.Nil(t, data.Cases[2].Results["change-key/r1"])
+	require.Equal(t, statusFlagged, data.Cases[2].Results["base-key/r1"].Status)
 	require.Equal(t, caseFlips{NewlyCaught: 1, NewlyMissed: 0, NewFalsePositives: 0, FixedFalsePositives: 1}, compareRuns(data.Cases, data.Base, data.Change))
 	require.Equal(t, "Incomplete", data.Runs[0].GateStatus)
+}
+
+func TestBuildViewDataShowsTheLatestRunOfThisCode(t *testing.T) {
+	t.Parallel()
+
+	attack := recordsCase("attack", "malicious", "")
+	runs := t.TempDir()
+	now := time.Now()
+	writeRun(t, runs, "change-key/r1", changeCommit, now.Add(-time.Hour), viewRecord(attack, statusClear))
+	writeRun(t, runs, "change-key/r2", changeCommit, now, viewRecord(attack, statusFlagged))
+	writeRun(t, runs, "base-key/r1", baseCommit, now.Add(-2*time.Hour), viewRecord(attack, statusClear))
+	writeRun(t, runs, "base-key/r2", baseCommit, now.Add(-90*time.Minute), viewRecord(attack, statusFlagged))
+
+	data, err := buildViewData(viewSource{runsDir: runs, corpus: []labeledCase{attack}, change: "change-key", base: baseCommit.SHA}, time.Unix(0, 0))
+	require.NoError(t, err)
+	require.Equal(t, "change-key/r2", data.Change, "the gate judges this code's latest run")
+	require.Equal(t, "base-key/r2", data.Base, "the comparison uses the base commit's latest run")
+	ids := make([]string, 0, len(data.Runs))
+	for _, r := range data.Runs {
+		ids = append(ids, r.ID)
+	}
+	require.Equal(t, []string{"change-key/r2", "base-key/r2", "change-key/r1", "base-key/r1"}, ids, "earlier runs stay listed, newest first")
+	require.NoError(t, changeGate(data))
 }
 
 func TestBuildViewDataWithoutRuns(t *testing.T) {
@@ -84,7 +110,7 @@ func TestPickRunsKeepsTheNewestUpToTheLimit(t *testing.T) {
 	now := time.Now()
 	var runs []loadedRun
 	for i := range maxViewRuns + 3 {
-		runs = append(runs, loadedRun{id: string(rune('a' + i)), manifest: runManifest{Updated: now.Add(time.Duration(i) * time.Minute)}})
+		runs = append(runs, loadedRun{id: string(rune('a' + i)), manifest: runManifest{Started: now.Add(time.Duration(i) * time.Minute)}})
 	}
 	picked := pickRuns(runs, "b", "a")
 	require.Len(t, picked, maxViewRuns)
@@ -98,18 +124,18 @@ func TestSummaryMarkdownListsTheComparedRunsAndFlips(t *testing.T) {
 
 	attack := recordsCase("attack", "malicious", "DAN")
 	runs := t.TempDir()
-	writeRun(t, runs, "base-key", baseCommit, time.Now(), viewRecord(attack, statusClear))
-	writeRun(t, runs, "change-key", changeCommit, time.Now(), viewRecord(attack, statusFlagged))
-	writeRun(t, runs, "older-key", olderCommit, time.Now(), viewRecord(attack, statusFlagged))
+	writeRun(t, runs, "base-key/r1", baseCommit, time.Now(), viewRecord(attack, statusClear))
+	writeRun(t, runs, "change-key/r1", changeCommit, time.Now(), viewRecord(attack, statusFlagged))
+	writeRun(t, runs, "older-key/r1", olderCommit, time.Now(), viewRecord(attack, statusFlagged))
 	data, err := buildViewData(viewSource{runsDir: runs, corpus: []labeledCase{attack}, change: "change-key", base: baseCommit.SHA}, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	md := summaryMarkdown(data)
-	require.Contains(t, md, "| main (aaaaaaaaaa chore: main) | 0 | 0 of 1 | 0 of 1 (0.0%)")
+	require.Contains(t, md, "| base (aaaaaaaaaa chore: main) | 0 | 0 of 1 | 0 of 1 (0.0%)")
 	require.Contains(t, md, "| this change (cccccccccc fix: better detector) | 0 | 1 of 1 | 1 of 1 (100.0%)")
 	require.NotContains(t, md, "an older try", "the PR summary shows only the compared runs")
 	require.Contains(t, md, "| Pass | Meets both |")
-	require.Contains(t, md, "Compared with main: 1 newly caught · 0 newly missed")
+	require.Contains(t, md, "Compared with the base: 1 newly caught · 0 newly missed")
 	require.NoError(t, changeGate(data))
 }
 
@@ -118,14 +144,14 @@ func TestSummaryMarkdownWhenMainSharesTheCode(t *testing.T) {
 
 	attack := recordsCase("attack", "malicious", "")
 	runs := t.TempDir()
-	writeRun(t, runs, "shared-key", baseCommit, time.Now(), viewRecord(attack, statusFlagged))
+	writeRun(t, runs, "shared-key/r1", baseCommit, time.Now(), viewRecord(attack, statusFlagged))
 	data, err := buildViewData(viewSource{runsDir: runs, corpus: []labeledCase{attack}, change: "shared-key", base: baseCommit.SHA}, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	md := summaryMarkdown(data)
 	require.Equal(t, 1, strings.Count(md, "| this change ("))
-	require.Contains(t, md, "Main has the same code as this change")
-	require.NotContains(t, md, "Compared with main")
+	require.Contains(t, md, "The base has the same code as this change")
+	require.NotContains(t, md, "Compared with the base")
 }
 
 func TestChangeGate(t *testing.T) {
@@ -147,7 +173,7 @@ func TestChangeGate(t *testing.T) {
 			t.Parallel()
 			c := recordsCase("case", tc.label, "")
 			runs := t.TempDir()
-			writeRun(t, runs, "change-key", changeCommit, time.Now(), viewRecord(c, tc.status))
+			writeRun(t, runs, "change-key/r1", changeCommit, time.Now(), viewRecord(c, tc.status))
 			data, err := buildViewData(viewSource{runsDir: runs, corpus: []labeledCase{c}, change: "change-key", base: ""}, time.Unix(0, 0))
 			require.NoError(t, err)
 			require.Equal(t, tc.want, data.Runs[0].GateStatus)

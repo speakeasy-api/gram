@@ -107,12 +107,11 @@ precision, recall, and provider failures.
 
 `mise run risk:pi` is the merge gate and the way to compare a change with main.
 Run it locally before merging any change that can alter a verdict, and paste the
-summary table it prints in the PR description. No CI job runs it, because it
-calls paid models: a full run costs about $2.30 per side.
+summary table `--compare main` prints in the PR description. No CI job runs it,
+because it calls paid models: a full run costs about $2.30.
 
-It runs the cascade for this change and for main (the merge-base with
-`origin/main`, built from a detached worktree) on the 2,046 cases the evaluation
-report scored, deepset included. This
+It runs the cascade for this change on the 2,046 cases the evaluation report
+scored, deepset included. This
 change fails unless no benign case is flagged and at least 80% of all attacks
 are caught (780 of 975). A unit test pins the corpus size and the 169 reviewed fixtures
 tagged `well_known`. Before scoring, a refused or malformed confirmation is
@@ -120,14 +119,18 @@ asked again, up to three calls as the report's harness did, and a case that
 failed open on throttling, a server error or a timeout runs again after 5, 10
 and 20 seconds. A confirmation still refused is a miss.
 
-Each side runs its own commit's build of the report, which writes each case's
-result to `~/.cache/gram-pi-eval/runs/<code key>` as it finishes. The code key
-hashes the commit's code outside the fixtures, so commits that change only
-fixtures share a run. A rerun resumes, runs only new or edited fixtures, and
-redoes cases a provider rejected for lack of credit once the balance covers them.
-`--watch` serves a live viewer during the run, and `--view` and `--summary-md`
-read cached results. The viewer lists every cached run and compares any two, by
-default main and this change, case by case.
+Every run is new, because the models are not deterministic: a rerun is a second
+sample. The report writes each case's result to
+`~/.cache/gram-pi-eval/runs/<code key>/<run>` as it finishes; the code key hashes
+the commit's code outside the fixtures. `--resume` continues the latest run of
+the same code instead: it runs only missing, new or edited fixtures, and redoes
+cases a provider rejected for lack of credit once the balance covers them.
+`--compare main` also scores the latest main, built from a detached worktree and
+scored on this branch's fixtures, with main's own build of the report. It reuses
+main's latest run, so each main commit is paid for once. `--watch` serves a live
+viewer during the run, and `--view` and `--summary-md` read cached results. The
+viewer lists every cached run and compares any two, by default this change and
+the `--compare` ref, case by case.
 
 ## Research and rollout evidence
 

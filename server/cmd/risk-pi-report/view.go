@@ -43,7 +43,7 @@ const (
 
 // viewRun is one cached run in the viewer.
 type viewRun struct {
-	// ID is the run directory's name, its code key.
+	// ID is "<code key>/<run>".
 	ID string `json:"id"`
 
 	// Manifest names the run's detector and the commits that produced it.
@@ -116,14 +116,14 @@ type viewData struct {
 	// Generated is when the data was built.
 	Generated time.Time `json:"generated"`
 
-	// Change is this checkout's run ID.
+	// Change is the ID of this checkout's latest run, or empty without one.
 	Change string `json:"change"`
 
 	// Base is the run to compare with, or empty without one.
 	Base string `json:"base,omitempty"`
 
 	// Runs lists this checkout's run, the base and then the rest, most
-	// recently updated first.
+	// recently started first.
 	Runs []viewRun `json:"runs"`
 
 	// Cases lists every corpus case in corpus order.
@@ -135,16 +135,26 @@ type viewSource struct {
 	runsDir string
 	corpus  []labeledCase
 
-	// change is this checkout's code key.
+	// change is this checkout's code key; the viewer shows its latest run.
 	change string
 
-	// base is the commit to compare with; empty compares with nothing.
+	// base is the commit to compare with; the viewer shows the latest run of
+	// its code. Empty compares with nothing.
 	base string
 }
 
-// loadedRun is a run directory read from the cache.
+// loadedRun is a run directory read from the cache. Its records load only
+// once the viewer picks it.
 type loadedRun struct {
-	id       string
+	// id is "<code key>/<run>".
+	id string
+
+	// key is the code key the run measured.
+	key string
+
+	// path is the run directory.
+	path string
+
 	manifest runManifest
 	records  map[string]caseRecord
 }
@@ -224,9 +234,16 @@ func buildViewData(src viewSource, now time.Time) (viewData, error) {
 	if err != nil {
 		return viewData{}, err
 	}
-	base := runWithCommit(all, src.base)
-	runs := pickRuns(all, src.change, base)
-	data := viewData{Generated: now, Change: src.change, Base: base, Runs: make([]viewRun, 0, len(runs)), Cases: make([]viewCase, 0, len(src.corpus))}
+	change := latestRun(all, func(r loadedRun) bool { return r.key == src.change })
+	base := latestRun(all, func(r loadedRun) bool { return measuredCommit(r, src.base) })
+	runs := pickRuns(all, change, base)
+	for i := range runs {
+		runs[i].records, err = loadRecords(filepath.Join(runs[i].path, casesFile))
+		if err != nil {
+			return viewData{}, err
+		}
+	}
+	data := viewData{Generated: now, Change: change, Base: base, Runs: make([]viewRun, 0, len(runs)), Cases: make([]viewCase, 0, len(src.corpus))}
 	for _, r := range runs {
 		totals := computeTotals(src.corpus, r.records)
 		data.Runs = append(data.Runs, viewRun{
@@ -261,10 +278,11 @@ func buildViewData(src viewSource, now time.Time) (viewData, error) {
 	return data, nil
 }
 
-// loadRuns reads every run in dir that names its commits. A directory
-// without them predates commit tracking or is still being claimed.
+// loadRuns reads the manifest of every run under dir: one directory per code
+// key, holding one directory per run. A run whose manifest names no commit is
+// still being claimed, or predates this layout.
 func loadRuns(dir string) ([]loadedRun, error) {
-	entries, err := os.ReadDir(dir)
+	keys, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -272,42 +290,51 @@ func loadRuns(dir string) ([]loadedRun, error) {
 		return nil, fmt.Errorf("list runs: %w", err)
 	}
 	var runs []loadedRun
-	for _, entry := range entries {
-		if !entry.IsDir() {
+	for _, key := range keys {
+		if !key.IsDir() {
 			continue
 		}
-		path := filepath.Join(dir, entry.Name())
-		manifest, err := readManifest(filepath.Join(path, manifestFile))
-		if err != nil || len(manifest.Commits) == 0 {
-			continue
-		}
-		records, err := loadRecords(filepath.Join(path, casesFile))
+		entries, err := os.ReadDir(filepath.Join(dir, key.Name()))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list runs: %w", err)
 		}
-		runs = append(runs, loadedRun{id: entry.Name(), manifest: manifest, records: records})
+		for _, entry := range entries {
+			path := filepath.Join(dir, key.Name(), entry.Name())
+			if !entry.IsDir() {
+				continue
+			}
+			manifest, err := readManifest(filepath.Join(path, manifestFile))
+			if err != nil || len(manifest.Commits) == 0 {
+				continue
+			}
+			runs = append(runs, loadedRun{id: key.Name() + "/" + entry.Name(), key: key.Name(), path: path, manifest: manifest, records: nil})
+		}
 	}
 	return runs, nil
 }
 
-// runWithCommit returns the ID of the run that measured commit's committed
-// code, or empty when none did. commit may be a full or abbreviated hash.
-func runWithCommit(runs []loadedRun, commit string) string {
-	if commit == "" {
-		return ""
-	}
+// latestRun returns the ID of the most recently started run that match
+// accepts, or empty when none does.
+func latestRun(runs []loadedRun, match func(loadedRun) bool) string {
+	id, started := "", time.Time{}
 	for _, r := range runs {
-		for _, c := range r.manifest.Commits {
-			if !c.Uncommitted && strings.HasPrefix(c.SHA, commit) {
-				return r.id
-			}
+		if match(r) && (id == "" || r.manifest.Started.After(started)) {
+			id, started = r.id, r.manifest.Started
 		}
 	}
-	return ""
+	return id
+}
+
+// measuredCommit reports whether run r measured commit's committed code.
+// commit may be a full or abbreviated hash; empty matches nothing.
+func measuredCommit(r loadedRun, commit string) bool {
+	return commit != "" && slices.ContainsFunc(r.manifest.Commits, func(c runCommit) bool {
+		return !c.Uncommitted && strings.HasPrefix(c.SHA, commit)
+	})
 }
 
 // pickRuns orders the runs the viewer shows: the change, the base, then the
-// rest by most recent update, up to maxViewRuns.
+// rest by most recent start, up to maxViewRuns.
 func pickRuns(runs []loadedRun, change, base string) []loadedRun {
 	rank := func(r loadedRun) int {
 		switch r.id {
@@ -320,7 +347,7 @@ func pickRuns(runs []loadedRun, change, base string) []loadedRun {
 	}
 	sorted := slices.Clone(runs)
 	slices.SortStableFunc(sorted, func(a, b loadedRun) int {
-		return cmp.Or(cmp.Compare(rank(a), rank(b)), b.manifest.Updated.Compare(a.manifest.Updated))
+		return cmp.Or(cmp.Compare(rank(a), rank(b)), b.manifest.Started.Compare(a.manifest.Started))
 	})
 	return sorted[:min(len(sorted), maxViewRuns)]
 }
@@ -410,7 +437,7 @@ func changeGate(data viewData) error {
 	run := data.Runs[i]
 	t := run.Totals
 	if t.Pending > 0 || t.OutOfCredit > 0 {
-		return fmt.Errorf("%d cases have no result for this checkout; rerun mise run risk:pi to finish before the merge gate", t.Pending+t.OutOfCredit)
+		return fmt.Errorf("%d cases have no result in this checkout's latest run; finish it with mise run risk:pi --resume before the merge gate", t.Pending+t.OutOfCredit)
 	}
 	var keys []string
 	for _, c := range data.Cases {
@@ -447,7 +474,7 @@ func summaryMarkdown(data viewData) string {
 		if r.ID == data.Change {
 			return "this change"
 		}
-		return "main"
+		return "base"
 	}
 	var b strings.Builder
 	b.WriteString("| Run | False positives | Well-known attacks | All attacks | Refused | No verdict | Out of credit | Decision time | Merge gate | Goals | Cost |\n")
@@ -459,11 +486,11 @@ func summaryMarkdown(data viewData) string {
 			t.Refused, t.NoVerdict, t.OutOfCredit, t.LatencyP50MS/1000, t.LatencyP90MS/1000, r.GateStatus, r.GoalsStatus, t.CostUSD)
 	}
 	if data.Base == data.Change && data.Base != "" {
-		b.WriteString("\nMain has the same code as this change, so one run covers both.\n")
+		b.WriteString("\nThe base has the same code as this change, so one run covers both.\n")
 	}
 	if len(shown) == 2 {
 		f := compareRuns(data.Cases, data.Base, data.Change)
-		fmt.Fprintf(&b, "\nCompared with main: %d newly caught · %d newly missed · %d new false positives · %d fixed false positives.\n",
+		fmt.Fprintf(&b, "\nCompared with the base: %d newly caught · %d newly missed · %d new false positives · %d fixed false positives.\n",
 			f.NewlyCaught, f.NewlyMissed, f.NewFalsePositives, f.FixedFalsePositives)
 	}
 	return b.String()

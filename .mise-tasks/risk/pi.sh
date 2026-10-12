@@ -1,27 +1,28 @@
 #!/usr/bin/env bash
 
-#MISE description="Benchmark prompt-injection detection on the labelled corpus: main vs this change, with a viewer"
+#MISE description="Benchmark prompt-injection detection on the labelled corpus, optionally against another commit, with a viewer"
 
-#USAGE flag "--base <ref>" help="Compare with this ref instead of the merge-base with origin/main"
-#USAGE flag "--no-main" help="Run only this change"
+#USAGE flag "--resume" help="Continue the latest run of this code instead of starting a new one"
+#USAGE flag "--compare <ref>" help="Also score this ref, such as main, reusing its latest run, and compare the two case by case"
 #USAGE flag "--watch" help="Serve a live viewer while the run progresses"
 #USAGE flag "--view" help="Open the viewer for cached results without running"
 #USAGE flag "--summary-md" help="Print the summary table as Markdown from cached results without running"
 
-# Runs the detector each commit ships on the labelled corpus, for this change
-# and for main (the merge-base with origin/main), side by side. A full run
-# costs about $2.30 per side in OpenRouter calls and fails unless this change
-# has no false positives and catches at least 80% of all attacks.
+# Runs the detector this change ships on the labelled corpus and fails unless
+# it has no false positives and catches at least 80% of all attacks. A full run
+# costs about $2.30 in OpenRouter calls.
 #
-# Each side runs its own commit's build of risk-pi-report, which keeps one
-# record per case under ~/.cache/gram-pi-eval/runs, keyed by the commit's code
-# outside the fixtures. Rerunning resumes, runs only new or edited fixtures,
-# and redoes cases that ran out of credit. Main runs from a detached worktree
-# of its commit, scored on this branch's fixtures. The viewer lists every
-# cached run, so earlier commits stay comparable.
+# Every run is new, because the models are not deterministic: a rerun is a
+# second sample. --resume continues the latest run of the same code instead,
+# such as after running out of credit. --compare <ref> also scores that ref
+# from a detached worktree, on this branch's fixtures, and compares the two
+# case by case; it reuses the ref's latest run, so each compared commit is
+# paid for once. Runs are kept under ~/.cache/gram-pi-eval/runs, and the
+# viewer lists every one.
 #
 # Every commit's build is called the same way: from its own checkout, with at
-# most -corpus-dir. Keep it that way, so this script can still run old commits.
+# most -resume and -corpus-dir. Keep it that way, so this script can still run
+# old commits.
 
 set -euo pipefail
 
@@ -30,8 +31,8 @@ cd "$root"
 cache="$HOME/.cache/gram-pi-eval"
 corpus="$root/server/internal/scanners/promptinjection/testdata/prompt_injection"
 
-base_ref="${usage_base:-}"
-no_main="${usage_no_main:-false}"
+resume="${usage_resume:-false}"
+compare_ref="${usage_compare:-}"
 watch="${usage_watch:-false}"
 view_only="${usage_view:-false}"
 summary_md="${usage_summary_md:-false}"
@@ -47,24 +48,19 @@ build() {
 
 build "$root" "$bin/change"
 
-# Main: the merge-base with origin/main, or --base.
+# --compare main means origin's main after a fetch, so a comparison uses the
+# latest main. A ref origin does not have, such as a commit hash, is used as
+# given.
 view_args=(view)
-base_sha=""
-if [ "$no_main" != "true" ]; then
-  if [ -z "$base_ref" ]; then
-    if ! git fetch -q origin main; then
-      if ! git rev-parse --verify --quiet 'origin/main^{commit}' >/dev/null; then
-        echo "cannot fetch origin/main and no local copy exists; fetch it, choose --base <ref>, or explicitly use --no-main" >&2
-        exit 1
-      fi
-      echo "warning: could not fetch origin/main; using the existing local origin/main" >&2
-    fi
-    base_ref=origin/main
-    base_sha=$(git merge-base HEAD "$base_ref")
-  else
-    base_sha=$(git rev-parse "$base_ref^{commit}")
+compare_sha=""
+if [ -n "$compare_ref" ]; then
+  git fetch -q origin "$compare_ref" 2>/dev/null || true
+  compare_rev="$compare_ref"
+  if git rev-parse --verify --quiet "origin/$compare_ref^{commit}" >/dev/null; then
+    compare_rev="origin/$compare_ref"
   fi
-  view_args+=(-base "$base_sha")
+  compare_sha=$(git rev-parse "$compare_rev^{commit}")
+  view_args+=(-base "$compare_sha")
 fi
 
 if [ "$summary_md" = "true" ]; then
@@ -75,16 +71,16 @@ if [ "$view_only" = "true" ]; then
 fi
 
 base_tree="$cache/worktrees/base"
-if [ -n "$base_sha" ]; then
-  base_short=$(git rev-parse --short=10 "$base_sha")
+if [ -n "$compare_sha" ]; then
+  compare_short=$(git rev-parse --short=10 "$compare_sha")
   if [ ! -d "$base_tree" ]; then
     git worktree prune
-    git worktree add -q --detach "$base_tree" "$base_sha"
+    git worktree add -q --detach "$base_tree" "$compare_sha"
   fi
-  git -C "$base_tree" checkout -q --detach "$base_sha"
-  # measuredCode marks a build that keeps per-case records under the cache.
-  if ! grep -qs 'func measuredCode' "$base_tree/server/cmd/risk-pi-report/code.go"; then
-    echo "$base_ref @ $base_short predates per-case benchmark records; choose a newer --base <ref>, or explicitly use --no-main" >&2
+  git -C "$base_tree" checkout -q --detach "$compare_sha"
+  # A build that can -resume keeps per-case records and can reuse them.
+  if ! grep -qs '"resume"' "$base_tree/server/cmd/risk-pi-report/main.go"; then
+    echo "$compare_rev @ $compare_short predates per-case benchmark records; compare with a newer ref" >&2
     exit 1
   fi
   build "$base_tree" "$bin/base"
@@ -95,22 +91,25 @@ if [ "$watch" = "true" ]; then
   viewer_pid=$!
 fi
 
-# Both sides run at once. When main has the same code as this change, they
-# share a run directory, and its lock makes one side wait and reuse the
-# other's records.
-if [ -n "$base_sha" ]; then
-  (cd "$base_tree" && exec "$bin/base" -corpus-dir "$corpus") &
+if [ -n "$compare_sha" ]; then
+  # The compared commit reuses its latest run, finishing it if it stopped
+  # early, so each compared commit is paid for once.
+  (cd "$base_tree" && exec "$bin/base" -resume -corpus-dir "$corpus") &
   base_pid=$!
 fi
+change_args=()
+if [ "$resume" = "true" ]; then
+  change_args+=(-resume)
+fi
 change_status=0
-"$bin/change" || change_status=$?
+"$bin/change" ${change_args[@]+"${change_args[@]}"} || change_status=$?
 base_status=0
 if [ -n "$base_pid" ]; then
   wait "$base_pid" || base_status=$?
   base_pid=""
 fi
 if [ "$base_status" -ne 0 ]; then
-  echo "warning: main's run did not finish (exit $base_status); rerun to complete it" >&2
+  echo "warning: the run of $compare_ref did not finish (exit $base_status); rerun to complete it" >&2
 fi
 
 # The viewer prints the summary and applies the merge gate to this change.
