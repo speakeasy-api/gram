@@ -11,10 +11,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -304,8 +306,9 @@ func TestProviders_OrderChangedMidAttemptDiscardsTheToken(t *testing.T) {
 		}
 	}
 
-	_, outcome := f.chainer.Acquire(t.Context(), f.req)
+	token, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.Equal(t, ReasonStaleConfiguration, outcome.Reason, "a provider removed mid-attempt never publishes or releases its token")
+	require.Empty(t, token.Value())
 	require.False(t, f.chainer.HasUsableCredential(t.Context(), f.req))
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
 	require.Equal(t, ReasonProviderUnavailable, outcome.Reason)
@@ -327,4 +330,43 @@ func TestCacheKey_ExternalKeepsTheLegacyFormat(t *testing.T) {
 	external := cacheKey("lock", req, sel)
 	sel.provider.Kind = remotesessions.EMAProviderSpeakeasy
 	require.NotEqual(t, external, cacheKey("lock", req, sel))
+}
+
+func TestPublish_SerializesWithOrderReplaces(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	ctx := t.Context()
+	fixtures := testrepo.New(f.db)
+	set, err := fixtures.SeedJsonWebKeySetFixture(ctx, testrepo.SeedJsonWebKeySetFixtureParams{OrganizationID: f.req.OrganizationID, Name: "speakeasy-" + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	internalIssuer, err := fixtures.SeedInternalSessionIssuerFixture(ctx, testrepo.SeedInternalSessionIssuerFixtureParams{OrganizationID: f.req.OrganizationID, Issuer: "https://speakeasy.example.test/oauth/idp/org/" + f.req.OrganizationID, JsonWebKeySetID: set})
+	require.NoError(t, err)
+	vendor, err := remotesessions.NormalizeVendorIssuer(f.sel.issuer)
+	require.NoError(t, err)
+
+	// An order replace holds the lock, as setEMAProviders does.
+	tx := testenv.BeginTx(t, ctx, f.db)
+	q := repo.New(tx)
+	require.NoError(t, q.LockEMAProviders(ctx, f.req.OrganizationID))
+
+	published := make(chan error, 1)
+	go func() {
+		published <- f.chainer.publish(ctx, f.chainer.logger, f.req, f.sel, f.credential("raced-token"))
+	}()
+	require.Eventually(t, func() bool {
+		waiting, err := fixtures.CountWaitingAdvisoryLocksFixture(ctx)
+		return err == nil && waiting > 0
+	}, 5*time.Second, 20*time.Millisecond, "publish waits for the order replace")
+
+	require.NoError(t, q.InsertEMAProvider(ctx, repo.InsertEMAProviderParams{
+		OrganizationID: f.req.OrganizationID, VendorIssuer: vendor,
+		RemoteSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		InternalSessionIssuerID: uuid.NullUUID{UUID: internalIssuer, Valid: true},
+		Position:                0,
+	}))
+	require.NoError(t, tx.Commit(ctx))
+
+	require.ErrorIs(t, <-published, errStale, "the write sees the committed order, which no longer allows the provider")
+	_, err = repo.New(f.db).GetEMACredentialForUse(ctx, credentialForUseParams(f.req, f.sel, time.Now()))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }

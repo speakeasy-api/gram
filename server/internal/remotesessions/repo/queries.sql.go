@@ -9711,6 +9711,17 @@ func (q *Queries) LockEMAProviders(ctx context.Context, organizationID string) e
 	return err
 }
 
+const lockEMAProvidersShared = `-- name: LockEMAProvidersShared :exec
+SELECT pg_advisory_xact_lock_shared(hashtextextended('remote_session_ema_providers:' || $1::text, 0))
+`
+
+// Held while publishing a chained credential, so an order replace cannot
+// commit between the eligibility check and the write.
+func (q *Queries) LockEMAProvidersShared(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockEMAProvidersShared, organizationID)
+	return err
+}
+
 const lockEMAUserIssuer = `-- name: LockEMAUserIssuer :one
 SELECT user_session_issuers.id FROM user_session_issuers WHERE user_session_issuers.id = $1 AND user_session_issuers.deleted IS FALSE
 AND ((user_session_issuers.project_id = $2 AND EXISTS (

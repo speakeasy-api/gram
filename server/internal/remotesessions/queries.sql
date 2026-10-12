@@ -5271,6 +5271,11 @@ WHERE organization_id = @organization_id AND deleted IS FALSE;
 -- Serializes EMA provider order replaces for one organization.
 SELECT pg_advisory_xact_lock(hashtextextended('remote_session_ema_providers:' || @organization_id::text, 0));
 
+-- name: LockEMAProvidersShared :exec
+-- Held while publishing a chained credential, so an order replace cannot
+-- commit between the eligibility check and the write.
+SELECT pg_advisory_xact_lock_shared(hashtextextended('remote_session_ema_providers:' || @organization_id::text, 0));
+
 -- name: SetEMAProvidersLockTimeout :exec
 -- Bounds how long a replace waits on another in the same organization.
 SET LOCAL lock_timeout = '5s';

@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -68,13 +69,30 @@ func (c *Chainer) cachedToken(ctx context.Context, logger *slog.Logger, req Requ
 }
 
 // publish stores the credential only if the provenance it was acquired under
-// still holds; errStale means the result must be discarded.
-func (c *Chainer) publish(ctx context.Context, req Request, sel selection, cred credential) error {
+// still holds, including its EMA provider's place in the vendor's order;
+// errStale means the result must be discarded. A shared lock keeps an order
+// replace from committing between that check and the write.
+func (c *Chainer) publish(ctx context.Context, logger *slog.Logger, req Request, sel selection, cred credential) error {
 	encrypted, err := c.enc.Encrypt([]byte(cred.accessToken))
 	if err != nil {
 		return fmt.Errorf("encrypt chained access token: %w", err)
 	}
-	_, err = repo.New(c.db).UpsertEMACredential(ctx, repo.UpsertEMACredentialParams{
+	tx, err := c.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin chained credential publish: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	q := repo.New(tx)
+	if err := q.LockEMAProvidersShared(ctx, req.OrganizationID); err != nil {
+		return fmt.Errorf("lock ema provider order: %w", err)
+	}
+	if outcome := c.stillServesWith(ctx, q, logger, req, sel); !outcome.Succeeded() {
+		if outcome.Reason == ReasonStaleConfiguration {
+			return errStale
+		}
+		return fmt.Errorf("check ema provider order: %s", outcome.Reason)
+	}
+	_, err = q.UpsertEMACredential(ctx, repo.UpsertEMACredentialParams{
 		OrganizationID:                 req.OrganizationID,
 		ProjectID:                      req.ProjectID,
 		UserSessionIssuerID:            req.UserSessionIssuerID,
@@ -97,6 +115,9 @@ func (c *Chainer) publish(ctx context.Context, req Request, sel selection, cred 
 	}
 	if err != nil {
 		return fmt.Errorf("publish chained credential: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit chained credential: %w", err)
 	}
 	return nil
 }

@@ -1943,3 +1943,9 @@ RETURNING id;
 UPDATE internal_session_issuers
 SET disabled_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
+
+-- name: CountWaitingAdvisoryLocksFixture :one
+-- Advisory lock requests still waiting, so a test can tell a writer blocked.
+SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
+WHERE locktype = 'advisory' AND NOT granted
+  AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database());

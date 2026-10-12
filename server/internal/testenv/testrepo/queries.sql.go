@@ -532,6 +532,20 @@ func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanR
 	return count, err
 }
 
+const countWaitingAdvisoryLocksFixture = `-- name: CountWaitingAdvisoryLocksFixture :one
+SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
+WHERE locktype = 'advisory' AND NOT granted
+  AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+`
+
+// Advisory lock requests still waiting, so a test can tell a writer blocked.
+func (q *Queries) CountWaitingAdvisoryLocksFixture(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countWaitingAdvisoryLocksFixture)
+	var waiting int64
+	err := row.Scan(&waiting)
+	return waiting, err
+}
+
 const createAttachmentAgentFixture = `-- name: CreateAttachmentAgentFixture :execrows
 INSERT INTO agents (id, organization_id, owner_user_id, name) VALUES ($1, $2, $3, $4)
 `

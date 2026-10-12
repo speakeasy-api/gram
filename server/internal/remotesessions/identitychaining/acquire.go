@@ -53,10 +53,7 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 	cred.trustedSessionID = grant.trustedSessionID
 	cred.trustedObtainedAt = grant.trustedObtainedAt
 
-	if outcome := c.stillServes(ctx, logger, req, sel); !outcome.Succeeded() {
-		return none, outcome, true
-	}
-	switch err := c.publish(ctx, req, sel, cred); {
+	switch err := c.publish(ctx, logger, req, sel, cred); {
 	case errors.Is(err, errStale):
 		return none, newOutcome(StagePersistence, ReasonStaleConfiguration, ConfidenceVerified, true), true
 	case err != nil:

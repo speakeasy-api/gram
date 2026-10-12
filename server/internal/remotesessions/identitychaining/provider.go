@@ -52,12 +52,17 @@ var providerUnavailable = newOutcome(StageAuthorization, ReasonProviderUnavailab
 // providerOrder resolves sel's vendor order for the endpoint. Providers that
 // cannot serve stay in the order, flagged, so views and logs can say why.
 func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
+	return g.providerOrderWith(ctx, repo.New(g.db), logger, req, sel)
+}
+
+// providerOrderWith is providerOrder over q, such as a publishing transaction.
+func (g *Governor) providerOrderWith(ctx context.Context, q *repo.Queries, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
 	vendor, err := remotesessions.NormalizeVendorIssuer(sel.issuer)
 	if err != nil {
 		// No saved order can name an issuer that does not normalize.
 		vendor = sel.issuer
 	}
-	order, err := remotesessions.EndpointEMAProviders(ctx, repo.New(g.db), req.OrganizationID, req.UserSessionIssuerID, vendor, g.sourceAvailable(remotesessions.EMAProviderSpeakeasy))
+	order, err := remotesessions.EndpointEMAProviders(ctx, q, req.OrganizationID, req.UserSessionIssuerID, vendor, g.sourceAvailable(remotesessions.EMAProviderSpeakeasy))
 	if err != nil {
 		logger.ErrorContext(ctx, "resolve ema provider order", attr.SlogError(err))
 		return order, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
@@ -92,7 +97,12 @@ func (g *Governor) servingProviders(ctx context.Context, logger *slog.Logger, re
 // vendor's order before a token it produced is published or released, so an
 // admin's order change wins over an attempt already in flight.
 func (g *Governor) stillServes(ctx context.Context, logger *slog.Logger, req Request, sel selection) Outcome {
-	order, outcome := g.providerOrder(ctx, logger, req, sel)
+	return g.stillServesWith(ctx, repo.New(g.db), logger, req, sel)
+}
+
+// stillServesWith is stillServes over q, such as a publishing transaction.
+func (g *Governor) stillServesWith(ctx context.Context, q *repo.Queries, logger *slog.Logger, req Request, sel selection) Outcome {
+	order, outcome := g.providerOrderWith(ctx, q, logger, req, sel)
 	if !outcome.Succeeded() {
 		return outcome
 	}
