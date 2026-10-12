@@ -1,4 +1,4 @@
-// Package dataclassification defines how Gram documents what every stored
+// Package dataclassification defines how Speakeasy documents what every stored
 // database column contains.
 //
 // Each column in server/database/schema.sql (Postgres) and
@@ -8,7 +8,7 @@
 //	COMMENT ON COLUMN chat_messages.content IS 'Raw message text.
 //	@access: opaque-restricted';
 //
-// Class names follow the levels of Gram's data classification policy
+// Class names follow the levels of Speakeasy's data classification policy
 // (public, internal use, confidential, restricted). A suffix or prefix narrows
 // a level: confidential-pii is confidential data about a person, and
 // secret-restricted and opaque-restricted are kinds of restricted data.
@@ -31,7 +31,7 @@ type Class string
 
 const (
 	// Confidential is reviewed operational metadata: internal IDs, foreign
-	// keys, timestamps, Gram-controlled enums and flags, counts and metrics,
+	// keys, timestamps, Speakeasy-controlled enums and flags, counts and metrics,
 	// short labels and slugs.
 	Confidential Class = "confidential"
 	// ConfidentialPII identifies or contacts a natural person: emails,
@@ -50,7 +50,7 @@ const (
 	// their systems or models: messages, prompts, tool arguments and results,
 	// request and response data, telemetry attributes, uploaded documents,
 	// free-form descriptions and customer-supplied JSON. Its contents are not
-	// controlled by Gram, so it is treated as possibly containing restricted
+	// controlled by Speakeasy, so it is treated as possibly containing restricted
 	// data.
 	OpaqueRestricted Class = "opaque-restricted"
 )
