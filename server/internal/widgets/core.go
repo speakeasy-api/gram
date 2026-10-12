@@ -55,6 +55,62 @@ func Version(row repo.Widget) string {
 	return row.UpdatedAt.Time.UTC().Format(time.RFC3339Nano)
 }
 
+// Caller is a request admitted to its project's widgets. Writes take one so
+// authorization runs before their transaction opens: a check logs its
+// challenge through the pool, which must not wait on a connection the
+// transaction holds.
+type Caller struct {
+	auth *contextvalues.AuthContext
+}
+
+// Change is a caller admitted to update or delete one widget.
+type Change struct {
+	caller   Caller
+	widgetID uuid.UUID
+}
+
+// Authorize admits the request's caller to its project's widgets.
+func (s *Service) Authorize(ctx context.Context) (Caller, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return Caller{}, err
+	}
+	return Caller{auth: authCtx}, nil
+}
+
+// AuthorizeChange admits the request's caller to update or delete one widget:
+// its creator, or anyone with project write access. A widget's creator never
+// changes, so the check holds for the transaction that follows; a widget that
+// does not exist is left for that transaction to refuse.
+func (s *Service) AuthorizeChange(ctx context.Context, id string) (Change, error) {
+	caller, err := s.Authorize(ctx)
+	if err != nil {
+		return Change{}, err
+	}
+	widgetID, err := parseID(id)
+	if err != nil {
+		return Change{}, err
+	}
+	row, err := repo.New(s.db).GetWidget(ctx, repo.GetWidgetParams{ProjectID: *caller.auth.ProjectID, ID: widgetID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return Change{}, oops.E(oops.CodeUnexpected, err, "get widget").LogError(ctx, s.logger)
+	default:
+		if err := s.requireOwnerOrWrite(ctx, caller.auth, conv.FromPGText[string](row.CreatedByUserID)); err != nil {
+			return Change{}, err
+		}
+	}
+	return Change{caller: caller, widgetID: widgetID}, nil
+}
+
+func (c Caller) admitted() (*contextvalues.AuthContext, error) {
+	if c.auth == nil || c.auth.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	return c.auth, nil
+}
+
 // Read returns one widget of the request's project, validated as it is read,
 // with its dashboards and version.
 func (s *Service) Read(ctx context.Context, id string) (Snapshot, error) {
@@ -86,8 +142,8 @@ func (s *Service) read(ctx context.Context, authCtx *contextvalues.AuthContext, 
 	return Snapshot{Widget: s.view(ctx, row, s.now(), dashboards), Version: Version(row)}, nil
 }
 
-// ReadForChange reads a widget and refuses, as UpdateInTx and DeleteInTx
-// would, a caller who may not change it, so a preview never shows a change
+// ReadForChange reads a widget and refuses, as AuthorizeChange does,
+// a caller who may not change it, so a preview never shows a change
 // that would be refused.
 func (s *Service) ReadForChange(ctx context.Context, id string) (Snapshot, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
@@ -146,8 +202,8 @@ func (s *Service) Check(ctx context.Context, input Input) error {
 
 // CreateInTx saves a new widget and audits it inside the caller's
 // transaction, after validating it as CreateWidget does.
-func (s *Service) CreateInTx(ctx context.Context, tx pgx.Tx, input Input) (Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+func (s *Service) CreateInTx(ctx context.Context, tx pgx.Tx, caller Caller, input Input) (Snapshot, error) {
+	authCtx, err := caller.admitted()
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -172,8 +228,8 @@ func (s *Service) CreateInTx(ctx context.Context, tx pgx.Tx, input Input) (Snaps
 // DuplicateInTx copies a widget into a new one the caller owns, inside the
 // caller's transaction. A non-empty expectedVersion refuses the copy when the
 // source changed since it was read.
-func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, id string, expectedVersion string) (Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, caller Caller, id string, expectedVersion string) (Snapshot, error) {
+	authCtx, err := caller.admitted()
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -224,18 +280,15 @@ func (s *Service) insert(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.
 	return Snapshot{Widget: view, Version: Version(row)}, nil
 }
 
-// UpdateInTx replaces a widget inside the caller's transaction; only its
-// creator or a project writer may. A non-empty expectedVersion refuses the
-// update when the widget changed since it was read.
-func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input Input, expectedVersion string) (Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+// UpdateInTx replaces the widget a change admits inside the caller's
+// transaction. A non-empty expectedVersion refuses the update when the widget
+// changed since it was read.
+func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, change Change, input Input, expectedVersion string) (Snapshot, error) {
+	authCtx, err := change.caller.admitted()
 	if err != nil {
 		return Snapshot{}, err
 	}
-	widgetID, err := parseID(id)
-	if err != nil {
-		return Snapshot{}, err
-	}
+	widgetID := change.widgetID
 
 	query, visualization, err := s.checkInput(ctx, input)
 	if err != nil {
@@ -245,9 +298,6 @@ func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input In
 	queries := repo.New(tx)
 	before, err := s.lockWidget(ctx, queries, *authCtx.ProjectID, widgetID, expectedVersion)
 	if err != nil {
-		return Snapshot{}, err
-	}
-	if err := s.requireOwnerOrWrite(ctx, authCtx, conv.FromPGText[string](before.CreatedByUserID)); err != nil {
 		return Snapshot{}, err
 	}
 
@@ -278,26 +328,19 @@ func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input In
 	return Snapshot{Widget: view, Version: Version(row)}, nil
 }
 
-// DeleteInTx soft-deletes a widget inside the caller's transaction and returns
-// the dashboards it was removed from; only its creator or a project writer
-// may. A non-empty expectedVersion refuses the delete when the widget changed
-// since it was read.
-func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, id string, expectedVersion string) ([]*gen.WidgetDashboard, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+// DeleteInTx soft-deletes the widget a change admits inside the caller's
+// transaction and returns the dashboards it was removed from. A non-empty
+// expectedVersion refuses the delete when the widget changed since it was
+// read.
+func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, change Change, expectedVersion string) ([]*gen.WidgetDashboard, error) {
+	authCtx, err := change.caller.admitted()
 	if err != nil {
 		return nil, err
 	}
-	widgetID, err := parseID(id)
-	if err != nil {
-		return nil, err
-	}
+	widgetID := change.widgetID
 
 	queries := repo.New(tx)
-	existing, err := s.lockWidget(ctx, queries, *authCtx.ProjectID, widgetID, expectedVersion)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.requireOwnerOrWrite(ctx, authCtx, conv.FromPGText[string](existing.CreatedByUserID)); err != nil {
+	if _, err := s.lockWidget(ctx, queries, *authCtx.ProjectID, widgetID, expectedVersion); err != nil {
 		return nil, err
 	}
 

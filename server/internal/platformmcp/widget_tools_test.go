@@ -112,9 +112,11 @@ func (f *widgetToolsFixture) scopedContext(t *testing.T, ctx context.Context) co
 func (f *widgetToolsFixture) createDirectly(t *testing.T, ctx context.Context, name string) widgets.Snapshot {
 	t.Helper()
 	scoped := f.scopedContext(t, ctx)
+	caller, err := f.management.Authorize(scoped)
+	require.NoError(t, err)
 	tx, err := f.db.Begin(scoped) //nolint:glint // notestingrawsql: transaction boundary only; the widget is written by the widgets service's create core.
 	require.NoError(t, err)
-	created, err := f.management.CreateInTx(scoped, tx, widgets.Input{Name: name, Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart()})
+	created, err := f.management.CreateInTx(scoped, tx, caller, widgets.Input{Name: name, Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart()})
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(scoped))
 	return created

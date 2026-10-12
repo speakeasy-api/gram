@@ -1,6 +1,7 @@
 package widgets_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +70,28 @@ func TestReadForChangeAppliesTheCreatorOrWriteRule(t *testing.T) {
 	require.NoError(t, err, "project write access may change anyone's widget")
 }
 
+func TestAuthorizeChangeAppliesTheCreatorOrWriteRuleBeforeAnyTransaction(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	member := asMember(t, ctx, ti, "user_member")
+	mine, err := ti.service.CreateWidget(member, createPayload("mine", validQuery(), barChart()))
+	require.NoError(t, err)
+	theirs, err := ti.service.CreateWidget(ctx, createPayload("theirs", validQuery(), barChart()))
+	require.NoError(t, err)
+
+	_, err = ti.service.AuthorizeChange(member, mine.ID)
+	require.NoError(t, err)
+	_, err = ti.service.AuthorizeChange(member, theirs.ID)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.AuthorizeChange(ctx, theirs.ID)
+	require.NoError(t, err)
+
+	missing := authorizeChange(t, member, ti, uuid.NewString())
+	tx := beginTx(t, ctx, ti)
+	_, err = ti.service.DeleteInTx(ctx, tx, missing, "")
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
 func TestUpdateInTxRefusesAStaleVersion(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -81,7 +104,7 @@ func TestUpdateInTxRefusesAStaleVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	tx := beginTx(t, ctx, ti)
-	_, err = ti.service.UpdateInTx(ctx, tx, created.ID, widgets.Input{Name: "stale edit", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()}, read.Version)
+	_, err = ti.service.UpdateInTx(ctx, tx, authorizeChange(t, ctx, ti, created.ID), widgets.Input{Name: "stale edit", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()}, read.Version)
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.ErrorIs(t, err, widgets.ErrVersionChanged)
 	require.NoError(t, tx.Rollback(ctx))
@@ -91,7 +114,7 @@ func TestUpdateInTxRefusesAStaleVersion(t *testing.T) {
 	require.Equal(t, "someone else's edit", current.Widget.Name)
 
 	tx = beginTx(t, ctx, ti)
-	updated, err := ti.service.UpdateInTx(ctx, tx, created.ID, widgets.Input{Name: "fresh edit", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()}, current.Version)
+	updated, err := ti.service.UpdateInTx(ctx, tx, authorizeChange(t, ctx, ti, created.ID), widgets.Input{Name: "fresh edit", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()}, current.Version)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 	require.Equal(t, "fresh edit", updated.Widget.Name)
@@ -118,13 +141,13 @@ func TestDeleteInTxRefusesAStaleVersionAndReportsDashboards(t *testing.T) {
 	require.NoError(t, err)
 
 	tx := beginTx(t, ctx, ti)
-	_, err = ti.service.DeleteInTx(ctx, tx, created.ID, "2001-01-01T00:00:00Z")
+	_, err = ti.service.DeleteInTx(ctx, tx, authorizeChange(t, ctx, ti, created.ID), "2001-01-01T00:00:00Z")
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.ErrorIs(t, err, widgets.ErrVersionChanged)
 	require.NoError(t, tx.Rollback(ctx))
 
 	tx = beginTx(t, ctx, ti)
-	removed, err := ti.service.DeleteInTx(ctx, tx, created.ID, read.Version)
+	removed, err := ti.service.DeleteInTx(ctx, tx, authorizeChange(t, ctx, ti, created.ID), read.Version)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 	require.Equal(t, []*gen.WidgetDashboard{{ID: dashboard.ID.String(), Name: "Ops"}}, removed)
@@ -140,15 +163,29 @@ func TestDuplicateInTxRefusesAStaleSource(t *testing.T) {
 	require.NoError(t, err)
 
 	tx := beginTx(t, ctx, ti)
-	_, err = ti.service.DuplicateInTx(ctx, tx, created.ID, "2001-01-01T00:00:00Z")
+	_, err = ti.service.DuplicateInTx(ctx, tx, authorizeCaller(t, ctx, ti), created.ID, "2001-01-01T00:00:00Z")
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.NoError(t, tx.Rollback(ctx))
 
 	read, err := ti.service.Read(ctx, created.ID)
 	require.NoError(t, err)
 	tx = beginTx(t, ctx, ti)
-	copied, err := ti.service.DuplicateInTx(ctx, tx, created.ID, read.Version)
+	copied, err := ti.service.DuplicateInTx(ctx, tx, authorizeCaller(t, ctx, ti), created.ID, read.Version)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 	require.Equal(t, "source (copy)", copied.Widget.Name)
+}
+
+func authorizeCaller(t *testing.T, ctx context.Context, ti *testInstance) widgets.Caller {
+	t.Helper()
+	caller, err := ti.service.Authorize(ctx)
+	require.NoError(t, err)
+	return caller
+}
+
+func authorizeChange(t *testing.T, ctx context.Context, ti *testInstance, id string) widgets.Change {
+	t.Helper()
+	change, err := ti.service.AuthorizeChange(ctx, id)
+	require.NoError(t, err)
+	return change
 }

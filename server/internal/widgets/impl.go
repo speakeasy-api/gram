@@ -176,9 +176,13 @@ func (s *Service) GetWidget(ctx context.Context, payload *gen.GetWidgetPayload) 
 // CreateWidget saves a widget after validating its query against the
 // catalog and its visualization against the query.
 func (s *Service) CreateWidget(ctx context.Context, payload *gen.CreateWidgetPayload) (*gen.Widget, error) {
+	caller, err := s.Authorize(ctx)
+	if err != nil {
+		return nil, err
+	}
 	input := Input{Name: payload.Name, Description: payload.Description, Dataset: payload.Dataset, Query: payload.Query, Visualization: payload.Visualization}
 	return inTx(ctx, s, "widget creation", func(tx pgx.Tx) (*gen.Widget, error) {
-		snapshot, err := s.CreateInTx(ctx, tx, input)
+		snapshot, err := s.CreateInTx(ctx, tx, caller, input)
 		return snapshot.Widget, err
 	})
 }
@@ -188,8 +192,12 @@ func (s *Service) CreateWidget(ctx context.Context, payload *gen.CreateWidgetPay
 // without redrawing anyone else's. Like every save it is validated, so a
 // widget the catalog has broken cannot be copied until it is fixed.
 func (s *Service) DuplicateWidget(ctx context.Context, payload *gen.DuplicateWidgetPayload) (*gen.Widget, error) {
+	caller, err := s.Authorize(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return inTx(ctx, s, "widget duplication", func(tx pgx.Tx) (*gen.Widget, error) {
-		snapshot, err := s.DuplicateInTx(ctx, tx, payload.ID, "")
+		snapshot, err := s.DuplicateInTx(ctx, tx, caller, payload.ID, "")
 		return snapshot.Widget, err
 	})
 }
@@ -198,9 +206,13 @@ func (s *Service) DuplicateWidget(ctx context.Context, payload *gen.DuplicateWid
 // visualization. Its creator can always update it; updating someone else's
 // needs project write access, as deleting it does.
 func (s *Service) UpdateWidget(ctx context.Context, payload *gen.UpdateWidgetPayload) (*gen.Widget, error) {
+	change, err := s.AuthorizeChange(ctx, payload.ID)
+	if err != nil {
+		return nil, err
+	}
 	input := Input{Name: payload.Name, Description: payload.Description, Dataset: payload.Dataset, Query: payload.Query, Visualization: payload.Visualization}
 	return inTx(ctx, s, "widget update", func(tx pgx.Tx) (*gen.Widget, error) {
-		snapshot, err := s.UpdateInTx(ctx, tx, payload.ID, input, "")
+		snapshot, err := s.UpdateInTx(ctx, tx, change, input, "")
 		return snapshot.Widget, err
 	})
 }
@@ -208,8 +220,12 @@ func (s *Service) UpdateWidget(ctx context.Context, payload *gen.UpdateWidgetPay
 // DeleteWidget soft-deletes a widget. Its creator can always delete it;
 // deleting someone else's needs project write access.
 func (s *Service) DeleteWidget(ctx context.Context, payload *gen.DeleteWidgetPayload) error {
-	_, err := inTx(ctx, s, "widget deletion", func(tx pgx.Tx) ([]*gen.WidgetDashboard, error) {
-		return s.DeleteInTx(ctx, tx, payload.ID, "")
+	change, err := s.AuthorizeChange(ctx, payload.ID)
+	if err != nil {
+		return err
+	}
+	_, err = inTx(ctx, s, "widget deletion", func(tx pgx.Tx) ([]*gen.WidgetDashboard, error) {
+		return s.DeleteInTx(ctx, tx, change, "")
 	})
 	return err
 }

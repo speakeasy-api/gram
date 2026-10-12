@@ -84,10 +84,12 @@ type widgetManagement interface {
 	ReadForChange(ctx context.Context, id string) (widgets.Snapshot, error)
 	Read(ctx context.Context, id string) (widgets.Snapshot, error)
 	Check(ctx context.Context, input widgets.Input) error
-	CreateInTx(ctx context.Context, tx pgx.Tx, input widgets.Input) (widgets.Snapshot, error)
-	UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input widgets.Input, expectedVersion string) (widgets.Snapshot, error)
-	DuplicateInTx(ctx context.Context, tx pgx.Tx, id string, expectedVersion string) (widgets.Snapshot, error)
-	DeleteInTx(ctx context.Context, tx pgx.Tx, id string, expectedVersion string) ([]*genwidgets.WidgetDashboard, error)
+	Authorize(ctx context.Context) (widgets.Caller, error)
+	AuthorizeChange(ctx context.Context, id string) (widgets.Change, error)
+	CreateInTx(ctx context.Context, tx pgx.Tx, caller widgets.Caller, input widgets.Input) (widgets.Snapshot, error)
+	UpdateInTx(ctx context.Context, tx pgx.Tx, change widgets.Change, input widgets.Input, expectedVersion string) (widgets.Snapshot, error)
+	DuplicateInTx(ctx context.Context, tx pgx.Tx, caller widgets.Caller, id string, expectedVersion string) (widgets.Snapshot, error)
+	DeleteInTx(ctx context.Context, tx pgx.Tx, change widgets.Change, expectedVersion string) ([]*genwidgets.WidgetDashboard, error)
 }
 
 // WidgetService lets an external user read and manage a project's Explore
@@ -325,14 +327,26 @@ func (s *WidgetService) save(ctx context.Context, principal Principal, operation
 		return s.preview(principal, project, out, token)
 	}
 
-	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, token, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
-		var snapshot widgets.Snapshot
-		var err error
-		if operation == operationCreateWidget {
-			snapshot, err = s.widgets.CreateInTx(ctx, tx, proposal)
-		} else {
-			snapshot, err = s.widgets.UpdateInTx(ctx, tx, input.WidgetID, proposal, input.ExpectedVersion)
+	var write func(context.Context, pgx.Tx) (widgets.Snapshot, error)
+	if operation == operationCreateWidget {
+		caller, err := s.widgets.Authorize(ctx)
+		if err != nil {
+			return out, fmt.Errorf("authorize widget creation: %w", err)
 		}
+		write = func(ctx context.Context, tx pgx.Tx) (widgets.Snapshot, error) {
+			return s.widgets.CreateInTx(ctx, tx, caller, proposal)
+		}
+	} else {
+		change, err := s.widgets.AuthorizeChange(ctx, input.WidgetID)
+		if err != nil {
+			return out, fmt.Errorf("authorize widget update: %w", err)
+		}
+		write = func(ctx context.Context, tx pgx.Tx) (widgets.Snapshot, error) {
+			return s.widgets.UpdateInTx(ctx, tx, change, proposal, input.ExpectedVersion)
+		}
+	}
+	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, token, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
+		snapshot, err := write(ctx, tx)
 		if err != nil {
 			return widgetReceipt{}, fmt.Errorf("save widget: %w", err)
 		}
@@ -346,30 +360,46 @@ func (s *WidgetService) save(ctx context.Context, principal Principal, operation
 
 // Duplicate previews or commits a copy of a widget the caller then owns.
 func (s *WidgetService) Duplicate(ctx context.Context, principal Principal, input widgetTargetInput) (widgetWriteOutput, error) {
-	output, err := s.target(ctx, principal, operationDuplicateWidget, input, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
-		snapshot, err := s.widgets.DuplicateInTx(ctx, tx, input.WidgetID, input.ExpectedVersion)
+	output, err := s.target(ctx, principal, operationDuplicateWidget, input, func(ctx context.Context) (widgetMutation, error) {
+		caller, err := s.widgets.Authorize(ctx)
 		if err != nil {
-			return widgetReceipt{}, fmt.Errorf("duplicate widget: %w", err)
+			return nil, fmt.Errorf("authorize widget duplication: %w", err)
 		}
-		return widgetReceipt{WidgetID: snapshot.Widget.ID, RemovedFrom: nil}, nil
+		return func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
+			snapshot, err := s.widgets.DuplicateInTx(ctx, tx, caller, input.WidgetID, input.ExpectedVersion)
+			if err != nil {
+				return widgetReceipt{}, fmt.Errorf("duplicate widget: %w", err)
+			}
+			return widgetReceipt{WidgetID: snapshot.Widget.ID, RemovedFrom: nil}, nil
+		}, nil
 	})
 	return output, s.boundaryError(ctx, duplicateWidgetToolName, err)
 }
 
 // Delete previews or commits deleting a widget, taking it off every dashboard.
 func (s *WidgetService) Delete(ctx context.Context, principal Principal, input widgetTargetInput) (widgetWriteOutput, error) {
-	output, err := s.target(ctx, principal, operationDeleteWidget, input, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
-		removed, err := s.widgets.DeleteInTx(ctx, tx, input.WidgetID, input.ExpectedVersion)
+	output, err := s.target(ctx, principal, operationDeleteWidget, input, func(ctx context.Context) (widgetMutation, error) {
+		change, err := s.widgets.AuthorizeChange(ctx, input.WidgetID)
 		if err != nil {
-			return widgetReceipt{}, fmt.Errorf("delete widget: %w", err)
+			return nil, fmt.Errorf("authorize widget deletion: %w", err)
 		}
-		return widgetReceipt{WidgetID: input.WidgetID, RemovedFrom: dashboardRefs(removed)}, nil
+		return func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
+			removed, err := s.widgets.DeleteInTx(ctx, tx, change, input.ExpectedVersion)
+			if err != nil {
+				return widgetReceipt{}, fmt.Errorf("delete widget: %w", err)
+			}
+			return widgetReceipt{WidgetID: input.WidgetID, RemovedFrom: dashboardRefs(removed)}, nil
+		}, nil
 	})
 	return output, s.boundaryError(ctx, deleteWidgetToolName, err)
 }
 
+// widgetMutation is a confirmed write, run inside its receipt's transaction.
+type widgetMutation func(context.Context, pgx.Tx) (widgetReceipt, error)
+
 // target previews or commits a duplicate or delete of one existing widget.
-func (s *WidgetService) target(ctx context.Context, principal Principal, operation widgetOperation, input widgetTargetInput, mutate func(context.Context, pgx.Tx) (widgetReceipt, error)) (widgetWriteOutput, error) {
+// authorize runs before the receipt's transaction opens and returns the write.
+func (s *WidgetService) target(ctx context.Context, principal Principal, operation widgetOperation, input widgetTargetInput, authorize func(context.Context) (widgetMutation, error)) (widgetWriteOutput, error) {
 	if err := validateWidgetID(input.WidgetID); err != nil {
 		return widgetWriteOutput{}, err
 	}
@@ -401,6 +431,10 @@ func (s *WidgetService) target(ctx context.Context, principal Principal, operati
 		return s.preview(principal, project, out, token)
 	}
 
+	mutate, err := authorize(ctx)
+	if err != nil {
+		return out, err
+	}
 	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, token, mutate)
 	if err != nil {
 		return out, err
@@ -530,7 +564,7 @@ func (s *WidgetService) previewToken(principal Principal, project ResolvedProjec
 // confirm checks a confirmation against its preview and runs the write in
 // the receipt's transaction, so a retry with the same key replays the stored
 // result instead of writing twice.
-func (s *WidgetService) confirm(ctx context.Context, principal Principal, project ResolvedProject, operation widgetOperation, confirmed confirmation, proposal widgetTokenProposal, mutate func(context.Context, pgx.Tx) (widgetReceipt, error)) (OperationReceipt, error) {
+func (s *WidgetService) confirm(ctx context.Context, principal Principal, project ResolvedProject, operation widgetOperation, confirmed confirmation, proposal widgetTokenProposal, mutate widgetMutation) (OperationReceipt, error) {
 	key := strings.TrimSpace(confirmed.Key)
 	if key == "" || len(key) > maxIdempotencyKeyLength {
 		return OperationReceipt{}, widgetInvalid("idempotency_key", fmt.Sprintf("Provide a stable idempotency_key of at most %d characters to confirm, and reuse it only to retry this exact request.", maxIdempotencyKeyLength))
