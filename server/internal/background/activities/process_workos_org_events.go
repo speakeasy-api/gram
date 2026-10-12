@@ -16,6 +16,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -28,6 +29,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -70,6 +72,8 @@ type ProcessWorkOSOrganizationEvents struct {
 	// deprovisioning events can invalidate a user's cached org memberships
 	// instead of waiting out the cache TTL.
 	userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo]
+	// revokedTokens is the access-token revocation cache.
+	revokedTokens ssosignins.TokenRevoker
 
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations created from WorkOS events.
@@ -83,6 +87,7 @@ func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, w
 		workosClient:  workosClient,
 		identityMap:   identityMap,
 		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cacheAdapter, cache.SuffixNone),
+		revokedTokens: revokedTokenCache{cache: cache.NewTypedObjectCache[chatsessions.RevokedToken](logger.With(attr.SlogCacheNamespace("chat_session_revoked")), cacheAdapter, cache.SuffixNone)},
 
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 	}
@@ -195,9 +200,20 @@ type postCommitEffects struct {
 	// deactivated). Safe to lose: the sync schedule delivers the same
 	// refresh at its next tick.
 	refreshIdentityMap bool
+	// revokeTokenJTIs are access tokens of grants deprovisioning revoked, to
+	// push into the revocation cache; revokeWorkOSSessionIDs are the WorkOS
+	// sessions of the revoked sign-ins.
+	revokeTokenJTIs        []string
+	revokeWorkOSSessionIDs []string
+	revokedSignIns         int
 }
 
 func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
+	if len(effects.revokeTokenJTIs) > 0 || len(effects.revokeWorkOSSessionIDs) > 0 {
+		ssosignins.FinishRevocation(ctx, logger, p.revokedTokens, p.workosClient, effects.revokeTokenJTIs, effects.revokeWorkOSSessionIDs)
+	}
+	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonDeprovisioned, effects.revokedSignIns)
+
 	if effects.refreshIdentityMap && p.identityMap != nil {
 		if err := p.identityMap.SignalIdentityMapRefresh(ctx); err != nil {
 			logger.WarnContext(ctx, "failed to signal identity map refresh", attr.SlogError(err))
@@ -948,4 +964,16 @@ func ShouldProcessEvent(rowLastEventID *string, rowWorkOSUpdatedAt *time.Time, e
 		return !eventUpdatedAt.Before(*rowWorkOSUpdatedAt)
 	}
 	return eventID > *rowLastEventID
+}
+
+// revokedTokenCache writes the same revocation entries as chatsessions.Manager.
+type revokedTokenCache struct {
+	cache cache.TypedCacheObject[chatsessions.RevokedToken]
+}
+
+func (c revokedTokenCache) RevokeToken(ctx context.Context, jti string) error {
+	if err := c.cache.Store(ctx, chatsessions.RevokedToken{JTI: jti, RevokedAt: time.Now()}); err != nil {
+		return fmt.Errorf("store revoked token: %w", err)
+	}
+	return nil
 }

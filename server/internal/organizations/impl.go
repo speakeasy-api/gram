@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
@@ -133,6 +134,7 @@ type Service struct {
 	orgHosts          *orghost.Resolver // resolves the host of links sent by email
 	audit             *audit.Logger
 	svix              *svix.Svix
+	tokens            ssosignins.TokenRevoker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -165,6 +167,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		orgHosts:          orgHosts,
 		audit:             auditLogger,
 		svix:              svix,
+		tokens:            nil,
 	}
 }
 
@@ -1782,6 +1785,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		ImpersonatorEmail:     "",
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
+		IssuedAt:              time.Time{},
 	}
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))

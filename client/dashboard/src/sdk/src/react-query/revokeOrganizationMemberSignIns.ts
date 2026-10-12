@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { userSessionsRevokeMySignIns } from "../funcs/userSessionsRevokeMySignIns.js";
+import { organizationsRevokeMemberSignIns } from "../funcs/organizationsRevokeMemberSignIns.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { RevokeSignInsResult } from "../models/components/revokesigninsresult.js";
@@ -24,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  RevokeMySignInsRequest,
-  RevokeMySignInsSecurity,
-} from "../models/operations/revokemysignins.js";
+  RevokeOrganizationMemberSignInsRequest,
+  RevokeOrganizationMemberSignInsSecurity,
+} from "../models/operations/revokeorganizationmembersignins.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type RevokeMySignInsMutationVariables = {
-  request?: RevokeMySignInsRequest | undefined;
-  security?: RevokeMySignInsSecurity | undefined;
+export type RevokeOrganizationMemberSignInsMutationVariables = {
+  request: RevokeOrganizationMemberSignInsRequest;
+  security?: RevokeOrganizationMemberSignInsSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RevokeMySignInsMutationData = RevokeSignInsResult;
+export type RevokeOrganizationMemberSignInsMutationData = RevokeSignInsResult;
 
-export type RevokeMySignInsMutationError =
+export type RevokeOrganizationMemberSignInsMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +51,49 @@ export type RevokeMySignInsMutationError =
   | SDKValidationError;
 
 /**
- * revokeMySignIns userSessions
+ * revokeMemberSignIns organizations
  *
  * @remarks
- * Sign the caller out everywhere: revoke their SSO sign-ins in every organization they belong to and every MCP grant made from them.
+ * Revoke a member's SSO sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
  */
-export function useRevokeMySignInsMutation(
+export function useRevokeOrganizationMemberSignInsMutation(
   options?: MutationHookOptions<
-    RevokeMySignInsMutationData,
-    RevokeMySignInsMutationError,
-    RevokeMySignInsMutationVariables
+    RevokeOrganizationMemberSignInsMutationData,
+    RevokeOrganizationMemberSignInsMutationError,
+    RevokeOrganizationMemberSignInsMutationVariables
   >,
 ): UseMutationResult<
-  RevokeMySignInsMutationData,
-  RevokeMySignInsMutationError,
-  RevokeMySignInsMutationVariables
+  RevokeOrganizationMemberSignInsMutationData,
+  RevokeOrganizationMemberSignInsMutationError,
+  RevokeOrganizationMemberSignInsMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildRevokeMySignInsMutation(client, options),
+    ...buildRevokeOrganizationMemberSignInsMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyRevokeMySignIns(): MutationKey {
-  return ["@gram/client", "userSessions", "revokeMySignIns"];
+export function mutationKeyRevokeOrganizationMemberSignIns(): MutationKey {
+  return ["@gram/client", "organizations", "revokeMemberSignIns"];
 }
 
-export function buildRevokeMySignInsMutation(
+export function buildRevokeOrganizationMemberSignInsMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: RevokeMySignInsMutationVariables,
-  ) => Promise<RevokeMySignInsMutationData>;
+    variables: RevokeOrganizationMemberSignInsMutationVariables,
+  ) => Promise<RevokeOrganizationMemberSignInsMutationData>;
 } {
   return {
-    mutationKey: mutationKeyRevokeMySignIns(),
-    mutationFn: function revokeMySignInsMutationFn({
+    mutationKey: mutationKeyRevokeOrganizationMemberSignIns(),
+    mutationFn: function revokeOrganizationMemberSignInsMutationFn({
       request,
       security,
       options,
-    }): Promise<RevokeMySignInsMutationData> {
+    }): Promise<RevokeOrganizationMemberSignInsMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +106,7 @@ export function buildRevokeMySignInsMutation(
           ),
         },
       };
-      return unwrapAsync(userSessionsRevokeMySignIns(
+      return unwrapAsync(organizationsRevokeMemberSignIns(
         client$,
         request,
         security,

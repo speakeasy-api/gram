@@ -150,6 +150,7 @@ type Service struct {
 	auditLogger          *audit.Logger
 	trialNotifier        trialemails.Notifier
 	transferManager      *authsessions.TransferManager
+	tokens               ssosignins.TokenRevoker
 
 	// siteOrigin is the dashboard's "scheme://host", derived from
 	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
@@ -209,6 +210,7 @@ func NewService(
 		auditLogger:          auditLogger,
 		trialNotifier:        trialNotifier,
 		transferManager:      authsessions.NewTransferManager(nonceStore),
+		tokens:               nil,
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
@@ -416,14 +418,16 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		ImpersonatorEmail:     idpUser.ImpersonatorEmail(),
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
+		IssuedAt:              time.Time{},
 	}
 	ssosignins.RecordExchange(ctx, logger, s.db, ssosignins.ExchangeParams{
 		Flow:                   ssosignins.FlowDashboard,
 		WorkOSOrganizationID:   idpUser.OrganizationID,
-		FallbackOrganizationID: "",
+		ExpectedOrganizationID: "",
 		UserID:                 userID,
 		WorkOSSessionID:        idpUser.WorkOSSessionID,
 		AuthenticationMethod:   idpUser.AuthenticationMethod,
+		Impersonated:           idpUser.ImpersonatorEmail() != "",
 	})
 
 	if supportOrgID != "" {
@@ -1007,7 +1011,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").LogError(ctx, s.logger)
 	}
 
-	s.revokeSignedOutSSOSignIn(ctx, *authCtx.SessionID, authCtx.UserID)
+	s.revokeSignedOutSSOSignIn(ctx, *authCtx.SessionID, authCtx)
 
 	if err := s.sessions.ClearSession(ctx, authsessions.Session{
 		SessionID:             *authCtx.SessionID,
@@ -1017,6 +1021,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		ImpersonatorEmail:     "",
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
+		IssuedAt:              time.Time{},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").LogError(ctx, s.logger)
 	}
@@ -1836,27 +1841,4 @@ func (s *Service) destinationFromState(payload *gen.CallbackPayload) string {
 		return ""
 	}
 	return safeRedirectPath(state.FinalDestinationURL, s.siteOrigin)
-}
-
-// revokeSignedOutSSOSignIn revokes the SSO sign-ins recorded for the WorkOS
-// session behind a dashboard session being signed out. Grants made from them
-// keep working for other paths but stop qualifying for vouching. Best effort:
-// sign-out never fails because of it.
-func (s *Service) revokeSignedOutSSOSignIn(ctx context.Context, sessionID, userID string) {
-	session, err := s.sessions.GetSession(ctx, sessionID)
-	if err != nil || session.WorkOSSessionID == "" || session.UserID != userID {
-		return
-	}
-	orgs, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
-	if err != nil {
-		s.logger.ErrorContext(ctx, "list organizations for sign-out", attr.SlogError(err))
-		return
-	}
-	organizationIDs := make([]string, 0, len(orgs))
-	for _, org := range orgs {
-		organizationIDs = append(organizationIDs, org.ID)
-	}
-	if _, err := ssosignins.RevokeSession(ctx, s.db, organizationIDs, userID, session.WorkOSSessionID); err != nil {
-		s.logger.ErrorContext(ctx, "revoke sso sign-in on sign-out", attr.SlogError(err))
-	}
 }

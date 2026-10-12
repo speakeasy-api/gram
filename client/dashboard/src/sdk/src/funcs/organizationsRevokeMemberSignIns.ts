@@ -31,23 +31,23 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  RevokeMemberSignInsRequest,
-  RevokeMemberSignInsRequest$outboundSchema,
-  RevokeMemberSignInsSecurity,
-} from "../models/operations/revokemembersignins.js";
+  RevokeOrganizationMemberSignInsRequest,
+  RevokeOrganizationMemberSignInsRequest$outboundSchema,
+  RevokeOrganizationMemberSignInsSecurity,
+} from "../models/operations/revokeorganizationmembersignins.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * revokeMemberSignIns userSessions
+ * revokeMemberSignIns organizations
  *
  * @remarks
- * Revoke a member's SSO sign-ins in the caller's organization and every MCP grant made from them. Requires organization admin.
+ * Revoke a member's SSO sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
  */
-export function userSessionsRevokeMemberSignIns(
+export function organizationsRevokeMemberSignIns(
   client: GramCore,
-  request: RevokeMemberSignInsRequest,
-  security?: RevokeMemberSignInsSecurity | undefined,
+  request: RevokeOrganizationMemberSignInsRequest,
+  security?: RevokeOrganizationMemberSignInsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function userSessionsRevokeMemberSignIns(
 
 async function $do(
   client: GramCore,
-  request: RevokeMemberSignInsRequest,
-  security?: RevokeMemberSignInsSecurity | undefined,
+  request: RevokeOrganizationMemberSignInsRequest,
+  security?: RevokeOrganizationMemberSignInsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -95,7 +95,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(RevokeMemberSignInsRequest$outboundSchema, value),
+    (value) =>
+      z.parse(RevokeOrganizationMemberSignInsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -106,7 +107,7 @@ async function $do(
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/userSessions.revokeMemberSignIns")();
+  const path = pathToFunc("/rpc/organizations.revokeMemberSignIns")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -130,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "revokeMemberSignIns",
+    operationID: "revokeOrganizationMemberSignIns",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

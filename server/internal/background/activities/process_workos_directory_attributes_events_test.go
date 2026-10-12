@@ -11,6 +11,8 @@ import (
 	"github.com/workos/workos-go/v6/pkg/events"
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -470,7 +472,7 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationRevokesSSOSign
 		AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now(),
 	})
 	require.NoError(t, err)
-	require.True(t, signIn.Valid)
+	require.True(t, signIn.ID.Valid)
 
 	email := userID + "@example.com"
 	workosClient := workos.NewStubClient()
@@ -488,6 +490,10 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationRevokesSSOSign
 	live, err := ssosignins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
 	require.NoError(t, err)
 	require.False(t, live.Valid, "deprovisioning revokes the user's sign-ins")
+	require.Equal(t, []string{workosSessionID}, workosClient.RevokedSessions(), "the revoked sign-in's WorkOS session is ended")
+	audited, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessMemberSignInsRevoke)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), audited, "deprovisioning audits the revocation as the system")
 }
 
 func TestProcessWorkOSOrganizationEvents_DirectoryUserReactivationRestoresDirectoryUser(t *testing.T) {

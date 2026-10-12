@@ -6,12 +6,9 @@ import { userSessionsList } from "../funcs/userSessionsList.js";
 import { userSessionsListFacets } from "../funcs/userSessionsListFacets.js";
 import { userSessionsMint } from "../funcs/userSessionsMint.js";
 import { userSessionsRevoke } from "../funcs/userSessionsRevoke.js";
-import { userSessionsRevokeMemberSignIns } from "../funcs/userSessionsRevokeMemberSignIns.js";
-import { userSessionsRevokeMySignIns } from "../funcs/userSessionsRevokeMySignIns.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListUserSessionFacetsResult } from "../models/components/listusersessionfacetsresult.js";
 import { MintUserSessionResponseBody } from "../models/components/mintusersessionresponsebody.js";
-import { RevokeSignInsResult } from "../models/components/revokesigninsresult.js";
 import {
   ListUserSessionFacetsRequest,
   ListUserSessionFacetsSecurity,
@@ -25,14 +22,6 @@ import {
   MintUserSessionRequest,
   MintUserSessionSecurity,
 } from "../models/operations/mintusersession.js";
-import {
-  RevokeMemberSignInsRequest,
-  RevokeMemberSignInsSecurity,
-} from "../models/operations/revokemembersignins.js";
-import {
-  RevokeMySignInsRequest,
-  RevokeMySignInsSecurity,
-} from "../models/operations/revokemysignins.js";
 import {
   RevokeUserSessionRequest,
   RevokeUserSessionSecurity,
@@ -110,44 +99,6 @@ export class UserSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(userSessionsRevoke(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * revokeMemberSignIns userSessions
-   *
-   * @remarks
-   * Revoke a member's SSO sign-ins in the caller's organization and every MCP grant made from them. Requires organization admin.
-   */
-  async revokeMemberSignIns(
-    request: RevokeMemberSignInsRequest,
-    security?: RevokeMemberSignInsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<RevokeSignInsResult> {
-    return unwrapAsync(userSessionsRevokeMemberSignIns(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * revokeMySignIns userSessions
-   *
-   * @remarks
-   * Sign the caller out everywhere: revoke their SSO sign-ins in every organization they belong to and every MCP grant made from them.
-   */
-  async revokeMySignIns(
-    request?: RevokeMySignInsRequest | undefined,
-    security?: RevokeMySignInsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<RevokeSignInsResult> {
-    return unwrapAsync(userSessionsRevokeMySignIns(
       this,
       request,
       security,

@@ -26,13 +26,3 @@ func MintUserSessionUserSessionsPath() string {
 func RevokeUserSessionUserSessionsPath() string {
 	return "/rpc/userSessions.revoke"
 }
-
-// RevokeMySignInsUserSessionsPath returns the URL path to the userSessions service revokeMySignIns HTTP endpoint.
-func RevokeMySignInsUserSessionsPath() string {
-	return "/rpc/userSessions.revokeMySignIns"
-}
-
-// RevokeMemberSignInsUserSessionsPath returns the URL path to the userSessions service revokeMemberSignIns HTTP endpoint.
-func RevokeMemberSignInsUserSessionsPath() string {
-	return "/rpc/userSessions.revokeMemberSignIns"
-}

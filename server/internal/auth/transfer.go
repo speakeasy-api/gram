@@ -471,6 +471,7 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 		ImpersonatorEmail:     "", // TransferOut refuses impersonation sessions.
 		SupportOrganizationID: "", // TransferOut refuses support sessions.
 		SupportExpiresAt:      time.Time{},
+		IssuedAt:              time.Time{},
 	}
 	if err := s.sessions.StoreSession(ctx, newSession); err != nil {
 		return nil, failTransfer(signinTransferTemporaryError, "session_store_failed", fmt.Errorf("store session: %w", err))

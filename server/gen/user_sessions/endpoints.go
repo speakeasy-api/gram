@@ -16,12 +16,10 @@ import (
 
 // Endpoints wraps the "userSessions" service endpoints.
 type Endpoints struct {
-	ListUserSessions    goa.Endpoint
-	ListFacets          goa.Endpoint
-	MintUserSession     goa.Endpoint
-	RevokeUserSession   goa.Endpoint
-	RevokeMySignIns     goa.Endpoint
-	RevokeMemberSignIns goa.Endpoint
+	ListUserSessions  goa.Endpoint
+	ListFacets        goa.Endpoint
+	MintUserSession   goa.Endpoint
+	RevokeUserSession goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "userSessions" service with endpoints.
@@ -29,12 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListUserSessions:    NewListUserSessionsEndpoint(s, a.APIKeyAuth),
-		ListFacets:          NewListFacetsEndpoint(s, a.APIKeyAuth),
-		MintUserSession:     NewMintUserSessionEndpoint(s, a.APIKeyAuth),
-		RevokeUserSession:   NewRevokeUserSessionEndpoint(s, a.APIKeyAuth),
-		RevokeMySignIns:     NewRevokeMySignInsEndpoint(s, a.APIKeyAuth),
-		RevokeMemberSignIns: NewRevokeMemberSignInsEndpoint(s, a.APIKeyAuth),
+		ListUserSessions:  NewListUserSessionsEndpoint(s, a.APIKeyAuth),
+		ListFacets:        NewListFacetsEndpoint(s, a.APIKeyAuth),
+		MintUserSession:   NewMintUserSessionEndpoint(s, a.APIKeyAuth),
+		RevokeUserSession: NewRevokeUserSessionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -44,8 +40,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListFacets = m(e.ListFacets)
 	e.MintUserSession = m(e.MintUserSession)
 	e.RevokeUserSession = m(e.RevokeUserSession)
-	e.RevokeMySignIns = m(e.RevokeMySignIns)
-	e.RevokeMemberSignIns = m(e.RevokeMemberSignIns)
 }
 
 // NewListUserSessionsEndpoint returns an endpoint function that calls the
@@ -257,51 +251,5 @@ func NewRevokeUserSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return nil, s.RevokeUserSession(ctx, p)
-	}
-}
-
-// NewRevokeMySignInsEndpoint returns an endpoint function that calls the
-// method "revokeMySignIns" of service "userSessions".
-func NewRevokeMySignInsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*RevokeMySignInsPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.RevokeMySignIns(ctx, p)
-	}
-}
-
-// NewRevokeMemberSignInsEndpoint returns an endpoint function that calls the
-// method "revokeMemberSignIns" of service "userSessions".
-func NewRevokeMemberSignInsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*RevokeMemberSignInsPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.RevokeMemberSignIns(ctx, p)
 	}
 }

@@ -277,7 +277,9 @@ func (f *transferFixture) requireAccepted(ctx context.Context, t *testing.T, res
 		ImpersonatorEmail:     "",
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
+		IssuedAt:              minted.IssuedAt,
 	}, minted)
+	require.False(t, minted.IssuedAt.IsZero(), "a stored session records when it was issued")
 }
 
 func nonceHash(nonce string) string {

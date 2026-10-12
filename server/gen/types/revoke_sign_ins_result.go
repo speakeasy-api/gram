@@ -7,8 +7,8 @@
 
 package types
 
-// RevokeSignInsResult is the result type of the userSessions service
-// revokeMySignIns method.
+// RevokeSignInsResult is the result type of the organizations service
+// revokeMemberSignIns method.
 type RevokeSignInsResult struct {
 	// Number of SSO sign-ins revoked.
 	RevokedSignIns int

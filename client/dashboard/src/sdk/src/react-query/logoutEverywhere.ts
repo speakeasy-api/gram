@@ -8,10 +8,9 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { userSessionsRevokeMemberSignIns } from "../funcs/userSessionsRevokeMemberSignIns.js";
+import { authLogoutEverywhere } from "../funcs/authLogoutEverywhere.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { RevokeSignInsResult } from "../models/components/revokesigninsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,22 +23,23 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  RevokeMemberSignInsRequest,
-  RevokeMemberSignInsSecurity,
-} from "../models/operations/revokemembersignins.js";
+  LogoutEverywhereRequest,
+  LogoutEverywhereResponse,
+  LogoutEverywhereSecurity,
+} from "../models/operations/logouteverywhere.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type RevokeMemberSignInsMutationVariables = {
-  request: RevokeMemberSignInsRequest;
-  security?: RevokeMemberSignInsSecurity | undefined;
+export type LogoutEverywhereMutationVariables = {
+  request?: LogoutEverywhereRequest | undefined;
+  security?: LogoutEverywhereSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type RevokeMemberSignInsMutationData = RevokeSignInsResult;
+export type LogoutEverywhereMutationData = LogoutEverywhereResponse;
 
-export type RevokeMemberSignInsMutationError =
+export type LogoutEverywhereMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +51,49 @@ export type RevokeMemberSignInsMutationError =
   | SDKValidationError;
 
 /**
- * revokeMemberSignIns userSessions
+ * logoutEverywhere auth
  *
  * @remarks
- * Revoke a member's SSO sign-ins in the caller's organization and every MCP grant made from them. Requires organization admin.
+ * Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their SSO sign-ins in every organization, and revokes every MCP grant made from them.
  */
-export function useRevokeMemberSignInsMutation(
+export function useLogoutEverywhereMutation(
   options?: MutationHookOptions<
-    RevokeMemberSignInsMutationData,
-    RevokeMemberSignInsMutationError,
-    RevokeMemberSignInsMutationVariables
+    LogoutEverywhereMutationData,
+    LogoutEverywhereMutationError,
+    LogoutEverywhereMutationVariables
   >,
 ): UseMutationResult<
-  RevokeMemberSignInsMutationData,
-  RevokeMemberSignInsMutationError,
-  RevokeMemberSignInsMutationVariables
+  LogoutEverywhereMutationData,
+  LogoutEverywhereMutationError,
+  LogoutEverywhereMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildRevokeMemberSignInsMutation(client, options),
+    ...buildLogoutEverywhereMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyRevokeMemberSignIns(): MutationKey {
-  return ["@gram/client", "userSessions", "revokeMemberSignIns"];
+export function mutationKeyLogoutEverywhere(): MutationKey {
+  return ["@gram/client", "auth", "logoutEverywhere"];
 }
 
-export function buildRevokeMemberSignInsMutation(
+export function buildLogoutEverywhereMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: RevokeMemberSignInsMutationVariables,
-  ) => Promise<RevokeMemberSignInsMutationData>;
+    variables: LogoutEverywhereMutationVariables,
+  ) => Promise<LogoutEverywhereMutationData>;
 } {
   return {
-    mutationKey: mutationKeyRevokeMemberSignIns(),
-    mutationFn: function revokeMemberSignInsMutationFn({
+    mutationKey: mutationKeyLogoutEverywhere(),
+    mutationFn: function logoutEverywhereMutationFn({
       request,
       security,
       options,
-    }): Promise<RevokeMemberSignInsMutationData> {
+    }): Promise<LogoutEverywhereMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +106,7 @@ export function buildRevokeMemberSignInsMutation(
           ),
         },
       };
-      return unwrapAsync(userSessionsRevokeMemberSignIns(
+      return unwrapAsync(authLogoutEverywhere(
         client$,
         request,
         security,

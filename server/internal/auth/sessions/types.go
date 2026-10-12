@@ -19,7 +19,26 @@ type Session struct {
 	ImpersonatorEmail     string
 	SupportOrganizationID string
 	SupportExpiresAt      time.Time
+	// IssuedAt is when the session was first stored; sessions issued before
+	// the user's sign-out-everywhere epoch are rejected.
+	IssuedAt time.Time
 }
+
+// validAfter is the instant before which every dashboard session a user holds
+// is invalid, set by signing out everywhere.
+type validAfter struct {
+	UserID     string
+	ValidAfter time.Time
+}
+
+var _ cache.CacheableObject[validAfter] = (*validAfter)(nil)
+
+func validAfterCacheKey(userID string) string { return "sessions:valid_after:" + userID }
+
+func (v validAfter) CacheKey() string { return validAfterCacheKey(v.UserID) }
+
+// TTL outlives any session issued before the epoch.
+func (v validAfter) TTL() time.Duration { return 400 * 24 * time.Hour }
 
 func SessionCacheKey(sessionID string) string {
 	// Version the namespace so sessions created under the previous, longer

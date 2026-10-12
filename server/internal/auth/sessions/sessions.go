@@ -65,6 +65,7 @@ type Manager struct {
 	logger       *slog.Logger
 	tracer       trace.Tracer
 	sessionCache cache.TypedCacheObject[Session]
+	validAfter   cache.TypedCacheObject[validAfter]
 	idpClient    SessionRevoker
 	orgRepo      *orgRepo.Queries
 	userRepo     *userRepo.Queries
@@ -88,6 +89,7 @@ func NewManager(
 		logger:       logger,
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
 		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), suffix),
+		validAfter:   cache.NewTypedObjectCache[validAfter](logger.With(attr.SlogCacheNamespace("session_valid_after")), cache.NewRedisCacheAdapter(redisClient), suffix),
 		idpClient:    idpClient,
 		orgRepo:      orgRepo.New(db),
 		userRepo:     userRepo.New(db),
@@ -113,6 +115,9 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnavailable, err, "error checking auth session").LogError(ctx, s.logger)
+	}
+	if err := s.checkValidAfter(ctx, session); err != nil {
+		return ctx, err
 	}
 
 	validatedSupportAdmin := false
@@ -262,6 +267,9 @@ func (s *Manager) GetSession(ctx context.Context, sessionID string) (Session, er
 }
 
 func (s *Manager) StoreSession(ctx context.Context, session Session) error {
+	if session.IssuedAt.IsZero() {
+		session.IssuedAt = time.Now()
+	}
 	err := s.sessionCache.Store(ctx, session)
 	if err != nil {
 		return fmt.Errorf("store session: %w", err)
@@ -271,6 +279,9 @@ func (s *Manager) StoreSession(ctx context.Context, session Session) error {
 }
 
 func (s *Manager) UpdateSession(ctx context.Context, expected, replacement Session) error {
+	if replacement.IssuedAt.IsZero() {
+		replacement.IssuedAt = expected.IssuedAt
+	}
 	updated, err := s.sessionCache.CompareAndSwap(ctx, expected, replacement)
 	if err != nil {
 		return fmt.Errorf("update session: %w", err)
@@ -325,6 +336,51 @@ func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, u
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
 	if err := s.identity.InvalidateUserInfoCache(ctx, userID); err != nil {
 		return fmt.Errorf("invalidate user info cache: %w", err)
+	}
+	return nil
+}
+
+// checkValidAfter rejects a session issued before its user signed out
+// everywhere.
+func (s *Manager) checkValidAfter(ctx context.Context, session Session) error {
+	epoch, err := s.validAfter.Get(ctx, validAfterCacheKey(session.UserID))
+	if errors.Is(err, redisCache.ErrCacheMiss) {
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "error checking session validity").LogError(ctx, s.logger)
+	}
+	if session.IssuedAt.IsZero() || !session.IssuedAt.After(epoch.ValidAfter) {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	return nil
+}
+
+// EndUserSessions invalidates every dashboard session the user holds now and
+// ends the given identity provider sessions. Sessions stored afterwards stay
+// valid.
+func (s *Manager) EndUserSessions(ctx context.Context, userID string, idpSessionIDs []string) error {
+	if err := s.validAfter.Store(ctx, validAfter{UserID: userID, ValidAfter: time.Now()}); err != nil {
+		return fmt.Errorf("store session epoch: %w", err)
+	}
+	for _, id := range idpSessionIDs {
+		if id == "" || s.idpClient == nil {
+			continue
+		}
+		if err := s.idpClient.RevokeSession(ctx, id); err != nil {
+			s.logger.ErrorContext(ctx, "failed to revoke WorkOS session", attr.SlogError(err))
+		}
+	}
+	return nil
+}
+
+// RevokeSession ends one identity provider session.
+func (s *Manager) RevokeSession(ctx context.Context, idpSessionID string) error {
+	if idpSessionID == "" || s.idpClient == nil {
+		return nil
+	}
+	if err := s.idpClient.RevokeSession(ctx, idpSessionID); err != nil {
+		return fmt.Errorf("revoke idp session: %w", err)
 	}
 	return nil
 }

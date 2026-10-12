@@ -33,14 +33,6 @@ type Client struct {
 	// revokeUserSession endpoint.
 	RevokeUserSessionDoer goahttp.Doer
 
-	// RevokeMySignIns Doer is the HTTP client used to make requests to the
-	// revokeMySignIns endpoint.
-	RevokeMySignInsDoer goahttp.Doer
-
-	// RevokeMemberSignIns Doer is the HTTP client used to make requests to the
-	// revokeMemberSignIns endpoint.
-	RevokeMemberSignInsDoer goahttp.Doer
-
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -61,17 +53,15 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListUserSessionsDoer:    doer,
-		ListFacetsDoer:          doer,
-		MintUserSessionDoer:     doer,
-		RevokeUserSessionDoer:   doer,
-		RevokeMySignInsDoer:     doer,
-		RevokeMemberSignInsDoer: doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		ListUserSessionsDoer:  doer,
+		ListFacetsDoer:        doer,
+		MintUserSessionDoer:   doer,
+		RevokeUserSessionDoer: doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
@@ -166,54 +156,6 @@ func (c *Client) RevokeUserSession() goa.Endpoint {
 		resp, err := c.RevokeUserSessionDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessions", "revokeUserSession", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// RevokeMySignIns returns an endpoint that makes HTTP requests to the
-// userSessions service revokeMySignIns server.
-func (c *Client) RevokeMySignIns() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeRevokeMySignInsRequest(c.encoder)
-		decodeResponse = DecodeRevokeMySignInsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRevokeMySignInsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.RevokeMySignInsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("userSessions", "revokeMySignIns", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// RevokeMemberSignIns returns an endpoint that makes HTTP requests to the
-// userSessions service revokeMemberSignIns server.
-func (c *Client) RevokeMemberSignIns() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeRevokeMemberSignInsRequest(c.encoder)
-		decodeResponse = DecodeRevokeMemberSignInsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRevokeMemberSignInsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.RevokeMemberSignInsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("userSessions", "revokeMemberSignIns", err)
 		}
 		return decodeResponse(resp)
 	}

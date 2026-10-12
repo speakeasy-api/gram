@@ -9,9 +9,11 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -97,10 +99,22 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx pgx.Tx, p deprovisi
 	}
 
 	if p.gramUserID != "" {
-		// Revoke the user's SSO sign-ins here and every grant made from them.
-		if _, err := ssosignins.RevokeUser(ctx, dbtx, []string{p.organizationID}, p.gramUserID, ssosignins.RevokeReasonDeprovisioned); err != nil {
+		organizationIDs := []string{p.organizationID}
+		revoked, err := ssosignins.RevokeUser(ctx, dbtx, organizationIDs, p.gramUserID, ssosignins.RevokeReasonDeprovisioned)
+		if err != nil {
 			return effects, fmt.Errorf("revoke sso sign-ins for user %q: %w", p.gramUserID, err)
 		}
+		actor := ssosignins.Actor{Principal: urn.NewSystemPrincipal("workos-deprovision"), DisplayName: nil}
+		if err := ssosignins.AuditRevocation(ctx, dbtx, audit.NewLogger(), actor, p.gramUserID, "", ssosignins.RevokeReasonDeprovisioned, organizationIDs, revoked); err != nil {
+			return effects, fmt.Errorf("audit sso sign-in revocation for user %q: %w", p.gramUserID, err)
+		}
+		jtis, err := ssosignins.JTIsToPush(ctx, dbtx, organizationIDs, p.gramUserID, revoked, time.Now())
+		if err != nil {
+			return effects, fmt.Errorf("list revoked grants for user %q: %w", p.gramUserID, err)
+		}
+		effects.revokedSignIns = revoked.SignIns()
+		effects.revokeTokenJTIs = jtis
+		effects.revokeWorkOSSessionIDs = revoked.WorkOSSessionIDs
 	}
 
 	effects.invalidateUserInfoCacheUserID = p.gramUserID

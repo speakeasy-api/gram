@@ -34,12 +34,6 @@ type Service interface {
 	MintUserSession(context.Context, *MintUserSessionPayload) (res *MintUserSessionResult, err error)
 	// Push the session's jti into the revocation cache and soft-delete the row.
 	RevokeUserSession(context.Context, *RevokeUserSessionPayload) (err error)
-	// Sign the caller out everywhere: revoke their SSO sign-ins in every
-	// organization they belong to and every MCP grant made from them.
-	RevokeMySignIns(context.Context, *RevokeMySignInsPayload) (res *types.RevokeSignInsResult, err error)
-	// Revoke a member's SSO sign-ins in the caller's organization and every MCP
-	// grant made from them. Requires organization admin.
-	RevokeMemberSignIns(context.Context, *RevokeMemberSignInsPayload) (res *types.RevokeSignInsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -62,7 +56,7 @@ const ServiceName = "userSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listUserSessions", "listFacets", "mintUserSession", "revokeUserSession", "revokeMySignIns", "revokeMemberSignIns"}
+var MethodNames = [4]string{"listUserSessions", "listFacets", "mintUserSession", "revokeUserSession"}
 
 // ListFacetsPayload is the payload type of the userSessions service listFacets
 // method.
@@ -141,20 +135,6 @@ type MintUserSessionResult struct {
 	AccessToken string
 	// Lifetime of the access token in seconds.
 	ExpiresIn int
-}
-
-// RevokeMemberSignInsPayload is the payload type of the userSessions service
-// revokeMemberSignIns method.
-type RevokeMemberSignInsPayload struct {
-	// The member's user id.
-	UserID       string
-	SessionToken *string
-}
-
-// RevokeMySignInsPayload is the payload type of the userSessions service
-// revokeMySignIns method.
-type RevokeMySignInsPayload struct {
-	SessionToken *string
 }
 
 // RevokeUserSessionPayload is the payload type of the userSessions service

@@ -12,10 +12,6 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
-import {
-  RevokeSignInsResult,
-  RevokeSignInsResult$inboundSchema,
-} from "../models/components/revokesigninsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +27,29 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  RevokeMySignInsRequest,
-  RevokeMySignInsRequest$outboundSchema,
-  RevokeMySignInsSecurity,
-} from "../models/operations/revokemysignins.js";
+  LogoutEverywhereRequest,
+  LogoutEverywhereRequest$outboundSchema,
+  LogoutEverywhereResponse,
+  LogoutEverywhereResponse$inboundSchema,
+  LogoutEverywhereSecurity,
+} from "../models/operations/logouteverywhere.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * revokeMySignIns userSessions
+ * logoutEverywhere auth
  *
  * @remarks
- * Sign the caller out everywhere: revoke their SSO sign-ins in every organization they belong to and every MCP grant made from them.
+ * Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their SSO sign-ins in every organization, and revokes every MCP grant made from them.
  */
-export function userSessionsRevokeMySignIns(
+export function authLogoutEverywhere(
   client: GramCore,
-  request?: RevokeMySignInsRequest | undefined,
-  security?: RevokeMySignInsSecurity | undefined,
+  request?: LogoutEverywhereRequest | undefined,
+  security?: LogoutEverywhereSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    RevokeSignInsResult,
+    LogoutEverywhereResponse,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +71,13 @@ export function userSessionsRevokeMySignIns(
 
 async function $do(
   client: GramCore,
-  request?: RevokeMySignInsRequest | undefined,
-  security?: RevokeMySignInsSecurity | undefined,
+  request?: LogoutEverywhereRequest | undefined,
+  security?: LogoutEverywhereSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      RevokeSignInsResult,
+      LogoutEverywhereResponse,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,7 +94,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(z.optional(RevokeMySignInsRequest$outboundSchema), value),
+      z.parse(z.optional(LogoutEverywhereRequest$outboundSchema), value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -105,7 +103,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/userSessions.revokeMySignIns")();
+  const path = pathToFunc("/rpc/auth.logoutEverywhere")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
@@ -128,7 +126,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "revokeMySignIns",
+    operationID: "logoutEverywhere",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -172,7 +170,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    RevokeSignInsResult,
+    LogoutEverywhereResponse,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -183,7 +181,10 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, RevokeSignInsResult$inboundSchema),
+    M.json(200, LogoutEverywhereResponse$inboundSchema, {
+      hdrs: true,
+      key: "Result",
+    }),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

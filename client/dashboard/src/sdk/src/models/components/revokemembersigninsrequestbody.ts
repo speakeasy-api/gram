@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type RevokeMemberSignInsRequestBody = {
   /**
-   * The member's user id.
+   * Speakeasy user ID of the member.
    */
   userId: string;
 };
