@@ -2103,6 +2103,7 @@ CREATE TABLE IF NOT EXISTS agent_events (
     source LowCardinality(String) COMMENT 'Canonicalized producer surface derived from resource service.name at write time (e.g. claude-code, litellm). Empty when not stated.',
     provider LowCardinality(String) COMMENT 'Model provider the record concerns (e.g. anthropic, openai). Empty when not stated.',
     surface LowCardinality(String) COMMENT 'Agent surface the activity happened on (e.g. claude-code, codex, cursor). Empty when not stated.',
+    channel LowCardinality(String) COMMENT 'The lane the record entered through: otel (the producer own OTel export, including the hooks OTLP tee passthrough), hooks (the hooks ingest tee), gateway (the MCP gateway) or chat (the chat message bridge). Derived from the producer original instrumentation scope name. Empty only for rows written before the column existed.',
 
     -- Actor
     user_id String COMMENT 'Producer-stated user id. Empty when not stated.' CODEC(ZSTD),
@@ -2243,3 +2244,81 @@ ORDER BY (organization_id, project_id, occurred_at_unix_nano, canonical_metric, 
 TTL fromUnixTimestamp64Nano(occurred_at_unix_nano) + INTERVAL 730 DAY
 SETTINGS index_granularity = 8192
 COMMENT 'One row per measurement data point per measure, at the producer native grain. Carries a full dimension repeat so no join is required. Retained beyond agent_events so billing can read historical cycles. Replacing collapses only on background merges, so a reader must de-duplicate on metric_id (FINAL, or ORDER BY observed_at_unix_nano DESC then LIMIT 1 BY metric_id, since an unordered LIMIT 1 BY keeps an arbitrary version) and never sum raw rows.';
+
+-- session_transcript folds the observations agent_events keeps of one logical
+-- event into one row per event_id: the tool_call and its tool_call_result, the
+-- same call seen from the gateway and from the producer's own export, a
+-- redelivered record. Message rows (prompt, api_response) enter from the chat
+-- lane only, tool events from every lane.
+--
+-- Every column is an idempotent state: min and max for the timestamps, and for
+-- the rest the value of the latest observation that stated one, ordered by
+-- (observed_at, lane rank, record_id) so a tie goes to the gateway over the
+-- producer's export over the rest and the fold is deterministic.
+CREATE TABLE IF NOT EXISTS session_transcript (
+    organization_id String COMMENT 'Organization the session belongs to, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+    project_id String COMMENT 'Project the session was ingested under, from the provenance stamped at the ingest edge.' CODEC(ZSTD),
+    session_id String COMMENT 'Agent session the event belongs to. Part of the key, so one event_id seen in two sessions is two rows.' CODEC(ZSTD),
+    event_id String COMMENT 'Natural identity of the logical event (the message, the tool call), shared across its observations. The fold key.' CODEC(ZSTD),
+
+    started_at_unix_nano SimpleAggregateFunction(min, Int64) COMMENT 'Earliest occurred_at_unix_nano among the observations of the event, as Unix time (ns). Drives partitioning and retention.',
+    ended_at_unix_nano SimpleAggregateFunction(max, Int64) COMMENT 'Latest occurred_at_unix_nano among the observations of the event, as Unix time (ns).',
+
+    -- Latest-value states: argMaxIf over the observation order, taking only
+    -- the observations that stated the value.
+    event_type AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Canonical event type, from the latest observation that stated one.',
+    turn_id AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Turn within the session, from the latest observation that stated one.',
+    name AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Name of the subject of the event, the tool on tool events, from the latest observation that stated one.',
+    text AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'The event in words, from the latest observation that stated any.',
+    outcome AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Agent-vocabulary outcome, from the latest observation that stated one.',
+    outcome_message AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Message accompanying an error outcome, from the latest observation that stated one.',
+    model AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Model named by the event, from the latest observation that stated one.',
+    provider AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Model provider, from the latest observation that stated one.',
+    surface AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Agent surface, from the latest observation that stated one.',
+    source AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Canonicalized producer surface, from the latest observation that stated one.',
+    channel AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Lane of the latest observation that stated one.',
+    user_id AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Producer-stated user id, from the latest observation that stated one.',
+    user_email AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Producer-stated user email, from the latest observation that stated one.',
+    external_user_id AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'User id in the provider own account system, from the latest observation that stated one.',
+    chat_id AggregateFunction(argMaxIf, String, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Speakeasy chat id, read from the gram.chat.id attribute of the latest observation that carried one. Empty when none did.',
+    duration_nano AggregateFunction(argMaxIf, Int64, Tuple(Int64, UInt8, String), UInt8) COMMENT 'Duration in nanoseconds, from the latest observation that stated one. 0 when none did.'
+) ENGINE = AggregatingMergeTree
+PARTITION BY toYYYYMM(fromUnixTimestamp64Nano(started_at_unix_nano))
+ORDER BY (organization_id, project_id, session_id, event_id)
+TTL fromUnixTimestamp64Nano(started_at_unix_nano) + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192
+COMMENT 'One partial row per observation of a logical event within a session, folded by the engine into one row per event_id. Every column is an idempotent state, so redelivery and backfill re-runs merge to the same answer. The fold completes only on background merges, so readers always apply the -Merge combinators and GROUP BY event_id. Filled only by session_transcript_mv, never written directly.';
+
+-- The SELECT aliases shadow the source columns everywhere in the query, so the
+-- channel and event_type the order and the filter read are qualified: bare,
+-- they would name the aggregate states.
+CREATE MATERIALIZED VIEW IF NOT EXISTS session_transcript_mv TO session_transcript AS
+WITH (observed_at_unix_nano, multiIf(agent_events.channel = 'gateway', 3, agent_events.channel = 'otel', 2, 1), record_id) AS observation_order
+SELECT
+    organization_id,
+    project_id,
+    session_id,
+    event_id,
+    min(occurred_at_unix_nano) AS started_at_unix_nano,
+    max(occurred_at_unix_nano) AS ended_at_unix_nano,
+    argMaxIfState(toString(event_type), observation_order, event_type != '') AS event_type,
+    argMaxIfState(turn_id, observation_order, turn_id != '') AS turn_id,
+    argMaxIfState(if(name != '', name, tool_name), observation_order, name != '' OR tool_name != '') AS name,
+    argMaxIfState(text, observation_order, text != '') AS text,
+    argMaxIfState(toString(outcome), observation_order, outcome != '') AS outcome,
+    argMaxIfState(outcome_message, observation_order, outcome_message != '') AS outcome_message,
+    argMaxIfState(model, observation_order, model != '') AS model,
+    argMaxIfState(toString(provider), observation_order, provider != '') AS provider,
+    argMaxIfState(toString(surface), observation_order, surface != '') AS surface,
+    argMaxIfState(toString(source), observation_order, source != '') AS source,
+    argMaxIfState(toString(channel), observation_order, channel != '') AS channel,
+    argMaxIfState(user_id, observation_order, user_id != '') AS user_id,
+    argMaxIfState(user_email, observation_order, user_email != '') AS user_email,
+    argMaxIfState(external_user_id, observation_order, external_user_id != '') AS external_user_id,
+    argMaxIfState(toString(attributes.gram.chat.id), observation_order, toString(attributes.gram.chat.id) != '') AS chat_id,
+    argMaxIfState(duration_nano, observation_order, duration_nano != 0) AS duration_nano
+FROM agent_events
+WHERE session_id != '' AND event_id != ''
+  AND ((agent_events.channel = 'chat' AND agent_events.event_type IN ('prompt', 'api_response'))
+       OR agent_events.event_type IN ('tool_call', 'tool_call_result', 'tool_decision'))
+GROUP BY organization_id, project_id, session_id, event_id;
