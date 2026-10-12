@@ -3,4 +3,4 @@
 "dashboard": patch
 ---
 
-Organizations with single sign-on can enable a Speakeasy enterprise authorization issuer: a permanent issuer URL with a dedicated Speakeasy-managed signing key, key rotation, emergency key replacement, a disable switch that keeps the URL, and a platform kill switch. The issuer's keys are never visible to customer key APIs or usable for client authentication. A read-only Platform MCP tool reports the issuer URL.
+Organizations with single sign-on can enable an internal session issuer through the new `internalSessionIssuers` API (get, setEnabled, rotate): a permanent issuer URL with a dedicated Speakeasy-managed signing key, routine and compromise key rotation, and a disable switch that keeps the URL. Expired keys are retired hourly. Signing can be paused for the platform or one organization with the `internal-session-issuer-signing-paused` flag or `GRAM_INTERNAL_SESSION_ISSUER_SIGNING_PAUSED`. Rollout is gated by the `internal-session-issuer` flag. The issuer's keys are never visible to customer key APIs or usable for client authentication. A read-only Platform MCP tool, `get_internal_session_issuer`, reports the issuer's state and URL.
