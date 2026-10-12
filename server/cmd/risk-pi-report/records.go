@@ -117,8 +117,8 @@ type caseRecord struct {
 
 // runManifest describes a run directory: the code it measured and when.
 type runManifest struct {
-	// Commit is the code the run measured. Resuming the run needs the same
-	// code.
+	// Commit is the commit the run measured. Resuming the run needs the same
+	// commit.
 	Commit runCommit `json:"commit"`
 
 	// Started is when the run began.
@@ -580,15 +580,14 @@ func lockRunDir(dir string) (func(), error) {
 }
 
 // claimRunDir records commit in the run's manifest before any case runs, so a
-// crashed run still names its code. It refuses a run of other code, so one
-// run never mixes two versions of the detector.
+// crashed run still names its commit. It refuses a run of another commit.
 func claimRunDir(dir string, commit runCommit, now time.Time) error {
 	path := filepath.Join(dir, manifestFile)
 	manifest, err := readManifest(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if manifest.Commit.SHA != "" && !manifest.Commit.sameCode(commit) {
+	if manifest.Commit.SHA != "" && manifest.Commit.SHA != commit.SHA {
 		return fmt.Errorf("run %s measured %s, not this checkout's %s; start a new run", dir, manifest.Commit.name(), commit.name())
 	}
 	manifest.Commit = commit

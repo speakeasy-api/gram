@@ -121,9 +121,8 @@ and 20 seconds. A confirmation still refused is a miss.
 
 Every run is new. The report writes each case's result to
 `~/.cache/gram-pi-eval/runs/<run>` as it finishes, and `run.json` records the
-commit and a hash of any uncommitted change outside the fixtures. `--resume`
-continues the latest run of the same commit and uncommitted change instead: it
-runs only missing, new or edited fixtures, and redoes
+commit. `--resume` continues the latest run of the same commit instead, even
+after uncommitted edits: it runs only missing, new or edited fixtures, and redoes
 cases a provider rejected for lack of credit once the balance covers them.
 `--compare main` also scores the latest main, built from a detached worktree and
 scored on this branch's fixtures, with main's own build of the report. It reuses

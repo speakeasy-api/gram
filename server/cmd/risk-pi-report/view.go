@@ -135,7 +135,7 @@ type viewSource struct {
 	runsDir string
 	corpus  []labeledCase
 
-	// change is this checkout's code; the viewer shows its latest run.
+	// change is this checkout's commit; the viewer shows its latest run.
 	change runCommit
 
 	// base is the commit to compare with; the viewer shows the latest run of
@@ -231,7 +231,7 @@ func buildViewData(src viewSource, now time.Time) (viewData, error) {
 	if err != nil {
 		return viewData{}, err
 	}
-	change := latestRun(all, func(r loadedRun) bool { return r.manifest.Commit.sameCode(src.change) })
+	change := latestRun(all, func(r loadedRun) bool { return r.manifest.Commit.SHA == src.change.SHA })
 	base := latestRun(all, func(r loadedRun) bool { return measuredCommit(r, src.base) })
 	runs := pickRuns(all, change, base)
 	for i := range runs {
@@ -317,7 +317,7 @@ func latestRun(runs []loadedRun, match func(loadedRun) bool) string {
 // commit may be a full or abbreviated hash; empty matches nothing.
 func measuredCommit(r loadedRun, commit string) bool {
 	c := r.manifest.Commit
-	return commit != "" && c.Uncommitted == "" && strings.HasPrefix(c.SHA, commit)
+	return commit != "" && !c.Uncommitted && strings.HasPrefix(c.SHA, commit)
 }
 
 // pickRuns orders the runs the viewer shows: the change, the base, then the

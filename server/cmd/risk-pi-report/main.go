@@ -1,9 +1,8 @@
 // Command risk-pi-report scores the prompt-injection detector this checkout
 // ships on the labelled fixtures. Each call starts a new run and writes one
 // record per case under ~/.cache/gram-pi-eval/runs/<run>. With -resume it
-// continues the most recent run of the same commit and uncommitted changes
-// instead: it runs only missing, new or edited cases and cases the run could
-// not fund.
+// continues the most recent run of the same commit instead: it runs only
+// missing, new or edited cases and cases the run could not fund.
 //
 // `risk-pi-report view` shows every cached run and applies the merge gate to
 // this checkout's run.
