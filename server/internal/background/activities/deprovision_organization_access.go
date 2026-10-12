@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -92,6 +93,13 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx pgx.Tx, p deprovisi
 			WorkosLastEventID: conv.ToPGText(p.eventID),
 		}); err != nil {
 			return effects, fmt.Errorf("mark role assignments deleted for workos user %q: %w", workosUserID, err)
+		}
+	}
+
+	if p.gramUserID != "" {
+		// Revoke the user's SSO sign-ins here and every grant made from them.
+		if _, err := ssosignins.RevokeUser(ctx, dbtx, []string{p.organizationID}, p.gramUserID, ssosignins.RevokeReasonDeprovisioned); err != nil {
+			return effects, fmt.Errorf("revoke sso sign-ins for user %q: %w", p.gramUserID, err)
 		}
 	}
 

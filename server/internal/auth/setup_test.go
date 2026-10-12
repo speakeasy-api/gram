@@ -117,8 +117,12 @@ type MockUserInfo struct {
 	Email          string
 	ExternalID     string // WorkOS external_id — simulates a backfilled user
 	OrganizationID string // WorkOS org ID returned by AuthenticateWithCode
-	Admin          bool
-	Organizations  []MockOrganizationEntry
+	// WorkOSSessionID, when set, is returned as the access token's sid claim.
+	WorkOSSessionID string
+	// AuthenticationMethod is returned as WorkOS's authentication_method.
+	AuthenticationMethod string
+	Admin                bool
+	Organizations        []MockOrganizationEntry
 }
 
 type MockOrganizationEntry struct {
@@ -157,6 +161,13 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 				"profile_picture_url": "",
 				"external_id":         userInfo.ExternalID,
 			},
+		}
+		if userInfo.WorkOSSessionID != "" {
+			claims, _ := json.Marshal(map[string]string{"sid": userInfo.WorkOSSessionID})
+			resp["access_token"] = "e30." + base64.RawURLEncoding.EncodeToString(claims) + ".sig"
+		}
+		if userInfo.AuthenticationMethod != "" {
+			resp["authentication_method"] = userInfo.AuthenticationMethod
 		}
 		if request.Code == "impersonation_code" {
 			resp["authentication_method"] = "Impersonation"

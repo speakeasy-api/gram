@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -416,6 +417,14 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
 	}
+	ssosignins.RecordExchange(ctx, logger, s.db, ssosignins.ExchangeParams{
+		Flow:                   ssosignins.FlowDashboard,
+		WorkOSOrganizationID:   idpUser.OrganizationID,
+		FallbackOrganizationID: "",
+		UserID:                 userID,
+		WorkOSSessionID:        idpUser.WorkOSSessionID,
+		AuthenticationMethod:   idpUser.AuthenticationMethod,
+	})
 
 	if supportOrgID != "" {
 		isAdmin, err := s.sessions.IsPlatformAdmin(ctx, userID)
@@ -997,6 +1006,8 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").LogError(ctx, s.logger)
 	}
+
+	s.revokeSignedOutSSOSignIn(ctx, *authCtx.SessionID, authCtx.UserID)
 
 	if err := s.sessions.ClearSession(ctx, authsessions.Session{
 		SessionID:             *authCtx.SessionID,
@@ -1825,4 +1836,27 @@ func (s *Service) destinationFromState(payload *gen.CallbackPayload) string {
 		return ""
 	}
 	return safeRedirectPath(state.FinalDestinationURL, s.siteOrigin)
+}
+
+// revokeSignedOutSSOSignIn revokes the SSO sign-ins recorded for the WorkOS
+// session behind a dashboard session being signed out. Grants made from them
+// keep working for other paths but stop qualifying for vouching. Best effort:
+// sign-out never fails because of it.
+func (s *Service) revokeSignedOutSSOSignIn(ctx context.Context, sessionID, userID string) {
+	session, err := s.sessions.GetSession(ctx, sessionID)
+	if err != nil || session.WorkOSSessionID == "" || session.UserID != userID {
+		return
+	}
+	orgs, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
+	if err != nil {
+		s.logger.ErrorContext(ctx, "list organizations for sign-out", attr.SlogError(err))
+		return
+	}
+	organizationIDs := make([]string, 0, len(orgs))
+	for _, org := range orgs {
+		organizationIDs = append(organizationIDs, org.ID)
+	}
+	if _, err := ssosignins.RevokeSession(ctx, s.db, organizationIDs, userID, session.WorkOSSessionID); err != nil {
+		s.logger.ErrorContext(ctx, "revoke sso sign-in on sign-out", attr.SlogError(err))
+	}
 }

@@ -18,11 +18,13 @@ import (
 
 // Server lists the userSessions service endpoint HTTP handlers.
 type Server struct {
-	Mounts            []*MountPoint
-	ListUserSessions  http.Handler
-	ListFacets        http.Handler
-	MintUserSession   http.Handler
-	RevokeUserSession http.Handler
+	Mounts              []*MountPoint
+	ListUserSessions    http.Handler
+	ListFacets          http.Handler
+	MintUserSession     http.Handler
+	RevokeUserSession   http.Handler
+	RevokeMySignIns     http.Handler
+	RevokeMemberSignIns http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,11 +58,15 @@ func New(
 			{"ListFacets", "GET", "/rpc/userSessions.listFacets"},
 			{"MintUserSession", "POST", "/rpc/userSessions.mint"},
 			{"RevokeUserSession", "POST", "/rpc/userSessions.revoke"},
+			{"RevokeMySignIns", "POST", "/rpc/userSessions.revokeMySignIns"},
+			{"RevokeMemberSignIns", "POST", "/rpc/userSessions.revokeMemberSignIns"},
 		},
-		ListUserSessions:  NewListUserSessionsHandler(e.ListUserSessions, mux, decoder, encoder, errhandler, formatter),
-		ListFacets:        NewListFacetsHandler(e.ListFacets, mux, decoder, encoder, errhandler, formatter),
-		MintUserSession:   NewMintUserSessionHandler(e.MintUserSession, mux, decoder, encoder, errhandler, formatter),
-		RevokeUserSession: NewRevokeUserSessionHandler(e.RevokeUserSession, mux, decoder, encoder, errhandler, formatter),
+		ListUserSessions:    NewListUserSessionsHandler(e.ListUserSessions, mux, decoder, encoder, errhandler, formatter),
+		ListFacets:          NewListFacetsHandler(e.ListFacets, mux, decoder, encoder, errhandler, formatter),
+		MintUserSession:     NewMintUserSessionHandler(e.MintUserSession, mux, decoder, encoder, errhandler, formatter),
+		RevokeUserSession:   NewRevokeUserSessionHandler(e.RevokeUserSession, mux, decoder, encoder, errhandler, formatter),
+		RevokeMySignIns:     NewRevokeMySignInsHandler(e.RevokeMySignIns, mux, decoder, encoder, errhandler, formatter),
+		RevokeMemberSignIns: NewRevokeMemberSignInsHandler(e.RevokeMemberSignIns, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -73,6 +79,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListFacets = m(s.ListFacets)
 	s.MintUserSession = m(s.MintUserSession)
 	s.RevokeUserSession = m(s.RevokeUserSession)
+	s.RevokeMySignIns = m(s.RevokeMySignIns)
+	s.RevokeMemberSignIns = m(s.RevokeMemberSignIns)
 }
 
 // MethodNames returns the methods served.
@@ -84,6 +92,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListFacetsHandler(mux, h.ListFacets)
 	MountMintUserSessionHandler(mux, h.MintUserSession)
 	MountRevokeUserSessionHandler(mux, h.RevokeUserSession)
+	MountRevokeMySignInsHandler(mux, h.RevokeMySignIns)
+	MountRevokeMemberSignInsHandler(mux, h.RevokeMemberSignIns)
 }
 
 // Mount configures the mux to serve the userSessions endpoints.
@@ -280,6 +290,112 @@ func NewRevokeUserSessionHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "revokeUserSession")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeMySignInsHandler configures the mux to serve the "userSessions"
+// service "revokeMySignIns" endpoint.
+func MountRevokeMySignInsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/userSessions.revokeMySignIns", f)
+}
+
+// NewRevokeMySignInsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "userSessions" service "revokeMySignIns" endpoint.
+func NewRevokeMySignInsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeMySignInsRequest(mux, decoder)
+		encodeResponse = EncodeRevokeMySignInsResponse(encoder)
+		encodeError    = EncodeRevokeMySignInsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeMySignIns")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeMemberSignInsHandler configures the mux to serve the
+// "userSessions" service "revokeMemberSignIns" endpoint.
+func MountRevokeMemberSignInsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/userSessions.revokeMemberSignIns", f)
+}
+
+// NewRevokeMemberSignInsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "userSessions" service "revokeMemberSignIns" endpoint.
+func NewRevokeMemberSignInsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeMemberSignInsRequest(mux, decoder)
+		encodeResponse = EncodeRevokeMemberSignInsResponse(encoder)
+		encodeError    = EncodeRevokeMemberSignInsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeMemberSignIns")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "userSessions")
 		payload, err := decodeRequest(r)
 		if err != nil {

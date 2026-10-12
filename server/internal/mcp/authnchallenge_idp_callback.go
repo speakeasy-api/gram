@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -287,6 +288,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 
 	var federatedIdentity *remotesessions.FederatedIdentity
 	var gramUserID string
+	var ssoSignInID uuid.NullUUID
 	impersonated := false
 	if federation := challengeState.Federation; federation != nil {
 		verified := federation.ValidatedIdentity
@@ -327,6 +329,14 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		}
 		gramUserID = login.UserID
 		impersonated = idpUser.ImpersonatorEmail() != ""
+		ssoSignInID = ssosignins.RecordExchange(ctx, logger, s.db, ssosignins.ExchangeParams{
+			Flow:                   ssosignins.FlowMCPAuthorize,
+			WorkOSOrganizationID:   idpUser.OrganizationID,
+			FallbackOrganizationID: endpoint.OrganizationID,
+			UserID:                 gramUserID,
+			WorkOSSessionID:        idpUser.WorkOSSessionID,
+			AuthenticationMethod:   idpUser.AuthenticationMethod,
+		})
 	}
 
 	// Validate the user belongs to the endpoint's organization before
@@ -427,6 +437,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
+	challengeState.SSOSignInID = nil
+	if ssoSignInID.Valid {
+		challengeState.SSOSignInID = &ssoSignInID.UUID
+	}
 	if federation := challengeState.Federation; federation != nil {
 		challengeState.FederatedBinding = &FederatedConsentBinding{IssuerID: federation.IssuerID, ClientID: federation.ClientID, Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject}
 	}

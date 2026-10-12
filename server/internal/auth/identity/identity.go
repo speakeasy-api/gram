@@ -63,10 +63,12 @@ type AuthorizationURLParams struct {
 
 // AuthenticateResult holds the fields Speakeasy uses from the IDP code exchange.
 type AuthenticateResult struct {
-	AccessToken       string
-	OrganizationID    string // WorkOS org ID the user selected during auth (may be empty)
-	User              AuthenticatedUser
-	impersonatorEmail string
+	AccessToken    string
+	OrganizationID string // WorkOS org ID the user selected during auth (may be empty)
+	// AuthenticationMethod is WorkOS's method for this sign-in, e.g. "SSO".
+	AuthenticationMethod string
+	User                 AuthenticatedUser
+	impersonatorEmail    string
 }
 
 type MagicAuthChallenge struct {
@@ -104,14 +106,16 @@ type WorkOSClient interface {
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
 type IDPUserInfo struct {
-	Sub               string  `json:"sub"`
-	Email             string  `json:"email"`
-	Name              string  `json:"name"`
-	Picture           *string `json:"picture,omitempty"`
-	ExternalID        string  `json:"-"`
-	WorkOSSessionID   string  `json:"-"`
-	OrganizationID    string  `json:"-"` // WorkOS org ID selected during auth
-	impersonatorEmail string
+	Sub             string  `json:"sub"`
+	Email           string  `json:"email"`
+	Name            string  `json:"name"`
+	Picture         *string `json:"picture,omitempty"`
+	ExternalID      string  `json:"-"`
+	WorkOSSessionID string  `json:"-"`
+	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
+	// AuthenticationMethod is WorkOS's method for this sign-in, e.g. "SSO".
+	AuthenticationMethod string `json:"-"`
+	impersonatorEmail    string
 }
 
 // ImpersonatorEmail returns the WorkOS Dashboard operator who initiated an
@@ -247,14 +251,15 @@ func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 	}
 
 	return &IDPUserInfo{
-		Sub:               resp.User.ID,
-		Email:             resp.User.Email,
-		Name:              name,
-		Picture:           picture,
-		ExternalID:        resp.User.ExternalID,
-		WorkOSSessionID:   extractSessionIDFromJWT(resp.AccessToken),
-		OrganizationID:    resp.OrganizationID,
-		impersonatorEmail: resp.impersonatorEmail,
+		Sub:                  resp.User.ID,
+		Email:                resp.User.Email,
+		Name:                 name,
+		Picture:              picture,
+		ExternalID:           resp.User.ExternalID,
+		WorkOSSessionID:      extractSessionIDFromJWT(resp.AccessToken),
+		OrganizationID:       resp.OrganizationID,
+		AuthenticationMethod: resp.AuthenticationMethod,
+		impersonatorEmail:    resp.impersonatorEmail,
 	}
 }
 

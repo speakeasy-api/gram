@@ -118,8 +118,10 @@ type mintSessionParams struct {
 	DesiredSessionDuration *time.Duration
 	Replayable             bool
 	Policy                 sessionIssuancePolicy
-	Subject                urn.SessionSubject
-	ToolSelection          []byte
+	// SSOSignInID links the session to the SSO sign-in that authorized it.
+	SSOSignInID   uuid.NullUUID
+	Subject       urn.SessionSubject
+	ToolSelection []byte
 }
 
 type mintedSession struct {
@@ -556,6 +558,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		DesiredSessionDuration: nil,
 		Replayable:             false,
 		Policy:                 sessionIssuancePolicyResourceScoped,
+		SSOSignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                result.Subject,
 		ToolSelection:          nil,
 	}, logger)
@@ -828,6 +831,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		DesiredSessionDuration: desiredSessionDuration,
 		Replayable:             false,
 		Policy:                 policy,
+		SSOSignInID:            grantSSOSignInID(grant),
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 	}, logger)
@@ -1259,6 +1263,7 @@ func (s *Service) rotateRefreshToken(
 		DesiredSessionDuration: nil,
 		Replayable:             true,
 		Policy:                 policy,
+		SSOSignInID:            oldSession.SsoSignInID,
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 	}, logger)
@@ -1682,6 +1687,7 @@ func (s *Service) mintSession(
 		DelegatedGrants:        params.DelegatedGrants,
 		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
 		ToolSelection:          params.ToolSelection,
+		SSOSignInID:            params.SSOSignInID,
 		AuthorizationExpiresAt: params.AuthorizationExpiresAt,
 		DesiredSessionDuration: params.DesiredSessionDuration,
 		Replayable:             params.Replayable,
@@ -1735,6 +1741,9 @@ type sessionIssuance struct {
 
 	// ToolSelection is the consent-screen policy, persisted verbatim.
 	ToolSelection []byte
+
+	// SSOSignInID links the session to the SSO sign-in that authorized it.
+	SSOSignInID uuid.NullUUID
 
 	// AuthorizationExpiresAt carries a rotated authorization's deadline
 	// forward. Nil starts a new authorization.
@@ -1855,6 +1864,7 @@ func (s *Service) issueSession(
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: *issuance.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
 		ToolSelection:          issuance.ToolSelection,
 		Resource:               conv.ToPGTextEmpty(issuance.Resource),
+		SsoSignInID:            issuance.SSOSignInID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1958,4 +1968,12 @@ func (s *Service) authorizationCodeIssuancePolicy(endpoint *ResolvedMcpEndpoint)
 		return sessionIssuancePolicyIssuerScoped, "", nil
 	}
 	return sessionIssuancePolicyResourceBound, resource, nil
+}
+
+// grantSSOSignInID is the sign-in an authorization code links its session to.
+func grantSSOSignInID(grant UserSessionGrant) uuid.NullUUID {
+	if grant.SSOSignInID == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: *grant.SSOSignInID, Valid: true}
 }

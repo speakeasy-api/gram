@@ -82780,6 +82780,174 @@ paths:
             x-speakeasy-name-override: revoke
             x-speakeasy-react-hook:
                 name: RevokeUserSession
+    /rpc/userSessions.revokeMemberSignIns:
+        post:
+            description: Revoke a member's SSO sign-ins in the caller's organization and every MCP grant made from them. Requires organization admin.
+            operationId: revokeMemberSignIns
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokeMemberSignInsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokeSignInsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: revokeMemberSignIns userSessions
+            tags:
+                - userSessions
+            x-speakeasy-name-override: revokeMemberSignIns
+            x-speakeasy-react-hook:
+                name: RevokeMemberSignIns
+    /rpc/userSessions.revokeMySignIns:
+        post:
+            description: 'Sign the caller out everywhere: revoke their SSO sign-ins in every organization they belong to and every MCP grant made from them.'
+            operationId: revokeMySignIns
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokeSignInsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: revokeMySignIns userSessions
+            tags:
+                - userSessions
+            x-speakeasy-name-override: revokeMySignIns
+            x-speakeasy-react-hook:
+                name: RevokeMySignIns
     /rpc/variations.createGlobal:
         post:
             description: 'Ensure the project-default (global) tool variation group exists, returning it. Idempotent: returns the existing group unchanged when present, otherwise creates it. Takes no parameters and only manages the single project-default group.'
@@ -108113,6 +108281,14 @@ components:
                     format: uuid
             required:
                 - id
+        RevokeMemberSignInsRequestBody:
+            type: object
+            properties:
+                user_id:
+                    type: string
+                    description: The member's user id.
+            required:
+                - user_id
         RevokeSessionRequestBody:
             type: object
             properties:
@@ -108126,6 +108302,21 @@ components:
             required:
                 - agent_id
                 - session_id
+        RevokeSignInsResult:
+            type: object
+            properties:
+                revoked_sessions:
+                    type: integer
+                    description: Number of MCP grants revoked.
+                    format: int64
+                revoked_sign_ins:
+                    type: integer
+                    description: Number of SSO sign-ins revoked.
+                    format: int64
+            description: What a sign-in revocation revoked.
+            required:
+                - revoked_sign_ins
+                - revoked_sessions
         RiskAnalysisStatusResult:
             type: object
             properties:

@@ -41,8 +41,9 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 	}
 
 	return &AuthenticateResult{
-		AccessToken:    resp.AccessToken,
-		OrganizationID: resp.OrganizationID,
+		AccessToken:          resp.AccessToken,
+		OrganizationID:       resp.OrganizationID,
+		AuthenticationMethod: string(resp.AuthenticationMethod),
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,
@@ -85,8 +86,9 @@ func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID,
 	}
 
 	return &AuthenticateResult{
-		AccessToken:    resp.AccessToken,
-		OrganizationID: resp.OrganizationID,
+		AccessToken:          resp.AccessToken,
+		OrganizationID:       resp.OrganizationID,
+		AuthenticationMethod: string(resp.AuthenticationMethod),
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,

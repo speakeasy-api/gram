@@ -206,7 +206,7 @@ func UsageCommands() []string {
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
-		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
+		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session|revoke-my-sign-ins|revoke-member-sign-ins)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
@@ -4856,6 +4856,13 @@ func ParseEndpoint(
 		userSessionsRevokeUserSessionApikeyTokenFlag      = userSessionsRevokeUserSessionFlags.String("apikey-token", "", "")
 		userSessionsRevokeUserSessionProjectSlugInputFlag = userSessionsRevokeUserSessionFlags.String("project-slug-input", "", "")
 
+		userSessionsRevokeMySignInsFlags            = flag.NewFlagSet("revoke-my-sign-ins", flag.ExitOnError)
+		userSessionsRevokeMySignInsSessionTokenFlag = userSessionsRevokeMySignInsFlags.String("session-token", "", "")
+
+		userSessionsRevokeMemberSignInsFlags            = flag.NewFlagSet("revoke-member-sign-ins", flag.ExitOnError)
+		userSessionsRevokeMemberSignInsBodyFlag         = userSessionsRevokeMemberSignInsFlags.String("body", "REQUIRED", "")
+		userSessionsRevokeMemberSignInsSessionTokenFlag = userSessionsRevokeMemberSignInsFlags.String("session-token", "", "")
+
 		widgetsFlags = flag.NewFlagSet("widgets", flag.ContinueOnError)
 
 		widgetsListWidgetsFlags                = flag.NewFlagSet("list-widgets", flag.ExitOnError)
@@ -6001,6 +6008,8 @@ func ParseEndpoint(
 	userSessionsListFacetsFlags.Usage = userSessionsListFacetsUsage
 	userSessionsMintUserSessionFlags.Usage = userSessionsMintUserSessionUsage
 	userSessionsRevokeUserSessionFlags.Usage = userSessionsRevokeUserSessionUsage
+	userSessionsRevokeMySignInsFlags.Usage = userSessionsRevokeMySignInsUsage
+	userSessionsRevokeMemberSignInsFlags.Usage = userSessionsRevokeMemberSignInsUsage
 
 	widgetsFlags.Usage = widgetsUsage
 	widgetsListWidgetsFlags.Usage = widgetsListWidgetsUsage
@@ -9147,6 +9156,12 @@ func ParseEndpoint(
 			case "revoke-user-session":
 				epf = userSessionsRevokeUserSessionFlags
 
+			case "revoke-my-sign-ins":
+				epf = userSessionsRevokeMySignInsFlags
+
+			case "revoke-member-sign-ins":
+				epf = userSessionsRevokeMemberSignInsFlags
+
 			}
 
 		case "widgets":
@@ -12176,6 +12191,12 @@ func ParseEndpoint(
 			case "revoke-user-session":
 				endpoint = c.RevokeUserSession()
 				data, err = usersessionsc.BuildRevokeUserSessionPayload(*userSessionsRevokeUserSessionIDFlag, *userSessionsRevokeUserSessionSessionTokenFlag, *userSessionsRevokeUserSessionApikeyTokenFlag, *userSessionsRevokeUserSessionProjectSlugInputFlag)
+			case "revoke-my-sign-ins":
+				endpoint = c.RevokeMySignIns()
+				data, err = usersessionsc.BuildRevokeMySignInsPayload(*userSessionsRevokeMySignInsSessionTokenFlag)
+			case "revoke-member-sign-ins":
+				endpoint = c.RevokeMemberSignIns()
+				data, err = usersessionsc.BuildRevokeMemberSignInsPayload(*userSessionsRevokeMemberSignInsBodyFlag, *userSessionsRevokeMemberSignInsSessionTokenFlag)
 			}
 		case "widgets":
 			c := widgetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -32960,6 +32981,8 @@ func userSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-facets: List available user session facet values (clients, users, servers) in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    mint-user-session: Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: an MCP server, a meta MCP server, or a legacy toolset without an mcp_servers wrapper. Exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.`)
 	fmt.Fprintln(os.Stderr, `    revoke-user-session: Push the session's jti into the revocation cache and soft-delete the row.`)
+	fmt.Fprintln(os.Stderr, `    revoke-my-sign-ins: Sign the caller out everywhere: revoke their SSO sign-ins in every organization they belong to and every MCP grant made from them.`)
+	fmt.Fprintln(os.Stderr, `    revoke-member-sign-ins: Revoke a member's SSO sign-ins in the caller's organization and every MCP grant made from them. Requires organization admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s user-sessions COMMAND --help\n", os.Args[0])
@@ -33064,6 +33087,44 @@ func userSessionsRevokeUserSessionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-user-session --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionsRevokeMySignInsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-sessions revoke-my-sign-ins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Sign the caller out everywhere: revoke their SSO sign-ins in every organization they belong to and every MCP grant made from them.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-my-sign-ins --session-token \"abc123\"")
+}
+
+func userSessionsRevokeMemberSignInsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-sessions revoke-member-sign-ins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke a member's SSO sign-ins in the caller's organization and every MCP grant made from them. Requires organization admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-member-sign-ins --body '{\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 // widgetsUsage displays the usage of the widgets command and its subcommands.

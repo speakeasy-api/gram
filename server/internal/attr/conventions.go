@@ -177,6 +177,14 @@ const (
 	AuthUserIDKey            = attribute.Key("gram.auth.user_id")
 	AuthUserExternalIDKey    = attribute.Key("gram.auth.external_user_id")
 	AuthImpersonatorEmailKey = attribute.Key("gram.auth.impersonator_email")
+	// AuthAuthenticationMethodKey is WorkOS's method for a sign-in, e.g. "SSO".
+	AuthAuthenticationMethodKey = attribute.Key("gram.auth.authentication_method")
+	// AuthSignInFlowKey names the flow that exchanged a WorkOS code:
+	// "dashboard" or "mcp_authorize".
+	AuthSignInFlowKey = attribute.Key("gram.auth.sign_in_flow")
+	// AuthWorkOSSessionFingerprintKey is a short one-way digest of a WorkOS
+	// session id, enough to tell whether two flows shared a session.
+	AuthWorkOSSessionFingerprintKey = attribute.Key("gram.auth.workos_session_fingerprint")
 
 	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
@@ -1522,6 +1530,13 @@ func SlogAuthScheme(v string) slog.Attr      { return slog.String(string(AuthSch
 func AuthUserEmail(v string) attribute.KeyValue { return AuthUserEmailKey.String(v) }
 func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(AuthUserEmailKey), v) }
 
+func SlogAuthAuthenticationMethod(v string) slog.Attr {
+	return slog.String(string(AuthAuthenticationMethodKey), v)
+}
+func SlogAuthSignInFlow(v string) slog.Attr { return slog.String(string(AuthSignInFlowKey), v) }
+func SlogAuthWorkOSSessionFingerprint(v string) slog.Attr {
+	return slog.String(string(AuthWorkOSSessionFingerprintKey), v)
+}
 func AuthImpersonatorEmail(v string) attribute.KeyValue { return AuthImpersonatorEmailKey.String(v) }
 func SlogAuthImpersonatorEmail(v string) slog.Attr {
 	return slog.String(string(AuthImpersonatorEmailKey), v)

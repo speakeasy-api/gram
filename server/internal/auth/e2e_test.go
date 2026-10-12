@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
@@ -1486,6 +1487,54 @@ func TestE2E_Logout(t *testing.T) {
 	// Step 4: Verify session is invalidated — Authenticate should fail
 	_, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
 	assert.Error(t, err, "session should be invalidated after logout")
+}
+
+func TestE2E_LoginRecordsSSOSignInAndLogoutRevokesIt(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID    = "user_01SSOSIGNIN"
+		workosOrgID     = "org_01SSOSIGNIN"
+		workosSessionID = "session_01SSOSIGNIN"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_SSOSIGNIN", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Sign-in Corp", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Sign-in Corp"},
+		},
+	}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "sso@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      workosSessionID,
+		AuthenticationMethod: ssosignins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	callbackResult, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	require.NotContains(t, callbackResult.Location, "signin_error=")
+	ctx, err = inst.sessionManager.Authenticate(ctx, callbackResult.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	signIn, err := ssosignins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	require.NoError(t, err)
+	require.True(t, signIn.Valid, "the dashboard login records the SSO sign-in in the WorkOS-selected organization")
+
+	_, err = inst.service.Logout(ctx, &gen.LogoutPayload{})
+	require.NoError(t, err)
+
+	revoked, err := ssosignins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	require.NoError(t, err)
+	require.False(t, revoked.Valid, "signing out revokes that session's sign-in")
 }
 
 // TestE2E_Register_ZeroOrgUserCreatesOrg exercises the full onboarding flow:

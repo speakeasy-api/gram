@@ -1849,7 +1849,8 @@ INSERT INTO user_sessions (
     refresh_expires_at,
     expires_at,
     tool_selection,
-    resource
+    resource,
+    sso_sign_in_id
 )
 SELECT
     issuer.project_id,
@@ -1865,7 +1866,8 @@ SELECT
     @refresh_expires_at,
     @expires_at,
     @tool_selection,
-    sqlc.narg('resource')
+    sqlc.narg('resource'),
+    sqlc.narg('sso_sign_in_id')
 FROM issuer
 RETURNING *;
 

@@ -143,6 +143,50 @@ var _ = Service("userSessions", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "revoke")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeUserSession"}`)
 	})
+
+	Method("revokeMySignIns", func() {
+		Description("Sign the caller out everywhere: revoke their SSO sign-ins in every organization they belong to and every MCP grant made from them.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(RevokeSignInsResult)
+
+		HTTP(func() {
+			POST("/rpc/userSessions.revokeMySignIns")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeMySignIns")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeMySignIns")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeMySignIns"}`)
+	})
+
+	Method("revokeMemberSignIns", func() {
+		Description("Revoke a member's SSO sign-ins in the caller's organization and every MCP grant made from them. Requires organization admin.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("user_id", String, "The member's user id.")
+			Required("user_id")
+			security.SessionPayload()
+		})
+
+		Result(RevokeSignInsResult)
+
+		HTTP(func() {
+			POST("/rpc/userSessions.revokeMemberSignIns")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeMemberSignIns")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeMemberSignIns")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeMemberSignIns"}`)
+	})
 })
 
 var UserSession = Type("UserSession", func() {
@@ -300,4 +344,14 @@ var ListUserSessionFacetsResult = Type("ListUserSessionFacetsResult", func() {
 	Attribute("users", ArrayOf(UserSessionFacetOption), "Subject (user) facets.")
 	Attribute("servers", ArrayOf(UserSessionFacetOption), "Issuer/server facets.")
 	Required("clients", "users", "servers")
+})
+
+var RevokeSignInsResult = Type("RevokeSignInsResult", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("What a sign-in revocation revoked.")
+
+	Attribute("revoked_sign_ins", Int, "Number of SSO sign-ins revoked.")
+	Attribute("revoked_sessions", Int, "Number of MCP grants revoked.")
+	Required("revoked_sign_ins", "revoked_sessions")
 })

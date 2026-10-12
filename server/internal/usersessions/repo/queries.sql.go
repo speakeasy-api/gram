@@ -628,7 +628,7 @@ WITH issuer AS (
     SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id
     FROM user_session_issuers AS issuer
     LEFT JOIN projects AS project ON project.id = issuer.project_id
-    WHERE issuer.id = $12
+    WHERE issuer.id = $13
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
 )
@@ -646,7 +646,8 @@ INSERT INTO user_sessions (
     refresh_expires_at,
     expires_at,
     tool_selection,
-    resource
+    resource,
+    sso_sign_in_id
 )
 SELECT
     issuer.project_id,
@@ -662,7 +663,8 @@ SELECT
     $8,
     $9,
     $10,
-    $11
+    $11,
+    $12
 FROM issuer
 RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sso_sign_in_id, created_at, updated_at, deleted_at, deleted
 `
@@ -679,6 +681,7 @@ type CreateUserSessionParams struct {
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
 	Resource               pgtype.Text
+	SsoSignInID            uuid.NullUUID
 	UserSessionIssuerID    uuid.UUID
 }
 
@@ -706,6 +709,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.ExpiresAt,
 		arg.ToolSelection,
 		arg.Resource,
+		arg.SsoSignInID,
 		arg.UserSessionIssuerID,
 	)
 	var i UserSession
