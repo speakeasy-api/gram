@@ -164,7 +164,7 @@ const CELL_STYLE: Record<CellState, string> = {
 
 function CellGlyph({ state }: { state: CellState }): JSX.Element | null {
   if (state === "on" || state === "inherited" || state === "row-blocked") {
-    return <Check aria-hidden="true" className="size-4" />;
+    return <Check aria-hidden="true" strokeWidth={2.75} className="size-4" />;
   }
   if (state === "blocked" || state === "inherited-blocked") {
     return <Ban aria-hidden="true" className="size-4" />;
