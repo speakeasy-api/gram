@@ -1,0 +1,385 @@
+package widgets
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	gen "github.com/speakeasy-api/gram/server/gen/widgets"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	dashboardsrepo "github.com/speakeasy-api/gram/server/internal/dashboards/repo"
+	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/widgets/repo"
+)
+
+// ErrVersionChanged marks a write that named the version it expected and
+// found the widget changed since. It is wrapped in a conflict error.
+var ErrVersionChanged = errors.New("widget changed since it was read")
+
+// Input is a widget as a caller wants it saved.
+type Input struct {
+	Name          string
+	Description   *string
+	Dataset       string
+	Query         map[string]any
+	Visualization map[string]any
+}
+
+// Snapshot is a widget as read or written, with the version a later write
+// can expect.
+type Snapshot struct {
+	Widget *gen.Widget
+
+	// Version is the widget's updated_at at full precision. Every write moves
+	// it, so a caller that read one version can refuse to overwrite another.
+	Version string
+}
+
+// Version is a stored widget's version: its updated_at at the database's
+// full precision, which the RFC 3339 updated_at in the view rounds to the
+// second.
+func Version(row repo.Widget) string {
+	return row.UpdatedAt.Time.UTC().Format(time.RFC3339Nano)
+}
+
+// Read returns one widget of the request's project, validated as it is read,
+// with its dashboards and version.
+func (s *Service) Read(ctx context.Context, id string) (Snapshot, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	widgetID, err := parseID(id)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	queries := repo.New(s.db)
+	row, err := queries.GetWidget(ctx, repo.GetWidgetParams{ProjectID: *authCtx.ProjectID, ID: widgetID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Snapshot{}, oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return Snapshot{}, oops.E(oops.CodeUnexpected, err, "get widget").LogError(ctx, s.logger)
+	}
+	dashboards, err := s.usage(ctx, queries, *authCtx.ProjectID, widgetID)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return Snapshot{Widget: s.view(ctx, row, s.now(), dashboards), Version: Version(row)}, nil
+}
+
+// ReadAll lists the request project's widgets, most recently updated first,
+// each validated as it is read, with its dashboards and version.
+func (s *Service) ReadAll(ctx context.Context) ([]Snapshot, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+
+	queries := repo.New(s.db)
+	rows, err := queries.ListWidgets(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list widgets").LogError(ctx, s.logger)
+	}
+	placed, err := queries.ListWidgetDashboards(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list widget dashboards").LogError(ctx, s.logger)
+	}
+	byWidget := map[uuid.UUID][]*gen.WidgetDashboard{}
+	for _, row := range placed {
+		byWidget[row.WidgetID] = append(byWidget[row.WidgetID], &gen.WidgetDashboard{ID: row.DashboardID.String(), Name: row.DashboardName})
+	}
+
+	now := s.now()
+	out := make([]Snapshot, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, Snapshot{Widget: s.view(ctx, row, now, byWidget[row.ID]), Version: Version(row)})
+	}
+	return out, nil
+}
+
+// Check validates a widget as a save would, without writing it: the query
+// against the catalog and the visualization against the query.
+func (s *Service) Check(ctx context.Context, input Input) error {
+	if _, err := s.authorize(ctx, authz.ScopeProjectRead); err != nil {
+		return err
+	}
+	_, _, err := s.checkWidget(ctx, input.Dataset, input.Query, input.Visualization)
+	return err
+}
+
+// CreateInTx saves a new widget and audits it inside the caller's
+// transaction, after validating it as CreateWidget does.
+func (s *Service) CreateInTx(ctx context.Context, tx pgx.Tx, input Input) (Snapshot, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	query, visualization, err := s.checkWidget(ctx, input.Dataset, input.Query, input.Visualization)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	return s.insert(ctx, tx, authCtx, repo.CreateWidgetParams{
+		ProjectID:       *authCtx.ProjectID,
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
+		Name:            input.Name,
+		Description:     conv.PtrToPGTextEmpty(input.Description),
+		Dataset:         input.Dataset,
+		Query:           query,
+		Visualization:   visualization,
+	}, nil)
+}
+
+// DuplicateInTx copies a widget into a new one the caller owns, inside the
+// caller's transaction. A non-empty expectedVersion refuses the copy when the
+// source changed since it was read. The source is locked so it cannot change
+// between that check and the copy.
+func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, id string, expectedVersion string) (Snapshot, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	widgetID, err := parseID(id)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	source, err := s.lockWidget(ctx, repo.New(tx), *authCtx.ProjectID, widgetID, expectedVersion)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	reason, err := s.problem(ctx, source.Dataset, source.Query, source.Visualization)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if reason != "" {
+		return Snapshot{}, oops.E(oops.CodeBadRequest, nil, "widget cannot be duplicated until it is fixed: %s", reason)
+	}
+
+	sourceURN := urn.NewWidget(source.ID)
+	return s.insert(ctx, tx, authCtx, repo.CreateWidgetParams{
+		ProjectID:       *authCtx.ProjectID,
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		CreatedByUserID: conv.ToPGTextEmpty(authCtx.UserID),
+		Name:            copyName(source.Name),
+		Description:     source.Description,
+		Dataset:         source.Dataset,
+		Query:           source.Query,
+		Visualization:   source.Visualization,
+	}, &sourceURN)
+}
+
+// insert stores a new widget and audits it in the caller's transaction.
+func (s *Service) insert(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, params repo.CreateWidgetParams, duplicatedFrom *urn.Widget) (Snapshot, error) {
+	if authCtx.UserID == "" {
+		return Snapshot{}, oops.E(oops.CodeUnauthorized, nil, "saving a widget requires a user identity")
+	}
+
+	row, err := repo.New(tx).CreateWidget(ctx, params)
+	if err != nil {
+		return Snapshot{}, oops.E(oops.CodeUnexpected, err, "create widget").LogError(ctx, s.logger)
+	}
+
+	view := mv.BuildWidgetView(row, "", nil)
+	if err := s.audit.LogWidgetCreate(ctx, tx, audit.LogWidgetCreateEvent{WidgetEventBase: s.auditBase(authCtx, row), Snapshot: view, DuplicatedFrom: duplicatedFrom}); err != nil {
+		return Snapshot{}, oops.E(oops.CodeUnexpected, err, "audit widget creation").LogError(ctx, s.logger)
+	}
+	return Snapshot{Widget: view, Version: Version(row)}, nil
+}
+
+// UpdateInTx replaces a widget's name, description, dataset, query and
+// visualization inside the caller's transaction. Its creator can always
+// update it; updating someone else's needs project write access. A non-empty
+// expectedVersion refuses the update when the widget changed since it was
+// read.
+func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input Input, expectedVersion string) (Snapshot, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	widgetID, err := parseID(id)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	query, visualization, err := s.checkWidget(ctx, input.Dataset, input.Query, input.Visualization)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	queries := repo.New(tx)
+	before, err := s.lockWidget(ctx, queries, *authCtx.ProjectID, widgetID, expectedVersion)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if err := s.requireOwnerOrWrite(ctx, authCtx, before); err != nil {
+		return Snapshot{}, err
+	}
+
+	row, err := queries.UpdateWidget(ctx, repo.UpdateWidgetParams{
+		Name:          input.Name,
+		Description:   conv.PtrToPGTextEmpty(input.Description),
+		Dataset:       input.Dataset,
+		Query:         query,
+		Visualization: visualization,
+		ProjectID:     *authCtx.ProjectID,
+		ID:            widgetID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Snapshot{}, oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return Snapshot{}, oops.E(oops.CodeUnexpected, err, "update widget").LogError(ctx, s.logger)
+	}
+
+	// The edit reaches every dashboard the widget is on; the view says which.
+	dashboards, err := s.usage(ctx, queries, *authCtx.ProjectID, widgetID)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	view := mv.BuildWidgetView(row, "", dashboards)
+	if err := s.audit.LogWidgetUpdate(ctx, tx, audit.LogWidgetUpdateEvent{WidgetEventBase: s.auditBase(authCtx, row), Before: s.view(ctx, before, s.now(), dashboards), After: view}); err != nil {
+		return Snapshot{}, oops.E(oops.CodeUnexpected, err, "audit widget update").LogError(ctx, s.logger)
+	}
+	return Snapshot{Widget: view, Version: Version(row)}, nil
+}
+
+// DeleteInTx soft-deletes a widget inside the caller's transaction and
+// returns the dashboards it was removed from. Its creator can always delete
+// it; deleting someone else's needs project write access. A non-empty
+// expectedVersion refuses the delete when the widget changed since it was
+// read.
+func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, id string, expectedVersion string) ([]*gen.WidgetDashboard, error) {
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return nil, err
+	}
+	widgetID, err := parseID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	queries := repo.New(tx)
+	existing, err := s.lockWidget(ctx, queries, *authCtx.ProjectID, widgetID, expectedVersion)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireOwnerOrWrite(ctx, authCtx, existing); err != nil {
+		return nil, err
+	}
+
+	// The widget comes off every dashboard it was on; the dashboards stay,
+	// and each is touched and audited as a layout change, so its history
+	// says why a card went.
+	affected, err := queries.ListDashboardsForWidget(ctx, repo.ListDashboardsForWidgetParams{ProjectID: *authCtx.ProjectID, WidgetID: widgetID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list widget's dashboards").LogError(ctx, s.logger)
+	}
+	dashboards := dashboardsrepo.New(tx)
+	before := make(map[uuid.UUID][]dashboardsrepo.DashboardWidget, len(affected))
+	for _, dashboard := range affected {
+		cards, err := dashboards.ListPlacements(ctx, dashboardsrepo.ListPlacementsParams{ProjectID: *authCtx.ProjectID, DashboardID: dashboard.DashboardID})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list dashboard cards").LogError(ctx, s.logger)
+		}
+		before[dashboard.DashboardID] = cards
+	}
+	if err := queries.DeleteWidgetPlacements(ctx, repo.DeleteWidgetPlacementsParams{ProjectID: *authCtx.ProjectID, WidgetID: widgetID}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "remove widget from dashboards").LogError(ctx, s.logger)
+	}
+	removedFrom := make([]urn.Dashboard, 0, len(affected))
+	for _, dashboard := range affected {
+		after, err := dashboards.ListPlacements(ctx, dashboardsrepo.ListPlacementsParams{ProjectID: *authCtx.ProjectID, DashboardID: dashboard.DashboardID})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list dashboard cards").LogError(ctx, s.logger)
+		}
+		if _, err := dashboards.TouchDashboard(ctx, dashboardsrepo.TouchDashboardParams{ProjectID: *authCtx.ProjectID, ID: dashboard.DashboardID}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "touch dashboard").LogError(ctx, s.logger)
+		}
+		dashboardURN := urn.NewDashboard(dashboard.DashboardID)
+		if err := s.audit.LogDashboardLayout(ctx, tx, audit.LogDashboardLayoutEvent{
+			DashboardEventBase: audit.DashboardEventBase{
+				OrganizationID:   authCtx.ActiveOrganizationID,
+				ProjectID:        *authCtx.ProjectID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+				ActorDisplayName: authCtx.Email,
+				DashboardURN:     dashboardURN,
+				Name:             dashboard.DashboardName,
+			},
+			Before: mv.BuildDashboardPlacements(before[dashboard.DashboardID]),
+			After:  mv.BuildDashboardPlacements(after),
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "audit dashboard layout").LogError(ctx, s.logger)
+		}
+		removedFrom = append(removedFrom, dashboardURN)
+	}
+	row, err := queries.DeleteWidget(ctx, repo.DeleteWidgetParams{ProjectID: *authCtx.ProjectID, ID: widgetID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "delete widget").LogError(ctx, s.logger)
+	}
+	if err := s.audit.LogWidgetDelete(ctx, tx, audit.LogWidgetDeleteEvent{WidgetEventBase: s.auditBase(authCtx, row), RemovedFrom: removedFrom}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "audit widget deletion").LogError(ctx, s.logger)
+	}
+	return dashboardsOf(affected), nil
+}
+
+// lockWidget loads a widget for update, holding its row lock for the rest of
+// the transaction, and refuses it as a conflict when expectedVersion is set
+// and the widget has moved on from it.
+func (s *Service) lockWidget(ctx context.Context, queries *repo.Queries, projectID, widgetID uuid.UUID, expectedVersion string) (repo.Widget, error) {
+	row, err := queries.GetWidgetForUpdate(ctx, repo.GetWidgetForUpdateParams{ProjectID: projectID, ID: widgetID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return repo.Widget{}, oops.E(oops.CodeNotFound, err, "widget not found")
+		}
+		return repo.Widget{}, oops.E(oops.CodeUnexpected, err, "load widget").LogError(ctx, s.logger)
+	}
+	if expectedVersion != "" && Version(row) != expectedVersion {
+		return repo.Widget{}, oops.E(oops.CodeConflict, ErrVersionChanged, "widget changed since it was read")
+	}
+	return row, nil
+}
+
+// inTx runs a write in its own transaction, committing it when the write
+// succeeds.
+func inTx[T any](ctx context.Context, s *Service, label string, write func(pgx.Tx) (T, error)) (T, error) {
+	var zero T
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return zero, oops.E(oops.CodeUnexpected, err, "begin %s", label).LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	out, err := write(dbtx)
+	if err != nil {
+		return zero, err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return zero, oops.E(oops.CodeUnexpected, err, "commit %s", label).LogError(ctx, s.logger)
+	}
+	return out, nil
+}
+
+func parseID(id string) (uuid.UUID, error) {
+	parsed, err := uuid.Parse(id)
+	if err != nil {
+		return uuid.Nil, oops.E(oops.CodeBadRequest, err, "invalid widget id")
+	}
+	return parsed, nil
+}
