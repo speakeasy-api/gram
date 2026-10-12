@@ -43,6 +43,11 @@ const (
 	maxListedWidgets = 200
 )
 
+// widgetOwnerOrWriteRequired is the refusal when the widgets service's own
+// rule turns a change away: only a widget's creator, or someone with project
+// write access, may update or delete it.
+const widgetOwnerOrWriteRequired = "owner_or_write_required"
+
 // widgetOperation is the write a widget tool performs. It also names the
 // operation its receipts are stored under.
 type widgetOperation string
@@ -89,6 +94,7 @@ func (e *widgetToolError) Unwrap() error { return e.Cause }
 // and write goes through its authorization, validation and audit.
 type widgetManagement interface {
 	ReadAll(ctx context.Context) ([]widgets.Snapshot, error)
+	ReadForChange(ctx context.Context, id string) (widgets.Snapshot, error)
 	Read(ctx context.Context, id string) (widgets.Snapshot, error)
 	Check(ctx context.Context, input widgets.Input) error
 	CreateInTx(ctx context.Context, tx pgx.Tx, input widgets.Input) (widgets.Snapshot, error)
@@ -269,7 +275,7 @@ type widgetReceipt struct {
 
 // List returns the project's widgets, most recently updated first.
 func (s *WidgetService) List(ctx context.Context, principal Principal, input listWidgetsInput) (listWidgetsOutput, error) {
-	ctx, project, err := s.scope(ctx, principal, input.ProjectID, false)
+	ctx, project, err := s.scope(ctx, principal, input.ProjectID)
 	if err != nil {
 		return listWidgetsOutput{}, s.boundaryError(ctx, listWidgetsToolName, err)
 	}
@@ -289,7 +295,7 @@ func (s *WidgetService) Get(ctx context.Context, principal Principal, input getW
 	if err := validateWidgetID(input.WidgetID); err != nil {
 		return getWidgetOutput{}, err
 	}
-	ctx, project, err := s.scope(ctx, principal, input.ProjectID, false)
+	ctx, project, err := s.scope(ctx, principal, input.ProjectID)
 	if err != nil {
 		return getWidgetOutput{}, s.boundaryError(ctx, getWidgetToolName, err)
 	}
@@ -323,7 +329,7 @@ func (s *WidgetService) save(ctx context.Context, principal Principal, operation
 	if err != nil {
 		return widgetWriteOutput{}, err
 	}
-	ctx, project, err := s.scope(ctx, principal, input.ProjectID, true)
+	ctx, project, err := s.scope(ctx, principal, input.ProjectID)
 	if err != nil {
 		return widgetWriteOutput{}, err
 	}
@@ -337,7 +343,7 @@ func (s *WidgetService) save(ctx context.Context, principal Principal, operation
 		proposed := widgetDefinition{ID: input.WidgetID, Name: proposal.Name, Description: proposal.Description, Dataset: proposal.Dataset, Query: proposal.Query, Visualization: proposal.Visualization, CreatedByUserID: nil, CreatedAt: "", UpdatedAt: "", Version: "", InvalidReason: nil, Dashboards: []widgetDashboardRef{}}
 		out.Version = newWidgetVersion
 		if operation == operationUpdateWidget {
-			current, err := s.widgets.Read(ctx, input.WidgetID)
+			current, err := s.widgets.ReadForChange(ctx, input.WidgetID)
 			if err != nil {
 				return out, fmt.Errorf("read widget to update: %w", err)
 			}
@@ -399,7 +405,7 @@ func (s *WidgetService) target(ctx context.Context, principal Principal, operati
 	if err := validateWidgetID(input.WidgetID); err != nil {
 		return widgetWriteOutput{}, err
 	}
-	ctx, project, err := s.scope(ctx, principal, input.ProjectID, true)
+	ctx, project, err := s.scope(ctx, principal, input.ProjectID)
 	if err != nil {
 		return widgetWriteOutput{}, err
 	}
@@ -407,7 +413,12 @@ func (s *WidgetService) target(ctx context.Context, principal Principal, operati
 	token := widgetTokenProposal{WidgetID: input.WidgetID, Widget: nil}
 
 	if !input.Confirmed {
-		current, err := s.widgets.Read(ctx, input.WidgetID)
+		read := s.widgets.ReadForChange
+		if operation == operationDuplicateWidget {
+			// Any member may copy a widget; only changing one is restricted.
+			read = s.widgets.Read
+		}
+		current, err := read(ctx, input.WidgetID)
 		if err != nil {
 			return out, fmt.Errorf("read widget: %w", err)
 		}
@@ -460,11 +471,14 @@ func (s *WidgetService) finish(ctx context.Context, out widgetWriteOutput, recei
 	return out, nil
 }
 
-// scope admits a caller to one exact project: project:read, and project:write
-// for a write, checked before any row is looked up so a denied caller cannot
-// probe what exists; then the Explore flag. It returns a context whose auth
+// scope admits a caller to one exact project: project:read, checked before
+// any row is looked up so a denied caller cannot probe what exists; then the
+// Explore flag. Membership is all any widget tool needs here: whether the
+// caller may change a given widget — its creator, or anyone with
+// project:write — is the widgets service's rule, applied when it is read for
+// a preview and again under the row lock. It returns a context whose auth
 // names that project, which is what the widgets service authorizes against.
-func (s *WidgetService) scope(ctx context.Context, principal Principal, projectID string, write bool) (context.Context, ResolvedProject, error) {
+func (s *WidgetService) scope(ctx context.Context, principal Principal, projectID string) (context.Context, ResolvedProject, error) {
 	var project ResolvedProject
 	if !s.valid() {
 		return ctx, project, ErrUnavailable
@@ -482,11 +496,6 @@ func (s *WidgetService) scope(ctx context.Context, principal Principal, projectI
 
 	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
 		return ctx, project, ErrForbidden
-	}
-	if write {
-		if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
-			return ctx, project, ErrForbidden
-		}
 	}
 
 	project, err = s.projects.resolveInventoryProject(ctx, principal.OrganizationID, FindMCPInput{ProjectID: id.String(), ProjectSlug: "", Query: "", Cursor: "", Limit: 0, Readiness: ""})
@@ -631,7 +640,7 @@ func (s *WidgetService) boundaryError(ctx context.Context, tool string, err erro
 	case errors.Is(err, ErrWidgetsNotEnabled):
 		return &widgetToolError{Code: analyticsNotEnabledCode, Field: "", Message: "Widgets are not switched on for your organization yet. They arrive with Explore; ask your Speakeasy contact to turn it on.", Cause: err}
 	case errors.Is(err, ErrForbidden):
-		return &widgetToolError{Code: "permission_denied", Field: "", Message: "This needs read access to the project, and write access to change its widgets.", Cause: err}
+		return &widgetToolError{Code: "permission_denied", Field: "", Message: "This needs read access to the project.", Cause: err}
 	}
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shareable.Code {
@@ -644,7 +653,7 @@ func (s *WidgetService) boundaryError(ctx context.Context, tool string, err erro
 				return &widgetToolError{Code: "version_changed", Field: "expected_version", Message: "The widget changed after it was read, so nothing was changed. Read it again, show the user what it is now, and preview the change again.", Cause: err}
 			}
 		case oops.CodeForbidden:
-			return &widgetToolError{Code: "permission_denied", Field: "", Message: "Only the widget's creator, or someone with write access to the project, can change it.", Cause: err}
+			return &widgetToolError{Code: widgetOwnerOrWriteRequired, Field: "widget_id", Message: "Only the widget's creator, or someone with write access to the project, can change it. Duplicate it to change a copy instead.", Cause: err}
 		case oops.CodeUnauthorized:
 			return &widgetToolError{Code: "permission_denied", Field: "", Message: "Saving a widget needs a signed-in user; this connection has no user identity.", Cause: err}
 		case oops.CodeNotFound:

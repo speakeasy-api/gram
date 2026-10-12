@@ -18,7 +18,7 @@ const (
 	deleteWidgetToolName    = "delete_widget"
 
 	widgetWriteNote  = "Call with confirmed:false first: nothing changes, and the result shows what would change, the version to expect and a preview_token. Show that to the user, and only after they confirm call again with the identical input plus confirmed:true, expected_version, preview_token and a stable idempotency_key. If the widget changed after it was read the write is refused as version_changed and nothing changes; read it again and preview again. Retrying with the same idempotency_key returns the first result without writing twice. The result reports the committed widget from a fresh read; snapshot_scope verification_unavailable means the write committed but that read failed, so keep the retry inputs unchanged. "
-	widgetAccessNote = "Requires read and write access to the project, and Explore to be switched on for the organization. External users only."
+	widgetAccessNote = "Any member of the project can create and duplicate widgets; only a widget's creator, or someone with write access to the project, can update or delete it, and anyone else is refused as owner_or_write_required. Requires Explore to be switched on for the organization. External users only."
 )
 
 // registerWidgetTools registers the five widget tools. Without a live service
@@ -26,9 +26,10 @@ const (
 // catalogue does not change shape as a deployment composes the service.
 func registerWidgetTools(reg *Registrar, service *WidgetService) {
 	// External only: every write is audited under a user, and a managed
-	// assistant has no user identity to act as.
-	readMeta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}
-	writeMeta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectWrite}
+	// assistant has no user identity to act as. Every tool is discovered and
+	// admitted on project read, as the widgets service admits every member:
+	// its own creator-or-write rule decides who may update or delete a widget.
+	meta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}
 
 	list := &mcp.Tool{
 		Name:  listWidgetsToolName,
@@ -69,19 +70,19 @@ func registerWidgetTools(reg *Registrar, service *WidgetService) {
 	}
 
 	if !service.valid() {
-		addTool(reg, list, readMeta, unavailableWidgetHandler[listWidgetsInput, listWidgetsOutput]())
-		addTool(reg, get, readMeta, unavailableWidgetHandler[getWidgetInput, getWidgetOutput]())
-		addTool(reg, save, writeMeta, unavailableWidgetHandler[saveWidgetInput, widgetWriteOutput]())
-		addTool(reg, duplicate, writeMeta, unavailableWidgetHandler[widgetTargetInput, widgetWriteOutput]())
-		addTool(reg, remove, writeMeta, unavailableWidgetHandler[widgetTargetInput, widgetWriteOutput]())
+		addTool(reg, list, meta, unavailableWidgetHandler[listWidgetsInput, listWidgetsOutput]())
+		addTool(reg, get, meta, unavailableWidgetHandler[getWidgetInput, getWidgetOutput]())
+		addTool(reg, save, meta, unavailableWidgetHandler[saveWidgetInput, widgetWriteOutput]())
+		addTool(reg, duplicate, meta, unavailableWidgetHandler[widgetTargetInput, widgetWriteOutput]())
+		addTool(reg, remove, meta, unavailableWidgetHandler[widgetTargetInput, widgetWriteOutput]())
 		return
 	}
 
-	addTool(reg, list, readMeta, widgetHandler(service.List))
-	addTool(reg, get, readMeta, widgetHandler(service.Get))
-	addTool(reg, save, writeMeta, widgetHandler(service.Save))
-	addTool(reg, duplicate, writeMeta, widgetHandler(service.Duplicate))
-	addTool(reg, remove, writeMeta, widgetHandler(service.Delete))
+	addTool(reg, list, meta, widgetHandler(service.List))
+	addTool(reg, get, meta, widgetHandler(service.Get))
+	addTool(reg, save, meta, widgetHandler(service.Save))
+	addTool(reg, duplicate, meta, widgetHandler(service.Duplicate))
+	addTool(reg, remove, meta, widgetHandler(service.Delete))
 }
 
 func widgetHandler[In, Out any](call func(context.Context, Principal, In) (Out, error)) mcp.ToolHandlerFor[In, Out] {

@@ -91,6 +91,25 @@ func (s *Service) Read(ctx context.Context, id string) (Snapshot, error) {
 	return Snapshot{Widget: s.view(ctx, row, s.now(), dashboards), Version: Version(row)}, nil
 }
 
+// ReadForChange reads a widget the caller is about to update or delete, and
+// refuses, as UpdateInTx and DeleteInTx would, a caller who may not change
+// it: anyone but its creator without project write access. A preview uses
+// it so a change that would be refused is refused before it is shown.
+func (s *Service) ReadForChange(ctx context.Context, id string) (Snapshot, error) {
+	snapshot, err := s.Read(ctx, id)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if err := s.requireOwnerOrWrite(ctx, authCtx, snapshot.Widget.CreatedByUserID); err != nil {
+		return Snapshot{}, err
+	}
+	return snapshot, nil
+}
+
 // ReadAll lists the request project's widgets, most recently updated first,
 // each validated as it is read, with its dashboards and version.
 func (s *Service) ReadAll(ctx context.Context) ([]Snapshot, error) {
@@ -237,7 +256,7 @@ func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input In
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if err := s.requireOwnerOrWrite(ctx, authCtx, before); err != nil {
+	if err := s.requireOwnerOrWrite(ctx, authCtx, conv.FromPGText[string](before.CreatedByUserID)); err != nil {
 		return Snapshot{}, err
 	}
 
@@ -289,7 +308,7 @@ func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, id string, expected
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireOwnerOrWrite(ctx, authCtx, existing); err != nil {
+	if err := s.requireOwnerOrWrite(ctx, authCtx, conv.FromPGText[string](existing.CreatedByUserID)); err != nil {
 		return nil, err
 	}
 

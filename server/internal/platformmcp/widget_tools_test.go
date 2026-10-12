@@ -80,14 +80,6 @@ func widgetCallerContext(ctx context.Context, principal Principal, project Resol
 	return authz.GrantsToContext(ctx, grants)
 }
 
-// asOtherUser is a different member of the same organization, holding the
-// named scopes on the project.
-func (f *widgetToolsFixture) asOtherUser(ctx context.Context, scopes ...authz.Scope) context.Context {
-	other := f.principal
-	other.UserID = "user_" + uuid.NewString()
-	return widgetCallerContext(ctx, other, f.project, scopes...)
-}
-
 func (f *widgetToolsFixture) invoke(t *testing.T, ctx context.Context, tool string, arguments any) (any, error) {
 	t.Helper()
 	encoded, err := json.Marshal(arguments)
@@ -114,7 +106,7 @@ func (f *widgetToolsFixture) write(t *testing.T, ctx context.Context, tool strin
 // caller's auth with the project selected.
 func (f *widgetToolsFixture) scopedContext(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
-	scoped, _, err := f.service.scope(ctx, f.principal, f.project.ID.String(), false)
+	scoped, _, err := f.service.scope(ctx, f.principal, f.project.ID.String())
 	require.NoError(t, err)
 	return scoped
 }
@@ -178,10 +170,12 @@ func TestWidgetToolsDeclareTheirContract(t *testing.T) {
 		require.True(t, descriptor.Annotations.ReadOnlyHint, name)
 		require.Equal(t, discoveryProjectRead, descriptor.Meta.DiscoveryScopes, name)
 	}
+	// Writes are discovered on project read too: a member with read access
+	// may create and duplicate widgets, and change the ones they created.
 	for _, name := range []string{saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName} {
 		descriptor := descriptorByName(t, reg, name)
 		require.False(t, descriptor.Annotations.ReadOnlyHint, name)
-		require.Equal(t, discoveryProjectWrite, descriptor.Meta.DiscoveryScopes, name)
+		require.Equal(t, discoveryProjectRead, descriptor.Meta.DiscoveryScopes, name)
 	}
 	projectID, widgetID := uuid.NewString(), uuid.NewString()
 	target := map[string]any{"project_id": projectID, "widget_id": widgetID, "confirmed": false}
@@ -239,20 +233,38 @@ func TestWidgetToolsCheckProjectAccessBeforeAnyRead(t *testing.T) {
 		require.Equal(t, "permission_denied", requireWidgetRefusal(t, err).Code, call.tool)
 	}
 
-	readOnly := widgetCallerContext(ctx, f.principal, f.project, authz.ScopeProjectRead)
-	_, err := f.invoke(t, readOnly, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
-	require.NoError(t, err, "reading needs project read only")
-	for _, call := range []struct {
-		tool      string
-		arguments map[string]any
-	}{
-		{saveWidgetToolName, saveArguments(f.project.ID.String(), "New")},
-		{duplicateWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID, "confirmed": false}},
-		{deleteWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID, "confirmed": false}},
-	} {
-		_, err := f.invoke(t, readOnly, call.tool, call.arguments)
-		require.Equal(t, "permission_denied", requireWidgetRefusal(t, err).Code, call.tool)
+	// Writes are refused the same way when the caller cannot read the project.
+	for _, tool := range []string{saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName} {
+		arguments := map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID, "confirmed": false}
+		if tool == saveWidgetToolName {
+			arguments = saveArguments(f.project.ID.String(), "New")
+		}
+		_, err := f.invoke(t, noAccess, tool, arguments)
+		require.Equal(t, "permission_denied", requireWidgetRefusal(t, err).Code, tool)
 	}
+}
+
+func TestAMemberCreatesDuplicatesAndChangesTheirOwnWidgetsWithReadAccess(t *testing.T) {
+	t.Parallel()
+	ctx, f := newWidgetToolsFixture(t)
+	member := widgetCallerContext(ctx, f.principal, f.project, authz.ScopeProjectRead)
+
+	create := saveArguments(f.project.ID.String(), "Mine")
+	created := f.write(t, member, saveWidgetToolName, confirmed(create, f.write(t, member, saveWidgetToolName, create), "member-create"))
+	require.Equal(t, widgetSnapshotCurrent, created.SnapshotScope)
+
+	duplicate := map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID, "confirmed": false}
+	copied := f.write(t, member, duplicateWidgetToolName, confirmed(duplicate, f.write(t, member, duplicateWidgetToolName, duplicate), "member-duplicate"))
+	require.Equal(t, "Mine (copy)", copied.Widget.Name)
+
+	update := saveArguments(f.project.ID.String(), "Mine, renamed")
+	update["widget_id"] = created.Widget.ID
+	updated := f.write(t, member, saveWidgetToolName, confirmed(update, f.write(t, member, saveWidgetToolName, update), "member-update"))
+	require.Equal(t, "Mine, renamed", updated.Widget.Name)
+
+	remove := map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID, "confirmed": false}
+	deleted := f.write(t, member, deleteWidgetToolName, confirmed(remove, f.write(t, member, deleteWidgetToolName, remove), "member-delete"))
+	require.Equal(t, widgetSnapshotDeleted, deleted.SnapshotScope)
 }
 
 func TestSaveWidgetPreviewsThenCreatesOnceAndReplays(t *testing.T) {
@@ -391,26 +403,51 @@ func TestWidgetWritesRefuseANonCreatorWithoutProjectWrite(t *testing.T) {
 	t.Parallel()
 	ctx, f := newWidgetToolsFixture(t)
 	existing := f.createDirectly(t, ctx, "Someone else's")
-	member := f.asOtherUser(ctx, authz.ScopeProjectRead)
+	other := f.principal
+	other.UserID = "user_" + uuid.NewString()
+	member := widgetCallerContext(ctx, other, f.project, authz.ScopeProjectRead)
 
 	update := saveArguments(f.project.ID.String(), "Hijacked")
 	update["widget_id"] = existing.Widget.ID
-	for _, call := range []struct {
-		tool      string
+	remove := map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": false}
+
+	// The previews are refused by the widgets service's creator-or-write rule,
+	// not by project access: the member can read the project.
+	_, err := f.invoke(t, member, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
+	require.NoError(t, err)
+	for tool, arguments := range map[string]map[string]any{saveWidgetToolName: update, deleteWidgetToolName: remove} {
+		_, err := f.invoke(t, member, tool, arguments)
+		refusal := requireWidgetRefusal(t, err)
+		require.Equal(t, widgetOwnerOrWriteRequired, refusal.Code, tool)
+		require.Equal(t, "widget_id", refusal.Field, tool)
+	}
+
+	// A correctly signed confirmation still reaches the service's rule under
+	// the row lock, and is refused there.
+	project := ResolvedProject{ID: f.project.ID, Name: f.project.Name, Slug: f.project.Slug}
+	for tool, request := range map[string]struct {
 		arguments map[string]any
+		operation widgetOperation
+		proposal  widgetTokenProposal
 	}{
-		{saveWidgetToolName, update},
-		{deleteWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": false}},
-		// A confirmation is refused the same way, before its token is checked.
-		{deleteWidgetToolName, map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": true, "expected_version": existing.Version, "preview_token": "forged", "idempotency_key": "member-delete"}},
+		saveWidgetToolName:   {update, operationUpdateWidget, widgetTokenProposal{WidgetID: existing.Widget.ID, Widget: &widgets.Input{Name: "Hijacked", Description: nil, Dataset: "sessions", Query: widgetTestQuery(), Visualization: widgetTestChart()}}},
+		deleteWidgetToolName: {remove, operationDeleteWidget, widgetTokenProposal{WidgetID: existing.Widget.ID, Widget: nil}},
 	} {
-		_, err := f.invoke(t, member, call.tool, call.arguments)
-		require.Equal(t, "permission_denied", requireWidgetRefusal(t, err).Code, call.tool)
+		token, err := f.service.previewToken(other, project, request.operation, existing.Version, request.proposal)
+		require.NoError(t, err)
+		arguments := confirmed(request.arguments, widgetWriteOutput{Version: existing.Version, PreviewToken: token}, "member-"+tool)
+		_, err = f.invoke(t, member, tool, arguments)
+		require.Equal(t, widgetOwnerOrWriteRequired, requireWidgetRefusal(t, err).Code, tool)
 	}
 
 	current, err := f.management.Read(f.scopedContext(t, ctx), existing.Widget.ID)
 	require.NoError(t, err)
 	require.Equal(t, "Someone else's", current.Widget.Name)
+
+	// The same member may still copy it, and change the copy.
+	duplicate := map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": false}
+	copied := f.write(t, member, duplicateWidgetToolName, confirmed(duplicate, f.write(t, member, duplicateWidgetToolName, duplicate), "member-copy"))
+	require.Equal(t, &other.UserID, copied.Widget.CreatedByUserID)
 }
 
 func TestDeleteWidgetReportsTheDashboardsThatLostIt(t *testing.T) {

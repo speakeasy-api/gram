@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -217,8 +216,8 @@ func (s *Service) DeleteWidget(ctx context.Context, payload *gen.DeleteWidgetPay
 
 // requireOwnerOrWrite lets a widget's creator change it with membership
 // alone; anyone else needs project write access.
-func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalues.AuthContext, widget repo.Widget) error {
-	if creator := conv.FromPGText[string](widget.CreatedByUserID); creator != nil && *creator == authCtx.UserID {
+func (s *Service) requireOwnerOrWrite(ctx context.Context, authCtx *contextvalues.AuthContext, creator *string) error {
+	if creator != nil && *creator == authCtx.UserID {
 		return nil
 	}
 	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})

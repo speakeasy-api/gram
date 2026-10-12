@@ -243,8 +243,8 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"list_my_sessions", "continue_session",
 		// The analytics reads hold the caller to project:read in the handler.
 		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
-		// The widget tools hold the caller to project:read, and project:write
-		// for writes, in the handler, before the widgets service's own checks.
+		// The widget tools hold the caller to project:read in the handler; the
+		// widgets service's creator-or-write rule decides updates and deletes.
 		listWidgetsToolName, getWidgetToolName, saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName,
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)

@@ -52,6 +52,23 @@ func TestCheckEnforcesNameAndDescriptionLimits(t *testing.T) {
 	require.NoError(t, ti.service.Check(ctx, widgets.Input{Name: long[:200], Description: new(long[:2000]), Dataset: "sessions", Query: validQuery(), Visualization: barChart()}))
 }
 
+func TestReadForChangeAppliesTheCreatorOrWriteRule(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	member := asMember(t, ctx, ti, "user_member")
+	mine, err := ti.service.CreateWidget(member, createPayload("mine", validQuery(), barChart()))
+	require.NoError(t, err)
+	theirs, err := ti.service.CreateWidget(ctx, createPayload("theirs", validQuery(), barChart()))
+	require.NoError(t, err)
+
+	_, err = ti.service.ReadForChange(member, mine.ID)
+	require.NoError(t, err, "a creator may change their own widget with membership alone")
+	_, err = ti.service.ReadForChange(member, theirs.ID)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = ti.service.ReadForChange(ctx, mine.ID)
+	require.NoError(t, err, "project write access may change anyone's widget")
+}
+
 func TestUpdateInTxRefusesAStaleVersion(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
