@@ -710,6 +710,7 @@ SELECT
   r.id
   , r.target_kind
   , r.target_raw
+  , r.target_key
   , r.status
   , CASE
       WHEN r.status = 'superseded' THEN ''
@@ -751,6 +752,7 @@ type GetPlatformRequesterApprovalRequestRow struct {
 	ID               uuid.UUID
 	TargetKind       string
 	TargetRaw        string
+	TargetKey        string
 	Status           string
 	StandingDecision string
 	RequestedAt      pgtype.Timestamptz
@@ -773,6 +775,7 @@ func (q *Queries) GetPlatformRequesterApprovalRequest(ctx context.Context, arg G
 		&i.ID,
 		&i.TargetKind,
 		&i.TargetRaw,
+		&i.TargetKey,
 		&i.Status,
 		&i.StandingDecision,
 		&i.RequestedAt,

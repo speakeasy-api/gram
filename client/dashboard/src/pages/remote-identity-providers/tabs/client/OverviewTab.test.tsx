@@ -2,7 +2,13 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat } from "@gram/client/models/components/updateremotesessionclientform.js";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -188,7 +194,7 @@ function renderTab(
 }
 
 function field(label: string): HTMLElement {
-  return screen.getByText(label).parentElement!;
+  return screen.getByText(label).closest<HTMLElement>("[data-info-field]")!;
 }
 
 function lastSaved(): Record<string, unknown> {
@@ -223,25 +229,32 @@ describe("client overview identity provider card", () => {
   it("shows the issuer's metadata and links to its page", () => {
     renderTab();
 
-    const link = screen.getByRole("link", { name: "Example IdP" });
+    const link = screen.getByRole("link", { name: "View identity provider" });
     expect(link.getAttribute("href")).toBe("/rip/issuer-1/overview");
-    expect(field("Issuer").textContent).toContain("https://idp.example.com");
-    expect(field("Authorization Endpoint").textContent).toContain(
+    expect(screen.getByText("Example IdP")).toBeTruthy();
+    expect(
+      screen.getAllByText("https://idp.example.com").length,
+    ).toBeGreaterThan(0);
+    expect(field("Authorization endpoint").textContent).toContain(
       "https://idp.example.com/authorize",
     );
-    expect(field("Token Endpoint").textContent).toContain(
+    expect(field("Token endpoint").textContent).toContain(
       "https://idp.example.com/token",
     );
-    expect(field("Registration Endpoint").textContent).toContain(
+    expect(field("Registration endpoint").textContent).toContain(
       "https://idp.example.com/register",
     );
-    expect(field("Registration Methods").textContent).toContain(
+    expect(field("Registration methods").textContent).toContain(
       "Dynamic client registration, Client ID metadata document",
     );
+    expect(field("Token endpoint").textContent).toContain(
+      "client_secret_basicnone",
+    );
     expect(
-      field("Token Endpoint Authentication Methods").textContent,
-    ).toContain("client_secret_basic, none");
-    expect(field("Scopes Supported").textContent).toContain("openid, profile");
+      within(field("Scopes supported"))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["openid", "profile"]);
   });
 
   it("reads none advertised when the issuer offers no registration", () => {
@@ -252,24 +265,30 @@ describe("client overview identity provider card", () => {
       }),
     });
 
-    expect(field("Registration Methods").textContent).toContain(
+    expect(field("Registration methods").textContent).toContain(
       "None advertised",
     );
-    expect(field("Registration Endpoint").textContent).toContain("—");
+    expect(field("Registration endpoint").textContent).toContain("—");
   });
 
   it("omits the card when the issuer failed to load", () => {
-    renderTab({ issuer: undefined });
+    const { container } = renderTab({ issuer: undefined });
 
-    expect(screen.queryByText("Identity Provider")).toBeNull();
+    expect(screen.queryByText("View identity provider")).toBeNull();
+    expect(container.querySelector(".skeleton")).toBeNull();
     expect(screen.getByText("Client")).toBeTruthy();
   });
 
   it("keeps the card while the issuer loads", () => {
-    renderTab({ issuer: undefined, isIssuerLoading: true });
+    const { container } = renderTab({
+      issuer: undefined,
+      isIssuerLoading: true,
+    });
 
-    expect(screen.getByText("Identity Provider")).toBeTruthy();
-    expect(screen.queryByText("Issuer")).toBeNull();
+    // The card holds its place with a skeleton until the issuer arrives.
+    expect(screen.queryByText("View identity provider")).toBeNull();
+    expect(container.querySelector(".skeleton")).not.toBeNull();
+    expect(screen.getByText("Client")).toBeTruthy();
   });
 });
 
@@ -366,7 +385,7 @@ describe("client overview read-only access", () => {
     auth.isOrgAdmin = false;
     renderTab();
 
-    expect(screen.queryByLabelText("Rotate Client Secret")).toBeNull();
+    expect(screen.queryByLabelText("Rotate client secret")).toBeNull();
     expect(screen.queryByText(/encrypted at rest/)).toBeNull();
   });
 
@@ -450,7 +469,7 @@ describe("client overview settings", () => {
   it("hides secret rotation when private_key_jwt is selected", () => {
     renderTab({ client: client(AuthMethod.PrivateKeyJwt) });
 
-    expect(screen.queryByText("Rotate Client Secret")).toBeNull();
+    expect(screen.queryByText("Rotate client secret")).toBeNull();
     expect(
       screen.getByText(/existing client secret is retained but not used/),
     ).toBeTruthy();
@@ -459,7 +478,7 @@ describe("client overview settings", () => {
   it("sends a new client secret", () => {
     renderTab();
 
-    fireEvent.change(screen.getByLabelText("Rotate Client Secret"), {
+    fireEvent.change(screen.getByLabelText("Rotate client secret"), {
       target: { value: "new-secret" },
     });
     save();
@@ -470,7 +489,7 @@ describe("client overview settings", () => {
   it("clears and omits an unsaved secret after switching to private_key_jwt", () => {
     renderTab();
 
-    fireEvent.change(screen.getByLabelText("Rotate Client Secret"), {
+    fireEvent.change(screen.getByLabelText("Rotate client secret"), {
       target: { value: "staged-secret" },
     });
     fireEvent.change(
@@ -478,7 +497,7 @@ describe("client overview settings", () => {
       { target: { value: AuthMethod.PrivateKeyJwt } },
     );
 
-    expect(screen.queryByText("Rotate Client Secret")).toBeNull();
+    expect(screen.queryByText("Rotate client secret")).toBeNull();
     save();
     expect(lastSaved()).toEqual(
       expect.objectContaining({
@@ -494,7 +513,7 @@ describe("client overview settings", () => {
       { target: { value: AuthMethod.ClientSecretBasic } },
     );
     expect(
-      (screen.getByLabelText("Rotate Client Secret") as HTMLInputElement).value,
+      (screen.getByLabelText("Rotate client secret") as HTMLInputElement).value,
     ).toBe("");
   });
 

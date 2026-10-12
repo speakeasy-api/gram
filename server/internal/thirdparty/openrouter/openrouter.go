@@ -147,6 +147,7 @@ var allowList = map[string]bool{
 	"anthropic/claude-fable-5.1":    true,
 	"anthropic/claude-opus-5":       true,
 	"anthropic/claude-fable-5":      true,
+	"anthropic/claude-sonnet-5.5":   true,
 	"anthropic/claude-sonnet-5":     true,
 	"anthropic/claude-opus-4.8":     true,
 	"anthropic/claude-opus-4.7":     true,

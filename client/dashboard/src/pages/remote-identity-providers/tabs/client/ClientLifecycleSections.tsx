@@ -54,7 +54,7 @@ export function ClientLifecycleSections({
       </Card>
 
       <Card className="border-destructive/30">
-        <Card.Header className="text-destructive">Danger Zone</Card.Header>
+        <Card.Header className="text-destructive">Danger zone</Card.Header>
         <Card.Content>
           <div className="flex flex-col gap-3">
             <Text small muted>

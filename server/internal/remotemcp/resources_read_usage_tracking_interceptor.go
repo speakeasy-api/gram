@@ -29,8 +29,9 @@ import (
 // treated as a no-op and logged so operators can spot misconfiguration
 // without taking down resource reads.
 type ResourcesReadUsageTrackingInterceptor struct {
-	tracker billing.Tracker
-	logger  *slog.Logger
+	mcpServerID string
+	tracker     billing.Tracker
+	logger      *slog.Logger
 }
 
 var _ proxy.ResourcesReadResponseInterceptor = (*ResourcesReadUsageTrackingInterceptor)(nil)
@@ -39,9 +40,17 @@ var _ proxy.ResourcesReadResponseInterceptor = (*ResourcesReadUsageTrackingInter
 // the given billing tracker. The same instance can be reused across requests.
 func NewResourcesReadUsageTrackingInterceptor(tracker billing.Tracker, logger *slog.Logger) *ResourcesReadUsageTrackingInterceptor {
 	return &ResourcesReadUsageTrackingInterceptor{
-		tracker: tracker,
-		logger:  logger,
+		mcpServerID: "",
+		tracker:     tracker,
+		logger:      logger,
 	}
+}
+
+// WithMCPServerID returns a per-target copy, preserving isolation between proxies.
+func (i *ResourcesReadUsageTrackingInterceptor) WithMCPServerID(serverID string) *ResourcesReadUsageTrackingInterceptor {
+	clone := *i
+	clone.mcpServerID = serverID
+	return &clone
 }
 
 // Name implements [proxy.ResourcesReadResponseInterceptor].
@@ -113,6 +122,8 @@ func (i *ResourcesReadUsageTrackingInterceptor) InterceptResourcesReadResponse(c
 		ResponseStatusCode:    statusCode,
 		ToolsetID:             nil,
 		MCPSessionID:          sessionID,
+		MCPServerID:           conv.PtrEmpty(i.mcpServerID),
+		MCPEndpointID:         nil,
 		MetaMCPServerID:       nil,
 		FunctionCPUUsage:      nil,
 		FunctionMemUsage:      nil,

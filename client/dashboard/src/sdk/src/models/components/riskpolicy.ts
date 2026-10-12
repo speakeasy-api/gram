@@ -122,10 +122,6 @@ export type RiskPolicy = {
    */
   name: string;
   /**
-   * Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).
-   */
-  pendingMessages?: number | undefined;
-  /**
    * Policy type: standard (regex/presidio/custom detection) or prompt_based (LLM-judge).
    */
   policyType: RiskPolicyPolicyType;
@@ -161,10 +157,6 @@ export type RiskPolicy = {
    * Detection sources enabled for this policy.
    */
   sources: Array<string>;
-  /**
-   * Total number of messages in the project. Populated on single-policy reads; omitted from list responses.
-   */
-  totalMessages?: number | undefined;
   /**
    * When the policy was last updated.
    */
@@ -223,7 +215,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
       mcp_scope: z.optional(RiskMCPScope$inboundSchema),
       model_config: z.optional(RiskPolicyModelConfig$inboundSchema),
       name: z.string(),
-      pending_messages: z.optional(z.int()),
       policy_type: z._default(RiskPolicyPolicyType$inboundSchema, "standard"),
       presidio_entities: z.optional(z.array(z.string())),
       presidio_score_threshold: z.optional(z.number()),
@@ -235,7 +226,6 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         RiskPolicyShadowMcpDisposition$inboundSchema,
       ),
       sources: z.array(z.string()),
-      total_messages: z.optional(z.int()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -255,14 +245,12 @@ export const RiskPolicy$inboundSchema: z.ZodMiniType<RiskPolicy, unknown> = z
         "disabled_rules": "disabledRules",
         "mcp_scope": "mcpScope",
         "model_config": "modelConfig",
-        "pending_messages": "pendingMessages",
         "policy_type": "policyType",
         "presidio_entities": "presidioEntities",
         "presidio_score_threshold": "presidioScoreThreshold",
         "project_id": "projectId",
         "prompt_injection_rules": "promptInjectionRules",
         "shadow_mcp_disposition": "shadowMcpDisposition",
-        "total_messages": "totalMessages",
         "updated_at": "updatedAt",
         "user_message": "userMessage",
       });

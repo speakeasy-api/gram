@@ -446,7 +446,7 @@ export function SettingsTab({
       </div>
 
       <div className="border-destructive/30 flex flex-col gap-2 border p-4">
-        <Text className="font-medium">Danger Zone</Text>
+        <Text className="font-medium">Danger zone</Text>
         <Text small muted>
           Deleting this provider is permanent. All clients must be deleted
           first.

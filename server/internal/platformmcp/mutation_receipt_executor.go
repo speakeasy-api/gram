@@ -187,6 +187,21 @@ func replayableReceipt(row platformrepo.PlatformMcpOperationReceipt, inputHash s
 // access-affecting Platform MCP mutations: advisory lock, exact replay,
 // pending receipt, domain+audit callback, result persistence, and one commit.
 func executeMutationReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T]) (OperationReceipt, error) {
+	return executeReceipt(ctx, execution, nil)
+}
+
+// executeSingleUseMutationReceipt is executeMutationReceipt for an input that
+// may commit once, such as a preview token: the first idempotency key to
+// commit InputHash holds it, still replaying, and any other key gets used's
+// refusal.
+func executeSingleUseMutationReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T], used func() error) (OperationReceipt, error) {
+	if used == nil {
+		return OperationReceipt{}, execution.Unavailable(errors.New("single-use mutation receipt refusal is missing"))
+	}
+	return executeReceipt(ctx, execution, used)
+}
+
+func executeReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T], singleUse func() error) (OperationReceipt, error) {
 	if execution.DB == nil || execution.Now == nil || execution.Mutate == nil || execution.EncodeResult == nil || execution.ValidateReplay == nil || execution.Invalid == nil || execution.Conflict == nil || execution.Unavailable == nil || execution.Principal.OrganizationID == "" || execution.Principal.UserID == "" || execution.Project.ID == uuid.Nil || execution.Project.Slug == "" || execution.Operation == "" || execution.IdempotencyKey == "" || len(execution.IdempotencyKey) > 128 || execution.InputHash == "" || execution.Label == "" {
 		return OperationReceipt{}, execution.Unavailable(errors.New("invalid mutation receipt execution"))
 	}
@@ -226,6 +241,21 @@ func executeMutationReceipt[T any](ctx context.Context, execution mutationReceip
 		return operationReceiptFromRow(stored, true), nil
 	case !errors.Is(err, pgx.ErrNoRows):
 		return OperationReceipt{}, fmt.Errorf("load %s receipt: %w", execution.Label, err)
+	}
+	if singleUse != nil {
+		// Locked on the input, so two keys racing for one input serialize and
+		// the loser sees the winner's receipt.
+		inputLock := platformrepo.LockPlatformMCPOperationReceiptInputParams{OrganizationID: lock.OrganizationID, SubjectUrn: lock.SubjectUrn, ProjectID: lock.ProjectID, Operation: lock.Operation, InputHash: execution.InputHash}
+		if err := q.LockPlatformMCPOperationReceiptInput(ctx, inputLock); err != nil {
+			return OperationReceipt{}, fmt.Errorf("lock %s input: %w", execution.Label, err)
+		}
+		claimed, err := q.PlatformMCPOperationReceiptInputClaimed(ctx, platformrepo.PlatformMCPOperationReceiptInputClaimedParams{OrganizationID: execution.Principal.OrganizationID, ProjectID: execution.Project.ID, Operation: execution.Operation, UserID: conv.ToPGText(execution.Principal.UserID), InputHash: execution.InputHash, IdempotencyKey: execution.IdempotencyKey})
+		if err != nil {
+			return OperationReceipt{}, fmt.Errorf("check %s input: %w", execution.Label, err)
+		}
+		if claimed {
+			return OperationReceipt{}, singleUse()
+		}
 	}
 	created, err := q.CreatePlatformMCPOperationReceipt(ctx, platformrepo.CreatePlatformMCPOperationReceiptParams{
 		OrganizationID: execution.Principal.OrganizationID, ProjectID: execution.Project.ID, RegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ConnectionID: connectionID, ConnectionGeneration: generation,

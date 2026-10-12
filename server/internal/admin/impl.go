@@ -811,7 +811,7 @@ const (
 // The columns the ORDER BY ladder in AdminListOrganizations knows. The opaque
 // ids are absent on purpose: an order built from them tells an operator nothing.
 //
-// This map cannot widen what the ladder accepts. The ladder matches these seven
+// This map cannot widen what the ladder accepts. The ladder matches these eight
 // literals and nothing else. Unknown keys use the newest-first default below.
 // This is defense in depth, and the one
 // place a reader can see the accepted set without reading the SQL.
@@ -819,6 +819,7 @@ var listOrganizationsSortColumns = map[string]bool{
 	"name":          true,
 	"slug":          true,
 	"account_type":  true,
+	"account_tier":  true,
 	"member_count":  true,
 	"created_at":    true,
 	"disabled_at":   true,
