@@ -107,7 +107,7 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     **Key-authenticated** badge, `Vendor Sync (misconfigured)` a red **Cannot
     authenticate** one, and the remaining three carry none (a missing badge on
     the first two means the credential columns did not land). `Acme Legacy
-Connector` appears under **Inactive** with no connections. Its row menu's
+    Connector` appears under **Inactive** with no connections. Its row menu's
     **View registration** opens the detail sheet with an **Authentication**
     field. The organization **MCP Sessions** page shows the same five
     connections and the same two badges.
