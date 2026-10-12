@@ -2,6 +2,7 @@
 CREATE TABLE "internal_session_issuers" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
   "organization_id" text NOT NULL,
+  "issuer" text NOT NULL,
   "json_web_key_set_id" uuid NOT NULL,
   "disabled_at" timestamptz NULL,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -12,6 +13,8 @@ CREATE TABLE "internal_session_issuers" (
   CONSTRAINT "internal_session_issuers_key_set_tenant_fkey" FOREIGN KEY ("organization_id", "json_web_key_set_id") REFERENCES "json_web_key_sets" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION,
   CONSTRAINT "internal_session_issuers_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
+-- Create index "internal_session_issuers_issuer_key" to table: "internal_session_issuers"
+CREATE UNIQUE INDEX "internal_session_issuers_issuer_key" ON "internal_session_issuers" ("issuer") WHERE (deleted IS FALSE);
 -- Create index "internal_session_issuers_key_set_idx" to table: "internal_session_issuers"
 CREATE INDEX "internal_session_issuers_key_set_idx" ON "internal_session_issuers" ("organization_id", "json_web_key_set_id");
 -- Create index "internal_session_issuers_organization_id_id_key" to table: "internal_session_issuers"

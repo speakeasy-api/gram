@@ -2138,14 +2138,16 @@ ON json_web_key_sets (organization_id, id);
 -- organization's Enterprise-Managed Authorization (EMA) issuer: Speakeasy signs
 -- ID-JAGs (identity assertion JWT authorization grants) for the organization's
 -- members, and vendors whose admins trust the issuer URL redeem them for access
--- tokens. The issuer URL derives from the organization id, and signing keys
--- rotate inside the referenced key set.
+-- tokens. Signing keys rotate inside the referenced key set.
 -- Contrast: remote_session_issuers are external servers Speakeasy calls as a
 -- client; user_session_issuers are Speakeasy acting as an authorization server
 -- for MCP clients.
 CREATE TABLE IF NOT EXISTS internal_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
+  -- Exact issuer URL vendors trust, pinned at creation so a later change to
+  -- Speakeasy's public origin can't silently change it.
+  issuer TEXT NOT NULL,
   json_web_key_set_id uuid NOT NULL,
   -- Set while the issuer is turned off: discovery still resolves, signing refuses.
   disabled_at timestamptz,
@@ -2161,6 +2163,11 @@ CREATE TABLE IF NOT EXISTS internal_session_issuers (
 -- One live internal session issuer per organization.
 CREATE UNIQUE INDEX IF NOT EXISTS internal_session_issuers_organization_id_key
 ON internal_session_issuers (organization_id)
+WHERE deleted IS FALSE;
+
+-- An issuer URL identifies exactly one live issuer.
+CREATE UNIQUE INDEX IF NOT EXISTS internal_session_issuers_issuer_key
+ON internal_session_issuers (issuer)
 WHERE deleted IS FALSE;
 
 -- Composite FK target so vendor policy rows pin the issuer to one org.

@@ -1348,6 +1348,7 @@ type IdentityProviderConnection struct {
 type InternalSessionIssuer struct {
 	ID              uuid.UUID
 	OrganizationID  string
+	Issuer          string
 	JsonWebKeySetID uuid.UUID
 	DisabledAt      pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
