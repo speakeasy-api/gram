@@ -14,7 +14,7 @@ Declining adds `zero:tailscale` to the comma-separated `GRAM_ZERO_SKIP` setting.
 
 `GRAM_SSL_EXTRA_HOSTS` accepts comma-separated DNS names or bare IP addresses, not URLs or hostnames with ports. Invalid entries are rejected before TLS configuration or CA trust changes.
 
-Tailscale setup stages configuration edits and applies them with an atomic replacement after successful writes. Concurrent-edit detection is best-effort, not a shared writer lock: avoid editing `mise.local.toml` or running other configuration-writing mise commands while setup saves it.
+When you accept Tailscale configuration, setup stages the edits and applies them with an atomic replacement after successful writes. Concurrent-edit detection is best-effort, not a shared writer lock: avoid editing `mise.local.toml` or running other configuration-writing mise commands while setup saves it.
 
 ### Seeding the database
 
