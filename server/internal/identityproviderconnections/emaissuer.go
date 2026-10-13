@@ -329,26 +329,35 @@ func (p *Provisioner) CleanupEMAIssuerKMS(ctx context.Context, organizationID st
 			return 0, len(keys), err
 		}
 	}
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
-	defer cancel()
-	kms, err := p.openKMSClient(cleanupCtx)
+	openCtx, cancelOpen := context.WithTimeout(context.WithoutCancel(ctx), p.issuerKeyCleanupTimeout)
+	defer cancelOpen()
+	kms, err := p.openKMSClient(openCtx)
 	if err != nil {
 		return 0, len(keys), fmt.Errorf("open kms client for issuer cleanup: %w", err)
 	}
 	defer o11y.LogDefer(ctx, p.logger, "failed to close gcp kms client", func() error { return kms.Close() })
 	var errs []error
 	for _, key := range keys {
-		if err := p.disableEMAIssuerKey(cleanupCtx, kms, organizationID, key); err != nil {
+		// Each key gets its own deadline, so one slow key can't starve the rest.
+		if err := p.cleanupEMAIssuerKey(ctx, kms, organizationID, key); err != nil {
 			errs = append(errs, err)
-			continue
-		}
-		if err := jwksrepo.New(p.db).MarkJsonWebKeyKMSDisabled(cleanupCtx, jwksrepo.MarkJsonWebKeyKMSDisabledParams{ID: key.ID, OrganizationID: organizationID}); err != nil {
-			errs = append(errs, fmt.Errorf("record issuer kms cleanup: %w", err))
 			continue
 		}
 		cleaned++
 	}
 	return cleaned, len(keys) - cleaned, errors.Join(errs...)
+}
+
+func (p *Provisioner) cleanupEMAIssuerKey(ctx context.Context, kms gcpkms.ProvisioningClient, organizationID string, key jwksrepo.JsonWebKey) error {
+	keyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.issuerKeyCleanupTimeout)
+	defer cancel()
+	if err := p.disableEMAIssuerKey(keyCtx, kms, organizationID, key); err != nil {
+		return err
+	}
+	if err := jwksrepo.New(p.db).MarkJsonWebKeyKMSDisabled(keyCtx, jwksrepo.MarkJsonWebKeyKMSDisabledParams{ID: key.ID, OrganizationID: organizationID}); err != nil {
+		return fmt.Errorf("record issuer kms cleanup: %w", err)
+	}
+	return nil
 }
 
 func (p *Provisioner) disableEMAIssuerKey(ctx context.Context, kms gcpkms.ProvisioningClient, organizationID string, key jwksrepo.JsonWebKey) error {
@@ -360,9 +369,19 @@ func (p *Provisioner) disableEMAIssuerKey(ctx context.Context, kms gcpkms.Provis
 	if err := p.issuerDeployment().CheckKey(row.ResourceName); err != nil {
 		return fmt.Errorf("check revoked issuer key deployment: %w", err)
 	}
+	// Disabling the version and removing the grant are independent: either
+	// one alone stops the old signer, so neither waits on the other.
+	var errs []error
 	if err := kms.DisableKeyVersion(ctx, row.ResourceName); err != nil {
-		return fmt.Errorf("disable revoked issuer kms key version: %w", err)
+		errs = append(errs, fmt.Errorf("disable revoked issuer kms key version: %w", err))
 	}
+	if err := p.revokeEMAIssuerKeyGrant(ctx, kms, q, row); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+func (p *Provisioner) revokeEMAIssuerKeyGrant(ctx context.Context, kms gcpkms.ProvisioningClient, q *repo.Queries, row repo.GetManagedKeyResourceRow) error {
 	keyName, err := gcpkms.KeyNameForVersion(row.ResourceName)
 	if err != nil {
 		return fmt.Errorf("derive revoked issuer kms key name: %w", err)
@@ -443,6 +462,7 @@ pages:
 		organizations, err := q.ListOrganizationsWithPendingEMAIssuerWork(ctx, jwksrepo.ListOrganizationsWithPendingEMAIssuerWorkParams{AfterOrganizationID: after, OverlapSeconds: int32(internalsessionissuers.RetiredKeyOverlap / time.Second), MaxOrganizations: p.sweepPage})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("list organizations with issuer key work: %w", err))
+			progress.Next = after
 			break
 		}
 		for _, organizationID := range organizations {

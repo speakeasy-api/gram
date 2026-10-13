@@ -26,15 +26,20 @@ JOIN internal_session_issuers AS isi
 WHERE ec.id = $1::uuid
   AND ec.organization_id IS NULL
   AND ec.project_id IS NULL
-  AND k.kms_disabled_at IS NULL
+  AND (k.state <> 'revoked' OR ($2::boolean AND k.kms_disabled_at IS NULL))
 `
 
+type CountIssuerKeysGrantedByCredentialParams struct {
+	ExternalCredentialID  uuid.UUID
+	IncludePendingCleanup bool
+}
+
 // Issuer keys still holding a signer grant made with this platform
-// credential's service account: live keys and revoked keys whose KMS cleanup
-// is pending. Platform credentials sign for every organization, so the count
-// spans them.
-func (q *Queries) CountIssuerKeysGrantedByCredential(ctx context.Context, externalCredentialID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countIssuerKeysGrantedByCredential, externalCredentialID)
+// credential's service account: live keys and, with include_pending_cleanup,
+// revoked keys whose KMS cleanup is pending. Platform credentials sign for
+// every organization, so the count spans them.
+func (q *Queries) CountIssuerKeysGrantedByCredential(ctx context.Context, arg CountIssuerKeysGrantedByCredentialParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countIssuerKeysGrantedByCredential, arg.ExternalCredentialID, arg.IncludePendingCleanup)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

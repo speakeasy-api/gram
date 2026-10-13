@@ -82,7 +82,9 @@ func InternalSessionIssuerKeySweepWorkflow(ctx workflow.Context) (InternalSessio
 	for range internalSessionIssuerKeySweepMaxPages {
 		var progress internalsessionissuers.SweepProgress
 		if err := workflow.ExecuteActivity(ctx, InternalSessionIssuerKeySweepActivityName, after).Get(ctx, &progress); err != nil {
-			return InternalSessionIssuerKeySweepResult{ResumeAfter: after}, fmt.Errorf("sweep internal session issuer keys: %w", err)
+			// A failed run records no result, so the next run resumes from the
+			// last successful one.
+			return InternalSessionIssuerKeySweepResult{ResumeAfter: ""}, fmt.Errorf("sweep internal session issuer keys: %w", err)
 		}
 		if progress.Done {
 			return InternalSessionIssuerKeySweepResult{ResumeAfter: ""}, nil

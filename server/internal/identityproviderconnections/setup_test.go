@@ -102,6 +102,11 @@ type hookedKMSClients struct {
 	disableErr error
 	// createErr, when set, fails every CreateSigningKey.
 	createErr error
+	// stallDisable, when it names a version, holds its disable until the
+	// caller's deadline.
+	stallDisable string
+	// onDisable runs at the start of every DisableKeyVersion.
+	onDisable func()
 }
 
 func (c *hookedKMSClients) failDisable(err error) {
@@ -186,6 +191,16 @@ func (c *hookedProvisioningClient) CreateSigningKey(ctx context.Context, params 
 }
 
 func (c *hookedProvisioningClient) DisableKeyVersion(ctx context.Context, versionName string) error {
+	c.hooks.mu.Lock()
+	stall, onDisable := c.hooks.stallDisable, c.hooks.onDisable
+	c.hooks.mu.Unlock()
+	if onDisable != nil {
+		onDisable()
+	}
+	if stall == versionName {
+		<-ctx.Done()
+		return fmt.Errorf("disable stalled key version: %w", ctx.Err())
+	}
 	c.hooks.mu.Lock()
 	failure := c.hooks.disableErr
 	if failure == nil {

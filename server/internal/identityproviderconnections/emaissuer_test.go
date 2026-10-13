@@ -482,6 +482,9 @@ func TestEMAIssuer_SignEnforcesClaimInvariants(t *testing.T) {
 		"subdomain of verified domain": func(c *internalsessionissuers.Claims) {
 			c.Email = "user-1@mail.example.com"
 		},
+		"second @ ending on verified domain": func(c *internalsessionissuers.Claims) {
+			c.Email = "user-1@attacker.example@example.com"
+		},
 		"reserved tenant":         func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"tenant": "tenant-1"} },
 		"reserved email_verified": func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"email_verified": true} },
 		"reserved act":            func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"act": map[string]any{"sub": "x"}} },
@@ -582,6 +585,7 @@ func TestEMAIssuer_CompromisedRotationContainsEvenIfKMSCannotDisable(t *testing.
 	require.Error(t, err)
 	require.Zero(t, cleaned)
 	require.Equal(t, 1, pendingCleanup, "the cleanup stays recorded as pending")
+	require.Len(t, replacingKMS.RevokedGrants(), 1, "a failed disable still removes the signer grant")
 	require.Empty(t, publishedIssuerKids(t, ctx, f, f.ti.orgID), "a KMS failure never republishes the compromised key")
 	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
 	requireRefused(t, err, internalsessionissuers.StateKeyless)
@@ -732,6 +736,59 @@ func TestEMAIssuer_SweepPagesThroughEveryOrganization(t *testing.T) {
 	require.Equal(t, len(organizations)-1, rest.Swept, "resuming covers the remaining pages")
 	require.Zero(t, rest.Pending)
 	require.Len(t, kms.Disabled(), len(organizations))
+}
+
+func TestEMAIssuer_SweepKeepsItsCursorWhenListingFails(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	for _, orgID := range []string{f.ti.orgID, createOrganization(t, ctx, f.ti.conn)} {
+		provisioner, _ := f.provisioner(t)
+		_, err := provisioner.EnsureEMAIssuer(ctx, orgID)
+		require.NoError(t, err)
+		kid := activeIssuerKid(t, ctx, f, orgID)
+		_, err = f.lifecycle().Contain(ctx, orgID, &kid)
+		require.NoError(t, err)
+	}
+	sweeper, kms := f.provisioner(t)
+	sweeper.SetSweepPage(1)
+	sweepCtx, cancel := context.WithCancel(ctx)
+	// The first organization's cleanup detaches from the caller; the next
+	// page's listing then fails on the cancelled context.
+	kms.mu.Lock()
+	kms.onDisable = cancel
+	kms.mu.Unlock()
+
+	progress, err := sweeper.SweepEMAIssuerKeysFrom(sweepCtx, "", 0)
+	require.Error(t, err)
+	require.Equal(t, 1, progress.Swept)
+	require.False(t, progress.Done)
+	require.NotEmpty(t, progress.Next, "a failed listing keeps the cursor instead of restarting the traversal")
+}
+
+func TestEMAIssuer_CleanupGivesEachKeyItsOwnDeadline(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, kms := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	active := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	rotator, rotatingKMS := f.provisioner(t)
+	err = rotator.RotateEMAIssuer(ctx, f.ti.orgID, active)
+	var pending *internalsessionissuers.RotationPendingError
+	require.ErrorAs(t, err, &pending)
+	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, &active)
+	require.NoError(t, err)
+
+	cleaner, cleaningKMS := f.provisioner(t)
+	cleaner.SetIssuerKeyCleanupTimeout(500 * time.Millisecond)
+	cleaningKMS.mu.Lock()
+	cleaningKMS.stallDisable = kms.Created()[0]
+	cleaningKMS.mu.Unlock()
+	cleaned, stillPending, err := cleaner.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
+	require.Error(t, err)
+	require.Equal(t, 1, cleaned, "the healthy key after a stalled one is still cleaned up")
+	require.Equal(t, 1, stillPending)
+	require.Equal(t, rotatingKMS.Created(), cleaningKMS.Disabled())
 }
 
 func TestEMAIssuer_CleanupRevokesTheOriginallyGrantedAccountOrStaysPending(t *testing.T) {

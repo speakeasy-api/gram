@@ -119,6 +119,8 @@ type Provisioner struct {
 	emaTokenPurger EMAIssuerTokenPurger
 	// sweepPage is how many organizations one sweep query returns.
 	sweepPage int32
+	// issuerKeyCleanupTimeout bounds each revoked issuer key's KMS cleanup.
+	issuerKeyCleanupTimeout time.Duration
 }
 
 // NewProvisioner wires a provisioner over the shared identity resolver, KMS
@@ -150,6 +152,8 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.
 		cfg:            cfg,
 		emaTokenPurger: nil,
 		sweepPage:      sweepOrganizationPage,
+
+		issuerKeyCleanupTimeout: keyCleanupTimeout,
 	}, nil
 }
 
