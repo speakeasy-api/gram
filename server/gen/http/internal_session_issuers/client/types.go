@@ -38,9 +38,9 @@ type GetResponseBody struct {
 	// signing_paused: enabled, but Speakeasy has paused all signing. keyless:
 	// every key was revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// Whether deployment readiness, rollout and SSO entitlement currently allow
-	// enabling this issuer. The caller still needs organization administrator
-	// access.
+	// Whether deployment readiness, rollout and a verified email domain currently
+	// allow enabling this issuer. The caller still needs organization
+	// administrator access.
 	CanEnable *bool `form:"can_enable,omitempty" json:"can_enable,omitempty" xml:"can_enable,omitempty"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
@@ -64,9 +64,9 @@ type SetEnabledResponseBody struct {
 	// signing_paused: enabled, but Speakeasy has paused all signing. keyless:
 	// every key was revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// Whether deployment readiness, rollout and SSO entitlement currently allow
-	// enabling this issuer. The caller still needs organization administrator
-	// access.
+	// Whether deployment readiness, rollout and a verified email domain currently
+	// allow enabling this issuer. The caller still needs organization
+	// administrator access.
 	CanEnable *bool `form:"can_enable,omitempty" json:"can_enable,omitempty" xml:"can_enable,omitempty"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
@@ -90,9 +90,9 @@ type RotateResponseBody struct {
 	// signing_paused: enabled, but Speakeasy has paused all signing. keyless:
 	// every key was revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// Whether deployment readiness, rollout and SSO entitlement currently allow
-	// enabling this issuer. The caller still needs organization administrator
-	// access.
+	// Whether deployment readiness, rollout and a verified email domain currently
+	// allow enabling this issuer. The caller still needs organization
+	// administrator access.
 	CanEnable *bool `form:"can_enable,omitempty" json:"can_enable,omitempty" xml:"can_enable,omitempty"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`

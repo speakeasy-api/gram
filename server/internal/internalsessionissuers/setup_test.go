@@ -116,7 +116,7 @@ func newTestServiceWithMintStore(t *testing.T, provisioning, mintStoreDown bool)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	// Redis is shared across the package, so each test gets its own
-	// organization for the entitlement cache and the rate limiter.
+	// organization for the rate limiter.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	orgID := "org_" + uuid.NewString()

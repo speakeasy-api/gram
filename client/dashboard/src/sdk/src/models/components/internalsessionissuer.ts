@@ -34,7 +34,7 @@ export type InternalSessionIssuerState = ClosedEnum<
 
 export type InternalSessionIssuer = {
   /**
-   * Whether deployment readiness, rollout and SSO entitlement currently allow enabling this issuer. The caller still needs organization administrator access.
+   * Whether deployment readiness, rollout and a verified email domain currently allow enabling this issuer. The caller still needs organization administrator access.
    */
   canEnable: boolean;
   /**
