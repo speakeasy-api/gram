@@ -5175,6 +5175,21 @@ ORDER BY id;
 UPDATE trusted_issuer_sessions SET deleted_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id::text AND deleted IS FALSE;
 
+-- name: PlantSpeakeasyEMACredentialFixture :one
+-- TEST FIXTURE ONLY. A live Speakeasy slot for a provider switch, without the
+-- issuer, sign-in and grant rows a real Speakeasy publish references.
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
+  resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
+  ema_provider, access_token_encrypted, access_expires_at
+)
+VALUES (
+  @organization_id, @project_id, @user_session_issuer_id, @remote_session_issuer_id, @remote_session_client_id,
+  @resource, @subject_urn, 'binding', @binding_id, @binding_generation,
+  'speakeasy', 'encrypted-fixture', clock_timestamp() + interval '1 hour'
+)
+RETURNING id;
+
 -- name: ListEMACredentialsFixture :many
 -- TEST FIXTURE ONLY. Every credential slot in a project, live and retired.
 SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at

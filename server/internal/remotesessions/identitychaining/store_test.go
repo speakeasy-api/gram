@@ -568,3 +568,28 @@ func TestStore_SelectBindingRestrictedToTunnelIssuer(t *testing.T) {
 	require.Equal(t, success, outcome)
 	require.Equal(t, f.sel.bindingID, sel.bindingID)
 }
+
+func TestStore_SwitchingBackToExternalReplacesSpeakeasySlot(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	planted, err := repo.New(f.db).PlantSpeakeasyEMACredentialFixture(t.Context(), repo.PlantSpeakeasyEMACredentialFixtureParams{
+		OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true}, ProjectID: uuid.NullUUID{UUID: f.req.ProjectID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: f.req.UserSessionIssuerID, Valid: true}, RemoteSessionIssuerID: uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true},
+		RemoteSessionClientID: uuid.NullUUID{UUID: f.sel.clientID, Valid: true}, Resource: f.sel.resource, SubjectUrn: urn.NewUserSubject(f.req.UserID).String(),
+		BindingID: uuid.NullUUID{UUID: f.sel.bindingID, Valid: true}, BindingGeneration: pgtype.Int8{Int64: f.sel.generation, Valid: true},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("external-token")), "the legacy subject index must not reject the external publish")
+	var live []repo.ListEMACredentialsFixtureRow
+	for _, row := range f.credentials(t) {
+		if !row.Deleted {
+			live = append(live, row)
+		}
+	}
+	require.Len(t, live, 1)
+	require.Equal(t, planted, live[0].ID, "the external publish takes over the Speakeasy slot")
+	token, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
+	require.True(t, ok, "the slot now holds the external credential")
+	require.Equal(t, "external-token", token.Value())
+}
