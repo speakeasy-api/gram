@@ -344,6 +344,59 @@ test("completed setup refreshes newly introduced host dependencies", async (t) =
   assert.equal(f.read().NEW_HOST_URL, "https://{{env.GRAM_HOST}}/new");
 });
 
+test("completed setup refreshes drifted bind templates and is then idempotent", async (t) => {
+  const f = fixture(t);
+  await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
+  const template = "{{env.GRAM_BIND_IP}}:{{env.NEW_SERVER_PORT}}";
+  f.writeConfig("mise.toml", {
+    NEW_SERVER_PORT: "34567",
+    ...config,
+    GRAM_SERVER_ADDRESS: template,
+  });
+  const prompt = t.mock.fn(async () => true);
+  await setupTailscale({ root: f.root, env: f.env, prompt });
+  assert.equal(prompt.mock.callCount(), 1);
+  assert.equal(f.read().GRAM_SERVER_ADDRESS, template);
+  const resolved = JSON.parse(
+    execFileSync("mise", ["env", "--json"], {
+      cwd: f.root,
+      env: f.env,
+      encoding: "utf8",
+    }),
+  );
+  assert.equal(resolved.GRAM_SERVER_ADDRESS, `${ipv4}:34567`);
+  const before = f.raw();
+  await setupTailscale({ root: f.root, env: f.env, prompt });
+  assert.equal(prompt.mock.callCount(), 1);
+  assert.equal(f.raw(), before);
+});
+
+test("bind template drift preserves literal overrides without repeat prompts", async (t) => {
+  const f = fixture(t);
+  f.writeConfig("mise.local.toml", {
+    ...f.local,
+    GRAM_SERVER_ADDRESS: "192.0.2.10:23456",
+  });
+  await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
+  f.writeConfig("mise.toml", {
+    NEW_SERVER_PORT: "34567",
+    ...config,
+    GRAM_SERVER_ADDRESS: "{{env.GRAM_BIND_IP}}:{{env.NEW_SERVER_PORT}}",
+  });
+  const prompt = t.mock.fn(async () => true);
+  const before = f.raw();
+  await setupTailscale({ root: f.root, env: f.env, prompt });
+  assert.equal(prompt.mock.callCount(), 0);
+  assert.equal(f.raw(), before);
+  await setupTailscale({
+    root: f.root,
+    env: { ...f.env, usage_force: "true" },
+    prompt,
+  });
+  assert.equal(prompt.mock.callCount(), 1);
+  assert.equal(f.read().GRAM_SERVER_ADDRESS, "192.0.2.10:23456");
+});
+
 test("existing hostname-only setup prompts to switch loopback to the Tailnet", async (t) => {
   const f = fixture(t);
   f.writeConfig("mise.local.toml", {

@@ -227,7 +227,15 @@ export async function setupTailscale(
   const dependents = [
     ...dependentEnvVars(config.env, ["GRAM_HOST"]),
     ...dependentEnvVars(config.env, ["GRAM_BIND_IP"]).map(
-      ([key, value]): [string, string] => [key, local.env?.[key] ?? value],
+      ([key, value]): [string, string] => {
+        const saved = local.env?.[key];
+        // Templates follow the shared config; literal listener overrides are
+        // developer-owned and remain intact when setup is refreshed.
+        return [
+          key,
+          saved !== undefined && !saved.includes("{{") ? saved : value,
+        ];
+      },
     ),
   ];
   const savedHosts = new Set(commaList(local.env?.["GRAM_SSL_EXTRA_HOSTS"]));
