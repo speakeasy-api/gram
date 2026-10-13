@@ -3452,6 +3452,40 @@ type SpendRuleEvent struct {
 	CreatedAt      pgtype.Timestamptz
 }
 
+type SsoSignIn struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	UserID               string
+	WorkosSessionID      string
+	AuthenticationMethod string
+	AuthenticatedAt      pgtype.Timestamptz
+	RevokedAt            pgtype.Timestamptz
+	RevokeReason         pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type SsoSignInRevocationCutoff struct {
+	OrganizationID string
+	UserID         string
+	CutoffAt       pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type SsoSignInRevocationDelivery struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Kind           string
+	Target         string
+	EffectiveAt    pgtype.Timestamptz
+	Attempts       int32
+	LastError      pgtype.Text
+	DeliveredAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type StripeInvoice struct {
 	StripeInvoiceID      string
 	OrganizationID       pgtype.Text
@@ -4005,6 +4039,7 @@ type UserSession struct {
 	ToolSelection          []byte
 	LastUsedAt             pgtype.Timestamptz
 	Resource               pgtype.Text
+	SsoSignInID            uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

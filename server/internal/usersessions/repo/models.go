@@ -27,6 +27,7 @@ type UserSession struct {
 	ToolSelection          []byte
 	LastUsedAt             pgtype.Timestamptz
 	Resource               pgtype.Text
+	SsoSignInID            uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
