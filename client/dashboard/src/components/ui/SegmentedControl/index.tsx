@@ -26,6 +26,7 @@ export function SegmentedControl<T extends string>({
   disabled,
   className,
   ariaLabel,
+  busy,
   trailing,
 }: {
   /** The active segment; null leaves every segment inactive, for a choice
@@ -37,6 +38,9 @@ export function SegmentedControl<T extends string>({
   className?: string;
   /** Names the control as a group for assistive technology. */
   ariaLabel?: string;
+  /** Marks the group busy while a chosen value is still being saved, so
+   *  assistive technology knows why a press has no effect yet. */
+  busy?: boolean;
   // An extra control pinned inside the track after the options — for a set too
   // long to segment, where the tail lives behind an overflow menu. Style it with
   // SEGMENT_BASE + SEGMENT_INACTIVE so it reads as one of the segments.
@@ -46,6 +50,7 @@ export function SegmentedControl<T extends string>({
     <div
       role={ariaLabel ? "group" : undefined}
       aria-label={ariaLabel}
+      aria-busy={busy || undefined}
       className={cn(
         "border-border bg-card divide-border inline-flex h-10 shrink-0 items-center divide-x border",
         disabled && "cursor-not-allowed opacity-50",

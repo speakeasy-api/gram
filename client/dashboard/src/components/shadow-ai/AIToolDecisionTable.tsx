@@ -84,6 +84,7 @@ function AIToolDecisionControl({
     <div className="flex items-center gap-3">
       <SegmentedControl
         ariaLabel={`Access decision for ${detection.displayName}`}
+        busy={mutation.isPending}
         className="h-7"
         value={current === "unreviewed" ? null : current}
         onChange={record}

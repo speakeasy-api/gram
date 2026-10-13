@@ -98,6 +98,11 @@ describe("AIToolDecisionTable", () => {
     fireEvent.click(screen.getByText("Approve"));
 
     expect(mocks.mutate).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole("group", { name: "Access decision for Cursor" })
+        .getAttribute("aria-busy"),
+    ).toBe("true");
   });
 
   it("marks a tool with no decision as unreviewed beside the control", () => {
