@@ -338,5 +338,5 @@ func TestEvaluateDocumentChange_SharedSchemaRequiredFieldIsWarning(t *testing.T)
 
 	inputs := findChange(t, eval, "tool_inputs_changed")
 	require.Equal(t, openapi.EvaluationSeverityWarning, inputs.Severity)
-	require.Equal(t, []string{"pets_create_pet: body field `owner` has new required field `email`"}, inputs.Details)
+	require.Equal(t, []string{"pets_create_pet: body field `owner` now requires `email`"}, inputs.Details)
 }

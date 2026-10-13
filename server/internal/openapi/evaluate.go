@@ -886,12 +886,6 @@ type toolInputSchema struct {
 // inputObjectSchema is the subset of an object schema used to compare the
 // fields inside one input group.
 type inputObjectSchema struct {
-	// Ref points at a schema under $defs.
-	Ref string `json:"$ref"`
-
-	// Type is the JSON Schema type.
-	Type any `json:"type"`
-
 	// Properties holds the object's fields.
 	Properties map[string]json.RawMessage `json:"properties"`
 
@@ -946,8 +940,11 @@ func compareToolInputs(beforeRaw, afterRaw []byte) (warnings, info []string) {
 			warnings = append(warnings, "request body is now required")
 		}
 
-		bObj := resolveInputObject(b, before.Defs)
-		aObj := resolveInputObject(a, after.Defs)
+		// Inputs often point at shared schemas under $defs, so a change to a
+		// shared schema leaves the input itself untouched. Compare the
+		// schemas with every reference resolved.
+		bObj := parseInputObject(inlineDefs(b, before.Defs))
+		aObj := parseInputObject(inlineDefs(a, after.Defs))
 
 		for _, name := range slices.Sorted(maps.Keys(bObj.Properties)) {
 			if _, ok := aObj.Properties[name]; !ok {
@@ -956,15 +953,10 @@ func compareToolInputs(beforeRaw, afterRaw []byte) (warnings, info []string) {
 		}
 
 		for _, name := range slices.Sorted(maps.Keys(aObj.Properties)) {
-			bPropRaw, ok := bObj.Properties[name]
+			aProp := aObj.Properties[name]
+			bProp, ok := bObj.Properties[name]
 			requiredAfter := slices.Contains(aObj.Required, name)
 			requiredBefore := slices.Contains(bObj.Required, name)
-
-			// Properties often point at shared schemas under $defs, so a
-			// change to the shared schema leaves the property itself
-			// untouched. Compare the resolved schemas instead.
-			aProp := inlineDefs(aObj.Properties[name], after.Defs)
-			bProp := inlineDefs(bPropRaw, before.Defs)
 
 			switch {
 			case !ok && requiredAfter:
@@ -977,7 +969,7 @@ func compareToolInputs(beforeRaw, afterRaw []byte) (warnings, info []string) {
 				warnings = append(warnings, fmt.Sprintf("%s `%s` type %s → %s", label, name, schemaType(bProp), schemaType(aProp)))
 			default:
 				if fields := newRequiredFields(bProp, aProp); len(fields) > 0 {
-					warnings = append(warnings, fmt.Sprintf("%s `%s` has new required %s %s", label, name, pluralWord(len(fields), "field", "fields"), quoteAll(fields)))
+					warnings = append(warnings, fmt.Sprintf("%s `%s` now requires %s", label, name, quoteAll(fields)))
 				} else if !jsonEqual(bProp, aProp) {
 					info = append(info, fmt.Sprintf("%s `%s` schema changed", label, name))
 				}
@@ -992,19 +984,9 @@ func compareToolInputs(beforeRaw, afterRaw []byte) (warnings, info []string) {
 	return warnings, info
 }
 
-func resolveInputObject(raw json.RawMessage, defs map[string]json.RawMessage) inputObjectSchema {
+func parseInputObject(raw json.RawMessage) inputObjectSchema {
 	var obj inputObjectSchema
 	_ = json.Unmarshal(raw, &obj)
-
-	if ref, ok := strings.CutPrefix(obj.Ref, "#/$defs/"); ok {
-		if def, ok := defs[ref]; ok {
-			var resolved inputObjectSchema
-			if err := json.Unmarshal(def, &resolved); err == nil {
-				return resolved
-			}
-		}
-	}
-
 	return obj
 }
 
@@ -1080,13 +1062,6 @@ func quoteAll(names []string) string {
 		quoted[i] = "`" + n + "`"
 	}
 	return strings.Join(quoted, ", ")
-}
-
-func pluralWord(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 func schemaType(raw json.RawMessage) string {
