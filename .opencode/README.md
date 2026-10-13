@@ -19,7 +19,8 @@ After changing the variable, reload the plugin with
 When an enabled top-level session becomes idle (turn completion, interruption,
 or failure), it runs
 `mise run pause` in that session's directory. Child-agent completions and events
-from other locations are ignored. Overlapping pause requests are coalesced.
+from other locations are ignored. The event handler waits for the pause command
+to finish before processing the next event.
 
 The existing pause task stops this worktree's services and containers while
 preserving their data. Resume with `mise run wake` or by opening the dashboard.

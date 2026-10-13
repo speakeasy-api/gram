@@ -19,17 +19,14 @@ export default {
     }
 
     const controller = new AbortController();
-    let pausing = false;
 
     /** @param {Parameters<typeof ctx.session.get>[0]["sessionID"]} sessionID */
     async function pause(sessionID) {
-      if (pausing) return;
       try {
         const session = await ctx.session.get({ sessionID });
         // Child agents finish inside a parent's turn. Events are server-wide,
         // and a session may have moved since its idle event was emitted.
         if (
-          pausing ||
           controller.signal.aborted ||
           session.parentID ||
           session.location.directory !== ctx.location.directory
@@ -37,14 +34,9 @@ export default {
           return;
         }
 
-        pausing = true;
-        try {
-          await exec("mise", ["run", "pause"], {
-            cwd: session.location.directory,
-          });
-        } finally {
-          pausing = false;
-        }
+        await exec("mise", ["run", "pause"], {
+          cwd: session.location.directory,
+        });
       } catch (error) {
         console.error(
           "[speakeasy.pause-stack] Failed to pause the stack:",
@@ -63,8 +55,7 @@ export default {
           event.location?.directory === ctx.location.directory &&
           event.location?.workspaceID === ctx.location.workspaceID
         ) {
-          // Keep consuming events while the stack shuts down.
-          void pause(event.data.sessionID);
+          await pause(event.data.sessionID);
         }
       }
     })().catch((error) => {
