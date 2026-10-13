@@ -120452,7 +120452,7 @@ components:
                     format: date-time
                 use_authentication_host:
                     type: boolean
-                    description: Whether the issuer's authorization servers are announced on the deployment's authentication host rather than the MCP host.
+                    description: 'Whether the issuer opts in to announcing its authorization servers on the deployment''s authentication host rather than the MCP host. This is the stored setting: on a deployment without an authentication host it has no effect, and issuer_url shows the host actually used.'
             description: A user_session_issuer record.
             required:
                 - id

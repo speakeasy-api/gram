@@ -280,11 +280,14 @@ func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListToken
 	for _, row := range rows {
 		issuer := row.UserSessionIssuer
 		authorizationServer, err := s.sharedHosts.SharedAuthorizationServer(issuer)
-		if err != nil {
+		switch {
+		case errors.Is(err, authserver.ErrPinnedIssuerURLInvalid), errors.Is(err, authserver.ErrHostNotServed):
 			// The issuer's MCP servers fall back to per-endpoint authorization
 			// servers, so there is no shared token endpoint to point a platform at.
 			s.logger.WarnContext(ctx, "skip user session issuer without a served shared authorization server", attr.SlogError(err))
 			continue
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to build token endpoint").LogError(ctx, s.logger)
 		}
 		items = append(items, mv.BuildWorkloadTokenEndpointView(issuer, row.ProjectName.String, authorizationServer.IssuerURL, authorizationServer.TokenEndpoint, serverURL.Host))
 	}
