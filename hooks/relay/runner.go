@@ -156,12 +156,20 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 
 	c, ok := resolveAuth(r.cfg)
+	// A box refused since its last accepted token must not trust a cached
+	// bearer: ask for a fresh one, and stay closed unless the server accepts
+	// it. Otherwise a later outage would let a revoked box fail open.
+	rejectedBox := ok && c.Source == credToken && tokenRejected()
+	if rejectedBox {
+		argv, _ := tokenCommandArgv()
+		c, ok = resolveTokenAuth(r.cfg, argv, true)
+	}
 	if !ok && tokenCommandConfigured() {
 		if tokenRejected() {
 			// This box was definitively refused and has not been issued a token
 			// since: fail closed, and drop the event rather than spool it.
 			r.debugf("event=%s token-rejected", agenthooks.EventOf(typed).NativeName)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: tokenRejectedMessage}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
+			return tokenRejectedResult(), stateBroken
 		}
 		// The device agent could not produce a token. That is a missing
 		// verdict, not a missing credential: report it like an unreachable
@@ -224,18 +232,19 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		// A rejected token gets one fresh token and one retry. There is no
 		// key to fall back to: a token box authenticates as itself or not at
 		// all, so a second rejection stays a definitive, fail-closed 4xx.
-		argv, _ := tokenCommandArgv()
-		if fresh, ok := resolveTokenAuth(r.cfg, argv, true); ok {
-			finalCreds = fresh
-			res = r.send(ctx, fresh, payload, idemKey)
-			r.debugf("event=%s auth-retry=token status=%d cause=%s denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause, res.decision.denied())
-		}
-		if res.authRejected {
-			markTokenRejected()
-		}
+		res, finalCreds = recoverTokenRejection(r.cfg, c, res, func(fresh creds) ingestResult {
+			return r.send(ctx, fresh, payload, idemKey)
+		})
+		r.debugf("event=%s auth-retry=token status=%d cause=%s denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause, res.decision.denied())
 	}
 	if c.Source == credToken && res.accepted() {
 		clearTokenRejected()
+	}
+	if rejectedBox && !res.accepted() {
+		// Still refused, or no verdict: a refused box neither fails open nor
+		// keeps the event for replay until a token is accepted again.
+		r.debugf("event=%s token-rejected status=%d", agenthooks.EventOf(typed).NativeName, res.statusCode)
+		return tokenRejectedResult(), stateBroken
 	}
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
 		// A rejected personal cache is forgotten. When the published plugin has
@@ -266,7 +275,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// kept for replay, a healthy exchange flushes any backlog, and a
 	// definitive 4xx does neither — the server answered, and would reject a
 	// replay identically.
-	r.finishExchange(idemKey, payload, res)
+	r.finishExchange(idemKey, payload, res, tokenProjectOf(finalCreds))
 	if res.accepted() || res.unsent() {
 		commitPromptAttachmentHighWater(promptAttachmentAdvance)
 	}
@@ -283,8 +292,24 @@ func (r *Relay) tokenUnavailable(typed any) ingestResult {
 	payload := buildEnvelope(typed, hostname())
 	res := ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeCredential, causeDetail: "token command produced no usable token"}
 	r.debugf("event=%s token-unavailable", agenthooks.EventOf(typed).NativeName)
-	r.finishExchange(newIdempotencyToken(), payload, res)
+	// Bind the entry to the project the box last authenticated for, so a
+	// replay after the device is reassigned cannot land in another project.
+	st, _ := readTokenBox()
+	r.finishExchange(newIdempotencyToken(), payload, res, st.Project)
 	return res
+}
+
+func tokenRejectedResult() ingestResult {
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: tokenRejectedMessage}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}
+}
+
+// tokenProjectOf is the admission project a token credential is bound to, or
+// "" for key credentials.
+func tokenProjectOf(c creds) string {
+	if c.Source == credToken {
+		return c.Project
+	}
+	return ""
 }
 
 // send posts one envelope through the ingest client and mirrors any

@@ -80,12 +80,19 @@ var deviceIdentityMemo struct {
 func deviceIdentityFor(ctx context.Context) deviceIdentity {
 	key := strings.Join(deviceAgentCommands(), "\x00") + "\x01" + agentSocketPath() + "\x01" + Env("DEVICE_AGENT_COMMANDS")
 	deviceIdentityMemo.Lock()
-	defer deviceIdentityMemo.Unlock()
 	if deviceIdentityMemo.key == key && nowFunc().Sub(deviceIdentityMemo.at) < deviceIdentityTTL {
-		return deviceIdentityMemo.id
+		id := deviceIdentityMemo.id
+		deviceIdentityMemo.Unlock()
+		return id
 	}
+	deviceIdentityMemo.Unlock()
+	// The lookup runs unlocked: concurrent events must not queue behind a slow
+	// device agent and spend their gating budget waiting. Racing lookups are
+	// harmless; the last one stored wins.
 	id := lookupDeviceIdentity(ctx)
+	deviceIdentityMemo.Lock()
 	deviceIdentityMemo.key, deviceIdentityMemo.at, deviceIdentityMemo.id = key, nowFunc(), id
+	deviceIdentityMemo.Unlock()
 	return id
 }
 

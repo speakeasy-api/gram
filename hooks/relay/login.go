@@ -47,7 +47,7 @@ func newLoginFlow(cfg Config) *loginFlow {
 func (l *loginFlow) tryInteractive(ctx context.Context) {
 	// A token-command box authenticates as itself; a personal key minted by
 	// sign-in would never be used, so don't prompt for one.
-	if tokenCommandConfigured() || !l.cfg.BrowserLogin || l.cfg.ConfigError != "" || insecureServerURL(l.cfg.ServerURL) {
+	if !l.cfg.BrowserLogin || l.cfg.ConfigError != "" || insecureServerURL(l.cfg.ServerURL) || tokenCommandConfigured() {
 		return
 	}
 	if ok, _ := loginViable(); !ok {

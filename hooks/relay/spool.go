@@ -63,14 +63,17 @@ var (
 // came from. The envelope itself already contains the event's occurred_at,
 // so replay preserves original timestamps.
 type spoolEntry struct {
-	V              int                          `json:"v"`
-	IdempotencyKey string                       `json:"idempotency_key"`
-	ServerURL      string                       `json:"server_url"`
-	OrgID          string                       `json:"org_id,omitempty"`
-	ProjectSlug    string                       `json:"project_slug,omitempty"`
-	ConfigPath     string                       `json:"config_path,omitempty"`
-	SpooledAt      time.Time                    `json:"spooled_at"`
-	Envelope       components.IngestRequestBody `json:"envelope"`
+	V              int    `json:"v"`
+	IdempotencyKey string `json:"idempotency_key"`
+	ServerURL      string `json:"server_url"`
+	OrgID          string `json:"org_id,omitempty"`
+	ProjectSlug    string `json:"project_slug,omitempty"`
+	// TokenProject is the admission project a token box's event was bound
+	// to; the drain drops the entry if the box's token now names another.
+	TokenProject string                       `json:"token_project,omitempty"`
+	ConfigPath   string                       `json:"config_path,omitempty"`
+	SpooledAt    time.Time                    `json:"spooled_at"`
+	Envelope     components.IngestRequestBody `json:"envelope"`
 }
 
 // maxSpoolEntryBytes caps one entry on disk. A single entry must never
@@ -84,7 +87,7 @@ const maxSpoolEntryBytes = 8 << 20
 // control plane. Best-effort by design: a spool failure only logs — the
 // event's gating outcome was already decided, and buffering must never
 // affect the user's session.
-func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody) {
+func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody, tokenProject string) {
 	dir := spoolDir()
 	if dir == "" {
 		r.debugf("spool: no writable state dir; entry dropped")
@@ -96,6 +99,7 @@ func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody
 		ServerURL:      r.cfg.ServerURL,
 		OrgID:          r.cfg.OrgID,
 		ProjectSlug:    r.cfg.ProjectSlug,
+		TokenProject:   tokenProject,
 		ConfigPath:     r.cfg.ConfigPath,
 		SpooledAt:      time.Now().UTC(),
 		Envelope:       payload,

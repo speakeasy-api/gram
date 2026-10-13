@@ -146,6 +146,16 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			cl = newReplayClient(entry.ServerURL)
 			clients[entry.ServerURL] = cl
 		}
+		if a.c.Source == credToken && entry.TokenProject != "" && entry.TokenProject != a.c.Project {
+			// The device's admission now names another project: this event was
+			// captured for the old one and must not land in the new one.
+			if removeSpoolEntry(path) {
+				s.Dropped++
+			} else {
+				s.Skipped++
+			}
+			continue
+		}
 		res := cl.send(ctx, a.c, entry.Envelope, entry.IdempotencyKey)
 		replayCreds := a.c
 		if res.authRejected {
@@ -155,9 +165,16 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			// retries through the config's shared org key), then skip the
 			// deployment's remaining entries. Never delete on auth rejection.
 			if a.c.Source == credToken {
-				// Drop the rejected token so the next drain asks the device
-				// agent for a fresh one; never fall back to a key.
-				forgetAuth()
+				// The same recovery as a live send: one fresh token and one
+				// resend in the same project, else record the refusal. Never
+				// fall back to a key.
+				cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: envDebugLog(), ConfigPath: entry.ConfigPath, ConfigError: ""}
+				res, replayCreds = recoverTokenRejection(cfg, a.c, res, func(fresh creds) ingestResult {
+					return cl.send(ctx, fresh, entry.Envelope, entry.IdempotencyKey)
+				})
+				if !res.authRejected {
+					auths[key] = drainAuth{c: replayCreds, ok: true, orgKey: ""}
+				}
 			}
 			if a.c.Source == credCache && a.orgKey != "" {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
@@ -172,6 +189,9 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 				s.Skipped++
 				continue
 			}
+		}
+		if replayCreds.Source == credToken && res.accepted() {
+			clearTokenRejected()
 		}
 		switch {
 		case res.accepted():
@@ -478,10 +498,10 @@ func (r *Relay) maybeSpawnDrain() {
 // finishExchange runs the spool bookkeeping for a final exchange result: an
 // unsent payload is kept for replay; a healthy exchange flushes any backlog
 // via a detached drain.
-func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult) {
+func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult, tokenProject string) {
 	switch {
 	case res.unsent():
-		r.spoolUnsent(idemKey, payload)
+		r.spoolUnsent(idemKey, payload, tokenProject)
 	case res.accepted():
 		r.maybeSpawnDrain()
 	}

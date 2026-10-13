@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // The token-command credential source (ADR-0025, contracts C7 and C8)
@@ -24,9 +25,10 @@ import (
 //     whitespace (no quoting).
 //  2. Discovery: `speakeasyd identity` reports "workload": true and the argv in
 //     "hooks_token_argv", executed as given.
-//  3. When the device agent cannot be asked at all, the argv recorded with the
-//     last cached token, so a box already authenticating by token never drops
-//     back to a key because one identity lookup failed.
+//  3. The token-box record (tokenBoxPath): once a box has authenticated by
+//     token it never drops back to a key because an identity lookup failed or
+//     answered from a stale cache. Removing that file is the only way back to
+//     key authentication.
 //
 // Whichever applies, it is the only credential source: an env key, a cached
 // personal key or the baked org-wide key would all bypass the admission's
@@ -59,19 +61,75 @@ var errTokenRefused = errors.New("the device agent refused to issue a hooks toke
 // is a separate file, so a damaged token cache cannot clear it.
 func tokenRejectedPath() string { return authFilePath() + ".token-rejected" }
 
-func markTokenRejected() {
-	f, err := os.OpenFile(tokenRejectedPath(), os.O_CREATE|os.O_WRONLY, 0o600)
-	if err == nil {
-		_ = f.Close()
+// tokenBoxPath records that this machine authenticates by token: the argv that
+// mints the token, the project its admission authorizes, and whether it was
+// refused. It lives apart from the auth cache, so forgetting a rejected bearer
+// or a damaged cache never erases the proof that keys must not be used.
+func tokenBoxPath() string { return authFilePath() + ".token-box" }
+
+type tokenBoxState struct {
+	Argv     []string `json:"argv"`
+	Project  string   `json:"project,omitempty"`
+	Rejected bool     `json:"rejected,omitempty"`
+}
+
+// readTokenBox returns the record and whether this is a token box. A record
+// that exists but cannot be read still marks a token box: uncertainty must
+// never reopen key fallback.
+func readTokenBox() (tokenBoxState, bool) {
+	b, err := os.ReadFile(tokenBoxPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return tokenBoxState{}, false
+	}
+	var st tokenBoxState
+	if err != nil || json.Unmarshal(b, &st) != nil {
+		return tokenBoxState{Argv: nil, Project: "", Rejected: true}, true
+	}
+	return st, true
+}
+
+func writeTokenBox(st tokenBoxState) error {
+	b, err := json.Marshal(st)
+	if err != nil {
+		return fmt.Errorf("encode token box: %w", err)
+	}
+	return atomicWriteCacheFile(tokenBoxPath(), append(b, '\n'))
+}
+
+// markTokenRejected records a definitive refusal twice, in the marker file and
+// in the token-box record, so a single failed write cannot let the box fail
+// open later. It reports an error only when neither record was written.
+func markTokenRejected() error {
+	f, markerErr := os.OpenFile(tokenRejectedPath(), os.O_CREATE|os.O_WRONLY, 0o600)
+	if markerErr == nil {
+		markerErr = f.Close()
+	}
+	st, _ := readTokenBox()
+	st.Rejected = true
+	boxErr := writeTokenBox(st)
+	if markerErr != nil && boxErr != nil {
+		return fmt.Errorf("record token refusal: %w; %w", markerErr, boxErr)
+	}
+	return nil
+}
+
+// tokenRejected reports whether this box must fail closed. Anything other than
+// a clean "no marker, record says not rejected" counts as rejected.
+func tokenRejected() bool {
+	if _, err := os.Stat(tokenRejectedPath()); !errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+	st, ok := readTokenBox()
+	return ok && st.Rejected
+}
+
+func clearTokenRejected() {
+	_ = os.Remove(tokenRejectedPath())
+	if st, ok := readTokenBox(); ok && st.Rejected {
+		st.Rejected = false
+		_ = writeTokenBox(st)
 	}
 }
-
-func tokenRejected() bool {
-	_, err := os.Stat(tokenRejectedPath())
-	return err == nil
-}
-
-func clearTokenRejected() { _ = os.Remove(tokenRejectedPath()) }
 
 // nowFunc is the relay's clock for token expiry; a var so tests can move it.
 var nowFunc = time.Now
@@ -88,14 +146,14 @@ func tokenCommandArgv() ([]string, bool) {
 	if commandLine := Env("HOOKS_TOKEN_COMMAND"); commandLine != "" {
 		return strings.Fields(commandLine), true
 	}
-	id := deviceIdentityFor(context.Background())
-	if id.Workload {
+	if id := deviceIdentityFor(context.Background()); id.Workload {
 		return id.HooksTokenArgv, true
 	}
-	if !id.Known {
-		if argv, ok := cachedTokenArgv(); ok {
-			return argv, true
-		}
+	// Once a box has authenticated by token it stays a token box, whatever a
+	// (possibly stale or failed) identity lookup now says: falling back to a
+	// key would bypass the admission's project filter.
+	if st, ok := readTokenBox(); ok {
+		return st.Argv, true
 	}
 	return nil, false
 }
@@ -164,7 +222,7 @@ func parseTokenOutput(raw []byte) (tokenCommandOutput, error) {
 	if err := dec.Decode(&out); err != nil {
 		return tokenCommandOutput{}, fmt.Errorf("decode: %w", err)
 	}
-	if dec.More() {
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return tokenCommandOutput{}, errors.New("trailing data after the JSON object")
 	}
 	token, ok := strings.CutPrefix(out.Authorization, "Bearer ")
@@ -210,20 +268,20 @@ func readCachedToken(cfg Config) (creds, bool) {
 
 // writeTokenAuth caches a token credential and marks the machine established,
 // so later failures follow the fail-closed ratchet like any credential. The
-// argv that minted it is recorded too (JSON, so it stays on one line), for
-// cachedTokenArgv.
+// token-box record is written first: it is what keeps the box off keys.
 func writeTokenAuth(c creds, argv []string) error {
 	for _, v := range []string{c.ServerURL, c.Bearer, c.Project, c.Org} {
 		if strings.ContainsAny(v, "\r\n") {
 			return errors.New("credential value contains a line break")
 		}
 	}
-	encodedArgv, err := json.Marshal(argv)
-	if err != nil {
-		return fmt.Errorf("encode token command: %w", err)
+	st, _ := readTokenBox()
+	st.Argv, st.Project = argv, c.Project
+	if err := writeTokenBox(st); err != nil {
+		return err
 	}
-	body := fmt.Sprintf("kind=%s\nserver_url=%s\nbearer=%s\nproject=%s\norg=%s\nexpires_at=%s\nargv=%s\n",
-		tokenCacheKind, c.ServerURL, c.Bearer, c.Project, c.Org, c.ExpiresAt.UTC().Format(time.RFC3339Nano), encodedArgv)
+	body := fmt.Sprintf("kind=%s\nserver_url=%s\nbearer=%s\nproject=%s\norg=%s\nexpires_at=%s\n",
+		tokenCacheKind, c.ServerURL, c.Bearer, c.Project, c.Org, c.ExpiresAt.UTC().Format(time.RFC3339Nano))
 	if err := atomicWriteCacheFile(authFilePath(), []byte(body)); err != nil {
 		return err
 	}
@@ -231,43 +289,49 @@ func writeTokenAuth(c creds, argv []string) error {
 	return nil
 }
 
-// cachedTokenArgv returns the argv recorded with the cached token, expired or
-// not: proof this box authenticates by token, used only when the device agent
-// cannot be asked.
-func cachedTokenArgv() ([]string, bool) {
-	values, err := readAuthFile(authFilePath())
-	if err != nil || values["kind"] != tokenCacheKind {
-		return nil, false
+// recoverTokenRejection handles a definitive rejection of token credentials c.
+// The live send and the spool drain both use it, so their handling cannot
+// drift: one fresh token and one resend, never into a different project than
+// the rejected event was bound to; if that does not succeed, the refusal is
+// recorded and the rejected bearer forgotten (the token-box record survives).
+func recoverTokenRejection(cfg Config, c creds, res ingestResult, resend func(creds) ingestResult) (ingestResult, creds) {
+	argv, _ := tokenCommandArgv()
+	fresh, ok := resolveTokenAuth(cfg, argv, true)
+	if ok && fresh.Project != c.Project {
+		// The admission now names another project: this event was bound to
+		// the old one, so it is not resent. The fresh token stays cached.
+		debugTokenCommand(cfg, "token project changed from %q to %q; event not resent", c.Project, fresh.Project)
+		return res, c
 	}
-	var argv []string
-	if json.Unmarshal([]byte(values["argv"]), &argv) != nil {
-		// A token cache without a usable argv still marks a token box: the
-		// source applies, and the empty argv fails as credential-unavailable.
-		return nil, true
+	if ok {
+		res, c = resend(fresh), fresh
 	}
-	return argv, true
+	if res.authRejected || !ok {
+		if err := markTokenRejected(); err != nil {
+			debugTokenCommand(cfg, "%v", err)
+		}
+		forgetAuth()
+	}
+	return res, c
 }
 
 // tokenCommandEnvAllow lists the environment passed to the command: enough to
-// locate the user's state and the device agent, and nothing that carries a
-// credential. SPEAKEASY_* (the device agent's managed config and socket) is
-// passed apart from key-shaped names.
+// locate the user's state and the device agent's own configuration, and
+// nothing that carries a credential. It is an explicit list: any other name,
+// SPEAKEASY_* included, is withheld.
 var tokenCommandEnvAllow = map[string]bool{
 	"HOME": true, "PATH": true, "USER": true, "LOGNAME": true, "TMPDIR": true,
 	"XDG_CONFIG_HOME": true, "XDG_STATE_HOME": true, "XDG_RUNTIME_DIR": true,
 	"SystemRoot": true, "USERPROFILE": true, "APPDATA": true, "LOCALAPPDATA": true, "ProgramData": true,
+	"SPEAKEASY_MANAGED_CONFIG": true, "SPEAKEASY_MANAGED_PREFS": true, "SPEAKEASY_LOCAL_CONFIG": true,
+	"SPEAKEASY_SOCKET": true, "SPEAKEASY_CONTROL_PLANE_URL": true, "SPEAKEASY_AUTH_URL": true,
+	"SPEAKEASY_KEYCHAIN_SERVICE": true,
 }
 
 func tokenCommandEnv(refresh bool) []string {
 	var env []string
 	for _, kv := range os.Environ() {
-		name, _, _ := strings.Cut(kv, "=")
-		upper := strings.ToUpper(name)
-		switch {
-		case tokenCommandEnvAllow[name]:
-			env = append(env, kv)
-		case strings.HasPrefix(name, "SPEAKEASY_") &&
-			!strings.Contains(upper, "API_KEY") && !strings.Contains(upper, "TOKEN"):
+		if name, _, _ := strings.Cut(kv, "="); tokenCommandEnvAllow[name] {
 			env = append(env, kv)
 		}
 	}
@@ -333,13 +397,13 @@ func (b *cappedBuffer) String() string { return b.buf.String() }
 var _ io.Writer = (*cappedBuffer)(nil)
 
 // sanitizeCommandStderr keeps the first line of the command's stderr for the
-// debug log, masking any token-length word: a failing command must not leak a
-// credential it was handling.
+// debug log, masking every word that is not plain letters: a failing command
+// must not leak a credential it was handling, however short.
 func sanitizeCommandStderr(raw string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(raw), "\n")
 	fields := strings.Fields(line)
 	for i, f := range fields {
-		if len(f) >= 24 {
+		if !plainWord(strings.TrimRight(f, ",.:;!?")) {
 			fields[i] = "***"
 		}
 	}
@@ -348,6 +412,18 @@ func sanitizeCommandStderr(raw string) string {
 		out = out[:200]
 	}
 	return out
+}
+
+func plainWord(w string) bool {
+	if w == "" || len(w) > 32 {
+		return false
+	}
+	for _, r := range w {
+		if !unicode.IsLetter(r) && r != '\'' {
+			return false
+		}
+	}
+	return true
 }
 
 func debugTokenCommand(cfg Config, format string, args ...any) {
