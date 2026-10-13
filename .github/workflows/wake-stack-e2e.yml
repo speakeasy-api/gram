@@ -33,6 +33,8 @@ on:
       - zero
       - .mise-tasks/git/workinit.sh
       - .mise-tasks/start/worker.sh
+      - .mise-tasks/start/assistant-relay.mts
+      - .mise-tasks/assistants/relay.test.mts
       - .mise-tasks/git/worksync.sh
       - .mise-tasks/git/workboot.sh
       - .mise-tasks/test/wake-stack.sh

@@ -145,7 +145,17 @@ async function main() {
       const localIPs = Object.values(networkInterfaces()).flatMap(
         (addresses) => addresses?.map((address) => address.address) ?? [],
       );
-      if (
+      if (!process.env["usage_listen_host"] && !localIPs.includes(host)) {
+        // Some CI and remote Docker engines expose published ports without
+        // sharing their bridge interface with this process. Assistant callback
+        // forwarding is unavailable there, but the rest of the stack can run.
+        reason = "inactive: Docker bridge gateway is not a local interface";
+        console.warn(
+          "Assistant relay inactive: Docker bridge gateway is not a local interface. " +
+            "Local assistant callbacks require a container-reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL " +
+            "or a host-local gateway configured with GRAM_ASSISTANT_RELAY_HOST.",
+        );
+      } else if (
         !net.isIP(host) ||
         !localIPs.includes(host) ||
         host === "::1" ||
@@ -156,20 +166,20 @@ async function main() {
             "For a customized host-gateway, set GRAM_ASSISTANT_RELAY_HOST. " +
             "Remote/rootless Docker needs an explicit reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
         );
-      }
-      const listen = { host, port };
-      const target = relayTarget(upstream, listen);
-      if (target) {
-        relay = createRelay(target);
-        relay.server.listen(listen);
-        await once(relay.server, "listening");
-        reason = `${host}:${port} -> ${upstream.host}:${upstream.port}`;
       } else {
-        reason = "API already listens on the Docker callback endpoint";
+        const listen = { host, port };
+        const target = relayTarget(upstream, listen);
+        if (target) {
+          relay = createRelay(target);
+          relay.server.listen(listen);
+          await once(relay.server, "listening");
+          reason = `${host}:${port} -> ${upstream.host}:${upstream.port}`;
+        } else {
+          reason = "API already listens on the Docker callback endpoint";
+        }
       }
     }
   }
-  console.log(`Assistant relay ready: ${reason}`);
   // Keep the supervised daemon alive when forwarding is unnecessary too.
   // A restart re-evaluates configuration after bind or Docker context changes.
   const keepAlive = setInterval(() => {}, 60_000);
@@ -179,6 +189,7 @@ async function main() {
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
+  console.log(`Assistant relay ready: ${reason}`);
 }
 
 if (import.meta.main) {

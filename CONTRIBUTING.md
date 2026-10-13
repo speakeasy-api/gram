@@ -22,7 +22,7 @@ On native Linux Docker, the `assistant-relay` Pitchfork daemon forwards TCP from
 
 If the API already listens on the gateway or a wildcard address at the callback port, the relay does not open another listener. Docker Desktop uses its built-in host forwarding instead; its VM bridge address is not bound on the host. An explicit `GRAM_ASSISTANT_RUNTIME_SERVER_URL` using a hostname other than `host.docker.internal` also bypasses the relay.
 
-For a customized Docker `host-gateway`, set `GRAM_ASSISTANT_RELAY_HOST` in `mise.local.toml` to the corresponding local interface IP. The relay never falls back to a wildcard listener. Remote/rootless Docker configurations without a host-local bridge need an explicit container-reachable `GRAM_ASSISTANT_RUNTIME_SERVER_URL`. Restart the stack after changing listener settings or Docker contexts.
+For a customized Docker `host-gateway`, set `GRAM_ASSISTANT_RELAY_HOST` in `mise.local.toml` to the corresponding local interface IP. The relay never falls back to a wildcard listener. If the auto-detected bridge gateway is not a local interface (as with some CI or remote Docker engines), the relay logs that it is inactive and lets the rest of the stack start. Assistant callbacks in those environments need an explicit container-reachable `GRAM_ASSISTANT_RUNTIME_SERVER_URL`. An invalid explicit `GRAM_ASSISTANT_RELAY_HOST` still fails startup. Restart the stack after changing listener settings or Docker contexts.
 
 ### Seeding the database
 

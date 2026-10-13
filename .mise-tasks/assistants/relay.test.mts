@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { $ } from "zx";
 import {
   bridgeGateway,
   callbackPort,
@@ -26,6 +31,69 @@ async function exchange(
   client.end(payload);
   for await (const chunk of client) chunks.push(chunk);
   return Buffer.concat(chunks);
+}
+
+for (const explicit of [false, true]) {
+  test(
+    `non-local Docker gateway ${explicit ? "rejects an explicit override" : "keeps the daemon alive but inactive"}`,
+    { timeout: 10_000 },
+    async (t) => {
+      const dir = mkdtempSync(join(tmpdir(), "assistant-relay-test-"));
+      t.after(() => rmSync(dir, { recursive: true, force: true }));
+      writeFileSync(
+        join(dir, "docker"),
+        `#!${process.execPath}
+if (process.argv[2] === 'info') {
+  console.log(JSON.stringify({ OperatingSystem: 'Linux' }));
+} else {
+  console.log(JSON.stringify([{ IPAM: { Config: [{ Gateway: '192.0.2.1' }] } }]));
+}
+`,
+        { mode: 0o755 },
+      );
+      const task = fileURLToPath(
+        new URL("../start/assistant-relay.mts", import.meta.url),
+      );
+      const command = $({
+        quiet: true,
+        nothrow: true,
+        env: {
+          ...process.env,
+          PATH: `${dir}:${process.env.PATH}`,
+          usage_server_address: "127.0.0.1:23456",
+          usage_server_url: "https://localhost:23456",
+          usage_runtime_server_url: "",
+          usage_listen_host: explicit ? "192.0.2.1" : "",
+        },
+      })`${process.execPath} ${task}`;
+      t.after(async () => {
+        if (command.stage === "running") await command.kill("SIGTERM");
+        await command;
+      });
+      if (explicit) {
+        const result = await command;
+        assert.equal(result.exitCode, 1);
+        assert.match(result.stderr, /requires a Docker gateway IP/);
+      } else {
+        await new Promise<void>((resolve, reject) => {
+          let output = "";
+          command.stdout.on("data", (chunk) => {
+            output += chunk.toString();
+            if (output.includes("Assistant relay ready: inactive:")) resolve();
+          });
+          command.then(
+            () => reject(new Error("relay exited before readiness")),
+            reject,
+          );
+        });
+        await command.kill("SIGTERM");
+        const result = await command;
+        assert.equal(result.exitCode, 0);
+        assert.match(result.stderr, /Assistant relay inactive/);
+        assert.match(result.stderr, /GRAM_ASSISTANT_RUNTIME_SERVER_URL/);
+      }
+    },
+  );
 }
 
 test("API address parsing supports loopback, wildcard, and bracketed IPv6", () => {
