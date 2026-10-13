@@ -20,6 +20,7 @@ function target(overrides: Partial<AiScanTarget>): AiScanTarget {
     },
     origin: "default",
     customized: false,
+    access: { state: "unreviewed", decision: "unreviewed", enforceable: false },
     createdAt: new Date("2026-09-09T00:00:00Z"),
     updatedAt: new Date("2026-09-09T00:00:00Z"),
     ...overrides,

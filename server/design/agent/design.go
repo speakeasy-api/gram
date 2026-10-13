@@ -597,9 +597,10 @@ var AiScanTargetModel = Type("AiScanTarget", func() {
 		Enum("default", "organization")
 	})
 	Attribute("customized", Boolean, "For a built-in, whether the organization has recorded an access decision about it. Always false for organization targets.")
+	Attribute("access", shared.AIToolAccessSummaryModel, "The organization's access decision for the target, computed with the same rules the AI detections carry: unreviewed when nothing is recorded, and never enforceable without a verifiable gateway matcher.")
 	Attribute("created_at", String, "When the organization's row was created; absent for an untouched default.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the organization's row last changed; absent for an untouched default.", func() { Format(FormatDateTime) })
-	Required("id", "display_name", "category", "signatures", "gateway_client", "origin", "customized")
+	Required("id", "display_name", "category", "signatures", "gateway_client", "origin", "customized", "access")
 })
 
 var ListAiScanTargetsResult = Type("ListAiScanTargetsResult", func() {
