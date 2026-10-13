@@ -61,7 +61,9 @@ func RecordExchange(ctx context.Context, logger *slog.Logger, db Beginner, p Exc
 	outcome := func(o string) Recorded {
 		recordOutcome(ctx, p.Flow, o)
 		failed := none
-		failed.Failed = o == OutcomeError
+		// A WorkOS session held by another user is a recording failure too:
+		// the login must not continue unlinked.
+		failed.Failed = o == OutcomeError || o == OutcomeOtherUser
 		failed.OrganizationID = organizationID
 		return failed
 	}

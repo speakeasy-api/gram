@@ -55,7 +55,7 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	revoked, err := s.revokeMember(ctx, dbtx, ac, payload.UserID)
+	revoked, err := s.revokeMember(ctx, dbtx, ac, payload.UserID, s.memberEmail(ctx, payload.UserID))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke sign-ins").LogError(ctx, logger)
 	}
@@ -70,12 +70,9 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 
 // revokeMember revokes a member's sign-ins and grants in the active
 // organization inside the caller's transaction, audited as the admin.
-func (s *Service) revokeMember(ctx context.Context, dbtx pgx.Tx, ac *contextvalues.AuthContext, userID string) (signins.Revoked, error) {
+// Resolve memberEmail before opening the transaction.
+func (s *Service) revokeMember(ctx context.Context, dbtx pgx.Tx, ac *contextvalues.AuthContext, userID, memberEmail string) (signins.Revoked, error) {
 	organizationIDs := []string{ac.ActiveOrganizationID}
-	memberEmail := ""
-	if info, _, err := s.sessions.GetUserInfo(ctx, userID); err == nil && info != nil {
-		memberEmail = info.Email
-	}
 	revoked, err := signins.RevokeUser(ctx, dbtx, organizationIDs, userID, signins.RevokeReasonAdmin)
 	if err != nil {
 		return revoked, fmt.Errorf("revoke sign-ins: %w", err)
@@ -91,4 +88,13 @@ func (s *Service) revokeMember(ctx context.Context, dbtx pgx.Tx, ac *contextvalu
 func (s *Service) afterMemberRevoked(ctx context.Context, organizationID string, revoked signins.Revoked) {
 	signins.RecordRevoked(ctx, signins.RevokeReasonAdmin, revoked.SignIns())
 	s.deliverer.DeliverNow(ctx, []string{organizationID}, revoked.DeliveryIDs)
+}
+
+// memberEmail is the member's email for the audit entry, or empty. It may
+// read through to the database, so callers resolve it outside a transaction.
+func (s *Service) memberEmail(ctx context.Context, userID string) string {
+	if info, _, err := s.sessions.GetUserInfo(ctx, userID); err == nil && info != nil {
+		return info.Email
+	}
+	return ""
 }

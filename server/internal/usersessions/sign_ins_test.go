@@ -1256,3 +1256,36 @@ func TestCheckConsentIdentity_JudgesTheCapturedSignIn(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, other.Eligible(), "another user's consent never uses this sign-in")
 }
+
+func TestRecordExchange_ASessionHeldByAnotherUserFailsTheRecording(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSignInFixture(t)
+	workosSessionID := "session_" + uuid.NewString()
+	_, err := signins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
+	require.NoError(t, err)
+	workosOrgID := workOSOrganizationIDForTest(t, ctx, f)
+
+	recorded := signins.RecordExchange(ctx, testenv.NewLogger(t), f.ti.conn, signins.ExchangeParams{
+		Flow:                   signins.FlowMCPAuthorize,
+		WorkOSOrganizationID:   workosOrgID,
+		ExpectedOrganizationID: f.orgID,
+		UserID:                 "another-user-" + uuid.NewString(),
+		WorkOSSessionID:        workosSessionID,
+		AuthenticationMethod:   signins.MethodSSO,
+		Evidence:               evidence("", "", time.Now()),
+		Impersonated:           false,
+		AuthenticatedAt:        time.Now(),
+	})
+	require.True(t, recorded.Failed, "enforcing callers must refuse rather than continue unlinked")
+	require.False(t, recorded.ID.Valid)
+	require.Equal(t, f.orgID, recorded.OrganizationID)
+}
+
+func workOSOrganizationIDForTest(t *testing.T, ctx context.Context, f signInFixture) string {
+	t.Helper()
+	org, err := orgrepo.New(f.ti.conn).GetOrganizationMetadata(ctx, f.orgID)
+	require.NoError(t, err)
+	require.True(t, org.WorkosID.Valid)
+	return org.WorkosID.String
+}

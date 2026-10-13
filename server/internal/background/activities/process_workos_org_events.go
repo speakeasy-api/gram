@@ -115,7 +115,8 @@ func (p *ProcessWorkOSOrganizationEvents) SetSignInEnforcement(flags feature.Pro
 // permanent.
 func (p *ProcessWorkOSOrganizationEvents) deprovisionRevokes(ctx context.Context, logger *slog.Logger, organizationID string) bool {
 	if p.flags == nil {
-		return false
+		logger.WarnContext(ctx, "sign-in enforcement flags not configured; revoking on deprovisioning")
+		return true
 	}
 	evaluation, err := feature.EvaluateFlag(ctx, p.flags, feature.FlagSignInEnforcement, organizationID, nil)
 	switch {

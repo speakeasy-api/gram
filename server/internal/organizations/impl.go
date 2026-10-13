@@ -713,6 +713,12 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		attr.UserID(ac.UserID),
 	)
 
+	removalRevokes := s.sessions.SignInEnforced(ctx, ac.ActiveOrganizationID)
+	removedEmail := ""
+	if removalRevokes {
+		removedEmail = s.memberEmail(ctx, payload.UserID)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -750,9 +756,8 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 	// Removal revokes the member's sign-ins and grants here, as
 	// revokeMemberSignIns does, wherever enforcement is on.
 	var revoked signins.Revoked
-	removalRevokes := s.sessions.SignInEnforced(ctx, ac.ActiveOrganizationID)
 	if removalRevokes {
-		if revoked, err = s.revokeMember(ctx, tx, ac, payload.UserID); err != nil {
+		if revoked, err = s.revokeMember(ctx, tx, ac, payload.UserID, removedEmail); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "revoke removed member's sign-ins").LogError(ctx, logger)
 		}
 	}

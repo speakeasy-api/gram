@@ -216,7 +216,11 @@ func (d *Deliverer) push(ctx context.Context, row repo.ClaimPendingRevocationDel
 		}
 		// Rechecked at delivery: the session may have been recorded in
 		// another organization since this was queued, and organization-scoped
-		// revocations must not end it there.
+		// revocations must not end it there. A recording that lands between
+		// this check and the call below is not serialized with it: the worst
+		// case ends that WorkOS session, which signs the user out of WorkOS
+		// there; their sign-in and grants stay valid (neither depends on the
+		// WorkOS session) and the next login is fresh.
 		live, err := repo.New(d.db).WorkOSSessionLiveOutsideOrganization(ctx, repo.WorkOSSessionLiveOutsideOrganizationParams{WorkosSessionID: row.Target, OrganizationID: row.OrganizationID})
 		if err != nil {
 			return pushFailed, fmt.Errorf("check workos session use elsewhere: %w", err)
