@@ -10383,7 +10383,25 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   client_selection TEXT NOT NULL,
   remote_session_ema_binding_id uuid,
   ema_binding_generation bigint,
+  -- External ID-JAG delegation; NULL for Speakeasy-issued assertions.
   trusted_issuer_session_id uuid,
+  -- ID-JAG source: 'external' or 'speakeasy', selected by the application.
+  -- The default preserves existing external-provider writers.
+  -- Unknown values do not qualify for cached token reuse.
+  ema_provider TEXT DEFAULT 'external',
+  -- Speakeasy issuer that authorized this cached vendor access token.
+  -- External credentials leave the Speakeasy-specific references below NULL.
+  internal_session_issuer_id uuid,
+  -- Issuer updated_at snapshot at acquisition; a changed value prevents reuse.
+  internal_session_issuer_updated_at timestamptz,
+  -- Key that signed the ID-JAG; a different active key prevents token reuse.
+  internal_session_issuer_key_id uuid,
+  -- Verified enterprise SSO sign-in that authorized the exact MCP grant.
+  -- Reuse requires this sign-in to remain eligible and match the current grant.
+  sso_sign_in_id uuid,
+  -- Exact authenticated MCP grant used to obtain the vendor access token.
+  -- A different grant cannot reuse this token, even for the same human.
+  user_session_id uuid,
   requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   access_token_encrypted TEXT,
@@ -10403,6 +10421,10 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   CONSTRAINT remote_session_ema_credentials_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_binding_id_fkey FOREIGN KEY (remote_session_ema_binding_id) REFERENCES remote_session_ema_bindings (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_internal_session_issuer_id_fkey FOREIGN KEY (internal_session_issuer_id) REFERENCES internal_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_internal_session_issuer_key_id_fkey FOREIGN KEY (internal_session_issuer_key_id) REFERENCES json_web_keys (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_sso_sign_in_id_fkey FOREIGN KEY (sso_sign_in_id) REFERENCES sso_sign_ins (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_user_session_id_fkey FOREIGN KEY (user_session_id) REFERENCES user_sessions (id) ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_trusted_issuer_session_id_fkey FOREIGN KEY (trusted_issuer_session_id) REFERENCES trusted_issuer_sessions (id) ON DELETE SET NULL
 );
 
@@ -10422,6 +10444,10 @@ CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_binding_id_idx
 ON remote_session_ema_credentials (remote_session_ema_binding_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_trusted_issuer_session_id_idx
 ON remote_session_ema_credentials (trusted_issuer_session_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_internal_session_issuer_id_idx ON remote_session_ema_credentials (internal_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_internal_session_issuer_key_id_idx ON remote_session_ema_credentials (internal_session_issuer_key_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_sso_sign_in_id_idx ON remote_session_ema_credentials (sso_sign_in_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_user_session_id_idx ON remote_session_ema_credentials (user_session_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_access_expires_at_idx
 ON remote_session_ema_credentials (access_expires_at, id);
 
