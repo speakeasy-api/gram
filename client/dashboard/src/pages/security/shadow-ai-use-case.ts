@@ -23,7 +23,7 @@ export function presentShadowAIUseCase(preset: RiskPreset): RiskPreset {
     ...preset,
     label: "Shadow AI",
     description:
-      "Detect unsanctioned AI tools and MCP servers across your devices and agent traffic, and decide which may connect. Unreviewed tools connect until you disallow them.",
+      "Detect unsanctioned AI tools and MCP servers across your devices and agent traffic, and decide which may connect. Unreviewed tools connect until you deny them.",
     action: "block",
   };
 }

@@ -33,6 +33,6 @@ export const POLICY_EDITOR_KIND_META: Record<
     label: "Shadow AI",
     placeholder: "Untitled Shadow AI policy",
     createHint:
-      "Decide which AI tools and MCP servers may connect. Tool decisions open once the policy exists.",
+      "Decide which AI tools may connect. Decisions apply when the policy is created.",
   },
 };
