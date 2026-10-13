@@ -135,8 +135,8 @@ func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) 
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	q := repo.New(tx)
-	if err := q.LockSignInsForUser(ctx, repo.LockSignInsForUserParams{OrganizationID: p.OrganizationID, UserID: p.UserID}); err != nil {
-		return none, fmt.Errorf("lock sso sign-ins: %w", err)
+	if err := lockUser(ctx, q, []string{p.OrganizationID}, p.UserID); err != nil {
+		return none, err
 	}
 	var idpAuthenticatedAt pgtype.Timestamptz
 	if !p.Evidence.IDPAuthenticatedAt.IsZero() {
@@ -447,10 +447,13 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 		return out, nil
 	}
 	q := repo.New(db)
+	if err := q.LockAllSignInsForUser(ctx, userID); err != nil {
+		return out, fmt.Errorf("lock user sso sign-ins: %w", err)
+	}
 	// Lock every organization the user has signed in to, not only the ones
 	// being revoked, so recordings elsewhere wait for the check below that
-	// keeps their WorkOS sessions up. A first-ever recording in a new
-	// organization can still race it; the worst case ends that WorkOS session.
+	// keeps their WorkOS sessions up. Listed under the user lock, so a
+	// recording either committed already or waits for this revocation.
 	recorded, err := q.ListSSOSignInOrganizationsForUser(ctx, userID)
 	if err != nil {
 		return out, fmt.Errorf("list sso sign-in organizations: %w", err)
@@ -575,9 +578,22 @@ func WorkOSSessionUsedElsewhere(ctx context.Context, db repo.DBTX, userID, worko
 	return workOSSessionUsedElsewhere(ctx, repo.New(db), userID, workosSessionID, organizationIDs)
 }
 
-// lockUser takes the user's per-organization sign-in locks in sorted order,
-// before any row lock, the order Record uses.
+// LockUser takes the user-wide sign-in lock, so no sign-in of the user is
+// recorded until the transaction ends.
+func LockUser(ctx context.Context, db repo.DBTX, userID string) error {
+	if err := repo.New(db).LockAllSignInsForUser(ctx, userID); err != nil {
+		return fmt.Errorf("lock user sso sign-ins: %w", err)
+	}
+	return nil
+}
+
+// lockUser takes the user-wide sign-in lock, then the per-organization ones in
+// sorted order, before any row lock. Every recording and revocation uses this
+// order.
 func lockUser(ctx context.Context, q *repo.Queries, organizationIDs []string, userID string) error {
+	if err := q.LockAllSignInsForUser(ctx, userID); err != nil {
+		return fmt.Errorf("lock user sso sign-ins: %w", err)
+	}
 	for _, organizationID := range slices.Compact(slices.Sorted(slices.Values(organizationIDs))) {
 		if err := q.LockSignInsForUser(ctx, repo.LockSignInsForUserParams{OrganizationID: organizationID, UserID: userID}); err != nil {
 			return fmt.Errorf("lock sso sign-ins: %w", err)

@@ -26,8 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	ssosigninsrepo "github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -707,6 +707,34 @@ func TestRecord_WaitsForAConcurrentRevocation(t *testing.T) {
 	got := <-done
 	require.NoError(t, got.err)
 	require.True(t, got.recorded.Revoked, "the recording that waited is fenced by the committed cutoff")
+}
+
+func TestRecord_AFirstSignInInAnotherOrganizationWaitsForARevocation(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSSOFixture(t)
+	otherOrg := seedOtherOrganization(t, ctx, f.ti.conn)
+
+	tx, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: holds the revocation open so a second connection can interleave
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
+	_, err = ssosignins.RevokeUser(ctx, tx, []string{f.orgID}, f.userID, ssosignins.RevokeReasonSignOutEverywhere)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		elsewhere := f.signInParams("session_"+uuid.NewString(), time.Now())
+		elsewhere.OrganizationID = otherOrg
+		_, err := ssosignins.Record(ctx, f.ti.conn, elsewhere)
+		done <- err
+	}()
+	select {
+	case <-done:
+		t.Fatal("a first-ever recording in another organization ran while the revocation held the user lock")
+	case <-time.After(300 * time.Millisecond):
+	}
+	require.NoError(t, tx.Commit(ctx))
+	require.NoError(t, <-done)
 }
 
 func TestRevokeSession_FencesASignInRecordedAfterwards(t *testing.T) {

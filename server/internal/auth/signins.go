@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -54,7 +55,7 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 		return nil, oops.E(oops.CodeForbidden, nil, "sign out everywhere is not available")
 	}
 	logger := s.logger.With(attr.SlogUserID(authCtx.UserID))
-	organizationIDs, err := s.userSignInOrganizations(ctx, authCtx.UserID)
+	organizationIDs, err := s.userSignInOrganizations(ctx, s.db, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations for sign-out").LogError(ctx, logger)
 	}
@@ -83,6 +84,21 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	// Re-list under the user lock: a first sign-in recorded since the list
+	// above is revoked here, a later one waits for this transaction.
+	if err := ssosignins.LockUser(ctx, dbtx, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock sso sign-ins").LogError(ctx, logger)
+	}
+	locked, err := s.userSignInOrganizations(ctx, dbtx, authCtx.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organizations for sign-out").LogError(ctx, logger)
+	}
+	for _, id := range locked {
+		if !slices.Contains(organizationIDs, id) {
+			organizationIDs = append(organizationIDs, id)
+		}
+	}
 
 	revoked, err := ssosignins.RevokeUser(ctx, dbtx, organizationIDs, authCtx.UserID, ssosignins.RevokeReasonSignOutEverywhere)
 	if err != nil {
@@ -151,8 +167,8 @@ func (s *Service) raiseEpoch(ctx context.Context, userID string, at time.Time) e
 
 // userSignInOrganizations is every organization the user belongs to or has a
 // recorded sign-in in.
-func (s *Service) userSignInOrganizations(ctx context.Context, userID string) ([]string, error) {
-	orgs, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
+func (s *Service) userSignInOrganizations(ctx context.Context, db orgRepo.DBTX, userID string) ([]string, error) {
+	orgs, err := orgRepo.New(db).ListOrganizationsForUser(ctx, conv.ToPGText(userID))
 	if err != nil {
 		return nil, err //nolint:wrapcheck // wrapped by callers
 	}
@@ -160,7 +176,7 @@ func (s *Service) userSignInOrganizations(ctx context.Context, userID string) ([
 	for _, org := range orgs {
 		organizationIDs = append(organizationIDs, org.ID)
 	}
-	recorded, err := ssosignins.SignInOrganizations(ctx, s.db, userID)
+	recorded, err := ssosignins.SignInOrganizations(ctx, db, userID)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // wrapped by callers
 	}
@@ -189,7 +205,7 @@ func (s *Service) revokeSignedOutSSOSignIn(ctx context.Context, sessionID string
 	if session.WorkOSSessionID == "" || session.UserID != authCtx.UserID {
 		return none, nil
 	}
-	organizationIDs, err := s.userSignInOrganizations(ctx, authCtx.UserID)
+	organizationIDs, err := s.userSignInOrganizations(ctx, s.db, authCtx.UserID)
 	if err != nil {
 		return none, fmt.Errorf("list organizations: %w", err)
 	}

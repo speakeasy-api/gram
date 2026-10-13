@@ -4,6 +4,12 @@
 -- these locks first, in organization order.
 SELECT pg_advisory_xact_lock(hashtextextended('sso_sign_in:' || @organization_id::text || ':' || @user_id::text, 0));
 
+-- name: LockAllSignInsForUser :exec
+-- Serializes recording a sign-in in any organization with revoking the
+-- user's sign-ins, so a first-ever recording in a new organization can't slip
+-- past a revocation. Taken before the per-organization locks.
+SELECT pg_advisory_xact_lock(hashtextextended('sso_sign_in_user:' || @user_id::text, 0));
+
 -- name: UpsertSSOSignIn :one
 -- Never reassigns a row to another user, clears a revocation or moves the
 -- recorded times later. A WorkOS session already seen in another of the

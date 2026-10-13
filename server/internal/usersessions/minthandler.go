@@ -178,10 +178,14 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		SsoSignInID:     ssoSignInID,
 		SsoSignInUserID: conv.ToPGText(authCtx.UserID),
 	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) && s.signInRevoked(ctx, authCtx.ActiveOrganizationID, ssoSignInID) {
-			return nil, oops.E(oops.CodeUnauthorized, err, "sign-in was revoked, sign in again").LogError(ctx, s.logger)
-		}
 		if errors.Is(err, pgx.ErrNoRows) {
+			revoked, lookupErr := s.signInRevoked(ctx, authCtx.ActiveOrganizationID, ssoSignInID)
+			switch {
+			case lookupErr != nil:
+				return nil, oops.E(oops.CodeUnavailable, lookupErr, "check sign-in after refused mint").LogError(ctx, s.logger)
+			case revoked:
+				return nil, oops.E(oops.CodeUnauthorized, err, "sign-in was revoked, sign in again").LogError(ctx, s.logger)
+			}
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
@@ -422,16 +426,20 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 }
 
 // signInRevoked reports whether a refused mint was refused for its sign-in,
-// so an issuer miss is not reported as a revocation.
-func (s *Service) signInRevoked(ctx context.Context, organizationID string, signInID uuid.NullUUID) bool {
+// so an issuer miss is not reported as a revocation. Only a missing sign-in
+// reads as not revoked; any other lookup failure is returned.
+func (s *Service) signInRevoked(ctx context.Context, organizationID string, signInID uuid.NullUUID) (bool, error) {
 	if !signInID.Valid {
-		return false
+		return false, nil
 	}
 	row, err := repo.New(s.db).LockSSOSignInForGrant(ctx, repo.LockSSOSignInForGrantParams{ID: signInID.UUID, OrganizationID: organizationID})
-	if err != nil {
-		return false
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("look up sso sign-in: %w", err)
 	}
-	return row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(ssosignins.RevokeReasonSignOut))
+	return row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(ssosignins.RevokeReasonSignOut)), nil
 }
 
 // dashboardSSOSignIn is the caller's SSO sign-in in its active organization,

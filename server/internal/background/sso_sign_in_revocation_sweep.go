@@ -23,7 +23,7 @@ const (
 	ssoSignInRevocationSweepCatchupWindow = ssoSignInRevocationSweepInterval - time.Second
 
 	// A full batch means more may wait.
-	ssoSignInRevocationSweepBatchSize        = ssosignins.SweepBatchSize
+	ssoSignInRevocationSweepBatchSize = ssosignins.SweepBatchSize
 	// Batches run one at a time without activity retries (the next run is the
 	// retry), so the run fits its timeout: 2 × 2m activity ≤ 4m30s < interval.
 	ssoSignInRevocationSweepMaxBatchesPerRun = 2

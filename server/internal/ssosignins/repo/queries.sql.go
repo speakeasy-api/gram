@@ -425,6 +425,18 @@ func (q *Queries) ListSSOSignInOrganizationsForUser(ctx context.Context, userID 
 	return items, nil
 }
 
+const lockAllSignInsForUser = `-- name: LockAllSignInsForUser :exec
+SELECT pg_advisory_xact_lock(hashtextextended('sso_sign_in_user:' || $1::text, 0))
+`
+
+// Serializes recording a sign-in in any organization with revoking the
+// user's sign-ins, so a first-ever recording in a new organization can't slip
+// past a revocation. Taken before the per-organization locks.
+func (q *Queries) LockAllSignInsForUser(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, lockAllSignInsForUser, userID)
+	return err
+}
+
 const lockSSOSignInsBySession = `-- name: LockSSOSignInsBySession :many
 SELECT id
 FROM sso_sign_ins
