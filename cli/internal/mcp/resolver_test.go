@@ -161,6 +161,13 @@ func TestResolveHostedMCPURL(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "without toolset MCP fields several platform endpoints are ambiguous",
+			lister:  listing(endpoint("newer-tools", nil), endpoint("platform-tools", nil)),
+			toolset: withoutSlug,
+			want:    "",
+			wantErr: true,
+		},
+		{
 			name:    "custom domain only falls back to toolset slug",
 			lister:  listing(endpoint("custom-tools", &customDomainID)),
 			toolset: withSlug,

@@ -152,7 +152,9 @@ func resolveHostedMCPURL(ctx context.Context, opts *ResolverOptions, endpoints m
 	list, err := endpoints.ListMcpEndpoints(listCtx, opts.APIKey, opts.ProjectSlug, toolset.ID)
 	if err != nil {
 		opts.Logger.DebugContext(ctx, "could not list MCP endpoints, using toolset MCP URL", slog.String("error", err.Error()))
-	} else if slug := platformEndpointSlug(list, toolsetSlug); slug != "" {
+	} else if slug, n := platformEndpointSlug(list, toolsetSlug); n > 1 {
+		return "", fmt.Errorf("toolset %q has %d MCP endpoints; pass --mcp-url to choose one", toolset.Slug, n)
+	} else if slug != "" {
 		return fmt.Sprintf("%s/mcp/%s", baseURL, slug), nil
 	}
 
@@ -162,17 +164,25 @@ func resolveHostedMCPURL(ctx context.Context, opts *ResolverOptions, endpoints m
 	return fmt.Sprintf("%s/mcp/%s", baseURL, toolsetSlug), nil
 }
 
-// platformEndpointSlug keeps the toolset's slug while the toolset still reports one.
-func platformEndpointSlug(endpoints []*types.McpEndpoint, toolsetSlug string) string {
+// platformEndpointSlug keeps the toolset's slug if reported, else the sole platform endpoint, plus the candidate count.
+func platformEndpointSlug(endpoints []*types.McpEndpoint, toolsetSlug string) (string, int) {
+	var candidates []string
 	for _, endpoint := range endpoints {
 		if endpoint == nil || endpoint.Slug == "" || (endpoint.CustomDomainID != nil && *endpoint.CustomDomainID != "") {
 			continue
 		}
-		if toolsetSlug == "" || string(endpoint.Slug) == toolsetSlug {
-			return string(endpoint.Slug)
+		if toolsetSlug != "" {
+			if string(endpoint.Slug) == toolsetSlug {
+				return toolsetSlug, 1
+			}
+			continue
 		}
+		candidates = append(candidates, string(endpoint.Slug))
 	}
-	return ""
+	if len(candidates) != 1 {
+		return "", len(candidates)
+	}
+	return candidates[0], 1
 }
 
 func deriveAuthConfig(toolset *types.Toolset) (headerName string, envVarName string) {
