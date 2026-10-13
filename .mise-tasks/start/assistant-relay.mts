@@ -121,31 +121,53 @@ async function main() {
   let relay: ReturnType<typeof createRelay> | undefined;
   let reason = "explicit runtime callback URL";
   if (port !== null) {
-    const info = await $({
-      quiet: true,
-      timeout: 15_000,
-    })`docker info --format ${"{{json .}}"}`.json<{
-      OperatingSystem: string;
-    }>();
-    if (/docker desktop/i.test(info.OperatingSystem)) {
-      // Docker Desktop provides its own host forwarding; its VM's bridge
-      // gateway is not an interface we can bind on the developer's host.
-      reason = "Docker Desktop host forwarding";
-    } else {
-      const host =
-        process.env["usage_listen_host"] ||
-        bridgeGateway(
-          (
-            await $({
-              quiet: true,
-              timeout: 15_000,
-            })`docker network inspect bridge`.json()
-          )[0],
-        );
-      const localIPs = Object.values(networkInterfaces()).flatMap(
-        (addresses) => addresses?.map((address) => address.address) ?? [],
+    const localIPs = Object.values(networkInterfaces()).flatMap(
+      (addresses) => addresses?.map((address) => address.address) ?? [],
+    );
+    let host = process.env["usage_listen_host"];
+    if (
+      host &&
+      (!net.isIP(host) ||
+        !localIPs.includes(host) ||
+        host === "::1" ||
+        host.startsWith("127."))
+    ) {
+      throw new Error(
+        "Assistant relay requires a Docker gateway IP on a local non-loopback interface. " +
+          "Check GRAM_ASSISTANT_RELAY_HOST or use an explicit reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
       );
-      if (!process.env["usage_listen_host"] && !localIPs.includes(host)) {
+    }
+    if (!host) {
+      try {
+        const info = await $({
+          quiet: true,
+          timeout: 15_000,
+        })`docker info --format ${"{{json .}}"}`.json<{
+          OperatingSystem: string;
+        }>();
+        if (/docker desktop/i.test(info.OperatingSystem)) {
+          // Docker Desktop forwards host traffic without a host-local bridge.
+          reason = "Docker Desktop host forwarding";
+        } else {
+          host = bridgeGateway(
+            (
+              await $({
+                quiet: true,
+                timeout: 15_000,
+              })`docker network inspect bridge`.json()
+            )[0],
+          );
+        }
+      } catch (error) {
+        reason = "inactive: Docker gateway discovery failed";
+        console.warn(
+          `Assistant relay inactive: Docker gateway discovery failed: ${error instanceof Error ? error.message : String(error)}. ` +
+            "Restart assistant-relay after Docker is available, or configure a container-reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
+        );
+      }
+    }
+    if (host) {
+      if (!localIPs.includes(host)) {
         // Some CI and remote Docker engines expose published ports without
         // sharing their bridge interface with this process. Assistant callback
         // forwarding is unavailable there, but the rest of the stack can run.
@@ -154,17 +176,6 @@ async function main() {
           "Assistant relay inactive: Docker bridge gateway is not a local interface. " +
             "Local assistant callbacks require a container-reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL " +
             "or a host-local gateway configured with GRAM_ASSISTANT_RELAY_HOST.",
-        );
-      } else if (
-        !net.isIP(host) ||
-        !localIPs.includes(host) ||
-        host === "::1" ||
-        host.startsWith("127.")
-      ) {
-        throw new Error(
-          "Assistant relay requires a Docker gateway IP on a local non-loopback interface. " +
-            "For a customized host-gateway, set GRAM_ASSISTANT_RELAY_HOST. " +
-            "Remote/rootless Docker needs an explicit reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
         );
       } else {
         const listen = { host, port };

@@ -33,9 +33,17 @@ async function exchange(
   return Buffer.concat(chunks);
 }
 
-for (const explicit of [false, true]) {
+for (const scenario of [
+  "non-local gateway",
+  "explicit override",
+  "daemon unavailable",
+  "network unavailable",
+  "missing IPv4 gateway",
+  "malformed response",
+]) {
+  const explicit = scenario === "explicit override";
   test(
-    `non-local Docker gateway ${explicit ? "rejects an explicit override" : "keeps the daemon alive but inactive"}`,
+    `Docker discovery: ${scenario} ${explicit ? "fails" : "keeps the daemon alive but inactive"}`,
     { timeout: 10_000 },
     async (t) => {
       const dir = mkdtempSync(join(tmpdir(), "assistant-relay-test-"));
@@ -43,10 +51,19 @@ for (const explicit of [false, true]) {
       writeFileSync(
         join(dir, "docker"),
         `#!${process.execPath}
+const scenario = ${JSON.stringify(scenario)};
+if (scenario === 'daemon unavailable' || (scenario === 'network unavailable' && process.argv[2] === 'network')) {
+  console.error('Docker probe unavailable');
+  process.exit(1);
+}
+if (scenario === 'malformed response') {
+  console.log('not JSON');
+  process.exit(0);
+}
 if (process.argv[2] === 'info') {
   console.log(JSON.stringify({ OperatingSystem: 'Linux' }));
 } else {
-  console.log(JSON.stringify([{ IPAM: { Config: [{ Gateway: '192.0.2.1' }] } }]));
+  console.log(JSON.stringify([{ IPAM: { Config: scenario === 'missing IPv4 gateway' ? [] : [{ Gateway: '192.0.2.1' }] } }]));
 }
 `,
         { mode: 0o755 },
@@ -91,6 +108,9 @@ if (process.argv[2] === 'info') {
         assert.equal(result.exitCode, 0);
         assert.match(result.stderr, /Assistant relay inactive/);
         assert.match(result.stderr, /GRAM_ASSISTANT_RUNTIME_SERVER_URL/);
+        if (scenario !== "non-local gateway") {
+          assert.match(result.stderr, /Docker gateway discovery failed/);
+        }
       }
     },
   );
