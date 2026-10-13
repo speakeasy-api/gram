@@ -3212,7 +3212,8 @@ LEFT JOIN LATERAL (
      AND plugin.organization_id = @organization_id
      AND plugin.deleted IS FALSE
     WHERE membership.deleted IS FALSE
-      AND ((@target_kind::text = 'mcp_server' AND membership.mcp_server_id = server.id)
+      AND ((@target_kind::text = 'mcp_server' AND (membership.mcp_server_id = server.id
+          OR (membership.toolset_id = server.id AND server.toolset_id = membership.toolset_id)))
         OR (@target_kind::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
 ) memberships ON TRUE
 WHERE project.id = @project_id
@@ -3314,27 +3315,29 @@ WHERE p.id = @plugin_id
 -- name: ListPlatformMCPPluginServers :many
 -- Member-facing compatibility projection. It deliberately omits membership and
 -- backend IDs, which are administrative identity and must not cross this path.
+-- A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists.
 SELECT
     ps.id,
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    (ps.toolset_id IS NOT NULL)::boolean AS toolset_backed,
+    (ps.toolset_id IS NOT NULL AND s.id IS NULL)::boolean AS toolset_backed,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
+LEFT JOIN mcp_servers s
+  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  AND s.project_id = p.project_id
+  AND s.deleted IS FALSE
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
   ON t.id = ps.toolset_id
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
-LEFT JOIN mcp_servers s
-  ON s.id = ps.mcp_server_id
-  AND s.project_id = p.project_id
-  AND s.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -3392,28 +3395,29 @@ SELECT
     ps.policy,
     ps.sort_order,
     CASE
+      WHEN ps.mcp_server_id IS NOT NULL OR s.id IS NOT NULL THEN 'mcp_server'
       WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
-      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
       WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
     END::text AS target_kind,
     COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
 CROSS JOIN membership_version
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
+LEFT JOIN mcp_servers s
+  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  AND s.project_id = p.project_id
+  AND s.deleted IS FALSE
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
   ON t.id = ps.toolset_id
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
-LEFT JOIN mcp_servers s
-  ON s.id = ps.mcp_server_id
-  AND s.project_id = p.project_id
-  AND s.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id

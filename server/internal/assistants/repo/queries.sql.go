@@ -386,19 +386,66 @@ func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendin
 	return i, err
 }
 
-const clearAssistantMcpServers = `-- name: ClearAssistantMcpServers :exec
-DELETE FROM assistant_mcp_servers
-WHERE assistant_id = $1
-  AND project_id = $2
+const clearAssistantDirectMcpServers = `-- name: ClearAssistantDirectMcpServers :exec
+DELETE FROM assistant_mcp_servers ams
+WHERE ams.assistant_id = $1
+  AND ams.project_id = $2
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers ms
+    WHERE ms.id = ams.mcp_server_id
+      AND ms.project_id = ams.project_id
+      AND ms.toolset_id = ms.id
+  )
 `
 
-type ClearAssistantMcpServersParams struct {
+type ClearAssistantDirectMcpServersParams struct {
 	AssistantID uuid.UUID
 	ProjectID   uuid.UUID
 }
 
-func (q *Queries) ClearAssistantMcpServers(ctx context.Context, arg ClearAssistantMcpServersParams) error {
-	_, err := q.db.Exec(ctx, clearAssistantMcpServers, arg.AssistantID, arg.ProjectID)
+// Detaches the assistant's servers that are not canonical hosted wrappers.
+func (q *Queries) ClearAssistantDirectMcpServers(ctx context.Context, arg ClearAssistantDirectMcpServersParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantDirectMcpServers, arg.AssistantID, arg.ProjectID)
+	return err
+}
+
+const clearAssistantHostedMcpServers = `-- name: ClearAssistantHostedMcpServers :exec
+DELETE FROM assistant_mcp_servers ams
+USING mcp_servers ms
+WHERE ams.mcp_server_id = ms.id
+  AND ms.project_id = ams.project_id
+  AND ms.toolset_id = ms.id
+  AND ams.assistant_id = $1
+  AND ams.project_id = $2
+`
+
+type ClearAssistantHostedMcpServersParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Detaches the assistant's toolset-backed (canonical wrapper) servers only.
+func (q *Queries) ClearAssistantHostedMcpServers(ctx context.Context, arg ClearAssistantHostedMcpServersParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantHostedMcpServers, arg.AssistantID, arg.ProjectID)
+	return err
+}
+
+const clearAssistantMcpServersForServers = `-- name: ClearAssistantMcpServersForServers :exec
+DELETE FROM assistant_mcp_servers
+WHERE assistant_id = $1
+  AND project_id = $2
+  AND mcp_server_id = ANY($3::UUID[])
+`
+
+type ClearAssistantMcpServersForServersParams struct {
+	AssistantID  uuid.UUID
+	ProjectID    uuid.UUID
+	McpServerIds []uuid.UUID
+}
+
+func (q *Queries) ClearAssistantMcpServersForServers(ctx context.Context, arg ClearAssistantMcpServersForServersParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantMcpServersForServers, arg.AssistantID, arg.ProjectID, arg.McpServerIds)
 	return err
 }
 
@@ -415,6 +462,24 @@ type ClearAssistantToolsetsParams struct {
 
 func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistantToolsetsParams) error {
 	_, err := q.db.Exec(ctx, clearAssistantToolsets, arg.AssistantID, arg.ProjectID)
+	return err
+}
+
+const clearAssistantToolsetsForServers = `-- name: ClearAssistantToolsetsForServers :exec
+DELETE FROM assistant_toolsets
+WHERE assistant_id = $1
+  AND project_id = $2
+  AND toolset_id = ANY($3::UUID[])
+`
+
+type ClearAssistantToolsetsForServersParams struct {
+	AssistantID  uuid.UUID
+	ProjectID    uuid.UUID
+	McpServerIds []uuid.UUID
+}
+
+func (q *Queries) ClearAssistantToolsetsForServers(ctx context.Context, arg ClearAssistantToolsetsForServersParams) error {
+	_, err := q.db.Exec(ctx, clearAssistantToolsetsForServers, arg.AssistantID, arg.ProjectID, arg.McpServerIds)
 	return err
 }
 
@@ -1716,6 +1781,43 @@ func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState s
 	return items, nil
 }
 
+const listAssistantAttachedServerIDs = `-- name: ListAssistantAttachedServerIDs :many
+SELECT at.toolset_id AS mcp_server_id
+FROM assistant_toolsets at
+WHERE at.assistant_id = $1
+  AND at.project_id = $2
+UNION
+SELECT ams.mcp_server_id
+FROM assistant_mcp_servers ams
+WHERE ams.assistant_id = $1
+  AND ams.project_id = $2
+`
+
+type ListAssistantAttachedServerIDsParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ListAssistantAttachedServerIDs(ctx context.Context, arg ListAssistantAttachedServerIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAssistantAttachedServerIDs, arg.AssistantID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssistantPendingThreads = `-- name: ListAssistantPendingThreads :many
 SELECT t.id, t.project_id
 FROM assistant_threads t
@@ -2316,55 +2418,82 @@ func (q *Queries) ListWarmPendingThreads(ctx context.Context, arg ListWarmPendin
 }
 
 const loadAssistantMcpServers = `-- name: LoadAssistantMcpServers :many
+WITH attachments AS (
+  SELECT at.assistant_id, at.toolset_id AS mcp_server_id, at.environment_id, at.created_at, TRUE AS legacy
+  FROM assistant_toolsets at
+  WHERE at.assistant_id = ANY($2::UUID[])
+    AND at.project_id = $1
+  UNION ALL
+  SELECT ams.assistant_id, ams.mcp_server_id, ams.environment_id, ams.created_at, FALSE AS legacy
+  FROM assistant_mcp_servers ams
+  WHERE ams.assistant_id = ANY($2::UUID[])
+    AND ams.project_id = $1
+)
 SELECT
-  ams.assistant_id,
-  ams.mcp_server_id,
+  a.assistant_id,
+  a.mcp_server_id,
+  a.legacy::bool AS legacy,
   ms.slug AS server_slug,
-  ms.visibility,
-  COALESCE((
+  t.slug AS toolset_slug,
+  CASE WHEN t.id IS NOT NULL THEN CASE
+    WHEN t.mcp_enabled IS NOT TRUE THEN 'disabled'
+    WHEN t.mcp_is_public THEN 'public'
+    ELSE 'private'
+  END ELSE ms.visibility END::text AS visibility,
+  CASE WHEN t.id IS NOT NULL THEN COALESCE(t.mcp_slug, '') ELSE COALESCE((
     SELECT me.slug
     FROM mcp_endpoints me
     WHERE me.mcp_server_id = ms.id
+      AND me.project_id = ms.project_id
       AND me.custom_domain_id IS NULL
       AND me.deleted IS FALSE
     ORDER BY me.created_at
     LIMIT 1
-  ), '')::text AS endpoint_slug,
-  ams.environment_id,
+  ), '') END::text AS endpoint_slug,
+  t.default_environment_slug,
+  a.environment_id,
   e.slug AS environment_slug
-FROM assistant_mcp_servers ams
-JOIN mcp_servers ms ON ms.id = ams.mcp_server_id AND ms.deleted IS FALSE
-LEFT JOIN environments e ON e.id = ams.environment_id
-WHERE ams.assistant_id = ANY($1::UUID[])
-  AND ams.project_id = $2
-ORDER BY ams.created_at
+FROM attachments a
+LEFT JOIN mcp_servers ms
+  ON ms.id = a.mcp_server_id
+  AND ms.project_id = $1
+  AND ms.deleted IS FALSE
+  AND (NOT a.legacy OR ms.toolset_id = ms.id)
+LEFT JOIN toolsets t
+  ON t.id = a.mcp_server_id
+  AND t.project_id = $1
+  AND t.deleted IS FALSE
+  AND (a.legacy OR ms.toolset_id = ms.id)
+LEFT JOIN environments e ON e.id = a.environment_id AND e.project_id = $1
+WHERE (a.legacy AND t.id IS NOT NULL)
+   OR (NOT a.legacy AND ms.id IS NOT NULL)
+ORDER BY (t.id IS NULL), a.created_at, a.legacy DESC, a.mcp_server_id
 `
 
 type LoadAssistantMcpServersParams struct {
-	AssistantIds []uuid.UUID
 	ProjectID    uuid.UUID
+	AssistantIds []uuid.UUID
 }
 
 type LoadAssistantMcpServersRow struct {
-	AssistantID     uuid.UUID
-	McpServerID     uuid.UUID
-	ServerSlug      pgtype.Text
-	Visibility      string
-	EndpointSlug    string
-	EnvironmentID   uuid.NullUUID
-	EnvironmentSlug pgtype.Text
+	AssistantID            uuid.UUID
+	McpServerID            uuid.UUID
+	Legacy                 bool
+	ServerSlug             pgtype.Text
+	ToolsetSlug            pgtype.Text
+	Visibility             string
+	EndpointSlug           string
+	DefaultEnvironmentSlug pgtype.Text
+	EnvironmentID          uuid.NullUUID
+	EnvironmentSlug        pgtype.Text
 }
 
-// Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
-// Speakeasy-hosted endpoint slug (custom_domain_id IS NULL), and the bound
-// environment. Soft-deleted servers are skipped so the runtime never targets a
-// dead endpoint; a row whose server has no Speakeasy-hosted endpoint yields a NULL
-// endpoint_slug and is filtered out in Go. Visibility is returned rather than
-// filtered here so API reads still show disabled attachments while the runtime
-// resolver skips them. Mirrors LoadAssistantToolsets: one read supplies
-// everything dispatch needs to build the MCP URL.
+// Both attachment tables; hosted rows (toolset id = canonical wrapper id) keep
+// the toolset slug, mcp_enabled, /mcp/{mcp_slug} address and default
+// environment, and sort first so they win runtime id collisions. Legacy rows
+// read the toolset whatever the wrapper's current shape.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
-	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.AssistantIds, arg.ProjectID)
+	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.ProjectID, arg.AssistantIds)
 	if err != nil {
 		return nil, err
 	}
@@ -2375,9 +2504,12 @@ func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistant
 		if err := rows.Scan(
 			&i.AssistantID,
 			&i.McpServerID,
+			&i.Legacy,
 			&i.ServerSlug,
+			&i.ToolsetSlug,
 			&i.Visibility,
 			&i.EndpointSlug,
+			&i.DefaultEnvironmentSlug,
 			&i.EnvironmentID,
 			&i.EnvironmentSlug,
 		); err != nil {
@@ -3438,13 +3570,22 @@ SELECT
   ms.slug,
   ms.visibility,
   (ms.tunneled_mcp_server_id IS NOT NULL)::bool AS tunneled,
-  EXISTS (
+  (ms.toolset_id IS NOT NULL AND ms.toolset_id = ms.id)::bool AS hosted,
+  (EXISTS (
     SELECT 1
     FROM mcp_endpoints me
     WHERE me.mcp_server_id = ms.id
+      AND me.project_id = ms.project_id
       AND me.custom_domain_id IS NULL
       AND me.deleted IS FALSE
-  ) AS has_gram_endpoint
+  ) OR (ms.toolset_id = ms.id AND EXISTS (
+    SELECT 1
+    FROM toolsets t
+    WHERE t.id = ms.toolset_id
+      AND t.project_id = ms.project_id
+      AND t.mcp_slug IS NOT NULL
+      AND t.deleted IS FALSE
+  )))::bool AS has_gram_endpoint
 FROM mcp_servers ms
 WHERE ms.project_id = $1
   AND ms.slug = ANY($2::TEXT[])
@@ -3463,6 +3604,7 @@ type ResolveMcpServersForWriteRow struct {
 	Slug            pgtype.Text
 	Visibility      string
 	Tunneled        bool
+	Hosted          bool
 	HasGramEndpoint bool
 }
 
@@ -3470,6 +3612,7 @@ type ResolveMcpServersForWriteRow struct {
 // validation needs to reject servers the assistant runtime cannot reach:
 // the backend kind (tunnelled servers have no serving path), visibility,
 // and whether a Speakeasy-hosted endpoint exists to build the /mcp/{slug} URL.
+// A canonical hosted wrapper may use its toolset's legacy mcp_slug address.
 func (q *Queries) ResolveMcpServersForWrite(ctx context.Context, arg ResolveMcpServersForWriteParams) ([]ResolveMcpServersForWriteRow, error) {
 	rows, err := q.db.Query(ctx, resolveMcpServersForWrite, arg.ProjectID, arg.Slugs)
 	if err != nil {
@@ -3484,6 +3627,7 @@ func (q *Queries) ResolveMcpServersForWrite(ctx context.Context, arg ResolveMcpS
 			&i.Slug,
 			&i.Visibility,
 			&i.Tunneled,
+			&i.Hosted,
 			&i.HasGramEndpoint,
 		); err != nil {
 			return nil, err
@@ -3576,18 +3720,30 @@ func (q *Queries) ResolveThreadProjectID(ctx context.Context, threadID uuid.UUID
 }
 
 const resolveToolsetsForWrite = `-- name: ResolveToolsetsForWrite :many
-SELECT id, slug
-FROM toolsets
-WHERE project_id = $1
-  AND slug = ANY($2::TEXT[])
-  AND deleted IS FALSE
-ORDER BY id
-FOR NO KEY UPDATE
+SELECT t.id, t.slug
+FROM toolsets t
+WHERE t.project_id = $1
+  AND t.deleted IS FALSE
+  AND (
+    t.slug = ANY($2::TEXT[])
+    OR EXISTS (
+      SELECT 1
+      FROM mcp_servers ms
+      WHERE ms.id = t.id
+        AND ms.toolset_id = ms.id
+        AND ms.project_id = t.project_id
+        AND ms.slug = ANY($3::TEXT[])
+        AND ms.deleted IS FALSE
+    )
+  )
+ORDER BY t.id
+FOR NO KEY UPDATE OF t
 `
 
 type ResolveToolsetsForWriteParams struct {
-	ProjectID uuid.UUID
-	Slugs     []string
+	ProjectID      uuid.UUID
+	Slugs          []string
+	McpServerSlugs []string
 }
 
 type ResolveToolsetsForWriteRow struct {
@@ -3595,10 +3751,12 @@ type ResolveToolsetsForWriteRow struct {
 	Slug string
 }
 
+// Also locks the toolsets behind canonical wrappers named by slug, so server
+// attachments take the toolset lock before the server lock, as deletion does.
 // Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
 // locks when an MCP server concurrently switches to this toolset backend.
 func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolsetsForWriteParams) ([]ResolveToolsetsForWriteRow, error) {
-	rows, err := q.db.Query(ctx, resolveToolsetsForWrite, arg.ProjectID, arg.Slugs)
+	rows, err := q.db.Query(ctx, resolveToolsetsForWrite, arg.ProjectID, arg.Slugs, arg.McpServerSlugs)
 	if err != nil {
 		return nil, err
 	}

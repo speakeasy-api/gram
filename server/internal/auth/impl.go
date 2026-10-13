@@ -534,6 +534,39 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
+	// An organization mirrored from an identity-provider membership never takes
+	// the zero-organization signup path, which is the only other place a
+	// self-serve trial is armed. Grant that trial here, before the session is
+	// stored, so the first authenticated request already sees it.
+	workosOrgID := ""
+	if orgMetadata.WorkosID.Valid {
+		workosOrgID = orgMetadata.WorkosID.String
+	}
+	// An impersonated session is a staff operator wearing the customer's
+	// identity. Starting a trial from it would bill the customer and record
+	// the customer as the actor.
+	var trialArmed bool
+	if idpUser.ImpersonatorEmail() == "" {
+		var armErr error
+		orgMetadata, trialArmed, armErr = s.armSelfServeTrialForExistingOrganization(ctx, orgMetadata, userID, userInfo.Email, membershipRoleForOrg(login.MembershipRoles, workosOrgID))
+		if armErr != nil {
+			// The arming transaction rolls back, so the organization is unchanged.
+			// Login still completes: a seeding or trial write must not turn into a
+			// sign-in error for an account that already has an organization.
+			logger.ErrorContext(ctx, "self-serve trial was not armed; login continues",
+				attr.SlogError(armErr),
+				attr.SlogOrganizationID(orgMetadata.ID),
+				attr.SlogUserID(userID),
+			)
+			trialArmed = false
+		}
+	}
+	if trialArmed {
+		if err := s.trialNotifier.TrialStarted(ctx, orgMetadata.ID); err != nil {
+			logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(orgMetadata.ID), attr.SlogUserID(userID))
+		}
+	}
+
 	session.ActiveOrganizationID = activeOrgID
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		return redirectWithError(authErrInit, err)

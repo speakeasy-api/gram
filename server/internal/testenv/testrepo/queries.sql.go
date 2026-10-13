@@ -322,6 +322,25 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const countMcpMetadataForBackendIDFixture = `-- name: CountMcpMetadataForBackendIDFixture :one
+SELECT count(*)
+FROM mcp_metadata
+WHERE project_id = $1
+  AND (toolset_id = $2::uuid OR mcp_server_id = $2::uuid)
+`
+
+type CountMcpMetadataForBackendIDFixtureParams struct {
+	ProjectID uuid.UUID
+	BackendID uuid.UUID
+}
+
+func (q *Queries) CountMcpMetadataForBackendIDFixture(ctx context.Context, arg CountMcpMetadataForBackendIDFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMcpMetadataForBackendIDFixture, arg.ProjectID, arg.BackendID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOrganizationFeaturesFixture = `-- name: CountOrganizationFeaturesFixture :one
 SELECT count(*)
 FROM organization_features
@@ -4228,6 +4247,26 @@ func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
 	return err
 }
 
+const rekeyMcpMetadataToMcpServerFixture = `-- name: RekeyMcpMetadataToMcpServerFixture :execrows
+UPDATE mcp_metadata
+SET toolset_id = NULL, mcp_server_id = toolset_id
+WHERE project_id = $1
+  AND toolset_id = $2
+`
+
+type RekeyMcpMetadataToMcpServerFixtureParams struct {
+	ProjectID uuid.UUID
+	ToolsetID uuid.NullUUID
+}
+
+func (q *Queries) RekeyMcpMetadataToMcpServerFixture(ctx context.Context, arg RekeyMcpMetadataToMcpServerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rekeyMcpMetadataToMcpServerFixture, arg.ProjectID, arg.ToolsetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const repointMCPServerToolsetFixture = `-- name: RepointMCPServerToolsetFixture :one
 UPDATE mcp_servers AS m
 SET toolset_id = (
@@ -5220,6 +5259,42 @@ type SetMCPServerRemoteSessionIssuerFixtureParams struct {
 // matched nothing would otherwise let a negative test pass vacuously.
 func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setMCPServerVisibilityFixture = `-- name: SetMCPServerVisibilityFixture :exec
+UPDATE mcp_servers SET visibility = $1 WHERE id = $2 AND project_id = $3
+`
+
+type SetMCPServerVisibilityFixtureParams struct {
+	Visibility string
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+func (q *Queries) SetMCPServerVisibilityFixture(ctx context.Context, arg SetMCPServerVisibilityFixtureParams) error {
+	_, err := q.db.Exec(ctx, setMCPServerVisibilityFixture, arg.Visibility, arg.ID, arg.ProjectID)
+	return err
+}
+
+const setMcpMetadataHeaderDisplayNamesFixture = `-- name: SetMcpMetadataHeaderDisplayNamesFixture :execrows
+UPDATE mcp_metadata
+SET header_display_names = $1
+WHERE id = $2
+  AND project_id = $3
+`
+
+type SetMcpMetadataHeaderDisplayNamesFixtureParams struct {
+	HeaderDisplayNames []byte
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+}
+
+func (q *Queries) SetMcpMetadataHeaderDisplayNamesFixture(ctx context.Context, arg SetMcpMetadataHeaderDisplayNamesFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMcpMetadataHeaderDisplayNamesFixture, arg.HeaderDisplayNames, arg.ID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}

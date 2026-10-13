@@ -7,14 +7,19 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type ExportMcpMetadataRequestBody = {
   /**
-   * The MCP server slug (from the install URL)
+   * The ID of a toolset-backed MCP server. Mutually exclusive with mcp_slug.
    */
-  mcpSlug: string;
+  mcpServerId?: string | undefined;
+  /**
+   * The MCP server slug (from the install URL). Mutually exclusive with mcp_server_id.
+   */
+  mcpSlug?: string | undefined;
 };
 
 /** @internal */
 export type ExportMcpMetadataRequestBody$Outbound = {
-  mcp_slug: string;
+  mcp_server_id?: string | undefined;
+  mcp_slug?: string | undefined;
 };
 
 /** @internal */
@@ -23,10 +28,12 @@ export const ExportMcpMetadataRequestBody$outboundSchema: z.ZodMiniType<
   ExportMcpMetadataRequestBody
 > = z.pipe(
   z.object({
-    mcpSlug: z.string(),
+    mcpServerId: z.optional(z.string()),
+    mcpSlug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      mcpServerId: "mcp_server_id",
       mcpSlug: "mcp_slug",
     });
   }),

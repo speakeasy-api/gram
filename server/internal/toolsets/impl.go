@@ -805,6 +805,11 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	if err != nil {
 		return err
 	}
+	detached, err := detachToolsetPluginServers(ctx, dbtx, s.audit, authCtx, deleted.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to detach toolset plugin servers").LogError(ctx, logger)
+	}
+	carried = carried || (toDelete.McpEnabled && detached > 0)
 	if carried {
 		if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enqueue toolset plugin publication").LogError(ctx, logger)
