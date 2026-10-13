@@ -4421,7 +4421,7 @@ WHERE delivered_at IS NULL;
 
 -- The retry sweep reads pending deliveries that are due, oldest first.
 CREATE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_pending_idx
-ON sso_sign_in_revocation_deliveries (next_attempt_at, created_at)
+ON sso_sign_in_revocation_deliveries (next_attempt_at NULLS FIRST, created_at)
 WHERE delivered_at IS NULL;
 
 -- User Sessions are records representing active Gram sessions for a given Subject

@@ -11,7 +11,7 @@ DROP INDEX CONCURRENTLY "sso_sign_in_revocation_deliveries_pending_idx";
 -- Modify "sso_sign_in_revocation_deliveries" table
 ALTER TABLE "sso_sign_in_revocation_deliveries" ADD COLUMN "claimed_until" timestamptz NULL, ADD COLUMN "next_attempt_at" timestamptz NULL;
 -- Create index "sso_sign_in_revocation_deliveries_pending_idx" to table: "sso_sign_in_revocation_deliveries"
-CREATE INDEX CONCURRENTLY "sso_sign_in_revocation_deliveries_pending_idx" ON "sso_sign_in_revocation_deliveries" ("next_attempt_at", "created_at") WHERE (delivered_at IS NULL);
+CREATE INDEX CONCURRENTLY "sso_sign_in_revocation_deliveries_pending_idx" ON "sso_sign_in_revocation_deliveries" ("next_attempt_at" NULLS FIRST, "created_at") WHERE (delivered_at IS NULL);
 -- Set comment to column: "claimed_until" on table: "sso_sign_in_revocation_deliveries"
 COMMENT ON COLUMN "sso_sign_in_revocation_deliveries"."claimed_until" IS '@access: confidential';
 -- Set comment to column: "next_attempt_at" on table: "sso_sign_in_revocation_deliveries"
