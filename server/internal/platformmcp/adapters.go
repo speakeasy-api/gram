@@ -946,6 +946,17 @@ func (r *PostgresReader) allowedMCPIDs(ctx context.Context, organizationID strin
 // organization and enforces the existing project:read scope before callers read
 // project-operational data.
 func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeProjectRead)
+}
+
+// ResolveProjectLogRead resolves one exact project under the principal's
+// organization and enforces log:read before callers list that project's
+// individual tool calls. project:read alone does not satisfy it.
+func (r *PostgresReader) ResolveProjectLogRead(ctx context.Context, principal Principal, input FindMCPInput) (ResolvedProject, error) {
+	return r.resolveProjectWithScope(ctx, principal, input, authz.ScopeLogRead)
+}
+
+func (r *PostgresReader) resolveProjectWithScope(ctx context.Context, principal Principal, input FindMCPInput, scope authz.Scope) (ResolvedProject, error) {
 	if r == nil || r.reader == nil || r.authz == nil {
 		return ResolvedProject{}, ErrUnavailable
 	}
@@ -953,7 +964,7 @@ func (r *PostgresReader) ResolveProjectRead(ctx context.Context, principal Princ
 	if err != nil {
 		return ResolvedProject{}, err
 	}
-	if err := r.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
+	if err := r.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
 		if isAuthorizationDenied(err) {
 			return ResolvedProject{}, ErrForbidden
 		}

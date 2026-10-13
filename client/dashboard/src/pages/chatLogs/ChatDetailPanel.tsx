@@ -66,7 +66,7 @@ import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
@@ -301,7 +301,8 @@ function SessionSummary({
   };
   userLabel: ReactNode;
   messageCount: number;
-  toolCount: number;
+  /** Undefined when the caller cannot read this project's tool logs. */
+  toolCount: number | undefined;
   compact?: boolean;
 }) {
   const tokens = totalTokensFor(chat);
@@ -403,7 +404,9 @@ function SessionSummary({
             )}
             <MetaRow label="Duration">{duration}s</MetaRow>
             <MetaRow label="Messages">{messageCount}</MetaRow>
-            <MetaRow label="Tool calls">{toolCount}</MetaRow>
+            {toolCount !== undefined && (
+              <MetaRow label="Tool calls">{toolCount}</MetaRow>
+            )}
             <MetaRow label="Total cost">
               {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
             </MetaRow>
@@ -459,7 +462,8 @@ function ChatDetailMetadataBadges({
   chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"];
   messageCount: number;
-  toolCount: number;
+  /** Undefined when the caller cannot read this project's tool logs. */
+  toolCount: number | undefined;
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
@@ -470,7 +474,7 @@ function ChatDetailMetadataBadges({
       <HeaderMetadataBadge>
         {messageCount.toLocaleString()} messages
       </HeaderMetadataBadge>
-      {toolCount > 0 && (
+      {toolCount !== undefined && toolCount > 0 && (
         <HeaderMetadataBadge>
           {toolCount.toLocaleString()} tool calls
         </HeaderMetadataBadge>
@@ -727,7 +731,8 @@ function ChatDetailHeader({
   chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
   userLabel: ReactNode;
   messageCount: number;
-  toolCount: number;
+  /** Undefined when the caller cannot read this project's tool logs. */
+  toolCount: number | undefined;
   canManageChat: boolean;
   compactMetadata: boolean;
   showFilter: boolean;
@@ -832,12 +837,14 @@ function ChatDetailHeader({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onSelect={() => onSetView("tools")}
-              >
-                Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
-              </DropdownMenuItem>
+              {toolCount !== undefined && (
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onSelect={() => onSetView("tools")}
+                >
+                  Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 className="cursor-pointer gap-2"
                 disabled={pinPending}
@@ -1173,6 +1180,10 @@ function ChatDetailPanel({
   // Risk findings are an org-admin resource (risk.results.list is org-admin
   // gated). Only admins get the risk-windowed "Risky only" view + its data.
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
+  // A session's tool calls come from the project's raw tool logs, which need
+  // log:read on the project on top of access to the transcript.
+  const project = useProject();
+  const canViewToolLogs = hasScope("log:read", project.id);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
   const [rawView, setRawView] = useState(false);
@@ -1360,6 +1371,7 @@ function ChatDetailPanel({
   } = useSearchLogsMutation();
 
   useEffect(() => {
+    if (!canViewToolLogs) return;
     searchLogs({
       request: {
         searchLogsPayload: {
@@ -1368,7 +1380,7 @@ function ChatDetailPanel({
         },
       },
     });
-  }, [chatId, searchLogs]);
+  }, [chatId, searchLogs, canViewToolLogs]);
 
   // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
@@ -1761,7 +1773,7 @@ function ChatDetailPanel({
         chat={chat}
         userLabel={userLabelNode}
         messageCount={chat.numMessages}
-        toolCount={toolLogs.length}
+        toolCount={canViewToolLogs ? toolLogs.length : undefined}
         canManageChat={canManageChat}
         compactMetadata={riskFocus}
         showFilter={view === "chat" || view === "effects"}

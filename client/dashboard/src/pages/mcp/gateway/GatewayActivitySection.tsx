@@ -1,4 +1,5 @@
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
@@ -141,7 +142,10 @@ export function GatewayActivitySection({
     }
     return `?${params.toString()}`;
   }, [metaMcpServerId, searchParams]);
-  const logsHref = routes.logs.href() + gatewayScopedSearch;
+  const canViewToolLogs = useCanViewToolLogs();
+  const logsHref = canViewToolLogs
+    ? routes.logs.href() + gatewayScopedSearch
+    : undefined;
   const insightsHref = routes.insights.href() + gatewayScopedSearch;
   const handleRangeSelect = useCallback(
     (rangeFrom: Date, rangeTo: Date) =>

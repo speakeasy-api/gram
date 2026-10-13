@@ -92019,6 +92019,7 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - log:read
             - agent:read
             - agent:write
             - agent:authorize
@@ -92072,6 +92073,7 @@ components:
               - risk_policy:block
               - chat:read
               - chat:write
+              - log:read
               - agent:read
               - agent:write
               - agent:authorize
@@ -98612,6 +98614,7 @@ components:
             - risk_policy:bypass
             - chat:read
             - chat:write
+            - log:read
             - agent:read
             - agent:write
             - agent:authorize
@@ -100594,6 +100597,7 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - log:read
             - agent:read
             - agent:write
             - agent:authorize
@@ -100964,6 +100968,7 @@ components:
             - risk_policy:block
             - chat:read
             - chat:write
+            - log:read
             - agent:read
             - agent:write
             - agent:authorize

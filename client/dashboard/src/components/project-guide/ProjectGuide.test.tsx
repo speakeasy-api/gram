@@ -180,6 +180,7 @@ function resetMcpOperations(): void {
         "codex mcp add 'Linear_Governed' --url 'https://api.example/mcp/linear-endpoint'",
     },
     toolLogsHref: "/projects/request-project/logs",
+    mcpServerHref: "/projects/request-project/mcp/linear-governed",
   };
 }
 

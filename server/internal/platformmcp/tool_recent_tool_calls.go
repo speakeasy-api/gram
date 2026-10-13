@@ -82,7 +82,7 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 		return ListRecentToolCallsOutput{}, fmt.Errorf("outcome must be one of success, error, blocked, pending")
 	}
 
-	project, err := r.ResolveProjectRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID, ProjectSlug: input.ProjectSlug})
+	project, err := r.ResolveProjectLogRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID, ProjectSlug: input.ProjectSlug})
 	if err != nil {
 		return ListRecentToolCallsOutput{}, err
 	}
@@ -210,9 +210,9 @@ func registerRecentToolCallTools(reg *Registrar, reader *PostgresReader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_recent_tool_calls",
 		Title:       "List Recent Tool Calls",
-		Description: "List the newest Tool Logs summaries for one project, defaulting to 10 calls from the last hour. Each call is reduced to when it happened, the tool and target, how it ended, and the calling app when known. Constraints: this uses the bounded Tool Logs summary path and never returns arguments, results, bodies, headers, URLs, attributes, or user identities. The returned dashboard link opens the full Tool Logs page.",
+		Description: "List the newest Tool Logs summaries for one project, defaulting to 10 calls from the last hour. Requires log:read on the project. Each call is reduced to when it happened, the tool and target, how it ended, and the calling app when known. Constraints: this uses the bounded Tool Logs summary path and never returns arguments, results, bodies, headers, URLs, attributes, or user identities. The returned dashboard link opens the full Tool Logs page.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRecentToolCallsInput) (*mcp.CallToolResult, ListRecentToolCallsOutput, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryLogRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRecentToolCallsInput) (*mcp.CallToolResult, ListRecentToolCallsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, ListRecentToolCallsOutput{}, err
@@ -228,5 +228,5 @@ func registerUnavailableRecentToolCallTools(reg *Registrar) {
 		Title:       "List Recent Tool Calls",
 		Description: "List recent Tool Logs summaries for one project. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}, unavailableTool("recent_tool_calls"))
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryLogRead}, unavailableTool("recent_tool_calls"))
 }

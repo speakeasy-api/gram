@@ -26,6 +26,13 @@ func (r refusingProjectReader) ResolveProjectRead(context.Context, Principal, Fi
 	return ResolvedProject{}, nil
 }
 
+func (r refusingProjectReader) ResolveProjectLogRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
+	if r.projectErr != nil {
+		return ResolvedProject{}, r.projectErr
+	}
+	return ResolvedProject{}, nil
+}
+
 func (r refusingProjectReader) GetMCP(context.Context, Principal, GetMCPInput) (MCP, error) {
 	if r.mcpErr != nil {
 		return MCP{}, r.mcpErr

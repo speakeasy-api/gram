@@ -15,6 +15,7 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -291,6 +292,9 @@ func (s *Service) listPlatformToolsetTools(
 		if !available(extra.RequiredFeature) {
 			continue
 		}
+		if !s.platformToolScopeGranted(ctx, authCtx, extra.RequiredScope) {
+			continue
+		}
 		entry := toolToListEntry(extra.Executor.Descriptor().ToTool(*authCtx.ProjectID))
 		if entry != nil {
 			tools = append(tools, entry)
@@ -343,6 +347,9 @@ func (s *Service) callPlatformToolsetTool(
 	}
 	if !s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, matched.RequiredFeature, nil) {
 		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogError(ctx, s.logger)
+	}
+	if !s.platformToolScopeGranted(ctx, authCtx, matched.RequiredScope) {
+		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogWarn(ctx, s.logger)
 	}
 
 	desc := matched.Executor.Descriptor()
@@ -551,6 +558,25 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 	}
 
 	return oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, args...)
+}
+
+// platformToolScopeGranted reports whether the caller holds a tool's required
+// scope on the active project. Evaluate rather than Require: a tool the caller
+// cannot use is simply not offered, so a missing grant is not an access
+// challenge worth recording.
+func (s *Service) platformToolScopeGranted(ctx context.Context, authCtx *contextvalues.AuthContext, scope string) bool {
+	if scope == "" {
+		return true
+	}
+	if authCtx.ProjectID == nil {
+		return false
+	}
+	allowed, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.Scope(scope), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate platform tool scope; hiding tool", attr.SlogError(err))
+		return false
+	}
+	return allowed
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on

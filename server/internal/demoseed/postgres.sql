@@ -743,6 +743,11 @@ BEGIN
        ARRAY['chat:read'],
        ARRAY['user_demo_hana', 'user_demo_jonas'],
        ARRAY[]::text[]),
+      ('tool-log-viewer', 'Tool Log Viewer',
+       'Reads tool-call logs, including arguments and results, without organization admin access.',
+       ARRAY['log:read'],
+       ARRAY['user_demo_lucas'],
+       ARRAY[]::text[]),
       ('collaborator', 'Collaborator',
        'Builds and ships MCP servers, skills and assistants, without organization settings.',
        ARRAY['org:read', 'project:read', 'project:write', 'mcp:read',
@@ -812,7 +817,7 @@ BEGIN
       (organization_id, principal_urn, scope, selectors)
     SELECT demo_org, custom_role_urn, scope,
            jsonb_build_object(
-             'resource_kind', CASE WHEN scope = 'plugin:write' THEN 'project'
+             'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
                                    ELSE split_part(scope, ':', 1) END,
              'resource_id', '*')
     FROM unnest(custom_role.scopes) AS scope;

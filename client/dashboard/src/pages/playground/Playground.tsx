@@ -9,7 +9,9 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
@@ -193,6 +195,9 @@ function PlaygroundInner() {
   const [searchParams] = useSearchParams();
   const chat = useChatContext();
   const routes = useRoutes();
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canViewLogs = hasScope("log:read", project.id);
 
   const { servers, isLoading: isLoadingServers } = usePlaygroundServers();
 
@@ -275,10 +280,21 @@ function PlaygroundInner() {
   }
 
   const logsButton = (
-    <Button size="sm" variant="tertiary" onClick={() => setShowLogs(!showLogs)}>
-      <ScrollTextIcon className="mr-2 size-4" />
-      {showLogs ? "Hide" : "Show"} Logs
-    </Button>
+    <RequireScope
+      scope="log:read"
+      resourceId={project.id}
+      level="component"
+      reason="You don't have permission to view this project's tool logs."
+    >
+      <Button
+        size="sm"
+        variant="tertiary"
+        onClick={() => setShowLogs(!showLogs)}
+      >
+        <ScrollTextIcon className="mr-2 size-4" />
+        {showLogs ? "Hide" : "Show"} Logs
+      </Button>
+    </RequireScope>
   );
 
   const additionalActions = (
@@ -356,7 +372,7 @@ function PlaygroundInner() {
               )}
             </div>
           </ResizablePanel.Pane>
-          {showLogs && (
+          {showLogs && canViewLogs && (
             <ResizablePanel.Pane minSize="20%" defaultSize="30%">
               <PlaygroundLogsPanel
                 chatId={chat.id}

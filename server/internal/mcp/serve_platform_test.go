@@ -52,12 +52,57 @@ func TestServePlatformToolset_ManagedAssistantReachesManagedToolset(t *testing.T
 		AssistantID: managedID,
 	})
 	require.NoError(t, err)
+	grantProjectLogRead(t, ti, authCtx)
 
 	token := mintAssistantToken(t, ti, authCtx, managedID)
 	w, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "managed assistant must reach the managed toolset: %s", w.Body.String())
 	require.Contains(t, w.Body.String(), platformtools.ToolNameSearchLogs)
+}
+
+// grantProjectLogRead gives the turn's user log:read on the project. No system
+// role holds it, so the tools that return individual tool calls and raw log
+// records are hidden from the assistant without it.
+func grantProjectLogRead(t *testing.T, ti *testInstance, authCtx *contextvalues.AuthContext) {
+	t.Helper()
+	seedPrincipalGrant(t, t.Context(), ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeLogRead, authCtx.ProjectID.String())
+}
+
+func TestServePlatformToolset_LogReadToolsHiddenWithoutLogRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	managedID := createAssistant(t, ti, authCtx, "Managed")
+	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
+		ProjectID:   *authCtx.ProjectID,
+		AssistantID: managedID,
+	})
+	require.NoError(t, err)
+
+	token := mintAssistantToken(t, ti, authCtx, managedID)
+	w, err := servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, toolsListBody(), token)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NotContains(t, w.Body.String(), `"`+platformtools.ToolNameSearchLogs+`"`)
+	require.NotContains(t, w.Body.String(), `"platform_search_tool_calls"`)
+	require.Contains(t, w.Body.String(), `"platform_get_tool_usage_summary"`, "aggregate tools stay on project access")
+
+	call, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params":  map[string]any{"name": platformtools.ToolNameSearchLogs, "arguments": map[string]any{}},
+	})
+	require.NoError(t, err)
+	w, err = servePlatformHTTP(t, ti, platformtools.ManagedAssistantPlatformToolsetSlug, call, token)
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), "tool not found", "a hidden tool cannot be called directly either")
 }
 
 // The swap cuts both ways: an org on the platformmcp variant must lose the
@@ -240,6 +285,7 @@ func TestServePlatformToolset_AssistantToolCallAudited(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	grantProjectLogRead(t, ti, authCtx)
 	token, threadID := mintThreadAssistantToken(t, ti, authCtx, managedID, "audit-test")
 
 	countBefore, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionAssistantToolCall)
@@ -294,6 +340,7 @@ func TestServePlatformToolset_RiskScanUsesStableToolsetIdentityAndAnnotations(t 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	grantProjectLogRead(t, ti, authCtx)
 
 	managedID := createAssistant(t, ti, authCtx, "Managed")
 	err := assistantsrepo.New(ti.conn).CreateProjectManagedAssistant(t.Context(), assistantsrepo.CreateProjectManagedAssistantParams{
