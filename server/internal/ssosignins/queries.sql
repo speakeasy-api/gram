@@ -78,13 +78,28 @@ WHERE organization_id = @organization_id
   AND revoked_at IS NULL;
 
 -- name: GetSignInEligibility :one
--- Everything CheckSignInIdentity judges, read in one statement. The sign-in
--- joins only when it belongs to the same organization as the session.
+-- Both runtime grants and pre-grant consent use one set of identity checks.
+-- A consent record proves sign-in eligibility only; it never represents a grant.
+WITH evidence AS (
+    SELECT s.id, s.subject_urn, s.sso_sign_in_id,
+           (s.refresh_expires_at IS NOT NULL AND s.refresh_expires_at > clock_timestamp())::boolean AS session_live
+    FROM user_sessions AS s
+    WHERE s.id = @user_session_id
+      AND s.organization_id = @organization_id
+      AND s.deleted IS FALSE
+    UNION ALL
+    SELECT '00000000-0000-0000-0000-000000000000'::uuid,
+           @consent_subject_urn::text,
+           NULLIF(@consent_sign_in_id::uuid, '00000000-0000-0000-0000-000000000000'::uuid),
+           TRUE
+    WHERE @user_session_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+      AND @consent_sign_in_id::uuid != '00000000-0000-0000-0000-000000000000'::uuid
+)
 SELECT
     s.id AS user_session_id,
     s.subject_urn,
     s.sso_sign_in_id,
-    (s.refresh_expires_at IS NOT NULL AND s.refresh_expires_at > clock_timestamp())::boolean AS session_live,
+    s.session_live,
     si.id AS sign_in_id,
     si.user_id AS sign_in_user_id,
     si.authentication_method,
@@ -116,7 +131,7 @@ SELECT
               AND d.deleted IS FALSE
         )
     )::boolean AS is_deprovisioned
-FROM user_sessions AS s
+FROM evidence AS s
 JOIN organization_metadata AS om ON om.id = @organization_id
 LEFT JOIN sso_sign_ins AS si
     ON si.id = s.sso_sign_in_id
@@ -125,9 +140,7 @@ LEFT JOIN users AS u
     ON u.id = si.user_id
    AND u.deleted_at IS NULL
    AND u.workos_deleted_at IS NULL
-WHERE s.id = @user_session_id
-  AND s.organization_id = @organization_id
-  AND s.deleted IS FALSE;
+;
 
 -- name: LockSSOSignInsBySession :many
 -- Locks a signed-out WorkOS session's sign-ins in id order, as every other

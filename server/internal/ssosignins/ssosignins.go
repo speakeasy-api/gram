@@ -164,8 +164,10 @@ func SignInForSession(ctx context.Context, db repo.DBTX, organizationID, userID,
 // error.
 func CheckSignInIdentity(ctx context.Context, db repo.DBTX, organizationID string, userSessionID uuid.UUID, now time.Time, maxAge time.Duration) (Result, error) {
 	row, err := repo.New(db).GetSignInEligibility(ctx, repo.GetSignInEligibilityParams{
-		OrganizationID: organizationID,
-		UserSessionID:  userSessionID,
+		OrganizationID:    organizationID,
+		UserSessionID:     userSessionID,
+		ConsentSignInID:   uuid.Nil,
+		ConsentSubjectUrn: "",
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -179,6 +181,28 @@ func CheckSignInIdentity(ctx context.Context, db repo.DBTX, organizationID strin
 	return judge(row, now, maxAge), nil
 }
 
+// CheckConsentIdentity checks the exact sign-in captured by an authenticated
+// authorization flow, before that flow has created an MCP grant. It never
+// grants access or substitutes for CheckSignInIdentity at token use.
+func CheckConsentIdentity(ctx context.Context, db repo.DBTX, organizationID, userID string, signInID uuid.UUID, now time.Time) (Result, error) {
+	if signInID == uuid.Nil || userID == "" {
+		return Result{Reason: ReasonNotLinked, Identity: nil}, nil
+	}
+	row, err := repo.New(db).GetSignInEligibility(ctx, repo.GetSignInEligibilityParams{
+		OrganizationID:    organizationID,
+		UserSessionID:     uuid.Nil,
+		ConsentSignInID:   signInID,
+		ConsentSubjectUrn: urn.NewUserSubject(userID).String(),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Result{Reason: ReasonNotLinked, Identity: nil}, nil
+	}
+	if err != nil {
+		return Result{Reason: ReasonNotLinked, Identity: nil}, fmt.Errorf("get consent sign-in eligibility: %w", err)
+	}
+	return judge(row, now, MaxAge), nil
+}
+
 func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration) Result {
 	reject := func(reason Reason) Result { return Result{Reason: reason, Identity: nil} }
 	if !row.SessionLive {
@@ -188,7 +212,7 @@ func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration
 		return reject(ReasonNotLinked)
 	}
 	userID := row.SignInUserID.String
-	if row.SubjectUrn.Kind != urn.SessionSubjectKindUser || row.SubjectUrn.ID != userID {
+	if row.SubjectUrn != urn.NewUserSubject(userID).String() {
 		return reject(ReasonNotUserSubject)
 	}
 	switch {

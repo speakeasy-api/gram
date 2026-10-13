@@ -206,11 +206,26 @@ func (q *Queries) GetSSOSignInBySession(ctx context.Context, arg GetSSOSignInByS
 }
 
 const getSignInEligibility = `-- name: GetSignInEligibility :one
+WITH evidence AS (
+    SELECT s.id, s.subject_urn, s.sso_sign_in_id,
+           (s.refresh_expires_at IS NOT NULL AND s.refresh_expires_at > clock_timestamp())::boolean AS session_live
+    FROM user_sessions AS s
+    WHERE s.id = $2
+      AND s.organization_id = $1
+      AND s.deleted IS FALSE
+    UNION ALL
+    SELECT '00000000-0000-0000-0000-000000000000'::uuid,
+           $3::text,
+           NULLIF($4::uuid, '00000000-0000-0000-0000-000000000000'::uuid),
+           TRUE
+    WHERE $2::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+      AND $4::uuid != '00000000-0000-0000-0000-000000000000'::uuid
+)
 SELECT
     s.id AS user_session_id,
     s.subject_urn,
     s.sso_sign_in_id,
-    (s.refresh_expires_at IS NOT NULL AND s.refresh_expires_at > clock_timestamp())::boolean AS session_live,
+    s.session_live,
     si.id AS sign_in_id,
     si.user_id AS sign_in_user_id,
     si.authentication_method,
@@ -242,7 +257,7 @@ SELECT
               AND d.deleted IS FALSE
         )
     )::boolean AS is_deprovisioned
-FROM user_sessions AS s
+FROM evidence AS s
 JOIN organization_metadata AS om ON om.id = $1
 LEFT JOIN sso_sign_ins AS si
     ON si.id = s.sso_sign_in_id
@@ -251,19 +266,18 @@ LEFT JOIN users AS u
     ON u.id = si.user_id
    AND u.deleted_at IS NULL
    AND u.workos_deleted_at IS NULL
-WHERE s.id = $2
-  AND s.organization_id = $1
-  AND s.deleted IS FALSE
 `
 
 type GetSignInEligibilityParams struct {
-	OrganizationID string
-	UserSessionID  uuid.UUID
+	OrganizationID    string
+	UserSessionID     uuid.UUID
+	ConsentSubjectUrn string
+	ConsentSignInID   uuid.UUID
 }
 
 type GetSignInEligibilityRow struct {
 	UserSessionID          uuid.UUID
-	SubjectUrn             urn.SessionSubject
+	SubjectUrn             string
 	SsoSignInID            uuid.NullUUID
 	SessionLive            bool
 	SignInID               uuid.NullUUID
@@ -278,10 +292,15 @@ type GetSignInEligibilityRow struct {
 	IsDeprovisioned        bool
 }
 
-// Everything CheckSignInIdentity judges, read in one statement. The sign-in
-// joins only when it belongs to the same organization as the session.
+// Both runtime grants and pre-grant consent use one set of identity checks.
+// A consent record proves sign-in eligibility only; it never represents a grant.
 func (q *Queries) GetSignInEligibility(ctx context.Context, arg GetSignInEligibilityParams) (GetSignInEligibilityRow, error) {
-	row := q.db.QueryRow(ctx, getSignInEligibility, arg.OrganizationID, arg.UserSessionID)
+	row := q.db.QueryRow(ctx, getSignInEligibility,
+		arg.OrganizationID,
+		arg.UserSessionID,
+		arg.ConsentSubjectUrn,
+		arg.ConsentSignInID,
+	)
 	var i GetSignInEligibilityRow
 	err := row.Scan(
 		&i.UserSessionID,
