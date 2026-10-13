@@ -172,21 +172,45 @@ func (s *Service) gatewayMemberResourceScopes(
 		s.logger.WarnContext(ctx, "stamp consent subject for gateway member scopes", attr.SlogError(err))
 		return nil
 	}
+	// Clients on one authorization server resolve to the same member, so each
+	// server is resolved once per render.
+	byIssuer := make(map[uuid.UUID]memberScopes, len(clients))
 	out := make(map[uuid.UUID]remotesessions.ResourceScopes, len(clients))
 	for _, c := range clients {
-		// The connect logs a shared authorization server; every render need not.
-		resource, member, _, err := s.resolveMetaMemberResource(memberCtx, quietLogger, endpoint, c.RemoteSessionIssuerID)
-		if err != nil {
-			s.logger.WarnContext(ctx, "resolve gateway member for consent card", attr.SlogError(err), attr.SlogRemoteSessionClientID(c.ID.String()))
-			continue
+		resolved, seen := byIssuer[c.RemoteSessionIssuerID]
+		if !seen {
+			resolved = s.gatewayMemberScopes(ctx, memberCtx, endpoint, c)
+			byIssuer[c.RemoteSessionIssuerID] = resolved
 		}
-		if !member.Valid {
-			continue
-		}
-		scopes, resourceURL, ok := s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, member, true)
-		if ok && strings.TrimRight(resourceURL, "/") == strings.TrimRight(resource, "/") {
-			out[c.ID] = scopes
+		if resolved.ok {
+			out[c.ID] = resolved.scopes
 		}
 	}
 	return out
+}
+
+// memberScopes is one authorization server's gateway member row, if any.
+type memberScopes struct {
+	scopes remotesessions.ResourceScopes
+	ok     bool
+}
+
+// gatewayMemberScopes reads the cached resource row of the member a login
+// through c would read. A lookup fault logs and reports none.
+func (s *Service) gatewayMemberScopes(ctx, memberCtx context.Context, endpoint *ResolvedMcpEndpoint, c remotesessions.Client) memberScopes {
+	none := memberScopes{scopes: remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: false}, ok: false}
+	// The connect logs a shared authorization server; every render need not.
+	resource, member, _, err := s.resolveMetaMemberResource(memberCtx, quietLogger, endpoint, c.RemoteSessionIssuerID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve gateway member for consent card", attr.SlogError(err), attr.SlogRemoteSessionClientID(c.ID.String()))
+		return none
+	}
+	if !member.Valid {
+		return none
+	}
+	scopes, resourceURL, ok := s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, member, true)
+	if !ok || strings.TrimRight(resourceURL, "/") != strings.TrimRight(resource, "/") {
+		return none
+	}
+	return memberScopes{scopes: scopes, ok: true}
 }
