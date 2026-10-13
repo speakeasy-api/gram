@@ -10,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -36,12 +35,8 @@ func TestPublicationKeySetLockSerializesLifecycleKeyWrites(t *testing.T) {
 			publicationParams := repo.LockSpeakeasyEMAKeySetParams{ID: issuer.ID, OrganizationID: ti.orgID}
 			_, err = repo.New(ti.conn).LockSpeakeasyEMAKeySet(ctx, repo.LockSpeakeasyEMAKeySetParams{ID: issuer.ID, OrganizationID: "org_other"})
 			require.ErrorIs(t, err, pgx.ErrNoRows, "a publication cannot lock another tenant's key set")
-			holder, err := ti.conn.Begin(ctx)
-			require.NoError(t, err)
-			defer o11y.NoLogDefer(func() error { return holder.Rollback(ctx) })
-			waiter, err := ti.conn.Begin(ctx)
-			require.NoError(t, err)
-			defer o11y.NoLogDefer(func() error { return waiter.Rollback(ctx) })
+			holder := testenv.BeginTx(t, ctx, ti.conn)
+			waiter := testenv.BeginTx(t, ctx, ti.conn)
 			queryPattern := "%LockSpeakeasyEMAKeySet%"
 			if publicationHolds {
 				_, err = repo.New(holder).LockSpeakeasyEMAKeySet(ctx, publicationParams)

@@ -17,7 +17,7 @@ read-only; it cannot enable, disable, rotate, or replace an issuer.
    not authority. This issuer is organization-scoped; do not choose a project
    or pass a project ID to its getter.
 2. Call `get_internal_session_issuer` with `{}`. Use its exact `organization_id`,
-   `state`, optional `issuer`, and `next_step`. Match any organization the user
+   `state`, `can_enable`, optional `issuer`, and `next_step`. Match any organization the user
    specified; otherwise ask the user to confirm the returned organization.
    Never guess an organization name or construct an issuer URI.
 3. Live membership, external organization-admin access, SSO entitlement and
@@ -35,7 +35,9 @@ current user has an enterprise SSO session. Explain this prerequisite during
 setup and when returning an already-enabled issuer. A configured vendor grant
 is not required merely to enable the issuer; vendor trust is a separate step.
 
-For `setup_required` or `disabled`, explain that enabling provisions or resumes
+For `setup_required` or `disabled`, first require `can_enable: true`. If it is
+false or missing, report `next_step` and stop; do not direct the administrator
+to enable an unavailable issuer. When eligible, explain that enabling provisions or resumes
 the organization's public issuer; it does not establish vendor trust or grant
 user access. Ask the organization administrator to open **IDP and SSO → Single
 sign-on → Enterprise authorization** and choose **Enable enterprise

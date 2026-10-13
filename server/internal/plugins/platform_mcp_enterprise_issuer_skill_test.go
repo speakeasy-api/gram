@@ -16,7 +16,7 @@ func TestGeneratePlatformMCPEnterpriseIssuerWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, source, files["speakeasy/"+path])
 	require.Equal(t, source, files["agent-plugins/speakeasy/"+path])
-	for _, instruction := range []string{"`list_projects`", "`get_internal_session_issuer`", "organization-scoped", "read-only", "IDP and SSO", "There is no issuer mutation", "enterprise SSO session", "social sign-in alone", "vendor trust is a separate step", "Recovery is not available", "same organization", "does not prove live user access", "Never request or expose API keys"} {
+	for _, instruction := range []string{"`list_projects`", "`get_internal_session_issuer`", "organization-scoped", "read-only", "IDP and SSO", "There is no issuer mutation", "enterprise SSO session", "social sign-in alone", "vendor trust is a separate step", "Recovery is not available", "`can_enable: true`", "false or missing", "same organization", "does not prove live user access", "Never request or expose API keys"} {
 		require.Contains(t, string(source), instruction)
 	}
 	require.NotContains(t, string(source), "`get_enterprise_issuer`")
