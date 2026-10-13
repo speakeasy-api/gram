@@ -37,10 +37,13 @@ import type { TestDetectionRuleResult } from "@gram/client/models/components/tes
 import { chatLoad } from "@gram/client/funcs/chatLoad.js";
 import { unwrapAsync } from "@gram/client/types/fp.js";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   BUILTIN_RULES_BY_CATEGORY,
   DETECTION_CEL_EXAMPLES,
+  detectionRulesTabCategories,
   SEVERITY_LEVELS,
   effectiveDetectionExpr,
   ruleSummary,
@@ -57,24 +60,6 @@ import { CelTrafficPreview } from "./cel-traffic-preview";
 import { useCelStatus } from "./use-cel-status";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 import { getCategoryCodeForFinding } from "./risk-utils";
-
-/** Presidio-backed categories: kept in the same order the policy form uses
- *  so users see the two surfaces in the same shape. */
-const PRESIDIO_CATEGORIES: RuleCategory[] = [
-  "financial",
-  "pii",
-  "government_ids",
-  "healthcare",
-];
-
-const BUILTIN_CATEGORY_ORDER: RuleCategory[] = [
-  "secrets",
-  ...PRESIDIO_CATEGORIES,
-  "shadow_mcp",
-  "destructive_tool",
-  "account_identity",
-  "prompt_injection",
-];
 
 const CUSTOM_RULE_ID_PREFIX = "custom.";
 
@@ -142,6 +127,10 @@ function DetectionRulesContent({
   const [expanded, setExpanded] = useState<RuleCategory | "custom" | null>(
     null,
   );
+  // Once Shadow AI is folded into Guardrails its targets have their own tab,
+  // so the catalog stops listing it; flag off, the catalog is unchanged.
+  const shadowAIFolded =
+    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
 
   // Deep-link support: `?rule=<id>` opens that rule's detail sheet (and expands
   // its category). The command palette uses this since rules have no per-item
@@ -203,6 +192,7 @@ function DetectionRulesContent({
         )}
 
         <BuiltinRulesSection
+          categories={detectionRulesTabCategories(shadowAIFolded)}
           expanded={expanded}
           onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
           onSelect={(rule) => setSelected({ kind: "builtin", rule })}
@@ -288,10 +278,12 @@ function CustomRulesSection({
 /* -------------------------------------------------------------------------- */
 
 function BuiltinRulesSection({
+  categories,
   expanded,
   onToggle,
   onSelect,
 }: {
+  categories: RuleCategory[];
   expanded: RuleCategory | "custom" | null;
   onToggle: (cat: RuleCategory) => void;
   onSelect: (rule: BuiltinRule) => void;
@@ -300,7 +292,7 @@ function BuiltinRulesSection({
     <div>
       <div className="text-eyebrow mb-3">Built-in</div>
       <div className="border-border divide-border divide-y border">
-        {BUILTIN_CATEGORY_ORDER.map((cat) => {
+        {categories.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];
           const rules = BUILTIN_RULES_BY_CATEGORY[cat];
           const isExpanded = expanded === cat;

@@ -54,6 +54,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
   const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
+  const shadowAiGuardrailsFlag = useFeatureFlag(
+    FEATURE_FLAGS.shadowAiGuardrails,
+  );
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
   // Assistants is opt-in: unavailable flags remain hidden.
@@ -66,6 +69,10 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   // Explore is opt-in while it is dogfooded: the flag is released to the
   // organizations trying it, and everyone else never sees the page.
   const isExploreEnabled = exploreFlag.status === "enabled";
+  // With the fold-in on, Shadow AI stops being a destination: its inventory
+  // lives in the Shadow AI policy under Guardrails, and its URLs redirect
+  // there. Opt-in, so an unavailable flag keeps the entry.
+  const isShadowAIFolded = shadowAiGuardrailsFlag.status === "enabled";
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -129,7 +136,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : [{ route: routes.riskOverview, scope: read }]),
       { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
       { route: routes.policyCenter, scope: readWrite },
-      { route: routes.shadowAI, scope: readWrite },
+      ...(isShadowAIFolded
+        ? []
+        : [{ route: routes.shadowAI, scope: readWrite }]),
       { route: routes.costs, scope: observe },
       ...(isExploreEnabled
         ? [
@@ -161,6 +170,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     isAssistantsEnabled,
     isDeploymentsPageEnabled,
     isExploreEnabled,
+    isShadowAIFolded,
     isOrgMemoryEnabled,
     isRiskWatchdogEnabled,
     isSignalsIntelligenceEnabled,

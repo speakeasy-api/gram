@@ -98,6 +98,7 @@ export function AppSidebar({
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
+  const isShadowAIFolded = !navAccess.has(routes.shadowAI.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
   const isAgentManagementEnabled = navAccess.has(routes.agents.url);
   const isSignalsIntelligenceEnabled = navAccess.has(
@@ -275,7 +276,11 @@ export function AppSidebar({
                   ]),
               { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.shadowAI, ...accessFor(routes.shadowAI) },
+              // Folded into Guardrails as the Shadow AI policy once the
+              // Shadow AI guardrails flag is on, mirroring useProjectNavRoutes.
+              ...(isShadowAIFolded
+                ? []
+                : [{ item: routes.shadowAI, ...accessFor(routes.shadowAI) }]),
             ]}
           />
 
