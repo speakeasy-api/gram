@@ -39,7 +39,9 @@ func DiscoverEndpointResource(ctx context.Context, policy *guardian.Policy, endp
 	}
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, policy, endpoint)
 	if err != nil {
-		if failure, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok && failure.Code() == "not_found" {
+		// Only metadata absent at every probe means "no metadata"; a final
+		// 404 after an earlier probe failed is still a discovery failure.
+		if failure, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok && failure.Absent() {
 			return EndpointResource{Resource: endpoint, AuthorizationServers: nil, Discovered: false}, nil
 		}
 		return none, fmt.Errorf("discover endpoint resource: %w", err)

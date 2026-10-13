@@ -28,6 +28,7 @@ func TestDiscoverEndpointResource(t *testing.T) {
 		canonicalMissing bool
 		missing          bool
 		noIssuer         bool
+		pathFault        bool
 		wantError        bool
 		wantPath         string
 	}{
@@ -40,6 +41,7 @@ func TestDiscoverEndpointResource(t *testing.T) {
 		{name: "foreign resource refused", foreign: true, wantError: true},
 		{name: "malformed metadata refused", malformed: true, wantError: true},
 		{name: "unadvertised authorization refused", noIssuer: true, wantError: true},
+		{name: "origin 404 after a failed transport probe is not absence", pathFault: true, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -52,6 +54,14 @@ func TestDiscoverEndpointResource(t *testing.T) {
 				if r.URL.Path == "/mcp" {
 					transportCalls.Add(1)
 					http.Error(w, "transport must not be probed", http.StatusBadRequest)
+					return
+				}
+				if tc.pathFault {
+					if r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
+						http.Error(w, "unavailable", http.StatusServiceUnavailable)
+						return
+					}
+					http.NotFound(w, r)
 					return
 				}
 				if (r.URL.Path != "/.well-known/oauth-protected-resource" && r.URL.Path != "/.well-known/oauth-protected-resource/mcp") || tc.missing || (tc.canonicalMissing && r.URL.Path == "/.well-known/oauth-protected-resource") || (!tc.pathDoc && r.URL.Path != "/.well-known/oauth-protected-resource") {
@@ -88,6 +98,7 @@ func TestDiscoverEndpointResource(t *testing.T) {
 			if tc.wantError {
 				require.Error(t, err)
 				require.Empty(t, resource.Resource)
+				require.False(t, resource.Discovered)
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, server.URL+tc.wantPath, resource.Resource)
