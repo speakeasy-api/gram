@@ -779,23 +779,34 @@ WHERE isi.organization_id > $1::text
       AND k.state = 'retired'
       AND k.deleted IS FALSE
       AND k.retired_at <= clock_timestamp() - make_interval(secs => $2::integer))
-    OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL))
+    OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL)
+    OR (isi.deleted IS FALSE
+      AND isi.disabled_at IS NULL
+      AND k.state = 'pending'
+      AND k.deleted IS FALSE
+      AND k.updated_at <= clock_timestamp() - make_interval(secs => $3::integer)))
 ORDER BY isi.organization_id
-LIMIT $3
+LIMIT $4
 `
 
 type ListOrganizationsWithPendingEMAIssuerWorkParams struct {
 	AfterOrganizationID string
 	OverlapSeconds      int32
+	ActivationSeconds   int32
 	MaxOrganizations    int32
 }
 
 // System sweep: organizations whose live issuer has retired keys past the
-// overlap, or with revoked keys from any issuer row whose KMS cleanup is still
-// pending. Paged by organization id so every organization is reached each
+// overlap, revoked keys from any issuer row whose KMS cleanup is still
+// pending, or an enabled issuer with a pending key past the activation delay. Paged by organization id so every organization is reached each
 // run. Returns only organization ids; each is then swept org-qualified.
 func (q *Queries) ListOrganizationsWithPendingEMAIssuerWork(ctx context.Context, arg ListOrganizationsWithPendingEMAIssuerWorkParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listOrganizationsWithPendingEMAIssuerWork, arg.AfterOrganizationID, arg.OverlapSeconds, arg.MaxOrganizations)
+	rows, err := q.db.Query(ctx, listOrganizationsWithPendingEMAIssuerWork,
+		arg.AfterOrganizationID,
+		arg.OverlapSeconds,
+		arg.ActivationSeconds,
+		arg.MaxOrganizations,
+	)
 	if err != nil {
 		return nil, err
 	}

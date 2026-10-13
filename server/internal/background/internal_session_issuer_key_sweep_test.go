@@ -27,7 +27,7 @@ func (s stubIssuerKeySweeper) SweepEMAIssuerKeysFrom(context.Context, string, ti
 }
 
 func progress(swept, pending int, next string, done bool) internalsessionissuers.SweepProgress {
-	return internalsessionissuers.SweepProgress{Swept: swept, Pending: pending, Next: next, Done: done}
+	return internalsessionissuers.SweepProgress{Swept: swept, Activated: 0, Pending: pending, Next: next, Done: done}
 }
 
 func TestInternalSessionIssuerKeySweep(t *testing.T) {
@@ -72,6 +72,35 @@ func TestInternalSessionIssuerKeySweepSkipsUnknownPendingCount(t *testing.T) {
 	_, err := NewInternalSessionIssuerKeySweepActivities(testenv.NewLogger(t), meterProvider, stubIssuerKeySweeper{progress: progress(0, -1, "", false), err: failure}).Sweep(t.Context(), "")
 	require.ErrorIs(t, err, failure)
 	require.Empty(t, pendingGauge(t, reader), "an unknown count records nothing")
+}
+
+func TestInternalSessionIssuerKeySweepCountsActivations(t *testing.T) {
+	t.Parallel()
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	swept := progress(3, 0, "", true)
+	swept.Activated = 2
+
+	got, err := NewInternalSessionIssuerKeySweepActivities(testenv.NewLogger(t), meterProvider, stubIssuerKeySweeper{progress: swept, err: nil}).Sweep(t.Context(), "")
+	require.NoError(t, err)
+	require.Equal(t, 2, got.Activated, "the page result carries activations")
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	var activated int64
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != "gram.internal_session_issuer.key_activations" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				activated += point.Value
+			}
+		}
+	}
+	require.Equal(t, int64(2), activated)
 }
 
 func pendingGauge(t *testing.T, reader *sdkmetric.ManualReader) []int64 {

@@ -19,7 +19,9 @@ import (
 )
 
 // The sweep is a backstop: rotation and management reads already retire
-// expired issuer keys. It revokes retired keys past the overlap and retries
+// expired issuer keys. It activates pending keys past the activation delay
+// (finishing a routine rotation within the hour), revokes retired keys past
+// the overlap and retries
 // KMS cleanup of every revoked key until it succeeds. Each activity sweeps
 // for a fixed budget and returns a cursor; the workflow continues from it for
 // a bounded number of pages and returns where it stopped. The next hourly run
@@ -97,13 +99,15 @@ func InternalSessionIssuerKeySweepWorkflow(ctx workflow.Context) (InternalSessio
 // InternalSessionIssuerKeySweepActivities runs the sweep. A worker without a
 // sweeper (no KMS provisioning) sweeps nothing.
 type InternalSessionIssuerKeySweepActivities struct {
-	logger  *slog.Logger
-	sweeper InternalSessionIssuerKeySweeper
-	pending metric.Int64Gauge
+	logger    *slog.Logger
+	sweeper   InternalSessionIssuerKeySweeper
+	pending   metric.Int64Gauge
+	activated metric.Int64Counter
 }
 
 func NewInternalSessionIssuerKeySweepActivities(logger *slog.Logger, meterProvider metric.MeterProvider, sweeper InternalSessionIssuerKeySweeper) *InternalSessionIssuerKeySweepActivities {
-	pending, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background").Int64Gauge(
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background")
+	pending, err := meter.Int64Gauge(
 		"gram.internal_session_issuer.kms_cleanup.pending",
 		metric.WithDescription("Revoked issuer keys whose KMS version is not yet disabled after a sweep"),
 		metric.WithUnit("{key}"),
@@ -111,20 +115,34 @@ func NewInternalSessionIssuerKeySweepActivities(logger *slog.Logger, meterProvid
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create issuer kms cleanup gauge", attr.SlogError(err))
 	}
-	return &InternalSessionIssuerKeySweepActivities{logger: logger, sweeper: sweeper, pending: pending}
+	activated, err := meter.Int64Counter(
+		"gram.internal_session_issuer.key_activations",
+		metric.WithDescription("Ready pending issuer keys the sweep activated"),
+		metric.WithUnit("{key}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create issuer key activation counter", attr.SlogError(err))
+	}
+	return &InternalSessionIssuerKeySweepActivities{logger: logger, sweeper: sweeper, pending: pending, activated: activated}
 }
 
 // Sweep runs one budgeted page. It fails, so Temporal retries the page, only
 // when it made no progress; otherwise failures are logged and paging goes on.
 func (a *InternalSessionIssuerKeySweepActivities) Sweep(ctx context.Context, after string) (internalsessionissuers.SweepProgress, error) {
 	if a.sweeper == nil {
-		return internalsessionissuers.SweepProgress{Swept: 0, Pending: 0, Next: "", Done: true}, nil
+		return internalsessionissuers.SweepProgress{Swept: 0, Activated: 0, Pending: 0, Next: "", Done: true}, nil
 	}
 	progress, err := a.sweeper.SweepEMAIssuerKeysFrom(ctx, after, internalSessionIssuerKeySweepPageBudget)
 	// The count is fleet-wide and read after the sweep, so it stays accurate
 	// when some organizations failed; -1 means it could not be read.
 	if a.pending != nil && progress.Pending >= 0 {
 		a.pending.Record(ctx, int64(progress.Pending))
+	}
+	if progress.Activated > 0 {
+		if a.activated != nil {
+			a.activated.Add(ctx, int64(progress.Activated))
+		}
+		a.logger.InfoContext(ctx, "activated ready internal session issuer keys", attr.SlogValueInt(progress.Activated))
 	}
 	if progress.Pending > 0 {
 		a.logger.ErrorContext(ctx, "revoked internal session issuer keys still await kms cleanup", attr.SlogValueInt(progress.Pending))
