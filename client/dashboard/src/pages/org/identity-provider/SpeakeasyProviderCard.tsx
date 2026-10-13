@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import { invalidateAllInternalSessionIssuer } from "@gram/client/react-query/internalSessionIssuer.js";
@@ -7,10 +8,13 @@ import { useOrganization, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { Alert } from "@/components/ui/Alert";
+import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Heading } from "@/components/ui/Heading";
+import { Icon } from "@/components/ui/Icon";
+import { SkeletonParagraph } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
@@ -20,12 +24,31 @@ import {
 
 type Action = "disable" | null;
 
-export function EnterpriseIssuerSection(): JSX.Element {
+type BadgeVariant = NonNullable<BadgeProps["variant"]>;
+
+const STATE_BADGE: Record<
+  InternalSessionIssuer["state"],
+  { label: string; variant: BadgeVariant }
+> = {
+  enabled: { label: "Enabled", variant: "success" },
+  disabled: { label: "Off", variant: "neutral" },
+  setup_required: { label: "Off", variant: "neutral" },
+  entitlement_required: {
+    label: "Requires single sign-on",
+    variant: "neutral",
+  },
+  signing_paused: { label: "Paused", variant: "warning" },
+  keyless: { label: "Needs attention", variant: "destructive" },
+  unavailable: { label: "Unavailable", variant: "neutral" },
+};
+
+/** Speakeasy as a built-in identity provider for Enterprise Managed Authorization. */
+export function SpeakeasyProviderCard(): JSX.Element {
   const organization = useOrganization();
-  return <EnterpriseIssuerContent key={organization.id} />;
+  return <SpeakeasyProviderContent key={organization.id} />;
 }
 
-function EnterpriseIssuerContent(): JSX.Element {
+function SpeakeasyProviderContent(): JSX.Element {
   const organization = useOrganization();
   const session = useSession();
   const { hasScope } = useRBAC();
@@ -55,87 +78,87 @@ function EnterpriseIssuerContent(): JSX.Element {
     enable.reset();
     setAction(nextAction);
   };
+  const badge = issuer ? STATE_BADGE[issuer.state] : undefined;
 
   return (
-    <section
-      aria-label="Enterprise Managed Authorization"
-      className="border-border border-t pt-6"
+    <article
+      aria-label="Speakeasy identity provider"
+      className="flex min-w-0 flex-col gap-4 border p-6"
     >
-      <Heading variant="h5">Enterprise Managed Authorization</Heading>
-      <Text muted small className="mt-1 block">
-        Let your team access supported MCP servers using their organization
-        identity, without authorizing each service individually.
+      <div className="flex flex-wrap items-center gap-3">
+        <Icon name="key-round" className="h-5 w-5" />
+        <Heading variant="h3">Speakeasy</Heading>
+        {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
+      </div>
+      <Text muted small>
+        Enterprise Managed Authorization lets your team reach supported MCP
+        servers with their organization sign-in, without authorizing each
+        service individually.
       </Text>
-      <div className="mt-4 min-h-24 space-y-3">
-        {query.isPending && (
-          <Text small muted role="status">
-            Loading issuer…
-          </Text>
-        )}
-        {query.isError && (
-          <Alert variant="error">
-            <Text small>Couldn't load the issuer. Try again.</Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
+      {query.isPending && <SkeletonParagraph />}
+      {query.isError && (
+        <Alert variant="error">
+          <Text small>Couldn't load the issuer. Try again.</Text>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={query.isFetching}
+            onClick={() => void query.refetch()}
+          >
+            Retry
+          </Button>
+        </Alert>
+      )}
+      {issuer && <IssuerStatus issuer={issuer} />}
+      {issuer?.issuer && (
+        <>
+          <dl className="space-y-1">
+            <dt className="text-eyebrow">Issuer URI</dt>
+            <dd className="flex min-w-0 items-center gap-2">
+              <code className="min-w-0 text-sm [overflow-wrap:anywhere]">
+                {issuer.issuer}
+              </code>
+              <span className="shrink-0">
+                <CopyButton
+                  text={issuer.issuer}
+                  tooltip="Copy issuer URI"
+                  size="xs"
+                />
+              </span>
+            </dd>
+          </dl>
+          <Text small muted>
+            Register this URI in each service's enterprise authorization
+            settings. It uses ID-JAG assertions with the JWT Bearer grant
+            defined in{" "}
+            <a
+              href="https://www.rfc-editor.org/rfc/rfc7523.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2"
             >
-              Retry
-            </Button>
-          </Alert>
-        )}
-        {issuer && <IssuerStatus issuer={issuer} />}
-        {issuer?.issuer && (
-          <>
-            <Text small muted>
-              Register the issuer URI in each service's enterprise authorization
-              settings.
-            </Text>
-            <dl className="space-y-1">
-              <dt className="text-eyebrow">Issuer URI</dt>
-              <dd className="flex min-w-0 items-center gap-2">
-                <code className="min-w-0 text-sm [overflow-wrap:anywhere]">
-                  {issuer.issuer}
-                </code>
-                <span className="shrink-0">
-                  <CopyButton
-                    text={issuer.issuer}
-                    tooltip="Copy issuer URI"
-                    size="xs"
-                  />
-                </span>
-              </dd>
-            </dl>
-            <Text small muted>
-              Uses ID-JAG assertions with the JWT Bearer grant defined in{" "}
-              <a
-                href="https://www.rfc-editor.org/rfc/rfc7523.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-2"
-              >
-                RFC 7523
-              </a>
-              .
-            </Text>
-          </>
-        )}
-        {issuer && isDemo && (
-          <Text small muted>
-            The shared demo is read-only.
+              RFC 7523
+            </a>
+            .
           </Text>
-        )}
-        {issuer && !canManage && !isDemo && (
-          <Text small muted>
-            Only organization admins signed in directly can change Enterprise
-            Managed Authorization.
-          </Text>
-        )}
+        </>
+      )}
+      {issuer && isDemo && (
+        <Text small muted>
+          The shared demo is read-only.
+        </Text>
+      )}
+      {issuer && !canManage && !isDemo && (
+        <Text small muted>
+          Only organization admins signed in directly can change Enterprise
+          Managed Authorization.
+        </Text>
+      )}
+      {(canEnable || canDisable) && (
         <div className="flex flex-wrap gap-2">
           {canEnable && (
             <Button
-              variant="secondary"
+              variant="primary"
               size="sm"
               disabled={pending}
               onClick={() =>
@@ -163,13 +186,13 @@ function EnterpriseIssuerContent(): JSX.Element {
             </SimpleTooltip>
           )}
         </div>
-        {enable.isError && action === null && (
-          <Alert variant="error">
-            Couldn't enable Enterprise Managed Authorization. Try again or
-            contact your Speakeasy administrator.
-          </Alert>
-        )}
-      </div>
+      )}
+      {enable.isError && action === null && (
+        <Alert variant="error">
+          Couldn't enable Enterprise Managed Authorization. Try again or contact
+          your Speakeasy administrator.
+        </Alert>
+      )}
       <ConfirmDialog
         open={action === "disable"}
         onOpenChange={(open) => {
@@ -202,7 +225,7 @@ function EnterpriseIssuerContent(): JSX.Element {
           })
         }
       />
-    </section>
+    </article>
   );
 }
 
@@ -226,9 +249,15 @@ function IssuerStatus({
         : "Enterprise Managed Authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and SSO access.";
       break;
     case "entitlement_required":
-      message =
-        "Enterprise Managed Authorization requires SSO access. Contact your Speakeasy administrator to enable it.";
-      break;
+      return (
+        <Text small muted role="status">
+          Enterprise Managed Authorization requires single sign-on.{" "}
+          <Link to="?tab=sso" className="underline underline-offset-2">
+            Set up single sign-on
+          </Link>
+          , or contact your Speakeasy administrator to enable it.
+        </Text>
+      );
     case "signing_paused":
       message =
         "Enterprise Managed Authorization is temporarily paused. Contact your Speakeasy administrator for help.";

@@ -40,12 +40,20 @@ vi.mock("@/components/api-error-alert", () => ({
     error ? <div role="alert">{error.message}</div> : null,
 }));
 
-function show(query = "") {
+vi.mock("./SpeakeasyProviderCard", () => ({
+  SpeakeasyProviderCard: () => (
+    <article aria-label="Speakeasy identity provider" />
+  ),
+}));
+function show(
+  query = "",
+  props = { showExternal: true, showSpeakeasy: false },
+) {
   render(
     <MemoryRouter
       initialEntries={[`/example/identity?tab=identity-providers${query}`]}
     >
-      <IdentityProviders />
+      <IdentityProviders {...props} />
     </MemoryRouter>,
   );
 }
@@ -152,5 +160,23 @@ describe("Identity providers", () => {
     mocks.admin = false;
     show();
     expect(screen.queryByRole("heading")).toBeNull();
+  });
+});
+
+describe("provider cards", () => {
+  it("lists Speakeasy beside external providers", () => {
+    show("", { showExternal: true, showSpeakeasy: true });
+    expect(
+      screen.getByRole("article", { name: "Speakeasy identity provider" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Okta/ })).toBeTruthy();
+  });
+
+  it("lists only Speakeasy without the external-provider rollout", () => {
+    show("?provider=okta", { showExternal: false, showSpeakeasy: true });
+    expect(
+      screen.getByRole("article", { name: "Speakeasy identity provider" }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Okta content/)).toBeNull();
   });
 });

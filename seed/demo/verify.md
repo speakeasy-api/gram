@@ -544,13 +544,12 @@ the PR, don't commit them.
 
 ## Enterprise authorization
 
-Open Organization Identity > Single sign-on. The enterprise authorization section
-shows a not-configured or unavailable state in the fresh demo; no synthetic
-signing key is presented as working. In a local organization with signing and
-SSO configured, enable the issuer and copy its URI. Rotate the key and confirm
-the pending publication message appears. After publication, click Complete rotation
-and confirm the new key activates and the message clears. Disable the issuer and
-confirm the URI remains visible. Disabling must remain possible after removing
+Open Organization Identity > Identity providers. The Speakeasy card shows a
+not-configured or unavailable state in the fresh demo; no synthetic signing key
+is presented as working. The Single sign-on tab no longer shows the issuer. In a
+local organization with signing and SSO configured, enable the issuer from the
+Speakeasy card and copy its URI. Without SSO, the card links to the Single
+sign-on tab. Disable the issuer and confirm the URI remains visible. Disabling must remain possible after removing
 the SSO entitlement; re-enabling requires it. Read-only and support sessions show
 the URI without mutation controls; check status messages in states that render one. At a 400px viewport, the URI wraps
 and the copy control remains visible.

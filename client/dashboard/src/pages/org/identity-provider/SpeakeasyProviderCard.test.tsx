@@ -8,7 +8,8 @@ import {
 } from "@testing-library/react";
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { EnterpriseIssuerSection } from "./EnterpriseIssuerSection";
+import { MemoryRouter } from "react-router";
+import { SpeakeasyProviderCard } from "./SpeakeasyProviderCard";
 
 const mocks = vi.hoisted(() => ({
   organizationId: "example-org",
@@ -79,9 +80,11 @@ const enabledIssuer: InternalSessionIssuer = {
 };
 function show() {
   return render(
-    <TooltipProvider>
-      <EnterpriseIssuerSection />
-    </TooltipProvider>,
+    <MemoryRouter>
+      <TooltipProvider>
+        <SpeakeasyProviderCard />
+      </TooltipProvider>
+    </MemoryRouter>,
   );
 }
 afterEach(() => {
@@ -96,17 +99,21 @@ afterEach(() => {
   mocks.error = false;
 });
 
-describe("Enterprise Managed Authorization", () => {
+describe("Speakeasy identity provider card", () => {
   it("shows a loading state and retry after failure", () => {
     mocks.loading = true;
     const view = show();
-    expect(screen.getByText("Loading issuer…")).toBeTruthy();
+    expect(
+      screen.getByRole("article", { name: "Speakeasy identity provider" }),
+    ).toBeTruthy();
     mocks.loading = false;
     mocks.error = true;
     view.rerender(
-      <TooltipProvider>
-        <EnterpriseIssuerSection />
-      </TooltipProvider>,
+      <MemoryRouter>
+        <TooltipProvider>
+          <SpeakeasyProviderCard />
+        </TooltipProvider>
+      </MemoryRouter>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mocks.refetch).toHaveBeenCalledOnce();
@@ -155,9 +162,7 @@ describe("Enterprise Managed Authorization", () => {
     mocks.issuer = enabledIssuer;
     show();
     expect(screen.getByText(enabledIssuer.issuer!)).toBeTruthy();
-    expect(
-      screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Speakeasy" })).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "RFC 7523" }).getAttribute("href"),
     ).toBe("https://www.rfc-editor.org/rfc/rfc7523.html");
@@ -314,9 +319,11 @@ describe("Enterprise Managed Authorization", () => {
     expect(screen.getByRole("dialog")).toBeTruthy();
     mocks.organizationId = "other-example-org";
     view.rerender(
-      <TooltipProvider>
-        <EnterpriseIssuerSection />
-      </TooltipProvider>,
+      <MemoryRouter>
+        <TooltipProvider>
+          <SpeakeasyProviderCard />
+        </TooltipProvider>
+      </MemoryRouter>,
     );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(mocks.mutate).not.toHaveBeenCalled();

@@ -14,6 +14,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 const mocks = vi.hoisted(() => ({
   admin: true,
   enabled: true,
+  issuerAvailable: false,
   ema: vi.fn(),
   slack: vi.fn(),
   features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
@@ -42,12 +43,14 @@ vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
     </div>
   ),
 }));
-vi.mock("./identity-provider/EnterpriseIssuerSection", () => ({
-  EnterpriseIssuerSection: () => <div>Enterprise authorization settings</div>,
+vi.mock("./identity-provider/useEnterpriseIssuer", () => ({
+  useEnterpriseIssuer: () => ({
+    data: mocks.issuerAvailable ? { state: "setup_required" } : undefined,
+  }),
 }));
 vi.mock("./identity-provider/IdentityProviders", () => ({
-  IdentityProviders: () => {
-    mocks.ema();
+  IdentityProviders: (props: unknown) => {
+    mocks.ema(props);
     return <div>EMA workspace</div>;
   },
 }));
@@ -138,6 +141,7 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.admin = true;
   mocks.enabled = true;
+  mocks.issuerAvailable = false;
   mocks.onboarding = {
     domainVerified: false,
     ssoConfigured: false,
@@ -198,6 +202,26 @@ describe("identity top-level tabs", () => {
       expect(mocks.features).toHaveBeenCalled();
     },
   );
+
+  it("lists the Speakeasy provider when the issuer is offered without the Okta rollout", () => {
+    mocks.enabled = false;
+    mocks.issuerAvailable = true;
+    show("?tab=identity-providers");
+    expect(
+      screen.getByRole("link", { name: "Identity providers" }),
+    ).toBeTruthy();
+    expect(mocks.ema).toHaveBeenCalledWith({
+      showExternal: false,
+      showSpeakeasy: true,
+    });
+  });
+
+  it("keeps the issuer off the Single sign-on tab", () => {
+    mocks.issuerAvailable = true;
+    show();
+    expect(screen.queryByText(/Enterprise Managed Authorization/)).toBeNull();
+    expect(mocks.ema).not.toHaveBeenCalled();
+  });
 
   it("falls back to SSO for arbitrary unsupported tabs", () => {
     show("?tab=bogus");

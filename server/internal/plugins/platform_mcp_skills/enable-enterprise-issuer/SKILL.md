@@ -3,7 +3,7 @@ name: enable-enterprise-issuer
 description: Guide an organization administrator through Speakeasy AI Control Plane enterprise issuer setup, retrieve the public issuer URI, and distinguish configured trust from verified MCP access.
 ---
 
-# Set up Enterprise Managed Authorization
+# Set up enterprise-managed authorization
 
 Use the executing client's authenticated Speakeasy AI Control Plane (AICP)
 Platform MCP connection. This workflow retrieves one organization's issuer and
@@ -39,9 +39,9 @@ For `setup_required` or `disabled`, first require `can_enable: true`. If it is
 false or missing, report `next_step` and stop; do not direct the administrator
 to enable an unavailable issuer. When eligible, explain that enabling provisions or resumes
 the organization's public issuer; it does not establish vendor trust or grant
-user access. Ask the organization administrator to open **IDP and SSO → Single
-sign-on → Enterprise Managed Authorization** and choose **Enable Enterprise
-Managed Authorization** for the confirmed organization. There is no issuer mutation
+user access. Ask the organization administrator to open **IDP and SSO → Identity
+providers**, find the **Speakeasy** card, and choose **Enable** for the confirmed
+organization. There is no issuer mutation
 tool in this workflow. Do not substitute raw API requests, database writes,
 credentials, or an invented tool.
 
