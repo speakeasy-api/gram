@@ -69,7 +69,7 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 		return fmt.Errorf("cannot read plugin config at %q (%s); reinstall the Speakeasy hooks plugin", l.cfg.ConfigPath, l.cfg.ConfigError)
 	}
 	if tokenCommandConfigured() {
-		return errors.New("this machine authenticates through SPEAKEASY_AI_HOOKS_TOKEN_COMMAND; sign-in is not used")
+		return errors.New("this machine authenticates through the device agent's hooks token; sign-in is not used")
 	}
 	if c, ok := resolveAuth(l.cfg); ok && !force && c.Source != credOrg {
 		return nil

@@ -41,15 +41,19 @@ func tokenBox(t *testing.T, serverURL string) (Config, *fakeTokenCommand) {
 	t.Setenv("SPEAKEASY_AI_HOOKS_TOKEN_COMMAND", "/opt/speakeasy/speakeasyd hooks-token")
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "env-key-must-not-be-used")
 	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "")
+	// No real device agent may answer identity: the env command is the source.
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	resetDeviceIdentityMemo()
+	t.Cleanup(resetDeviceIdentityMemo)
 
 	fc := &fakeTokenCommand{now: time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC), life: 15 * time.Minute, project: "hooks-proj"}
 	prevRun, prevNow := runTokenCommand, nowFunc
-	runTokenCommand = func(_ context.Context, commandLine string, refresh bool) ([]byte, error) {
+	runTokenCommand = func(_ context.Context, argv []string, refresh bool) ([]byte, error) {
 		n := fc.calls.Add(1)
 		if refresh {
 			fc.refresh.Add(1)
 		}
-		fc.lastSeen = commandLine
+		fc.lastSeen = strings.Join(argv, "\x00")
 		if fc.fail != nil {
 			return nil, fc.fail
 		}
@@ -82,7 +86,7 @@ func TestTokenCommandIsExclusive(t *testing.T) {
 	require.Empty(t, h.Get("Gram-Key"), "no key may ride alongside the device token")
 	require.Equal(t, "hooks-proj", h.Get("Gram-Project"), "the token's project overrides the plugin's")
 	require.Equal(t, int32(1), fc.calls.Load())
-	require.Equal(t, "/opt/speakeasy/speakeasyd hooks-token", fc.lastSeen)
+	require.Equal(t, "/opt/speakeasy/speakeasyd\x00hooks-token", fc.lastSeen, "the env command line is split on whitespace")
 }
 
 func TestTokenCommandCacheHitSkipsCommand(t *testing.T) {
@@ -265,7 +269,7 @@ func TestLoginRefusedOnTokenBox(t *testing.T) {
 	cfg, _ := tokenBox(t, "https://app.example")
 	cfg.BrowserLogin = true
 	err := newLoginFlow(cfg).Run(context.Background(), true)
-	require.ErrorContains(t, err, "SPEAKEASY_AI_HOOKS_TOKEN_COMMAND")
+	require.ErrorContains(t, err, "hooks token")
 }
 
 func TestExecTokenCommand(t *testing.T) {
@@ -279,23 +283,23 @@ printf '{"authorization":"Bearer %s","project":"%s","expires_at":"2099-01-01T00:
 `), 0o700)) // #nosec G306 -- test script must be executable
 	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "leaked")
 
-	out, err := execTokenCommand(context.Background(), script+" hooks-token", true)
+	out, err := execTokenCommand(context.Background(), []string{script, "hooks-token"}, true)
 	require.NoError(t, err)
 	require.Contains(t, string(out), `"Bearer none"`, "a hooks key must not reach the command")
 	require.Contains(t, string(out), `"project":"1"`, "a forced refresh is signalled to the command")
 
-	_, err = execTokenCommand(context.Background(), "speakeasyd hooks-token", false)
+	_, err = execTokenCommand(context.Background(), []string{"speakeasyd", "hooks-token"}, false)
 	require.ErrorContains(t, err, "absolute path")
 
 	failing := filepath.Join(dir, "failing")
 	require.NoError(t, os.WriteFile(failing, []byte("#!/bin/sh\necho 'no hooks project: Bearer eyJhbGciOiJSUzI1NiJ9.secretsecretsecret' >&2\nexit 3\n"), 0o700)) // #nosec G306 -- test script must be executable
-	_, err = execTokenCommand(context.Background(), failing, false)
+	_, err = execTokenCommand(context.Background(), []string{failing}, false)
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "secretsecretsecret", "stderr is sanitized")
 	require.Contains(t, err.Error(), "no hooks project")
 
 	noisy := filepath.Join(dir, "noisy")
 	require.NoError(t, os.WriteFile(noisy, []byte("#!/bin/sh\nhead -c 40000 /dev/zero | tr '\\0' 'a'\n"), 0o700)) // #nosec G306 -- test script must be executable
-	_, err = execTokenCommand(context.Background(), noisy, false)
+	_, err = execTokenCommand(context.Background(), []string{noisy}, false)
 	require.ErrorContains(t, err, "exceeds")
 }

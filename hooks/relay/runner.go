@@ -216,7 +216,8 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		// A rejected token gets one fresh token and one retry. There is no
 		// key to fall back to: a token box authenticates as itself or not at
 		// all, so a second rejection stays a definitive, fail-closed 4xx.
-		if fresh, ok := resolveTokenAuth(r.cfg, true); ok {
+		argv, _ := tokenCommandArgv()
+		if fresh, ok := resolveTokenAuth(r.cfg, argv, true); ok {
 			finalCreds = fresh
 			res = r.send(ctx, fresh, payload, idemKey)
 			r.debugf("event=%s auth-retry=token status=%d cause=%s denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause, res.decision.denied())

@@ -14,12 +14,21 @@ import (
 	"time"
 )
 
-// The token-command credential source (ADR-0025, contract C7) authenticates a
-// headless workload box. SPEAKEASY_AI_HOOKS_TOKEN_COMMAND names the device
-// agent's `speakeasyd hooks-token`, which prints a short-lived device-agent
-// bearer and the project the box's admission names.
+// The token-command credential source (ADR-0025, contracts C7 and C8)
+// authenticates a headless workload box. The command is the device agent's
+// `speakeasyd hooks-token`, which prints a short-lived device-agent bearer and
+// the project the box's admission names. It is found in one of three ways, in
+// order:
 //
-// When it is set it is the only credential source: an env key, a cached
+//  1. SPEAKEASY_AI_HOOKS_TOKEN_COMMAND, an explicit override, split on
+//     whitespace (no quoting).
+//  2. Discovery: `speakeasyd identity` reports "workload": true and the argv in
+//     "hooks_token_argv", executed as given.
+//  3. When the device agent cannot be asked at all, the argv recorded with the
+//     last cached token, so a box already authenticating by token never drops
+//     back to a key because one identity lookup failed.
+//
+// Whichever applies, it is the only credential source: an env key, a cached
 // personal key or the baked org-wide key would all bypass the admission's
 // project filter. The bearer is cached in the auth cache until shortly before
 // it expires, so a hook event costs a file read rather than a process spawn.
@@ -36,14 +45,35 @@ const (
 // nowFunc is the relay's clock for token expiry; a var so tests can move it.
 var nowFunc = time.Now
 
-// runTokenCommand executes the configured command; a var so tests can script
-// its output without a real binary.
+// runTokenCommand executes the token command's argv; a var so tests can
+// script its output without a real binary.
 var runTokenCommand = execTokenCommand
+
+// tokenCommandArgv returns the argv this machine must authenticate with, and
+// whether the token source applies at all. An applying source with an empty
+// or invalid argv is still exclusive: it fails as credential-unavailable and
+// never falls back to a key.
+func tokenCommandArgv() ([]string, bool) {
+	if commandLine := Env("HOOKS_TOKEN_COMMAND"); commandLine != "" {
+		return strings.Fields(commandLine), true
+	}
+	id := deviceIdentityFor(context.Background())
+	if id.Workload {
+		return id.HooksTokenArgv, true
+	}
+	if !id.Known {
+		if argv, ok := cachedTokenArgv(); ok {
+			return argv, true
+		}
+	}
+	return nil, false
+}
 
 // tokenCommandConfigured reports whether this machine authenticates through
 // the token command.
 func tokenCommandConfigured() bool {
-	return Env("HOOKS_TOKEN_COMMAND") != ""
+	_, ok := tokenCommandArgv()
+	return ok
 }
 
 type tokenCommandOutput struct {
@@ -56,13 +86,13 @@ type tokenCommandOutput struct {
 // has more than tokenRefreshMargin left, else a fresh one from the command.
 // refresh skips the cache and asks the command for a new token, for the
 // 401/403 recovery path.
-func resolveTokenAuth(cfg Config, refresh bool) (creds, bool) {
+func resolveTokenAuth(cfg Config, argv []string, refresh bool) (creds, bool) {
 	if !refresh {
 		if c, ok := readCachedToken(cfg); ok {
 			return c, true
 		}
 	}
-	out, err := runTokenCommand(context.Background(), Env("HOOKS_TOKEN_COMMAND"), refresh)
+	out, err := runTokenCommand(context.Background(), argv, refresh)
 	if err != nil {
 		debugTokenCommand(cfg, "token command failed: %v", err)
 		return creds{}, false
@@ -82,7 +112,7 @@ func resolveTokenAuth(cfg Config, refresh bool) (creds, bool) {
 		Bearer:    strings.TrimPrefix(bearer.Authorization, "Bearer "),
 		ExpiresAt: bearer.ExpiresAt,
 	}
-	if err := writeTokenAuth(c); err != nil {
+	if err := writeTokenAuth(c, argv); err != nil {
 		// The token still authenticates this event; the next one re-runs the
 		// command.
 		debugTokenCommand(cfg, "token cache write failed: %v", err)
@@ -145,20 +175,43 @@ func readCachedToken(cfg Config) (creds, bool) {
 }
 
 // writeTokenAuth caches a token credential and marks the machine established,
-// so later failures follow the fail-closed ratchet like any credential.
-func writeTokenAuth(c creds) error {
+// so later failures follow the fail-closed ratchet like any credential. The
+// argv that minted it is recorded too (JSON, so it stays on one line), for
+// cachedTokenArgv.
+func writeTokenAuth(c creds, argv []string) error {
 	for _, v := range []string{c.ServerURL, c.Bearer, c.Project, c.Org} {
 		if strings.ContainsAny(v, "\r\n") {
 			return errors.New("credential value contains a line break")
 		}
 	}
-	body := fmt.Sprintf("kind=%s\nserver_url=%s\nbearer=%s\nproject=%s\norg=%s\nexpires_at=%s\n",
-		tokenCacheKind, c.ServerURL, c.Bearer, c.Project, c.Org, c.ExpiresAt.UTC().Format(time.RFC3339Nano))
+	encodedArgv, err := json.Marshal(argv)
+	if err != nil {
+		return fmt.Errorf("encode token command: %w", err)
+	}
+	body := fmt.Sprintf("kind=%s\nserver_url=%s\nbearer=%s\nproject=%s\norg=%s\nexpires_at=%s\nargv=%s\n",
+		tokenCacheKind, c.ServerURL, c.Bearer, c.Project, c.Org, c.ExpiresAt.UTC().Format(time.RFC3339Nano), encodedArgv)
 	if err := atomicWriteCacheFile(authFilePath(), []byte(body)); err != nil {
 		return err
 	}
 	markEstablished()
 	return nil
+}
+
+// cachedTokenArgv returns the argv recorded with the cached token, expired or
+// not: proof this box authenticates by token, used only when the device agent
+// cannot be asked.
+func cachedTokenArgv() ([]string, bool) {
+	values, err := readAuthFile(authFilePath())
+	if err != nil || values["kind"] != tokenCacheKind {
+		return nil, false
+	}
+	var argv []string
+	if json.Unmarshal([]byte(values["argv"]), &argv) != nil {
+		// A token cache without a usable argv still marks a token box: the
+		// source applies, and the empty argv fails as credential-unavailable.
+		return nil, true
+	}
+	return argv, true
 }
 
 // tokenCommandEnvAllow lists the environment passed to the command: enough to
@@ -190,17 +243,15 @@ func tokenCommandEnv(refresh bool) []string {
 	return env
 }
 
-// execTokenCommand runs the command line without a shell. The first field
-// must be an absolute path, so PATH lookups cannot substitute a different
-// binary.
-func execTokenCommand(ctx context.Context, commandLine string, refresh bool) ([]byte, error) {
-	fields := strings.Fields(commandLine)
-	if len(fields) == 0 || !filepath.IsAbs(fields[0]) {
-		return nil, errors.New("SPEAKEASY_AI_HOOKS_TOKEN_COMMAND must start with an absolute path")
+// execTokenCommand runs argv without a shell. The first element must be an
+// absolute path, so PATH lookups cannot substitute a different binary.
+func execTokenCommand(ctx context.Context, argv []string, refresh bool) ([]byte, error) {
+	if len(argv) == 0 || !filepath.IsAbs(argv[0]) {
+		return nil, errors.New("the hooks token command (SPEAKEASY_AI_HOOKS_TOKEN_COMMAND or the device agent's hooks_token_argv) must start with an absolute path")
 	}
 	ctx, cancel := context.WithTimeout(ctx, tokenCommandTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, fields[0], fields[1:]...) // #nosec G204 -- an administrator-configured command, run without a shell.
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) // #nosec G204 -- the administrator's or device agent's command, run without a shell.
 	cmd.Env = tokenCommandEnv(refresh)
 	cmd.Stdin = nil
 	var stdout, stderr cappedBuffer

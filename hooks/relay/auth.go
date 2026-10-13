@@ -149,8 +149,8 @@ func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
 // A configured token command is exclusive: no key of any kind is consulted,
 // because each would bypass the project filter the box's admission sets.
 func resolveAuth(cfg Config) (creds, bool) {
-	if tokenCommandConfigured() {
-		return resolveTokenAuth(cfg, false)
+	if argv, ok := tokenCommandArgv(); ok {
+		return resolveTokenAuth(cfg, argv, false)
 	}
 	apiKey := Env("HOOKS_API_KEY")
 	if apiKey != "" {
