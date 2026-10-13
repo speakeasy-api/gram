@@ -12,7 +12,7 @@ export default {
       const { stdout } = await exec("mise", ["set", "GRAM_OPENCODE_PLUGINS"], {
         cwd: ctx.location.directory,
       });
-      if (!stdout.split(",").some((id) => id.trim() === pluginID)) return;
+      if (!stdout.split(":").some((id) => id.trim() === pluginID)) return;
     } catch {
       // An unset variable (or failed lookup) leaves the plugin disabled.
       return;

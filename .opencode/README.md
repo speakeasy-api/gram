@@ -2,7 +2,7 @@
 
 OpenCode V2 automatically loads `plugins/pause-stack.js`, but it is opt-in.
 At setup, the plugin reads `mise set GRAM_OPENCODE_PLUGINS` in its location's
-directory. It activates only when that comma-separated value contains the exact
+directory. It activates only when that colon-separated value contains the exact
 ID `speakeasy.pause-stack` (surrounding whitespace is ignored). An unset variable
 or failed lookup leaves it disabled.
 
@@ -11,7 +11,7 @@ Enable it locally by appending the ID to `GRAM_OPENCODE_PLUGINS` in
 
 ```sh
 plugins="$(mise set GRAM_OPENCODE_PLUGINS 2>/dev/null || true)"
-mise set --file mise.local.toml "GRAM_OPENCODE_PLUGINS=${plugins:+$plugins,}speakeasy.pause-stack"
+mise set --file mise.local.toml "GRAM_OPENCODE_PLUGINS=${plugins:+$plugins:}speakeasy.pause-stack"
 ```
 
 After changing the variable, reload the plugin with
