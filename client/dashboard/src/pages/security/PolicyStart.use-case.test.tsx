@@ -10,7 +10,7 @@ import { PolicyStartChooser } from "./PolicyStart";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn<(to: unknown, options?: unknown) => void>(),
   setKind: vi.fn<(kind: string | null) => void>(),
-  flags: {} as Record<string, "enabled" | "disabled">,
+  flags: {} as Record<string, "enabled" | "disabled" | "loading">,
   policies: {
     data: { policies: [] as RiskPolicy[] } as
       | { policies: RiskPolicy[] }
@@ -195,6 +195,20 @@ describe("PolicyStartChooser Shadow AI use case", () => {
     const row = shadowAIRow();
     expect(row.hasAttribute("disabled")).toBe(true);
     expect(row.textContent).toContain("Checking this project's policies");
+
+    fireEvent.click(row);
+
+    expect(mocks.setKind).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("holds the use case until the flag resolves", () => {
+    mocks.flags["gram-shadow-ai-guardrails"] = "loading";
+    renderChooser();
+
+    const row = screen.getByRole("button", { name: /Unapproved MCP servers/ });
+    expect(row.hasAttribute("disabled")).toBe(true);
+    expect(row.textContent).toContain("Checking this project's settings");
 
     fireEvent.click(row);
 

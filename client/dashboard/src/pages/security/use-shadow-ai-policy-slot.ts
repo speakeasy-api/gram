@@ -15,15 +15,24 @@ export interface ShadowAIPolicySlot {
   href: string | undefined;
 }
 
-export function useShadowAIPolicySlot(): ShadowAIPolicySlot {
+export function useShadowAIPolicySlot({
+  enabled = true,
+}: {
+  /** Off, nothing is fetched: the flag-off flow has no Shadow AI control. */
+  enabled?: boolean;
+} = {}): ShadowAIPolicySlot {
   const routes = useRoutes();
-  const policiesQuery = useRiskListPolicies();
+  const policiesQuery = useRiskListPolicies(undefined, undefined, {
+    enabled,
+    throwOnError: false,
+  });
   const existing = findBlockingShadowMCPPolicy(
     policiesQuery.data?.policies ?? [],
   );
   return {
     pending: !policiesQuery.data && !policiesQuery.isError,
-    failed: policiesQuery.isError,
+    // A failed refetch over a cached list still answers the question.
+    failed: policiesQuery.isError && !policiesQuery.data,
     existing,
     href: existing ? routes.policyCenter.detail.href(existing.id) : undefined,
   };

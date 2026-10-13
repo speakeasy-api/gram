@@ -173,8 +173,11 @@ export function PolicyStartChooser(): JSX.Element {
     telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
   // The Shadow AI policy kind arrives with the fold-in of the Shadow AI
   // section into Guardrails.
-  const shadowAIEnabled =
-    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
+  const shadowAIFlag = useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status;
+  const shadowAIEnabled = shadowAIFlag === "enabled";
+  // Until the flag resolves, the Shadow AI use case must not open the
+  // standard editor it leaves behind once the flag reads enabled.
+  const shadowAIFlagPending = shadowAIFlag === "loading";
   const [, setKind] = useQueryState("kind");
   // "Change starting point" hands the state over in the route; otherwise
   // pick up a description left behind earlier in this browser session.
@@ -197,7 +200,7 @@ export function PolicyStartChooser(): JSX.Element {
   const allPresets = shadowAIEnabled
     ? (data?.presets ?? []).map(presentShadowAIUseCase)
     : (data?.presets ?? []);
-  const shadowAISlot = useShadowAIPolicySlot();
+  const shadowAISlot = useShadowAIPolicySlot({ enabled: shadowAIEnabled });
   const presets = allPresets.filter(
     (preset) => promptPoliciesEnabled || preset.policyType !== "prompt_based",
   );
@@ -346,6 +349,7 @@ export function PolicyStartChooser(): JSX.Element {
                 mode={mode}
                 promptPoliciesEnabled={promptPoliciesEnabled}
                 shadowAIEnabled={shadowAIEnabled}
+                shadowAIFlagPending={shadowAIFlagPending}
                 shadowAISlot={shadowAISlot}
                 onSelect={(preset) => openDraft(draftFromPreset(preset))}
                 onShadowAI={openShadowAI}
@@ -374,6 +378,7 @@ function UseCaseTable({
   mode,
   promptPoliciesEnabled,
   shadowAIEnabled,
+  shadowAIFlagPending,
   shadowAISlot,
   onSelect,
   onShadowAI,
@@ -386,6 +391,7 @@ function UseCaseTable({
   mode: DetectorMode;
   promptPoliciesEnabled: boolean;
   shadowAIEnabled: boolean;
+  shadowAIFlagPending: boolean;
   shadowAISlot: ShadowAIPolicySlot;
   onSelect: (preset: RiskPreset) => void;
   onShadowAI: () => void;
@@ -419,10 +425,14 @@ function UseCaseTable({
           // The Shadow AI use case follows the project's one slot: it opens
           // the existing policy when there is one, and waits while that is
           // unknown, the same as the from-scratch option below.
-          const shadowAI = shadowAIEnabled && isShadowAIUseCase(preset);
-          const slotMessage = shadowAI
-            ? shadowAISlotMessage(shadowAISlot)
-            : undefined;
+          const shadowAI =
+            isShadowAIUseCase(preset) &&
+            (shadowAIEnabled || shadowAIFlagPending);
+          const slotMessage = !shadowAI
+            ? undefined
+            : shadowAIFlagPending
+              ? "Checking this project's settings…"
+              : shadowAISlotMessage(shadowAISlot);
           return (
             <button
               key={preset.id}

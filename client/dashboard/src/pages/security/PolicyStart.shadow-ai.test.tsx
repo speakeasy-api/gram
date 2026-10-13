@@ -85,6 +85,17 @@ describe("ShadowAIScratchOption", () => {
     expect(mocks.onPick).not.toHaveBeenCalled();
   });
 
+  it("keeps the existing policy link when a refetch fails over a cached list", () => {
+    mocks.policies = {
+      data: { policies: [blockingShadowMCPPolicy()] },
+      isError: true,
+    };
+    renderOption();
+
+    expect(screen.getByText(/already has one/)).toBeTruthy();
+    expect(screen.queryByText(/could not be loaded/)).toBeNull();
+  });
+
   it("waits for the policy list before offering a create", () => {
     mocks.policies = { data: undefined, isError: false };
     renderOption();
