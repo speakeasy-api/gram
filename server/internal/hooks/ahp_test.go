@@ -1,0 +1,204 @@
+package hooks
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	ahp "github.com/agenthooksprotocol/go-sdk"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"goa.design/goa/v3/security"
+
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+)
+
+// ahpTestAuthorizer accepts the key "example" for the project slug "chosen".
+type ahpTestAuthorizer struct {
+	authCtx *contextvalues.AuthContext
+}
+
+func (a *ahpTestAuthorizer) Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+	switch {
+	case scheme.Name == constants.KeySecurityScheme && key == "example":
+		authCopy := *a.authCtx
+		authCopy.ProjectID = nil
+		return contextvalues.SetAuthContext(ctx, &authCopy), nil
+	case scheme.Name == constants.ProjectSlugSecuritySchema && key == "chosen":
+		authCopy := *a.authCtx
+		return contextvalues.SetAuthContext(ctx, &authCopy), nil
+	default:
+		return ctx, errors.New("unauthorized")
+	}
+}
+
+func ahpRequest(t *testing.T, h http.Handler, method string, event map[string]any, effects []string, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	params := map[string]any{"protocolVersion": "draft", "event": event}
+	body := map[string]any{"jsonrpc": "2.0", "method": method, "params": params}
+	if method == "hooks/intercept" {
+		params["capabilities"] = map[string]any{"effects": effects}
+		body["id"] = event["id"]
+	}
+	b, err := json.Marshal(body)
+	require.NoError(t, err)
+	r := httptest.NewRequest(http.MethodPost, "/ahp", strings.NewReader(string(b)))
+	r.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		r.Header.Set(k, v)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w
+}
+
+func ahpToolEvent(eventType string) map[string]any {
+	return map[string]any{
+		"id":      uuid.NewString(),
+		"source":  "https://harness.example/runtime",
+		"type":    eventType,
+		"time":    "2026-10-13T08:51:14Z",
+		"session": map[string]any{"id": uuid.NewString()},
+		"tool":    map[string]any{"name": "read_file", "kind": "file_read", "input": map[string]any{"path": "example.txt"}, "origin": "native"},
+		"call":    map[string]any{"id": "call-1"},
+		"path":    "example",
+	}
+}
+
+var ahpAuthHeaders = map[string]string{"Authorization": "Bearer example", "Gram-Project": "chosen"}
+
+func TestAHPAuthentication(t *testing.T) {
+	t.Parallel()
+	project := uuid.New()
+	s := &Service{auth: &ahpTestAuthorizer{authCtx: &contextvalues.AuthContext{ActiveOrganizationID: "org_example", ProjectID: &project}}}
+	h, err := s.ahpHandler()
+	require.NoError(t, err)
+
+	for name, headers := range map[string]map[string]string{
+		"missing key":     {"Gram-Project": "chosen"},
+		"missing project": {"Authorization": "Bearer example"},
+		"invalid key":     {"Authorization": "Bearer other", "Gram-Project": "chosen"},
+		"unknown project": {"Gram-Key": "example", "Gram-Project": "other"},
+	} {
+		w := ahpRequest(t, h, "hooks/intercept", ahpToolEvent("tool.before"), []string{"deny"}, headers)
+		require.Equal(t, http.StatusUnauthorized, w.Code, name)
+	}
+}
+
+func TestAHPToolBeforeDeny(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{Action: "block", PolicyName: "Example policy"}}
+	h, err := ti.service.ahpHandler()
+	require.NoError(t, err)
+
+	for name, tc := range map[string]struct {
+		effects []string
+		denied  bool
+	}{
+		"deny granted":     {effects: []string{"deny"}, denied: true},
+		"deny not granted": {effects: []string{}, denied: false},
+	} {
+		w := ahpRequest(t, h, "hooks/intercept", ahpToolEvent("tool.before"), tc.effects, ahpAuthHeaders)
+		require.Equal(t, http.StatusOK, w.Code, name)
+		require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
+		var response struct {
+			Result struct {
+				Effects []map[string]any `json:"effects"`
+			} `json:"result"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		if tc.denied {
+			require.Len(t, response.Result.Effects, 1, name)
+			require.Equal(t, "deny", response.Result.Effects[0]["type"])
+		} else {
+			require.Empty(t, response.Result.Effects, name)
+		}
+	}
+}
+
+func TestAHPToolBeforeAllow(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+	h, err := ti.service.ahpHandler()
+	require.NoError(t, err)
+
+	w := ahpRequest(t, h, "hooks/intercept", ahpToolEvent("tool.before"), []string{"deny"}, ahpAuthHeaders)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotContains(t, w.Body.String(), `"deny"`)
+}
+
+func TestAHPToolAfterPayload(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		execution map[string]any
+		outcome   string
+		eventType string
+	}{
+		"executed ok":    {execution: map[string]any{"status": "executed"}, outcome: "ok", eventType: "tool.completed"},
+		"executed error": {execution: map[string]any{"status": "executed"}, outcome: "error", eventType: "tool.failed"},
+		"skipped":        {execution: map[string]any{"status": "skipped", "reason": "policy"}, outcome: "denied", eventType: ""},
+	} {
+		raw := ahpToolEvent("tool.after")
+		raw["execution"] = tc.execution
+		raw["outcome"] = tc.outcome
+		raw["items"] = []any{}
+		b, err := json.Marshal(raw)
+		require.NoError(t, err)
+		var event ahp.ToolAfterEvent
+		require.NoError(t, json.Unmarshal(b, &event), name)
+
+		payload := ahpToolAfterPayload(&event)
+		if tc.eventType == "" {
+			require.Nil(t, payload, name)
+			continue
+		}
+		require.NotNil(t, payload, name)
+		require.Equal(t, tc.eventType, payload.Event.Type, name)
+		require.Equal(t, "read_file", *payload.Data.ToolCall.Name)
+		require.Equal(t, map[string]any{"path": "example.txt"}, payload.Data.ToolCall.Input)
+	}
+}
+
+func TestAHPTurnStartPayload(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		trigger string
+		prompt  string
+	}{
+		"user":         {trigger: "user", prompt: "hello"},
+		"continuation": {trigger: "continuation", prompt: ""},
+	} {
+		raw := map[string]any{
+			"id": uuid.NewString(), "source": "https://harness.example/runtime", "type": "turn.start", "time": "2026-10-13T08:51:14Z",
+			"trigger": tc.trigger, "turn": map[string]any{"id": "turn-1"},
+			"items": []any{map[string]any{"id": "m1", "role": "user", "parts": []any{
+				map[string]any{"id": "p1", "kind": "text", "selection": "body", "mediaType": "text/plain", "text": "hello"},
+			}}},
+		}
+		b, err := json.Marshal(raw)
+		require.NoError(t, err)
+		var event ahp.TurnStartEvent
+		require.NoError(t, json.Unmarshal(b, &event), name)
+
+		payload := ahpTurnStartPayload(&event)
+		if tc.prompt == "" {
+			require.Nil(t, payload, name)
+			continue
+		}
+		require.Equal(t, "prompt.submitted", payload.Event.Type)
+		require.Equal(t, tc.prompt, *payload.Data.Prompt.Text)
+	}
+}
