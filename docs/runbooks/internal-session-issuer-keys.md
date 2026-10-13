@@ -2,7 +2,7 @@
 
 An organization's internal session issuer signs enterprise-managed authorization assertions (ID-JAGs) for its users. Vendors trust its issuer URL, `<origin>/oauth/idp/org/<org-id>`, which never changes. Its signing keys live in GCP KMS on the platform identity provider key ring (`GRAM_IDENTITY_PROVIDER_KMS_KEY_RING`), named `emaissuer-*`. Each assertion's email must be on one of the organization's verified domains at signing time, since vendors trust the email alone.
 
-Speakeasy serves a vendor only where an admin selected it as that vendor's EMA provider, and only while the `sign-in-enforcement` flag is on for the organization.
+Speakeasy serves a vendor only where an admin selected it as that vendor's EMA provider, and only while the organization has both the `internal-session-issuer` rollout flag and the `sign-in-enforcement` flag (from the sign-in linking change, #7460) on.
 
 ## Issuer origin
 

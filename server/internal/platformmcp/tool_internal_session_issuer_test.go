@@ -27,8 +27,8 @@ func TestInternalSessionIssuerToolContract(t *testing.T) {
 	require.Equal(t, externalOnly, d.Meta.Audiences)
 	require.True(t, d.Annotations.ReadOnlyHint)
 	require.Empty(t, reg.For(AudienceAssistant))
-	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "company-managed Google or Microsoft account, magic link, or password with MFA")
-	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "passwords without MFA don't qualify")
+	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "company-managed Google or Microsoft account, magic link, or password")
+	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "registering alone changes nothing")
 }
 
 func TestInternalSessionIssuerToolStates(t *testing.T) {

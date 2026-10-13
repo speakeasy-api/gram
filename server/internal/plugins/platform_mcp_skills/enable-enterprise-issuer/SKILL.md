@@ -28,9 +28,9 @@ read-only; it cannot enable, disable, rotate, or replace an issuer.
 ## Guide setup and retrieve the issuer
 
 Each user needs a company sign-in to Speakeasy (SSO, company-managed Google or
-Microsoft account, magic link, or password with MFA) with an email on one of the
-organization's verified domains. Personal Google or Microsoft accounts and
-passwords without MFA don't qualify. An enabled issuer does not prove that the
+Microsoft account, magic link, or password) with an email on one of the
+organization's verified domains. Personal Google or Microsoft accounts don't
+qualify. An enabled issuer does not prove that the
 current user has a qualifying sign-in. Explain this prerequisite during setup and
 when returning an already-enabled issuer. A configured vendor grant
 is not required merely to enable the issuer; vendor trust is a separate step.
@@ -66,7 +66,8 @@ or imply that support staff may mutate the organization's issuer.
 
 Show the exact public issuer URI from the successful read. Explain that the
 service's administrator must register it in that service's enterprise-managed
-authorization settings. This is a separate trust change requiring the user's
+authorization settings, and that Speakeasy must then be selected as that
+service's EMA provider: registering the URI alone changes nothing. This is a separate trust change requiring the user's
 explicit authorization; do not change ordinary employee SSO login settings or
 replace an existing trusted issuer automatically.
 
