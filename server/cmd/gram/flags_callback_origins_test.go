@@ -52,6 +52,8 @@ func TestParseCallbackOrigin(t *testing.T) {
 // The worker mints replacement issuer keys and the server serves and signs for
 // the issuer, so both must derive the issuer origin from the same flag.
 func TestServerAndWorkerDeriveTheSameIssuerOrigin(t *testing.T) {
+	t.Parallel()
+
 	serverURL, err := url.Parse("https://ai.example.com")
 	require.NoError(t, err)
 	args := []string{"--" + outboundCallbackURLFlag + "=https://app.example.com", "--" + platformHostsFlag + "=app.example.com"}

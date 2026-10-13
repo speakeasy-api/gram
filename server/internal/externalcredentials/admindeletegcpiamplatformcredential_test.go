@@ -111,7 +111,7 @@ func TestUpdateGcpIamPlatformCredential_RefusesWhileIssuerKeysHoldGrants(t *test
 		_, err := ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
 			ID: cred.ID, SessionToken: nil, Name: "renamed", ImpersonateServiceAccount: nil, WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
 		})
-		return err
+		return err //nolint:wrapcheck // Test helper.
 	}
 	requireOopsCode(t, update(), oops.CodeConflict)
 
