@@ -2400,6 +2400,8 @@ type InternalSessionIssuer struct {
 	// @access: confidential
 	DisabledAt pgtype.Timestamptz
 	// @access: confidential
+	AllowedSignInMethods []string
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -6213,6 +6215,12 @@ type SsoSignIn struct {
 	WorkosSessionID string
 	// @access: confidential
 	AuthenticationMethod string
+	// @access: confidential
+	MfaVerified bool
+	// @access: restricted
+	IdpHostedDomain pgtype.Text
+	// @access: opaque-confidential
+	IdpTenantID pgtype.Text
 	// @access: confidential
 	AuthenticatedAt pgtype.Timestamptz
 	// @access: confidential
