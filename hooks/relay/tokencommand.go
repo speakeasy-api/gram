@@ -40,7 +40,38 @@ const (
 	tokenRefreshMargin    = 60 * time.Second
 	tokenMaxBearerBytes   = 8 << 10
 	tokenCacheKind        = "token"
+
+	// tokenCommandRefusedExit is the exit status the token command uses for a
+	// definitive refusal (the device was revoked, is not a workload, or has no
+	// hooks project), as opposed to any other failure such as an unreachable
+	// control plane.
+	tokenCommandRefusedExit = 3
 )
+
+// errTokenRefused marks a token command failure as a definitive refusal.
+var errTokenRefused = errors.New("the device agent refused to issue a hooks token")
+
+// A token box that has been definitively refused, by the server rejecting
+// its token or by the command exiting tokenCommandRefusedExit, fails closed
+// until a fresh token is accepted. Without the marker, a refused box would
+// reach the no-token path once its cached token expired, and that path follows
+// the org's fail-open posture: a revoked device would get through. The marker
+// is a separate file, so a damaged token cache cannot clear it.
+func tokenRejectedPath() string { return authFilePath() + ".token-rejected" }
+
+func markTokenRejected() {
+	f, err := os.OpenFile(tokenRejectedPath(), os.O_CREATE|os.O_WRONLY, 0o600)
+	if err == nil {
+		_ = f.Close()
+	}
+}
+
+func tokenRejected() bool {
+	_, err := os.Stat(tokenRejectedPath())
+	return err == nil
+}
+
+func clearTokenRejected() { _ = os.Remove(tokenRejectedPath()) }
 
 // nowFunc is the relay's clock for token expiry; a var so tests can move it.
 var nowFunc = time.Now
@@ -94,6 +125,9 @@ func resolveTokenAuth(cfg Config, argv []string, refresh bool) (creds, bool) {
 	}
 	out, err := runTokenCommand(context.Background(), argv, refresh)
 	if err != nil {
+		if errors.Is(err, errTokenRefused) {
+			markTokenRejected()
+		}
 		debugTokenCommand(cfg, "token command failed: %v", err)
 		return creds{}, false
 	}
@@ -258,6 +292,9 @@ func execTokenCommand(ctx context.Context, argv []string, refresh bool) ([]byte,
 	stdout.limit, stderr.limit = tokenCommandMaxStdout, tokenCommandMaxStderr
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok && exitErr.ExitCode() == tokenCommandRefusedExit {
+			err = fmt.Errorf("%w: %w", errTokenRefused, err)
+		}
 		msg := sanitizeCommandStderr(stderr.String())
 		if msg != "" {
 			return nil, fmt.Errorf("%w: %s", err, msg)

@@ -122,6 +122,8 @@ const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but
 
 const reauthNeededMessage = "Speakeasy hooks need to reconnect. Run the Speakeasy hooks login command to reconnect."
 
+const tokenRejectedMessage = "Speakeasy refused this device's hooks credential; the device may have been revoked. Contact your Speakeasy administrator."
+
 const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in SPEAKEASY_AI_HOOKS_API_KEY (or the deprecated GRAM_HOOKS_API_KEY). Update or unset it, then run the Speakeasy hooks login command to reconnect."
 
 // deliver relays one event to the server, returning the result and the
@@ -155,6 +157,12 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 
 	c, ok := resolveAuth(r.cfg)
 	if !ok && tokenCommandConfigured() {
+		if tokenRejected() {
+			// This box was definitively refused and has not been issued a token
+			// since: fail closed, and drop the event rather than spool it.
+			r.debugf("event=%s token-rejected", agenthooks.EventOf(typed).NativeName)
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: tokenRejectedMessage}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
+		}
 		// The device agent could not produce a token. That is a missing
 		// verdict, not a missing credential: report it like an unreachable
 		// control plane, so observe-only events spool for replay and gating
@@ -222,6 +230,12 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			res = r.send(ctx, fresh, payload, idemKey)
 			r.debugf("event=%s auth-retry=token status=%d cause=%s denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.cause, res.decision.denied())
 		}
+		if res.authRejected {
+			markTokenRejected()
+		}
+	}
+	if c.Source == credToken && res.accepted() {
+		clearTokenRejected()
 	}
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
 		// A rejected personal cache is forgotten. When the published plugin has
