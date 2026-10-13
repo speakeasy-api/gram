@@ -2,8 +2,8 @@ package assistants
 
 import (
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,11 +13,11 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 )
 
-// preRenameInstructions rebuilds the shipped prompt from before the product
-// rename, which differed from the current one only in the product name.
-func preRenameInstructions() string {
-	return strings.ReplaceAll(managedAssistantInstructions, "Speakeasy", "Gram") // brand-ok: rebuilds the pre-rename prompt
-}
+// previousShippedInstructions is a frozen copy of an earlier shipped version of
+// managed_assistant_instructions.txt, as an unedited older assistant stores it.
+//
+//go:embed testdata/managed_assistant_instructions_05c5372.txt
+var previousShippedInstructions string
 
 func TestShippedManagedAssistantInstructionsIncludesCurrent(t *testing.T) {
 	t.Parallel()
@@ -30,14 +30,14 @@ func TestShippedManagedAssistantInstructionsIncludesCurrent(t *testing.T) {
 func TestCurrentAssistantInstructionsReplacesShippedVersion(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, managedAssistantInstructions, currentAssistantInstructions(preRenameInstructions()))
+	require.Equal(t, managedAssistantInstructions, currentAssistantInstructions(previousShippedInstructions))
 	require.Equal(t, managedAssistantInstructions, currentAssistantInstructions(managedAssistantInstructions))
 }
 
 func TestCurrentAssistantInstructionsKeepsEditedPrompt(t *testing.T) {
 	t.Parallel()
 
-	for _, stored := range []string{"", "You are a custom assistant.", preRenameInstructions() + "\nAlways answer in French."} {
+	for _, stored := range []string{"", "You are a custom assistant.", previousShippedInstructions + "\nAlways answer in French."} {
 		require.Equal(t, stored, currentAssistantInstructions(stored))
 	}
 }
@@ -46,7 +46,7 @@ func TestBuildThreadBootstrapRefreshesOnlyManagedAssistantPrompt(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistant_bootstrap_managed_prompt")
-	old := preRenameInstructions()
+	old := previousShippedInstructions
 
 	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", false)
 	require.NoError(t, err)

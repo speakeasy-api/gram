@@ -50,6 +50,7 @@ var shippedManagedAssistantInstructions = map[string]struct{}{
 	"a4cb9ab5e1611176e055a1cef69bbd1ba2b293512be8f20e56ede6a9290939df": {},
 	"2c9926a47e4ff5c3d100c6a1dd60daebf0aa8bcafa57ee4d26cca5436cfa5e48": {},
 	"05c5372488ef5589f93df91b1fe5f23ead57e9a78a21cb8105c658354ef2ccf0": {},
+	"5611c835404ef600152cce9eb90a494780524ad6894d598c5c41205b5222a81d": {},
 }
 
 // currentAssistantInstructions returns the current managed prompt when stored
