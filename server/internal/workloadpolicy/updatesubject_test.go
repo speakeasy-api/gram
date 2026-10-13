@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
@@ -639,6 +640,54 @@ func TestAdmitAndUpdateSubject_BindTheHooksProject(t *testing.T) {
 	policy, err = ti.service.UpdateSubject(ctx, payload)
 	require.NoError(t, err)
 	require.Empty(t, onlyAdmission(t, policy).HooksProjectID)
+}
+
+func TestAdmitSubject_DeletingTheHooksProjectKeepsTheAdmission(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	hooksProjectID, err := testrepo.New(ti.conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID:             uuid.New(),
+		Name:           "Hooks project",
+		Slug:           "hooks-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+
+	policy, err := ti.service.AdmitSubject(ctx, &gen.AdmitSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Issuer:           anthropicIssuer,
+		Subject:          channelOne,
+		MatchKind:        string(workloadidentity.MatchKindExact),
+		Name:             nil,
+		Tags:             nil,
+		AgentID:          agentID.String(),
+		ProjectScoped:    false,
+		HooksProjectID:   new(hooksProjectID.String()),
+	})
+	require.NoError(t, err)
+	admitted := onlyAdmission(t, policy)
+	require.Equal(t, hooksProjectID.String(), admitted.HooksProjectID)
+
+	deleted, err := testrepo.New(ti.conn).HardDeleteProjectFixture(ctx, testrepo.HardDeleteProjectFixtureParams{
+		OrganizationID: ti.orgID,
+		ID:             hooksProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
+
+	// Losing the project must not revoke the workload: the admission stays,
+	// with no hooks project.
+	after, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	remaining := onlyAdmission(t, after)
+	require.Equal(t, admitted.ID, remaining.ID)
+	require.Empty(t, remaining.HooksProjectID)
 }
 
 func TestAdmitSubject_WithAHooksProject(t *testing.T) {
