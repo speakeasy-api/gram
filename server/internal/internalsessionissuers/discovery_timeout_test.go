@@ -32,7 +32,8 @@ func TestDiscoveryPoolTimeoutIsRetryableAndNotCached(t *testing.T) {
 	require.Equal(t, "1", response.Header().Get("Retry-After"))
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 	held.Release()
+	provisionIssuer(t, ctx, ti)
 	response = httptest.NewRecorder()
 	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
-	require.Equal(t, http.StatusNotFound, response.Code, "retry reads the database rather than caching the timeout")
+	require.Equal(t, http.StatusOK, response.Code, "retry serves the newly provisioned issuer rather than caching the timeout")
 }

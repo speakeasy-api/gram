@@ -3,7 +3,7 @@ name: enable-enterprise-issuer
 description: Guide an organization administrator through Speakeasy AI Control Plane enterprise issuer setup, retrieve the public issuer URI, and distinguish configured trust from verified MCP access.
 ---
 
-# Set up enterprise authorization
+# Set up Enterprise Managed Authorization
 
 Use the executing client's authenticated Speakeasy AI Control Plane (AICP)
 Platform MCP connection. This workflow retrieves one organization's issuer and
@@ -40,8 +40,8 @@ false or missing, report `next_step` and stop; do not direct the administrator
 to enable an unavailable issuer. When eligible, explain that enabling provisions or resumes
 the organization's public issuer; it does not establish vendor trust or grant
 user access. Ask the organization administrator to open **IDP and SSO → Single
-sign-on → Enterprise authorization** and choose **Enable enterprise
-authorization** for the confirmed organization. There is no issuer mutation
+sign-on → Enterprise Managed Authorization** and choose **Enable Enterprise
+Managed Authorization** for the confirmed organization. There is no issuer mutation
 tool in this workflow. Do not substitute raw API requests, database writes,
 credentials, or an invented tool.
 
@@ -67,7 +67,13 @@ replace an existing trusted issuer automatically.
 If the user wants to configure an MCP connection too, use `list_projects`,
 `find_mcp`, and `get_mcp` to identify an exact project and MCP server. Follow its
 supported setup handoff and obtain separate authorization for any provider or
-binding changes. Then call `get_mcp_readiness` for current readiness evidence.
+binding changes. Provider selection is API-only in this release through
+`organizationRemoteSessionIssuers.setEMAProviders`, behind the `ema-providers`
+rollout. There is no Platform MCP or dashboard provider-selection control; hand
+off that API setup rather than implying this skill can select the provider.
+Then call `get_xaa_readiness` with the exact project and MCP server IDs for
+enterprise authorization readiness. Do not substitute a Platform MCP registration
+ID or generic registration readiness for this check.
 An enabled issuer or a saved vendor setting does not prove live user access.
 Only a separately authorized test using the connected MCP can establish that;
 never impersonate another user or create test data without permission.

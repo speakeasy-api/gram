@@ -28,16 +28,16 @@ type InternalSessionIssuerStatus struct {
 var internalSessionIssuerNextSteps = map[internalsessionissuers.State]string{
 	internalsessionissuers.StateUnavailable:         "The issuer is not available to this organization yet.",
 	internalsessionissuers.StateEntitlementRequired: "Ask support to enable single sign-on for this organization.",
-	internalsessionissuers.StateSetupRequired:       "An organization administrator can enable enterprise authorization on IDP and SSO, in the Single sign-on tab.",
+	internalsessionissuers.StateSetupRequired:       "An organization administrator can enable Enterprise Managed Authorization on IDP and SSO, in the Single sign-on tab.",
 	internalsessionissuers.StateEnabled:             "Register this URI in each supported service's enterprise-managed authorization settings. Each user must sign in through the organization's enterprise SSO. Google Workspace connected through enterprise SAML or OIDC qualifies; personal Google or other social sign-in alone is insufficient. Configuration alone does not verify access.",
-	internalsessionissuers.StateDisabled:            "Signing is disabled. An organization administrator can re-enable enterprise authorization on IDP and SSO, in the Single sign-on tab.",
+	internalsessionissuers.StateDisabled:            "Signing is disabled. An organization administrator can re-enable Enterprise Managed Authorization on IDP and SSO, in the Single sign-on tab.",
 	internalsessionissuers.StateSigningPaused:       "Speakeasy has paused issuer signing. Contact your Speakeasy administrator to resume it.",
 	internalsessionissuers.StateKeyless:             "No signing key is active. Ask an organization administrator to contact Speakeasy support for the signing-key recovery procedure; recovery is unavailable through this read-only tool.",
 }
 
 func internalSessionIssuerNextStep(state internalsessionissuers.State, canEnable bool) string {
 	if !canEnable && (state == internalsessionissuers.StateSetupRequired || state == internalsessionissuers.StateDisabled) {
-		return "Signing is unavailable. Ask a Speakeasy administrator to check the organization's issuer entitlement and this deployment's signing configuration before enabling enterprise authorization."
+		return "Signing is unavailable. Ask a Speakeasy administrator to check the organization's issuer entitlement and this deployment's signing configuration before enabling Enterprise Managed Authorization."
 	}
 	return internalSessionIssuerNextSteps[state]
 }

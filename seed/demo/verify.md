@@ -553,10 +553,11 @@ Open Organization Identity > Single sign-on. The enterprise authorization sectio
 shows a not-configured or unavailable state in the fresh demo; no synthetic
 signing key is presented as working. In a local organization with signing and
 SSO configured, enable the issuer and copy its URI. Rotate the key and confirm
-the pending publication message clears after activation. Disable the issuer and
+the pending publication message appears. After publication, click Complete rotation
+and confirm the new key activates and the message clears. Disable the issuer and
 confirm the URI remains visible. Disabling must remain possible after removing
 the SSO entitlement; re-enabling requires it. Read-only and support sessions show
-the URI and status without mutation controls. At a 400px viewport, the URI wraps
+the URI without mutation controls; check status messages in states that render one. At a 400px viewport, the URI wraps
 and the copy control remains visible.
 
 ## Slack workspaces

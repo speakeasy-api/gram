@@ -20,7 +20,9 @@ export function useEnterpriseIssuer(): UseQueryResult<
   const organization = useOrganization();
   const client = useGramContext();
   return useQuery({
-    ...buildInternalSessionIssuerQuery(client),
+    ...buildInternalSessionIssuerQuery(client, undefined, {
+      sessionHeaderGramSession: "",
+    }),
     queryKey: enterpriseIssuerQueryKey(organization.id),
     throwOnError: false,
     retry: false,

@@ -10,6 +10,7 @@ import {
 const mocks = vi.hoisted(() => ({
   organizationId: "first-org",
   load: vi.fn(),
+  build: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: mocks.organizationId }),
@@ -18,10 +19,13 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
 vi.mock("@gram/client/react-query/internalSessionIssuer.core.js", () => ({
-  buildInternalSessionIssuerQuery: () => ({
-    queryKey: ["unscoped"],
-    queryFn: mocks.load,
-  }),
+  buildInternalSessionIssuerQuery: (...args: unknown[]) => {
+    mocks.build(...args);
+    return {
+      queryKey: ["unscoped"],
+      queryFn: mocks.load,
+    };
+  },
 }));
 afterEach(() => {
   cleanup();
@@ -47,6 +51,9 @@ describe("issuer query isolation", () => {
     );
     const { result, rerender } = renderHook(() => useEnterpriseIssuer(), {
       wrapper,
+    });
+    expect(mocks.build).toHaveBeenCalledWith({}, undefined, {
+      sessionHeaderGramSession: "",
     });
     expect(result.current.data?.issuer).toBe("https://first.example.com");
     mocks.organizationId = "second-org";

@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import { invalidateAllInternalSessionIssuer } from "@gram/client/react-query/internalSessionIssuer.js";
 import { useSetInternalSessionIssuerEnabledMutation } from "@gram/client/react-query/setInternalSessionIssuerEnabled.js";
-import { useRotateInternalSessionIssuerMutation } from "@gram/client/react-query/rotateInternalSessionIssuer.js";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
@@ -13,12 +12,13 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   enterpriseIssuerQueryKey,
   useEnterpriseIssuer,
 } from "./useEnterpriseIssuer";
 
-type Action = "disable" | "rotate" | null;
+type Action = "disable" | null;
 
 export function EnterpriseIssuerSection(): JSX.Element {
   const organization = useOrganization();
@@ -46,33 +46,25 @@ function EnterpriseIssuerContent(): JSX.Element {
   const enable = useSetInternalSessionIssuerEnabledMutation({
     onSuccess: update,
   });
-  const rotate = useRotateInternalSessionIssuerMutation({ onSuccess: update });
   const issuer = query.data;
-  const pending = enable.isPending || rotate.isPending;
-  const activeKey = issuer?.keys.find((key) => key.state === "active");
+  const pending = enable.isPending;
   const canEnable = canManage && issuer?.canEnable;
   const canDisable =
     canManage && !!issuer?.issuer && issuer.state !== "disabled";
-  const canRotate =
-    canManage &&
-    !!activeKey &&
-    !issuer?.rotationReadyAt &&
-    (issuer?.state === "enabled" || issuer?.state === "signing_paused");
   const chooseAction = (nextAction: Action) => {
     enable.reset();
-    rotate.reset();
     setAction(nextAction);
   };
 
   return (
     <section
-      aria-label="Enterprise authorization"
+      aria-label="Enterprise Managed Authorization"
       className="border-border border-t pt-6"
     >
-      <Heading variant="h5">Enterprise authorization</Heading>
+      <Heading variant="h5">Enterprise Managed Authorization</Heading>
       <Text muted small className="mt-1 block">
-        Register your organization's issuer with supported services to let your
-        team use them through Speakeasy without separate OAuth consent.
+        Let your team access supported MCP servers using their organization
+        identity, without authorizing each service individually.
       </Text>
       <div className="mt-4 min-h-24 space-y-3">
         {query.isPending && (
@@ -94,32 +86,40 @@ function EnterpriseIssuerContent(): JSX.Element {
           </Alert>
         )}
         {issuer && <IssuerStatus issuer={issuer} />}
-        {issuer &&
-          ["enabled", "setup_required", "disabled"].includes(issuer.state) && (
-            <Text small muted>
-              To use enterprise authorization, each user must sign in to
-              Speakeasy through your organization's enterprise SSO. Google
-              Workspace connected through enterprise SAML or OIDC qualifies.
-              Personal Google or other social sign-in alone is not sufficient.
-              Enabling the issuer does not establish an enterprise SSO session.
-            </Text>
-          )}
         {issuer?.issuer && (
-          <div className="bg-muted flex min-w-0 items-start gap-3 p-4">
-            <div className="min-w-0 flex-1">
-              <Text small className="font-medium">
-                Issuer URI
-              </Text>
-              <code className="mt-1 block break-all text-sm">
-                {issuer.issuer}
-              </code>
-            </div>
-            <CopyButton
-              text={issuer.issuer}
-              tooltip="Copy issuer URI"
-              size="sm"
-            />
-          </div>
+          <>
+            <Text small muted>
+              Register the issuer URI in each service's enterprise authorization
+              settings.
+            </Text>
+            <dl className="space-y-1">
+              <dt className="text-eyebrow">Issuer URI</dt>
+              <dd className="flex min-w-0 items-center gap-2">
+                <code className="min-w-0 text-sm [overflow-wrap:anywhere]">
+                  {issuer.issuer}
+                </code>
+                <span className="shrink-0">
+                  <CopyButton
+                    text={issuer.issuer}
+                    tooltip="Copy issuer URI"
+                    size="xs"
+                  />
+                </span>
+              </dd>
+            </dl>
+            <Text small muted>
+              Uses ID-JAG assertions with the JWT Bearer grant defined in{" "}
+              <a
+                href="https://www.rfc-editor.org/rfc/rfc7523.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2"
+              >
+                RFC 7523
+              </a>
+              .
+            </Text>
+          </>
         )}
         {issuer && isDemo && (
           <Text small muted>
@@ -128,8 +128,8 @@ function EnterpriseIssuerContent(): JSX.Element {
         )}
         {issuer && !canManage && !isDemo && (
           <Text small muted>
-            Only organization admins signed in directly can change enterprise
-            authorization.
+            Only organization admins signed in directly can change Enterprise
+            Managed Authorization.
           </Text>
         )}
         <div className="flex flex-wrap gap-2">
@@ -140,40 +140,33 @@ function EnterpriseIssuerContent(): JSX.Element {
               disabled={pending}
               onClick={() =>
                 enable.mutate({
+                  security: { sessionHeaderGramSession: "" },
                   request: { setEnabledRequestBody: { enabled: true } },
                 })
               }
             >
               {enable.isPending
                 ? "Enabling…"
-                : "Enable enterprise authorization"}
-            </Button>
-          )}
-          {canRotate && (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={pending}
-              onClick={() => chooseAction("rotate")}
-            >
-              Rotate key
+                : "Enable Enterprise Managed Authorization"}
             </Button>
           )}
           {canDisable && (
-            <Button
-              variant="tertiary"
-              size="sm"
-              disabled={pending}
-              onClick={() => chooseAction("disable")}
-            >
-              Disable enterprise authorization
-            </Button>
+            <SimpleTooltip tooltip="Turn off automatic authorization. Users will need to authorize affected services individually.">
+              <Button
+                variant="tertiary"
+                size="sm"
+                disabled={pending}
+                onClick={() => chooseAction("disable")}
+              >
+                Disable
+              </Button>
+            </SimpleTooltip>
           )}
         </div>
         {enable.isError && action === null && (
           <Alert variant="error">
-            Couldn't enable enterprise authorization. Try again or contact your
-            Speakeasy administrator.
+            Couldn't enable Enterprise Managed Authorization. Try again or
+            contact your Speakeasy administrator.
           </Alert>
         )}
       </div>
@@ -182,60 +175,30 @@ function EnterpriseIssuerContent(): JSX.Element {
         onOpenChange={(open) => {
           if (!open) chooseAction(null);
         }}
-        title="Disable enterprise authorization?"
+        title="Disable Enterprise Managed Authorization?"
         confirmLabel="Disable"
         pendingLabel="Disabling…"
-        description="Speakeasy will stop issuing new authorization tokens for this organization. Existing access tokens may remain valid until they expire. The issuer URI is kept for re-enabling later."
+        description={
+          <>
+            Users will need their own authorized connections to affected
+            services. Existing individual connections will continue to work.
+            Access already granted through Enterprise Managed Authorization may
+            continue until it expires.
+            <br />
+            <br />
+            You can re-enable this later using the same issuer URI.
+          </>
+        }
         isPending={enable.isPending}
         error={
           enable.isError
-            ? "Couldn't disable enterprise authorization. Try again."
+            ? "Couldn't disable Enterprise Managed Authorization. Try again."
             : undefined
         }
         onConfirm={() =>
           enable.mutate({
+            security: { sessionHeaderGramSession: "" },
             request: { setEnabledRequestBody: { enabled: false } },
-          })
-        }
-      />
-      <ConfirmDialog
-        open={action === "rotate"}
-        onOpenChange={(open) => {
-          if (!open) chooseAction(null);
-        }}
-        title="Rotate the signing key?"
-        confirmLabel="Rotate key"
-        pendingLabel="Preparing key…"
-        confirmVariant="primary"
-        description="Speakeasy will publish a new key before activating it. The current key continues signing during publication, and the issuer URI stays the same."
-        isPending={rotate.isPending}
-        error={
-          rotate.isError ? (
-            <>
-              <Text small>
-                Couldn't rotate the key. Refresh the issuer and try again.
-              </Text>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  chooseAction(null);
-                  void query.refetch();
-                }}
-              >
-                Refresh issuer
-              </Button>
-            </>
-          ) : undefined
-        }
-        onConfirm={() =>
-          rotate.mutate({
-            request: {
-              rotateRequestBody: {
-                activeKid: activeKey?.kid,
-                compromised: false,
-              },
-            },
           })
         }
       />
@@ -251,35 +214,32 @@ function IssuerStatus({
   let message: string;
   switch (issuer.state) {
     case "enabled":
-      if (!issuer.rotationReadyAt) return null;
-      message =
-        "The new signing key is being published. Speakeasy will activate it automatically when it is ready.";
-      break;
+      return null;
     case "setup_required":
       message = issuer.canEnable
-        ? "Enable enterprise authorization to create your organization's issuer."
-        : "Enterprise authorization cannot be enabled right now. Contact your Speakeasy administrator to check availability and SSO access.";
+        ? "Enable Enterprise Managed Authorization to create your organization's issuer."
+        : "Enterprise Managed Authorization cannot be enabled right now. Contact your Speakeasy administrator to check availability and SSO access.";
       break;
     case "disabled":
       message = issuer.canEnable
-        ? "Enterprise authorization is disabled. Re-enable it to resume issuing authorization tokens."
-        : "Enterprise authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and SSO access.";
+        ? "Enterprise Managed Authorization is disabled. Re-enable it to restore automatic authorization."
+        : "Enterprise Managed Authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and SSO access.";
       break;
     case "entitlement_required":
       message =
-        "Enterprise authorization requires SSO access. Contact your Speakeasy administrator to enable it.";
+        "Enterprise Managed Authorization requires SSO access. Contact your Speakeasy administrator to enable it.";
       break;
     case "signing_paused":
       message =
-        "Speakeasy has paused authorization token signing. Contact your Speakeasy administrator to resume it.";
+        "Enterprise Managed Authorization is temporarily paused. Contact your Speakeasy administrator for help.";
       break;
     case "keyless":
       message =
-        "Authorization token signing is stopped because no active signing key is available. Ask an organization administrator to contact Speakeasy support for the signing-key recovery procedure. Recovery is not available on this page.";
+        "Enterprise Managed Authorization is unavailable. Ask an organization administrator to contact Speakeasy support to restore it.";
       break;
     case "unavailable":
       message =
-        "Enterprise authorization is not available for this organization. Contact your Speakeasy administrator.";
+        "Enterprise Managed Authorization is not available for this organization. Contact your Speakeasy administrator.";
       break;
   }
   return (

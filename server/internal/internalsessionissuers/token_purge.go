@@ -11,7 +11,8 @@ import (
 const tokenPurgeTimeout = 10 * time.Second
 
 // EMAIssuerTokenPurger erases retained vendor credentials independently of KMS.
-// Containment must still erase them when provisioning is unavailable.
+// Wire this even when provisioning is unavailable. Cleanup is best effort after
+// authoritative revocation; cleanup failure must never roll back containment.
 type EMAIssuerTokenPurger interface {
 	PurgeEMAIssuerTokens(context.Context, string) error
 }

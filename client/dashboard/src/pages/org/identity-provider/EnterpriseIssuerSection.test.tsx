@@ -20,7 +20,6 @@ const mocks = vi.hoisted(() => ({
   error: false,
   refetch: vi.fn(),
   mutate: vi.fn(),
-  rotate: vi.fn(),
   reset: vi.fn(),
   setData: vi.fn(),
   invalidate: vi.fn(),
@@ -70,14 +69,6 @@ vi.mock("@gram/client/react-query/setInternalSessionIssuerEnabled.js", () => ({
     };
   },
 }));
-vi.mock("@gram/client/react-query/rotateInternalSessionIssuer.js", () => ({
-  useRotateInternalSessionIssuerMutation: () => ({
-    mutate: mocks.rotate,
-    reset: mocks.reset,
-    isPending: false,
-    isError: false,
-  }),
-}));
 
 const enabledIssuer: InternalSessionIssuer = {
   issuer: "https://example.com/oauth/idp/org/example-org",
@@ -105,7 +96,7 @@ afterEach(() => {
   mocks.error = false;
 });
 
-describe("enterprise authorization", () => {
+describe("Enterprise Managed Authorization", () => {
   it("shows a loading state and retry after failure", () => {
     mocks.loading = true;
     const view = show();
@@ -130,9 +121,12 @@ describe("enterprise authorization", () => {
     };
     show();
     fireEvent.click(
-      screen.getByRole("button", { name: "Enable enterprise authorization" }),
+      screen.getByRole("button", {
+        name: "Enable Enterprise Managed Authorization",
+      }),
     );
     expect(mocks.mutate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
       request: { setEnabledRequestBody: { enabled: true } },
     });
     mocks.onSuccess?.(enabledIssuer);
@@ -148,27 +142,11 @@ describe("enterprise authorization", () => {
     expect(mocks.invalidate).toHaveBeenCalledOnce();
   });
 
-  it.each(["enabled", "setup_required"] as const)(
-    "explains the enterprise SSO session prerequisite in %s state",
-    (state) => {
-      mocks.issuer = { ...enabledIssuer, state };
-      show();
-      const prerequisite = screen.getByText(/each user must sign in to/);
-      expect(prerequisite.textContent).toContain(
-        "Personal Google or other social sign-in alone is not sufficient",
-      );
-      expect(prerequisite.textContent).toContain(
-        "Google Workspace connected through enterprise SAML or OIDC qualifies",
-      );
-    },
-  );
-
   it("hands keyless recovery to an administrator with support guidance", () => {
     mocks.issuer = { ...enabledIssuer, keys: [], state: "keyless" };
     show();
-    expect(screen.getByText(/signing-key recovery procedure/)).toBeTruthy();
     expect(
-      screen.getByText(/Recovery is not available on this page/),
+      screen.getByText(/contact Speakeasy support to restore it/),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Rotate key" })).toBeNull();
   });
@@ -177,6 +155,13 @@ describe("enterprise authorization", () => {
     mocks.issuer = enabledIssuer;
     show();
     expect(screen.getByText(enabledIssuer.issuer!)).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "RFC 7523" }).getAttribute("href"),
+    ).toBe("https://www.rfc-editor.org/rfc/rfc7523.html");
+    expect(screen.queryByText(/Google|social sign-in/)).toBeNull();
     expect(
       screen.getByRole("button", { name: "Copy issuer URI" }),
     ).toBeTruthy();
@@ -194,7 +179,7 @@ describe("enterprise authorization", () => {
       show();
       fireEvent.click(
         screen.getByRole("button", {
-          name: "Disable enterprise authorization",
+          name: "Disable",
         }),
       );
       fireEvent.click(
@@ -203,6 +188,7 @@ describe("enterprise authorization", () => {
         }),
       );
       expect(mocks.mutate).toHaveBeenCalledWith({
+        security: { sessionHeaderGramSession: "" },
         request: { setEnabledRequestBody: { enabled: false } },
       });
     },
@@ -217,7 +203,7 @@ describe("enterprise authorization", () => {
       show();
       expect(
         screen.queryByRole("button", {
-          name: "Disable enterprise authorization",
+          name: "Disable",
         }),
       ).toBeNull();
       expect(screen.queryByRole("button", { name: "Rotate key" })).toBeNull();
@@ -231,7 +217,9 @@ describe("enterprise authorization", () => {
     mocks.issuer = { ...enabledIssuer, state: "disabled" };
     show();
     expect(
-      screen.queryByRole("button", { name: "Enable enterprise authorization" }),
+      screen.queryByRole("button", {
+        name: "Enable Enterprise Managed Authorization",
+      }),
     ).toBeNull();
     expect(screen.getByText(/check availability and SSO access/)).toBeTruthy();
   });
@@ -243,7 +231,7 @@ describe("enterprise authorization", () => {
       show();
       expect(
         screen.queryByRole("button", {
-          name: "Enable enterprise authorization",
+          name: "Enable Enterprise Managed Authorization",
         }),
       ).toBeNull();
       expect(screen.getByText(/cannot be re-enabled right now/)).toBeTruthy();
@@ -255,9 +243,12 @@ describe("enterprise authorization", () => {
     mocks.issuer = { ...enabledIssuer, state: "disabled", canEnable: true };
     show();
     fireEvent.click(
-      screen.getByRole("button", { name: "Enable enterprise authorization" }),
+      screen.getByRole("button", {
+        name: "Enable Enterprise Managed Authorization",
+      }),
     );
     expect(mocks.mutate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
       request: { setEnabledRequestBody: { enabled: true } },
     });
   });
@@ -271,7 +262,9 @@ describe("enterprise authorization", () => {
     };
     show();
     expect(
-      screen.queryByRole("button", { name: "Enable enterprise authorization" }),
+      screen.queryByRole("button", {
+        name: "Enable Enterprise Managed Authorization",
+      }),
     ).toBeNull();
     expect(screen.getByText(/cannot be enabled right now/)).toBeTruthy();
   });
@@ -285,7 +278,7 @@ describe("enterprise authorization", () => {
       show();
       expect(
         screen.queryByRole("button", {
-          name: "Enable enterprise authorization",
+          name: "Enable Enterprise Managed Authorization",
         }),
       ).toBeNull();
     },
@@ -298,45 +291,26 @@ describe("enterprise authorization", () => {
     expect(screen.getByText("The shared demo is read-only.")).toBeTruthy();
     expect(
       screen.queryByRole("button", {
-        name: "Disable enterprise authorization",
+        name: "Disable",
       }),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Rotate key" })).toBeNull();
   });
 
-  it("rotates the current key only after confirmation", () => {
-    mocks.issuer = enabledIssuer;
-    show();
-    fireEvent.click(screen.getByRole("button", { name: "Rotate key" }));
-    expect(mocks.rotate).not.toHaveBeenCalled();
-    fireEvent.click(
-      within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Rotate key",
-      }),
-    );
-    expect(mocks.rotate).toHaveBeenCalledWith({
-      request: {
-        rotateRequestBody: { activeKid: "example-key", compromised: false },
-      },
-    });
-  });
-
-  it("shows pending publication without offering another rotation", () => {
-    mocks.issuer = {
-      ...enabledIssuer,
-      rotationReadyAt: new Date("2030-01-01"),
-    };
-    show();
-    expect(screen.getByText(/new signing key is being published/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Rotate key" })).toBeNull();
-  });
+  it.each([undefined, new Date("2030-01-01"), new Date("2020-01-01")])(
+    "leaves signing-key maintenance out of the page (%s)",
+    (rotationReadyAt) => {
+      mocks.issuer = { ...enabledIssuer, rotationReadyAt };
+      show();
+      expect(screen.queryByRole("button", { name: /rotat/i })).toBeNull();
+      expect(screen.queryByText(/signing key|complete rotation/i)).toBeNull();
+    },
+  );
 
   it("closes an outstanding confirmation when the organization changes", () => {
     mocks.issuer = enabledIssuer;
     const view = show();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Disable enterprise authorization" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Disable" }));
     expect(screen.getByRole("dialog")).toBeTruthy();
     mocks.organizationId = "other-example-org";
     view.rerender(
