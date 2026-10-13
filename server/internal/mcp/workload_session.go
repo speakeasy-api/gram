@@ -193,19 +193,6 @@ func (s *Service) prepareWorkloadSessionContext(ctx context.Context, organizatio
 	if !ok || authCtx == nil || subject.Kind != urn.SessionSubjectKindWorkload {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
-	// A workload acts through an agent's policy, so it rides the agent
-	// authorization rollout and is hidden the same way while that is off. The
-	// token is untouched by either outcome, so both stay unmarked: a fresh one
-	// would meet the same gate.
-	enabled, _, rolloutErr := s.agentAuthorizationRollout(ctx, s.logger, organizationID)
-	switch {
-	case rolloutErr != nil:
-		// The rollout state could not be read, so nothing here says the
-		// feature is off for this organization.
-		return ctx, fmt.Errorf("%w: %w", errWorkloadRolloutUnavailable, oops.C(oops.CodeNotFound))
-	case !enabled:
-		return ctx, fmt.Errorf("%w: %w", errWorkloadRolloutDisabled, oops.C(oops.CodeNotFound))
-	}
 	workloadIssuerID, externalSubject, err := subject.Workload()
 	if err != nil {
 		return ctx, oops.C(oops.CodeUnauthorized)
@@ -221,8 +208,7 @@ func (s *Service) prepareWorkloadSessionContext(ctx context.Context, organizatio
 }
 
 // admitWorkloadSession admits a workload session in the organization it acts
-// in: the rollout is on, and the workload still has a live assigned agent with
-// an eligible owner. It does not decide whether the session reaches a
+// in: the workload still has a live assigned agent with an eligible owner. It does not decide whether the session reaches a
 // particular MCP server; requireWorkloadSessionAuthorization does.
 func (s *Service) admitWorkloadSession(ctx context.Context, organizationID string, subject urn.SessionSubject, credential workloadSessionCredential) (context.Context, error) {
 	ctx, err := s.prepareWorkloadSessionContext(ctx, organizationID, subject, credential)

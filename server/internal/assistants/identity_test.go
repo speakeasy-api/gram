@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/agents/lifecycle"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
@@ -20,8 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -31,14 +28,6 @@ import (
 )
 
 var testIdentityService = assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
-
-// identityFlags sets the assistant identity provisioning rollout for the test
-// organization.
-func identityFlags(enabled bool) *feature.InMemory {
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagAgentIdentityCredentials, "org-test", enabled)
-	return flags
-}
 
 func newTestAuthzEngine(t *testing.T, db *pgxpool.Pool) *authz.Engine {
 	t.Helper()
@@ -244,39 +233,22 @@ func TestDeleteAssistantWithdrawsWorkloads(t *testing.T) {
 	require.Equal(t, assistantidentity.NeverConfigured, states[record.ID].State)
 }
 
-func TestIdentityProvisioningFollowsRolloutFlag(t *testing.T) {
+// Every new assistant gets a dedicated agent, and an assistant created before
+// identity provisioning existed is upgraded on request.
+func TestIdentityProvisioningIsAlwaysOn(t *testing.T) {
 	t.Parallel()
-	svc, ctx, project, _ := newRBACServiceWithConn(t, "identity_rollout")
+	svc, ctx, project, db := newRBACServiceWithConn(t, "identity_always_on")
 	granted := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeAssistantWrite, project.String()), authz.NewGrant(authz.ScopeProjectWrite, project.String()))
-	create := func(name string) *types.Assistant {
-		t.Helper()
-		created, err := svc.CreateAssistant(granted, &gen.CreateAssistantPayload{SessionToken: nil, ProjectSlugInput: nil, Name: name, Model: "openai/gpt-4o-mini", Instructions: "", Toolsets: nil, McpServers: nil, WarmTTLSeconds: nil, MaxConcurrency: nil, Status: nil})
-		require.NoError(t, err)
-		return created
-	}
 
-	svc.features = identityFlags(true)
-	active := create("Rolled out")
-	require.Equal(t, string(assistantidentity.Active), *active.IdentityState)
-
-	svc.features = identityFlags(false)
-	legacy := create("Not rolled out")
-	require.Equal(t, string(assistantidentity.NeverConfigured), *legacy.IdentityState)
+	created, err := svc.CreateAssistant(granted, &gen.CreateAssistantPayload{SessionToken: nil, ProjectSlugInput: nil, Name: "Provisioned", Model: "openai/gpt-4o-mini", Instructions: "", Toolsets: nil, McpServers: nil, WarmTTLSeconds: nil, MaxConcurrency: nil, Status: nil})
+	require.NoError(t, err)
+	require.Equal(t, string(assistantidentity.Active), *created.IdentityState)
 	managed, err := svc.EnsureManagedAssistant(granted, &gen.EnsureManagedAssistantPayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
-	require.Equal(t, string(assistantidentity.NeverConfigured), *managed.IdentityState)
-	_, err = svc.UpgradeAssistantIdentity(granted, &gen.UpgradeAssistantIdentityPayload{ID: legacy.ID, SessionToken: nil, ProjectSlugInput: nil})
-	var refused *oops.ShareableError
-	require.ErrorAs(t, err, &refused)
-	require.Equal(t, oops.CodeForbidden, refused.Code)
+	require.Equal(t, string(assistantidentity.Active), *managed.IdentityState)
 
-	// Turning the rollout off gates provisioning only.
-	kept, err := svc.core.GetAssistant(ctx, project, uuid.MustParse(active.ID))
-	require.NoError(t, err)
-	require.Equal(t, string(assistantidentity.Active), kept.IdentityState)
-
-	svc.features = identityFlags(true)
-	upgraded, err := svc.UpgradeAssistantIdentity(granted, &gen.UpgradeAssistantIdentityPayload{ID: legacy.ID, SessionToken: nil, ProjectSlugInput: nil})
+	legacy := createLegacyAssistant(t, db, project, "Legacy")
+	upgraded, err := svc.UpgradeAssistantIdentity(granted, &gen.UpgradeAssistantIdentityPayload{ID: legacy.ID.String(), SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Equal(t, string(assistantidentity.Active), *upgraded.IdentityState)
 }

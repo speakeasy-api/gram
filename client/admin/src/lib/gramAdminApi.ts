@@ -1,3 +1,4 @@
+import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import { GramError } from "@gram/admin-client/models/errors/gramerror";
 
 import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
@@ -620,22 +621,6 @@ export function listOrganizationMembers(
   );
 }
 
-type AdminInferenceKeyResponse = {
-  key_type: string;
-  credits_used: number;
-  monthly_credits: number;
-  disabled: boolean;
-  disable_causes?: string[];
-  disable_causes_classified: boolean;
-};
-
-export type AdminInferenceKey = Omit<
-  AdminInferenceKeyResponse,
-  "disable_causes"
-> & {
-  disable_causes: string[] | null;
-};
-
 export type AdminChatAnalysisJudge = "work_units" | "business_memory";
 
 export type AdminOrganizationChatAnalysisSettings = {
@@ -694,27 +679,12 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
-export async function getInferenceKeys(
-  organizationID: string,
-): Promise<AdminInferenceKey[]> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  const keys = await gramAdminFetch<AdminInferenceKeyResponse[]>(
-    `/admin/organization.inferenceKeys?${qs}`,
-  );
-  return keys.map((key) => ({
-    ...key,
-    disable_causes: key.disable_causes_classified
-      ? (key.disable_causes ?? [])
-      : null,
-  }));
-}
+export type AdminInferenceKeyType = RepairInferenceKeyRequestBody["keyType"];
 
-export type AdminInferenceKeyType = "chat" | "internal";
-
-export type AdminInferenceKeyLimit = Pick<
-  AdminInferenceKey,
-  "key_type" | "monthly_credits"
->;
+export type AdminInferenceKeyLimit = {
+  key_type: string;
+  monthly_credits: number;
+};
 
 export function setInferenceKeyMonthlyLimit(input: {
   organizationID: string;

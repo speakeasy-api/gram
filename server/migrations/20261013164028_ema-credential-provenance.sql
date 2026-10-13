@@ -16,6 +16,18 @@ CREATE INDEX CONCURRENTLY "remote_session_ema_credentials_org_provider_idx" ON "
 CREATE INDEX CONCURRENTLY "remote_session_ema_credentials_sso_sign_in_id_idx" ON "remote_session_ema_credentials" ("organization_id", "sso_sign_in_id");
 -- Create index "remote_session_ema_credentials_user_session_id_idx" to table: "remote_session_ema_credentials"
 CREATE INDEX CONCURRENTLY "remote_session_ema_credentials_user_session_id_idx" ON "remote_session_ema_credentials" ("organization_id", "user_session_id");
+-- Set comment to column: "ema_provider" on table: "remote_session_ema_credentials"
+COMMENT ON COLUMN "remote_session_ema_credentials"."ema_provider" IS '@access: confidential';
+-- Set comment to column: "internal_session_issuer_id" on table: "remote_session_ema_credentials"
+COMMENT ON COLUMN "remote_session_ema_credentials"."internal_session_issuer_id" IS '@access: confidential';
+-- Set comment to column: "internal_session_issuer_updated_at" on table: "remote_session_ema_credentials"
+COMMENT ON COLUMN "remote_session_ema_credentials"."internal_session_issuer_updated_at" IS '@access: confidential';
+-- Set comment to column: "internal_session_issuer_key_id" on table: "remote_session_ema_credentials"
+COMMENT ON COLUMN "remote_session_ema_credentials"."internal_session_issuer_key_id" IS '@access: confidential';
+-- Set comment to column: "sso_sign_in_id" on table: "remote_session_ema_credentials"
+COMMENT ON COLUMN "remote_session_ema_credentials"."sso_sign_in_id" IS '@access: confidential';
+-- Set comment to column: "user_session_id" on table: "remote_session_ema_credentials"
+COMMENT ON COLUMN "remote_session_ema_credentials"."user_session_id" IS '@access: confidential';
 
 -- Validate tenant-qualified provenance after the low-lock constraint installation.
 ALTER TABLE "remote_session_ema_credentials" VALIDATE CONSTRAINT "remote_session_ema_credentials_internal_session_issuer_id_fkey";

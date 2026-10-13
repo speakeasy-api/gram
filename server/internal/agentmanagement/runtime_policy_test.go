@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -51,11 +50,8 @@ func TestLoadAgentPolicyUsesOnlyExactSafeAgentGrants(t *testing.T) {
 	seedGrant(t, ctx, conn, "org-agent-policy", authz.AllUsersPrincipal(), authz.ScopeProjectRead, "all-users-project")
 	seedGrant(t, ctx, conn, "org-agent-policy", urn.NewPrincipal(urn.PrincipalTypeRole, "global:00000000-0000-0000-0000-000000000001"), authz.ScopeProjectRead, "role-project")
 
-	// Rows the narrow runtime resolver must reject: a legacy deny, and an allow
-	// whose selector names the wrong resource kind for its scope.
-	require.NoError(t, testrepo.New(conn).InsertLegacyDenyPrincipalGrantFixture(ctx, testrepo.InsertLegacyDenyPrincipalGrantFixtureParams{
-		OrganizationID: "org-agent-policy", PrincipalUrn: principal, Scope: string(authz.ScopeSkillRead), Selectors: []byte(`{"resource_kind":"skill","resource_id":"*"}`),
-	}))
+	// A row the narrow runtime resolver must reject: an allow whose selector
+	// names the wrong resource kind for its scope.
 	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
 		OrganizationID: "org-agent-policy", PrincipalUrn: principal, Scope: string(authz.ScopeMCPRead), Selectors: []byte(`{"resource_kind":"project","resource_id":"*"}`),
 	})
