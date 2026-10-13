@@ -266,7 +266,7 @@ func TestEmulatorBrowserRoutesAreNotPublicUnderWorkOSBackend(t *testing.T) {
 		APIKey:       "",
 	}, stubHandler("emulator"))
 
-	for _, path := range []string{"/portal", "/passwordless/sessions/session_1/authorize"} {
+	for _, path := range []string{"/portal", "/passwordless/sessions/session_1/authorize", "/google/userinfo"} {
 		rec := httptest.NewRecorder()
 		workosHandler.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		require.Equal(t, http.StatusUnauthorized, rec.Code)

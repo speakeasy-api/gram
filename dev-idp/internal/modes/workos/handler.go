@@ -188,6 +188,10 @@ func (h *Handler) isPublicRoute(mux *http.ServeMux, r *http.Request) bool {
 	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/passwordless/sessions/") && strings.HasSuffix(r.URL.Path, "/authorize") {
 		return true
 	}
+	// The Google userinfo mock authenticates with the mock Google token.
+	if r.Method == http.MethodGet && r.URL.Path == "/google/userinfo" {
+		return true
+	}
 	return r.Method == http.MethodGet && r.URL.Path == "/portal"
 }
 
