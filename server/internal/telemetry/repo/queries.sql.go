@@ -2599,6 +2599,7 @@ type GetTimeSeriesMetricsParams struct {
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
+	ToolsetSlugServerID string                // Optional, with ToolsetSlug - drops rows stamped with a different mcp_server_id
 	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
 	MCPServerID         string                // Optional filter - filters by mcp_server_id
 	MetaMCPServerID     string                // Optional filter - gateway (meta MCP server) the call was dispatched through
@@ -2659,6 +2660,9 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+		if arg.ToolsetSlugServerID != "" {
+			sb = sb.Where(squirrel.Eq{"mcp_server_id": []string{"", arg.ToolsetSlugServerID}})
+		}
 	}
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
@@ -2738,6 +2742,7 @@ type GetToolMetricsBreakdownParams struct {
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
+	ToolsetSlugServerID string                // Optional, with ToolsetSlug - drops rows stamped with a different mcp_server_id
 	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
 	MCPServerID         string                // Optional filter - filters by mcp_server_id
 	MetaMCPServerID     string                // Optional filter - gateway (meta MCP server) the call was dispatched through
@@ -2778,6 +2783,9 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+		if arg.ToolsetSlugServerID != "" {
+			sb = sb.Where(squirrel.Eq{"mcp_server_id": []string{"", arg.ToolsetSlugServerID}})
+		}
 	}
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
@@ -2861,6 +2869,7 @@ type GetOverviewSummaryParams struct {
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
+	ToolsetSlugServerID string                // Optional, with ToolsetSlug - drops rows stamped with a different mcp_server_id
 	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
 	MCPServerID         string                // Optional filter - filters by mcp_server_id
 	MetaMCPServerID     string                // Optional filter - gateway (meta MCP server) the call was dispatched through
@@ -2986,6 +2995,9 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+		if arg.ToolsetSlugServerID != "" {
+			sb = sb.Where(squirrel.Eq{"mcp_server_id": []string{"", arg.ToolsetSlugServerID}})
+		}
 	}
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
@@ -3027,7 +3039,14 @@ type ListChatsParams struct {
 	ExternalUserID   string
 	SortOrder        string
 	Cursor           string // gram_chat_id to paginate from
-	Limit            int
+
+	// CursorStartTimeUnixNano is the start_time_unix_nano the cursor's chat was
+	// shown with on the previous page. When set, the page boundary is compared
+	// against it directly. Zero re-derives the boundary from the table, which
+	// ignores this query's time window and row filters.
+	CursorStartTimeUnixNano int64
+
+	Limit int
 }
 
 // ListChats retrieves aggregated chat summaries grouped by gram_chat_id.
@@ -3082,7 +3101,11 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	sb = sb.GroupBy("gram_chat_id")
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)", "", nil)
+	if arg.CursorStartTimeUnixNano != 0 {
+		sb = withHavingTupleValuePagination(sb, arg.Cursor, arg.CursorStartTimeUnixNano, arg.SortOrder, "gram_chat_id", "min(time_unix_nano)")
+	} else {
+		sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)", "", nil)
+	}
 
 	// Ordering - include gram_chat_id as secondary for stable ordering
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "gram_chat_id")
@@ -8089,7 +8112,7 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	// A row carries one of them, so matching any never counts a user twice.
 	identity := squirrel.Or{}
 	if arg.ToolsetSlug != "" {
-		identity = append(identity, squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+		identity = append(identity, toolsetSlugArm([]string{arg.ToolsetSlug}, arg.MCPServerID != ""))
 	}
 	if arg.MCPServerID != "" {
 		identity = append(identity, squirrel.Eq{"mcp_server_id": arg.MCPServerID})

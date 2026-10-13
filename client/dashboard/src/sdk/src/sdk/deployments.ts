@@ -4,6 +4,8 @@
 
 import { deploymentsActive } from "../funcs/deploymentsActive.js";
 import { deploymentsCreate } from "../funcs/deploymentsCreate.js";
+import { deploymentsEvaluateOpenAPIv3 } from "../funcs/deploymentsEvaluateOpenAPIv3.js";
+import { deploymentsEvaluation } from "../funcs/deploymentsEvaluation.js";
 import { deploymentsEvolveDeployment } from "../funcs/deploymentsEvolveDeployment.js";
 import { deploymentsGetById } from "../funcs/deploymentsGetById.js";
 import { deploymentsLatest } from "../funcs/deploymentsLatest.js";
@@ -14,15 +16,21 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CreateDeploymentResult } from "../models/components/createdeploymentresult.js";
 import { EvolveResult } from "../models/components/evolveresult.js";
 import { GetActiveDeploymentResult } from "../models/components/getactivedeploymentresult.js";
+import { GetDeploymentEvaluationResult } from "../models/components/getdeploymentevaluationresult.js";
 import { GetDeploymentLogsResult } from "../models/components/getdeploymentlogsresult.js";
 import { GetDeploymentResult } from "../models/components/getdeploymentresult.js";
 import { GetLatestDeploymentResult } from "../models/components/getlatestdeploymentresult.js";
 import { ListDeploymentResult } from "../models/components/listdeploymentresult.js";
+import { OpenAPIv3Evaluation } from "../models/components/openapiv3evaluation.js";
 import { RedeployResult } from "../models/components/redeployresult.js";
 import {
   CreateDeploymentRequest,
   CreateDeploymentSecurity,
 } from "../models/operations/createdeployment.js";
+import {
+  EvaluateOpenAPIv3Request,
+  EvaluateOpenAPIv3Security,
+} from "../models/operations/evaluateopenapiv3.js";
 import {
   EvolveDeploymentRequest,
   EvolveDeploymentSecurity,
@@ -35,6 +43,10 @@ import {
   GetDeploymentRequest,
   GetDeploymentSecurity,
 } from "../models/operations/getdeployment.js";
+import {
+  GetDeploymentEvaluationRequest,
+  GetDeploymentEvaluationSecurity,
+} from "../models/operations/getdeploymentevaluation.js";
 import {
   GetDeploymentLogsRequest,
   GetDeploymentLogsSecurity,
@@ -85,6 +97,44 @@ export class Deployments extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CreateDeploymentResult> {
     return unwrapAsync(deploymentsCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * evaluateOpenAPIv3 deployments
+   *
+   * @remarks
+   * Compare an uploaded OpenAPI document with the version of the same source in the active deployment. Reports changes to tools, inputs and security without deploying anything.
+   */
+  async evaluateOpenAPIv3(
+    request: EvaluateOpenAPIv3Request,
+    security?: EvaluateOpenAPIv3Security | undefined,
+    options?: RequestOptions,
+  ): Promise<OpenAPIv3Evaluation> {
+    return unwrapAsync(deploymentsEvaluateOpenAPIv3(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getDeploymentEvaluation deployments
+   *
+   * @remarks
+   * Compare the OpenAPI documents in a deployment with the deployment it was created from.
+   */
+  async evaluation(
+    request: GetDeploymentEvaluationRequest,
+    security?: GetDeploymentEvaluationSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetDeploymentEvaluationResult> {
+    return unwrapAsync(deploymentsEvaluation(
       this,
       request,
       security,

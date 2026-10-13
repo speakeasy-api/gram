@@ -400,6 +400,8 @@ type IdentityCommit struct {
 	locked             bool
 	userIssuerOrgLevel bool
 	result             IdentityResult
+	// createCapabilities pins registration to the submitted form, before create-time discovery fills it in.
+	createCapabilities providerCapabilities
 }
 
 // IdentityTx is the transaction a commit writes in.
@@ -415,6 +417,13 @@ func (c *IdentityCommitter) Prepare(plan IdentityPlan) *IdentityCommit {
 	var commit IdentityCommit
 	commit.committer = c
 	commit.plan = plan
+	if create := plan.Provider.create; create != nil {
+		commit.createCapabilities = providerCapabilities{
+			registrationEndpoint:              create.RegistrationEndpoint,
+			tokenEndpointAuthMethodsSupported: slices.Clone(create.TokenEndpointAuthMethodsSupported),
+			clientIDMetadataDocumentSupported: create.ClientIDMetadataDocumentSupported,
+		}
+	}
 	return &commit
 }
 
@@ -663,15 +672,11 @@ func (p providerCapabilities) supportsCIMD() bool {
 	return SupportsClientIDMetadataDocument(p.clientIDMetadataDocumentSupported, p.tokenEndpointAuthMethodsSupported)
 }
 
-// capabilities is what registration is chosen from: the new provider's
+// capabilities is what registration is chosen from: the new provider's submitted
 // parameters or the stored provider's row.
 func (c *IdentityCommit) capabilities() providerCapabilities {
-	if create := c.plan.Provider.create; create != nil {
-		return providerCapabilities{
-			registrationEndpoint:              create.RegistrationEndpoint,
-			tokenEndpointAuthMethodsSupported: create.TokenEndpointAuthMethodsSupported,
-			clientIDMetadataDocumentSupported: create.ClientIDMetadataDocumentSupported,
-		}
+	if c.plan.Provider.create != nil {
+		return c.createCapabilities
 	}
 	return providerCapabilities{
 		registrationEndpoint:              c.provider.RegistrationEndpoint,
@@ -979,7 +984,11 @@ func listUserSessionIssuerClients(ctx context.Context, q *repo.Queries, projectI
 // shared across projects. A project-owned client is invisible to other
 // projects, so its binding only ever changes the scope's own project.
 func (c *IdentityCommit) refuseOrgWideBinding(client repo.RemoteSessionClient) error {
-	if c.userIssuerOrgLevel && !client.ProjectID.Valid {
+	return refuseOrgWideBinding(c.userIssuerOrgLevel, client.ProjectID)
+}
+
+func refuseOrgWideBinding(userIssuerOrgLevel bool, clientProjectID uuid.NullUUID) error {
+	if userIssuerOrgLevel && !clientProjectID.Valid {
 		return identityRefusal(ErrIdentityOrgWideBinding, nil, OrgWideBindingMessage)
 	}
 	return nil

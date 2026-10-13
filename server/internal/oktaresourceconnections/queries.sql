@@ -350,6 +350,13 @@ SET grant_types_supported = @grant_types_supported::text[],
     metadata_fetched_at = clock_timestamp()
 WHERE id = @id;
 
+-- Test fixture: an issuer whose advertised capabilities have no discovery recorded.
+-- name: ClearIssuerDiscoveryFixture :execrows
+UPDATE remote_session_issuers
+SET metadata_fetched_at = NULL
+WHERE id = @id
+  AND organization_id = @organization_id;
+
 -- Test fixture: an issuer identifier, e.g. to match a confirmed audience.
 -- name: SetIssuerURLFixture :execrows
 UPDATE remote_session_issuers

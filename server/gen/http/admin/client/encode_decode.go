@@ -6443,6 +6443,240 @@ func DecodeGetOrganizationStatsResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildRepairInferenceKeyRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "repairInferenceKey" endpoint
+func (c *Client) BuildRepairInferenceKeyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RepairInferenceKeyAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "repairInferenceKey", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRepairInferenceKeyRequest returns an encoder for requests sent to the
+// admin repairInferenceKey server.
+func EncodeRepairInferenceKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RepairInferenceKeyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "repairInferenceKey", "*admin.RepairInferenceKeyPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRepairInferenceKeyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "repairInferenceKey", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRepairInferenceKeyResponse returns a decoder for responses returned by
+// the admin repairInferenceKey endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRepairInferenceKeyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRepairInferenceKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RepairInferenceKeyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+			}
+			err = ValidateRepairInferenceKeyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+			}
+			res := NewRepairInferenceKeyAdminInferenceKeyRepairResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RepairInferenceKeyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+			}
+			err = ValidateRepairInferenceKeyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+			}
+			return nil, NewRepairInferenceKeyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RepairInferenceKeyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+			}
+			err = ValidateRepairInferenceKeyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+			}
+			return nil, NewRepairInferenceKeyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RepairInferenceKeyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+			}
+			err = ValidateRepairInferenceKeyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+			}
+			return nil, NewRepairInferenceKeyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RepairInferenceKeyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+			}
+			err = ValidateRepairInferenceKeyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+			}
+			return nil, NewRepairInferenceKeyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RepairInferenceKeyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+			}
+			err = ValidateRepairInferenceKeyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+			}
+			return nil, NewRepairInferenceKeyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RepairInferenceKeyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+			}
+			err = ValidateRepairInferenceKeyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+			}
+			return nil, NewRepairInferenceKeyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RepairInferenceKeyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+			}
+			err = ValidateRepairInferenceKeyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+			}
+			return nil, NewRepairInferenceKeyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RepairInferenceKeyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+				}
+				err = ValidateRepairInferenceKeyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+				}
+				return nil, NewRepairInferenceKeyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RepairInferenceKeyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+				}
+				err = ValidateRepairInferenceKeyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+				}
+				return nil, NewRepairInferenceKeyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "repairInferenceKey", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RepairInferenceKeyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "repairInferenceKey", err)
+			}
+			err = ValidateRepairInferenceKeyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "repairInferenceKey", err)
+			}
+			return nil, NewRepairInferenceKeyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "repairInferenceKey", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetInferenceKeysRequest instantiates a HTTP request object with method
 // and path set to call the "admin" service "getInferenceKeys" endpoint
 func (c *Client) BuildGetInferenceKeysRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -20383,6 +20617,46 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 	return res
 }
 
+// unmarshalAdminInferenceKeyRepairStateResponseBodyToAdminAdminInferenceKeyRepairState
+// builds a value of type *admin.AdminInferenceKeyRepairState from a value of
+// type *AdminInferenceKeyRepairStateResponseBody.
+func unmarshalAdminInferenceKeyRepairStateResponseBodyToAdminAdminInferenceKeyRepairState(v *AdminInferenceKeyRepairStateResponseBody) *admin.AdminInferenceKeyRepairState {
+	res := &admin.AdminInferenceKeyRepairState{
+		KeyType:                 *v.KeyType,
+		MonthlyCredits:          *v.MonthlyCredits,
+		Disabled:                *v.Disabled,
+		DisableCausesClassified: *v.DisableCausesClassified,
+	}
+	res.DisableCauses = make([]string, len(v.DisableCauses))
+	for i, val := range v.DisableCauses {
+		res.DisableCauses[i] = val
+	}
+	res.CauseDiagnostics = make([]*admin.AdminInferenceKeyCause, len(v.CauseDiagnostics))
+	for i, val := range v.CauseDiagnostics {
+		if val == nil {
+			res.CauseDiagnostics[i] = nil
+			continue
+		}
+		res.CauseDiagnostics[i] = unmarshalAdminInferenceKeyCauseResponseBodyToAdminAdminInferenceKeyCause(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminInferenceKeyCauseResponseBodyToAdminAdminInferenceKeyCause
+// builds a value of type *admin.AdminInferenceKeyCause from a value of type
+// *AdminInferenceKeyCauseResponseBody.
+func unmarshalAdminInferenceKeyCauseResponseBodyToAdminAdminInferenceKeyCause(v *AdminInferenceKeyCauseResponseBody) *admin.AdminInferenceKeyCause {
+	res := &admin.AdminInferenceKeyCause{
+		Cause:         *v.Cause,
+		Description:   *v.Description,
+		Removable:     *v.Removable,
+		BlockedReason: v.BlockedReason,
+	}
+
+	return res
+}
+
 // unmarshalAdminInferenceKeyResponseToAdminAdminInferenceKey builds a value of
 // type *admin.AdminInferenceKey from a value of type
 // *AdminInferenceKeyResponse.
@@ -20399,6 +20673,33 @@ func unmarshalAdminInferenceKeyResponseToAdminAdminInferenceKey(v *AdminInferenc
 		for i, val := range v.DisableCauses {
 			res.DisableCauses[i] = val
 		}
+	}
+	if v.CauseDiagnostics != nil {
+		res.CauseDiagnostics = make([]*admin.AdminInferenceKeyCause, len(v.CauseDiagnostics))
+		for i, val := range v.CauseDiagnostics {
+			if val == nil {
+				res.CauseDiagnostics[i] = nil
+				continue
+			}
+			res.CauseDiagnostics[i] = unmarshalAdminInferenceKeyCauseResponseToAdminAdminInferenceKeyCause(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalAdminInferenceKeyCauseResponseToAdminAdminInferenceKeyCause builds
+// a value of type *admin.AdminInferenceKeyCause from a value of type
+// *AdminInferenceKeyCauseResponse.
+func unmarshalAdminInferenceKeyCauseResponseToAdminAdminInferenceKeyCause(v *AdminInferenceKeyCauseResponse) *admin.AdminInferenceKeyCause {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminInferenceKeyCause{
+		Cause:         *v.Cause,
+		Description:   *v.Description,
+		Removable:     *v.Removable,
+		BlockedReason: v.BlockedReason,
 	}
 
 	return res

@@ -63,15 +63,6 @@ export function pageFieldsFor(
   );
 }
 
-/**
- * Removes every value a page's bar keeps in the URL, so the next page opens
- * on its own: a dashboard on its saved filters.
- */
-export function clearPageFilterParams(params: URLSearchParams): void {
-  for (const name of DATE_RANGE_PARAMS) params.delete(name);
-  for (const { field } of PAGE_FILTER_FIELDS) params.delete(field);
-}
-
 /** Everything a page's bar is set to at once. */
 export interface PageFilterValues {
   /** The date range; absent means the page's default. */

@@ -33,7 +33,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Network, Plus, RefreshCw } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
-import { ConfirmDialog } from "../remote-identity-providers/ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLiteLLMInstanceProjects } from "./use-litellm-instance-projects";
 import {
   buildLiteLLMEnvironment,

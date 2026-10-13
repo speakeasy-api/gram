@@ -206,7 +206,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
-			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, time.Since(start))
+			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, "", time.Since(start))
 		}()
 	}
 
@@ -390,7 +390,7 @@ func (s *Service) callPlatformToolsetTool(
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
-		s.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, params.Name)
+		s.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, "", params.Name)
 	}
 
 	if err := checkToolUsageLimits(ctx, logger, authCtx.ActiveOrganizationID, authCtx.AccountType, s.billingRepository); err != nil {
@@ -440,6 +440,8 @@ func (s *Service) callPlatformToolsetTool(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          nil,
+			MCPServerID:           nil,
+			MCPEndpointID:         nil,
 			MetaMCPServerID:       nil,
 			ChatID:                conv.PtrEmpty(chatID),
 			Type:                  plan.BillingType,

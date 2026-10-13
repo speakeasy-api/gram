@@ -1,16 +1,14 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { formatRelativeTime } from "@/lib/dates";
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { Widget } from "@gram/client/models/components/widget.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useDashboard } from "@gram/client/react-query/dashboard.js";
 import { useEffect, useMemo, useState, type JSX } from "react";
-import { Link } from "react-router";
 import {
   AddWidgetDialog,
   DashboardDetailsDialog,
@@ -22,13 +20,14 @@ import {
   savedFromContext,
   savedPreset,
 } from "./dashboardFilters";
+import { DashboardBackLink, DashboardFrame } from "./DashboardFrame";
 import { DashboardGrid } from "./DashboardGrid";
+import type { GridCard } from "./dashboardLayout";
 import { longestWindow } from "./exploreModel";
 import { useCanEditDashboard } from "./useCanEditDashboard";
 import { useCreatorName } from "./useCreatorName";
 import { useDashboardMutations } from "./useDashboardMutations";
 import { pageFieldsFor, usePageFilters } from "./usePageFilters";
-import type { OpenInExplore } from "./WidgetView";
 
 /** What the dashboard page is told about the project around it. */
 interface DashboardPageProps {
@@ -41,13 +40,10 @@ interface DashboardPageProps {
   onRetryWidgets: () => void;
   /** Where the list of dashboards is. */
   backHref: string;
-  backState: unknown;
   /** Open another dashboard: the copy, after duplicating. */
   onOpen: (dashboard: Dashboard) => void;
   /** This dashboard was deleted. */
   onDeleted: () => void;
-  /** Open a card's question in the Explore tab. */
-  onOpenQuery: OpenInExplore;
 }
 
 /**
@@ -60,8 +56,9 @@ export function DashboardPage({
   id,
   ...props
 }: DashboardPageProps & { id: string }): JSX.Element {
-  const query = useDashboard({ id });
-  const back = <BackLink href={props.backHref} state={props.backState} />;
+  const gramProject = useProjectSlugForRequests();
+  const query = useDashboard({ id, gramProject });
+  const back = <DashboardBackLink href={props.backHref} />;
 
   if (query.isPending) {
     return (
@@ -97,25 +94,6 @@ export function DashboardPage({
   return <DashboardView dashboard={query.data} {...props} />;
 }
 
-function BackLink({
-  href,
-  state,
-}: {
-  href: string;
-  state: unknown;
-}): JSX.Element {
-  return (
-    <Link
-      to={href}
-      state={state}
-      className="text-muted-foreground hover:text-foreground inline-flex w-max items-center gap-1 text-xs no-underline hover:underline"
-    >
-      <Icon name="arrow-left" className="size-3" aria-hidden />
-      All dashboards
-    </Link>
-  );
-}
-
 function DashboardView({
   dashboard,
   widgets,
@@ -123,10 +101,8 @@ function DashboardView({
   widgetsFailed,
   onRetryWidgets,
   backHref,
-  backState,
   onOpen,
   onDeleted,
-  onOpenQuery,
 }: DashboardPageProps & { dashboard: Dashboard }): JSX.Element {
   const creator = useCreatorName();
   const canEdit = useCanEditDashboard();
@@ -227,109 +203,117 @@ function DashboardView({
     </Button>
   ) : null;
 
+  // Each card links to a saved widget, found once the widget list answers.
+  const byId = useMemo(
+    () => new Map(widgets.map((widget) => [widget.id, widget])),
+    [widgets],
+  );
+  const cards = useMemo<GridCard[]>(
+    () =>
+      dashboard.widgets.map((placement) => ({
+        placement,
+        widget: byId.get(placement.widgetId),
+      })),
+    [dashboard.widgets, byId],
+  );
+  const hasCards = dashboard.widgets.length > 0;
+
+  let body: JSX.Element;
+  if (!hasCards) {
+    body = (
+      <InlineEmptyState
+        icon="layout-dashboard"
+        heading="Nothing on this dashboard yet"
+        description={
+          editable
+            ? "Add a saved widget to start laying it out. Each card can then be dragged and resized."
+            : "Its creator has not placed any widgets on it yet."
+        }
+      />
+    );
+  } else if (widgetsFailed) {
+    body = (
+      <InlineEmptyState
+        icon="triangle-alert"
+        heading="The widgets did not load"
+        description="The cards are here, but the widgets behind them could not be fetched."
+        action={
+          <Button variant="secondary" size="sm" onClick={onRetryWidgets}>
+            Try again
+          </Button>
+        }
+      />
+    );
+  } else {
+    body = (
+      <DashboardGrid
+        cards={cards}
+        page={bar.context}
+        canEdit={editable}
+        saving={mutations.saving}
+        onSave={(placements) => mutations.saveLayout(dashboard.id, placements)}
+        onRemove={(placementId) =>
+          mutations.removeWidget(dashboard.id, placementId)
+        }
+      />
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        <BackLink href={backHref} state={backState} />
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h2 className="text-heading-lg truncate" title={dashboard.name}>
-              {dashboard.name}
-            </h2>
-            {dashboard.description ? (
-              <p className="text-muted-foreground text-sm">
-                {dashboard.description}
-              </p>
-            ) : null}
-            <p className="text-muted-foreground text-xs">
-              Created by {creator(dashboard.createdByUserId)} · Updated{" "}
-              {formatRelativeTime(dashboard.updatedAt)}
-              {mutations.saving ? " · Saving…" : ""}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
+    <>
+      <DashboardFrame
+        backHref={backHref}
+        name={dashboard.name}
+        description={dashboard.description}
+        byline={
+          <>
+            Created by {creator(dashboard.createdByUserId)} · Updated{" "}
+            {formatRelativeTime(dashboard.updatedAt)}
+            {mutations.saving ? " · Saving…" : ""}
+          </>
+        }
+        actions={
+          <>
             {addWidget}
             <MoreActions
               triggerAriaLabel={`Actions for ${dashboard.name}`}
               actions={actions}
             />
-          </div>
-        </div>
-      </div>
-
-      {dashboard.widgets.length === 0 ? (
-        <InlineEmptyState
-          icon="layout-dashboard"
-          heading="Nothing on this dashboard yet"
-          description={
-            editable
-              ? "Add a saved widget to start laying it out. Each card can then be dragged and resized."
-              : "Its creator has not placed any widgets on it yet."
-          }
-        />
-      ) : widgetsFailed ? (
-        <InlineEmptyState
-          icon="triangle-alert"
-          heading="The widgets did not load"
-          description="The cards are here, but the widgets behind them could not be fetched."
-          action={
-            <Button variant="secondary" size="sm" onClick={onRetryWidgets}>
-              Try again
-            </Button>
-          }
-        />
-      ) : (
-        <>
-          {/* The shared filter bar every card answers within. Picking in
-              it is the viewer's own view; Save filters makes it what the
-              dashboard opens on, for everyone. */}
-          <Page.Toolbar>
-            <Page.Toolbar.Row>
-              <Page.Toolbar.Filters {...bar.toolbar} />
-              {changed ? (
-                <Page.Toolbar.Actions>
-                  {editable ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon="save"
-                      disabled={mutations.pending}
-                      onClick={() =>
-                        mutations.saveFilters(dashboard.id, current)
-                      }
-                    >
-                      Save filters
-                    </Button>
-                  ) : null}
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onClick={() =>
-                      apply(barValuesFromSaved(dashboard.filters, fields))
-                    }
-                  >
-                    Reset filters
-                  </Button>
-                </Page.Toolbar.Actions>
+          </>
+        }
+        // The shared filter bar every card answers within. Picking in it
+        // is the viewer's own view; Save filters makes it what the
+        // dashboard opens on, for everyone.
+        filters={hasCards && !widgetsFailed ? bar.toolbar : undefined}
+        filterActions={
+          changed ? (
+            <>
+              {editable ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon="save"
+                  disabled={mutations.pending}
+                  onClick={() => mutations.saveFilters(dashboard.id, current)}
+                >
+                  Save filters
+                </Button>
               ) : null}
-            </Page.Toolbar.Row>
-          </Page.Toolbar>
-          <DashboardGrid
-            dashboard={dashboard}
-            widgets={widgets}
-            page={bar.context}
-            canEdit={editable}
-            saving={mutations.saving}
-            onSave={(placements) =>
-              mutations.saveLayout(dashboard.id, placements)
-            }
-            onRemove={(placementId) =>
-              mutations.removeWidget(dashboard.id, placementId)
-            }
-            onOpen={onOpenQuery}
-          />
-        </>
-      )}
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() =>
+                  apply(barValuesFromSaved(dashboard.filters, fields))
+                }
+              >
+                Reset filters
+              </Button>
+            </>
+          ) : null
+        }
+      >
+        {body}
+      </DashboardFrame>
 
       <AddWidgetDialog
         key={adding ? "adding" : "not-adding"}
@@ -365,6 +349,6 @@ function DashboardView({
           })
         }
       />
-    </div>
+    </>
   );
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -183,7 +184,7 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.NoError(t, policybypass.ReplacePolicyURLAudience(ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, policyID.String(), serverURL, []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeUser, "first-user"),
 	}))
-	policy := policycore.Project(stored, []string{authz.AllUsersPrincipal().String()}, nil)
+	policy := policycore.Project(stored, []string{authz.AllUsersPrincipal().String()})
 	firstGrantState, err := riskPolicyVersionState(ctx, conn, policy)
 	require.NoError(t, err)
 	firstGrantVersion, err := controls.Versions().PolicyVersion(firstGrantState)
@@ -253,18 +254,22 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, legacyStored.ShadowMcpDisposition.Valid, "legacy block_all posture has no stored disposition")
 
+	legacyAllowedURL := "https://legacy-allowed.example.test/mcp"
+	require.NoError(t, policybypass.ReplacePolicyURLAudience(ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, legacyBlockingID.String(), legacyAllowedURL, []urn.Principal{authz.AllUsersPrincipal()}))
+	legacyRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: legacyBlocking.Policy.ID})
+	require.NoError(t, err)
 	_, _, err = handlers.UpdatePolicy(ctx, nil, map[string]any{
 		"project_slug":     project.Slug,
 		"policy_id":        legacyBlocking.Policy.ID,
-		"expected_version": legacyBlocking.Version,
+		"expected_version": legacyRead.Policy.Version,
 		"idempotency_key":  "drop-legacy-blocking-posture-key",
 		"patch":            map[string]any{"sources": []string{"gitleaks"}},
 	})
-	requireRiskMutationRefusal(t, err, "invalid_request")
+	require.NoError(t, err)
 	legacyStored, err = riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: legacyBlockingID, ProjectID: project.ID})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"shadow_mcp"}, legacyStored.Sources)
-	require.Equal(t, "block", legacyStored.Action)
+	require.Equal(t, []string{"gitleaks"}, legacyStored.Sources)
+	require.Empty(t, riskPolicyURLGrants(t, ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, legacyBlockingID), "a legacy block_all posture retires its allowed-server grants with it")
 
 	_, _, err = unavailableRiskMutationTool[CreateRiskExclusionToolOutput]()(ctx, nil, map[string]any{})
 	requireRiskMutationRefusal(t, err, unavailableCode)
@@ -278,15 +283,101 @@ func cloneRiskMutationInput(input map[string]any) map[string]any {
 	return cloned
 }
 
-func requireRiskMutationRefusal(t *testing.T, err error, code string) {
+func requireRiskMutationRefusal(t *testing.T, err error, code string) string {
 	t.Helper()
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
-	var payload struct {
-		Code string `json:"code"`
-	}
+	var payload featureUnavailableResult
 	require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &payload))
 	require.Equal(t, code, payload.Code)
+	return payload.Message
+}
+
+func riskPolicyURLGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, scope authz.Scope, policyID uuid.UUID) []string {
+	t.Helper()
+	grants, err := authz.ListGrantsForResource(ctx, conn, authz.Resource{OrganizationID: organizationID, Scope: scope, ResourceID: policyID.String()})
+	require.NoError(t, err)
+	return grantURLs(grants)
+}
+
+func TestRiskPolicyUpdateRetiresShadowMCPPostureByDisposition(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_risk_policy_shadow_posture")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	principal.ClientID = "test-client"
+	principal.Surface = SurfacePlatformMCP
+	ctx = ContextWithPrincipal(ctx, principal)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
+	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
+	require.NoError(t, err)
+	policies := risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil)
+	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, policies)
+	require.NoError(t, err)
+	reads, err := newRiskReadService(conn, "risk-policy-test-key")
+	require.NoError(t, err)
+
+	// The Platform create path stores no disposition, so the policies the
+	// dashboard would create are seeded through the shared mutation core.
+	createBlocking := func(name, disposition string, allowedURLs, blockedURLs []string) (uuid.UUID, string) {
+		created, err := policies.CreatePolicy(ctx, policycore.CreateMutation{
+			Params: riskrepo.CreateRiskPolicyParams{
+				ID: uuid.New(), ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: name,
+				PolicyType: "standard", Sources: []string{"shadow_mcp"}, PresidioEntities: []string{}, AnalyzerConfig: nil, McpScope: nil,
+				PromptInjectionRules: []string{}, DisabledRules: []string{}, CustomRuleIds: []string{},
+				Enabled: true, Action: "block",
+				AudienceType: riskPolicyAudienceEveryone, ShadowMcpDisposition: conv.ToPGText(disposition), AutoName: false,
+				UserMessage: pgtype.Text{String: "", Valid: false}, Prompt: pgtype.Text{String: "", Valid: false}, ModelConfig: nil,
+				Score: pgtype.Float8{Float64: defaultRiskPolicyScore, Valid: true},
+			},
+			AudiencePrincipals: []urn.Principal{authz.AllUsersPrincipal()},
+			AllowedURLs:        allowedURLs,
+			AllowedURLsSet:     allowedURLs != nil,
+			BlockedURLs:        blockedURLs,
+			BlockedURLsSet:     blockedURLs != nil,
+			Actor:              policycore.Actor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil, Slug: nil},
+		})
+		require.NoError(t, err)
+		read, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: created.Row.ID.String()})
+		require.NoError(t, err)
+		return created.Row.ID, read.Policy.Version
+	}
+	patch := func(policyID uuid.UUID, version, key string, fields map[string]any) (UpdateRiskPolicyToolOutput, error) {
+		_, updated, err := handlers.UpdatePolicy(ctx, nil, map[string]any{
+			"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": version, "idempotency_key": key, "patch": fields,
+		})
+		return updated, err
+	}
+
+	allowedURL := "https://allowed.example.test/mcp"
+	blockAllID, blockAllVersion := createBlocking("Stored block all", "block_all", []string{allowedURL}, nil)
+	require.Equal(t, []string{allowedURL}, riskPolicyURLGrants(t, ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, blockAllID))
+	retired, err := patch(blockAllID, blockAllVersion, "retire-block-all", map[string]any{"action": "warn"})
+	require.NoError(t, err)
+	require.Equal(t, "warn", retired.Policy.Action)
+	require.Empty(t, riskPolicyURLGrants(t, ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBypass, blockAllID), "retiring the deny retires the allowed-server exceptions without the caller sending a URL list")
+	retiredRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: blockAllID.String()})
+	require.NoError(t, err)
+	require.Nil(t, retiredRead.Policy.ShadowDecisions)
+
+	blockedURL := "https://sketchy.example.test/mcp"
+	allowAllID, allowAllVersion := createBlocking("Stored allow all", "allow_all", nil, []string{blockedURL})
+	_, err = patch(allowAllID, allowAllVersion, "retire-allow-all-sources", map[string]any{"sources": []string{"gitleaks"}})
+	message := requireRiskMutationRefusal(t, err, "invalid_request")
+	require.Contains(t, message, "turning off shadow_mcp detection")
+	require.Contains(t, message, "Delete this policy and create the one you want instead")
+	_, err = patch(allowAllID, allowAllVersion, "retire-allow-all-action", map[string]any{"action": "flag"})
+	message = requireRiskMutationRefusal(t, err, "invalid_request")
+	require.Contains(t, message, `changing the action from "block" to "flag"`)
+	stored, err := riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: allowAllID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, []string{"shadow_mcp"}, stored.Sources)
+	require.Equal(t, "block", stored.Action)
+	require.Equal(t, []string{blockedURL}, riskPolicyURLGrants(t, ctx, conn, principal.OrganizationID, authz.ScopeRiskPolicyBlock, allowAllID))
 }
 
 func TestRiskPolicyUpdateRejectsSessionSourceOnMCPScopedPolicy(t *testing.T) {
@@ -425,4 +516,80 @@ func TestRiskPolicyAudienceReplacement(t *testing.T) {
 	require.Equal(t, "everyone", restoredRead.Policy.Audience.Type)
 	require.Empty(t, restoredRead.Policy.Audience.PrincipalURNs)
 	require.Equal(t, restored.Version, restoredRead.Policy.Version)
+}
+
+func TestRiskPolicyCreateAcceptsMCPScope(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_risk_policy_create_scope")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	principal.ClientID = "test-client"
+	principal.Surface = SurfacePlatformMCP
+	ctx = ContextWithPrincipal(ctx, principal)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
+	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
+	require.NoError(t, err)
+	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil))
+	require.NoError(t, err)
+
+	scoped := func(key string, overrides map[string]any) map[string]any {
+		input := map[string]any{
+			"project_slug":    project.Slug,
+			"preset":          "secrets_and_credentials",
+			"idempotency_key": key,
+			"mcp_scope":       map[string]any{"all_servers": true, "tool_annotations": []string{"destructiveHint"}},
+		}
+		maps.Copy(input, overrides)
+		return input
+	}
+
+	_, created, err := handlers.CreatePolicy(ctx, nil, scoped("create-scoped-key", nil))
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(created.Policy.ID)
+	require.NoError(t, err)
+	stored, err := riskrepo.New(conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, "block", stored.Action)
+	require.JSONEq(t, `{"all_servers":true,"tool_annotations":["destructiveHint"],"servers":[]}`, string(stored.McpScope))
+
+	reads, err := newRiskReadService(conn, "risk-policy-test-key")
+	require.NoError(t, err)
+	read, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: policyID.String()})
+	require.NoError(t, err)
+	require.NotNil(t, read.Policy.MCPScope, "the read an agent verifies with shows where the policy applies")
+	require.True(t, read.Policy.MCPScope.AllServers)
+	require.Equal(t, []string{"destructiveHint"}, read.Policy.MCPScope.ToolAnnotations)
+
+	_, replayed, err := handlers.CreatePolicy(ctx, nil, scoped("create-scoped-key", nil))
+	require.NoError(t, err)
+	require.True(t, replayed.Receipt.Replayed)
+
+	_, unscoped, err := handlers.CreatePolicy(ctx, nil, map[string]any{"project_slug": project.Slug, "preset": "prompt_injection", "idempotency_key": "create-unscoped-key"})
+	require.NoError(t, err)
+	unscopedRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: unscoped.Policy.ID})
+	require.NoError(t, err)
+	require.Nil(t, unscopedRead.Policy.MCPScope)
+
+	for name, tc := range map[string]struct {
+		overrides map[string]any
+		contains  string
+	}{
+		"action the gateway cannot enforce": {map[string]any{"action": "warn"}, "use flag or block"},
+		"session-level preset":              {map[string]any{"preset": "unapproved_mcp_servers"}, "cannot be used by an MCP-scoped policy"},
+		"server outside the project":        {map[string]any{"mcp_scope": map[string]any{"servers": []map[string]any{{"mcp_server_id": "11111111-1111-4111-8111-111111111111"}}}}, "does not belong to the project"},
+		"no servers selected":               {map[string]any{"mcp_scope": map[string]any{"tool_annotations": []string{"destructiveHint"}}}, "at least one server"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := handlers.CreatePolicy(ctx, nil, scoped("rejected-"+name, tc.overrides))
+			var refusal *ToolRefusalError
+			require.ErrorAs(t, err, &refusal)
+			require.Contains(t, refusal.Payload, `"code":"invalid_request"`)
+			require.Contains(t, refusal.Payload, tc.contains)
+		})
+	}
 }

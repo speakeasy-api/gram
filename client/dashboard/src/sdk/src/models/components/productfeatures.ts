@@ -74,6 +74,10 @@ export type ProductFeatures = {
    */
   sessionPortabilityEnabled: boolean;
   /**
+   * Whether the organization can configure signals intelligence
+   */
+  signalsIntelligenceEnabled: boolean;
+  /**
    * Whether skill capture stores activation metadata without requesting manifest content
    */
   skillCaptureMetadataOnly: boolean;
@@ -113,6 +117,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     session_portability_enabled: z.boolean(),
+    signals_intelligence_enabled: z.boolean(),
     skill_capture_metadata_only: z.boolean(),
     skills_enabled: z.boolean(),
     sso_enabled: z.boolean(),
@@ -139,6 +144,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "session_portability_enabled": "sessionPortabilityEnabled",
+      "signals_intelligence_enabled": "signalsIntelligenceEnabled",
       "skill_capture_metadata_only": "skillCaptureMetadataOnly",
       "skills_enabled": "skillsEnabled",
       "sso_enabled": "ssoEnabled",

@@ -68,6 +68,16 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 	}
 }
 
+// NewWithClient wraps an existing SDK client.
+func NewWithClient(logger *slog.Logger, client posthog.Client) *Posthog {
+	return &Posthog{
+		client:          client,
+		disabled:        false,
+		localEvaluation: false,
+		logger:          logger.With(attr.SlogComponent("posthog")),
+	}
+}
+
 // newSDKConfig builds the PostHog client configuration. SDK diagnostics are
 // routed through logger so they carry its attributes. A personal API key
 // turns on local flag evaluation, with the SDK polling flag definitions every

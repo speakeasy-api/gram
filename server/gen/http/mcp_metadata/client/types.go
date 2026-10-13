@@ -42,8 +42,11 @@ type SetMcpMetadataRequestBody struct {
 // ExportMcpMetadataRequestBody is the type of the "mcpMetadata" service
 // "exportMcpMetadata" endpoint HTTP request body.
 type ExportMcpMetadataRequestBody struct {
-	// The MCP server slug (from the install URL)
-	McpSlug string `form:"mcp_slug" json:"mcp_slug" xml:"mcp_slug"`
+	// The MCP server slug (from the install URL). Mutually exclusive with
+	// mcp_server_id.
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// The ID of a toolset-backed MCP server. Mutually exclusive with mcp_slug.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 }
 
 // GetMcpMetadataResponseBody is the type of the "mcpMetadata" service
@@ -788,7 +791,11 @@ func NewSetMcpMetadataRequestBody(p *mcpmetadata.SetMcpMetadataPayload) *SetMcpM
 // payload of the "exportMcpMetadata" endpoint of the "mcpMetadata" service.
 func NewExportMcpMetadataRequestBody(p *mcpmetadata.ExportMcpMetadataPayload) *ExportMcpMetadataRequestBody {
 	body := &ExportMcpMetadataRequestBody{
-		McpSlug: string(p.McpSlug),
+		McpServerID: p.McpServerID,
+	}
+	if p.McpSlug != nil {
+		mcpSlug := string(*p.McpSlug)
+		body.McpSlug = &mcpSlug
 	}
 	return body
 }

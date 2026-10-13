@@ -226,31 +226,37 @@ func (q *Queries) ListDashboardsForWidget(ctx context.Context, arg ListDashboard
 	return items, nil
 }
 
-const listWidgetDashboards = `-- name: ListWidgetDashboards :many
+const listDashboardsForWidgets = `-- name: ListDashboardsForWidgets :many
 SELECT DISTINCT p.widget_id, d.id AS dashboard_id, d.name AS dashboard_name
 FROM dashboard_widgets p
 JOIN dashboards d ON d.id = p.dashboard_id AND d.project_id = p.project_id AND d.deleted IS FALSE
 WHERE p.project_id = $1
+  AND p.widget_id = ANY($2::uuid[])
 ORDER BY p.widget_id, d.name, d.id
 `
 
-type ListWidgetDashboardsRow struct {
+type ListDashboardsForWidgetsParams struct {
+	ProjectID uuid.UUID
+	WidgetIds []uuid.UUID
+}
+
+type ListDashboardsForWidgetsRow struct {
 	WidgetID      uuid.UUID
 	DashboardID   uuid.UUID
 	DashboardName string
 }
 
-// Which live dashboards each of the project's widgets is on, once each,
-// however many cards show it.
-func (q *Queries) ListWidgetDashboards(ctx context.Context, projectID uuid.UUID) ([]ListWidgetDashboardsRow, error) {
-	rows, err := q.db.Query(ctx, listWidgetDashboards, projectID)
+// Which live dashboards each of the given widgets is on, once each, however
+// many cards show it.
+func (q *Queries) ListDashboardsForWidgets(ctx context.Context, arg ListDashboardsForWidgetsParams) ([]ListDashboardsForWidgetsRow, error) {
+	rows, err := q.db.Query(ctx, listDashboardsForWidgets, arg.ProjectID, arg.WidgetIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListWidgetDashboardsRow
+	var items []ListDashboardsForWidgetsRow
 	for rows.Next() {
-		var i ListWidgetDashboardsRow
+		var i ListDashboardsForWidgetsRow
 		if err := rows.Scan(&i.WidgetID, &i.DashboardID, &i.DashboardName); err != nil {
 			return nil, err
 		}
@@ -268,10 +274,17 @@ FROM widgets
 WHERE project_id = $1
   AND deleted IS FALSE
 ORDER BY updated_at DESC, id DESC
+LIMIT $2::int
 `
 
-func (q *Queries) ListWidgets(ctx context.Context, projectID uuid.UUID) ([]Widget, error) {
-	rows, err := q.db.Query(ctx, listWidgets, projectID)
+type ListWidgetsParams struct {
+	ProjectID uuid.UUID
+	RowLimit  pgtype.Int4
+}
+
+// A null row_limit lists every widget.
+func (q *Queries) ListWidgets(ctx context.Context, arg ListWidgetsParams) ([]Widget, error) {
+	rows, err := q.db.Query(ctx, listWidgets, arg.ProjectID, arg.RowLimit)
 	if err != nil {
 		return nil, err
 	}

@@ -39,7 +39,7 @@ import (
 // not connect.
 func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http.ResponseWriter, r *http.Request, issuer *sharedIssuer) error {
 	logger := issuer.logger
-	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, extractClientCredentials(r), issuer.organizationID, logger); refused {
+	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, extractClientCredentials(r), logger); refused {
 		return err
 	}
 

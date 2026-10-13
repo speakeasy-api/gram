@@ -127,17 +127,7 @@ func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "op_tos_uri must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
-	dbtx := callerTx
-	if dbtx == nil {
-		ownTx, err := s.db.Begin(ctx)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-		}
-		defer o11y.NoLogDefer(func() error { return ownTx.Rollback(ctx) })
-		dbtx = ownTx
-	}
-
-	issuer, err := repo.New(dbtx).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+	params := repo.CreateRemoteSessionIssuerParams{
 		ProjectID:                           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:                      pgtype.Text{String: "", Valid: false},
 		Slug:                                strings.TrimSpace(payload.Slug),
@@ -155,7 +145,7 @@ func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		OpTosUri:                            conv.PtrToPGTextEmpty(payload.OpTosURI),
 		ScopesSupported:                     orEmptySlice(payload.ScopesSupported),
 		GrantTypesSupported:                 orEmptySlice(payload.GrantTypesSupported),
-		AuthorizationGrantProfilesSupported: orEmptySlice(payload.AuthorizationGrantProfilesSupported),
+		AuthorizationGrantProfilesSupported: payload.AuthorizationGrantProfilesSupported,
 		ResponseTypesSupported:              orEmptySlice(payload.ResponseTypesSupported),
 		TokenEndpointAuthMethodsSupported:   orEmptySlice(payload.TokenEndpointAuthMethodsSupported),
 		// Unlike the NOT NULL siblings above, deliberately not orEmptySlice:
@@ -183,7 +173,20 @@ func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		MetadataLastError:                          "",
 		MetadataLastErrorUrl:                       "",
-	})
+	}
+	s.recordCreateDiscovery(ctx, logger, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, &params, time.Now())
+
+	dbtx := callerTx
+	if dbtx == nil {
+		ownTx, err := s.db.Begin(ctx)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+		}
+		defer o11y.NoLogDefer(func() error { return ownTx.Rollback(ctx) })
+		dbtx = ownTx
+	}
+
+	issuer, err := repo.New(dbtx).CreateRemoteSessionIssuer(ctx, params)
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {
 			return nil, oops.E(oops.CodeConflict, err, "a global issuer with this slug already exists").LogError(ctx, logger)

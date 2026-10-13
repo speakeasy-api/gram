@@ -10,6 +10,7 @@ package agent
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 )
@@ -155,12 +156,21 @@ type AgentMarketplace struct {
 }
 
 type AgentPlugin struct {
-	// Plugin slug. Combined with marketplace_name, this identifies the plugin the
-	// agent enables in the managed tool.
+	// Plugin slug. Combined with marketplace_name, this identifies the plugin in
+	// the managed tool.
 	Slug string
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName string
+	// How the agent installs the plugin. `required`: installed, and the user can't
+	// turn it off. `default`: installed, and the user can turn it off.
+	// `available`: not installed until the user turns it on. Agents that predate
+	// this field install every listed plugin.
+	InstallMode string
+	// Display name of the plugin. Absent for the synthesized observability plugin.
+	Name *string
+	// Short description of the plugin, when one is set.
+	Description *string
 }
 
 type AgentPollingPrincipal struct {
@@ -206,6 +216,11 @@ type AiScanTarget struct {
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
 	Customized bool
+	// The organization's access decision for the target, computed with the same
+	// rules the AI detections carry: unreviewed when nothing is recorded, and
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
+	Access *types.AIToolAccessSummary
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string
 	// When the organization's row last changed; absent for an untouched default.
@@ -368,8 +383,11 @@ type GetPluginsResult struct {
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
 	Marketplaces []*AgentMarketplace
-	// Plugins the agent should enable. Each entry references one of the
-	// marketplaces above by name.
+	// Plugins for the caller: the observability plugin of each listed marketplace,
+	// when enabled, and the plugins assigned to the caller. Each entry's
+	// install_mode says whether the agent installs it (`required`, `default`) or
+	// only offers it for the user to turn on (`available`). Each entry references
+	// one of the marketplaces above by name.
 	Plugins []*AgentPlugin
 	// Organization-wide remote configuration. Absent until an administrator saves
 	// a configuration, allowing an agent with no cached remote layer to keep using

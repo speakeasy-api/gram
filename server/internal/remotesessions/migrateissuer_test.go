@@ -246,6 +246,33 @@ func TestMigrateIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
 	require.NoError(t, err, "blocked migration must leave the source issuer active")
 }
 
+// A client trusted for federated sign-in keeps its issuer, even when the trust row names another issuer.
+func TestMigrateIssuer_BlockedByTrustedSignInClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	source, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-client-source", nil))
+	require.NoError(t, err)
+	target, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-client-target", nil))
+	require.NoError(t, err)
+	other, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("migrate-trusted-client-other", nil))
+	require.NoError(t, err)
+	client, err := ti.service.CreateClient(ctx, newCreateClientPayload(source.ID, nil, nil))
+	require.NoError(t, err)
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "migrate-trusted-client-usi", uuid.MustParse(other.ID), uuid.MustParse(client.ID))
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, migratePreflightPayload(source.ID, target.ID))
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate)
+
+	_, err = ti.service.MigrateIssuer(ctx, migratePayload(source.ID, target.ID))
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	row, err := repo.New(ti.conn).GetRemoteSessionClientForRotation(ctx, uuid.MustParse(client.ID))
+	require.NoError(t, err)
+	require.Equal(t, uuid.MustParse(source.ID), row.RemoteSessionClient.RemoteSessionIssuerID, "the trusted client must stay on its issuer")
+}
+
 func TestMigrateIssuer_BlockedByOutOfScopeTrustedUserSessionIssuer(t *testing.T) {
 	t.Parallel()
 

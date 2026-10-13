@@ -14,8 +14,6 @@ import {
 } from "@/components/ui/Sheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
@@ -49,10 +47,14 @@ import {
   membersWithRole,
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
-import { MCP_CONNECT_SCOPE } from "./mcpAccessModel";
+import { indexServers, MCP_CONNECT_SCOPE } from "./mcpAccessModel";
 import { McpAccessPanel } from "./McpAccessPanel";
 import { useMcpAccessCount } from "./useMcpAccessCount";
-import { PermissionScopeControl } from "./PermissionScopeControl";
+import { useOrgMcpServers } from "./useOrgMcpServers";
+import {
+  BlockedScopeControl,
+  PermissionScopeControl,
+} from "./PermissionScopeControl";
 import { RolePermissionsSection } from "./RolePermissionsSection";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
@@ -94,7 +96,9 @@ function getAllowLevel(
   rules: ScopeRule[],
 ): "all" | "project" | "server" | "tool" | "annotation" | null {
   const allows = rules.filter((r) => r.effect === "allow");
-  if (allows.length === 0) return null;
+  // A block with no grant beside it subtracts from what other roles grant,
+  // which can be everything, so it may name anything.
+  if (allows.length === 0) return rules.length > 0 ? "all" : null;
   if (allows.some((r) => r.selectors === null)) return "all";
   const allSels = allows.flatMap((r) => r.selectors ?? []);
   if (allSels.some((s) => s.projectId)) return "project";
@@ -208,15 +212,10 @@ export function CreateRoleDialog({
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  const agentManagementEnabled =
-    useFeatureFlag(FEATURE_FLAGS.agentManagement).status === "enabled";
-  // throwOnError is off because the agents service answers 404 (and 403 for
-  // callers without agent:read) when the rollout is off for the organization,
-  // and the global query policy only suppresses 401 and 403. The agent picker
-  // is optional here, so on any error it shows no agents instead of taking the
-  // role editor down.
+  // The agent picker is optional here, so on any error (including 403 for
+  // callers without agent:read) it shows no agents instead of taking the role
+  // editor down.
   const { data: agentsData } = useAgents(undefined, undefined, {
-    enabled: agentManagementEnabled,
     throwOnError: false,
   });
   // Suspended and revoked agents keep the roles they hold but cannot be given
@@ -238,6 +237,39 @@ export function CreateRoleDialog({
   );
 
   const mcpAccessCount = useMcpAccessCount(grants, open);
+  const mcpInventory = useOrgMcpServers(open);
+  const mcpServerIndex = useMemo(
+    () => indexServers(mcpInventory.groups),
+    [mcpInventory.groups],
+  );
+  // Names the servers a block covers, so the row says which one it is; falls
+  // back to the count-style label for anything else.
+  const blockedResourceLabel = (
+    selectors: Selector[] | null,
+    resourceType: ResourceType,
+  ): string => {
+    const names = (selectors ?? []).map((s) =>
+      s.tool || s.projectId || s.disposition
+        ? undefined
+        : mcpServerIndex.get(s.resourceId)?.server.name,
+    );
+    if (
+      resourceType === "mcp" &&
+      names.length > 0 &&
+      names.every((n) => n !== undefined)
+    ) {
+      return names.join(", ");
+    }
+    return computeRuleLabel(selectors, resourceType, projectList);
+  };
+  // Permissions the role only takes away: every rule is an exception.
+  const blockOnlyScopes = new Set(
+    Object.values(grants)
+      .filter(
+        (g) => g.rules.length > 0 && g.rules.every((r) => r.effect === "deny"),
+      )
+      .map((g) => g.scope),
+  );
 
   const projectList = useMemo(
     () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
@@ -408,7 +440,18 @@ export function CreateRoleDialog({
   const toggleScope = (scope: Scope) => {
     updateGrants((prev) => {
       const next = { ...prev };
-      if (next[scope]) {
+      const existing = next[scope];
+      if (existing && existing.rules.every((r) => r.effect === "deny")) {
+        // Granting a permission the role only blocks keeps the block, which
+        // then reads as the grant's exception.
+        next[scope] = {
+          ...existing,
+          rules: [
+            { id: crypto.randomUUID(), effect: "allow", selectors: null },
+            ...existing.rules,
+          ],
+        };
+      } else if (existing) {
         delete next[scope];
       } else {
         next[scope] = {
@@ -628,10 +671,8 @@ export function CreateRoleDialog({
                 ? Array.from(selectedMembers)
                 : undefined,
             // Agent membership is declarative: an agent has no other surface
-            // to be taken off a role on. Preserve it when the rollout is unavailable.
-            ...(agentManagementEnabled
-              ? { agentIds: Array.from(selectedAgents) }
-              : {}),
+            // to be taken off a role on.
+            agentIds: Array.from(selectedAgents),
           },
         },
       });
@@ -646,7 +687,7 @@ export function CreateRoleDialog({
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
                 : undefined,
-            ...(agentManagementEnabled && selectedAgents.size > 0
+            ...(selectedAgents.size > 0
               ? { agentIds: Array.from(selectedAgents) }
               : {}),
           },
@@ -808,6 +849,7 @@ export function CreateRoleDialog({
             <RolePermissionsSection
               groups={scopeGroups}
               selectedScopes={new Set(Object.keys(grants))}
+              blockOnlyScopes={blockOnlyScopes}
               disabled={false}
               markAgentIneligible={selectedAgents.size > 0}
               onToggleScope={toggleScope}
@@ -849,6 +891,25 @@ export function CreateRoleDialog({
                 const denyRules = grant.rules
                   .map((rule, index) => ({ rule, index }))
                   .filter(({ rule }) => rule.effect === "deny");
+                if (allowRules.length === 0) {
+                  return (
+                    <BlockedScopeControl
+                      denyRules={denyRules}
+                      denyLabel={(rule) =>
+                        blockedResourceLabel(
+                          rule.selectors,
+                          scopeDef.resourceType,
+                        )
+                      }
+                      onEditException={(index) =>
+                        openRuleEditor(scopeDef.slug, index)
+                      }
+                      onRemoveException={(index) =>
+                        removeRule(scopeDef.slug, index)
+                      }
+                    />
+                  );
+                }
                 return allowRules.map(
                   ({ rule: allowRule, index: allowIndex }, position) => (
                     <PermissionScopeControl
@@ -864,10 +925,9 @@ export function CreateRoleDialog({
                         projectList,
                       )}
                       denyLabel={(rule) =>
-                        computeRuleLabel(
+                        blockedResourceLabel(
                           rule.selectors,
                           scopeDef.resourceType,
-                          projectList,
                         )
                       }
                       canAddException={
@@ -1068,7 +1128,7 @@ export function CreateRoleDialog({
             {/* ─── Assign Agents ─────────────────────────────────────
                 Not gated on SCIM: a directory syncs people, never agents,
                 so this is the only place an agent's roles are decided. */}
-            {agentManagementEnabled && !hideAssignments && (
+            {!hideAssignments && (
               <div className="border-border border-t pt-4 pb-4">
                 <button
                   type="button"

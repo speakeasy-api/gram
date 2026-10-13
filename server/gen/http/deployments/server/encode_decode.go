@@ -1853,6 +1853,469 @@ func EncodeGetDeploymentLogsError(encoder func(context.Context, http.ResponseWri
 	}
 }
 
+// EncodeEvaluateOpenAPIv3Response returns an encoder for responses returned by
+// the deployments evaluateOpenAPIv3 endpoint.
+func EncodeEvaluateOpenAPIv3Response(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*deployments.OpenAPIv3Evaluation)
+		enc := encoder(ctx, w)
+		body := NewEvaluateOpenAPIv3ResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeEvaluateOpenAPIv3Request returns a decoder for requests sent to the
+// deployments evaluateOpenAPIv3 endpoint.
+func DecodeEvaluateOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*deployments.EvaluateOpenAPIv3Payload, error) {
+	return func(r *http.Request) (*deployments.EvaluateOpenAPIv3Payload, error) {
+		var payload *deployments.EvaluateOpenAPIv3Payload
+		var (
+			body EvaluateOpenAPIv3RequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateEvaluateOpenAPIv3RequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewEvaluateOpenAPIv3Payload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeEvaluateOpenAPIv3Error returns an encoder for errors returned by the
+// evaluateOpenAPIv3 deployments endpoint.
+func EncodeEvaluateOpenAPIv3Error(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3UnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3ForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3BadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3NotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3ConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3UnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3InvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3InvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3UnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEvaluateOpenAPIv3GatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetDeploymentEvaluationResponse returns an encoder for responses
+// returned by the deployments getDeploymentEvaluation endpoint.
+func EncodeGetDeploymentEvaluationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*deployments.GetDeploymentEvaluationResult)
+		enc := encoder(ctx, w)
+		body := NewGetDeploymentEvaluationResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetDeploymentEvaluationRequest returns a decoder for requests sent to
+// the deployments getDeploymentEvaluation endpoint.
+func DecodeGetDeploymentEvaluationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*deployments.GetDeploymentEvaluationPayload, error) {
+	return func(r *http.Request) (*deployments.GetDeploymentEvaluationPayload, error) {
+		var payload *deployments.GetDeploymentEvaluationPayload
+		var (
+			deploymentID     string
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		deploymentID = r.URL.Query().Get("deployment_id")
+		if deploymentID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "query string"))
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetDeploymentEvaluationPayload(deploymentID, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetDeploymentEvaluationError returns an encoder for errors returned by
+// the getDeploymentEvaluation deployments endpoint.
+func EncodeGetDeploymentEvaluationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetDeploymentEvaluationGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalTypesOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody
 // builds a value of type *OpenAPIv3DeploymentAssetResponseBody from a value of
 // type *types.OpenAPIv3DeploymentAsset.
@@ -2109,6 +2572,152 @@ func marshalDeploymentsDeploymentLogEventToDeploymentLogEventResponseBody(v *dep
 		CreatedAt:      v.CreatedAt,
 		Event:          v.Event,
 		Message:        v.Message,
+	}
+
+	return res
+}
+
+// marshalDeploymentsOpenAPIv3DocumentSnapshotToOpenAPIv3DocumentSnapshotResponseBody
+// builds a value of type *OpenAPIv3DocumentSnapshotResponseBody from a value
+// of type *deployments.OpenAPIv3DocumentSnapshot.
+func marshalDeploymentsOpenAPIv3DocumentSnapshotToOpenAPIv3DocumentSnapshotResponseBody(v *deployments.OpenAPIv3DocumentSnapshot) *OpenAPIv3DocumentSnapshotResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &OpenAPIv3DocumentSnapshotResponseBody{
+		ToolCount:             v.ToolCount,
+		SkippedOperationCount: v.SkippedOperationCount,
+		DefaultSecurity:       v.DefaultSecurity,
+		ServerURL:             v.ServerURL,
+	}
+	if v.SecuritySchemes != nil {
+		res.SecuritySchemes = make([]*OpenAPIv3SecuritySchemeSummaryResponseBody, len(v.SecuritySchemes))
+		for i, val := range v.SecuritySchemes {
+			if val == nil {
+				res.SecuritySchemes[i] = nil
+				continue
+			}
+			res.SecuritySchemes[i] = marshalDeploymentsOpenAPIv3SecuritySchemeSummaryToOpenAPIv3SecuritySchemeSummaryResponseBody(val)
+		}
+	} else {
+		res.SecuritySchemes = []*OpenAPIv3SecuritySchemeSummaryResponseBody{}
+	}
+
+	return res
+}
+
+// marshalDeploymentsOpenAPIv3SecuritySchemeSummaryToOpenAPIv3SecuritySchemeSummaryResponseBody
+// builds a value of type *OpenAPIv3SecuritySchemeSummaryResponseBody from a
+// value of type *deployments.OpenAPIv3SecuritySchemeSummary.
+func marshalDeploymentsOpenAPIv3SecuritySchemeSummaryToOpenAPIv3SecuritySchemeSummaryResponseBody(v *deployments.OpenAPIv3SecuritySchemeSummary) *OpenAPIv3SecuritySchemeSummaryResponseBody {
+	res := &OpenAPIv3SecuritySchemeSummaryResponseBody{
+		Key:     v.Key,
+		Type:    v.Type,
+		Summary: v.Summary,
+	}
+	if v.EnvVariables != nil {
+		res.EnvVariables = make([]string, len(v.EnvVariables))
+		for i, val := range v.EnvVariables {
+			res.EnvVariables[i] = val
+		}
+	} else {
+		res.EnvVariables = []string{}
+	}
+
+	return res
+}
+
+// marshalDeploymentsOpenAPIv3EvaluationChangeToOpenAPIv3EvaluationChangeResponseBody
+// builds a value of type *OpenAPIv3EvaluationChangeResponseBody from a value
+// of type *deployments.OpenAPIv3EvaluationChange.
+func marshalDeploymentsOpenAPIv3EvaluationChangeToOpenAPIv3EvaluationChangeResponseBody(v *deployments.OpenAPIv3EvaluationChange) *OpenAPIv3EvaluationChangeResponseBody {
+	res := &OpenAPIv3EvaluationChangeResponseBody{
+		Severity: string(v.Severity),
+		Category: string(v.Category),
+		Code:     v.Code,
+		Title:    v.Title,
+	}
+	if v.Details != nil {
+		res.Details = make([]string, len(v.Details))
+		for i, val := range v.Details {
+			res.Details[i] = val
+		}
+	} else {
+		res.Details = []string{}
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	} else {
+		res.Tools = []string{}
+	}
+
+	return res
+}
+
+// marshalDeploymentsOpenAPIv3AffectedToolsetToOpenAPIv3AffectedToolsetResponseBody
+// builds a value of type *OpenAPIv3AffectedToolsetResponseBody from a value of
+// type *deployments.OpenAPIv3AffectedToolset.
+func marshalDeploymentsOpenAPIv3AffectedToolsetToOpenAPIv3AffectedToolsetResponseBody(v *deployments.OpenAPIv3AffectedToolset) *OpenAPIv3AffectedToolsetResponseBody {
+	res := &OpenAPIv3AffectedToolsetResponseBody{
+		ID:                v.ID,
+		Name:              v.Name,
+		Slug:              v.Slug,
+		McpSlug:           v.McpSlug,
+		McpEnabled:        v.McpEnabled,
+		OauthConfigured:   v.OauthConfigured,
+		ToolCount:         v.ToolCount,
+		AffectedToolCount: v.AffectedToolCount,
+	}
+
+	return res
+}
+
+// marshalDeploymentsOpenAPIv3EvaluationToOpenAPIv3EvaluationResponseBody
+// builds a value of type *OpenAPIv3EvaluationResponseBody from a value of type
+// *deployments.OpenAPIv3Evaluation.
+func marshalDeploymentsOpenAPIv3EvaluationToOpenAPIv3EvaluationResponseBody(v *deployments.OpenAPIv3Evaluation) *OpenAPIv3EvaluationResponseBody {
+	res := &OpenAPIv3EvaluationResponseBody{
+		Slug:          v.Slug,
+		Name:          v.Name,
+		Status:        v.Status,
+		AssetID:       v.AssetID,
+		BaseAssetID:   v.BaseAssetID,
+		BreakingCount: v.BreakingCount,
+		WarningCount:  v.WarningCount,
+		InfoCount:     v.InfoCount,
+	}
+	if v.Base != nil {
+		res.Base = marshalDeploymentsOpenAPIv3DocumentSnapshotToOpenAPIv3DocumentSnapshotResponseBody(v.Base)
+	}
+	if v.Next != nil {
+		res.Next = marshalDeploymentsOpenAPIv3DocumentSnapshotToOpenAPIv3DocumentSnapshotResponseBody(v.Next)
+	}
+	if v.Changes != nil {
+		res.Changes = make([]*OpenAPIv3EvaluationChangeResponseBody, len(v.Changes))
+		for i, val := range v.Changes {
+			if val == nil {
+				res.Changes[i] = nil
+				continue
+			}
+			res.Changes[i] = marshalDeploymentsOpenAPIv3EvaluationChangeToOpenAPIv3EvaluationChangeResponseBody(val)
+		}
+	} else {
+		res.Changes = []*OpenAPIv3EvaluationChangeResponseBody{}
+	}
+	if v.AffectedToolsets != nil {
+		res.AffectedToolsets = make([]*OpenAPIv3AffectedToolsetResponseBody, len(v.AffectedToolsets))
+		for i, val := range v.AffectedToolsets {
+			if val == nil {
+				res.AffectedToolsets[i] = nil
+				continue
+			}
+			res.AffectedToolsets[i] = marshalDeploymentsOpenAPIv3AffectedToolsetToOpenAPIv3AffectedToolsetResponseBody(val)
+		}
+	} else {
+		res.AffectedToolsets = []*OpenAPIv3AffectedToolsetResponseBody{}
 	}
 
 	return res

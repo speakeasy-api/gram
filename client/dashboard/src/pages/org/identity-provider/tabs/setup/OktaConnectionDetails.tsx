@@ -24,7 +24,7 @@ import {
 } from "../../identityProviderQueries";
 import { ClientSecretField } from "./OktaConnectionForms";
 
-function FactList({
+export function FactList({
   children,
   className,
 }: {
@@ -43,7 +43,7 @@ function FactList({
   );
 }
 
-function Fact({
+export function Fact({
   label,
   children,
   mono,

@@ -46,6 +46,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/publiclimits"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -697,6 +698,7 @@ func (s *Service) serveTunneledPublicSession(
 		"",
 		"",
 		nil,
+		remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled),
 	)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true

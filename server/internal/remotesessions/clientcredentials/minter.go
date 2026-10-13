@@ -285,10 +285,11 @@ func (m *Minter) cachedFailure(ctx context.Context, keys cacheKeys) error {
 		return fmt.Errorf("recent client credentials grant failure: %w", remotesessions.ErrTokenEndpointConfiguration)
 	case entry.StatusCode != 0:
 		return fmt.Errorf("recent client credentials grant failure: %w", &remotesessions.TokenEndpointError{
-			StatusCode: entry.StatusCode,
-			Code:       entry.Code,
-			Transport:  false,
-			Signing:    false,
+			StatusCode:  entry.StatusCode,
+			Code:        entry.Code,
+			Description: "",
+			Transport:   false,
+			Signing:     false,
 		})
 	default:
 		return nil
