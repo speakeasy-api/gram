@@ -119,7 +119,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	if err != nil {
 		return nil, err
 	}
-	chainer.SetSpeakeasyIssuer(d.IssuerGate, d.IssuerSigner)
+	chainer.SetSpeakeasyIssuer(d.IssuerGate, d.IssuerSigner, d.Features)
 	service.SetIdentityChainer(chainer)
 	return service, nil
 }

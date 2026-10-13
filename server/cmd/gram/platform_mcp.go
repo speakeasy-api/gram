@@ -864,7 +864,7 @@ func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityC
 		return nil
 	}
 	g := identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
-	g.SetSpeakeasyIssuer(config.IssuerGate, config.IssuerSigner)
+	g.SetSpeakeasyIssuer(config.IssuerGate, config.IssuerSigner, config.FeatureFlags)
 	g.SetResourceResolver(config.RemoteChallengeManager.ResolveEMAResource)
 	return g
 }
