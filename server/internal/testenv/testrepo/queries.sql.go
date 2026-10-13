@@ -5990,7 +5990,9 @@ func (q *Queries) SetUserSessionIssuerUseAuthenticationHostFixture(ctx context.C
 
 const setWorkloadAdmissionHooksProjectFixture = `-- name: SetWorkloadAdmissionHooksProjectFixture :execrows
 UPDATE workload_identity_admissions
-SET hooks_project_id = $1, updated_at = clock_timestamp()
+SET hooks_project_id = $1,
+    hooks_project_organization_id = CASE WHEN $1::uuid IS NULL THEN NULL ELSE organization_id END,
+    updated_at = clock_timestamp()
 WHERE organization_id = $2
   AND workload_issuer_id = $3
   AND subject = $4
