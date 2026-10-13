@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -31,13 +32,30 @@ type hostedAttachmentFixture struct {
 	remote    mcpserversrepo.McpServer
 }
 
+// newHostedAttachmentFixture writes with the server-key rollout on (phase B).
 func newHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixture {
+	t.Helper()
+	return newHostedAttachmentFixtureKeyed(t, name, true)
+}
+
+// newPhaseAHostedAttachmentFixture writes with the server-key rollout off, as every pod did before it.
+func newPhaseAHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixture {
+	t.Helper()
+	return newHostedAttachmentFixtureKeyed(t, name, false)
+}
+
+func newHostedAttachmentFixtureKeyed(t *testing.T, name string, serverKey bool) hostedAttachmentFixture {
 	t.Helper()
 	ctx := t.Context()
 	db, err := assistantsInfra.CloneTestDatabase(t, name)
 	require.NoError(t, err)
 	projectID := newProvisioningProject(t, db, name)
 	core := newProvisioningCore(t, db)
+	if serverKey {
+		flags := &feature.InMemory{}
+		flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, true)
+		core.SetFeatureProvider(flags)
+	}
 
 	for _, slug := range []string{"default-env", "staging"} {
 		_, err := environmentsrepo.New(db).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{

@@ -1208,10 +1208,11 @@ func writeAssistantAttachments(
 	replaceToolsets bool,
 	servers []resolvedMcpServerInsert,
 	replaceServers bool,
+	serverKey bool,
 ) error {
 	queries := assistantrepo.New(tx)
 	wrapped := map[uuid.UUID]bool{}
-	if len(toolsets) > 0 {
+	if serverKey && len(toolsets) > 0 {
 		toolsetIDs := make([]uuid.UUID, 0, len(toolsets))
 		for _, r := range toolsets {
 			toolsetIDs = append(toolsetIDs, r.ToolsetID)
@@ -1248,8 +1249,14 @@ func writeAssistantAttachments(
 			continue
 		}
 		written = append(written, r.MCPServerID)
-		if r.Hosted {
+		if r.Hosted && serverKey {
 			hostedRows = append(hostedRows, addServer(r.MCPServerID, r.EnvironmentID))
+			continue
+		}
+		if r.Hosted {
+			hostedRows = append(hostedRows, assistantAttachmentRow{server: nil, toolset: &assistantrepo.AddAssistantToolsetsParams{
+				AssistantID: assistantID, ToolsetID: r.MCPServerID, EnvironmentID: r.EnvironmentID, ProjectID: projectID,
+			}})
 			continue
 		}
 		serverRows = append(serverRows, addServer(r.MCPServerID, r.EnvironmentID))
@@ -1422,7 +1429,7 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true); err != nil {
+	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true, s.hostedServerKeyWrites(ctx, projectID)); err != nil {
 		return assistantRecord{}, err
 	}
 
@@ -1571,7 +1578,7 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 	if toolsets != nil || mcpServers != nil {
-		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
+		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil, s.hostedServerKeyWrites(ctx, projectID)); err != nil {
 			return assistantRecord{}, err
 		}
 	}
@@ -3086,6 +3093,23 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
 	return platformSlugs, nil
+}
+
+// hostedServerKeyWrites reports whether the project's organization writes hosted attachments under the canonical server key; any failure keeps assistant_toolsets.
+func (s *ServiceCore) hostedServerKeyWrites(ctx context.Context, projectID uuid.UUID) bool {
+	if s.featureFlags == nil {
+		return false
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization for hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+		return false
+	}
+	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.featureFlags, project.ID, project.Slug)
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+	}
+	return enabled
 }
 
 // assistantToolsVariant reports which managed-assistant platform toolset the

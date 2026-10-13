@@ -29,7 +29,7 @@ func entryIDs(servers []*gen.PluginServer) map[string]backendIDs {
 // Callers that read toolset_id keep getting it for a hosted entry stored under its canonical server.
 func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestPluginsService(t)
+	ctx, ti := newServerKeyPluginsService(t)
 
 	serverKeyed := createTestToolset(t, ctx, ti.conn, "server-keyed")
 	createCanonicalWrapper(t, ctx, ti, serverKeyed, "private", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, serverKeyed.McpSlug.String)

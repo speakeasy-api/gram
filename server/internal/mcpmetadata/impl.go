@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -237,6 +238,7 @@ type Service struct {
 	// publishing is not configured.
 	publicationRequests plugins.PublicationRequests
 	publisher           plugins.PluginPublishSignaler
+	features            feature.Provider
 
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
@@ -288,6 +290,7 @@ func NewService(
 		metaInstallAdmission:  metaInstallAdmission,
 		publicationRequests:   plugins.PublicationRequests{Enabled: false},
 		publisher:             nil,
+		features:              nil,
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
 	}
@@ -296,6 +299,12 @@ func NewService(
 func (s *Service) WithPluginPublication(publicationRequests bool, publisher plugins.PluginPublishSignaler) *Service {
 	s.publicationRequests.Enabled = publicationRequests
 	s.publisher = publisher
+	return s
+}
+
+// WithFeatureProvider sets the hosted MCP write rollout gate; without one, saves keep phase A row keys.
+func (s *Service) WithFeatureProvider(provider feature.Provider) *Service {
+	s.features = provider
 	return s
 }
 
@@ -423,7 +432,14 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "fetch canonical MCP server").LogError(ctx, logger)
 	}
-	if wrapperID.Valid {
+	// Until the server-key rollout is on, saves keep phase A row keys; responses still report both ids.
+	writeWrapperID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	serverKeyWrites, err := feature.HostedMCPServerKeyWrites(ctx, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
+	if err != nil {
+		logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+	}
+	if serverKeyWrites && wrapperID.Valid {
+		writeWrapperID = wrapperID
 		if err := rekeyMetadataOntoWrapper(ctx, mcpr, *authCtx.ProjectID, wrapperID.UUID, rows); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "move MCP server metadata onto its server").LogError(ctx, logger)
 		}
@@ -489,7 +505,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		defaultEnvironmentID = existingRow.DefaultEnvironmentID
 	}
 
-	toolsetKey, serverKey := backend.writeKey(existingRow, wrapperID)
+	toolsetKey, serverKey := backend.writeKey(existingRow, writeWrapperID)
 
 	// A toolset-keyed row created beside a server-keyed one wins every read, so it takes over the env configs and header aliases.
 	takeOver := existingRow != nil && toolsetKey.Valid && !existingRow.ToolsetID.Valid

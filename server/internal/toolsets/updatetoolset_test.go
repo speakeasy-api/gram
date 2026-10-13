@@ -734,6 +734,7 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPlugin(t *test
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	ti.service.WithFeatureProvider(serverKeyFlags())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

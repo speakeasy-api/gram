@@ -69,6 +69,12 @@ const (
 	// like FlagBudgets. Evaluated server-side only; removed once the toolset
 	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
+	// FlagHostedMCPServerKeyWrites switches hosted MCP writers (plugin entries,
+	// install page metadata, assistant attachments) to the canonical MCP server
+	// key (AIM-16 phase B). Evaluated server-side; targeted by PostHog
+	// organization group (org slug), rolled out to everyone once no phase A pods
+	// remain. Fails closed to the toolset key. Removed once the AIM-507 move ships.
+	FlagHostedMCPServerKeyWrites Flag = "hosted-mcp-server-key-writes"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.

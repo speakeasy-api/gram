@@ -163,6 +163,8 @@ type AttachToDefaultPluginParams struct {
 	ToolsetID      uuid.NullUUID
 	McpServerID    uuid.NullUUID
 	DisplayName    string
+	// HostedServerKey stores a wrapped toolset under its canonical server (feature.FlagHostedMCPServerKeyWrites).
+	HostedServerKey bool
 }
 
 // AttachToDefaultPluginResult is nil when AttachToDefaultPlugin no-ops
@@ -251,11 +253,12 @@ func AttachToExistingPluginAudited(ctx context.Context, tx pgx.Tx, auditLogger *
 	}
 
 	attached, err := attachToPlugin(ctx, q, plugin, false, AttachToDefaultPluginParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    uuid.NullUUID{UUID: mcpServerID, Valid: true},
-		DisplayName:    displayName,
+		OrganizationID:  organizationID,
+		ProjectID:       projectID,
+		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: mcpServerID, Valid: true},
+		DisplayName:     displayName,
+		HostedServerKey: false,
 	})
 	if err != nil || attached == nil {
 		return attached, err
@@ -316,7 +319,7 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 		return nil, err
 	}
 
-	toolsetID, mcpServerID, err := hostedEntryKey(ctx, q, plugin.ProjectID, params.ToolsetID, params.McpServerID)
+	toolsetID, mcpServerID, err := hostedEntryKey(ctx, q, plugin.ProjectID, params.ToolsetID, params.McpServerID, params.HostedServerKey)
 	if err != nil {
 		return nil, err
 	}
@@ -412,9 +415,9 @@ func backendIDSuffix(params AttachToDefaultPluginParams) string {
 	return s[len(s)-4:]
 }
 
-// hostedEntryKey stores a toolset that has a canonical wrapper under the wrapper, which shares its id.
-func hostedEntryKey(ctx context.Context, q *repo.Queries, projectID uuid.UUID, toolsetID, mcpServerID uuid.NullUUID) (uuid.NullUUID, uuid.NullUUID, error) {
-	if !toolsetID.Valid {
+// hostedEntryKey stores a toolset that has a canonical wrapper under the wrapper, which shares its id, once serverKey is on.
+func hostedEntryKey(ctx context.Context, q *repo.Queries, projectID uuid.UUID, toolsetID, mcpServerID uuid.NullUUID, serverKey bool) (uuid.NullUUID, uuid.NullUUID, error) {
+	if !serverKey || !toolsetID.Valid {
 		return toolsetID, mcpServerID, nil
 	}
 	wrapped, err := q.HasCanonicalWrapper(ctx, repo.HasCanonicalWrapperParams{ToolsetID: toolsetID.UUID, ProjectID: projectID})

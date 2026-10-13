@@ -895,7 +895,7 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		if exists {
 			return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
 		}
-		backend.toolsetID, backend.mcpServerID, err = hostedEntryKey(ctx, s.repo.WithTx(tx), *ac.ProjectID, backend.toolsetID, backend.mcpServerID)
+		backend.toolsetID, backend.mcpServerID, err = hostedEntryKey(ctx, s.repo.WithTx(tx), *ac.ProjectID, backend.toolsetID, backend.mcpServerID, s.hostedServerKeyWrites(ctx, ac))
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve plugin server key").LogError(ctx, s.logger)
 		}
@@ -3586,6 +3586,15 @@ func pluginToGen(p repo.Plugin, servers []repo.PluginServer, wrappers map[uuid.U
 	}
 
 	return result
+}
+
+// hostedServerKeyWrites reports whether this organization's hosted writes use the canonical server key; errors keep the toolset key.
+func (s *Service) hostedServerKeyWrites(ctx context.Context, ac *contextvalues.AuthContext) bool {
+	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.features, ac.ActiveOrganizationID, ac.OrganizationSlug)
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+	}
+	return enabled
 }
 
 // canonicalWrapperIDs returns which of the servers' hosted backends are a live canonical wrapper in the project.

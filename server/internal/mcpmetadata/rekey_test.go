@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -21,6 +22,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+// newServerKeyMCPMetadataService saves with the server-key rollout on (phase B).
+func newServerKeyMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	ctx, ti := newTestMCPMetadataService(t)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, true)
+	ti.service.WithFeatureProvider(flags)
+	return ctx, ti
+}
 
 func createHostedToolset(t *testing.T, ctx context.Context, ti *testInstance, slug string) toolsets_repo.Toolset {
 	t.Helper()
@@ -201,7 +212,7 @@ func createEnvironment(t *testing.T, ctx context.Context, ti *testInstance, slug
 func TestSetMcpMetadata_NewRowsUseTheServerKey(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPMetadataService(t)
+	ctx, ti := newServerKeyMCPMetadataService(t)
 	bySlug := createHostedToolset(t, ctx, ti, "hosted-new-slug")
 	createCanonicalWrapper(t, ctx, ti, bySlug)
 	byServer := createHostedToolset(t, ctx, ti, "hosted-new-server")
@@ -225,7 +236,7 @@ func TestSetMcpMetadata_NewRowsUseTheServerKey(t *testing.T) {
 func TestSetMcpMetadata_RekeysToolsetRowInPlace(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPMetadataService(t)
+	ctx, ti := newServerKeyMCPMetadataService(t)
 	env := createEnvironment(t, ctx, ti, "rekey-env")
 	defaultEnv := uuid.NullUUID{UUID: env.ID, Valid: true}
 
@@ -286,7 +297,7 @@ func TestSetMcpMetadata_RekeysToolsetRowInPlace(t *testing.T) {
 func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPMetadataService(t)
+	ctx, ti := newServerKeyMCPMetadataService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -371,7 +382,7 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 func TestSetMcpMetadata_CollapsesTwinKeepingToolsetRow(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPMetadataService(t)
+	ctx, ti := newServerKeyMCPMetadataService(t)
 	for name, viaServer := range map[string]bool{"slug": false, "server": true} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -409,7 +420,7 @@ func TestSetMcpMetadata_CollapsesTwinKeepingToolsetRow(t *testing.T) {
 func TestExportMcpMetadata_ByMcpServerID(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPMetadataService(t)
+	ctx, ti := newServerKeyMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-export")
 	createCanonicalWrapper(t, ctx, ti, toolset)
 
@@ -444,7 +455,7 @@ func TestExportMcpMetadata_ByMcpServerID(t *testing.T) {
 func TestHeaderDisplayNames_PreferToolsetKeyedTwin(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPMetadataService(t)
+	ctx, ti := newServerKeyMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-twin-names")
 	createCanonicalWrapper(t, ctx, ti, toolset)
 	toolsetRow := seedToolsetKeyedRow(t, ctx, ti, toolset, "toolset", uuid.NullUUID{})
@@ -491,7 +502,7 @@ func TestHeaderDisplayNames_PreferToolsetKeyedTwin(t *testing.T) {
 func TestSetMcpMetadata_ServerKeyedSaveKeepsHeaderAliases(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPMetadataService(t)
+	ctx, ti := newServerKeyMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-save-aliases")
 	createCanonicalWrapper(t, ctx, ti, toolset)
 	original := seedToolsetKeyedRow(t, ctx, ti, toolset, "before", uuid.NullUUID{})

@@ -175,7 +175,7 @@ func TestPluginsService_PublishPlugins_EndpointlessHostedEntryKeepsToolsetAddres
 
 func TestPluginsService_AddPluginServer_RejectsTwinsUnderEitherKey(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestPluginsService(t)
+	ctx, ti := newServerKeyPluginsService(t)
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Keys"})
 	require.NoError(t, err)

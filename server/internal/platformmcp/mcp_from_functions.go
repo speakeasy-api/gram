@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -125,6 +126,15 @@ func (s *MCPToolExposureService) CreateMCPFromFunctions(ctx context.Context, pri
 // authorization challenge passes through; anything else becomes the generic
 // unavailable refusal, and the underlying cause is logged here, server-side,
 // rather than the sanitized message.
+// hostedServerKeyWrites reports whether the organization's hosted writes use the canonical server key; errors keep the toolset key.
+func (s *MCPToolExposureService) hostedServerKeyWrites(ctx context.Context, organizationID, organizationSlug string) bool {
+	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.features, organizationID, organizationSlug)
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+	}
+	return enabled
+}
+
 func (s *MCPToolExposureService) sanitizeMCPFromFunctionsError(ctx context.Context, err error) error {
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return err
@@ -245,6 +255,7 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 		ActorUserID: principal.UserID, ActorEmail: email, Name: name, Description: nil,
 		DefaultEnvironmentSlug: nil, OriginRegistrySpecifier: nil,
 		ToolURNs: values, ResourceURNs: nil,
+		HostedServerKey: s.hostedServerKeyWrites(ctx, principal.OrganizationID, organizationSlug),
 	})
 	if err != nil {
 		return mcpFromFunctionsReceipt{}, classifyMCPFromFunctionsError(err)

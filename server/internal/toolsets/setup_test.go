@@ -80,6 +80,13 @@ type testInstance struct {
 	assetStorage   assets.BlobStore
 }
 
+// serverKeyFlags turns the hosted MCP server-key rollout on (phase B).
+func serverKeyFlags() feature.Provider {
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, true)
+	return flags
+}
+
 func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context.Context, *testInstance) {
 	t.Helper()
 

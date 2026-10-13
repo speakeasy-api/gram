@@ -515,6 +515,7 @@ func TestToolsetsService_CreateToolset_AttachesToDefaultPlugin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	ti.service.WithFeatureProvider(serverKeyFlags())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -565,6 +566,7 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	ti.service.WithFeatureProvider(serverKeyFlags())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

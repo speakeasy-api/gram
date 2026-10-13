@@ -16,7 +16,7 @@ import (
 func TestMcpMetadata_HostedRowsReportBothIDs(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPMetadataService(t)
+	ctx, ti := newServerKeyMCPMetadataService(t)
 
 	serverKeyed := createHostedToolset(t, ctx, ti, "ids-server-keyed")
 	createCanonicalWrapper(t, ctx, ti, serverKeyed)
@@ -53,7 +53,7 @@ func TestMcpMetadata_HostedRowsReportBothIDs(t *testing.T) {
 func TestMcpMetadata_NonHostedRowsKeepOneID(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPMetadataService(t)
+	ctx, ti := newServerKeyMCPMetadataService(t)
 
 	unwrapped := createHostedToolset(t, ctx, ti, "ids-unwrapped")
 	seedToolsetKeyedRow(t, ctx, ti, unwrapped, "legacy", uuid.NullUUID{})
