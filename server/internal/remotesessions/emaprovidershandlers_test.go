@@ -96,7 +96,9 @@ func TestSetEMAProvider_SavesSelectionAndAudits(t *testing.T) {
 	snapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, "https://vendor.example.com", snapshot["vendor_issuer"])
-	require.Equal(t, "speakeasy", snapshot["provider"].(map[string]any)["kind"])
+	provider, ok := snapshot["provider"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "speakeasy", provider["kind"])
 
 	view, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{SessionToken: nil, ApikeyToken: nil, ID: f.vendor.String()})
 	require.NoError(t, err)
