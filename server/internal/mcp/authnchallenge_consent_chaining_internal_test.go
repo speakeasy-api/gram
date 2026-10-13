@@ -86,7 +86,9 @@ func TestConsentChainedClients_RequestMatchesRuntime(t *testing.T) {
 
 			runtime, ok := s.identityChainingRequest(humanChainingContext(t, "user-1", chainingTestOrg), endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, endpoint.UpstreamResource, tc.tunneled, uuid.NullUUID{UUID: tunnelIssuer, Valid: true})
 			require.True(t, ok)
-			require.Equal(t, []identitychaining.Request{runtime}, g.requests, "consent judges with the runtime's own request")
+			require.NotEmpty(t, runtime.UserSessionJTI)
+			runtime.UserSessionJTI = "" // Consent precedes grant creation and carries no validated grant identifier.
+			require.Equal(t, []identitychaining.Request{runtime}, g.requests, "consent selects the same endpoint without asserting runtime SSO provenance")
 		})
 	}
 }
@@ -215,4 +217,9 @@ func TestConsentChainedMetaClients_ServesEachRequestOnce(t *testing.T) {
 	require.True(t, chained[clientA.ID])
 	require.True(t, chained[clientB.ID])
 	require.Len(t, g.requests, 1, "one render judges each distinct request once")
+}
+
+func (g *funcGovernor) CheckConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) identitychaining.Outcome {
+	_, outcome := g.Acquire(ctx, req)
+	return outcome
 }

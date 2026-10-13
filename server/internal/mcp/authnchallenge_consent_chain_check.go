@@ -18,6 +18,7 @@ import (
 // Chained card check states, shared by the template and the page script.
 const (
 	chainCheckPending   = "pending"
+	chainCheckReady     = "ready"
 	chainCheckConnected = "connected"
 	chainCheckRejected  = "rejected"
 	chainCheckUnknown   = "unknown"
@@ -105,7 +106,11 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 
 	owner := s.newResourceDisplayOwner(endpoint)
 	display, _ := issuerCardBranding(*client, owner.ownsOrFallsBack(ctx, logger, *client), s.serverURL)
-	result := s.checkIdentityChaining(ctx, requests, display)
+	signInID := uuid.Nil
+	if challengeState.SSOSignInID != nil {
+		signInID = *challengeState.SSOSignInID
+	}
+	result := s.checkIdentityChaining(ctx, requests, display, signInID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -115,19 +120,24 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-// checkIdentityChaining acquires every request under one deadline. A
-// rejection anywhere decides the card; any other failure leaves it unknown.
-// Success publishes the credential, so the first tool call reuses it.
-func (s *Service) checkIdentityChaining(ctx context.Context, requests []identitychaining.Request, service string) consentChainCheckResult {
+// checkIdentityChaining checks every request under one deadline. External
+// providers retain their live exchange; Speakeasy checks local eligibility
+// until the user authorizes the MCP grant. Neither is claimed connected
+// without a downstream token.
+func (s *Service) checkIdentityChaining(ctx context.Context, requests []identitychaining.Request, service string, signInID uuid.UUID) consentChainCheckResult {
 	ctx, cancel := context.WithTimeout(ctx, consentChainCheckTimeout)
 	defer cancel()
 	result := chainCheckConnectedResult
 	for _, req := range requests {
-		_, outcome := s.identityChainer.Acquire(ctx, req)
+		outcome := s.identityChainer.CheckConsent(ctx, req, signInID)
 		checked := classifyChainCheck(outcome, service)
 		switch checked.Status {
 		case chainCheckRejected:
 			return checked
+		case chainCheckReady:
+			if result.Status != chainCheckUnknown {
+				result = checked
+			}
 		case chainCheckUnknown:
 			result = checked
 		}
@@ -145,6 +155,8 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		return consentChainCheckResult{Status: chainCheckRejected, Message: fmt.Sprintf(format, service)}
 	}
 	switch outcome.Reason {
+	case identitychaining.ReasonConsentRequired:
+		return consentChainCheckResult{Status: chainCheckReady, Message: "Ready to connect after authorization"}
 	case identitychaining.ReasonSuccess:
 		return chainCheckConnectedResult
 	case identitychaining.ReasonInvalidGrant, identitychaining.ReasonAccessDenied, identitychaining.ReasonScopePolicyDenied,
@@ -162,7 +174,7 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		return rejected("%s isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.")
 	case identitychaining.ReasonNotApplicable, identitychaining.ReasonBindingNotReady, identitychaining.ReasonMalformedAssertion,
 		identitychaining.ReasonMalformedResponse, identitychaining.ReasonTransientFailure, identitychaining.ReasonUnknownRejection,
-		identitychaining.ReasonStaleConfiguration:
+		identitychaining.ReasonStaleConfiguration, identitychaining.ReasonProviderUnavailable:
 	}
 	return chainCheckUnknownResult
 }

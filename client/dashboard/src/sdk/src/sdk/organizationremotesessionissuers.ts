@@ -13,8 +13,10 @@ import { organizationRemoteSessionIssuersList } from "../funcs/organizationRemot
 import { organizationRemoteSessionIssuersMigrate } from "../funcs/organizationRemoteSessionIssuersMigrate.js";
 import { organizationRemoteSessionIssuersMove } from "../funcs/organizationRemoteSessionIssuersMove.js";
 import { organizationRemoteSessionIssuersRefreshMetadata } from "../funcs/organizationRemoteSessionIssuersRefreshMetadata.js";
+import { organizationRemoteSessionIssuersSetEMAProviders } from "../funcs/organizationRemoteSessionIssuersSetEMAProviders.js";
 import { organizationRemoteSessionIssuersUpdate } from "../funcs/organizationRemoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { EMAProviderOrder } from "../models/components/emaproviderorder.js";
 import { MigrateOrganizationRemoteSessionIssuerResult } from "../models/components/migrateorganizationremotesessionissuerresult.js";
 import { OrganizationIssuerDeletePreflight } from "../models/components/organizationissuerdeletepreflight.js";
 import { OrganizationIssuerMigratePreflight } from "../models/components/organizationissuermigratepreflight.js";
@@ -67,6 +69,10 @@ import {
   RefreshOrganizationRemoteSessionIssuerMetadataRequest,
   RefreshOrganizationRemoteSessionIssuerMetadataSecurity,
 } from "../models/operations/refreshorganizationremotesessionissuermetadata.js";
+import {
+  SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+  SetOrganizationRemoteSessionIssuerEMAProvidersSecurity,
+} from "../models/operations/setorganizationremotesessionissueremaproviders.js";
 import {
   UpdateOrganizationRemoteSessionIssuerRequest,
   UpdateOrganizationRemoteSessionIssuerSecurity,
@@ -296,6 +302,27 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RemoteSessionIssuerRefresh> {
     return unwrapAsync(organizationRemoteSessionIssuersRefreshMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setEMAProviders organizationRemoteSessionIssuers
+   *
+   * @remarks
+   * Replace the order in which EMA providers issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external first, then Speakeasy. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout.
+   */
+  async setEMAProviders(
+    request: SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+    security?:
+      | SetOrganizationRemoteSessionIssuerEMAProvidersSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<EMAProviderOrder> {
+    return unwrapAsync(organizationRemoteSessionIssuersSetEMAProviders(
       this,
       request,
       security,

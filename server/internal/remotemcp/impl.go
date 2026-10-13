@@ -45,17 +45,18 @@ import (
 )
 
 type Service struct {
-	tracer                trace.Tracer
-	logger                *slog.Logger
-	db                    *pgxpool.Pool
-	auth                  *auth.Auth
-	authz                 *authz.Engine
-	headers               *Headers
-	policy                *guardian.Policy
-	audit                 *audit.Logger
-	provisioning          *RemoteMCPProvisioningService
-	distributionAdmission *admission.Guard
-	features              feature.Provider
+	tracer                        trace.Tracer
+	logger                        *slog.Logger
+	db                            *pgxpool.Pool
+	auth                          *auth.Auth
+	authz                         *authz.Engine
+	headers                       *Headers
+	policy                        *guardian.Policy
+	audit                         *audit.Logger
+	provisioning                  *RemoteMCPProvisioningService
+	distributionAdmission         *admission.Guard
+	features                      feature.Provider
+	resourceScopeDiscoveryEnabled func() bool
 	// beforeClaim runs between the claim's list and re-read with the locked previous URL; tests only.
 	beforeClaim func(holderPID uint32, previousURL string)
 	// beforeScopePinLock runs inside the pin transaction before it locks anything; tests only.
@@ -80,19 +81,20 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 
 	return &Service{
-		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
-		logger:                logger,
-		db:                    db,
-		auth:                  auth.New(logger, db, sessions, authzEngine),
-		authz:                 authzEngine,
-		headers:               NewHeaders(logger, db, enc),
-		policy:                policy,
-		audit:                 auditLogger,
-		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
-		distributionAdmission: admission.NewGuard(),
-		features:              features,
-		beforeClaim:           nil,
-		beforeScopePinLock:    nil,
+		tracer:                        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
+		logger:                        logger,
+		db:                            db,
+		auth:                          auth.New(logger, db, sessions, authzEngine),
+		authz:                         authzEngine,
+		headers:                       NewHeaders(logger, db, enc),
+		policy:                        policy,
+		audit:                         auditLogger,
+		provisioning:                  NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
+		distributionAdmission:         admission.NewGuard(),
+		features:                      features,
+		resourceScopeDiscoveryEnabled: nil,
+		beforeClaim:                   nil,
+		beforeScopePinLock:            nil,
 	}
 }
 

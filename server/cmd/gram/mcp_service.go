@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -84,6 +86,8 @@ type mcpServiceDependencies struct {
 	CallbackOrigins        remotesessions.CallbackOrigins
 	PlatformHosts          map[string]string
 	CallerAssertions       *mcpauthz.Issuer
+	IssuerGate             *internalsessionissuers.Gate
+	IssuerSigner           *internalsessionissuers.Signer
 }
 
 func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, error) {
@@ -116,6 +120,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	if err != nil {
 		return nil, err
 	}
+	chainer.SetSpeakeasyIssuer(d.IssuerGate, d.IssuerSigner)
 	service.SetIdentityChainer(chainer)
 	return service, nil
 }
@@ -128,6 +133,21 @@ func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgx
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
 	chainer := identitychaining.New(logger, db, enc, challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
+	chainer.SetResourceResolver(challenges.ResolveEMAResource)
+	chainer.SetMeterProvider(meter)
 	chainer.SetObserver(oktaresourceconnections.NewObserver(logger, meter, db, auditLogger))
 	return chainer, nil
+}
+
+// internalIssuerSignerConfig pins signing to this deployment's public origin
+// and KMS ring, so a preview database cannot use another deployment's keys.
+func internalIssuerSignerConfig(c *cli.Context, serverURL *url.URL) internalsessionissuers.SignerConfig {
+	ring := strings.TrimSpace(c.String(identityProviderKMSKeyRingFlag))
+	if ring == "" && c.String("environment") == "local" {
+		ring = identityProviderKMSKeyRingLocalDefault
+	}
+	return internalsessionissuers.SignerConfig{
+		Deployment:    internalsessionissuers.Deployment{ServerURL: serverURL, AllowLoopbackIssuer: c.String("environment") == "local", KeyRing: ring},
+		ManagedSigner: c.String(identityProviderSigningServiceAccount),
+	}
 }

@@ -749,6 +749,7 @@ func newWorkerCommand() *cli.Command {
 			)
 
 			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, identityResolver)
+			sessionManager.SetFlags(featureFlags)
 
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link
@@ -853,6 +854,11 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+			// Sweeps retired internal session issuer keys; nil where KMS provisioning is unconfigured.
+			issuerProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, serverURL)
+			if err != nil {
+				return fmt.Errorf("build identity provider provisioner: %w", err)
+			}
 
 			var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
 			if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {
@@ -897,6 +903,7 @@ func newWorkerCommand() *cli.Command {
 				CacheAdapter:                 remoteSessionsCache,
 				IssuerMetadataRefresher:      issuerMetadataRefresher,
 				RemoteSessionAssertionSigner: clientAssertionSigner,
+				IssuerKeySweeper:             issuerKeySweeper(issuerProvisioner),
 				StartupSeeds:                 startupSeeds(logger, db),
 				AssistantsCore:               assistantsCore,
 				TemporalEnv:                  temporalEnv,

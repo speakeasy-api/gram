@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -51,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -78,6 +80,9 @@ type platformMCPConfig struct {
 	Environment            string
 	JWTSigningKey          string
 	ProductFeatures        *productfeatures.Client
+	IssuerGate             *internalsessionissuers.Gate
+	IssuerSigner           *internalsessionissuers.Signer
+	RemoteMCPScopes        *remotemcp.Service
 	FeatureFlags           feature.Provider
 	DistributionAdmission  *admission.Guard
 	Authz                  *authz.Engine
@@ -481,6 +486,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithInternalSessionIssuer(config.IssuerGate).
+		WithMCPScopes(config.RemoteMCPScopes).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
@@ -853,13 +860,16 @@ func newPlatformMCPOktaSignIn(config platformMCPConfig) *identityproviderconnect
 	return identityproviderconnections.NewSignInReader(config.Logger, config.DB, remotesessions.DefaultCallbackOrigins(origin))
 }
 
-// platformMCPIdentityChaining builds the database-only identity chaining
-// governor status surfaces consult, or nil when remote sessions are off.
+// platformMCPIdentityChaining builds the identity chaining governor
+// authenticated status surfaces consult, or nil when remote sessions are off.
 func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityChainingGovernor {
 	if config.RemoteChallengeManager == nil {
 		return nil
 	}
-	return identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
+	g := identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
+	g.SetSpeakeasyIssuer(config.IssuerGate, config.IssuerSigner)
+	g.SetResourceResolver(config.RemoteChallengeManager.ResolveEMAResource)
+	return g
 }
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
@@ -1078,6 +1088,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithInternalSessionIssuer(config.IssuerGate).
+		WithMCPScopes(config.RemoteMCPScopes).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).

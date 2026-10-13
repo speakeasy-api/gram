@@ -143,6 +143,7 @@ var _ = Service("userSessions", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "revoke")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeUserSession"}`)
 	})
+
 })
 
 var UserSession = Type("UserSession", func() {

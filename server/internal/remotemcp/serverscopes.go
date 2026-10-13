@@ -2,6 +2,7 @@ package remotemcp
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -37,28 +38,59 @@ type pinnableServer struct {
 	resourceURL string
 }
 
+// SetResourceScopeDiscoveryEnabled shares the login runtime's capability with
+// the management API, so a saved pin is never presented as enforced when the
+// runtime cannot consult the protected resource.
+func (s *Service) SetResourceScopeDiscoveryEnabled(enabled func() bool) {
+	s.resourceScopeDiscoveryEnabled = enabled
+}
+
+func (s *Service) scopeDiscoveryEnabled() bool {
+	return s.resourceScopeDiscoveryEnabled != nil && s.resourceScopeDiscoveryEnabled()
+}
+
 func (s *Service) GetServerScopes(ctx context.Context, payload *gen.GetServerScopesPayload) (*gen.RemoteMcpServerScopes, error) {
+	state, _, err := s.GetServerScopesForConfirmation(ctx, payload)
+	return state, err
+}
+
+// GetServerScopesForConfirmation returns a revision of the affected resource and
+// server set, so an agent can bind a confirmed change to the impact it displayed.
+func (s *Service) GetServerScopesForConfirmation(ctx context.Context, payload *gen.GetServerScopesPayload) (*gen.RemoteMcpServerScopes, string, error) {
 	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, authz.ScopeMCPRead, payload.McpServerID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	target, err := s.loadPinnableServer(ctx, logger, *authCtx.ProjectID, mcpServerID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	sharing, err := s.listSharingServers(ctx, logger, authCtx, target)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	discover := remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
-	cached, _, err := remotesessions.CachedResourceScopes(ctx, s.db, *authCtx.ProjectID, target.resourceURL, discover)
+	cached, _, err := remotesessions.CachedResourceScopes(ctx, s.db, *authCtx.ProjectID, target.resourceURL, s.scopeDiscoveryEnabled())
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
+		return nil, "", oops.E(oops.CodeUnexpected, err, "get protected resource").LogError(ctx, logger)
 	}
-	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), s.canPin(ctx, logger, authCtx, target, sharing), cached)
+	state, err := s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), s.canPin(ctx, logger, authCtx, target, sharing), cached)
+	if err != nil {
+		return nil, "", err
+	}
+	return state, scopePinVersion(target.resourceURL, sharing), nil
 }
 
 func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerScopePinPayload) (*gen.RemoteMcpServerScopes, error) {
+	return s.setServerScopePin(ctx, payload, nil, "")
+}
+
+// SetServerScopePinWithExpectedScopes applies an agent-confirmed change only
+// while the current pin matches the state the agent read for confirmation.
+func (s *Service) SetServerScopePinWithExpectedScopes(ctx context.Context, payload *gen.SetServerScopePinPayload, expected []string, expectedVersion string) (*gen.RemoteMcpServerScopes, error) {
+	return s.setServerScopePin(ctx, payload, &expected, expectedVersion)
+}
+
+func (s *Service) setServerScopePin(ctx context.Context, payload *gen.SetServerScopePinPayload, expected *[]string, expectedVersion string) (*gen.RemoteMcpServerScopes, error) {
 	authCtx, logger, mcpServerID, err := s.authorizeServerScopes(ctx, authz.ScopeMCPWrite, payload.McpServerID)
 	if err != nil {
 		return nil, err
@@ -66,6 +98,9 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 	scopes, err := normalizePinnedScopes(payload.Scopes)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
+	}
+	if len(scopes) > 0 && !s.scopeDiscoveryEnabled() {
+		return nil, oops.E(oops.CodeFailedPrecondition, nil, "scope pins require protected resource discovery on this deployment")
 	}
 	target, err := s.loadPinnableServer(ctx, logger, *authCtx.ProjectID, mcpServerID)
 	if err != nil {
@@ -76,13 +111,6 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 	if err != nil {
 		return nil, err
 	}
-	// After every authorization, so the refusal reveals the flag only to a caller allowed to write.
-	// Logins ignore the pin without discovery, so it may only be cleared.
-	discover := remotesessions.ResourceScopeDiscoveryEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
-	if len(scopes) > 0 && !discover {
-		return nil, oops.E(oops.CodeBadRequest, nil, "pinned scopes are not enabled for this organization; a pin can only be cleared")
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -91,7 +119,7 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 	if s.beforeScopePinLock != nil {
 		s.beforeScopePinLock()
 	}
-	row, err := writeScopePin(ctx, dbtx, s.audit, logger, scopePinWrite{authCtx: authCtx, target: target, authorized: sharing, scopes: scopes})
+	row, err := writeScopePin(ctx, dbtx, s.audit, logger, scopePinWrite{authCtx: authCtx, target: target, authorized: sharing, scopes: scopes, expected: expected, expectedVersion: expectedVersion})
 	if err != nil {
 		return nil, err
 	}
@@ -100,14 +128,25 @@ func (s *Service) SetServerScopePin(ctx context.Context, payload *gen.SetServerS
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), true, remotesessions.ResourceScopesFromRow(row, discover))
+	return s.serverScopes(ctx, logger, authCtx, target, sharedServerCount(sharing, target), s.scopeDiscoveryEnabled(), remotesessions.ResourceScopesFromRow(row, s.scopeDiscoveryEnabled()))
 }
 
 type scopePinWrite struct {
-	authCtx    *contextvalues.AuthContext
-	target     pinnableServer
-	authorized []uuid.UUID
-	scopes     []string
+	authCtx         *contextvalues.AuthContext
+	target          pinnableServer
+	authorized      []uuid.UUID
+	scopes          []string
+	expected        *[]string
+	expectedVersion string
+}
+
+func scopePinVersion(resourceURL string, sharing []uuid.UUID) string {
+	ids := make([]string, 0, len(sharing))
+	for _, id := range sharing {
+		ids = append(ids, id.String())
+	}
+	slices.Sort(ids)
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(resourceURL+"\x00"+strings.Join(ids, "\x00"))))
 }
 
 // writeScopePin runs only on dbtx: a second pool connection taken while holding
@@ -136,6 +175,9 @@ func writeScopePin(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, 
 	if !slices.Equal(sharing, w.authorized) {
 		return nil, oops.E(oops.CodeConflict, nil, "the mcp servers sharing this url changed while saving; reload and try again").LogError(ctx, logger)
 	}
+	if w.expected != nil && w.expectedVersion != scopePinVersion(w.target.resourceURL, sharing) {
+		return nil, oops.E(oops.CodeConflict, nil, "the resource or affected MCP servers changed after confirmation; read them again before retrying")
+	}
 
 	var existing *repo.RemoteProtectedResource
 	row, err := q.GetRemoteProtectedResource(ctx, repo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: w.target.resourceURL})
@@ -152,6 +194,9 @@ func writeScopePin(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, 
 	}
 	if slices.Equal(before, w.scopes) {
 		return existing, nil
+	}
+	if w.expected != nil && !slices.Equal(before, *w.expected) {
+		return nil, oops.E(oops.CodeConflict, nil, "the scope pin changed after confirmation; read it again before retrying")
 	}
 
 	updated, err := q.UpsertRemoteProtectedResourceScopeOverride(ctx, repo.UpsertRemoteProtectedResourceScopeOverrideParams{
@@ -238,6 +283,9 @@ func (s *Service) authorizeSharingServers(ctx context.Context, logger *slog.Logg
 // canPin reports whether the caller holds mcp:write on every sharing server
 // (the target included) without recording a denial; failures read as false.
 func (s *Service) canPin(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer, sharing []uuid.UUID) bool {
+	if !s.scopeDiscoveryEnabled() {
+		return false
+	}
 	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, target.server.ID.String(), authCtx.ProjectID.String())}
 	for _, id := range sharing {
 		if id == target.server.ID {

@@ -34,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -270,8 +269,6 @@ type syntheticLoginOptions struct {
 	protectedResource *protectedResourceSeed
 	// prober wires a fresh protected resource prober into the manager.
 	prober bool
-	// liveResourceScopes enrols the organization in resource-first scope discovery.
-	liveResourceScopes bool
 }
 
 // protectedResourceSeed is a remote_protected_resources row as a login finds it.
@@ -300,10 +297,6 @@ func withProtectedResource(seed protectedResourceSeed) syntheticLoginOption {
 
 func withProber() syntheticLoginOption {
 	return func(o *syntheticLoginOptions) { o.prober = true }
-}
-
-func withLiveResourceScopes() syntheticLoginOption {
-	return func(o *syntheticLoginOptions) { o.liveResourceScopes = true }
 }
 
 func withTunnels(tunnels *tunnelrouting.HTTPClient) syntheticLoginOption {
@@ -481,11 +474,6 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	}
 	if options.prober {
 		managerOptions = append(managerOptions, remotesessions.WithProtectedResourceProber(protectedresource.NewProber(ti.conn, policy)))
-	}
-	if options.liveResourceScopes {
-		flags := &feature.InMemory{}
-		flags.SetFlag(feature.FlagRemoteSessionLiveResourceScopes, feature.AnyDistinctID, true)
-		managerOptions = append(managerOptions, remotesessions.WithFeatureFlags(flags))
 	}
 	if options.issuerMetadataRefresh {
 		issuerMetadataReader = sdkmetric.NewManualReader()

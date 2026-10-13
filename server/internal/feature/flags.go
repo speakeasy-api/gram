@@ -124,14 +124,6 @@ const (
 	// when the fold flag is on. Same targeting; removed with the fold flag.
 	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
 
-	// FlagRemoteSessionLiveResourceScopes lets a remote-session login consult
-	// its protected resource row (the last WWW-Authenticate challenge's
-	// scopes, the operator's pin, else the RFC 9728 scopes_supported read
-	// live or from the cached row) ahead of the issuer's whole
-	// scopes_supported catalogue. Client scopes and issuer overrides apply
-	// either way.
-	FlagRemoteSessionLiveResourceScopes Flag = "remote-session-live-resource-scopes"
-
 	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
 	// Targeted by PostHog organization group (org slug) and removed once PAYG
 	// billing is generally available.
@@ -189,6 +181,25 @@ const (
 	// FlagOktaConnections gates the Okta integration while it is dogfooded:
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
+
+	// FlagInternalSessionIssuer gates an organization's internal session issuer
+	// while it rolls out: enabling it, signing with it and its Platform MCP tool.
+	// Server-evaluated, targeted by the organization group.
+	FlagInternalSessionIssuer Flag = "internal-session-issuer"
+
+	// FlagInternalSessionIssuerSigningPaused pauses every internal session
+	// issuer signature without a redeploy, for incident response. Discovery
+	// keeps serving. Server-evaluated; target everyone to pause the platform,
+	// or an organization group to pause one organization.
+	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
+	// FlagEMAProviders gates changing a vendor's EMA provider order while the
+	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.
+	FlagEMAProviders Flag = "ema-providers"
+	// FlagSSOSignInEnforcement turns on SSO sign-in linking of MCP grants,
+	// the dashboard session epoch, sign out everywhere and member sign-in
+	// revocation. Enable it only once every pod runs the code that honours
+	// it; off keeps today's behaviour. Evaluated fleet-wide.
+	FlagSSOSignInEnforcement Flag = "sso-sign-in-enforcement"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

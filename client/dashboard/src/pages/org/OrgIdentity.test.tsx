@@ -42,6 +42,9 @@ vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
     </div>
   ),
 }));
+vi.mock("./identity-provider/EnterpriseIssuerSection", () => ({
+  EnterpriseIssuerSection: () => <div>Enterprise authorization settings</div>,
+}));
 vi.mock("./identity-provider/IdentityProviders", () => ({
   IdentityProviders: () => {
     mocks.ema();

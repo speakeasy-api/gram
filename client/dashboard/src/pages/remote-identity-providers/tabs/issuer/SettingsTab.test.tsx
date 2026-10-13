@@ -126,6 +126,16 @@ describe("issuer settings scope section", () => {
   const save = () =>
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
+  it("explains the override precedence with and without discovery", () => {
+    render(<SettingsTab issuer={issuer()} />);
+    const description = screen.getByText(
+      /With MCP scope discovery, this override/,
+    );
+    expect(description.textContent).toContain(
+      "Without MCP scope discovery, a nonempty override takes precedence over the client",
+    );
+  });
+
   it("seeds the omit-scope-fallback switch from the saved issuer", () => {
     render(<SettingsTab issuer={issuer(true)} />);
 

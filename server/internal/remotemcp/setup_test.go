@@ -142,6 +142,7 @@ func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (con
 	features := &feature.InMemory{}
 
 	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger, iconSetter, features)
+	svc.SetResourceScopeDiscoveryEnabled(func() bool { return true })
 
 	return ctx, &testInstance{
 		service:        svc,

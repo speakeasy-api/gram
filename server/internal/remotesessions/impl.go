@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -84,6 +85,13 @@ type Service struct {
 	// which is what ties this one link to customer_managed_encryption_keys.
 	productFeatures   *productfeatures.Client
 	bindingAuthorizer func(context.Context, pgx.Tx, uuid.UUID) error
+
+	// featureFlags gates rollouts; nil reads every flag as off.
+	featureFlags feature.Provider
+
+	// speakeasySigningAvailable matches the runtime deployment capability.
+	speakeasySigningAvailable bool
+	speakeasyReadiness        EMAProviderReadiness
 
 	createDiscoveryBudget time.Duration
 }
@@ -134,9 +142,18 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		registrationTelemetry: registrationTelemetry,
 		origins:               DefaultCallbackOrigins(serverURL),
 
-		productFeatures:       productFeatures,
-		createDiscoveryBudget: defaultCreateDiscoveryBudget,
+		productFeatures:           productFeatures,
+		featureFlags:              nil,
+		speakeasySigningAvailable: false,
+		speakeasyReadiness:        nil,
+		createDiscoveryBudget:     defaultCreateDiscoveryBudget,
 	}
+}
+
+// SetFeatureFlags sets the rollout flag provider. Call it during wiring,
+// before the service handles requests.
+func (s *Service) SetFeatureFlags(flags feature.Provider) {
+	s.featureFlags = flags
 }
 
 // SetCallbackOrigins replaces the default origins, which pin every client to
@@ -218,4 +235,15 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	}
 
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+// SetSpeakeasySigningAvailable configures the deployment capability used by
+// provider-order views. Organization lifecycle and entitlements remain live checks.
+func (s *Service) SetSpeakeasySigningAvailable(available bool) {
+	s.speakeasySigningAvailable = available
+}
+
+// SetSpeakeasyReadiness installs the runtime's live issuer eligibility check.
+func (s *Service) SetSpeakeasyReadiness(check EMAProviderReadiness) {
+	s.speakeasyReadiness = check
 }

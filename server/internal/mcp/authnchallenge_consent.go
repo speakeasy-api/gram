@@ -1000,7 +1000,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		AgentAuthorization:          agentAuthorization,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
 		ToolSelection:               toolSelection,
+		SSOSignInID:                 nil,
 		CreatedAt:                   time.Now(),
+	}
+	// Only a human subject's own session is linked to its sign-in.
+	if agentAuthorization == nil && subject.Kind == urn.SessionSubjectKindUser && subject.ID == challengeState.AuthorizerUserID {
+		grant.SSOSignInID = challengeState.SSOSignInID
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
@@ -1421,7 +1426,7 @@ func (s *Service) buildRemoteSessionCards(
 	// server, or a client whose grant goes elsewhere is decided by its
 	// authorization server alone; a client's own claimed resource never
 	// stands in, because no login reads it.
-	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
+	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled()
 	var serverResource remotesessions.ResourceScopes
 	var serverResourceURL string
 	hasServerResource := false

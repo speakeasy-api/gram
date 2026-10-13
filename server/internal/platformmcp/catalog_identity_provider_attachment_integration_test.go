@@ -121,7 +121,7 @@ func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachme
 			ClientSecret:            "",
 			SecretExpiresAt:         pgtype.Timestamptz{},
 			TokenEndpointAuthMethod: nil,
-			Scope:                   resource.ScopesSupported,
+			Scope:                   nil,
 			Audience:                nil,
 		}),
 		Bound:           remotesessions.ReuseBound,
@@ -401,6 +401,7 @@ func TestAttachmentUsesClientIDMetadataDocumentWithoutDynamicRegistration(t *tes
 	require.Len(t, clients, 1)
 	require.True(t, strings.HasPrefix(clients[0].ExternalClientID, "https://app.example.com/.well-known/oauth-client/"), clients[0].ExternalClientID)
 	require.False(t, clients[0].ClientSecretEncrypted.Valid)
+	require.Empty(t, clients[0].ClientScope, "the resource's advertised scopes are not copied onto the client")
 
 	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)

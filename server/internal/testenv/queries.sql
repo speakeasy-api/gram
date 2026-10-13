@@ -1639,6 +1639,19 @@ UPDATE user_session_issuers SET trusted_remote_session_issuer_id = @issuer_id WH
 UPDATE organization_metadata SET disabled_at = clock_timestamp()
 WHERE id = @organization_id::text;
 
+-- name: TombstoneInternalSessionIssuerFixture :exec
+-- Test-only tombstone of an organization's internal session issuer.
+UPDATE internal_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id::text;
+
+-- name: SoftDeleteExternalCredentialFixture :exec
+-- Test-only soft delete of an external credential in its tier: a NULL
+-- organization_id names the platform tier.
+UPDATE external_credentials SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND project_id IS NULL;
+
 -- name: RevokeDelegationUserIssuersFixture :exec
 -- Test-only revocation of organization-scoped delegation authority.
 UPDATE user_session_issuers SET deleted_at = clock_timestamp()
@@ -1931,3 +1944,26 @@ SET omit_scope_fallback = @omit_scope_fallback
 WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;
+
+-- name: SeedInternalSessionIssuerFixture :one
+-- An organization's Speakeasy issuer over an existing key set, for tests that
+-- reference the issuer row without signing.
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id)
+VALUES (@organization_id, @issuer, @json_web_key_set_id)
+RETURNING id;
+
+-- name: DisableInternalSessionIssuerFixture :execrows
+UPDATE internal_session_issuers
+SET disabled_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
+
+-- name: CountWaitingAdvisoryLocksFixture :one
+-- Advisory lock requests still waiting, so a test can tell a writer blocked.
+SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
+WHERE locktype = 'advisory' AND NOT granted
+  AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database());
+-- name: CountPendingSSOSignInRevocationDeliveries :one
+SELECT count(*)
+FROM sso_sign_in_revocation_deliveries
+WHERE organization_id = @organization_id
+  AND delivered_at IS NULL;

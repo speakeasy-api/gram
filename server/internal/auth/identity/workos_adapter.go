@@ -41,8 +41,9 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 	}
 
 	return &AuthenticateResult{
-		AccessToken:    resp.AccessToken,
-		OrganizationID: resp.OrganizationID,
+		AccessToken:          resp.AccessToken,
+		OrganizationID:       resp.OrganizationID,
+		AuthenticationMethod: string(resp.AuthenticationMethod),
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,
@@ -85,8 +86,9 @@ func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID,
 	}
 
 	return &AuthenticateResult{
-		AccessToken:    resp.AccessToken,
-		OrganizationID: resp.OrganizationID,
+		AccessToken:          resp.AccessToken,
+		OrganizationID:       resp.OrganizationID,
+		AuthenticationMethod: string(resp.AuthenticationMethod),
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,
@@ -118,4 +120,36 @@ func (a *WorkOSAdapter) RevokeSession(ctx context.Context, sessionID string) err
 		return fmt.Errorf("workos revoke session: %w", err)
 	}
 	return nil
+}
+
+// maxSessionPages caps the WorkOS session listing for one user.
+const maxSessionPages = 50
+
+// ListSessionIDs lists every WorkOS session the user holds, following
+// pagination.
+func (a *WorkOSAdapter) ListSessionIDs(ctx context.Context, workosUserID string) ([]string, error) {
+	if a == nil {
+		return nil, nil
+	}
+	var ids []string
+	after := ""
+	for range maxSessionPages {
+		resp, err := a.client.ListSessions(ctx, workosUserID, usermanagement.ListSessionsOpts{
+			Limit:  100,
+			Before: "",
+			After:  after,
+			Order:  usermanagement.Desc,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("workos list sessions: %w", err)
+		}
+		for _, session := range resp.Data {
+			ids = append(ids, session.ID)
+		}
+		if resp.ListMetadata.After == "" || len(resp.Data) == 0 {
+			return ids, nil
+		}
+		after = resp.ListMetadata.After
+	}
+	return nil, fmt.Errorf("workos list sessions: more than %d pages", maxSessionPages)
 }

@@ -9,10 +9,15 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
+
+var deprovisionActor = ssosignins.Actor{Principal: urn.NewSystemPrincipal("workos-deprovision"), DisplayName: nil}
 
 // deprovisionOrganizationAccessParams identifies whose organization access to
 // revoke and the WorkOS event driving the change. Callers own the
@@ -93,6 +98,21 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx pgx.Tx, p deprovisi
 		}); err != nil {
 			return effects, fmt.Errorf("mark role assignments deleted for workos user %q: %w", workosUserID, err)
 		}
+	}
+
+	if p.gramUserID != "" {
+		organizationIDs := []string{p.organizationID}
+		revoked, err := ssosignins.RevokeUser(ctx, dbtx, organizationIDs, p.gramUserID, ssosignins.RevokeReasonDeprovisioned)
+		if err != nil {
+			return effects, fmt.Errorf("revoke sso sign-ins for user %q: %w", p.gramUserID, err)
+		}
+		if err := ssosignins.AuditRevocation(ctx, dbtx, audit.NewLogger(), deprovisionActor, p.gramUserID, "", ssosignins.RevokeReasonDeprovisioned, organizationIDs, revoked); err != nil {
+			return effects, fmt.Errorf("audit sso sign-in revocation for user %q: %w", p.gramUserID, err)
+		}
+		effects.revokedSignIns = revoked.SignIns()
+		effects.revocationOrganizationID = p.organizationID
+		effects.revocationDeliveries = revoked.DeliveryIDs
+		effects.revokedGrants = revoked.Sessions
 	}
 
 	effects.invalidateUserInfoCacheUserID = p.gramUserID

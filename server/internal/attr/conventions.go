@@ -177,6 +177,19 @@ const (
 	AuthUserIDKey            = attribute.Key("gram.auth.user_id")
 	AuthUserExternalIDKey    = attribute.Key("gram.auth.external_user_id")
 	AuthImpersonatorEmailKey = attribute.Key("gram.auth.impersonator_email")
+	// AuthAuthenticationMethodKey is WorkOS's method for a sign-in, e.g. "SSO".
+	AuthAuthenticationMethodKey = attribute.Key("gram.auth.authentication_method")
+	// AuthSignInFlowKey names the flow that exchanged a WorkOS code:
+	// "dashboard" or "mcp_authorize".
+	AuthSignInFlowKey = attribute.Key("gram.auth.sign_in_flow")
+	// AuthWorkOSSessionFingerprintKey is a short one-way digest of a WorkOS
+	// session id, enough to tell whether two flows shared a session.
+	AuthWorkOSSessionFingerprintKey = attribute.Key("gram.auth.workos_session_fingerprint")
+	// SSOSignInRecordOutcomeKey is how a WorkOS code exchange resolved to an
+	// SSO sign-in row.
+	SSOSignInRecordOutcomeKey = attribute.Key("gram.sso_sign_in.record_outcome")
+	// SSOSignInRevokeReasonKey is why SSO sign-ins were revoked.
+	SSOSignInRevokeReasonKey = attribute.Key("gram.sso_sign_in.revoke_reason")
 
 	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
@@ -281,74 +294,75 @@ const (
 	// jwks.validation.failures.
 	JWKSValidationReasonKey = attribute.Key("gram.jwks.validation_reason")
 
-	ComponentKey                   = attribute.Key("gram.component")
-	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
-	DBUpdatedRowsCountKey          = attribute.Key("gram.db.updated_rows_count")
-	DeploymentIDKey                = attribute.Key("gram.deployment.id")
-	DeploymentFunctionsAccessIDKey = attribute.Key("gram.deployment.functions.access_id")
-	DeploymentFunctionsIDKey       = attribute.Key("gram.deployment.functions.id")
-	DeploymentFunctionsNameKey     = attribute.Key("gram.deployment.functions.name")
-	DeploymentFunctionsSlugKey     = attribute.Key("gram.deployment.functions.slug")
-	DeploymentOpenAPIIDKey         = attribute.Key("gram.deployment.openapi.id")
-	DeploymentOpenAPINameKey       = attribute.Key("gram.deployment.openapi.name")
-	DeploymentOpenAPIParserKey     = attribute.Key("gram.deployment.openapi_parser")
-	DeploymentOpenAPISlugKey       = attribute.Key("gram.deployment.openapi.slug")
-	DeploymentStatusKey            = attribute.Key("gram.deployment.status")
-	EnvironmentIDKey               = attribute.Key("gram.environment.id")
-	EnvironmentSlugKey             = attribute.Key("gram.environment.slug")
-	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
-	EventSourceKey                 = attribute.Key("gram.event.source")
-	EventURNKey                    = attribute.Key("gram.event.urn")
-	FilterExpressionKey            = attribute.Key("gram.filter.src")
-	TriggerCorrelationIDKey        = attribute.Key("gram.trigger.correlation_id")
-	TriggerDefinitionSlugKey       = attribute.Key("gram.trigger.definition_slug")
-	TriggerDeliveryStatusKey       = attribute.Key("gram.trigger.delivery_status")
-	TriggerEventIDKey              = attribute.Key("gram.trigger.event_id")
-	TriggerInstanceIDKey           = attribute.Key("gram.trigger.instance_id")
-	TriggerTargetKindKey           = attribute.Key("gram.trigger.target.kind")
-	TriggerTargetRefKey            = attribute.Key("gram.trigger.target.ref")
-	AssistantIDKey                 = attribute.Key("gram.assistant.id")
-	AssistantThreadIDKey           = attribute.Key("gram.assistant.thread_id")
-	AssistantEventIDKey            = attribute.Key("gram.assistant.event_id")
-	AssistantAttemptKey            = attribute.Key("gram.assistant.attempt")
-	AssistantRuntimeIDKey          = attribute.Key("gram.assistant.runtime_id")
-	AssistantRuntimeBackendKey     = attribute.Key("gram.assistant.runtime_backend")
-	AssistantPhaseKey              = attribute.Key("gram.assistant.phase")
-	AssistantColdStartKey          = attribute.Key("gram.assistant.cold_start")
-	AssistantAppCreatedKey         = attribute.Key("gram.assistant.app_created")
-	AssistantSetupFailureClassKey  = attribute.Key("gram.assistant.setup_failure_class")
-	AssistantTurnOutcomeKey        = attribute.Key("gram.assistant.turn_outcome")
-	AssistantServerIPKey           = attribute.Key("gram.assistant.server_ip")
-	AssistantImageRecycleKey       = attribute.Key("gram.assistant.image_recycle")
-	AssistantImageDesiredKey       = attribute.Key("gram.assistant.image_desired")
-	AssistantImageActualKey        = attribute.Key("gram.assistant.image_actual")
-	ChatModelKey                   = attribute.Key("gram.chat.model")
-	ChatToolCountKey               = attribute.Key("gram.chat.tool_count")
-	ChatToolNamesKey               = attribute.Key("gram.chat.tool_names")
-	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
-	FunctionIDKey                  = attribute.Key("gram.function.id")
-	FunctionsBackendKey            = attribute.Key("gram.functions.backend")
-	FunctionsManifestVersionKey    = attribute.Key("gram.functions.manifest_version")
-	FunctionsRunnerImageKey        = attribute.Key("gram.functions.runner_image")
-	FunctionsRunnerVersionKey      = attribute.Key("gram.functions.runner_version")
-	FunctionsRuntimeKey            = attribute.Key("gram.functions.runtime")
-	HTTPEncodingStyleKey           = attribute.Key("gram.http.encoding.style")
-	HTTPHeaderAliasNameKey         = attribute.Key("gram.http.header_alias.name")
-	HTTPHeaderAliasFormKey         = attribute.Key("gram.http.header_alias.form")
-	HTTPParamNameKey               = attribute.Key("gram.http.param.name")
-	HTTPParamValueKey              = attribute.Key("gram.http.param.value")
-	HTTPResponseExternalKey        = attribute.Key("gram.http.response.external")
-	HTTPResponseFilteredKey        = attribute.Key("gram.http.response.filtered")
-	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
-	IngressNameKey                 = attribute.Key("gram.ingress.name")
-	CustomDomainProvisionerKindKey = attribute.Key("gram.custom_domain.provisioner.kind")
-	NetworkSurfaceKey              = attribute.Key("gram.network.surface")
-	NetworkIngressIDKey            = attribute.Key("gram.network_ingress.id")
-	NetworkIngressOperationKey     = attribute.Key("gram.network_ingress.operation")
-	NetworkIngressResultKey        = attribute.Key("gram.network_ingress.result")
-	NetworkIngressReasonKey        = attribute.Key("gram.network_ingress.reason")
-	NetworkIngressErrorCodeKey     = attribute.Key("gram.network_ingress.error_code")
-	NetworkIngressDurationKey      = attribute.Key("gram.network_ingress.operation.duration")
+	ComponentKey                      = attribute.Key("gram.component")
+	DBDeletedRowsCountKey             = attribute.Key("gram.db.deleted_rows_count")
+	DBUpdatedRowsCountKey             = attribute.Key("gram.db.updated_rows_count")
+	DeploymentIDKey                   = attribute.Key("gram.deployment.id")
+	DeploymentFunctionsAccessIDKey    = attribute.Key("gram.deployment.functions.access_id")
+	DeploymentFunctionsIDKey          = attribute.Key("gram.deployment.functions.id")
+	DeploymentFunctionsNameKey        = attribute.Key("gram.deployment.functions.name")
+	DeploymentFunctionsSlugKey        = attribute.Key("gram.deployment.functions.slug")
+	DeploymentOpenAPIIDKey            = attribute.Key("gram.deployment.openapi.id")
+	DeploymentOpenAPINameKey          = attribute.Key("gram.deployment.openapi.name")
+	DeploymentOpenAPIParserKey        = attribute.Key("gram.deployment.openapi_parser")
+	DeploymentOpenAPISlugKey          = attribute.Key("gram.deployment.openapi.slug")
+	DeploymentStatusKey               = attribute.Key("gram.deployment.status")
+	EnvironmentIDKey                  = attribute.Key("gram.environment.id")
+	EnvironmentSlugKey                = attribute.Key("gram.environment.slug")
+	EnvVarNameKey                     = attribute.Key("gram.envvar.name")
+	EventSourceKey                    = attribute.Key("gram.event.source")
+	EventURNKey                       = attribute.Key("gram.event.urn")
+	FilterExpressionKey               = attribute.Key("gram.filter.src")
+	TriggerCorrelationIDKey           = attribute.Key("gram.trigger.correlation_id")
+	TriggerDefinitionSlugKey          = attribute.Key("gram.trigger.definition_slug")
+	TriggerDeliveryStatusKey          = attribute.Key("gram.trigger.delivery_status")
+	TriggerEventIDKey                 = attribute.Key("gram.trigger.event_id")
+	TriggerInstanceIDKey              = attribute.Key("gram.trigger.instance_id")
+	TriggerTargetKindKey              = attribute.Key("gram.trigger.target.kind")
+	TriggerTargetRefKey               = attribute.Key("gram.trigger.target.ref")
+	AssistantIDKey                    = attribute.Key("gram.assistant.id")
+	AssistantThreadIDKey              = attribute.Key("gram.assistant.thread_id")
+	AssistantEventIDKey               = attribute.Key("gram.assistant.event_id")
+	AssistantAttemptKey               = attribute.Key("gram.assistant.attempt")
+	AssistantRuntimeIDKey             = attribute.Key("gram.assistant.runtime_id")
+	AssistantRuntimeBackendKey        = attribute.Key("gram.assistant.runtime_backend")
+	AssistantPhaseKey                 = attribute.Key("gram.assistant.phase")
+	AssistantColdStartKey             = attribute.Key("gram.assistant.cold_start")
+	AssistantAppCreatedKey            = attribute.Key("gram.assistant.app_created")
+	AssistantSetupFailureClassKey     = attribute.Key("gram.assistant.setup_failure_class")
+	AssistantTurnOutcomeKey           = attribute.Key("gram.assistant.turn_outcome")
+	AssistantServerIPKey              = attribute.Key("gram.assistant.server_ip")
+	AssistantImageRecycleKey          = attribute.Key("gram.assistant.image_recycle")
+	AssistantImageDesiredKey          = attribute.Key("gram.assistant.image_desired")
+	AssistantImageActualKey           = attribute.Key("gram.assistant.image_actual")
+	ChatModelKey                      = attribute.Key("gram.chat.model")
+	ChatToolCountKey                  = attribute.Key("gram.chat.tool_count")
+	ChatToolNamesKey                  = attribute.Key("gram.chat.tool_names")
+	FlyAppInternalIDKey               = attribute.Key("gram.fly.app_id")
+	FunctionIDKey                     = attribute.Key("gram.function.id")
+	FunctionsBackendKey               = attribute.Key("gram.functions.backend")
+	FunctionsManifestVersionKey       = attribute.Key("gram.functions.manifest_version")
+	FunctionsRunnerImageKey           = attribute.Key("gram.functions.runner_image")
+	FunctionsRunnerVersionKey         = attribute.Key("gram.functions.runner_version")
+	FunctionsRuntimeKey               = attribute.Key("gram.functions.runtime")
+	HTTPEncodingStyleKey              = attribute.Key("gram.http.encoding.style")
+	HTTPHeaderAliasNameKey            = attribute.Key("gram.http.header_alias.name")
+	HTTPHeaderAliasFormKey            = attribute.Key("gram.http.header_alias.form")
+	HTTPParamNameKey                  = attribute.Key("gram.http.param.name")
+	HTTPParamValueKey                 = attribute.Key("gram.http.param.value")
+	HTTPResponseExternalKey           = attribute.Key("gram.http.response.external")
+	HTTPResponseFilteredKey           = attribute.Key("gram.http.response.filtered")
+	HTTPStatusCodePatternKey          = attribute.Key("gram.http.status_code_pattern")
+	IngressNameKey                    = attribute.Key("gram.ingress.name")
+	CustomDomainProvisionerKindKey    = attribute.Key("gram.custom_domain.provisioner.kind")
+	NetworkSurfaceKey                 = attribute.Key("gram.network.surface")
+	NetworkIngressIDKey               = attribute.Key("gram.network_ingress.id")
+	NetworkIngressOperationKey        = attribute.Key("gram.network_ingress.operation")
+	InternalSessionIssuerOperationKey = attribute.Key("gram.internal_session_issuer.operation")
+	NetworkIngressResultKey           = attribute.Key("gram.network_ingress.result")
+	NetworkIngressReasonKey           = attribute.Key("gram.network_ingress.reason")
+	NetworkIngressErrorCodeKey        = attribute.Key("gram.network_ingress.error_code")
+	NetworkIngressDurationKey         = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
@@ -491,18 +505,25 @@ const (
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
-	OAuthResourceKey              = attribute.Key("gram.oauth.resource")
-	OAuthProviderKey              = attribute.Key("gram.oauth.provider")
-	OAuthRedirectURICountKey      = attribute.Key("gram.oauth.redirect_uri.count")
-	OAuthRedirectURIFullKey       = attribute.Key("gram.oauth.redirect_uri.full")
-	OAuthRegisteredAuthMethodKey  = attribute.Key("gram.oauth.registered_auth_method")
-	OAuthRegistrationEndpointKey  = attribute.Key("gram.oauth.registration_endpoint")
-	OAuthRegistrationMethodKey    = attribute.Key("gram.oauth.registration_method")
-	OAuthRegistrationOutcomeKey   = attribute.Key("gram.oauth.registration_outcome")
-	OAuthRegistrationReasonKey    = attribute.Key("gram.oauth.registration_reason")
-	OAuthRegistrationRetryableKey = attribute.Key("gram.oauth.registration_retryable")
-	OAuthRequiredKey              = attribute.Key("gram.oauth.required")
-	OAuthScopeKey                 = attribute.Key("gram.oauth.scope")
+	OAuthResourceKey = attribute.Key("gram.oauth.resource")
+	OAuthProviderKey = attribute.Key("gram.oauth.provider")
+	// IdentityChainingProviderKey is the EMA provider kind serving an
+	// identity chaining attempt (external or speakeasy).
+	IdentityChainingProviderKey = attribute.Key("gram.identity_chaining.provider")
+	// IdentityChainingFallbackKey reports an attempt after an earlier provider failed.
+	IdentityChainingFallbackKey = attribute.Key("gram.identity_chaining.fallback")
+	// IdentityChainingSkippedProvidersKey counts providers an order could not use.
+	IdentityChainingSkippedProvidersKey = attribute.Key("gram.identity_chaining.skipped_providers")
+	OAuthRedirectURICountKey            = attribute.Key("gram.oauth.redirect_uri.count")
+	OAuthRedirectURIFullKey             = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegisteredAuthMethodKey        = attribute.Key("gram.oauth.registered_auth_method")
+	OAuthRegistrationEndpointKey        = attribute.Key("gram.oauth.registration_endpoint")
+	OAuthRegistrationMethodKey          = attribute.Key("gram.oauth.registration_method")
+	OAuthRegistrationOutcomeKey         = attribute.Key("gram.oauth.registration_outcome")
+	OAuthRegistrationReasonKey          = attribute.Key("gram.oauth.registration_reason")
+	OAuthRegistrationRetryableKey       = attribute.Key("gram.oauth.registration_retryable")
+	OAuthRequiredKey                    = attribute.Key("gram.oauth.required")
+	OAuthScopeKey                       = attribute.Key("gram.oauth.scope")
 	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
 	// client's configured scope because the issuer advertises them.
 	OAuthScopeAddedKey = attribute.Key("gram.oauth.scope_added")
@@ -1522,6 +1543,21 @@ func SlogAuthScheme(v string) slog.Attr      { return slog.String(string(AuthSch
 func AuthUserEmail(v string) attribute.KeyValue { return AuthUserEmailKey.String(v) }
 func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(AuthUserEmailKey), v) }
 
+func SlogAuthAuthenticationMethod(v string) slog.Attr {
+	return slog.String(string(AuthAuthenticationMethodKey), v)
+}
+func SlogAuthSignInFlow(v string) slog.Attr      { return slog.String(string(AuthSignInFlowKey), v) }
+func AuthSignInFlow(v string) attribute.KeyValue { return AuthSignInFlowKey.String(v) }
+func SSOSignInRecordOutcome(v string) attribute.KeyValue {
+	return SSOSignInRecordOutcomeKey.String(v)
+}
+func SlogSSOSignInRecordOutcome(v string) slog.Attr {
+	return slog.String(string(SSOSignInRecordOutcomeKey), v)
+}
+func SSOSignInRevokeReason(v string) attribute.KeyValue { return SSOSignInRevokeReasonKey.String(v) }
+func SlogAuthWorkOSSessionFingerprint(v string) slog.Attr {
+	return slog.String(string(AuthWorkOSSessionFingerprintKey), v)
+}
 func AuthImpersonatorEmail(v string) attribute.KeyValue { return AuthImpersonatorEmailKey.String(v) }
 func SlogAuthImpersonatorEmail(v string) slog.Attr {
 	return slog.String(string(AuthImpersonatorEmailKey), v)
@@ -1816,6 +1852,14 @@ func SlogNetworkSurface[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkSurfaceKey), string(v))
 }
 
+func InternalSessionIssuerOperation(v string) attribute.KeyValue {
+	return InternalSessionIssuerOperationKey.String(v)
+}
+
+func SlogInternalSessionIssuerOperation(v string) slog.Attr {
+	return slog.String(string(InternalSessionIssuerOperationKey), v)
+}
+
 func NetworkIngressOperation[V ~string](v V) attribute.KeyValue {
 	return NetworkIngressOperationKey.String(string(v))
 }
@@ -2020,6 +2064,20 @@ func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
 
 func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
 func SlogProvider(v string) slog.Attr      { return slog.String(string(ProviderKey), v) }
+
+func IdentityChainingProvider(v string) attribute.KeyValue {
+	return IdentityChainingProviderKey.String(v)
+}
+func SlogIdentityChainingProvider(v string) slog.Attr {
+	return slog.String(string(IdentityChainingProviderKey), v)
+}
+func IdentityChainingFallback(v bool) attribute.KeyValue { return IdentityChainingFallbackKey.Bool(v) }
+func SlogIdentityChainingFallback(v bool) slog.Attr {
+	return slog.Bool(string(IdentityChainingFallbackKey), v)
+}
+func SlogIdentityChainingSkippedProviders(v int) slog.Attr {
+	return slog.Int(string(IdentityChainingSkippedProvidersKey), v)
+}
 
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
 func SlogOAuthProvider(v string) slog.Attr      { return slog.String(string(OAuthProviderKey), v) }

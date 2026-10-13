@@ -159,20 +159,16 @@ Overview tab; everyone else sees neither. Browser verification: `[~]`.
 
 Linear's protected resource (`https://mcp.linear.app/mcp`) has a PG
 `remote_protected_resources` row read two hours before the seed ran,
-advertising `read` and `write`, with a scope pin of `read`. What the server's
-Identity panel (`remoteMcp.getServerScopes`) shows depends on the
-`remote-session-live-resource-scopes` rollout flag. Off, the pin picker is
-hidden and logins request the issuer override; the panel shows the read-only
-"Requested at sign-in" summary instead (`read`, "Set by the identity
-provider's override."). On (the demo org is enrolled), Linear's seeded client
-has no scopes of its own, so the pin decides and the panel reads "Sign-ins
-request these scopes." The advertised `read` and `write` are offered as picker
+advertising `read` and `write`, with a scope pin of `read`. In the server's
+Identity panel (`remoteMcp.getServerScopes`), Linear's seeded client has no
+scopes of its own, so the pin decides and the panel reads "Sign-ins request
+these scopes." The advertised `read` and `write` are offered as picker
 options. When the pin does not decide, the picker's status line also names
 what sign-ins request, e.g. "Not used for this connection. Sign-ins request
 read, set by the identity provider's override." The extra sentence drops while
 the pin has unsaved edits. Members with only `mcp:read` on the server see no
 picker; instead the same read-only summary lists what the connected client
-requests (`read`, with "Pinned for this MCP server's URL." with the flag on).
+requests (`read`, with "Pinned for this MCP server's URL.").
 Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
@@ -273,6 +269,15 @@ dashboard, provider acceptance, or usable human access is demonstrated.
 ### [~] Self remote session client (client credentials)
 
 The project has a hand-entered Jamf Pro remote issuer (`jamf-pro`, reserved `acme-demo.jamfcloud.example` host, token endpoint only, no discovery) and one client, `demo-jamf-pro-api-client`, whose `credential_owner` is `self`: it would obtain one shared access token with the `client_credentials` grant, authenticating with `client_secret_post` as Jamf Pro documents. The issuer's client setup documentation link points to Jamf's API Roles and Clients guide. The secret is the inert `DEMO-NOT-VALID-CIPHERTEXT`, and the client has no user session issuer binding, remote session, or MCP server, so it demonstrates configuration only, never a usable credential. Until the dashboard reads `credentialOwner` (AIM-464), the client renders like any secret-authenticated client; `credential_owner` and `grant_types` are management API evidence only.
+
+### [~] Organization Identity: Enterprise authorization
+
+The Single sign-on tab includes enterprise authorization. A fresh demo workspace
+shows the not-configured or unavailable state; it does not seed a working issuer
+or signing key. The public demo stays read-only. A local organization admin can
+enable an issuer when its SSO entitlement and deployment signing configuration
+are available. Existing issuers retain their copyable URI after disabling, and
+can be disabled even if the SSO entitlement has been removed.
 
 ### [~] Organization Identity: Slack workspaces
 

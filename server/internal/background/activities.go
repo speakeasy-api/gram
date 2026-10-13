@@ -601,6 +601,10 @@ func (a *Activities) SendPaygActivatedEmail(ctx context.Context, input billingno
 	return nil
 }
 
+func (a *Activities) SweepSSOSignInRevocations(ctx context.Context) (int, error) {
+	return a.processWorkOSOrganizationEvents.SweepSSOSignInRevocations(ctx) //nolint:wrapcheck // wrapped by the activity
+}
+
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {
 	return a.processWorkOSOrganizationEvents.Do(ctx, params)
 }

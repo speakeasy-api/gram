@@ -17,6 +17,26 @@ vi.mock(
 
 afterEach(cleanup);
 
+describe("OverridesFields", () => {
+  it("discloses inherited scopes and where they can be changed", () => {
+    render(
+      <OverridesFields
+        scopeOverride=""
+        audienceOverride=""
+        issuerScopeOverride={["admin", "offline_access"]}
+        onScopeOverrideChange={vi.fn<(value: string) => void>()}
+        onAudienceOverrideChange={vi.fn<(value: string) => void>()}
+      />,
+    );
+    expect(
+      screen.getByText(/provider's scope fallback is admin, offline_access/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Change it in the identity provider's Settings/),
+    ).toBeTruthy();
+  });
+});
+
 function renderFields(method: AuthMethod, callbackURL?: string): void {
   render(
     <TooltipProvider>
@@ -69,31 +89,5 @@ describe("ClientCredentialsFields", () => {
     expect(
       screen.getByText("https://pinned.example.com/mcp/remote_login_callback"),
     ).toBeTruthy();
-  });
-});
-
-describe("OverridesFields", () => {
-  function renderOverrides(scopeOverride: string): void {
-    render(
-      <OverridesFields
-        scopeOverride={scopeOverride}
-        audienceOverride=""
-        onScopeOverrideChange={vi.fn<(value: string) => void>()}
-        onAudienceOverrideChange={vi.fn<(value: string) => void>()}
-        scopeWarning={<div>scope override warning</div>}
-      />,
-    );
-  }
-
-  it("hides the scope warning while the scope field is empty", () => {
-    renderOverrides("  ");
-
-    expect(screen.queryByText("scope override warning")).toBeNull();
-  });
-
-  it("shows the scope warning once the scope field has text", () => {
-    renderOverrides("openid");
-
-    expect(screen.getByText("scope override warning")).toBeTruthy();
   });
 });

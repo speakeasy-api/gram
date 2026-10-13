@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	ActionAccessRoleCreate       Action = "access_role:create"
-	ActionAccessRoleUpdate       Action = "access_role:update"
-	ActionAccessRoleDelete       Action = "access_role:delete"
-	ActionAccessMemberRoleUpdate Action = "access_member:update_role"
-	ActionAccessChallengeResolve Action = "access_challenge:resolve"
+	ActionAccessRoleCreate          Action = "access_role:create"
+	ActionAccessRoleUpdate          Action = "access_role:update"
+	ActionAccessRoleDelete          Action = "access_role:delete"
+	ActionAccessMemberRoleUpdate    Action = "access_member:update_role"
+	ActionAccessMemberSignInsRevoke Action = "access_member:revoke_sign_ins"
+	ActionAccessChallengeResolve    Action = "access_challenge:resolve"
 )
 
 type LogAccessRoleCreateEvent struct {
@@ -240,4 +241,60 @@ func (l *Logger) LogAccessChallengeResolve(ctx context.Context, dbtx repo.DBTX, 
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessChallengeV1})
+}
+
+type LogAccessMemberSignInsRevokeEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+
+	MemberID    string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for RBAC member identifiers; pending team discussion
+	MemberEmail string
+
+	Reason          string
+	RevokedSignIns  int
+	RevokedSessions int
+}
+
+type accessMemberSignInsRevokeMetadata struct {
+	Reason          string `json:"reason"`
+	RevokedSignIns  int    `json:"revoked_sign_ins"`
+	RevokedSessions int    `json:"revoked_sessions"`
+}
+
+func (l *Logger) LogAccessMemberSignInsRevoke(ctx context.Context, dbtx repo.DBTX, event LogAccessMemberSignInsRevokeEvent) error {
+	action := ActionAccessMemberSignInsRevoke
+
+	metadata, err := marshalAuditPayload(accessMemberSignInsRevokeMetadata{
+		Reason:          event.Reason,
+		RevokedSignIns:  event.RevokedSignIns,
+		RevokedSessions: event.RevokedSessions,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(nil),
+
+		Action: string(action),
+
+		SubjectID:          event.MemberID,
+		SubjectType:        string(subjectTypeAccessMember),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.MemberEmail),
+		SubjectSlug:        conv.ToPGTextEmpty(event.MemberEmail),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AccessMemberV1})
 }

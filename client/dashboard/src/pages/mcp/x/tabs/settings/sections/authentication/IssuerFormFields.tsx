@@ -18,13 +18,13 @@ import {
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
+import { IssuerScopeFallback } from "@/pages/remote-identity-providers/IssuerScopeFallback";
 import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
   isPrivateKeyJwtAuthMethod,
   type ClientType,
 } from "./issuerFormUtils";
-import type { ReactNode } from "react";
 
 // RedirectURICallout shows the redirect_uri operators must register on the
 // upstream provider's OAuth app before typed-in client credentials will
@@ -517,20 +517,19 @@ export function ClientCredentialsFields({
 // OverridesFields renders the per-client OAuth dance overrides. Both fields
 // are optional and apply in both DCR and manual modes — they control what
 // Speakeasy sends at authorize/token time, independent of how the client was
-// registered. scopeWarning renders under the scope input once it has text, for
-// callers whose issuer pins the requested scopes and so makes this field inert.
+// registered.
 export function OverridesFields({
   scopeOverride,
   audienceOverride,
   onScopeOverrideChange,
   onAudienceOverrideChange,
-  scopeWarning,
+  issuerScopeOverride,
 }: {
   scopeOverride: string;
   audienceOverride: string;
   onScopeOverrideChange: (value: string) => void;
   onAudienceOverrideChange: (value: string) => void;
-  scopeWarning?: ReactNode;
+  issuerScopeOverride?: string[] | null;
 }): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
@@ -544,12 +543,11 @@ export function OverridesFields({
           placeholder="read, write, openid"
         />
         <Text muted small>
-          Comma-separated. When provided, the platform requests these scopes
-          during the OAuth dance; otherwise it falls back to the issuer's
-          scopes_supported.
+          Comma-separated. With MCP scope discovery, this client selection takes
+          precedence. Leave empty to use the MCP server's scopes, then the
+          identity provider's scope fallback or advertised scopes.
         </Text>
-        {/* Only warn once there are client scopes to be overridden. */}
-        {scopeOverride.trim() && scopeWarning}
+        <IssuerScopeFallback scopes={issuerScopeOverride} />
       </Stack>
 
       <Stack gap={2}>

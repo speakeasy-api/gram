@@ -141,6 +141,8 @@ type WorkerOptions struct {
 	// RemoteSessionAssertionSigner enables scheduled refreshes for clients that
 	// authenticate with private_key_jwt.
 	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
+	// IssuerKeySweeper retires expired internal session issuer keys; nil sweeps nothing.
+	IssuerKeySweeper InternalSessionIssuerKeySweeper
 
 	// StartupSeeds is the reference data this worker keeps applied. The
 	// worker kicks one run per seed version when it starts.
@@ -208,6 +210,7 @@ func ForDeploymentProcessing(
 		MCPCatalog:                   externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator)), f),
 		AuditLogger:                  auditLogger,
 		RemoteSessionAssertionSigner: nil,
+		IssuerKeySweeper:             nil,
 		StartupSeeds:                 nil,
 		SlackClient:                  nil,
 		SlackDirectoryTokenRefresher: nil,
@@ -329,6 +332,7 @@ func NewTemporalWorker(
 		CacheAdapter:                 nil,
 		IssuerMetadataRefresher:      nil,
 		RemoteSessionAssertionSigner: nil,
+		IssuerKeySweeper:             nil,
 		StartupSeeds:                 nil,
 		EmailService:                 nil,
 		AssistantsCore:               nil,
@@ -388,6 +392,7 @@ func NewTemporalWorker(
 			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
 			IssuerMetadataRefresher:      conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			RemoteSessionAssertionSigner: conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			IssuerKeySweeper:             conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
 			StartupSeeds:                 conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                 conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:               conv.Default(o.AssistantsCore, opts.AssistantsCore),
@@ -542,6 +547,8 @@ func NewTemporalWorker(
 	adminReconciliationActivities := NewOpenRouterAdminReconciliationActivities(logger, adminReconciler)
 	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.CaptureCursor, activity.RegisterOptions{Name: OpenRouterAdminCaptureCursorActivityName})
 	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.Reconcile, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
+	issuerKeySweep := NewInternalSessionIssuerKeySweepActivities(logger, meterProvider, opts.IssuerKeySweeper)
+	temporalWorker.RegisterActivityWithOptions(issuerKeySweep.Sweep, activity.RegisterOptions{Name: InternalSessionIssuerKeySweepActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -706,6 +713,7 @@ func NewTemporalWorker(
 	}
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
+	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -755,6 +763,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PlatformMCPReceiptGCWorkflow)
+	temporalWorker.RegisterWorkflow(SSOSignInRevocationSweepWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflowDebounced)
@@ -852,6 +861,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		return
 	}
 
+	// The sweep disables KMS versions. Preview databases clone dev's keys,
+	// so only the shared queue may run it.
+	if err := AddInternalSessionIssuerKeySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add internal session issuer key sweep schedule", attr.SlogError(err))
+	}
+
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(ctx, "failed to add platform usage metrics schedule", attr.SlogError(err))
@@ -928,6 +943,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddPlatformMCPReceiptGCSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add platform mcp receipt gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddSSOSignInRevocationSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add sso sign-in revocation sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
