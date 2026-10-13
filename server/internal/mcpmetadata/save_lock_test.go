@@ -2,7 +2,6 @@ package mcpmetadata_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -45,7 +44,8 @@ func TestSetMcpMetadata_SerializesConcurrentSavesAcrossKeys(t *testing.T) {
 		saved, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{ToolsetSlug: new(types.Slug(toolset.Slug)), Instructions: new("after")})
 		done <- result{metadata: saved, err: err}
 	}()
-	require.Never(t, func() bool { return len(done) > 0 }, 300*time.Millisecond, 20*time.Millisecond, "the save waits for the backend lock")
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), "%AcquireMetadataBackendLock%")
+	require.Empty(t, done, "the save waits for the backend lock")
 	require.NoError(t, tx.Commit(ctx))
 
 	got := <-done
