@@ -35,6 +35,8 @@ CREATE TABLE "sso_sign_in_revocation_deliveries" (
   PRIMARY KEY ("id"),
   CONSTRAINT "sso_sign_in_revocation_deliveries_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
 );
+-- Create index "sso_sign_in_revocation_deliveries_organization_id_idx" to table: "sso_sign_in_revocation_deliveries"
+CREATE INDEX "sso_sign_in_revocation_deliveries_organization_id_idx" ON "sso_sign_in_revocation_deliveries" ("organization_id");
 -- Create index "sso_sign_in_revocation_deliveries_pending_idx" to table: "sso_sign_in_revocation_deliveries"
 CREATE INDEX "sso_sign_in_revocation_deliveries_pending_idx" ON "sso_sign_in_revocation_deliveries" ("created_at") WHERE (delivered_at IS NULL);
 -- Create index "sso_sign_in_revocation_deliveries_pending_key" to table: "sso_sign_in_revocation_deliveries"
