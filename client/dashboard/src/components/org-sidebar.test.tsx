@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   isPlatformAdmin: false,
   productTier: "enterprise" as ProductTier,
   adminOrganizationId: null as string | null,
+  userSessionIssuersFlag: "disabled" as "enabled" | "disabled",
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () =>
@@ -68,6 +69,9 @@ vi.mock("@/hooks/useProductTier", () => ({
 
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: mocks.userSessionIssuersFlag }),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: mocks.features,
@@ -145,6 +149,7 @@ afterEach(() => {
   mocks.isPlatformAdmin = false;
   mocks.productTier = "enterprise";
   mocks.adminOrganizationId = null;
+  mocks.userSessionIssuersFlag = "disabled";
 });
 
 it("lists one IDP and SSO entry under Team and no vendor entry", () => {
@@ -177,6 +182,18 @@ it.each([
   expect(screen.getByTestId("selection").getAttribute("data-item")).toBe(
     active === "identity" ? "IDP and SSO" : active,
   );
+});
+
+it("lists Speakeasy authorization servers under Settings only once rolled out", () => {
+  render(<OrgSidebar />);
+  expect(screen.queryByRole("link", { name: "userSessionIssuers" })).toBeNull();
+  cleanup();
+
+  mocks.userSessionIssuersFlag = "enabled";
+  render(<OrgSidebar />);
+  const link = screen.getByRole("link", { name: "userSessionIssuers" });
+  expect(link.textContent).toBe("Authorization Servers");
+  expect(link.getAttribute("data-scope")).toBe("org:read org:admin");
 });
 
 it("lists the Access Hub under Secure, gated on the workload scopes", () => {

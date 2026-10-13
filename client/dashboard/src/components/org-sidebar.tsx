@@ -26,6 +26,8 @@ import { useCanSetUpOrg } from "@/hooks/useCanSetUpOrg";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -74,6 +76,9 @@ export function OrgSidebar({
   const isPlatformAdmin = useIsPlatformAdmin();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
+  const isUserSessionIssuersEnabled =
+    useFeatureFlag(FEATURE_FLAGS.userSessionIssuerDashboard).status ===
+    "enabled";
 
   const settingsActive = [
     orgRoutes.billing,
@@ -83,6 +88,7 @@ export function OrgSidebar({
     orgRoutes.skills,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
+    orgRoutes.userSessionIssuers,
     orgRoutes.externalServices,
     orgRoutes.encryptionKeys,
   ].some((r) => r.active);
@@ -133,6 +139,7 @@ export function OrgSidebar({
     orgRoutes.skills,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
+    orgRoutes.userSessionIssuers,
     orgRoutes.externalServices,
     orgRoutes.encryptionKeys,
     orgRoutes.data,
@@ -194,6 +201,15 @@ export function OrgSidebar({
                   { item: orgRoutes.skills, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
+                  ...(isUserSessionIssuersEnabled
+                    ? [
+                        {
+                          item: orgRoutes.userSessionIssuers,
+                          scope: orgReadOrAdmin,
+                          label: "Authorization Servers",
+                        },
+                      ]
+                    : []),
                 ]}
               />
 

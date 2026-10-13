@@ -111,6 +111,11 @@ import {
   EncryptionKeysRoot,
 } from "./pages/org/encryption-keys/EncryptionKeys";
 import OrgWebhooks from "./pages/org/OrgWebhooks";
+import UserSessionIssuerDetail from "./pages/user-session-issuers/UserSessionIssuerDetail";
+import {
+  UserSessionIssuersPage,
+  UserSessionIssuersRoot,
+} from "./pages/user-session-issuers/UserSessionIssuers";
 import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
@@ -1412,6 +1417,22 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "webhook",
     stage: "beta",
     component: OrgWebhooks,
+  },
+  // Rolled out behind gram-user-session-issuer-dashboard, which the root
+  // checks; the sidebar hides the entry while it is off.
+  userSessionIssuers: {
+    title: "Speakeasy Authorization Servers",
+    url: "user-session-issuers",
+    icon: "key-round",
+    component: UserSessionIssuersRoot,
+    indexComponent: UserSessionIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Speakeasy Authorization Server",
+        url: ":issuerId",
+        component: UserSessionIssuerDetail,
+      },
+    },
   },
   externalServices: {
     title: "External Services",
