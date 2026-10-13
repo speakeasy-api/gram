@@ -1318,13 +1318,18 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		return nil, portalLinkError(intent, err).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
 	}
 	if strings.TrimSpace(link) == "" {
-		return nil, oops.E(oops.CodeGatewayError, nil, "%s setup could not be started right now. Try again in a few minutes.", portalIntentLabel(intent)).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
+		return nil, oops.E(oops.CodeGatewayError, nil, portalRetryLater, portalIntentLabel(intent)).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
 	}
 
 	return &gen.GenerateWorkOSAdminPortalLinkResult{
 		URL: link,
 	}, nil
 }
+
+// portalRetryLater is the answer to every portal failure the admin can only
+// wait out: unreachable, an upstream 5xx, and a success carrying no link. They
+// are three faults for us and one situation for them.
+const portalRetryLater = "%s setup could not be started right now. Try again in a few minutes."
 
 // portalIntentLabel names an Admin Portal intent as the thing the admin was
 // trying to set up. Capitalized because every message below opens with it.
@@ -1354,6 +1359,7 @@ func portalIntentLabel(intent workos.PortalIntent) string {
 // distinction only we can act on, and naming it hands the reader a dead end.
 // WorkOS is named in this flow only where the admin's next action is in the
 // WorkOS tab.
+//
 // The failing status still decides which branch runs — it is what separates
 // "wait and retry" from "verify a domain" from "we have to fix this" — and the
 // cause, which carries WorkOS's response body, goes to the log and the span.
@@ -1366,7 +1372,7 @@ func portalLinkError(intent workos.PortalIntent, cause error) *oops.ShareableErr
 
 	var apiErr *workos.APIError
 	if !errors.As(cause, &apiErr) {
-		return oops.E(oops.CodeGatewayError, cause, "%s setup could not be started right now. Try again in a few minutes.", label)
+		return oops.E(oops.CodeGatewayError, cause, portalRetryLater, label)
 	}
 
 	switch {
@@ -1381,7 +1387,7 @@ func portalLinkError(intent workos.PortalIntent, cause error) *oops.ShareableErr
 		// their message through the SDK, so 502 is the closest declared fit.
 		return oops.E(oops.CodeGatewayError, cause, "Too many %s setup attempts. Wait a minute, then try again.", label)
 	case apiErr.StatusCode >= http.StatusInternalServerError:
-		return oops.E(oops.CodeGatewayError, cause, "%s setup could not be started right now. Try again in a few minutes.", label)
+		return oops.E(oops.CodeGatewayError, cause, portalRetryLater, label)
 	case isPortalValidationStatus(apiErr.StatusCode) && intent == workos.PortalIntentSSO:
 		// A missing verified domain is the common cause of a refused SSO portal
 		// session and the one precondition an admin can clear without support,
@@ -1391,10 +1397,11 @@ func portalLinkError(intent workos.PortalIntent, cause error) *oops.ShareableErr
 		// the diagnosis. No equivalent precondition is established for the
 		// other intents, so they fall through to the generic next step.
 		return oops.E(oops.CodeBadRequest, cause, "%s setup was refused. Verify a domain for this organization, then try again, or contact Speakeasy support if one is already verified.", label)
-	case apiErr.StatusCode >= http.StatusBadRequest:
-		return oops.E(oops.CodeBadRequest, cause, "%s setup could not be started. Contact Speakeasy support if it keeps failing.", label)
 	default:
-		return oops.E(oops.CodeGatewayError, cause, "%s setup could not be started. Try again, and contact Speakeasy support if it keeps failing.", label)
+		// Everything left is a 4xx WorkOS refused for a reason we cannot name:
+		// an APIError only exists for a status at or above 400, so there is no
+		// lower band to fall through to.
+		return oops.E(oops.CodeBadRequest, cause, "%s setup could not be started. Contact Speakeasy support if it keeps failing.", label)
 	}
 }
 
