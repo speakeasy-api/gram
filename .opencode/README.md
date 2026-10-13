@@ -6,11 +6,12 @@ directory. It activates only when that comma-separated value contains the exact
 ID `speakeasy.pause-stack` (surrounding whitespace is ignored). An unset variable
 or failed lookup leaves it disabled.
 
-Enable it locally by adding the ID to `GRAM_OPENCODE_PLUGINS` in
-`mise.local.toml`. If no other plugins are enabled:
+Enable it locally by appending the ID to `GRAM_OPENCODE_PLUGINS` in
+`mise.local.toml`, preserving any plugins already enabled:
 
 ```sh
-mise set --file mise.local.toml GRAM_OPENCODE_PLUGINS=speakeasy.pause-stack
+plugins="$(mise set GRAM_OPENCODE_PLUGINS 2>/dev/null || true)"
+mise set --file mise.local.toml "GRAM_OPENCODE_PLUGINS=${plugins:+$plugins,}speakeasy.pause-stack"
 ```
 
 After changing the variable, reload the plugin with
