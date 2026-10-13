@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -424,8 +425,8 @@ func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t 
 	result, err := svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference"})
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
-		{KeyType: "chat", CreditsUsed: 42.75, MonthlyCredits: 100, Disabled: true, DisableCauses: []string{"admin_lock", "future_policy"}, DisableCausesClassified: true},
-		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true, DisableCauses: []string{"admin_lock"}, DisableCausesClassified: true},
+		{KeyType: "chat", CreditsUsed: 42.75, MonthlyCredits: 100, Disabled: true, DisableCauses: []string{"admin_lock", "future_policy"}, DisableCausesClassified: true, CauseDiagnostics: []*gen.AdminInferenceKeyCause{{Cause: "admin_lock", Description: "Explicit staff lock.", Removable: true}, {Cause: "future_policy", Description: "Unrecognized disable cause.", Removable: false, BlockedReason: conv.PtrEmpty("Investigate with engineering; unknown causes cannot be removed here.")}}},
+		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true, DisableCauses: []string{"admin_lock"}, DisableCausesClassified: true, CauseDiagnostics: []*gen.AdminInferenceKeyCause{{Cause: "admin_lock", Description: "Explicit staff lock.", Removable: true}}},
 	}, result)
 }
 
@@ -462,7 +463,7 @@ func TestGetInferenceKeysOmitsUnsupportedAndAbsentKeys(t *testing.T) {
 	result, err := svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference_filtered"})
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
-		{KeyType: "chat", CreditsUsed: 7.25, MonthlyCredits: 100, Disabled: false, DisableCauses: []string{}, DisableCausesClassified: true},
+		{KeyType: "chat", CreditsUsed: 7.25, MonthlyCredits: 100, Disabled: false, DisableCauses: []string{}, DisableCausesClassified: true, CauseDiagnostics: []*gen.AdminInferenceKeyCause{}},
 	}, result)
 
 }
