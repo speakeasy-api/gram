@@ -12,6 +12,11 @@ func CreateIssuerOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.create"
 }
 
+// CreateSharedIssuerOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service createSharedIssuer HTTP endpoint.
+func CreateSharedIssuerOrganizationUserSessionIssuersPath() string {
+	return "/rpc/organizationUserSessionIssuers.createShared"
+}
+
 // ListIssuersOrganizationUserSessionIssuersPath returns the URL path to the organizationUserSessionIssuers service listIssuers HTTP endpoint.
 func ListIssuersOrganizationUserSessionIssuersPath() string {
 	return "/rpc/organizationUserSessionIssuers.list"

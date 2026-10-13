@@ -108,6 +108,10 @@ type platformMCPConfig struct {
 	// OutboundCallbackOrigin is the pinned origin of the identity provider
 	// callback the Platform MCP OAuth login registers.
 	OutboundCallbackOrigin *url.URL
+	// SharedIssuerProvisioner is the management API's shared issuer
+	// creation, behind create_shared_authorization_server. Nil keeps the tool
+	// visible as unavailable.
+	SharedIssuerProvisioner platformmcp.SharedAuthorizationServerProvisioner
 	// SkillInsights is the ClickHouse read behind the skill insight tools.
 	// Startup always supplies it; a nil reader keeps the tools registered as
 	// stubs rather than answering with empty insights.
@@ -482,6 +486,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
+		WithSharedAuthorizationServers(config.SharedIssuerProvisioner).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithShadowMCPReviewLinks(shadowReviewLinks).
@@ -1079,6 +1084,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
+		WithSharedAuthorizationServers(config.SharedIssuerProvisioner).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithShadowMCPReviewLinks(shadowReviewLinks).

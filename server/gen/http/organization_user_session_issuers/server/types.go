@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	organizationusersessionissuers "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -29,6 +31,16 @@ type CreateIssuerRequestBody struct {
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+}
+
+// CreateSharedIssuerRequestBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// request body.
+type CreateSharedIssuerRequestBody struct {
+	// Caller-chosen key that makes the request safe to retry. Submissions from the
+	// same organization with the same key resolve to the same issuer; choose a new
+	// key to create another issuer.
+	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 }
 
 // UpdateIssuerRequestBody is the type of the "organizationUserSessionIssuers"
@@ -121,8 +133,62 @@ type CreateIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// CreateSharedIssuerResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body.
+type CreateSharedIssuerResponseBody struct {
+	// The user_session_issuer id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The owning project id; empty for organization-owned issuers.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning organization id.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
+	// slugs may repeat.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// chain | interactive.
+	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
+	// Maximum issued user session lifetime, in hours.
+	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. 'open' is the resting policy an issuer carries
+	// unless an operator chooses otherwise: it admits any spec-valid document, and
+	// 'presets' enforcement is opt-in because a denial under it is unrecoverable
+	// for the end user. Note 'reporting' can be READ but not written: it is a
+	// legacy value that admits exactly what 'open' admits, and no issuer is
+	// created with it.
+	ClientIDMetadataAdmissionMode string `form:"client_id_metadata_admission_mode" json:"client_id_metadata_admission_mode" xml:"client_id_metadata_admission_mode"`
+	// The organization-level or global remote_session_issuer whose assertions this
+	// issuer trusts. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
+	// The organization-level remote_session_client Speakeasy uses with the trusted
+	// issuer. Absent when enterprise-managed authorization is disabled.
+	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListIssuersResponseBody is the type of the "organizationUserSessionIssuers"
@@ -164,8 +230,17 @@ type GetIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateIssuerResponseBody is the type of the "organizationUserSessionIssuers"
@@ -199,8 +274,17 @@ type UpdateIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerDeletePreflightResponseBody is the type of the
@@ -254,8 +338,17 @@ type MoveIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerMigratePreflightResponseBody is the type of the
@@ -524,6 +617,196 @@ type CreateIssuerUnexpectedResponseBody struct {
 // "organizationUserSessionIssuers" service "createIssuer" endpoint HTTP
 // response body for the "gateway_error" error.
 type CreateIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "unauthorized" error.
+type CreateSharedIssuerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "forbidden" error.
+type CreateSharedIssuerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "bad_request" error.
+type CreateSharedIssuerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "not_found" error.
+type CreateSharedIssuerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "conflict" error.
+type CreateSharedIssuerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "unsupported_media" error.
+type CreateSharedIssuerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "invalid" error.
+type CreateSharedIssuerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "invariant_violation" error.
+type CreateSharedIssuerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "unexpected" error.
+type CreateSharedIssuerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateSharedIssuerGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint HTTP
+// response body for the "gateway_error" error.
+type CreateSharedIssuerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2850,8 +3133,17 @@ type UserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // OrganizationUserSessionIssuerReferenceResponseBody is used to define fields
@@ -2908,6 +3200,30 @@ func NewCreateIssuerResponseBody(res *types.UserSessionIssuer) *CreateIssuerResp
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:       res.AuthorizationServerMode,
+		IssuerURL:                     res.IssuerURL,
+		CreatedAt:                     res.CreatedAt,
+		UpdatedAt:                     res.UpdatedAt,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerResponseBody builds the HTTP response body from the
+// result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerResponseBody(res *types.UserSessionIssuer) *CreateSharedIssuerResponseBody {
+	body := &CreateSharedIssuerResponseBody{
+		ID:                            res.ID,
+		ProjectID:                     res.ProjectID,
+		OrganizationID:                res.OrganizationID,
+		Slug:                          res.Slug,
+		AuthnChallengeMode:            res.AuthnChallengeMode,
+		SessionDurationHours:          res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:       res.AuthorizationServerMode,
+		IssuerURL:                     res.IssuerURL,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -2948,6 +3264,8 @@ func NewGetIssuerResponseBody(res *types.UserSessionIssuer) *GetIssuerResponseBo
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:       res.AuthorizationServerMode,
+		IssuerURL:                     res.IssuerURL,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -2967,6 +3285,8 @@ func NewUpdateIssuerResponseBody(res *types.UserSessionIssuer) *UpdateIssuerResp
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:       res.AuthorizationServerMode,
+		IssuerURL:                     res.IssuerURL,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -3023,6 +3343,8 @@ func NewMoveIssuerResponseBody(res *types.UserSessionIssuer) *MoveIssuerResponse
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:       res.AuthorizationServerMode,
+		IssuerURL:                     res.IssuerURL,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -3275,6 +3597,156 @@ func NewCreateIssuerUnexpectedResponseBody(res *goa.ServiceError) *CreateIssuerU
 // "organizationUserSessionIssuers" service.
 func NewCreateIssuerGatewayErrorResponseBody(res *goa.ServiceError) *CreateIssuerGatewayErrorResponseBody {
 	body := &CreateIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerUnauthorizedResponseBody(res *goa.ServiceError) *CreateSharedIssuerUnauthorizedResponseBody {
+	body := &CreateSharedIssuerUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerForbiddenResponseBody builds the HTTP response body
+// from the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerForbiddenResponseBody(res *goa.ServiceError) *CreateSharedIssuerForbiddenResponseBody {
+	body := &CreateSharedIssuerForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerBadRequestResponseBody builds the HTTP response body
+// from the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerBadRequestResponseBody(res *goa.ServiceError) *CreateSharedIssuerBadRequestResponseBody {
+	body := &CreateSharedIssuerBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerNotFoundResponseBody builds the HTTP response body from
+// the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerNotFoundResponseBody(res *goa.ServiceError) *CreateSharedIssuerNotFoundResponseBody {
+	body := &CreateSharedIssuerNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerConflictResponseBody builds the HTTP response body from
+// the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerConflictResponseBody(res *goa.ServiceError) *CreateSharedIssuerConflictResponseBody {
+	body := &CreateSharedIssuerConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateSharedIssuerUnsupportedMediaResponseBody {
+	body := &CreateSharedIssuerUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerInvalidResponseBody builds the HTTP response body from
+// the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerInvalidResponseBody(res *goa.ServiceError) *CreateSharedIssuerInvalidResponseBody {
+	body := &CreateSharedIssuerInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerInvariantViolationResponseBody(res *goa.ServiceError) *CreateSharedIssuerInvariantViolationResponseBody {
+	body := &CreateSharedIssuerInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerUnexpectedResponseBody(res *goa.ServiceError) *CreateSharedIssuerUnexpectedResponseBody {
+	body := &CreateSharedIssuerUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateSharedIssuerGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createSharedIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewCreateSharedIssuerGatewayErrorResponseBody(res *goa.ServiceError) *CreateSharedIssuerGatewayErrorResponseBody {
+	body := &CreateSharedIssuerGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5100,6 +5572,17 @@ func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string)
 	return v
 }
 
+// NewCreateSharedIssuerPayload builds a organizationUserSessionIssuers service
+// createSharedIssuer endpoint payload.
+func NewCreateSharedIssuerPayload(body *CreateSharedIssuerRequestBody, sessionToken *string) *organizationusersessionissuers.CreateSharedIssuerPayload {
+	v := &organizationusersessionissuers.CreateSharedIssuerPayload{
+		IdempotencyKey: *body.IdempotencyKey,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListIssuersPayload builds a organizationUserSessionIssuers service
 // listIssuers endpoint payload.
 func NewListIssuersPayload(cursor *string, limit *int, sessionToken *string) *organizationusersessionissuers.ListIssuersPayload {
@@ -5269,6 +5752,25 @@ func ValidateCreateIssuerRequestBody(body *CreateIssuerRequestBody) (err error) 
 	if body.SessionDurationHours != nil {
 		if *body.SessionDurationHours > 2.562047e+06 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.session_duration_hours", *body.SessionDurationHours, 2.562047e+06, false))
+		}
+	}
+	return
+}
+
+// ValidateCreateSharedIssuerRequestBody runs the validations defined on
+// CreateSharedIssuerRequestBody
+func ValidateCreateSharedIssuerRequestBody(body *CreateSharedIssuerRequestBody) (err error) {
+	if body.IdempotencyKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("idempotency_key", "body"))
+	}
+	if body.IdempotencyKey != nil {
+		if utf8.RuneCountInString(*body.IdempotencyKey) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 1, true))
+		}
+	}
+	if body.IdempotencyKey != nil {
+		if utf8.RuneCountInString(*body.IdempotencyKey) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 200, false))
 		}
 	}
 	return

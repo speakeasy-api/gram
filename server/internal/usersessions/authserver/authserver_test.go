@@ -141,3 +141,32 @@ func TestHosts_ServesSharedOn(t *testing.T) {
 		})
 	}
 }
+
+// A pin derived for a new issuer is on the server URL origin and is exactly
+// what SharedIssuerURL derives for the row once it is stored.
+func TestPinnedSharedIssuerURL_RoundTripsThroughSharedIssuerURL(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.New()
+	pin, err := testHosts.PinnedSharedIssuerURL(id)
+	require.NoError(t, err)
+	require.Equal(t, testServerURL+authserver.SharedPath(id), pin)
+
+	issuer := sharedIssuer(false)
+	issuer.ID = id
+	issuer.PinnedIssuerUrl = conv.ToPGText(pin)
+	served, err := testHosts.SharedIssuerURL(issuer)
+	require.NoError(t, err)
+	require.Equal(t, pin, served)
+}
+
+// A deployment with no usable server URL serves no shared authorization
+// server, so no pin can be derived for it.
+func TestPinnedSharedIssuerURL_RefusesUnservedOrigin(t *testing.T) {
+	t.Parallel()
+
+	for _, serverURL := range []string{"", "not a url", "app.example.com"} {
+		_, err := (authserver.Hosts{ServerURL: serverURL, AuthenticationHostBaseURL: "", PlatformHosts: nil}).PinnedSharedIssuerURL(uuid.New())
+		require.Error(t, err, serverURL)
+	}
+}

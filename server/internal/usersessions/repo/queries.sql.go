@@ -623,6 +623,82 @@ func (q *Queries) CreateOrganizationUserSessionIssuerCimdClient(ctx context.Cont
 	return i, err
 }
 
+const createSharedOrganizationUserSessionIssuer = `-- name: CreateSharedOrganizationUserSessionIssuer :one
+INSERT INTO user_session_issuers (
+    id,
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration,
+    client_id_metadata_admission_mode,
+    authorization_server_mode,
+    pinned_issuer_url
+)
+VALUES (
+    $1,
+    NULL,
+    $2,
+    $3,
+    $4,
+    $5,
+    'open',
+    $6,
+    $7
+)
+ON CONFLICT (id) DO NOTHING
+RETURNING id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, use_authentication_host, authorization_server_mode, pinned_issuer_url, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateSharedOrganizationUserSessionIssuerParams struct {
+	ID                      uuid.UUID
+	OrganizationID          pgtype.Text
+	Slug                    string
+	AuthnChallengeMode      string
+	SessionDuration         pgtype.Interval
+	AuthorizationServerMode string
+	PinnedIssuerUrl         pgtype.Text
+}
+
+// Creates an organization-owned issuer in shared authorization-server mode
+// with its issuer URL pinned in the same statement. The id is chosen by the
+// caller, derived from the organization and an idempotency key, so a retry
+// or a concurrent submission with the same key hits the primary key and
+// inserts nothing; the caller then reads the row that id names.
+func (q *Queries) CreateSharedOrganizationUserSessionIssuer(ctx context.Context, arg CreateSharedOrganizationUserSessionIssuerParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, createSharedOrganizationUserSessionIssuer,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.AuthnChallengeMode,
+		arg.SessionDuration,
+		arg.AuthorizationServerMode,
+		arg.PinnedIssuerUrl,
+	)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
+		&i.AuthorizationServerMode,
+		&i.PinnedIssuerUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createUserSession = `-- name: CreateUserSession :one
 WITH issuer AS (
     SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id

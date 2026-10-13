@@ -130,7 +130,7 @@ func TestRevokeUserSessionClient_RevocationCacheFailure(t *testing.T) {
 	t.Parallel()
 
 	revoker := &failingTokenRevoker{}
-	ctx, ti := newTestServiceWithRevoker(t, revoker)
+	ctx, ti := newTestServiceWith(t, testServiceConfig{revoker: revoker})
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
 		SessionToken:         nil,
@@ -179,7 +179,7 @@ func TestRevokeUserSessionClient_PartialRevocationFailure(t *testing.T) {
 	t.Parallel()
 
 	revoker := &partialTokenRevoker{}
-	ctx, ti := newTestServiceWithRevoker(t, revoker)
+	ctx, ti := newTestServiceWith(t, testServiceConfig{revoker: revoker})
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
 		SessionToken:         nil,

@@ -10,6 +10,20 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every attached MCP server its own authorization server; 'shared' serves one authorization server for the issuer, used by all of its MCP servers.
+ */
+export const AuthorizationServerMode = {
+  Endpoint: "endpoint",
+  Shared: "shared",
+} as const;
+/**
+ * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every attached MCP server its own authorization server; 'shared' serves one authorization server for the issuer, used by all of its MCP servers.
+ */
+export type AuthorizationServerMode = ClosedEnum<
+  typeof AuthorizationServerMode
+>;
+
+/**
  * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.
  */
 export const ClientIdMetadataAdmissionMode = {
@@ -34,6 +48,10 @@ export type UserSessionIssuer = {
    */
   authnChallengeMode: string;
   /**
+   * Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every attached MCP server its own authorization server; 'shared' serves one authorization server for the issuer, used by all of its MCP servers.
+   */
+  authorizationServerMode: AuthorizationServerMode;
+  /**
    * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.
    */
   clientIdMetadataAdmissionMode: ClientIdMetadataAdmissionMode;
@@ -42,6 +60,10 @@ export type UserSessionIssuer = {
    * The user_session_issuer id.
    */
   id: string;
+  /**
+   * The OAuth issuer identifier pinned for the issuer's shared authorization server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode. The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+   */
+  issuerUrl?: string | undefined;
   /**
    * The owning organization id.
    */
@@ -70,6 +92,11 @@ export type UserSessionIssuer = {
 };
 
 /** @internal */
+export const AuthorizationServerMode$inboundSchema: z.ZodMiniEnum<
+  typeof AuthorizationServerMode
+> = z.enum(AuthorizationServerMode);
+
+/** @internal */
 export const ClientIdMetadataAdmissionMode$inboundSchema: z.ZodMiniEnum<
   typeof ClientIdMetadataAdmissionMode
 > = z.enum(ClientIdMetadataAdmissionMode);
@@ -81,6 +108,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     authn_challenge_mode: z.string(),
+    authorization_server_mode: AuthorizationServerMode$inboundSchema,
     client_id_metadata_admission_mode:
       ClientIdMetadataAdmissionMode$inboundSchema,
     created_at: z.pipe(
@@ -88,6 +116,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    issuer_url: z.optional(z.string()),
     organization_id: z.string(),
     project_id: z.string(),
     session_duration_hours: z.int(),
@@ -102,8 +131,10 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "authn_challenge_mode": "authnChallengeMode",
+      "authorization_server_mode": "authorizationServerMode",
       "client_id_metadata_admission_mode": "clientIdMetadataAdmissionMode",
       "created_at": "createdAt",
+      "issuer_url": "issuerUrl",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "session_duration_hours": "sessionDurationHours",

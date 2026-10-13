@@ -207,3 +207,34 @@ func issuerIDs(items []*types.WorkloadTokenEndpoint) []string {
 	}
 	return ids
 }
+
+// An issuer created the way CreateSharedIssuer creates one, with its mode
+// and pin written together, is discovered at exactly the pinned issuer.
+func TestListTokenEndpoints_ListsIssuerCreatedWithPinnedSharedMode(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	id := uuid.New()
+	hosts := authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil}
+	pin, err := hosts.PinnedSharedIssuerURL(id)
+	require.NoError(t, err)
+	issuer, err := usersessions_repo.New(ti.conn).CreateSharedOrganizationUserSessionIssuer(ctx, usersessions_repo.CreateSharedOrganizationUserSessionIssuerParams{
+		ID:                      id,
+		OrganizationID:          conv.ToPGText(ti.orgID),
+		Slug:                    "shared-authorization-server-" + id.String()[:8],
+		AuthnChallengeMode:      "interactive",
+		SessionDuration:         oneDay,
+		AuthorizationServerMode: string(authserver.ModeShared),
+		PinnedIssuerUrl:         conv.ToPGText(pin),
+	})
+	require.NoError(t, err)
+	require.Equal(t, id, issuer.ID)
+
+	result, err := ti.service.ListTokenEndpoints(withoutProject(t, ctx), listTokenEndpointsPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, id.String(), result.Items[0].UserSessionIssuerID)
+	require.Equal(t, pin, result.Items[0].Issuer)
+	require.Equal(t, pin+"/token", result.Items[0].TokenEndpoint)
+	require.Empty(t, result.Items[0].ProjectID)
+}

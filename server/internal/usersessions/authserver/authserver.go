@@ -102,6 +102,20 @@ func (h Hosts) SharedIssuerURL(issuer repo.UserSessionIssuer) (string, error) {
 	return origin + path, nil
 }
 
+// PinnedSharedIssuerURL is the issuer identifier to pin on a shared-mode
+// issuer created with issuerID: this deployment's server URL origin followed
+// by the issuer's path. Deriving it from the id that is about to be inserted
+// lets the pin be written in the same statement as the mode. It is refused
+// when the shared routes are not served on that origin, so a pin is never
+// written that SharedIssuerURL would later reject.
+func (h Hosts) PinnedSharedIssuerURL(issuerID uuid.UUID) (string, error) {
+	origin := requestorigin.URLOrigin(h.ServerURL)
+	if !h.ServesSharedOn(origin) {
+		return "", fmt.Errorf("shared authorization server issuer origin %q is not served by this deployment", origin)
+	}
+	return origin + SharedPath(issuerID), nil
+}
+
 // SharedTokenEndpoint is the token endpoint of the shared authorization
 // server whose issuer identifier is issuerURL.
 func SharedTokenEndpoint(issuerURL string) (string, error) {

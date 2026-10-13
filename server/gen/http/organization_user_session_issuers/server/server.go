@@ -21,6 +21,7 @@ import (
 type Server struct {
 	Mounts                    []*MountPoint
 	CreateIssuer              http.Handler
+	CreateSharedIssuer        http.Handler
 	ListIssuers               http.Handler
 	GetIssuer                 http.Handler
 	UpdateIssuer              http.Handler
@@ -63,6 +64,7 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"CreateIssuer", "POST", "/rpc/organizationUserSessionIssuers.create"},
+			{"CreateSharedIssuer", "POST", "/rpc/organizationUserSessionIssuers.createShared"},
 			{"ListIssuers", "GET", "/rpc/organizationUserSessionIssuers.list"},
 			{"GetIssuer", "GET", "/rpc/organizationUserSessionIssuers.get"},
 			{"UpdateIssuer", "POST", "/rpc/organizationUserSessionIssuers.update"},
@@ -77,6 +79,7 @@ func New(
 			{"DeleteCimdClient", "DELETE", "/rpc/organizationUserSessionIssuers.deleteCimdClient"},
 		},
 		CreateIssuer:              NewCreateIssuerHandler(e.CreateIssuer, mux, decoder, encoder, errhandler, formatter),
+		CreateSharedIssuer:        NewCreateSharedIssuerHandler(e.CreateSharedIssuer, mux, decoder, encoder, errhandler, formatter),
 		ListIssuers:               NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
 		GetIssuer:                 NewGetIssuerHandler(e.GetIssuer, mux, decoder, encoder, errhandler, formatter),
 		UpdateIssuer:              NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
@@ -98,6 +101,7 @@ func (s *Server) Service() string { return "organizationUserSessionIssuers" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateIssuer = m(s.CreateIssuer)
+	s.CreateSharedIssuer = m(s.CreateSharedIssuer)
 	s.ListIssuers = m(s.ListIssuers)
 	s.GetIssuer = m(s.GetIssuer)
 	s.UpdateIssuer = m(s.UpdateIssuer)
@@ -119,6 +123,7 @@ func (s *Server) MethodNames() []string { return organizationusersessionissuers.
 // endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateIssuerHandler(mux, h.CreateIssuer)
+	MountCreateSharedIssuerHandler(mux, h.CreateSharedIssuer)
 	MountListIssuersHandler(mux, h.ListIssuers)
 	MountGetIssuerHandler(mux, h.GetIssuer)
 	MountUpdateIssuerHandler(mux, h.UpdateIssuer)
@@ -170,6 +175,60 @@ func NewCreateIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateSharedIssuerHandler configures the mux to serve the
+// "organizationUserSessionIssuers" service "createSharedIssuer" endpoint.
+func MountCreateSharedIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizationUserSessionIssuers.createShared", f)
+}
+
+// NewCreateSharedIssuerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizationUserSessionIssuers" service
+// "createSharedIssuer" endpoint.
+func NewCreateSharedIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateSharedIssuerRequest(mux, decoder)
+		encodeResponse = EncodeCreateSharedIssuerResponse(encoder)
+		encodeError    = EncodeCreateSharedIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createSharedIssuer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {
