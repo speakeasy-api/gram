@@ -160,6 +160,20 @@ func TestDeviceAssertion_RetiredKeyIsRefused(t *testing.T) {
 	require.ErrorContains(t, f.presentRaw(t, signDeviceAssertion(t, device.key, device.thumbprint, device.subject)), "device_key_not_registered")
 }
 
+// An issuer whose key_source is not a known value fails closed instead of
+// falling back to its remote key set.
+func TestDeviceAssertion_UnknownKeySourceFailsClosed(t *testing.T) {
+	t.Parallel()
+	f := newLiveWorkloadFixture(t)
+	issuerID := seedDeviceIssuer(t, f)
+	device := enrollDevice(t, f, issuerID)
+
+	_, err := f.conn.Exec(t.Context(), "UPDATE workload_issuers SET key_source = 'device_keyz' WHERE id = $1", issuerID) //nolint:glint // notestingrawsql: an unknown key_source is never written by application code, so no SQLc query exists to produce one
+	require.NoError(t, err)
+
+	require.ErrorContains(t, f.presentRaw(t, signDeviceAssertion(t, device.key, device.thumbprint, device.subject)), "issuer_key_source_unknown")
+}
+
 // A registered key whose subject is not admitted is refused at admission.
 func TestDeviceAssertion_UnadmittedDeviceIsRefused(t *testing.T) {
 	t.Parallel()

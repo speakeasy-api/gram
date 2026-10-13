@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy"
 )
 
@@ -134,6 +136,51 @@ func TestRegisterDevice_TokenIsSingleUse(t *testing.T) {
 
 	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
 	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+// Grants removed after the token was issued are caught at redemption, and the
+// refusal leaves the token unspent.
+func TestRegisterDevice_RechecksTheDeviceAgentGrants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	agentID := newAgent(t, ctx, ti, "grants-removed")
+	token := createJoinToken(t, ctx, ti, agentID)
+
+	selectors, err := authz.NewSelector(authz.ScopeOrgHooksIngest, ti.orgID).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
+		OrganizationID: ti.orgID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
+		Scope:          string(authz.ScopeOrgHooksIngest),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+
+	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+
+	seedAgentGrant(t, ctx, ti, agentID, authz.ScopeOrgHooksIngest)
+	_, err = registerDevice(ctx, ti, token, publicJWK(t, newDeviceKey(t).Public()))
+	require.NoError(t, err, "the refused attempt must not have spent the token")
+}
+
+// A key already live for one device cannot be registered for a second, which
+// would let one private key sign as both.
+func TestRegisterDevice_RefusesAKeyAlreadyRegistered(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	agentID := newAgent(t, ctx, ti, "shared-key")
+	jwk := publicJWK(t, newDeviceKey(t).Public())
+
+	_, err := registerDevice(ctx, ti, createJoinToken(t, ctx, ti, agentID), jwk)
+	require.NoError(t, err)
+
+	second := createJoinToken(t, ctx, ti, agentID)
+	_, err = registerDevice(ctx, ti, second, jwk)
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = registerDevice(ctx, ti, second, publicJWK(t, newDeviceKey(t).Public()))
+	require.NoError(t, err, "the conflicting attempt must not have spent the token")
 }
 
 func TestRegisterDevice_RefusesExpiredAndUnknownTokens(t *testing.T) {
@@ -288,17 +335,26 @@ func TestRegisterIssuer_RefusesTheDeviceIssuerPrefix(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
-		Name:                   "impostor",
-		Issuer:                 workloadpolicy.DeviceIssuer(testServerURL, ti.orgID),
-		JwksURI:                "https://attacker.example.com/jwks.json",
-		Description:            nil,
-		Tags:                   nil,
-		AllowWildcardAdmission: nil,
-		ProjectScoped:          false,
-		SessionToken:           nil,
-		ApikeyToken:            nil,
-		ProjectSlugInput:       nil,
-	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	// Every spelling issuer lookup treats as the same URL is reserved.
+	for _, issuer := range []string{
+		workloadpolicy.DeviceIssuer(testServerURL, ti.orgID),
+		"https://gram.example.com:443/workload/devices/" + ti.orgID,
+		"https://GRAM.example.com/workload/devices/" + ti.orgID,
+		"https://gram.example.com/workload/devices/" + ti.orgID + "/",
+		"https://gram.example.com/workload/devices",
+	} {
+		_, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+			Name:                   "impostor",
+			Issuer:                 issuer,
+			JwksURI:                "https://attacker.example.com/jwks.json",
+			Description:            nil,
+			Tags:                   nil,
+			AllowWildcardAdmission: nil,
+			ProjectScoped:          false,
+			SessionToken:           nil,
+			ApikeyToken:            nil,
+			ProjectSlugInput:       nil,
+		})
+		requireOopsCode(t, err, oops.CodeInvalid)
+	}
 }

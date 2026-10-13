@@ -322,6 +322,11 @@ func admitWorkloadAssertion(
 // kid must name the registered key's thumbprint, so a device that rotates its
 // key cannot keep signing with the old one.
 func (grant *workloadGrant) assertionKeySource(ctx context.Context, tenancy workloadTenancy, issuer *workloadidentity_repo.WorkloadIssuer, subject, keyID string) (jwks.Source, error) {
+	// Any key_source other than none or device_keys fails closed rather than
+	// quietly falling back to the remote key set.
+	if issuer.KeySource.Valid && !workloadidentity.IsDeviceKeyIssuer(*issuer) {
+		return jwks.Source{}, refuseWorkloadGrant("issuer_key_source_unknown", fmt.Errorf("unknown issuer key source %q", issuer.KeySource.String))
+	}
 	if !workloadidentity.IsDeviceKeyIssuer(*issuer) {
 		source, err := workloadIssuerKeySource(tenancy, issuer)
 		if err != nil {

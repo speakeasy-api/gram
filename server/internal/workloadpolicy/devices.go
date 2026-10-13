@@ -18,7 +18,9 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
@@ -27,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -85,6 +88,23 @@ func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID s
 // DeviceIssuer is the issuer an organization's enrolled devices sign as.
 func DeviceIssuer(serverURL, organizationID string) string {
 	return strings.TrimRight(serverURL, "/") + deviceIssuerPath + organizationID
+}
+
+// isReservedDeviceIssuer reports whether issuer falls under the device issuer
+// namespace once canonicalized the way issuer lookup canonicalizes it, so a
+// spelling such as an explicit :443 or an uppercase host cannot claim it.
+func isReservedDeviceIssuer(issuer, serverURL string) bool {
+	prefix := strings.TrimRight(serverURL, "/") + strings.TrimRight(deviceIssuerPath, "/")
+	canonicalPrefix, err := issuerurl.Parse(prefix)
+	if err != nil {
+		return strings.HasPrefix(strings.TrimSpace(issuer), prefix)
+	}
+	canonical, err := issuerurl.Parse(issuer)
+	if err != nil {
+		return false
+	}
+	c, p := canonical.String(), canonicalPrefix.String()
+	return c == p || strings.HasPrefix(c, p+"/")
 }
 
 func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.CreateDeviceJoinTokenPayload) (*gen.WorkloadDeviceJoinToken, error) {
@@ -229,6 +249,12 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 		}
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	// Re-checked too: grants removed since the token was issued would enroll a
+	// device every request of which is refused. Failing here rolls back the
+	// redemption, so the token is not spent.
+	if err := s.requireDeviceAgentGrants(ctx, org, agent.ID); err != nil {
+		return nil, err
+	}
 
 	issuer, err := s.deviceIssuer(ctx, dbtx, org, actor)
 	if err != nil {
@@ -244,6 +270,11 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 		Hostname:         conv.PtrToPGTextEmpty(payload.Hostname),
 		Serial:           conv.PtrToPGTextEmpty(payload.Serial),
 	}); err != nil {
+		// One key per device: a key already live for another device would let
+		// its private key sign as both.
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "this key is already registered to another device; generate a new key")
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "error registering device key").LogError(ctx, s.logger)
 	}
 
