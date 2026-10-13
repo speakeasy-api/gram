@@ -16,7 +16,7 @@ const (
 	InvitationStateRevoked  InvitationState = "revoked"
 )
 
-// Invitation represents a WorkOS invitation with the fields used by Gram.
+// Invitation represents a WorkOS invitation with the fields used by Speakeasy.
 type Invitation struct {
 	ID                  string
 	Email               string

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 	"unicode/utf8"
 
@@ -230,20 +231,24 @@ func TestInterpretErrorCarriesCause(t *testing.T) {
 // statusCode 0, and blocked the tool call; the derived one waits for the
 // verdict.
 func TestGateSurvivesSlowControlPlane(t *testing.T) {
-	delay := gateSendBudget + 2*time.Second
-	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		time.Sleep(delay)
-		return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	// The fake server's delay runs on the bubble's fake clock. seedOrgSettings
+	// stays inside the bubble so the cache and the relay share one clock.
+	synctest.Test(t, func(t *testing.T) {
+		delay := gateSendBudget + 2*time.Second
+		fs := newPipeFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+			time.Sleep(delay)
+			return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+		})
+		cfg := authedConfig(t, fs.URL)
+		// Fail-closed: the posture whose users lose tool calls to a slow handshake.
+		seedOrgSettings(t, cfg, false, time.Minute)
+
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+		require.NotContains(t, string(res.Stdout), `"permissionDecision":"deny"`,
+			"a control plane that answers inside the budget must not block the call")
+		require.NotContains(t, string(res.Stderr), "HTTP 0")
 	})
-	cfg := authedConfig(t, fs.URL)
-	// Fail-closed: the posture whose users lose tool calls to a slow handshake.
-	seedOrgSettings(t, cfg, false, time.Minute)
-
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-
-	require.NotContains(t, string(res.Stdout), `"permissionDecision":"deny"`,
-		"a control plane that answers inside the budget must not block the call")
-	require.NotContains(t, string(res.Stderr), "HTTP 0")
 }
 
 // TestUnparseableResponseNamesItsCause: an unparseable 2xx reports statusCode 0

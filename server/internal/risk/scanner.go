@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -39,8 +40,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"math"
-
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -132,8 +131,8 @@ func (p *ShadowMCPPolicy) IsAllowAll() bool {
 // (Claude permissionDecisionReason/SystemMessage; Cursor/Codex UserMessage/
 // AgentMessage) and therefore the local agent transcript. That is by design -
 // the human needs to see what tripped the challenge - but it means the
-// "never leaves the server" invariant is scoped to Gram's own persistence, not
-// the agent host. Any Gram-side ingestion that captures permission-prompt or
+// "never leaves the server" invariant is scoped to Speakeasy's own persistence, not
+// the agent host. Any Speakeasy-side ingestion that captures permission-prompt or
 // transcript content (e.g. a future session-replay path) MUST scrub %{match}
 // before persisting, or the invariant breaks silently.
 type ScanResult struct {
@@ -1177,7 +1176,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			}
 		case ra.SourcePromptInjection:
 			scanStarted := time.Now()
-			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgemessage.New(messageType, toolName, text))
+			judgeMessage := judgemessage.New(messageType, toolName, text)
+			judgeMessage.AnchorID = baseProvenance.ChatMessageID
+			judgeMessage.ChatID = baseProvenance.ChatID
+			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgeMessage)
 			if !scanResult.Completed {
 				incomplete.Store(true)
 				legacyUnavailable = true

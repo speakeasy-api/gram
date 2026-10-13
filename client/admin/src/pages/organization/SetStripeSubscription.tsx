@@ -47,7 +47,7 @@ const STRIPE_SUBSCRIPTION_ID = /^sub_[A-Za-z0-9_]+$/;
 const MAX_STRIPE_SUBSCRIPTION_ID_LENGTH = 255;
 
 const MISSING_CUSTOMER_NOTE =
-  "Set a Stripe customer ID before recording a subscription. Gram checks that the subscription belongs to that customer.";
+  "Set a Stripe customer ID before recording a subscription. Speakeasy checks that the subscription belongs to that customer.";
 
 function ConfirmationDetail({
   label,
@@ -269,7 +269,7 @@ export function SetStripeSubscription({
               <DialogTitle>Set Stripe subscription ID</DialogTitle>
               <DialogDescription>
                 This records the initial Stripe subscription for a PAYG
-                organization. Gram verifies the subscription belongs to{" "}
+                organization. Speakeasy verifies the subscription belongs to{" "}
                 {org.stripe_customer_id}. It cannot replace a subscription that
                 is already set.
               </DialogDescription>

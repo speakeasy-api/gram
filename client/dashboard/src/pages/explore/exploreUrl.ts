@@ -26,9 +26,6 @@ export const WIDGET_PARAM = "widget";
 /** The search parameter naming the page's tab; absent means Explore. */
 export const TAB_PARAM = "tab";
 
-/** The search parameter naming the dashboard the Dashboards tab has open. */
-export const DASHBOARD_PARAM = "dashboard";
-
 // Bumped when the encoding changes shape; a link in an older shape then
 // falls back to the default view rather than being misread.
 const VERSION = 1;

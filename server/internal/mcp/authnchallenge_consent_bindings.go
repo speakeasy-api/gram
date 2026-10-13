@@ -48,7 +48,7 @@ func (s *Service) serveConsentAgentConnections(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return consentAgentAuthorizationError(err, "consent authorizer is not eligible")
 	}
-	if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
+	if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint.OrganizationID); !enabled {
 		return oops.C(oops.CodeNotFound)
 	}
 	action := r.PostForm.Get("action")

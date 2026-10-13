@@ -108,7 +108,7 @@ function WorkOSPortalButton({
   intent: "sso" | "dsync" | "domain_verification";
   errorFallback: string;
   label?: string;
-  /** Adds an external-link icon, for spots where leaving Gram is not obvious. */
+  /** Adds an external-link icon, for spots where leaving Speakeasy is not obvious. */
   external?: boolean;
   /** Primary when opening the portal is the card's first-run action. */
   variant?: "primary" | "secondary";
@@ -311,7 +311,7 @@ export default function OrgIdentity(): JSX.Element {
     "tab",
     parseAsStringLiteral(IDENTITY_TABS).withDefault("sso"),
   );
-  // The only read of the rollout flag: without it (or org:admin) the tab does not exist.
+  // Without the rollout flag (or org:admin) the tab does not exist.
   const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const { hasScope } = useRBAC();
   const showIdentityProviders =

@@ -914,7 +914,7 @@ func TestServiceCoreLoadChatHistoryReplaysToolTurns(t *testing.T) {
 		toolCalls  []byte
 		toolCallID pgtype.Text
 	}{
-		{role: "system", content: "You are Gram."},
+		{role: "system", content: "You are Speakeasy."},
 		{role: "user", content: "what's the weather in oslo?"},
 		{role: "assistant", content: "", toolCalls: []byte(toolCallsJSON)},
 		{role: "tool", content: `{"temp":"cold"}`, toolCallID: pgtype.Text{String: "call_abc", Valid: true}},

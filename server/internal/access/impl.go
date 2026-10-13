@@ -120,7 +120,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// ListRoles reads local role records and enriches them with Gram's local grant state.
+// ListRoles reads local role records and enriches them with Speakeasy's local grant state.
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
 	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
 	// roleOrgContext, but the listing itself is pure Postgres — serve it.
@@ -170,7 +170,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 }
 
-// GetRole returns the role definition enriched with Gram's local grant
+// GetRole returns the role definition enriched with Speakeasy's local grant
 // state so callers see the complete effective role configuration in one place.
 func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*gen.Role, error) {
 	ac, _, err := s.roleOrgContext(ctx)
@@ -503,7 +503,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 
 // UpdateMemberRoles replaces all role assignments for a member. It is
 // intentionally stricter than member listing: it only mutates access for users
-// Gram knows are connected to the local organization.
+// Speakeasy knows are connected to the local organization.
 func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemberRolesPayload) (*gen.AccessMember, error) {
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -799,7 +799,7 @@ type challengeUserInfo struct {
 	photoURL *string
 }
 
-// activeOrgMemberUserIDs returns the Gram user IDs of active members of the
+// activeOrgMemberUserIDs returns the Speakeasy user IDs of active members of the
 // organization. The challenge UI uses it to suppress challenges raised by users
 // outside the organization — e.g. Speakeasy staff impersonating a customer org,
 // whose entries otherwise clutter the list while they switch accounts. Always

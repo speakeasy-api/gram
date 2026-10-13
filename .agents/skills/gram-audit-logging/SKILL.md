@@ -1,6 +1,6 @@
 ---
 name: gram-audit-logging
-description: Concepts, external interfaces, and conventions for Gram's audit logging subsystem — the internal Go API for recording actor/action/subject events and the `/rpc/auditlogs.*` management API that exposes them. Activate whenever the task involves recording or exposing audit events (adding or changing audit coverage on a service, introducing a new audited subject or action, writing tests that assert an event was recorded, changing how entries are displayed or filtered).
+description: Concepts, external interfaces, and conventions for Speakeasy's audit logging subsystem — the internal Go API for recording actor/action/subject events and the `/rpc/auditlogs.*` management API that exposes them. Activate whenever the task involves recording or exposing audit events (adding or changing audit coverage on a service, introducing a new audited subject or action, writing tests that assert an event was recorded, changing how entries are displayed or filtered).
 metadata:
   relevant_files:
     - "server/internal/audit/**/*.go"
@@ -8,7 +8,7 @@ metadata:
     - "server/design/auditlogs/**"
 ---
 
-Audit logging is how Gram records _who did what to which resource_. Every meaningful mutation on a project- or org-scoped resource is expected to produce one audit entry per affected row, written inside the same database transaction as the mutation so events can't drift from the state they describe. Entries are exposed to Gram users through the `auditlogs` management API.
+Audit logging is how Speakeasy records _who did what to which resource_. Every meaningful mutation on a project- or org-scoped resource is expected to produce one audit entry per affected row, written inside the same database transaction as the mutation so events can't drift from the state they describe. Entries are exposed to Speakeasy users through the `auditlogs` management API.
 
 ## Concepts and terminology
 
@@ -79,7 +79,7 @@ Files under `server/gen/**` and any `repo/` subdirectory carry a `DO NOT EDIT` h
 
 ## Server-client contract
 
-Audit entries are surfaced to Gram users through a small, fixed set of endpoints. New actions and subject types appear automatically — facets are computed from the rows that exist, so there is no registration step outside the Go code.
+Audit entries are surfaced to Speakeasy users through a small, fixed set of endpoints. New actions and subject types appear automatically — facets are computed from the rows that exist, so there is no registration step outside the Go code.
 
 **HTTP routes** (design: `server/design/auditlogs/design.go`):
 

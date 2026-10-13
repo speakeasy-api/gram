@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -34,22 +35,53 @@ export interface ScopeGroup {
 }
 
 /**
+ * MCP permissions for administering servers rather than using them. They sit
+ * under Platform access, but each still lets its holder connect to the servers
+ * it covers with every tool (scopeExpansions in server/internal/authz/scopes.go).
+ */
+const MCP_ADMIN_SCOPES: ReadonlySet<string> = new Set([
+  "mcp:read",
+  "mcp:write",
+]);
+
+function isMcpAccessScope(scope: ScopeDefinition): boolean {
+  return scope.resourceType === "mcp" && !MCP_ADMIN_SCOPES.has(scope.slug);
+}
+
+function mcpTabLabel(
+  serverCount: number | null | undefined,
+  permissionCount: number,
+): string {
+  if (serverCount === null) return "MCP access";
+  return `MCP access (${serverCount ?? permissionCount})`;
+}
+
+/**
  * The permissions a role carries, as a list you build rather than a tree you
  * walk: pick permissions from one searchable menu, then narrow each one on its
- * own row. MCP permissions are separated from the rest because they are the
- * ones with something to narrow — a server, and inside it, particular tools.
+ * own row. Connecting to MCP servers is separated from the rest because it is
+ * the one with something to narrow — a server, and inside it, particular tools.
  */
 export function RolePermissionsSection({
   groups,
   selectedScopes,
+  blockOnlyScopes = new Set(),
   disabled,
   onToggleScope,
   renderScopeRule,
   subjectLabel = "this role",
   markAgentIneligible = false,
+  renderMcpAccess,
+  mcpAccessCount,
 }: {
   groups: ScopeGroup[];
   selectedScopes: Set<string>;
+  /**
+   * Selected permissions the role only takes away. A block is stored as its
+   * own scope (mcp:blocked_read) but edited on its base permission's row, so
+   * without this the row reads as the role granting that permission.
+   */
+  blockOnlyScopes?: ReadonlySet<string>;
   disabled?: boolean;
   onToggleScope: (scope: Scope) => void;
   /** Right-hand side of a row: the rule chips that narrow this permission. */
@@ -63,14 +95,31 @@ export function RolePermissionsSection({
    * its agent members rather than granted. Set once the role has any.
    */
   markAgentIneligible?: boolean;
+  /**
+   * Replaces the MCP access tab's permission list with a server picker. Given
+   * a way back to Platform access, where the admin permissions that also
+   * connect are managed.
+   */
+  renderMcpAccess?: (controls: { showPlatformAccess: () => void }) => ReactNode;
+  /**
+   * What the MCP access tab counts when it shows servers, not permissions.
+   * Null while that count is still loading.
+   */
+  mcpAccessCount?: number | null;
 }): JSX.Element {
   const [tab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
   // A pick from the empty state waits here until the picker has closed.
   const pendingScope = useRef<Scope | null>(null);
 
-  const mcpGroups = groups.filter((group) => group.resourceType === "mcp");
-  const otherGroups = groups.filter((group) => group.resourceType !== "mcp");
+  // Split by permission, not by group: the MCP group's admin permissions
+  // belong with the platform ones.
+  const groupsWith = (keep: (scope: ScopeDefinition) => boolean) =>
+    groups
+      .map((group) => ({ ...group, scopes: group.scopes.filter(keep) }))
+      .filter((group) => group.scopes.length > 0);
+  const mcpGroups = groupsWith(isMcpAccessScope);
+  const otherGroups = groupsWith((scope) => !isMcpAccessScope(scope));
 
   const selectedIn = (list: ScopeGroup[]) =>
     list.flatMap((group) =>
@@ -81,6 +130,7 @@ export function RolePermissionsSection({
   const otherSelected = selectedIn(otherGroups);
   const activeGroups = tab === "mcp" ? mcpGroups : otherGroups;
   const activeSelected = tab === "mcp" ? mcpSelected : otherSelected;
+  const showsMcpAccess = tab === "mcp" && !!renderMcpAccess;
 
   const addButton = (
     <PopoverTrigger asChild>
@@ -111,14 +161,14 @@ export function RolePermissionsSection({
           <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
             <PageTabsList>
               <PageTabsTrigger value="mcp">
-                MCP access ({mcpSelected.length})
+                {mcpTabLabel(mcpAccessCount, mcpSelected.length)}
               </PageTabsTrigger>
               <PageTabsTrigger value="organization">
                 Platform access ({otherSelected.length})
               </PageTabsTrigger>
             </PageTabsList>
 
-            {activeSelected.length > 0 && addButton}
+            {activeSelected.length > 0 && !showsMcpAccess && addButton}
             <PopoverContent
               align="end"
               className="w-[min(24rem,calc(100vw-2rem))] p-0"
@@ -164,14 +214,17 @@ export function RolePermissionsSection({
                           </div>
                           {/* A tick marks what the role already has; a
                                 checkbox implied a second, separate state. */}
-                          {selectedScopes.has(scope.slug) && (
-                            <>
-                              {/* cmdk owns aria-selected on its items, so
+                          {/* A block-only permission is not granted yet, so
+                                picking it adds the grant beside the block. */}
+                          {selectedScopes.has(scope.slug) &&
+                            !blockOnlyScopes.has(scope.slug) && (
+                              <>
+                                {/* cmdk owns aria-selected on its items, so
                                     ownership is spoken as text instead. */}
-                              <span className="sr-only">Already added</span>
-                              <Check className="mt-0.5 h-4 w-4 shrink-0" />
-                            </>
-                          )}
+                                <span className="sr-only">Already added</span>
+                                <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                              </>
+                            )}
                         </CommandItem>
                       ))}
                     </CommandGroup>
@@ -185,7 +238,11 @@ export function RolePermissionsSection({
               directly under a popover trigger, so a box that grew or shrank as
               permissions came and went would shift the page under the cursor. */}
           <TabsContent value={tab} forceMount className="min-h-[13.5rem]">
-            {activeSelected.length === 0 ? (
+            {showsMcpAccess ? (
+              renderMcpAccess?.({
+                showPlatformAccess: () => setTab("organization"),
+              })
+            ) : activeSelected.length === 0 ? (
               <div className="flex min-h-[13.5rem] flex-col items-center justify-center px-4 text-center">
                 <Text variant="body" className="font-medium">
                   {tab === "mcp"
@@ -195,7 +252,7 @@ export function RolePermissionsSection({
                 <Text muted small className="mt-1">
                   {tab === "mcp"
                     ? `Add a permission to let ${subjectLabel} reach MCP servers and their tools.`
-                    : `Add a permission to let ${subjectLabel} work with projects, environments and skills.`}
+                    : `Add a permission to let ${subjectLabel} work with projects, environments, skills and MCP servers.`}
                 </Text>
                 <div className="mt-4">{addButton}</div>
               </div>
@@ -216,6 +273,11 @@ export function RolePermissionsSection({
                           >
                             {scope.slug}
                           </Text>
+                          {blockOnlyScopes.has(scope.slug) && (
+                            <Badge variant="destructive" size="sm">
+                              Blocked
+                            </Badge>
+                          )}
                           {markAgentIneligible &&
                             scope.agentEligible === false && (
                               <Badge variant="neutral" size="sm">
@@ -234,13 +296,30 @@ export function RolePermissionsSection({
                             {rule}
                           </div>
                         )}
+                        {MCP_ADMIN_SCOPES.has(scope.slug) &&
+                          !blockOnlyScopes.has(scope.slug) && (
+                            <Alert
+                              iconName="lock"
+                              alignTop
+                              className="mt-2 text-xs"
+                            >
+                              Also allows connecting to these servers with every
+                              tool.
+                              {renderMcpAccess &&
+                                " They show as locked on the MCP access tab."}
+                            </Alert>
+                          )}
                       </div>
                       <Button
                         variant="tertiary"
                         size="sm"
                         disabled={disabled}
                         onClick={() => onToggleScope(scope.slug as Scope)}
-                        aria-label={`Remove ${scope.slug}`}
+                        aria-label={
+                          blockOnlyScopes.has(scope.slug)
+                            ? `Remove block on ${scope.slug}`
+                            : `Remove ${scope.slug}`
+                        }
                       >
                         <Button.LeftIcon>
                           <X className="h-4 w-4" />

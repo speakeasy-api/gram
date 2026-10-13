@@ -27,11 +27,11 @@ type Service interface {
 	UpdateInviteRole(context.Context, *UpdateInviteRolePayload) (res *OrganizationInvitation, err error)
 	// List pending WorkOS invitations for the active organization.
 	ListInvites(context.Context, *ListInvitesPayload) (res *ListInvitesResult, err error)
-	// List users in the active organization from Gram
+	// List users in the active organization from Speakeasy
 	// organization_user_relationships.
 	ListUsers(context.Context, *ListUsersPayload) (res *ListUsersResult, err error)
-	// Remove a user from the active organization in Gram and delete their WorkOS
-	// organization membership.
+	// Remove a user from the active organization in Speakeasy and delete their
+	// WorkOS organization membership.
 	RemoveUser(context.Context, *RemoveUserPayload) (err error)
 	// Enable  webhooks for the active organization.
 	EnableWebhooks(context.Context, *EnableWebhooksPayload) (err error)
@@ -44,7 +44,7 @@ type Service interface {
 	GetOnboardingStatus(context.Context, *GetOnboardingStatusPayload) (res *OnboardingStatusResult, err error)
 	// Return recent hook events for the active organization so the onboarding
 	// wizard can confirm that coding agent instrumentation is delivering events to
-	// Gram. Polled from the confirm-traffic step.
+	// Speakeasy. Polled from the confirm-traffic step.
 	VerifyOnboardingHooksSetup(context.Context, *VerifyOnboardingHooksSetupPayload) (res *VerifyOnboardingHooksSetupResult, err error)
 	// Send the enterprise admin onboarding email to one or more recipients. The
 	// email links each recipient to the wizard for the active organization. Used
@@ -188,7 +188,7 @@ type ListUsersPayload struct {
 // ListUsersResult is the result type of the organizations service listUsers
 // method.
 type ListUsersResult struct {
-	// Users linked to the organization in Gram.
+	// Users linked to the organization in Speakeasy.
 	Users []*OrganizationUser
 }
 
@@ -202,14 +202,14 @@ type OnboardingHookEvent struct {
 	ToolName *string
 	// Hook event name (e.g. PreToolUse, SessionStart).
 	EventName *string
-	// Slug of the Gram project that received the event.
+	// Slug of the Speakeasy project that received the event.
 	ProjectSlug string
 	// Outcome status: allowed, blocked, failure, or pending.
 	Status *string
 	// Email of the user whose session produced the event, when present in hook
 	// attributes.
 	UserEmail *string
-	// Gram chat/session ID that owns this event, when present.
+	// Speakeasy chat/session ID that owns this event, when present.
 	ChatID *string
 }
 
@@ -261,7 +261,7 @@ type OrganizationInvitation struct {
 	AcceptedAt *string
 	// When the invitation was revoked.
 	RevokedAt *string
-	// Gram user ID of the inviter, when known.
+	// Speakeasy user ID of the inviter, when known.
 	InviterUserID *string
 	// WorkOS role slug assigned when the invite is accepted.
 	RoleSlug *string
@@ -272,11 +272,11 @@ type OrganizationInvitation struct {
 }
 
 type OrganizationUser struct {
-	// Gram relationship row ID.
+	// Speakeasy relationship row ID.
 	ID string
-	// Gram organization ID.
+	// Speakeasy organization ID.
 	OrganizationID string
-	// Gram user ID.
+	// Speakeasy user ID.
 	UserID string
 	// User display name.
 	Name string
@@ -295,7 +295,7 @@ type OrganizationUser struct {
 // RemoveUserPayload is the payload type of the organizations service
 // removeUser method.
 type RemoveUserPayload struct {
-	// Gram user ID to remove.
+	// Speakeasy user ID to remove.
 	UserID       string
 	SessionToken *string
 }

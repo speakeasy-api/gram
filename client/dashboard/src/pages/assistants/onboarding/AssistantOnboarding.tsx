@@ -182,7 +182,7 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
       });
     }
     // Directly-attached MCP servers (no backing toolset) connect through the
-    // same Gram-hosted /mcp/{endpoint} path the assistant runtime dials. No
+    // same Speakeasy-hosted /mcp/{endpoint} path the assistant runtime dials. No
     // fallback environment: most remote servers carry their own connection
     // auth, so only an explicitly bound environment is sent.
     for (const ref of draft.assistant?.mcpServers ?? []) {

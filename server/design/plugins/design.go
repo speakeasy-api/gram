@@ -344,7 +344,7 @@ var _ = Service("plugins", func() {
 	})
 
 	Method("downloadObservabilityPlugin", func() {
-		Description("Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
+		Description("Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
 
 		Payload(func() {
 			Attribute("platform", String, func() {
@@ -512,11 +512,11 @@ var PluginServerModel = Type("PluginServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID. Exactly one backend ID is set.")
+		Description("Speakeasy toolset ID. Exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID. Exactly one backend ID is set.")
+		Description("Speakeasy MCP server ID. Exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("meta_mcp_server_id", String, func() {
@@ -536,13 +536,17 @@ var PluginServerModel = Type("PluginServer", func() {
 
 // PluginAssignmentModel represents a role or user assignment for a plugin.
 var PluginAssignmentModel = Type("PluginAssignment", func() {
-	Required("id", "principal_urn", "created_at")
+	Required("id", "principal_urn", "install_mode", "created_at")
 
 	Attribute("id", String, func() {
 		Description("Unique assignment identifier.")
 		Format(FormatUUID)
 	})
 	Attribute("principal_urn", String, "Principal URN (e.g. role:organization:<uuid>, user:id, or *).")
+	Attribute("install_mode", String, func() {
+		Description("How the device agent installs the plugin for this audience. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on.")
+		shared.InstallModeEnum()
+	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -615,11 +619,11 @@ var AddPluginServerForm = Type("AddPluginServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.")
+		Description("Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID. Provide exactly one backend ID.")
+		Description("Speakeasy MCP server ID. Provide exactly one backend ID.")
 		Format(FormatUUID)
 	})
 	Attribute("meta_mcp_server_id", String, func() {
@@ -662,6 +666,11 @@ var SetPluginAssignmentsForm = Type("SetPluginAssignmentsForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("principal_urns", ArrayOf(String), "List of principal URNs to assign.")
+	Attribute("install_modes", MapOf(String, String, func() {
+		Elem(func() {
+			shared.InstallModeEnum()
+		})
+	}), "Install mode per principal URN in principal_urns. A principal missing from this map keeps its current mode, or gets `default` when it is newly assigned.")
 })
 
 // --- Results ---

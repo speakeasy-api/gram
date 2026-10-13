@@ -469,6 +469,6 @@ esac
 	require.Error(t, err, "primary Temporal accepted by secondary checkout")
 	require.NoError(t, os.Remove(filepath.Join(c.Root, ".git")))
 	_, err = Validate(t.Context(), c)
-	require.ErrorContains(t, err, "not a Gram repository")
+	require.ErrorContains(t, err, "not a Speakeasy repository")
 
 }

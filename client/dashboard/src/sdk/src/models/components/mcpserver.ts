@@ -10,7 +10,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export const McpServerNetworkAccessMode = {
   PublicOnly: "public_only",
@@ -18,7 +18,7 @@ export const McpServerNetworkAccessMode = {
   PrivateOnly: "private_only",
 } as const;
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export type McpServerNetworkAccessMode = ClosedEnum<
   typeof McpServerNetworkAccessMode
@@ -58,9 +58,13 @@ export type McpServer = {
    */
   name?: string | undefined;
   /**
-   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
    */
   networkAccessMode: McpServerNetworkAccessMode;
+  /**
+   * An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.
+   */
+  platformEndpointSlug?: string | undefined;
   /**
    * The project ID this MCP server belongs to
    */
@@ -86,7 +90,7 @@ export type McpServer = {
    */
   tunneledMcpServerId?: string | undefined;
   /**
-   * The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Gram.
+   * The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Speakeasy.
    */
   unproxiedMcpServerId?: string | undefined;
   /**
@@ -125,6 +129,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       id: z.string(),
       name: z.optional(z.string()),
       network_access_mode: McpServerNetworkAccessMode$inboundSchema,
+      platform_endpoint_slug: z.optional(z.string()),
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
       slug: z.optional(z.string()),
@@ -144,6 +149,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
         "created_at": "createdAt",
         "environment_id": "environmentId",
         "network_access_mode": "networkAccessMode",
+        "platform_endpoint_slug": "platformEndpointSlug",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
         "tool_variations_group_id": "toolVariationsGroupId",

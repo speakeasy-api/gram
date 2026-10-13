@@ -357,16 +357,44 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	require.Equal(t, "private", server.Visibility, "updating assistant toolsets must also enable the hosted wrapper")
 }
 
+func TestServiceAssistantEnableMaterializesCanonicalWrapper(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable_canonical")
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
+	ts, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID: "org-test", ProjectID: projectID, Name: "Linear", Slug: "linear",
+		McpSlug: pgtype.Text{String: "org-test-linear-canonical", Valid: true}, McpEnabled: false,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+		Name: "Assistant", Model: "openai/gpt-4o-mini",
+		Toolsets: []*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}},
+	})
+	require.NoError(t, err)
+
+	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
+	require.NoError(t, err, "enabling through an assistant creates the canonical wrapper")
+	require.Equal(t, uuid.NullUUID{UUID: ts.ID, Valid: true}, server.ToolsetID)
+	require.Equal(t, "private", server.Visibility)
+	endpoints, err := mcpendpointsRepo.New(conn).ListMCPEndpointsByMCPServerID(t.Context(), mcpendpointsRepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: ts.ID})
+	require.NoError(t, err)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, ts.McpSlug.String, endpoints[0].Slug)
+	require.False(t, endpoints[0].CustomDomainID.Valid)
+}
+
 // A remote-backed MCP server (no toolset) can be attached to an assistant and
 // round-trips through the API and the dispatch resolver, which points the
-// runner at the server's Gram-hosted endpoint.
+// runner at the server's Speakeasy-hosted endpoint.
 func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 	t.Parallel()
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_attach_mcp_server")
 	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
 
-	// Seed a remote-backed mcp_server with a Gram-hosted endpoint, mirroring
+	// Seed a remote-backed mcp_server with a Speakeasy-hosted endpoint, mirroring
 	// how the dashboard registers an external "Remote MCP" server.
 	remote, err := remotemcpRepo.New(conn).CreateServer(t.Context(), remotemcpRepo.CreateServerParams{
 		ID:            uuid.New(),
@@ -433,7 +461,7 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 	require.Equal(t, server.Slug.String, got.McpServers[0].McpServerSlug)
 
 	// The dispatch resolver turns the attachment into the runner's MCP URL,
-	// pointed at the server's Gram-hosted endpoint slug (not the internal slug).
+	// pointed at the server's Speakeasy-hosted endpoint slug (not the internal slug).
 	assistantID, err := uuid.Parse(created.ID)
 	require.NoError(t, err)
 	rows, err := svc.core.loadAssistantMcpServers(t.Context(), projectID, []uuid.UUID{assistantID})
@@ -448,7 +476,7 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 
 // Attaching a server the runtime cannot reach fails the write with a
 // validation error instead of silently vanishing from reads and dispatch:
-// no Gram-hosted endpoint means no /mcp URL to build, and disabled servers
+// no Speakeasy-hosted endpoint means no /mcp URL to build, and disabled servers
 // 404 at the serving path.
 func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 	t.Parallel()
@@ -507,7 +535,7 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 		slug    string
 		wantErr string
 	}{
-		{slug: endpointless.Slug.String, wantErr: "no Gram-hosted MCP endpoint"},
+		{slug: endpointless.Slug.String, wantErr: "no Speakeasy-hosted MCP endpoint"},
 		{slug: disabled.Slug.String, wantErr: "is disabled"},
 	} {
 		// The resolver carries the reason; the endpoint maps it to a 400.

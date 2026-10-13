@@ -101,7 +101,7 @@ type ShadowAIToolSummary struct {
 	DisplayName string `json:"display_name"`
 	Category    string `json:"category"`
 	// State is the enforcement verdict: allowed, blocked or unreviewed. A
-	// tool Gram cannot recognize at the gateway always reads unreviewed.
+	// tool Speakeasy cannot recognize at the gateway always reads unreviewed.
 	State string `json:"state"`
 	// Enforceable reports whether a decision about this tool could reach the
 	// gateway at all, which requires it to publish a client ID metadata

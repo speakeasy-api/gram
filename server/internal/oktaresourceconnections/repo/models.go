@@ -10,15 +10,26 @@ import (
 )
 
 type OktaResourceConnection struct {
-	ID                           uuid.UUID
-	OrganizationID               string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
 	IdentityProviderConnectionID uuid.UUID
-	RemoteSessionIssuerID        uuid.UUID
-	Resource                     string
-	Audience                     string
-	OktaApplicationID            pgtype.Text
-	ObservedResult               pgtype.Text
-	ObservedAt                   pgtype.Timestamptz
-	CreatedAt                    pgtype.Timestamptz
-	UpdatedAt                    pgtype.Timestamptz
+	// @access: confidential
+	RemoteSessionIssuerID uuid.UUID
+	// @access: restricted
+	Resource string
+	// @access: restricted
+	Audience string
+	// @access: confidential
+	OktaApplicationID pgtype.Text
+	// @access: confidential
+	ObservedResult pgtype.Text
+	// @access: confidential
+	ObservedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

@@ -7,7 +7,7 @@ import { useRoutes } from "@/routes";
 import { useState } from "react";
 import { Link } from "react-router";
 import { legacyCallbackURL } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 // IssuerScopeOverrideAlert warns beside a client's scope field that the parent
 // remote identity provider pins the requested scopes. The override replaces

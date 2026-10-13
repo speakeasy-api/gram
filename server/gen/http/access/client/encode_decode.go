@@ -8079,6 +8079,23 @@ func unmarshalAIDetectionUserResponseBodyToAccessAIDetectionUser(v *AIDetectionU
 	return res
 }
 
+// unmarshalResourceAudienceRolePluginResponseBodyToAccessResourceAudienceRolePlugin
+// builds a value of type *access.ResourceAudienceRolePlugin from a value of
+// type *ResourceAudienceRolePluginResponseBody.
+func unmarshalResourceAudienceRolePluginResponseBodyToAccessResourceAudienceRolePlugin(v *ResourceAudienceRolePluginResponseBody) *access.ResourceAudienceRolePlugin {
+	if v == nil {
+		return nil
+	}
+	res := &access.ResourceAudienceRolePlugin{
+		PrincipalUrn: *v.PrincipalUrn,
+		PluginID:     *v.PluginID,
+		Name:         *v.Name,
+		Slug:         *v.Slug,
+	}
+
+	return res
+}
+
 // unmarshalResourceAudienceEntryResponseBodyToAccessResourceAudienceEntry
 // builds a value of type *access.ResourceAudienceEntry from a value of type
 // *ResourceAudienceEntryResponseBody.

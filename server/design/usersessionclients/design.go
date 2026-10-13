@@ -147,7 +147,7 @@ var UserSessionClient = Type("UserSessionClient", func() {
 	Attribute("user_session_issuer_id", String, "The owning user_session_issuer id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("client_id", String, "The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.")
+	Attribute("client_id", String, "The client_id. Minted by Speakeasy for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.")
 	Attribute("client_id_metadata_uri", String, "When set, the client was resolved from a Client ID Metadata Document (CIMD) hosted at this URL rather than registered via RFC 7591 DCR. Null for DCR clients. The URL is the client's identity, so its origin -- not client_name, which the client chooses -- is the trustworthy label.")
 	Attribute("client_id_metadata_fetched_at", String, "When the metadata document was last successfully read. A 304 revalidation counts as a read, so this is not necessarily when the body was last fetched. Null for DCR clients.", func() {
 		Format(FormatDateTime)

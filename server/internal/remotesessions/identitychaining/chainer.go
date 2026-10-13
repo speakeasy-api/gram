@@ -71,7 +71,7 @@ const (
 	// not write on every proxied call. Matches interactive remote sessions.
 	lastUsedCutoff = 5 * time.Minute
 
-	// maxClockSkew tolerates drift between Gram and the identity provider when
+	// maxClockSkew tolerates drift between Speakeasy and the identity provider when
 	// validating an ID-JAG's temporal claims.
 	maxClockSkew = time.Minute
 )
@@ -79,16 +79,12 @@ const (
 // Chainer obtains resource-bound downstream access tokens for a human by
 // identity chaining. It is safe for concurrent use.
 type Chainer struct {
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	enc        *encryption.Client
+	Governor
 	challenges *remotesessions.ChallengeManager
-	delegation *remotesessions.DelegationService
 	keys       *jwks.KeyResolver
 	locks      cache.Cache
 	observerMu sync.RWMutex
 	observer   Observer
-	now        func() time.Time
 }
 
 // New builds a chainer over the challenge manager's egress, tunnel and
@@ -96,16 +92,12 @@ type Chainer struct {
 // locks serializes acquisition across processes and shares failures.
 func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, keys *jwks.KeyResolver, locks cache.Cache) *Chainer {
 	return &Chainer{
-		logger:     logger.With(attr.SlogComponent("identity_chaining")),
-		db:         db,
-		enc:        enc,
+		Governor:   *NewGovernor(logger, db, enc, delegation),
 		challenges: challenges,
-		delegation: delegation,
 		keys:       keys,
 		locks:      locks,
 		observerMu: sync.RWMutex{},
 		observer:   nil,
-		now:        time.Now,
 	}
 }
 
@@ -183,10 +175,8 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 	startedAt := c.now()
 	token, outcome, grantValidated := c.acquire(attemptCtx, logger, req, sel)
 	if !outcome.Succeeded() {
-		logger.WarnContext(ctx, "identity chaining failed",
-			attr.SlogOutcome(string(outcome.Reason)),
-			attr.SlogReason(string(outcome.Stage)),
-		)
+		logAcquisitionFailure(ctx, logger, outcome)
+		outcome.providerDescription = ""
 		// Requests waiting on this attempt adopt its failure instead of timing out.
 		attemptKey := cacheKey("identityChainingAttempt", req, sel)
 		if err := c.locks.Set(context.WithoutCancel(ctx), attemptKey, attemptResult{Outcome: outcome, FinishedAt: c.now()}, attemptResultTTL); err != nil {
@@ -211,17 +201,6 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		StartedAt:       startedAt,
 	})
 	return token, outcome
-}
-
-// Governs reports whether identity chaining owns the request's upstream: a
-// ready binding names it. It reads configuration only and never contacts a
-// provider.
-func (c *Chainer) Governs(ctx context.Context, req Request) bool {
-	if !req.complete() {
-		return false
-	}
-	_, outcome := c.selectBinding(ctx, c.logger, req)
-	return outcome.Applicable() && !outcome.Retryable
 }
 
 // awaitConcurrentAcquisition adopts a concurrent holder's credential, or its
@@ -267,4 +246,13 @@ func cacheKey(prefix string, req Request, sel selection) string {
 		sel.clientID.String(), sel.resource, strings.Join(sel.scopes, " "),
 	}, "\n")))
 	return prefix + ":" + hex.EncodeToString(digest[:])
+}
+
+// logAcquisitionFailure logs a failed attempt with the provider's error text.
+func logAcquisitionFailure(ctx context.Context, logger *slog.Logger, outcome Outcome) {
+	logger.WarnContext(ctx, "identity chaining failed",
+		attr.SlogOutcome(string(outcome.Reason)),
+		attr.SlogReason(string(outcome.Stage)),
+		attr.SlogOAuthErrorDescription(outcome.providerDescription),
+	)
 }

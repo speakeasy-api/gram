@@ -96,6 +96,23 @@ func TestCreateWidget(t *testing.T) {
 		require.NoError(t, err, "the client owns the chart vocabulary")
 	})
 
+	t.Run("it saves a distinct count over a dimension and refuses one over a measure", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		query := validQuery()
+		query["measures"] = []any{map[string]any{"op": "count_distinct", "field": "user", "alias": "people"}}
+		created, err := ti.service.CreateWidget(ctx, createPayload("people", query, barChart()))
+		require.NoError(t, err)
+		require.Nil(t, created.InvalidReason)
+
+		query = validQuery()
+		query["measures"] = []any{map[string]any{"op": "count_distinct", "field": "tool_call_count"}}
+		_, err = ti.service.CreateWidget(ctx, createPayload("distinct counts", query, barChart()))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "unsupported_aggregation")
+		require.ErrorContains(t, err, "measures[0].op")
+	})
+
 	t.Run("it rejects a query the catalog cannot plan, naming the field", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
@@ -164,6 +181,10 @@ func TestCreateWidget(t *testing.T) {
 			{name: "a ranking with nothing to rank by", query: withQuery(withQuery(validQuery(), "grain", "none"), "dimensions", []any{}), chart: widgets.ChartRanked, reason: "at least one dimension"},
 			{name: "a number over time buckets", query: withQuery(validQuery(), "dimensions", []any{}), chart: widgets.ChartNumber, reason: "no grain"},
 			{name: "a ranking over time buckets", query: validQuery(), chart: widgets.ChartRanked, reason: "no grain"},
+			{name: "a stacked bar with no grain", query: withQuery(validQuery(), "grain", "none"), chart: widgets.ChartStackedBar, reason: "timeseries"},
+			{name: "a stacked area of rows", query: rowsQuery(), chart: widgets.ChartStackedArea, reason: "timeseries"},
+			{name: "a stacked bar of two measures", query: validQuery(), chart: widgets.ChartStackedBar, reason: "one measure"},
+			{name: "a stacked area of averages", query: withQuery(validQuery(), "measures", []any{map[string]any{"op": "avg", "field": "turn_count", "alias": "avg_turn_count"}}), chart: widgets.ChartStackedArea, reason: "count or a sum"},
 		}
 		for _, tc := range cases {
 			_, err := ti.service.CreateWidget(ctx, createPayload(tc.name, tc.query, chart(tc.chart)))
@@ -178,11 +199,23 @@ func TestCreateWidget(t *testing.T) {
 		_, err := ti.service.CreateWidget(ctx, createPayload("rows", rowsQuery(), chart(widgets.ChartTable)))
 		require.NoError(t, err)
 
-		for _, chartType := range []widgets.ChartType{widgets.ChartLine, widgets.ChartArea, widgets.ChartBar, widgets.ChartNumber, widgets.ChartRanked} {
+		for _, chartType := range []widgets.ChartType{widgets.ChartLine, widgets.ChartArea, widgets.ChartBar, widgets.ChartStackedBar, widgets.ChartStackedArea, widgets.ChartNumber, widgets.ChartRanked} {
 			_, err := ti.service.CreateWidget(ctx, createPayload("rows as "+string(chartType), rowsQuery(), chart(chartType)))
 			requireOopsCode(t, err, oops.CodeBadRequest)
 			require.ErrorContains(t, err, "unsatisfiable", chartType)
 		}
+	})
+
+	t.Run("it draws a stack over a bucketed breakdown", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		oneCount := withQuery(validQuery(), "measures", []any{map[string]any{"op": "count"}})
+		created, err := ti.service.CreateWidget(ctx, createPayload("calls by server", oneCount, chart(widgets.ChartStackedBar)))
+		require.NoError(t, err)
+		require.Equal(t, "stacked_bar", created.Visualization["type"])
+		oneSum := withQuery(validQuery(), "measures", []any{map[string]any{"op": "sum", "field": "tool_call_count", "alias": "tool_calls"}})
+		_, err = ti.service.CreateWidget(ctx, createPayload("tool calls by server", oneSum, chart(widgets.ChartStackedArea)))
+		require.NoError(t, err)
 	})
 
 	t.Run("it ranks by more than one dimension", func(t *testing.T) {

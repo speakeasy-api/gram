@@ -56,7 +56,7 @@ type Client struct {
 	repo         *risk_repo.Queries
 	cache        cache.TypedCacheObject[PolicyEnabledCache]
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
-	// serverURL is the deployment's own base URL, trusted as a Gram-hosted
+	// serverURL is the deployment's own base URL, trusted as a Speakeasy-hosted
 	// MCP host alongside the built-in ones. Nil in contexts that never
 	// classify URLs (the check then falls back to the built-ins plus the
 	// org's custom domain).

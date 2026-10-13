@@ -48,8 +48,8 @@ type Service interface {
 	CreateClient(context.Context, *CreateClientPayload) (res *types.RemoteSessionClient, err error)
 	// Register a standalone remote_session_client in Client ID Metadata Document
 	// (CIMD) mode under an existing remote_session_issuer in the caller's
-	// organization, with no user_session_issuer attachments. Gram generates the
-	// client_id and hosts the metadata document; the issuer must advertise
+	// organization, with no user_session_issuer attachments. Speakeasy generates
+	// the client_id and hosts the metadata document; the issuer must advertise
 	// client_id_metadata_document_supported. The client is project-scoped: it
 	// inherits a project-specific issuer's project, or the caller names a project
 	// (which must belong to the organization) when the issuer is
@@ -154,7 +154,7 @@ type CreateClientPayload struct {
 	ProjectID *string
 	// client_id supplied by the caller, e.g. from Dynamic Client Registration.
 	ClientID string
-	// Optional client_secret supplied by the caller. Gram encrypts before
+	// Optional client_secret supplied by the caller. Speakeasy encrypts before
 	// persisting; the plaintext is never returned.
 	ClientSecret *string
 	// How the client authenticates at the issuer's token endpoint. Omit to default
@@ -164,12 +164,25 @@ type CreateClientPayload struct {
 	// the issuer identifier; token_endpoint is available for providers that
 	// require the token endpoint URL.
 	TokenEndpointAuthAudienceFormat *string
+	// Organization JSON Web Key Set to sign private_key_jwt assertions with.
+	// Required when token_endpoint_auth_method is private_key_jwt and optional
+	// otherwise, as with attachKeySet. Must belong to the caller's organization,
+	// which needs the customer-managed encryption keys entitlement.
+	JSONWebKeySetID *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// Who the upstream access credential belongs to, fixed at creation. subject
+	// (the default) means each caller connects their own upstream account through
+	// the client. self means the client obtains a credential for itself with the
+	// client_credentials grant and every caller shares it; it requires
+	// token_endpoint_auth_method client_secret_basic, client_secret_post (both
+	// with client_secret) or private_key_jwt (with json_web_key_set_id), and an
+	// issuer with a token_endpoint.
+	CredentialOwner string
 	// When the issuer reported issuing the client_id (RFC 7591
 	// client_id_issued_at). Omit to record the time of this call.
 	ClientIDIssuedAt *string
@@ -374,7 +387,7 @@ type UpdateClientPayload struct {
 	ApikeyToken  *string
 	// The remote_session_client id.
 	ID string
-	// Rotate the client secret. Gram re-encrypts before persisting.
+	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string

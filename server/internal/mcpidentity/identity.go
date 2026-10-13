@@ -1,7 +1,7 @@
 // Package mcpidentity carries trusted authentication provenance for MCP
 // requests. An Identity records how the serving surface established the
 // caller's identity, so downstream enforcement can distinguish an
-// authoritative acting Gram user from credentials that merely prove an
+// authoritative acting Speakeasy user from credentials that merely prove an
 // organization, a machine, or nothing at all.
 //
 // Only the code that validates a credential may stamp an Identity. It must
@@ -24,7 +24,7 @@ import (
 type Kind string
 
 const (
-	// KindUserSession marks a validated Gram user-session token whose subject
+	// KindUserSession marks a validated Speakeasy user-session token whose subject
 	// is a concrete user. This is the only kind that identifies an
 	// authoritative acting user.
 	KindUserSession Kind = "user_session"
@@ -50,7 +50,7 @@ const (
 	KindAssistant Kind = "assistant"
 
 	// KindChatSession marks a validated chat-session token minted for an
-	// embedded chat surface. Its claims may name a Gram user or an external
+	// embedded chat surface. Its claims may name a Speakeasy user or an external
 	// end-user for attribution, but the credential proves only the session,
 	// so it is never an authoritative acting user.
 	KindChatSession Kind = "chat_session"
@@ -75,7 +75,7 @@ type Identity struct {
 // Kind returns the validated credential class.
 func (i Identity) Kind() Kind { return i.kind }
 
-// UserID returns the concrete Gram user ID for KindUserSession or
+// UserID returns the concrete Speakeasy user ID for KindUserSession or
 // KindConsentDiscovery. Other classes return empty. Check Kind before using
 // a user ID for runtime enforcement: consent proves discovery identity only.
 func (i Identity) UserID() string { return i.userID }
@@ -145,7 +145,7 @@ func (b *ValidatorBoundary) StampAssistant(ctx context.Context) context.Context 
 	return b.withIdentity(ctx, KindAssistant, "")
 }
 
-// StampAPIKey records an accepted Gram API key.
+// StampAPIKey records an accepted Speakeasy API key.
 func (b *ValidatorBoundary) StampAPIKey(ctx context.Context, keyID string) context.Context {
 	if b == nil || !b.initialized {
 		return ctx

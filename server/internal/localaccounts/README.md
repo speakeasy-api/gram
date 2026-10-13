@@ -35,7 +35,7 @@ mise run account status --json
 
 `repair` means `apply enterprise`. There is no user/org selector or Book a Demo
 profile. The running local dev-idp's selected oauth2-1 user must already be linked
-to a Gram user with exactly one active organization.
+to a Speakeasy user with exactly one active organization.
 
 Output is a human summary; progress goes to stderr. Add `--json` for full state
 and results on stdout, including `committed` on post-commit failures. Flags may

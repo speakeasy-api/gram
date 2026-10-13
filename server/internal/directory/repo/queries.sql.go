@@ -16,7 +16,7 @@ const clearOrganizationDirectoryUserLinksFixture = `-- name: ClearOrganizationDi
 UPDATE directory_users SET user_id = NULL WHERE organization_id = $1
 `
 
-// Test fixture: exercise email fallback without a direct Gram user link.
+// Test fixture: exercise email fallback without a direct Speakeasy user link.
 func (q *Queries) ClearOrganizationDirectoryUserLinksFixture(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, clearOrganizationDirectoryUserLinksFixture, organizationID)
 	return err
@@ -847,7 +847,7 @@ type ResolveIDJAGUsersByEmailParams struct {
 
 // The directory row is the provisioning gate. A stored user_id wins; only a
 // NULL link falls back to live email matching. Both paths require an active
-// Gram user and active membership in the same organization. Two distinct
+// Speakeasy user and active membership in the same organization. Two distinct
 // matches are returned so the caller can fail closed on ambiguity.
 func (q *Queries) ResolveIDJAGUsersByEmail(ctx context.Context, arg ResolveIDJAGUsersByEmailParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, resolveIDJAGUsersByEmail, arg.OrganizationID, arg.Email)

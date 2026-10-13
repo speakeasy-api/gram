@@ -26,7 +26,7 @@ const keyGenerationTimeout = 2 * time.Minute
 const keyCleanupTimeout = 10 * time.Second
 
 // CreateSigningKey creates the key and waits for its first version to leave
-// PENDING_GENERATION. The version name returned is what Gram records; the key
+// PENDING_GENERATION. The version name returned is what Speakeasy records; the key
 // name is what IAM bindings attach to.
 func (c *kmsSigningClient) CreateSigningKey(ctx context.Context, params CreateSigningKeyParams) (*CreatedSigningKey, error) {
 	if err := validateCreateSigningKeyParams(params); err != nil {

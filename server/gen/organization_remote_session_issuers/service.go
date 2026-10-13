@@ -95,7 +95,7 @@ type Service interface {
 	// organizational and project-specific issuers in the caller's organization.
 	// Only RFC 8414-derived columns are written — endpoints, the *_supported
 	// arrays, client_id_metadata_document_supported, and the documentation URLs.
-	// Gram behavior and display fields (oidc, passthrough, name, slug, logo,
+	// Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo,
 	// client setup documentation) are left alone. Requires org:admin.
 	RefreshIssuerMetadata(context.Context, *RefreshIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
 }

@@ -405,7 +405,7 @@ func decodeSlackEvent(raw json.RawMessage) (slackEventRequestBody, error) {
 
 // slackCorrelationID derives the assistant-thread correlation key from a
 // Slack event. Top-level messages (empty thread_ts) fall back to the event's
-// own ts so each top-level message maps 1:1 to a Gram thread — Slack itself
+// own ts so each top-level message maps 1:1 to a Speakeasy thread — Slack itself
 // promotes a top-level ts into thread_ts the moment anyone replies, so this
 // mirrors Slack's threading semantic. Channel-less events (e.g. team_join)
 // fall back to the workspace ID.
@@ -480,7 +480,7 @@ func handleSlackInteraction(body []byte) (*WebhookIngest, error) {
 	}
 	if payload.Type != "block_actions" {
 		// Other interaction envelopes (view_submission, shortcut, etc.) are
-		// not wired through Gram triggers yet. Ack without dispatching so
+		// not wired through Speakeasy triggers yet. Ack without dispatching so
 		// Slack stops retrying.
 		return &WebhookIngest{Response: nil, Event: nil, EventID: "", CorrelationID: ""}, nil
 	}
@@ -711,7 +711,7 @@ func newSlackDefinition() Definition {
 	vendor := WebhookVendor{
 		Slug:            DefinitionSlugSlack,
 		Title:           "Slack",
-		Description:     "Receive Slack Events API callbacks and map them to Gram trigger events.",
+		Description:     "Receive Slack Events API callbacks and map them to Speakeasy trigger events.",
 		EventType:       reflect.TypeFor[slackTriggerEvent](),
 		EnvRequirements: []EnvRequirement{{Name: slackSigningSecretEnv, Description: "Slack signing secret used to verify webhook signatures.", Required: true}},
 		SecretEnv:       slackSigningSecretEnv,

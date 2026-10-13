@@ -73,7 +73,7 @@ export type ListToolUsageTracesPayload = {
    */
   accountType?: string | undefined;
   /**
-   * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include
+   * MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Speakeasy never saw an initialize handshake for) to include
    */
   clientKeys?: Array<string> | undefined;
   /**
@@ -105,7 +105,7 @@ export type ListToolUsageTracesPayload = {
    */
   metaMcpServerIds?: Array<string> | undefined;
   /**
-   * Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.
+   * Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Speakeasy URN, conversation ID, and trigger instance ID.
    */
   query?: string | undefined;
   /**

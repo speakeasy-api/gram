@@ -464,9 +464,9 @@ type MessageEvent_builder struct {
 	Type           *MessageEvent_Type
 	OrganizationId *string
 	ProjectId      *string
-	// Persisted Gram conversation UUID.
+	// Persisted Speakeasy conversation UUID.
 	ConversationId *string
-	// Persisted Gram message UUID, distinct from the mutation event ID.
+	// Persisted Speakeasy message UUID, distinct from the mutation event ID.
 	MessageId *string
 	// Role at the time of the mutation; allows filtering before fetching content.
 	Role *MessageEvent_Role
@@ -847,11 +847,11 @@ type MessageEvent_IngestionContext_builder struct {
 
 	// Canonical normalized ingestion source.
 	Source *string
-	// Gram user to whom ingestion explicitly allocates usage. Independent of
+	// Speakeasy user to whom ingestion explicitly allocates usage. Independent of
 	// actor identity; consumers must not infer it from the actor or account owner.
 	// Absence means unassigned. This is not proof that a charge occurred.
 	BillingUserId *string
-	// Gram assistant resource associated with the workload, when supplied.
+	// Speakeasy assistant resource associated with the workload, when supplied.
 	AssistantId *string
 	// Actor email explicitly observed by ingestion, not a directory lookup.
 	ObservedUserEmail *string
@@ -862,11 +862,11 @@ type MessageEvent_IngestionContext_builder struct {
 	// Device hostname observed by ingestion.
 	Hostname *string
 	// Ingestion-time classification of the external AI account, such as "team"
-	// or "personal". Not the organization's Gram billing plan.
+	// or "personal". Not the organization's Speakeasy billing plan.
 	AccountType *string
 	// External AI account billing mode, such as "metered" or "flat_rate".
 	// "unknown" or absence can represent an unresolved mode. Does not select a
-	// billing user or determine Gram pricing.
+	// billing user or determine Speakeasy pricing.
 	BillingMode *string
 	// Historical source import/replay marker, not Pub/Sub redelivery.
 	Replayed *bool

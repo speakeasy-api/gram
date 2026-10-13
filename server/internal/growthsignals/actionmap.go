@@ -12,10 +12,10 @@ import (
 type McpKind string
 
 const (
-	// McpKindHosted is a server Gram builds and hosts from a deployment.
+	// McpKindHosted is a server Speakeasy builds and hosts from a deployment.
 	McpKindHosted McpKind = "hosted"
 
-	// McpKindRemote is a third-party server Gram proxies.
+	// McpKindRemote is a third-party server Speakeasy proxies.
 	McpKindRemote McpKind = "remote"
 
 	// McpKindTunneled is a server reachable through a customer-run tunnel.

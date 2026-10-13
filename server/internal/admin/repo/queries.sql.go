@@ -211,7 +211,7 @@ SET disabled_at = COALESCE(disabled_at, clock_timestamp()),
 WHERE id = $1
 `
 
-// Operator-initiated disable. Keyed on the Gram organization id rather than
+// Operator-initiated disable. Keyed on the Speakeasy organization id rather than
 // workos_id so an organization that was never linked to WorkOS can still be
 // disabled. Deliberately leaves workos_last_event_id alone: that column is the
 // WorkOS webhook cursor and this is not a WorkOS event, so stamping it would
@@ -344,8 +344,17 @@ SELECT
 FROM mcp_servers m
 LEFT JOIN toolsets t ON t.id = m.toolset_id AND t.project_id = m.project_id AND t.deleted IS FALSE
 CROSS JOIN LATERAL (
-    SELECT count(*)::bigint AS wrapper_count FROM mcp_servers o
-    WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+    SELECT CASE
+        WHEN m.id = m.toolset_id THEN 1
+        WHEN EXISTS (
+            SELECT 1 FROM mcp_servers c
+            WHERE c.id = m.toolset_id AND c.project_id = m.project_id AND c.deleted IS FALSE
+        ) THEN 2
+        ELSE (
+            SELECT count(*) FROM mcp_servers o
+            WHERE o.toolset_id = m.toolset_id AND o.project_id = m.project_id AND o.deleted IS FALSE
+        )
+    END::bigint AS wrapper_count
 ) w
 WHERE m.id = $1
   AND m.project_id = $2
@@ -401,8 +410,10 @@ type AdminGetMcpServerAuthRow struct {
 // for a toolset-only server, the toolset id. A toolset-backed wrapper takes its
 // issuer from its own row, not its toolset's, matching how the MCP endpoint
 // resolves it; the legacy OAuth columns live on the toolset only.
-// toolset_wrapper_count counts live wrappers of the toolset, so the caller can
-// drop a toolset slug that would also select another wrapper's calls.
+// toolset_wrapper_count counts the live wrappers competing for the toolset's
+// slug, so the caller can drop a toolset slug that would also select another
+// wrapper's calls. A live canonical wrapper (id = toolset id) owns the slug
+// outright: it counts as one, and any other wrapper of that toolset as two.
 // url_slug is the slug in the /mcp/<slug> path clients call: the primary live
 // endpoint's (custom domain first, as mcpendpoints.PrimaryEndpoint ranks them;
 // a domain root has no such path), else the server's own slug, else the
@@ -1123,6 +1134,9 @@ filtered AS (
         om.name,
         om.slug,
         om.gram_account_type AS account_type,
+        -- Ranks by what the account pays rather than by how its type is spelled:
+        -- enterprise, then pro and payg, then free, then any type off the list.
+        CASE om.gram_account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END AS account_tier,
         om.workos_id,
         bm.stripe_customer_id,
         bm.stripe_subscription_id,
@@ -1196,7 +1210,7 @@ filtered AS (
         )
 ),
 paged AS MATERIALIZED (
-SELECT id, name, slug, account_type, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+SELECT id, name, slug, account_type, account_tier, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 WHERE coalesce(cardinality($11::text[]), 0) = 0 OR trial_state = ANY($11::text[])
 ORDER BY
     CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
@@ -1205,6 +1219,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -1236,6 +1252,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,

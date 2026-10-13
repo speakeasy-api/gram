@@ -1,4 +1,4 @@
-# OpenTelemetry Collector for Gram's Fly-hosted workloads (assistant
+# OpenTelemetry Collector for Speakeasy's Fly-hosted workloads (assistant
 # runtimes and, later, function runners). VMs export OTLP to this app over
 # the org's private network; the collector forwards traces to Datadog using
 # credentials that live only on this app as Fly secrets:

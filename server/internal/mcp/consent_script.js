@@ -2,13 +2,14 @@
 // inline scripts. Loaded by consent_template.html via a content-hashed
 // <script src>.
 //
-// Two jobs:
+// Main jobs:
 //
 //   1. Neutralise double-clicks on the consent controls. A second activation
 //      while the first request is still pending sends the user to an authn
 //      challenge that has already been consumed, producing "authn challenge
 //      state not found or expired" (AIS-103).
 //   2. Fan the page-level auto-refresh choice out to every card.
+//   3. Check identity-chained cards' exchanges in the background.
 //
 // Connect deliberately stays a full-page form POST. Running it in a popup kept
 // the page's state through the provider round trip, but handed the provider a
@@ -468,6 +469,87 @@
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
   guardActionButtons("button[data-validate-link]", "Checking…");
+
+  // Identity-chained cards render neutral, so they read right without script.
+  // Check each exchange in the background and settle the card in place; any
+  // failure keeps the neutral copy and the separate sign-in fallback.
+  var connectedSummary = document.querySelector("[data-connected-summary]");
+  var chainActionURL = (function () {
+    var services = document.querySelector("[data-service-connections]");
+    return services ? services.getAttribute("data-action-url") : "";
+  })();
+
+  function settleChainCheck(status, card, result) {
+    var state = result ? result.status : "";
+    if (state !== "connected" && state !== "rejected") {
+      state = "unknown";
+    }
+    status.setAttribute("data-chain-check", state);
+    if (state === "connected") {
+      status.className = "text-xs text-default-success";
+      status.textContent = "Connected through your identity provider";
+      if (connectedSummary) {
+        var count =
+          Number(connectedSummary.getAttribute("data-connected-count")) + 1;
+        connectedSummary.setAttribute("data-connected-count", String(count));
+        connectedSummary.textContent =
+          count +
+          " of " +
+          connectedSummary.getAttribute("data-connected-total") +
+          " connected";
+      }
+      return;
+    }
+    if (state === "rejected") {
+      status.className = "text-xs text-default-warning";
+      status.textContent =
+        result.message ||
+        "Your identity provider sign-in wasn't accepted. Use a separate sign-in.";
+      var fallback = card.querySelector("button[data-connect-fallback]");
+      if (fallback && fallback.getAttribute("aria-disabled") !== "true") {
+        fallback.className =
+          "bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm";
+        fallback.removeAttribute("data-connect-fallback");
+        fallback.textContent = "Connect";
+      }
+      return;
+    }
+    status.className = "text-xs text-muted-foreground";
+    status.textContent = "Managed by your identity provider";
+  }
+
+  var chainChecks = document.querySelectorAll('[data-chain-check="pending"]');
+  Array.prototype.forEach.call(chainChecks, function (status) {
+    var card = status.closest("[data-remote-client]");
+    var state = card && card.querySelector('input[name="state"]');
+    var csrf = card && card.querySelector('input[name="csrf_token"]');
+    if (!chainActionURL || !state || !csrf) {
+      return;
+    }
+    showPending(status, "Connecting through your identity provider…");
+    fetch(chainActionURL, {
+      method: "POST",
+      credentials: "same-origin",
+      body: new URLSearchParams({
+        state: state.value,
+        csrf_token: csrf.value,
+        action: "identity_chaining_check",
+        client_id: card.getAttribute("data-remote-client"),
+      }),
+      headers: { Accept: "application/json" },
+    })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(
+        function (result) {
+          settleChainCheck(status, card, result);
+        },
+        function () {
+          settleChainCheck(status, card, null);
+        },
+      );
+  });
 
   // Session length is stated on the summary line so it is visible without
   // opening the configuration disclosure; keep the two in step when the

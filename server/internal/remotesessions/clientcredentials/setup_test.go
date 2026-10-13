@@ -325,12 +325,24 @@ func (f fixture) rotateSecret(t *testing.T, clientID uuid.UUID, secret string) {
 func (f fixture) cacheKeys(t *testing.T, clientID uuid.UUID, resource string) cacheKeys {
 	t.Helper()
 
-	client, err := repo.New(f.db).GetClientCredentialsGrantClient(t.Context(), repo.GetClientCredentialsGrantClientParams{ID: clientID, OrganizationID: pgtype.Text{String: f.org, Valid: true}})
-	require.NoError(t, err)
+	client := f.grantClient(t, clientID)
 
 	return newCacheKeys(client, sentResource(client, resource))
 }
 
-func (f fixture) request(clientID uuid.UUID, resource string) Request {
-	return Request{OrganizationID: f.org, ClientID: clientID, Resource: resource}
+// grantClient reads the client as the minter does.
+func (f fixture) grantClient(t *testing.T, clientID uuid.UUID) repo.GetClientCredentialsGrantClientRow {
+	t.Helper()
+
+	client, err := repo.New(f.db).GetClientCredentialsGrantClient(t.Context(), repo.GetClientCredentialsGrantClientParams{
+		ID:             clientID,
+		OrganizationID: pgtype.Text{String: f.org, Valid: true},
+	})
+	require.NoError(t, err)
+
+	return client
+}
+
+func (f fixture) request(clientID uuid.UUID, resource string) remotesessions.ClientCredentialRequest {
+	return remotesessions.ClientCredentialRequest{OrganizationID: f.org, ClientID: clientID, Resource: resource}
 }

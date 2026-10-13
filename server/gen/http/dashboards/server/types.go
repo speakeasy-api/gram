@@ -76,11 +76,20 @@ type DuplicateDashboardRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// DuplicateBuiltInDashboardRequestBody is the type of the "dashboards" service
+// "duplicateBuiltInDashboard" endpoint HTTP request body.
+type DuplicateBuiltInDashboardRequestBody struct {
+	// The built-in dashboard to copy
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
 // ListDashboardsResponseBody is the type of the "dashboards" service
 // "listDashboards" endpoint HTTP response body.
 type ListDashboardsResponseBody struct {
 	// Dashboards in the project, most recently updated first
 	Dashboards []*DashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
+	// The dashboards Speakeasy ships, the same in every project
+	BuiltIn []*BuiltInDashboardResponseBody `form:"built_in" json:"built_in" xml:"built_in"`
 }
 
 // GetDashboardResponseBody is the type of the "dashboards" service
@@ -226,6 +235,26 @@ type SaveDashboardFiltersResponseBody struct {
 // DuplicateDashboardResponseBody is the type of the "dashboards" service
 // "duplicateDashboard" endpoint HTTP response body.
 type DuplicateDashboardResponseBody struct {
+	ID             string `form:"id" json:"id" xml:"id"`
+	ProjectID      string `form:"project_id" json:"project_id" xml:"project_id"`
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Who made it, when known
+	CreatedByUserID *string `form:"created_by_user_id,omitempty" json:"created_by_user_id,omitempty" xml:"created_by_user_id,omitempty"`
+	// Display name. Not unique.
+	Name string `form:"name" json:"name" xml:"name"`
+	// What the dashboard is for, when its creator said
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The saved date range and filter values it opens on
+	Filters *DashboardFiltersResponseBody `form:"filters" json:"filters" xml:"filters"`
+	// Its cards, in no particular order; the grid places them by position
+	Widgets   []*DashboardPlacementResponseBody `form:"widgets" json:"widgets" xml:"widgets"`
+	CreatedAt string                            `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string                            `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// DuplicateBuiltInDashboardResponseBody is the type of the "dashboards"
+// service "duplicateBuiltInDashboard" endpoint HTTP response body.
+type DuplicateBuiltInDashboardResponseBody struct {
 	ID             string `form:"id" json:"id" xml:"id"`
 	ProjectID      string `form:"project_id" json:"project_id" xml:"project_id"`
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
@@ -1931,6 +1960,196 @@ type DuplicateDashboardGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DuplicateBuiltInDashboardUnauthorizedResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "unauthorized" error.
+type DuplicateBuiltInDashboardUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateBuiltInDashboardForbiddenResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "forbidden" error.
+type DuplicateBuiltInDashboardForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateBuiltInDashboardBadRequestResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "bad_request" error.
+type DuplicateBuiltInDashboardBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateBuiltInDashboardNotFoundResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "not_found" error.
+type DuplicateBuiltInDashboardNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateBuiltInDashboardConflictResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "conflict" error.
+type DuplicateBuiltInDashboardConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateBuiltInDashboardUnsupportedMediaResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "unsupported_media" error.
+type DuplicateBuiltInDashboardUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateBuiltInDashboardInvalidResponseBody is the type of the "dashboards"
+// service "duplicateBuiltInDashboard" endpoint HTTP response body for the
+// "invalid" error.
+type DuplicateBuiltInDashboardInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateBuiltInDashboardInvariantViolationResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "invariant_violation" error.
+type DuplicateBuiltInDashboardInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateBuiltInDashboardUnexpectedResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "unexpected" error.
+type DuplicateBuiltInDashboardUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DuplicateBuiltInDashboardGatewayErrorResponseBody is the type of the
+// "dashboards" service "duplicateBuiltInDashboard" endpoint HTTP response body
+// for the "gateway_error" error.
+type DuplicateBuiltInDashboardGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteDashboardUnauthorizedResponseBody is the type of the "dashboards"
 // service "deleteDashboard" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -2172,6 +2391,41 @@ type DashboardPlacementResponseBody struct {
 	H int `form:"h" json:"h" xml:"h"`
 }
 
+// BuiltInDashboardResponseBody is used to define fields on response body types.
+type BuiltInDashboardResponseBody struct {
+	// Names the dashboard in links and when duplicating it
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Display name
+	Name string `form:"name" json:"name" xml:"name"`
+	// What the dashboard is for
+	Description string `form:"description" json:"description" xml:"description"`
+	// Its cards, in no particular order; the grid places them by position
+	Cards []*BuiltInCardResponseBody `form:"cards" json:"cards" xml:"cards"`
+}
+
+// BuiltInCardResponseBody is used to define fields on response body types.
+type BuiltInCardResponseBody struct {
+	// What the card is called
+	Name string `form:"name" json:"name" xml:"name"`
+	// What the card shows, when there is more to say
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The catalog dataset the card asks
+	Dataset string `form:"dataset" json:"dataset" xml:"dataset"`
+	// The question: window, grain, dimensions, measures, filters, order and limit,
+	// in the shape a saved widget stores.
+	Query map[string]any `form:"query" json:"query" xml:"query"`
+	// How the question is drawn: a chart type and its options.
+	Visualization map[string]any `form:"visualization" json:"visualization" xml:"visualization"`
+	// Column the card starts at, from 0
+	X int `form:"x" json:"x" xml:"x"`
+	// Row the card starts at, from 0
+	Y int `form:"y" json:"y" xml:"y"`
+	// Width in columns
+	W int `form:"w" json:"w" xml:"w"`
+	// Height in rows
+	H int `form:"h" json:"h" xml:"h"`
+}
+
 // PlacementInputRequestBody is used to define fields on request body types.
 type PlacementInputRequestBody struct {
 	// The placement being moved or resized
@@ -2223,6 +2477,18 @@ func NewListDashboardsResponseBody(res *dashboards.ListDashboardsResult) *ListDa
 		}
 	} else {
 		body.Dashboards = []*DashboardResponseBody{}
+	}
+	if res.BuiltIn != nil {
+		body.BuiltIn = make([]*BuiltInDashboardResponseBody, len(res.BuiltIn))
+		for i, val := range res.BuiltIn {
+			if val == nil {
+				body.BuiltIn[i] = nil
+				continue
+			}
+			body.BuiltIn[i] = marshalDashboardsBuiltInDashboardToBuiltInDashboardResponseBody(val)
+		}
+	} else {
+		body.BuiltIn = []*BuiltInDashboardResponseBody{}
 	}
 	return body
 }
@@ -2448,6 +2714,38 @@ func NewSaveDashboardFiltersResponseBody(res *dashboards.Dashboard) *SaveDashboa
 // result of the "duplicateDashboard" endpoint of the "dashboards" service.
 func NewDuplicateDashboardResponseBody(res *dashboards.Dashboard) *DuplicateDashboardResponseBody {
 	body := &DuplicateDashboardResponseBody{
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		OrganizationID:  res.OrganizationID,
+		CreatedByUserID: res.CreatedByUserID,
+		Name:            res.Name,
+		Description:     res.Description,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
+	}
+	if res.Filters != nil {
+		body.Filters = marshalDashboardsDashboardFiltersToDashboardFiltersResponseBody(res.Filters)
+	}
+	if res.Widgets != nil {
+		body.Widgets = make([]*DashboardPlacementResponseBody, len(res.Widgets))
+		for i, val := range res.Widgets {
+			if val == nil {
+				body.Widgets[i] = nil
+				continue
+			}
+			body.Widgets[i] = marshalDashboardsDashboardPlacementToDashboardPlacementResponseBody(val)
+		}
+	} else {
+		body.Widgets = []*DashboardPlacementResponseBody{}
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardResponseBody builds the HTTP response body from
+// the result of the "duplicateBuiltInDashboard" endpoint of the "dashboards"
+// service.
+func NewDuplicateBuiltInDashboardResponseBody(res *dashboards.Dashboard) *DuplicateBuiltInDashboardResponseBody {
+	body := &DuplicateBuiltInDashboardResponseBody{
 		ID:              res.ID,
 		ProjectID:       res.ProjectID,
 		OrganizationID:  res.OrganizationID,
@@ -3787,6 +4085,156 @@ func NewDuplicateDashboardGatewayErrorResponseBody(res *goa.ServiceError) *Dupli
 	return body
 }
 
+// NewDuplicateBuiltInDashboardUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "duplicateBuiltInDashboard" endpoint of
+// the "dashboards" service.
+func NewDuplicateBuiltInDashboardUnauthorizedResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardUnauthorizedResponseBody {
+	body := &DuplicateBuiltInDashboardUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardForbiddenResponseBody builds the HTTP response
+// body from the result of the "duplicateBuiltInDashboard" endpoint of the
+// "dashboards" service.
+func NewDuplicateBuiltInDashboardForbiddenResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardForbiddenResponseBody {
+	body := &DuplicateBuiltInDashboardForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardBadRequestResponseBody builds the HTTP response
+// body from the result of the "duplicateBuiltInDashboard" endpoint of the
+// "dashboards" service.
+func NewDuplicateBuiltInDashboardBadRequestResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardBadRequestResponseBody {
+	body := &DuplicateBuiltInDashboardBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardNotFoundResponseBody builds the HTTP response
+// body from the result of the "duplicateBuiltInDashboard" endpoint of the
+// "dashboards" service.
+func NewDuplicateBuiltInDashboardNotFoundResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardNotFoundResponseBody {
+	body := &DuplicateBuiltInDashboardNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardConflictResponseBody builds the HTTP response
+// body from the result of the "duplicateBuiltInDashboard" endpoint of the
+// "dashboards" service.
+func NewDuplicateBuiltInDashboardConflictResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardConflictResponseBody {
+	body := &DuplicateBuiltInDashboardConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "duplicateBuiltInDashboard" endpoint of
+// the "dashboards" service.
+func NewDuplicateBuiltInDashboardUnsupportedMediaResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardUnsupportedMediaResponseBody {
+	body := &DuplicateBuiltInDashboardUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardInvalidResponseBody builds the HTTP response
+// body from the result of the "duplicateBuiltInDashboard" endpoint of the
+// "dashboards" service.
+func NewDuplicateBuiltInDashboardInvalidResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardInvalidResponseBody {
+	body := &DuplicateBuiltInDashboardInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "duplicateBuiltInDashboard" endpoint of
+// the "dashboards" service.
+func NewDuplicateBuiltInDashboardInvariantViolationResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardInvariantViolationResponseBody {
+	body := &DuplicateBuiltInDashboardInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardUnexpectedResponseBody builds the HTTP response
+// body from the result of the "duplicateBuiltInDashboard" endpoint of the
+// "dashboards" service.
+func NewDuplicateBuiltInDashboardUnexpectedResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardUnexpectedResponseBody {
+	body := &DuplicateBuiltInDashboardUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDuplicateBuiltInDashboardGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "duplicateBuiltInDashboard" endpoint of
+// the "dashboards" service.
+func NewDuplicateBuiltInDashboardGatewayErrorResponseBody(res *goa.ServiceError) *DuplicateBuiltInDashboardGatewayErrorResponseBody {
+	body := &DuplicateBuiltInDashboardGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteDashboardUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "deleteDashboard" endpoint of the "dashboards"
 // service.
@@ -4050,6 +4498,18 @@ func NewDuplicateDashboardPayload(body *DuplicateDashboardRequestBody, sessionTo
 	return v
 }
 
+// NewDuplicateBuiltInDashboardPayload builds a dashboards service
+// duplicateBuiltInDashboard endpoint payload.
+func NewDuplicateBuiltInDashboardPayload(body *DuplicateBuiltInDashboardRequestBody, sessionToken *string, projectSlugInput *string) *dashboards.DuplicateBuiltInDashboardPayload {
+	v := &dashboards.DuplicateBuiltInDashboardPayload{
+		Slug: *body.Slug,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewDeleteDashboardPayload builds a dashboards service deleteDashboard
 // endpoint payload.
 func NewDeleteDashboardPayload(id string, sessionToken *string, projectSlugInput *string) *dashboards.DeleteDashboardPayload {
@@ -4204,6 +4664,15 @@ func ValidateDuplicateDashboardRequestBody(body *DuplicateDashboardRequestBody) 
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateDuplicateBuiltInDashboardRequestBody runs the validations defined on
+// DuplicateBuiltInDashboardRequestBody
+func ValidateDuplicateBuiltInDashboardRequestBody(body *DuplicateBuiltInDashboardRequestBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	return
 }

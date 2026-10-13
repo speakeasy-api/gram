@@ -103,6 +103,17 @@ type CommitServerIdentityConfigurationResponseBody struct {
 	Failure *ServerIdentityRegistrationFailureResponseBody `form:"failure,omitempty" json:"failure,omitempty" xml:"failure,omitempty"`
 }
 
+// GetServerIdentityImpactResponseBody is the type of the "remoteSessions"
+// service "getServerIdentityImpact" endpoint HTTP response body.
+type GetServerIdentityImpactResponseBody struct {
+	// Affected MCP servers the caller can read.
+	Servers []*ServerIdentityImpactServerResponseBody `form:"servers" json:"servers" xml:"servers"`
+	// MCP servers and gateways the caller cannot read; they are not named. When
+	// the change touches an organization-level client this counts every such
+	// server on the issuer, affected or not.
+	HiddenServerCount int `form:"hidden_server_count" json:"hidden_server_count" xml:"hidden_server_count"`
+}
+
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
 // "listRemoteSessions" endpoint HTTP response body.
 type ListRemoteSessionsResponseBody struct {
@@ -870,6 +881,196 @@ type CommitServerIdentityConfigurationGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetServerIdentityImpactUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "unauthorized" error.
+type GetServerIdentityImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactForbiddenResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "forbidden" error.
+type GetServerIdentityImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactBadRequestResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "bad_request" error.
+type GetServerIdentityImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactNotFoundResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "not_found" error.
+type GetServerIdentityImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactConflictResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "conflict" error.
+type GetServerIdentityImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "unsupported_media" error.
+type GetServerIdentityImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactInvalidResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "invalid" error.
+type GetServerIdentityImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactInvariantViolationResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetServerIdentityImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactUnexpectedResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "unexpected" error.
+type GetServerIdentityImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerIdentityImpactGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "getServerIdentityImpact" endpoint HTTP response
+// body for the "gateway_error" error.
+type GetServerIdentityImpactGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListRemoteSessionsUnauthorizedResponseBody is the type of the
 // "remoteSessions" service "listRemoteSessions" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1461,14 +1662,14 @@ type RemoteSessionResponseBody struct {
 	// The session's subject URN (user:<id> | apikey:<uuid> |
 	// anonymous:<mcp-session-id>).
 	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
-	// Resolved display name when the subject is a Gram user. Absent for
+	// Resolved display name when the subject is a Speakeasy user. Absent for
 	// apikey/anonymous subjects or unresolved users.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
-	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
-	// subjects or unresolved users.
+	// Resolved email when the subject is a Speakeasy user. Absent for
+	// apikey/anonymous subjects or unresolved users.
 	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
 	// Stored email of the account at the upstream provider. Absent when no
-	// upstream identity interface supplied it; never inferred from the Gram
+	// upstream identity interface supplied it; never inferred from the Speakeasy
 	// subject.
 	UpstreamEmail *string `form:"upstream_email,omitempty" json:"upstream_email,omitempty" xml:"upstream_email,omitempty"`
 	// Stored display name of the account at the upstream provider. Absent when no
@@ -1526,8 +1727,8 @@ type RemoteSessionIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.
@@ -1621,9 +1822,9 @@ type RemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -1639,8 +1840,8 @@ type RemoteSessionClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -1652,11 +1853,23 @@ type RemoteSessionClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ServerIdentityRegistrationFailureResponseBody is used to define fields on
@@ -1669,6 +1882,29 @@ type ServerIdentityRegistrationFailureResponseBody struct {
 	ProviderMessage *string `form:"provider_message,omitempty" json:"provider_message,omitempty" xml:"provider_message,omitempty"`
 	// Optional upstream HTTP status.
 	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+}
+
+// ServerIdentityImpactServerResponseBody is used to define fields on response
+// body types.
+type ServerIdentityImpactServerResponseBody struct {
+	// The MCP server or gateway id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Whether this is an MCP server or a gateway.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The MCP server or gateway name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server slug. Gateways have none.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The owning project.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the owning project.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// repoint: its upstream authorization server changes to another single
+	// provider. clear: it is left with no single provider and loses its upstream.
+	// resignin: its upstream is unchanged but its client is replaced, so everyone
+	// signs in again. client_removed: a gateway loses a provider client its
+	// members sign in through.
+	Impact string `form:"impact" json:"impact" xml:"impact"`
 }
 
 // CreateRemoteSessionIssuerFormRequestBody is used to define fields on request
@@ -1847,6 +2083,28 @@ func NewCommitServerIdentityConfigurationResponseBody(res *remotesessions.Commit
 	}
 	if res.Failure != nil {
 		body.Failure = marshalRemotesessionsServerIdentityRegistrationFailureToServerIdentityRegistrationFailureResponseBody(res.Failure)
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactResponseBody builds the HTTP response body from
+// the result of the "getServerIdentityImpact" endpoint of the "remoteSessions"
+// service.
+func NewGetServerIdentityImpactResponseBody(res *remotesessions.ServerIdentityImpactResult) *GetServerIdentityImpactResponseBody {
+	body := &GetServerIdentityImpactResponseBody{
+		HiddenServerCount: res.HiddenServerCount,
+	}
+	if res.Servers != nil {
+		body.Servers = make([]*ServerIdentityImpactServerResponseBody, len(res.Servers))
+		for i, val := range res.Servers {
+			if val == nil {
+				body.Servers[i] = nil
+				continue
+			}
+			body.Servers[i] = marshalRemotesessionsServerIdentityImpactServerToServerIdentityImpactServerResponseBody(val)
+		}
+	} else {
+		body.Servers = []*ServerIdentityImpactServerResponseBody{}
 	}
 	return body
 }
@@ -2457,6 +2715,156 @@ func NewCommitServerIdentityConfigurationGatewayErrorResponseBody(res *goa.Servi
 	return body
 }
 
+// NewGetServerIdentityImpactUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactUnauthorizedResponseBody(res *goa.ServiceError) *GetServerIdentityImpactUnauthorizedResponseBody {
+	body := &GetServerIdentityImpactUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactForbiddenResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactForbiddenResponseBody(res *goa.ServiceError) *GetServerIdentityImpactForbiddenResponseBody {
+	body := &GetServerIdentityImpactForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactBadRequestResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactBadRequestResponseBody(res *goa.ServiceError) *GetServerIdentityImpactBadRequestResponseBody {
+	body := &GetServerIdentityImpactBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactNotFoundResponseBody builds the HTTP response body
+// from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactNotFoundResponseBody(res *goa.ServiceError) *GetServerIdentityImpactNotFoundResponseBody {
+	body := &GetServerIdentityImpactNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactConflictResponseBody builds the HTTP response body
+// from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactConflictResponseBody(res *goa.ServiceError) *GetServerIdentityImpactConflictResponseBody {
+	body := &GetServerIdentityImpactConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getServerIdentityImpact" endpoint of
+// the "remoteSessions" service.
+func NewGetServerIdentityImpactUnsupportedMediaResponseBody(res *goa.ServiceError) *GetServerIdentityImpactUnsupportedMediaResponseBody {
+	body := &GetServerIdentityImpactUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactInvalidResponseBody builds the HTTP response body
+// from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactInvalidResponseBody(res *goa.ServiceError) *GetServerIdentityImpactInvalidResponseBody {
+	body := &GetServerIdentityImpactInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getServerIdentityImpact" endpoint of
+// the "remoteSessions" service.
+func NewGetServerIdentityImpactInvariantViolationResponseBody(res *goa.ServiceError) *GetServerIdentityImpactInvariantViolationResponseBody {
+	body := &GetServerIdentityImpactInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactUnexpectedResponseBody(res *goa.ServiceError) *GetServerIdentityImpactUnexpectedResponseBody {
+	body := &GetServerIdentityImpactUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerIdentityImpactGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getServerIdentityImpact" endpoint of the
+// "remoteSessions" service.
+func NewGetServerIdentityImpactGatewayErrorResponseBody(res *goa.ServiceError) *GetServerIdentityImpactGatewayErrorResponseBody {
+	body := &GetServerIdentityImpactGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRemoteSessionsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listRemoteSessions" endpoint of the "remoteSessions"
 // service.
@@ -2963,6 +3371,22 @@ func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfi
 	if body.ClientConfiguration != nil {
 		v.ClientConfiguration = unmarshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration(body.ClientConfiguration)
 	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetServerIdentityImpactPayload builds a remoteSessions service
+// getServerIdentityImpact endpoint payload.
+func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
+	v := &remotesessions.GetServerIdentityImpactPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.McpServerID = mcpServerID
+	v.Change = change
+	v.ProviderID = providerID
+	v.ClientID = clientID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

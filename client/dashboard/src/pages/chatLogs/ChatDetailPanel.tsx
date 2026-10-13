@@ -1623,7 +1623,7 @@ function ChatDetailPanel({
   }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
 
   const userLabelOverride = chat && !readableTag ? userLabel : undefined;
-  // The same key ChatOwnerLabel uses: a chat carries the Gram user when the
+  // The same key ChatOwnerLabel uses: a chat carries the Speakeasy user when the
   // owner is a member and the reported agent id otherwise. Memoized because a
   // fresh object each render would invalidate the row context below on every
   // pass, re-rendering the whole transcript.

@@ -1,4 +1,4 @@
-import type { AdmitSubjectFormValues } from "./AdmitSubjectSheet";
+import type { AdmitSubjectFormValues } from "./formValues";
 
 /** The editable fields of an allowed machine that differ from what is stored. */
 export interface AdmissionChanges {

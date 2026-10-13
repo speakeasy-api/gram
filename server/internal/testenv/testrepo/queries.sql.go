@@ -1166,6 +1166,22 @@ func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePr
 	return err
 }
 
+const expirePlatformMCPOperationReceiptFixture = `-- name: ExpirePlatformMCPOperationReceiptFixture :one
+UPDATE platform_mcp_operation_receipts
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = $1
+RETURNING expires_at
+`
+
+// Test-only fixture expiring an idempotency receipt by the database clock,
+// the clock both the replay pre-check and the locked path judge expiry with.
+func (q *Queries) ExpirePlatformMCPOperationReceiptFixture(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, expirePlatformMCPOperationReceiptFixture, id)
+	var expires_at pgtype.Timestamptz
+	err := row.Scan(&expires_at)
+	return expires_at, err
+}
+
 const expirePlatformMCPSetupHandoffFixture = `-- name: ExpirePlatformMCPSetupHandoffFixture :exec
 UPDATE platform_mcp_setup_handoffs
 SET expires_at = clock_timestamp() - interval '1 second'
@@ -1245,6 +1261,42 @@ type ForceRemoteSessionClientAuthMethodFixtureParams struct {
 // (requireDetachableKeySet, requirePrivateKeyJWTKeySet) must then refuse.
 func (q *Queries) ForceRemoteSessionClientAuthMethodFixture(ctx context.Context, arg ForceRemoteSessionClientAuthMethodFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, forceRemoteSessionClientAuthMethodFixture, arg.TokenEndpointAuthMethod, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const forceRemoteSessionClientCredentialOwnerFixture = `-- name: ForceRemoteSessionClientCredentialOwnerFixture :execrows
+UPDATE remote_session_clients
+SET credential_owner = $1,
+    updated_at = clock_timestamp()
+WHERE remote_session_clients.id = $2
+  AND remote_session_clients.deleted IS FALSE
+  AND remote_session_clients.project_id IS NOT DISTINCT FROM $3::uuid
+  AND (remote_session_clients.organization_id IS NULL OR remote_session_clients.organization_id = $4)
+  AND (remote_session_clients.organization_id = $4 AND remote_session_clients.project_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = $4))
+`
+
+type ForceRemoteSessionClientCredentialOwnerFixtureParams struct {
+	CredentialOwner string
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+	OrganizationID  pgtype.Text
+}
+
+// Test fixture: sets who owns a client's upstream credential, which no
+// application query changes after creation. A 'self' owner must satisfy
+// remote_session_clients_credential_owner_check, so the client needs a
+// confidential token endpoint auth method first.
+func (q *Queries) ForceRemoteSessionClientCredentialOwnerFixture(ctx context.Context, arg ForceRemoteSessionClientCredentialOwnerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, forceRemoteSessionClientCredentialOwnerFixture,
+		arg.CredentialOwner,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -1910,34 +1962,6 @@ func (q *Queries) GetPreparationFixtureRegistration(ctx context.Context, arg Get
 	return i, err
 }
 
-const getPrincipalGrantEffectFixture = `-- name: GetPrincipalGrantEffectFixture :one
-SELECT effect
-FROM principal_grants
-WHERE organization_id = $1
-  AND principal_urn = $2
-  AND scope = $3
-  AND selectors = $4
-`
-
-type GetPrincipalGrantEffectFixtureParams struct {
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	Scope          string
-	Selectors      []byte
-}
-
-func (q *Queries) GetPrincipalGrantEffectFixture(ctx context.Context, arg GetPrincipalGrantEffectFixtureParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getPrincipalGrantEffectFixture,
-		arg.OrganizationID,
-		arg.PrincipalUrn,
-		arg.Scope,
-		arg.Selectors,
-	)
-	var effect pgtype.Text
-	err := row.Scan(&effect)
-	return effect, err
-}
-
 const getPrincipalRemoteSessionBindingIssuerFixture = `-- name: GetPrincipalRemoteSessionBindingIssuerFixture :one
 SELECT user_session_issuer_id
 FROM principal_remote_session_bindings
@@ -2573,29 +2597,6 @@ func (q *Queries) InsertKillswitchPrescriptionFixture(ctx context.Context, arg I
 		arg.ResourceScope,
 		arg.InternalNote,
 		arg.ExternalNote,
-	)
-	return err
-}
-
-const insertLegacyDenyPrincipalGrantFixture = `-- name: InsertLegacyDenyPrincipalGrantFixture :exec
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, $2, $3, 'deny', $4)
-`
-
-type InsertLegacyDenyPrincipalGrantFixtureParams struct {
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	Scope          string
-	Selectors      []byte
-}
-
-// Test-only fixture for exercising allow-only writes against legacy rows.
-func (q *Queries) InsertLegacyDenyPrincipalGrantFixture(ctx context.Context, arg InsertLegacyDenyPrincipalGrantFixtureParams) error {
-	_, err := q.db.Exec(ctx, insertLegacyDenyPrincipalGrantFixture,
-		arg.OrganizationID,
-		arg.PrincipalUrn,
-		arg.Scope,
-		arg.Selectors,
 	)
 	return err
 }
@@ -3293,6 +3294,34 @@ func (q *Queries) ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx co
 			return nil, err
 		}
 		items = append(items, disable_causes)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPOperationReceiptIDsFixture = `-- name: ListPlatformMCPOperationReceiptIDsFixture :many
+SELECT id
+FROM platform_mcp_operation_receipts
+WHERE organization_id = $1
+ORDER BY id
+`
+
+// Test-only inspection of which receipts an organization still holds.
+func (q *Queries) ListPlatformMCPOperationReceiptIDsFixture(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPOperationReceiptIDsFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -5404,6 +5433,45 @@ func (q *Queries) SetPreparationFixtureClientSecretExpiry(ctx context.Context, a
 	return err
 }
 
+const setPreparationFixtureConfidentialClient = `-- name: SetPreparationFixtureConfidentialClient :execrows
+WITH issuer AS (
+    UPDATE remote_session_issuers
+    SET token_endpoint_auth_methods_supported = array_append(array_remove(token_endpoint_auth_methods_supported, 'private_key_jwt'), 'private_key_jwt')
+    WHERE remote_session_issuers.id = $5 AND remote_session_issuers.project_id = $4
+    RETURNING remote_session_issuers.id
+)
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = $1, client_secret_encrypted = NULL,
+    organization_id = $2
+WHERE remote_session_clients.id = $3
+  AND remote_session_clients.project_id = $4
+  AND remote_session_clients.remote_session_issuer_id IN (SELECT issuer.id FROM issuer)
+`
+
+type SetPreparationFixtureConfidentialClientParams struct {
+	JsonWebKeySetID       uuid.NullUUID
+	OrganizationID        pgtype.Text
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// Identity chaining refuses public clients: make a fixture client authenticate
+// with private_key_jwt against a key set, and its issuer accept that method.
+func (q *Queries) SetPreparationFixtureConfidentialClient(ctx context.Context, arg SetPreparationFixtureConfidentialClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPreparationFixtureConfidentialClient,
+		arg.JsonWebKeySetID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ProjectID,
+		arg.RemoteSessionIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setPreparationFixtureDCREndpoint = `-- name: SetPreparationFixtureDCREndpoint :exec
 UPDATE remote_session_issuers SET registration_endpoint = $1, token_endpoint_auth_methods_supported=ARRAY['client_secret_basic'] WHERE id = $2 AND project_id = $3
 `
@@ -5437,7 +5505,8 @@ func (q *Queries) SetPreparationFixtureInteractiveClient(ctx context.Context, ar
 const setPreparationFixtureIssuerCapability = `-- name: SetPreparationFixtureIssuerCapability :exec
 UPDATE remote_session_issuers
 SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer']
+    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer'],
+    metadata_fetched_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2
 `
 

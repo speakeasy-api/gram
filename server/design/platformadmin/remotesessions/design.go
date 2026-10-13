@@ -185,7 +185,7 @@ var _ = Service("adminRemoteSessions", func() {
 	})
 
 	Method("refreshGlobalIssuerMetadata", func() {
-		Description("Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.")
+		Description("Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_issuer id.", func() {
@@ -529,7 +529,7 @@ var CreateGlobalRemoteSessionClientForm = Type("CreateGlobalRemoteSessionClientF
 		Format(FormatUUID)
 	})
 	Attribute("client_id", String, "client_id supplied by the caller.")
-	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
+	Attribute("client_secret", String, "client_secret supplied by the caller. Speakeasy encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", func() {
 		Enum("client_secret_basic", "client_secret_post", "none")
 	})
@@ -549,7 +549,7 @@ var UpdateGlobalRemoteSessionClientForm = Type("UpdateGlobalRemoteSessionClientF
 	Attribute("id", String, "The remote_session_client id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting.")
+	Attribute("client_secret", String, "Rotate the client secret. Speakeasy re-encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", func() {
 		Enum("client_secret_basic", "client_secret_post", "none")
 	})

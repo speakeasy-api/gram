@@ -8,6 +8,7 @@ import {
 } from "./mcp-server-visibility";
 
 const mocks = vi.hoisted(() => ({
+  invalidateAllResourceAudience: vi.fn(() => Promise.resolve()),
   invalidateAllMcpServers: vi.fn(() => Promise.resolve()),
   invalidateAllGetMcpServer: vi.fn(() => Promise.resolve()),
   invalidateAllMcpEndpoints: vi.fn(() => Promise.resolve()),
@@ -15,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   invalidateAllPublishStatus: vi.fn(() => Promise.resolve()),
 }));
 
+vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
+  invalidateAllResourceAudience: mocks.invalidateAllResourceAudience,
+}));
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   invalidateAllMcpServers: mocks.invalidateAllMcpServers,
 }));
@@ -124,6 +128,7 @@ describe("mcpServerVisibilityToast", () => {
 
 describe("invalidateMcpServerQueries", () => {
   beforeEach(() => {
+    mocks.invalidateAllResourceAudience.mockClear();
     mocks.invalidateAllMcpServers.mockClear();
     mocks.invalidateAllGetMcpServer.mockClear();
     mocks.invalidateAllMcpEndpoints.mockClear();
@@ -137,6 +142,10 @@ describe("invalidateMcpServerQueries", () => {
     await invalidateMcpServerQueries(queryClient);
 
     const filters = { refetchType: "all" };
+    expect(mocks.invalidateAllResourceAudience).toHaveBeenCalledExactlyOnceWith(
+      queryClient,
+      filters,
+    );
     expect(mocks.invalidateAllMcpServers).toHaveBeenCalledTimes(1);
     expect(mocks.invalidateAllMcpServers).toHaveBeenCalledWith(
       queryClient,

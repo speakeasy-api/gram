@@ -100,7 +100,7 @@ func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.
 		}
 		chatID, parseErr := uuid.Parse(env.GramChatID)
 		if parseErr != nil || chatID == uuid.Nil {
-			t.logger.WarnContext(ctx, "skipping assistant skill observation: missing or invalid Gram chat ID",
+			t.logger.WarnContext(ctx, "skipping assistant skill observation: missing or invalid Speakeasy chat ID",
 				attr.SlogProjectID(authCtx.ProjectID.String()),
 				attr.SlogAssistantID(principal.AssistantID.String()),
 				attr.SlogAssistantThreadID(principal.ThreadID.String()),

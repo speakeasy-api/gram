@@ -358,8 +358,8 @@ type ChatParticipant struct {
 	ProviderUserID string
 	// Workspace resolved from the organization directory, when unambiguous.
 	ProviderTeamID *string
-	// Explicitly mapped Gram person at capture time; this attribution grants no
-	// permissions.
+	// Explicitly mapped Speakeasy person at capture time; this attribution grants
+	// no permissions.
 	UserID *string
 	// Directory display name at capture time.
 	DisplayName *string
@@ -546,7 +546,7 @@ type ListChatsPayload struct {
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
-	// Filter by Gram user ID
+	// Filter by Speakeasy user ID
 	UserID *string
 	// Filter by agent source. Comma-separated list of exact source values (e.g.
 	// 'claude-code,Codex,playground') matched against each session's inferred

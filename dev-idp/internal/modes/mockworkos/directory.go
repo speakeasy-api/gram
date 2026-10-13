@@ -4,7 +4,7 @@ package mockworkos
 // GET /directory_users[/{id}]. Each org has one mock directory
 // ("directory_mock_<workos org id>", see handleWorkosListDirectories). The
 // first list call for an org seeds a fixed set of groups and users, including
-// the org's own dev-idp members, so Gram has directory data to map to roles.
+// the org's own dev-idp members, so Speakeasy has directory data to map to roles.
 
 import (
 	"context"
@@ -393,7 +393,7 @@ func parseDirectoryPageParams(q map[string][]string, prefix string) (limit int, 
 	return limit, after, nil
 }
 
-// orgWorkosID is the WorkOS-style ID Gram knows the org by.
+// orgWorkosID is the WorkOS-style ID Speakeasy knows the org by.
 func (h *Handler) orgWorkosID(ctx context.Context, orgID uuid.UUID) (string, error) {
 	org, err := repo.New(h.db).GetOrganization(ctx, orgID)
 	if err != nil {

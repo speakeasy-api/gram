@@ -9,7 +9,7 @@ import (
 
 // WorkOSAdapter wraps the WorkOS usermanagement.Client to implement both
 // IDPClient (for identity) and sessions.SessionRevoker (for sessions),
-// translating between Gram's slim interfaces and the SDK's richer types.
+// translating between Speakeasy's slim interfaces and the SDK's richer types.
 type WorkOSAdapter struct {
 	client *usermanagement.Client
 }

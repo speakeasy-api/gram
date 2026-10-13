@@ -44,7 +44,7 @@ type Spec struct {
 	// GroupPrefix prefixes workos_directory_group_id, which is globally
 	// unique.
 	GroupPrefix string
-	// WorkOSOrgID is the WorkOS organization this tenant's org is the Gram
+	// WorkOSOrgID is the WorkOS organization this tenant's org is the Speakeasy
 	// side of, and which OrgID is derived from. The shared demo org has no
 	// WorkOS counterpart, so its value is an inert placeholder that exists
 	// only to give the preflight assert something to rewrite.

@@ -1,5 +1,5 @@
 // Management API handlers for the userSessionIssuersCimdClients service:
-// the read-only CIMD preset catalog Gram curates, and CRUD over the custom
+// the read-only CIMD preset catalog Speakeasy curates, and CRUD over the custom
 // document URLs an individual issuer additionally admits.
 //
 // Together with the client_id_metadata_admission_mode field on the
@@ -40,7 +40,7 @@ const (
 	verifyRateBurst  = 5
 )
 
-// Lists Gram's curated CIMD preset catalog. The catalog is a compile-time
+// Lists Speakeasy's curated CIMD preset catalog. The catalog is a compile-time
 // constant with no tenant data, but the endpoint still carries the standard
 // project auth: it is only meaningful next to the issuer configuration it
 // accompanies, and an unauthenticated surface would be a needless addition
@@ -80,7 +80,7 @@ func (s *Service) ListPresets(ctx context.Context, payload *gen.ListPresetsPaylo
 // itself was bad or the caller is not authorized, never that the document is.
 //
 // Takes the write scope rather than read: this is a pre-flight for a write,
-// it makes Gram issue an outbound request to a caller-chosen URL, and gating
+// it makes Speakeasy issue an outbound request to a caller-chosen URL, and gating
 // it lower than the create it precedes would be an odd seam.
 func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) (*gen.VerifyCimdURLResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -108,7 +108,7 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 	// asked for, not a malformed request.
 	result := s.cimdResolver.Inspect(ctx, payload.ClientIDMetadataURI)
 
-	// This is the only endpoint that makes Gram issue an outbound request to
+	// This is the only endpoint that makes Speakeasy issue an outbound request to
 	// a caller-chosen host, and the resolver's own log line carries the
 	// origin but no tenant. Stamp the project so egress can be attributed if
 	// the endpoint is ever abused as a scanner.

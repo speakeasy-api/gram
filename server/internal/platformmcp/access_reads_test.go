@@ -32,13 +32,13 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 	access := GetMCPAccessOutput{
 		ProjectID: uuid.NewString(),
 		MCP:       MCPAccessTarget{ID: uuid.NewString(), Name: "Tasks", Backend: "remote", Visibility: "private", AuthorizationMode: "rbac", AuthorizationSurface: "configured_endpoint", AccessSummary: "by_role", ToolCatalog: "stored_metadata", Tools: []MCPAccessTool{{Name: "list_tasks", Disposition: "read_only"}}},
-		Roles:     []MCPRoleCoverage{{Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7), Reference: "opaque-role", Version: "opaque-version", CanEnterServer: true, KnownToolAccess: "all", AllowedKnownTools: []string{"list_tasks"}, DispositionRules: []string{"read_only"}, BlockedDispositions: []string{}, UnevaluatedGrants: false}},
+		Roles:     []MCPRoleCoverage{{MatchingPlugins: []MCPMatchingPlugin{{PluginID: uuid.NewString(), Name: "Tasks plugin", Slug: "tasks-plugin"}}, Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7), Reference: "opaque-role", Version: "opaque-version", CanEnterServer: true, KnownToolAccess: "all", AllowedKnownTools: []string{"list_tasks"}, DispositionRules: []string{"read_only"}, BlockedDispositions: []string{}, UnevaluatedGrants: false}},
 		ExpiresAt: "2026-09-04T12:10:00Z",
 	}
 	keys := decodeKeys(t, access)
 	require.ElementsMatch(t, []string{
 		"project_id", "mcp", "id", "name", "backend", "visibility", "authorization_mode", "authorization_surface", "access_summary", "tool_catalog", "tools", "name", "tools_truncated", "disposition",
-		"roles", "name", "type", "member_count", "reference", "version", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "assignment_eligible", "expires_at",
+		"roles", "name", "type", "member_count", "reference", "version", "can_enter_server", "known_tool_access", "allowed_known_tools", "disposition_rules", "blocked_dispositions", "unevaluated_grants", "assignment_eligible", "expires_at", "matching_plugins", "plugin_id", "name", "slug",
 	}, keys)
 	encoded, err := json.Marshal(access)
 	require.NoError(t, err)
@@ -154,4 +154,14 @@ func TestAccessReferencesAreBoundByKindPrincipalAndExpiry(t *testing.T) {
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
 	_, err = codec.Decode(reference, principal, subjectKindAccessMember, now.Add(SubjectReferenceTTL))
 	require.ErrorIs(t, err, ErrSubjectReferenceNotFound)
+}
+
+func TestMCPMatchingPluginsSchema(t *testing.T) {
+	t.Parallel()
+	schema := inferOutputSchema[GetMCPAccessOutput]("get_mcp_access")
+	encoded, err := json.Marshal(schema)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"matching_plugins"`)
+	require.Contains(t, string(encoded), `"plugin_id"`)
+	require.NotContains(t, string(encoded), `"principal_urn"`)
 }

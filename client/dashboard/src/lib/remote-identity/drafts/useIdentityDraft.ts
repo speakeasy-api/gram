@@ -11,6 +11,7 @@ import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/re
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateSharedIssuerImpact } from "@/lib/remote-identity/model/upstreamRepointing";
 import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import {
   invalidateAllRemoteSessionIssuers,
@@ -267,11 +268,16 @@ function displayUrl(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-function issuerDisplayName(issuer: RemoteSessionIssuer): string {
+/** An issuer's name, else its URL's host, else its slug; "" when none. */
+export function issuerDisplayName(
+  issuer: Pick<RemoteSessionIssuer, "issuer"> &
+    Partial<Pick<RemoteSessionIssuer, "name" | "slug">>,
+): string {
   return (
     issuer.name?.trim() ||
     deriveRemoteSessionIssuerNameFromUrl(issuer.issuer) ||
-    issuer.slug
+    issuer.slug ||
+    ""
   );
 }
 
@@ -303,6 +309,8 @@ export type UserIdentityDraft = {
   connected: boolean;
   /** The connected client, once the provider's client list has loaded. */
   connectedClient: ClientOption | null;
+  /** The connected client's id, known before the client list loads. */
+  connectedClientId: string | null;
   /** People signed in through the connected client; null while unknown. */
   signedIn: number | null;
   /** The server had a client and the operator cleared it. Save replaces it. */
@@ -761,6 +769,8 @@ export function useUserIdentityDraft({
           jwksUri: draft.jwksUri ?? undefined,
           scopesSupported: draft.scopesSupported ?? undefined,
           grantTypesSupported: draft.grantTypesSupported ?? undefined,
+          authorizationGrantProfilesSupported:
+            draft.authorizationGrantProfilesSupported ?? [],
           responseTypesSupported: draft.responseTypesSupported ?? undefined,
           tokenEndpointAuthMethodsSupported:
             draft.tokenEndpointAuthMethodsSupported ?? undefined,
@@ -867,6 +877,7 @@ export function useUserIdentityDraft({
         invalidateAllRemoteSessionIssuers(queryClient),
         invalidateAllRemoteSessionsCount(queryClient),
         invalidateAllGetRemoteMcpServerScopes(queryClient),
+        invalidateSharedIssuerImpact(queryClient),
       ]);
     },
     onError: (error: unknown) => {
@@ -933,6 +944,7 @@ export function useUserIdentityDraft({
 
     connected,
     connectedClient,
+    connectedClientId: connected ? linkedClientId : null,
     signedIn,
     cleared,
     clear: (): void => {

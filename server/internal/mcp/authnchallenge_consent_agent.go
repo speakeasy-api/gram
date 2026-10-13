@@ -89,22 +89,22 @@ func (t AgentAuthorizationTarget) connectCheck() authz.Check {
 }
 
 // agentAuthorizationRollout reports whether agent authorization is switched on
-// for the endpoint's organization. Every caller hides the feature when it is
+// for an organization. Every caller hides the feature when it is
 // off, so the boolean is false whenever the answer is not a confident yes.
 //
 // The error separates "off" from "unknown". An organization row or flag
 // evaluation that could not be read leaves the rollout state undetermined,
 // which callers that report why a request was refused must not record as a
 // deliberate rollout decision.
-func (s *Service) agentAuthorizationRollout(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (bool, string, error) {
-	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, endpoint.OrganizationID)
+func (s *Service) agentAuthorizationRollout(ctx context.Context, logger *slog.Logger, organizationID string) (bool, string, error) {
+	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
 		logger.WarnContext(ctx, "agent authorization rollout organization unavailable")
 		return false, "", fmt.Errorf("read organization metadata: %w", err)
 	}
 	groups := feature.OrgProjectGroups(organization.Slug, "")
 	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
-		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, endpoint.OrganizationID, groups)
+		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, organizationID, groups)
 		if err != nil {
 			logger.WarnContext(ctx, "agent authorization rollout evaluation unavailable")
 			return false, "", fmt.Errorf("evaluate flag %s: %w", flag, err)

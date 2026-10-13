@@ -37,8 +37,8 @@ type RemoteSessionIssuer struct {
 	RegistrationEndpoint *string
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.

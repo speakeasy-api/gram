@@ -116,7 +116,7 @@ jobs:
           cache: true
           cache_key_prefix: mise-github-v1
           env: false
-      - name: Generate GitHub App Token for Gram Bot
+      - name: Generate GitHub App Token for Speakeasy Bot
         id: bot-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -146,7 +146,7 @@ jobs:
   release-tunnel-agent:
     needs: [release]
     if: needs.release.outputs.published == 'true' && contains(fromJSON(needs.release.outputs.publishedPackages).*.name, 'tunnel')
-    name: Release Gram Tunnel Agent image
+    name: Release Speakeasy Tunnel Agent image
     runs-on: ubuntu-latest
     env:
       IMAGE: ghcr.io/speakeasy-api/gram-tunnel-agent
@@ -185,7 +185,7 @@ jobs:
             ${{ env.IMAGE }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/speakeasy-api/gram
-            org.opencontainers.image.description=Gram tunnel agent: connects a local MCP server to the Gram tunnel gateway
+            org.opencontainers.image.description=Speakeasy tunnel agent: connects a local MCP server to the Speakeasy tunnel gateway
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=AGPL-3.0

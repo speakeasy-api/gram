@@ -519,8 +519,8 @@ var runnerHistoryRejectMarkers = []string{
 // is in the chain) the VM is alive and must not be torn down on its own; only
 // a transport failure — or a 5xx we cannot attribute to a deterministic cause —
 // is treated as unhealthy. "provider error" is agentkit-provider-openrouter's
-// prefix; "completion failed" is Gram's gateway-stamped variant;
-// chat.IsHistoryCorrupted detects the Gram marker stamped on upstream 400/422.
+// prefix; "completion failed" is Speakeasy's gateway-stamped variant;
+// chat.IsHistoryCorrupted detects the Speakeasy marker stamped on upstream 400/422.
 func classifyTurnError(err error) error {
 	if err == nil {
 		return nil

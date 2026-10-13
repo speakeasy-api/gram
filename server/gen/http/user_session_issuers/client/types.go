@@ -37,7 +37,7 @@ type UpdateUserSessionIssuerRequestBody struct {
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
-	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;
+	// 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs;
 	// 'open' admits any spec-valid document; 'disabled' admits none and stops
 	// advertising CIMD support. Omit to leave unchanged.
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
@@ -71,7 +71,7 @@ type CreateUserSessionIssuerResponseBody struct {
 	// The organization-level or global remote_session_issuer whose assertions this
 	// issuer trusts. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
-	// The organization-level remote_session_client Gram uses with the trusted
+	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -106,7 +106,7 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// The organization-level or global remote_session_issuer whose assertions this
 	// issuer trusts. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
-	// The organization-level remote_session_client Gram uses with the trusted
+	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -149,7 +149,7 @@ type GetUserSessionIssuerResponseBody struct {
 	// The organization-level or global remote_session_issuer whose assertions this
 	// issuer trusts. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
-	// The organization-level remote_session_client Gram uses with the trusted
+	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -1134,7 +1134,7 @@ type UserSessionIssuerResponseBody struct {
 	// The organization-level or global remote_session_issuer whose assertions this
 	// issuer trusts. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionIssuerID *string `form:"trusted_remote_session_issuer_id,omitempty" json:"trusted_remote_session_issuer_id,omitempty" xml:"trusted_remote_session_issuer_id,omitempty"`
-	// The organization-level remote_session_client Gram uses with the trusted
+	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
 	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`

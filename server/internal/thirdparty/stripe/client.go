@@ -207,7 +207,7 @@ type CreateCheckoutSessionInput struct {
 	// CustomerID identifies the Stripe customer that owns the subscription.
 	CustomerID string
 
-	// OrganizationID is Gram's stable organization identifier.
+	// OrganizationID is Speakeasy's stable organization identifier.
 	OrganizationID string
 
 	// OrganizationSlug is the organization slug included in Stripe metadata.
@@ -219,7 +219,7 @@ type CreateCheckoutSessionInput struct {
 	// CancelURL is the browser destination when Checkout is canceled.
 	CancelURL string
 
-	// TrialEnd is the UTC-aligned financial trial end. Gram retains the exact
+	// TrialEnd is the UTC-aligned financial trial end. Speakeasy retains the exact
 	// product trial end separately and the interval between them is a free stub.
 	TrialEnd *time.Time
 
@@ -316,7 +316,7 @@ type CreatePortalSessionInput struct {
 	// CustomerID identifies the Stripe customer entering the portal.
 	CustomerID string
 
-	// ReturnURL is the Gram billing page Stripe returns the customer to.
+	// ReturnURL is the Speakeasy billing page Stripe returns the customer to.
 	ReturnURL string
 }
 

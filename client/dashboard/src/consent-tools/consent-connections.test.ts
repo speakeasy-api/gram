@@ -308,7 +308,7 @@ describe("consent agent connections", () => {
     expect(document.body.textContent).toContain(
       "not available for authorization",
     );
-    expect(document.body.textContent).not.toContain("Sign in to Gram");
+    expect(document.body.textContent).not.toContain("Sign in to Speakeasy");
   });
 });
 

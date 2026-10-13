@@ -39,10 +39,10 @@ type UpdatePluginRequestBody struct {
 // "addPluginServer" endpoint HTTP request body.
 type AddPluginServerRequestBody struct {
 	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
-	// Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
+	// Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
 	// meta_mcp_server_id.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Provide exactly one backend ID.
+	// Speakeasy MCP server ID. Provide exactly one backend ID.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. Provide exactly one backend ID.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
@@ -69,6 +69,9 @@ type SetPluginAssignmentsRequestBody struct {
 	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
 	// List of principal URNs to assign.
 	PrincipalUrns []string `form:"principal_urns,omitempty" json:"principal_urns,omitempty" xml:"principal_urns,omitempty"`
+	// Install mode per principal URN in principal_urns. A principal missing from
+	// this map keeps its current mode, or gets `default` when it is newly assigned.
+	InstallModes map[string]string `form:"install_modes,omitempty" json:"install_modes,omitempty" xml:"install_modes,omitempty"`
 }
 
 // RotateObservabilityCredentialRequestBody is the type of the "plugins"
@@ -228,9 +231,9 @@ type UpdatePluginResponseBody struct {
 type AddPluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram toolset ID. Exactly one backend ID is set.
+	// Speakeasy toolset ID. Exactly one backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Exactly one backend ID is set.
+	// Speakeasy MCP server ID. Exactly one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. Exactly one backend ID is set.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
@@ -248,9 +251,9 @@ type AddPluginServerResponseBody struct {
 type UpdatePluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram toolset ID. Exactly one backend ID is set.
+	// Speakeasy toolset ID. Exactly one backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Exactly one backend ID is set.
+	// Speakeasy MCP server ID. Exactly one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. Exactly one backend ID is set.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
@@ -4546,9 +4549,9 @@ type PluginResponseBody struct {
 type PluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID string `form:"id" json:"id" xml:"id"`
-	// Gram toolset ID. Exactly one backend ID is set.
+	// Speakeasy toolset ID. Exactly one backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Gram MCP server ID. Exactly one backend ID is set.
+	// Speakeasy MCP server ID. Exactly one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. Exactly one backend ID is set.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
@@ -4567,7 +4570,11 @@ type PluginAssignmentResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
-	CreatedAt    string `form:"created_at" json:"created_at" xml:"created_at"`
+	// How the device agent installs the plugin for this audience. `required`:
+	// installed, and the user can't turn it off. `default`: installed, and the
+	// user can turn it off. `available`: not installed until the user turns it on.
+	InstallMode string `form:"install_mode" json:"install_mode" xml:"install_mode"`
+	CreatedAt   string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
 // PluginAudienceResponseBody is used to define fields on response body types.
@@ -8311,6 +8318,14 @@ func NewSetPluginAssignmentsPayload(body *SetPluginAssignmentsRequestBody, sessi
 	for i, val := range body.PrincipalUrns {
 		v.PrincipalUrns[i] = val
 	}
+	if body.InstallModes != nil {
+		v.InstallModes = make(map[string]string, len(body.InstallModes))
+		for key, val := range body.InstallModes {
+			tk := key
+			tv := val
+			v.InstallModes[tk] = tv
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -8511,6 +8526,11 @@ func ValidateSetPluginAssignmentsRequestBody(body *SetPluginAssignmentsRequestBo
 	}
 	if body.PluginID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.plugin_id", *body.PluginID, goa.FormatUUID))
+	}
+	for _, v := range body.InstallModes {
+		if !(v == "required" || v == "default" || v == "available") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.install_modes[key]", v, []any{"required", "default", "available"}))
+		}
 	}
 	return
 }

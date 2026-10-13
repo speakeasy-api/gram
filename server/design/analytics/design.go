@@ -6,17 +6,17 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
-var analyticsOps = []any{"count", "sum", "avg", "min", "max", "p50", "p95", "p99"}
+var analyticsOps = []any{"count", "count_distinct", "sum", "avg", "min", "max", "p50", "p95", "p99"}
 var analyticsOperators = []any{"equals", "in"}
 var analyticsGrains = []any{"none", "hour", "day", "week", "month"}
 
 var Measure = Type("AnalyticsMeasure", func() {
 	Description("A composed measure: an op over a field, or count alone.")
-	Attribute("op", String, "Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.", func() {
+	Attribute("op", String, "Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.", func() {
 		Enum(analyticsOps...)
 		Example("sum")
 	})
-	Attribute("field", String, "Measure field the op applies to. Absent for count.", func() {
+	Attribute("field", String, "Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.", func() {
 		Example("tool_call_count")
 	})
 	Attribute("alias", String, "Result column name. Defaults to the op, or op_field.", func() {
@@ -65,7 +65,7 @@ var QueryPayload = Type("AnalyticsQueryPayload", func() {
 	Attribute("measures", ArrayOf(Measure), "Composed measures. Required when grouped, forbidden when ungrouped.")
 	Attribute("filters", ArrayOf(Filter), "Filters, ANDed. At most 100 values per filter.")
 	Attribute("order_by", ArrayOf(OrderBy), "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first.")
-	Attribute("limit", Int, "Maximum rows. Defaults to 100, at most 1000.", func() {
+	Attribute("limit", Int, "Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for ungrouped rows.", func() {
 		Default(100)
 		Minimum(1)
 		Maximum(1000)
@@ -92,8 +92,17 @@ var FieldType = Type("AnalyticsField", func() {
 	Attribute("default", Boolean, "Part of the query the dataset opens on: a default dimension is in the opening group-by", func() { Example(true) })
 	Attribute("unit", String, "Unit of a measure, when it has one", func() { Example("s") })
 	Attribute("operators", ArrayOf(String), "Filter operators a dimension admits")
-	Attribute("aggregations", ArrayOf(String), "Ops a measure admits")
+	Attribute("aggregations", ArrayOf(String), "Ops a field admits: aggregations on a measure, count_distinct on a dimension")
+	Attribute("description", String, "What the field is and which producers fill it, when the catalog has something to say beyond the name")
+	Attribute("lookup", LookupType, "The map this dimension reads through, when it reads through one")
 	Required("name", "type", "role", "default")
+})
+
+var LookupType = Type("AnalyticsLookup", func() {
+	Description("A per-project map a dimension reads through at query time: a reported value with an entry shows as its target, the rest show as reported.")
+	Attribute("name", String, func() { Example("mcp_server_display_names") })
+	Attribute("description", String, "What the map is and where it is set")
+	Required("name", "description")
 })
 
 var DatasetType = Type("AnalyticsDataset", func() {

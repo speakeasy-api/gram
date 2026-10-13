@@ -32,17 +32,6 @@ export interface SaveButtonInput {
   };
 }
 
-/** Effective grant count — scopes with at least one allow rule that has content. */
-export function effectiveGrantCount(grants: Record<string, RoleGrant>): number {
-  return Object.values(grants).filter((g) =>
-    g.rules.some(
-      (r) =>
-        r.effect === "allow" &&
-        (r.selectors === null || r.selectors.length > 0),
-    ),
-  ).length;
-}
-
 export function visiblePermissionCount(
   grants: Array<{ scope?: string }>,
 ): number {
@@ -66,19 +55,39 @@ export function membersHaveChanged(
   return false;
 }
 
+function selectorIdentity(s: Selector): string {
+  // JSON, not a joined string: a tool name or server URL can hold any
+  // delimiter, and two different selectors must never share an identity.
+  return JSON.stringify([
+    s.resourceKind,
+    s.resourceId,
+    s.projectId ?? "",
+    s.tool ?? "",
+    s.disposition ?? "",
+    s.serverUrl ?? "",
+  ]);
+}
+
 /** Sorted, comma-joined grant keys for cheap equality check.
- *  Encodes each rule's effect and selector count so any change marks dirty. */
+ *  Encodes what each effect covers — every selector, not how the rules group
+ *  them — so swapping one server for another marks the form dirty while
+ *  regrouping the same selectors does not. */
 export function grantKeysString(grants: Record<string, RoleGrant>): string {
   return Object.entries(grants)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, g]) => {
-      const summary = g.rules
-        .map((r) => {
-          const selKey =
-            r.selectors === null ? "*" : String(r.selectors.length);
-          return `${r.effect}:${selKey}`;
+      const summary = (["allow", "deny"] as const)
+        .flatMap((effect) => {
+          const rules = g.rules.filter((r) => r.effect === effect);
+          if (rules.length === 0) return [];
+          if (rules.some((r) => r.selectors === null)) return [`${effect}:*`];
+          const ids = [
+            ...new Set(
+              rules.flatMap((r) => (r.selectors ?? []).map(selectorIdentity)),
+            ),
+          ].sort();
+          return [`${effect}:${ids.join("|")}`];
         })
-        .sort()
         .join("+");
       return `${key}[${summary}]`;
     })
@@ -98,9 +107,9 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
 }
 
 /** Whether the form fields are valid enough to submit.
- *  Description is optional. */
+ *  Description and grants are optional. */
 function isFormValid(input: SaveButtonInput): boolean {
-  return input.name.trim().length > 0 && effectiveGrantCount(input.grants) > 0;
+  return input.name.trim().length > 0;
 }
 
 /** Returns true when the Save/Create button should be disabled */

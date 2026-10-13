@@ -232,7 +232,7 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 	}
 
 	if assistantID, ok := assistants.ParseAssistantClientMetadataDocumentURL(s.outboundOrigin(), clientID); ok && mode != admission.ModeDisabled {
-		// Gram's own assistants are first-party clients of every Gram-hosted
+		// Speakeasy's own assistants are first-party clients of every Speakeasy-hosted
 		// issuer. Their document URL is never a catalog preset (the host is
 		// the deployment's own) and must not depend on an operator adding
 		// it as a custom URL, so it is admitted ahead of the policy on any

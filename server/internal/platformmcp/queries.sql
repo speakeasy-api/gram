@@ -613,6 +613,18 @@ SELECT pg_advisory_xact_lock(
     )
 );
 
+-- name: LockPlatformMCPOperationReceiptInput :exec
+-- A single-use preview is claimed by its input, so confirmations racing for
+-- one input serialize here. The namespace differs from the key lock above so
+-- a caller-chosen idempotency key can never name this lock, which is what
+-- keeps two confirmations from taking the pair in opposite orders.
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-receipt-input', @organization_id::text, @subject_urn::text, @project_id::text, @operation::text, @input_hash::text)::text,
+        0
+    )
+);
+
 -- name: LockPlatformMCPRemoteIssuerAttachment :exec
 -- Serialize browser-catalog attachment for one project/upstream issuer before
 -- checking for an existing remote-session issuer or registering a new client.
@@ -646,6 +658,60 @@ WHERE receipt.organization_id = @organization_id
   )
 ORDER BY receipt.created_at DESC, receipt.id DESC
 LIMIT 1;
+
+-- name: PlatformMCPOperationReceiptInputClaimed :one
+-- Whether another idempotency key already holds this exact input for the same
+-- user, project and operation. A write whose input is single-use, such as a
+-- preview token, commits under one key only.
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_operation_receipts
+    WHERE organization_id = @organization_id
+      AND project_id = @project_id
+      AND operation = @operation
+      AND user_id = @user_id
+      AND input_hash = @input_hash
+      AND idempotency_key <> @idempotency_key
+);
+
+-- name: GetUnexpiredPlatformMCPOperationReceipt :one
+-- The unlocked replay pre-check that runs before a write charges its budget.
+-- Same match as GetPlatformMCPOperationReceipt, but expiry is judged here with
+-- the database clock, the same clock DeleteExpiredPlatformMCPOperationReceipt
+-- uses under the lock, so the pre-check can never replay a receipt the locked
+-- path would already treat as expired.
+SELECT receipt.*
+FROM platform_mcp_operation_receipts AS receipt
+LEFT JOIN platform_mcp_connections AS connection
+  ON connection.id = receipt.connection_id
+ AND connection.organization_id = receipt.organization_id
+WHERE receipt.organization_id = @organization_id
+  AND receipt.project_id = @project_id
+  AND receipt.operation = @operation
+  AND receipt.idempotency_key = @idempotency_key
+  AND receipt.expires_at > clock_timestamp()
+  AND (
+    receipt.user_id = @user_id
+    OR (receipt.user_id IS NULL AND connection.subject_urn = @subject_urn)
+  )
+ORDER BY receipt.created_at DESC, receipt.id DESC
+LIMIT 1;
+
+-- name: DeleteExpiredPlatformMCPOperationReceiptsBatch :execrows
+-- The periodic sweep that bounds the receipt table. The per-key reclaim in the
+-- receipt transaction only reaches a key that is written again, and a
+-- project-creation receipt is never reclaimed that way at all. Bounded by
+-- batch so one tick never holds a long delete; SKIP LOCKED leaves rows a
+-- receipt transaction is touching to the next tick.
+DELETE FROM platform_mcp_operation_receipts
+WHERE id IN (
+    SELECT id
+    FROM platform_mcp_operation_receipts
+    WHERE expires_at <= clock_timestamp()
+    ORDER BY expires_at
+    LIMIT @batch_size
+    FOR UPDATE SKIP LOCKED
+);
 
 -- name: GetPlatformMCPProjectCreationReceipt :one
 -- An operation that creates its own project has no project to key a receipt
@@ -2678,17 +2744,29 @@ LIMIT @result_limit;
 -- display name (the key the plugin's mcp.json ships it under). One row per
 -- (server, membership); a server with no membership yields one row with empty
 -- plugin columns. Hosted servers are also reached through memberships attached
--- by toolset, so those memberships are included for the server fronting that
--- toolset. Memberships are gathered from the project's live plugins through the
--- (plugin_id, backend) indexes, one arm per backend kind: a live membership has
--- exactly one backend, so the arms never repeat a row.
+-- by toolset, so those memberships, and the toolset slug, belong to the
+-- toolset's hosting server: its canonical row (id = toolset id), or every
+-- server fronting it when it has none. Memberships are gathered from the
+-- project's live plugins through the (plugin_id, backend) indexes, one arm per
+-- backend kind: a live membership has exactly one backend, so the arms never
+-- repeat a row. toolset_shared marks a hosting server whose toolset other live
+-- servers also front, since their calls carry the same toolset slug.
 WITH server AS (
     SELECT
         m.id,
         m.toolset_id,
         COALESCE(m.name, '')::text AS mcp_name,
         COALESCE(m.slug, '')::text AS mcp_slug,
-        COALESCE(toolset.slug, '')::text AS toolset_slug
+        COALESCE(toolset.slug, '')::text AS toolset_slug,
+        (m.toolset_id IS NOT NULL AND (m.id = m.toolset_id OR NOT EXISTS (
+            SELECT 1 FROM mcp_servers AS canonical
+            WHERE canonical.id = m.toolset_id AND canonical.project_id = m.project_id AND canonical.deleted IS FALSE
+        )))::boolean AS hosts_toolset,
+        EXISTS (
+            SELECT 1 FROM mcp_servers AS sibling
+            WHERE sibling.toolset_id = m.toolset_id AND sibling.project_id = m.project_id
+              AND sibling.deleted IS FALSE AND sibling.id <> m.id
+        )::boolean AS toolset_shared
     FROM mcp_servers AS m
     JOIN projects AS project
       ON project.id = m.project_id
@@ -2732,13 +2810,14 @@ server_membership AS (
     FROM server
     JOIN membership
       ON membership.toolset_id = server.toolset_id
-    WHERE server.toolset_id IS NOT NULL
+    WHERE server.hosts_toolset
 )
 SELECT
     server.id AS mcp_server_id,
     server.mcp_name,
     server.mcp_slug,
-    server.toolset_slug,
+    (CASE WHEN server.hosts_toolset THEN server.toolset_slug ELSE '' END)::text AS toolset_slug,
+    (server.hosts_toolset AND server.toolset_shared)::boolean AS toolset_shared,
     COALESCE(server_membership.plugin_slug, '')::text AS plugin_slug,
     COALESCE(server_membership.display_name, '')::text AS plugin_display_name
 FROM server
@@ -3030,7 +3109,7 @@ LIMIT 2;
 -- name: GetPlatformMCPInstallTarget :one
 -- Tenant-scoped exact MCP target plus its canonical public endpoint. Disabled
 -- and unproxied servers deliberately expose no endpoint even if an endpoint row
--- remains, because neither can be dispatched through Gram's public MCP route.
+-- remains, because neither can be dispatched through Speakeasy's public MCP route.
 SELECT
     m.name,
     m.slug,
@@ -3708,9 +3787,9 @@ WHERE htd.deployment_id IN (SELECT id FROM all_deployment_ids)
 -- Takes the toolset row lock, and must run BEFORE the server row is locked.
 --
 -- The order is the constraint, not the lock. toolsets.UpdateToolset holds this
--- same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
--- updates the hosted mcp_servers row — an exclusive row lock taken by a plain
--- UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+-- same row (via GetToolsetForUpdate) and then, inside hostedmcp.Sync, locks
+-- the hosted mcp_servers row FOR UPDATE (LockMCPServerByIDAndProjectID) before
+-- writing it. For a hosted server both ids are
 -- the toolset id, so it is the same pair of rows this path touches. Locking the
 -- server first here and the toolset first there is an ABBA cycle that
 -- PostgreSQL resolves by aborting one side with deadlock_detected, so both
@@ -3761,8 +3840,8 @@ FOR UPDATE OF m;
 
 -- name: GetPlatformMCPServerToolExposure :one
 -- The tool list one hosted MCP server exposes, read through its modern server
--- record. A server whose backend is not a Gram toolset, or a bare toolset with
--- no server record, deliberately returns no row: its tool list is not Gram's
+-- record. A server whose backend is not a Speakeasy toolset, or a bare toolset with
+-- no server record, deliberately returns no row: its tool list is not Speakeasy's
 -- to change from here.
 -- The columns this returns are only the ones the caller cannot already supply:
 -- the organization, project and MCP server ids are query inputs, so echoing

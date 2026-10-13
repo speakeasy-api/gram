@@ -196,6 +196,8 @@ function ModifyRemoteIdentityProviderSheetBody({
     jwksUri: issuer.jwksUri ?? "",
     scopesSupported: issuer.scopesSupported ?? [],
     grantTypesSupported: issuer.grantTypesSupported ?? [],
+    authorizationGrantProfilesSupported:
+      issuer.authorizationGrantProfilesSupported ?? [],
     responseTypesSupported: issuer.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       issuer.tokenEndpointAuthMethodsSupported ?? [],
@@ -305,7 +307,7 @@ function ModifyRemoteIdentityProviderSheetBody({
       // NULL"; an omitted field keeps the existing value. Send the trimmed
       // input directly (including "") so blanking out a field in the UI
       // actually clears the saved record — especially registration_endpoint,
-      // which is the signal Gram uses for "DCR is supported on this issuer".
+      // which is the signal Speakeasy uses for "DCR is supported on this issuer".
       await client.remoteSessionIssuers.update({
         updateRemoteSessionIssuerForm: {
           id: issuer.id,
@@ -321,6 +323,9 @@ function ModifyRemoteIdentityProviderSheetBody({
           jwksUri: jwksUri.trim(),
           scopesSupported: discoveredSnapshot?.scopesSupported,
           grantTypesSupported: discoveredSnapshot?.grantTypesSupported,
+          // A reset snapshot means a new issuer URL; its profiles are unknown until rediscovery.
+          authorizationGrantProfilesSupported:
+            discoveredSnapshot?.authorizationGrantProfilesSupported ?? [],
           responseTypesSupported: discoveredSnapshot?.responseTypesSupported,
           tokenEndpointAuthMethodsSupported:
             discoveredSnapshot?.tokenEndpointAuthMethodsSupported,

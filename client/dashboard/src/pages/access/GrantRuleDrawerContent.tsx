@@ -793,6 +793,13 @@ export function GrantRuleDrawerContent({
   return (
     <div className="flex flex-1 flex-col px-1.5 pb-1.5">
       {renderScopeOptions()}
+      {isMcpConnect && !isDenyProp && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Plugins shared with this role receive the servers chosen here. Read
+          and write access also let members connect, but never add servers to
+          plugins.
+        </p>
+      )}
       {/* The server inventory is withheld unless both org listings succeeded,
           so say why the lists are empty rather than implying the org has no
           servers. */}

@@ -13,9 +13,9 @@ import (
 // deliberately not distinguished — all of it faces third-party clients.
 //
 // The go-sdk-served /platform-mcp surface (server/internal/platformmcp) is
-// deliberately outside this instrument: it is served by neither Gram's
+// deliberately outside this instrument: it is served by neither Speakeasy's
 // JSON-RPC dispatch nor the remote proxy, so no emit site sees it, and its
-// protocol version is the go-sdk dependency's rather than Gram's. AIS-558
+// protocol version is the go-sdk dependency's rather than Speakeasy's. AIS-558
 // records the conditions under which it would come into scope.
 type Surface string
 

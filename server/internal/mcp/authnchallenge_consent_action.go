@@ -97,12 +97,15 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
 	case "retry_delegation":
 		return s.retryFederatedDelegation(w, r, endpoint, challengeState)
+	case "identity_chaining_check":
+		return s.serveIdentityChainingCheck(w, r, endpoint, challengeState)
 	}
 
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	bound, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
+	clients := subjectConnectedClients(bound)
 
 	// The posted client_id is only a lookup key; the acted-on client is
 	// re-resolved through the endpoint's current bindings so a crafted form
@@ -145,7 +148,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, clients, autoRefresh)
+		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, autoRefresh)
 		if berr != nil {
 			return berr
 		}
@@ -252,7 +255,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil
 
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", or "retry_delegation"`).LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", "retry_delegation", or "identity_chaining_check"`).LogError(ctx, logger)
 	}
 }
 
@@ -262,6 +265,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 // identically — an auto-connect that qualified the credential differently from
 // a manual one would mint a session the runtime then rejects. hop reports a
 // URL to the remote login browser hop rather than the upstream provider.
+// bound is every client bound to the endpoint, self clients included, since
+// each one's upstream decides what client may claim.
 func (s *Service) buildRemoteConnectURL(
 	ctx context.Context,
 	logger *slog.Logger,

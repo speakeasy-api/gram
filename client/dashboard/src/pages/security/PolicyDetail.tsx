@@ -31,6 +31,7 @@ import { useRecentLabelOverride } from "@/components/command-palette/recentlyVis
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
@@ -82,12 +83,26 @@ import { useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { useQueryState } from "nuqs";
 import {
+  ApprovedDomainsRequirement,
+  PolicyDraftProvenance,
+  PolicyStartChooser,
+} from "./PolicyStart";
+import {
+  clearPolicyStartSession,
+  invalidEmailDomains,
+  draftMCPScopeValue,
+  type PolicyDraft,
+  readPolicyDraft,
+} from "./policy-draft";
+import {
   parsePolicyNewPrefill,
   type PolicyNewPrefill,
 } from "./policy-new-prefill";
 import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
+  SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+  shadowMCPAllowAllPostureLocked,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
   shadowMCPDecisionConflicts,
@@ -101,7 +116,6 @@ import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
 import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import { PolicyScopeModeCards } from "./PolicyScopeModeCards";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import {
   initialPolicyMCPScopeValue,
   policyMCPScopeComplete,
@@ -233,6 +247,16 @@ const STANDARD_STEPS: PolicyStep[] = [
   },
 ];
 
+// Steps a draft from the intent screen fills in, tagged in the stepper.
+const PROMPT_PREFILLED_STEPS: ReadonlySet<string> = new Set([
+  "guardrail",
+  "action",
+]);
+const STANDARD_PREFILLED_STEPS: ReadonlySet<string> = new Set([
+  "detect",
+  "action",
+]);
+
 const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
   flag: "Flag",
   warn: "Warn",
@@ -351,6 +375,8 @@ export function PolicyNew(): JSX.Element {
 function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
   const [category] = useQueryState("category");
+  const location = useLocation();
+  const draft = readPolicyDraft(location.state);
   // Read once: the editor seeds its state on mount and owns it from there.
   const [prefill] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -364,7 +390,11 @@ function PolicyNewContent(): JSX.Element {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <StandardPolicyEditor policy={null} prefill={prefill} />
+          <StandardPolicyEditor
+            policy={null}
+            prefill={prefill}
+            draft={draft?.policyType === "standard" ? draft : null}
+          />
         </Page.Body>
       </Page>
     );
@@ -376,64 +406,15 @@ function PolicyNewContent(): JSX.Element {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <PromptPolicyEditor policy={null} />
+          <PromptPolicyEditor
+            policy={null}
+            draft={draft?.policyType === "prompt_based" ? draft : null}
+          />
         </Page.Body>
       </Page>
     );
   }
-  return <PolicyKindChooser />;
-}
-
-// Kind chooser shown when the create page is opened without a `?kind=` hint
-// (e.g. a direct navigation). Mirrors PolicyCenter's modal chooser.
-function PolicyKindChooser(): JSX.Element {
-  const [, setKind] = useQueryState("kind");
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Stack gap={4} className="mx-auto w-full max-w-2xl">
-          <Stack gap={1}>
-            <Heading variant="h3" className="normal-case">
-              Choose policy type
-            </Heading>
-            <Text small muted>
-              Start with a built-in detector policy or define criteria in plain
-              language.
-            </Text>
-          </Stack>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => void setKind("standard")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
-            >
-              <Shield className="text-muted-foreground mb-3 h-5 w-5" />
-              <Text className="font-medium">Built-in detector</Text>
-              <Text small muted className="mt-1">
-                Scan for secrets, PII, and risky tool calls with built-in and
-                custom detection rules.
-              </Text>
-            </button>
-            <button
-              type="button"
-              onClick={() => void setKind("prompt")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
-            >
-              <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
-              <Text className="font-medium">Prompt-based</Text>
-              <Text small muted className="mt-1">
-                Describe the behavior to catch in plain language; an LLM judge
-                evaluates each in-scope message.
-              </Text>
-            </button>
-          </div>
-        </Stack>
-      </Page.Body>
-    </Page>
-  );
+  return <PolicyStartChooser />;
 }
 
 // ── Stepper shell (pinned header + left rail + spacious content column) ───────
@@ -445,10 +426,12 @@ function HorizontalStepper({
   steps,
   current,
   onStep,
+  prefilledStepIds,
 }: {
   steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
+  prefilledStepIds?: ReadonlySet<string>;
 }): JSX.Element {
   return (
     <nav aria-label="Progress" className="flex items-center">
@@ -486,6 +469,11 @@ function HorizontalStepper({
               >
                 {step.title}
               </span>
+              {prefilledStepIds?.has(step.id) ? (
+                <span className="border-border bg-card text-muted-foreground hidden border px-1 py-0.5 font-mono text-[10px] leading-none tracking-[0.1em] uppercase sm:inline">
+                  Prefilled
+                </span>
+              ) : null}
             </button>
             {index < steps.length - 1 && (
               <div className="bg-border mx-2 h-px min-w-6 flex-1" />
@@ -499,15 +487,20 @@ function HorizontalStepper({
 
 function StepperShell({
   header,
+  provenance,
   steps,
   current,
   onStep,
+  prefilledStepIds,
   children,
 }: {
   header: React.ReactNode;
+  /** Where a prefilled draft came from, shown between header and stepper. */
+  provenance?: React.ReactNode;
   steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
+  prefilledStepIds?: ReadonlySet<string>;
   children: React.ReactNode;
 }): JSX.Element {
   return (
@@ -515,8 +508,14 @@ function StepperShell({
     // standard page width).
     <Stack gap={6} className="w-full">
       {header}
+      {provenance}
       <div className="bg-muted/20 border px-4 py-3">
-        <HorizontalStepper steps={steps} current={current} onStep={onStep} />
+        <HorizontalStepper
+          steps={steps}
+          current={current}
+          onStep={onStep}
+          prefilledStepIds={prefilledStepIds}
+        />
       </div>
       <Stack gap={6}>{children}</Stack>
     </Stack>
@@ -759,20 +758,24 @@ function SectionHeader({
 
 function PromptPolicyEditor({
   policy,
+  draft = null,
 }: {
   policy: RiskPolicy | null;
+  draft?: PolicyDraft | null;
 }): JSX.Element {
   const routes = useRoutes();
+  const gramProject = useProjectSlugForRequests();
   const queryClient = useQueryClient();
   const isCreate = policy === null;
 
   const [step, setStep] = useStepParam(PROMPT_STEPS);
   const [nameGenerating, setNameGenerating] = useState(false);
 
-  // Editable guardrail definition, seeded from the loaded policy (edit) or
-  // defaults (create). Kept local so the author can iterate freely.
-  const [name, setName] = useState(policy?.name ?? "");
-  const [prompt, setPrompt] = useState(policy?.prompt ?? "");
+  // Editable guardrail definition, seeded from the loaded policy (edit), a
+  // draft from the intent screen, or defaults (create). Kept local so the
+  // author can iterate freely.
+  const [name, setName] = useState(policy?.name ?? draft?.name ?? "");
+  const [prompt, setPrompt] = useState(policy?.prompt ?? draft?.prompt ?? "");
   const [temperature, setTemperature] = useState(
     policy?.modelConfig?.temperature ?? 0,
   );
@@ -782,11 +785,16 @@ function PromptPolicyEditor({
   const [scopeOverrides, setScopeOverrides] = useState<
     Map<string, ScopeOverride>
   >(() => scopeOverridesFromPolicy(policy?.detectionScopes));
-  const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(() =>
-    initialPolicyMCPScopeValue(policy),
+  const [mcpScope, setMcpScope] = useState<PolicyMCPScopeValue>(
+    () =>
+      (policy ? null : draftMCPScopeValue(draft)) ??
+      initialPolicyMCPScopeValue(policy),
+  );
+  const [draftScopeNames, setDraftScopeNames] = useState<string[]>(
+    policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [action, setAction] = useState<PolicyAction>(() => {
-    const initial = policy?.action ?? "flag";
+    const initial = policy?.action ?? draft?.action ?? "flag";
     return mcpScope.mode === "mcp" ? mcpCompatibleAction(initial) : initial;
   });
   const updateMCPScope = (next: PolicyMCPScopeValue) => {
@@ -805,8 +813,10 @@ function PromptPolicyEditor({
       ? new Set(policy.audiencePrincipalUrns ?? [])
       : new Set<string>(),
   );
-  const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
-  const [score, setScore] = useState(policy?.score ?? 5);
+  const [userMessage, setUserMessage] = useState(
+    policy?.userMessage ?? draft?.userMessage ?? "",
+  );
+  const [score, setScore] = useState(policy?.score ?? draft?.score ?? 5);
   const [reviewVerdictFilter, setReviewVerdictFilter] =
     useState<EvalVerdict | null>(null);
   const mcpScopePayload = policyMCPScopePayload(mcpScope);
@@ -845,6 +855,7 @@ function PromptPolicyEditor({
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
+      clearPolicyStartSession(gramProject);
       void invalidateAllRiskListPolicies(queryClient);
       routes.policyCenter.goTo();
     },
@@ -987,9 +998,11 @@ function PromptPolicyEditor({
   return (
     <StepperShell
       header={header}
+      provenance={draft ? <PolicyDraftProvenance draft={draft} /> : null}
       steps={PROMPT_STEPS}
       current={step}
       onStep={handleStep}
+      prefilledStepIds={draft?.origin ? PROMPT_PREFILLED_STEPS : undefined}
     >
       {step === 0 && (
         <>
@@ -1012,6 +1025,11 @@ function PromptPolicyEditor({
           setMcpScope={updateMCPScope}
           action={action}
           hasStoredMcpScope={!!policy?.mcpScope}
+          draftScopeNames={draftScopeNames}
+          onClearDraftScope={() => {
+            setDraftScopeNames([]);
+            updateMCPScope(initialPolicyMCPScopeValue(null));
+          }}
         />
       )}
 
@@ -1187,6 +1205,8 @@ function ScopeStep({
   setMcpScope,
   action,
   hasStoredMcpScope,
+  draftScopeNames,
+  onClearDraftScope,
 }: {
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
@@ -1195,6 +1215,10 @@ function ScopeStep({
   setMcpScope: (next: PolicyMCPScopeValue) => void;
   action: PolicyAction;
   hasStoredMcpScope: boolean;
+  /** Server names a description-based draft pre-selected, shown so the
+   *  administrator can see why the scope is already set. */
+  draftScopeNames: string[];
+  onClearDraftScope: () => void;
 }): JSX.Element {
   const mcpScopeFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const gramProject = useProjectSlugForRequests();
@@ -1260,6 +1284,22 @@ function ScopeStep({
           <Text small muted>
             Choose where this policy applies to continue.
           </Text>
+        ) : null}
+        {mcpScoped && draftScopeNames.length > 0 ? (
+          <div className="flex items-center justify-between gap-4 border px-4 py-3 text-sm">
+            <span>
+              Set from your description, which names{" "}
+              {draftScopeNames.join(", ")}.
+            </span>
+            <Button
+              type="button"
+              size="xs"
+              variant="tertiary"
+              onClick={onClearDraftScope}
+            >
+              Clear
+            </Button>
+          </div>
         ) : null}
         {mcpScoped ? (
           <PolicyMCPScopePicker
@@ -2070,6 +2110,7 @@ export function ActionStep({
   setScore,
   flagOnlySelected = false,
   mcpScoped = false,
+  pinnedAction,
   shadowMCPAllowedServers,
 }: {
   action: PolicyAction;
@@ -2086,6 +2127,7 @@ export function ActionStep({
   setScore: React.Dispatch<React.SetStateAction<number>>;
   flagOnlySelected?: boolean;
   mcpScoped?: boolean;
+  pinnedAction?: { value: PolicyAction; reason: string };
   shadowMCPAllowedServers?: ReactNode;
 }): JSX.Element {
   return (
@@ -2101,6 +2143,7 @@ export function ActionStep({
             setFormAction={setAction}
             flagOnlySelected={flagOnlySelected}
             mcpScoped={mcpScoped}
+            pinnedAction={pinnedAction}
           />
           {shadowMCPAllowedServers}
           <PolicyAudiencePicker
@@ -3603,12 +3646,15 @@ function ReviewAgreementControl({
 export function StandardPolicyEditor({
   policy,
   prefill,
+  draft = null,
 }: {
   policy: RiskPolicy | null;
   /** Starting values for a new policy; ignored when editing one. */
   prefill?: PolicyNewPrefill;
+  draft?: PolicyDraft | null;
 }): JSX.Element {
   const routes = useRoutes();
+  const gramProject = useProjectSlugForRequests();
   const project = useProject();
   const queryClient = useQueryClient();
   const { customRules } = useDetectionRulesStore();
@@ -3655,12 +3701,32 @@ export function StandardPolicyEditor({
     };
   }, [policy, mode]);
 
-  // ── Local form state, seeded from the policy (edit) or defaults (create). ──
+  // ── Local form state, seeded from the policy (edit), a draft from the
+  // intent screen, or prefill and defaults (create). ──
   const seed = policy ? undefined : prefill;
-  const [name, setName] = useState(policy?.name ?? seed?.name ?? "");
+  const [name, setName] = useState(
+    policy?.name ?? draft?.name ?? seed?.name ?? "",
+  );
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(() => new Set(orig?.categories ?? seed?.categories));
+  >(
+    () =>
+      new Set(
+        orig?.categories ??
+          (draft
+            ? policyToCategories(draft.sources, draft.presidioEntities, mode)
+            : seed?.categories),
+      ),
+  );
+  // Categories the draft turned on, tagged on the detect step. Recomputed
+  // with `mode`, which resolves after mount.
+  const draftCategories = useMemo(
+    () =>
+      !policy && draft?.origin
+        ? policyToCategories(draft.sources, draft.presidioEntities, mode)
+        : new Set<RuleCategory>(),
+    [policy, draft, mode],
+  );
   // The flag behind `mode` resolves asynchronously, so the seed above may
   // predate it; fold any legacy personal-data selection into `pii` once the
   // LLM analyzer applies, or the collapsed card would hide it and a save
@@ -3682,13 +3748,17 @@ export function StandardPolicyEditor({
           toolAnnotations: [],
           servers: seed.mcpServerIds.map((mcpServerId) => ({ mcpServerId })),
         }
-      : initialPolicyMCPScopeValue(policy),
+      : ((policy ? null : draftMCPScopeValue(draft)) ??
+        initialPolicyMCPScopeValue(policy)),
+  );
+  const [draftScopeNames, setDraftScopeNames] = useState<string[]>(
+    policy ? [] : (draft?.mcpScope?.matchedNames ?? []),
   );
   const [selectedCustomRuleIds, setSelectedCustomRuleIds] = useState<
     Set<string>
   >(() => new Set(policy?.customRuleIds ?? []));
   const initialAction =
-    (policy?.action as PolicyAction) ?? seed?.action ?? "flag";
+    (policy?.action as PolicyAction) ?? draft?.action ?? seed?.action ?? "flag";
   const [action, setAction] = useState<PolicyAction>(
     mcpScope.mode === "mcp"
       ? mcpCompatibleAction(initialAction)
@@ -3712,7 +3782,9 @@ export function StandardPolicyEditor({
       () =>
         (policy?.shadowMcpDisposition as ShadowMCPDisposition) ?? "block_all",
     );
-  const [userMessage, setUserMessage] = useState(policy?.userMessage ?? "");
+  const [userMessage, setUserMessage] = useState(
+    policy?.userMessage ?? draft?.userMessage ?? "",
+  );
   const [audienceType, setAudienceType] = useState<"everyone" | "targeted">(
     policy?.audienceType === "targeted" ? "targeted" : "everyone",
   );
@@ -3731,7 +3803,9 @@ export function StandardPolicyEditor({
   const [customizeCategory, setCustomizeCategory] =
     useState<RuleCategory | null>(null);
   const [detectionExpanded, setDetectionExpanded] = useState(true);
-  const [score, setScore] = useState(policy?.score ?? seed?.score ?? 5);
+  const [score, setScore] = useState(
+    policy?.score ?? draft?.score ?? seed?.score ?? 5,
+  );
   const [presidioThreshold, setPresidioThreshold] = useState<number>(
     policy?.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
   );
@@ -3751,6 +3825,10 @@ export function StandardPolicyEditor({
   const originalHasShadowMCPBlockConfiguration = policy
     ? isShadowMCPBlockConfiguration(policy.sources, policy.action)
     : false;
+  // An allow_all policy cannot stop detecting Shadow MCP or stop denying: its
+  // blocked-server list would have nothing to enforce, and the server rejects
+  // the save. Pin both controls so that shows up here, not in an error toast.
+  const allowAllPostureLocked = shadowMCPAllowAllPostureLocked(policy);
 
   useEffect(() => {
     if (
@@ -3833,8 +3911,21 @@ export function StandardPolicyEditor({
     categoriesQuery.data?.categories,
     mcpScope.mode === "mcp",
   );
+  // A draft from a use case that needs approved domains can't be created
+  // without them while its Non-Corporate Accounts detector is on.
+  const approvedDomainsRequired =
+    !policy &&
+    draft?.requiresApprovedEmailDomains === true &&
+    selectedCategories.has("account_identity");
+  const parsedApprovedDomains = parseApprovedEmailDomains(approvedDomains);
+  const invalidApprovedDomains = invalidEmailDomains(parsedApprovedDomains);
+  const approvedDomainsMissing =
+    approvedDomainsRequired &&
+    (parsedApprovedDomains.length === 0 || invalidApprovedDomains.length > 0);
+
   const saveBlocked =
     !hasEnabledDetector ||
+    approvedDomainsMissing ||
     audienceMissing ||
     shadowMCPInventoryUnavailable ||
     mcpScope.mode === "unset" ||
@@ -3885,6 +3976,7 @@ export function StandardPolicyEditor({
   });
   const createMutation = useRiskCreatePolicyMutation({
     onSuccess: () => {
+      clearPolicyStartSession(gramProject);
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
       void invalidateShadowMCPPolicyInventory(queryClient, project.id);
@@ -4120,9 +4212,23 @@ export function StandardPolicyEditor({
       />
       <StepperShell
         header={header}
+        provenance={
+          draft ? (
+            <PolicyDraftProvenance draft={draft}>
+              {approvedDomainsRequired ? (
+                <ApprovedDomainsRequirement
+                  value={approvedDomains}
+                  onChange={setApprovedDomains}
+                  invalid={invalidApprovedDomains}
+                />
+              ) : null}
+            </PolicyDraftProvenance>
+          ) : null
+        }
         steps={STANDARD_STEPS}
         current={step}
         onStep={setStep}
+        prefilledStepIds={draft?.origin ? STANDARD_PREFILLED_STEPS : undefined}
       >
         {step === 0 && (
           <>
@@ -4150,11 +4256,13 @@ export function StandardPolicyEditor({
                         category={cat}
                         selected={selectedCategories.has(cat)}
                         disabledRules={disabledRules}
-                        disabledReason={builtInRuleDisabledReason(
-                          cat,
-                          selectedCategories,
-                        )}
+                        disabledReason={
+                          allowAllPostureLocked && cat === "shadow_mcp"
+                            ? SHADOW_MCP_ALLOW_ALL_LOCK_REASON
+                            : builtInRuleDisabledReason(cat, selectedCategories)
+                        }
                         mode={mode}
+                        fromUseCase={draftCategories.has(cat)}
                         onToggle={(checked) => toggleCategory(cat, checked)}
                         onCustomize={() => customizeCategoryRules(cat)}
                       />
@@ -4206,6 +4314,11 @@ export function StandardPolicyEditor({
             setMcpScope={updateMCPScope}
             action={action}
             hasStoredMcpScope={!!policy?.mcpScope}
+            draftScopeNames={draftScopeNames}
+            onClearDraftScope={() => {
+              setDraftScopeNames([]);
+              updateMCPScope(initialPolicyMCPScopeValue(null));
+            }}
           />
         )}
 
@@ -4223,6 +4336,14 @@ export function StandardPolicyEditor({
             setScore={setScore}
             flagOnlySelected={flagOnlySelected}
             mcpScoped={mcpScope.mode === "mcp"}
+            pinnedAction={
+              allowAllPostureLocked
+                ? {
+                    value: "block",
+                    reason: SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
+                  }
+                : undefined
+            }
             shadowMCPAllowedServers={
               targetIsShadowMCPBlock ? (
                 <div className="grid gap-5 lg:grid-cols-3 lg:items-start">

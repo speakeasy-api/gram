@@ -154,7 +154,7 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the organization's scan target list when serving agents.")
+			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Speakeasy injects from the organization's scan target list when serving agents.")
 			Required("config")
 		})
 
@@ -258,7 +258,7 @@ var _ = Service("agent", func() {
 	})
 
 	Method("getSessionMeta", func() {
-		Description("Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.")
+		Description("Resolve display metadata (Speakeasy chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.")
 
 		// Deliberately NOT reachable with the org install key (`agent` scope):
 		// unlike getPlugins, this returns per-user chat data, and the org key +
@@ -271,7 +271,7 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("session_ids", ArrayOf(String), "Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Gram derives its chat ids from these the same way hook ingest does.", func() {
+			Attribute("session_ids", ArrayOf(String), "Native harness session identifiers (e.g. Claude Code session UUIDs, Codex rollout ids) to resolve. Speakeasy derives its chat ids from these the same way hook ingest does.", func() {
 				MaxLength(50)
 			})
 			Required("session_ids")
@@ -300,13 +300,13 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("session_id", String, "Native harness session identifier of the moved session. Gram derives its chat id from this the same way hook ingest does; the move is recorded even if the session has not been captured yet.", func() {
+			Attribute("session_id", String, "Native harness session identifier of the moved session. Speakeasy derives its chat id from this the same way hook ingest does; the move is recorded even if the session has not been captured yet.", func() {
 				MaxLength(256)
 			})
 			Attribute("target_harness", String, "Harness the session was moved to (e.g. cursor, codex, claude-code).", func() {
 				MaxLength(64)
 			})
-			Attribute("target_session_id", String, "Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Gram link the original session and its continuation.", func() {
+			Attribute("target_session_id", String, "Native session id minted for the continuation, when the daemon knows it at launch time (claude-code targets today; Cursor mints ids server-side so moves there omit it). Lets Speakeasy link the original session and its continuation.", func() {
 				MaxLength(256)
 			})
 			Attribute("source_surface", String, "Harness the session originated in, as detected by the agent (e.g. claude-code, codex).", func() {
@@ -390,7 +390,7 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.ByKeyPayload()
-			Attribute("session_id", String, "Native harness session identifier the handoff was rendered from. Gram derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.", func() {
+			Attribute("session_id", String, "Native harness session identifier the handoff was rendered from. Speakeasy derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.", func() {
 				MaxLength(256)
 			})
 			Attribute("content", String, "The rendered handoff document (markdown). Size-capped; the daemon renders deterministically from the local transcript.", func() {
@@ -431,7 +431,7 @@ var GetPluginsResult = Type("GetPluginsResult", func() {
 	Required("etag", "marketplaces", "plugins")
 	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.")
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
-	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins the agent should enable. Each entry references one of the marketplaces above by name.")
+	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.")
 	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")
 	Attribute("principal", AgentPollingPrincipalModel, "The non-human principal the plugin set was resolved for. Present only when the caller authenticated with an agent API key.")
 })
@@ -464,9 +464,15 @@ var AgentMarketplaceModel = Type("AgentMarketplace", func() {
 })
 
 var AgentPluginModel = Type("AgentPlugin", func() {
-	Required("slug", "marketplace_name")
-	Attribute("slug", String, "Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.")
+	Required("slug", "marketplace_name", "install_mode")
+	Attribute("slug", String, "Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.")
 	Attribute("marketplace_name", String, "Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.")
+	Attribute("install_mode", String, func() {
+		Description("How the agent installs the plugin. `required`: installed, and the user can't turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.")
+		shared.InstallModeEnum()
+	})
+	Attribute("name", String, "Display name of the plugin. Absent for the synthesized observability plugin.")
+	Attribute("description", String, "Short description of the plugin, when one is set.")
 })
 
 var SyncedAgentUserModel = Type("SyncedAgentUser", func() {
@@ -492,7 +498,7 @@ var ListSyncedUsersResult = Type("ListSyncedUsersResult", func() {
 var AgentSessionMetaModel = Type("AgentSessionMeta", func() {
 	Required("session_id", "chat_id", "updated_at")
 	Attribute("session_id", String, "The native harness session identifier this entry resolves, echoed from the request.")
-	Attribute("chat_id", String, "Gram chat id for the captured session.", func() {
+	Attribute("chat_id", String, "Speakeasy chat id for the captured session.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("title", String, "Generated (or manually set) chat title. Absent when no title has been generated yet.")
@@ -558,8 +564,8 @@ var AiScanTargetSignaturesModel = Type("AiScanTargetSignatures", func() {
 })
 
 var AiScanTargetGatewayClientModel = Type("AiScanTargetGatewayClient", func() {
-	Description("How a target detected on a device is recognized again when the same tool calls Gram's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Gram verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.")
-	Attribute("cimd_vendor_keys", ArrayOf(String, func() { Pattern(aiScanVendorKeyPattern) }), "Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.", func() {
+	Description("How a target detected on a device is recognized again when the same tool calls Speakeasy's MCP gateway. A device signature and a registered OAuth client share no natural join key, so the link is declared here. The three lists are not interchangeable: the first two name credentials Speakeasy verified and can be enforced on, the third names what a client said about itself and is used only to attribute traffic.")
+	Attribute("cimd_vendor_keys", ArrayOf(String, func() { Pattern(aiScanVendorKeyPattern) }), "Vendor keys from Speakeasy's CIMD client catalog. Vendor-grained: no two targets may claim the same key, or a block on either would silently cover the other.", func() {
 		MaxLength(aiScanMaxGatewayClientEntries)
 	})
 	Attribute("oauth_client_ids", ArrayOf(String, func() { MaxLength(512) }), "Client ids matched literally against the caller's verified client_id, or CIMD catalog URLs — including the wildcard patterns — matched against the catalog entry that admitted it. Naming the catalog URL is how a vendor that mints one document per MCP server is still named exactly. No two targets may claim the same entry.", func() {

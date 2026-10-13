@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// SetMCPServerURL sets the public Gram server origin that platform-domain MCP
+// SetMCPServerURL sets the public Speakeasy server origin that platform-domain MCP
 // URLs are built on.
 func (s *Service) SetMCPServerURL(serverURL *url.URL) { s.mcpServerURL = serverURL }
 

@@ -24,7 +24,7 @@ export const Type = {
 export type Type = ClosedEnum<typeof Type>;
 
 /**
- * One MCP server's tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.
+ * One MCP server's tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization's logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Speakeasy directly.
  */
 export type AdminMcpServerToolCalls = {
   /**

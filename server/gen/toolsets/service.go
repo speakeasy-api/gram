@@ -47,7 +47,7 @@ type Service interface {
 	// Associate an external OAuth server with a toolset
 	AddExternalOAuthServer(context.Context, *AddExternalOAuthServerPayload) (res *types.Toolset, err error)
 	// Change an attached external OAuth server between provider-hosted and
-	// Gram-hosted authorization-server metadata without replacing the server,
+	// Speakeasy-hosted authorization-server metadata without replacing the server,
 	// registrations, tokens, or toolset association
 	UpdateExternalOAuthServer(context.Context, *UpdateExternalOAuthServerPayload) (res *types.Toolset, err error)
 	// Remove OAuth server association from a toolset
@@ -272,10 +272,10 @@ type UpdateExternalOAuthServerPayload struct {
 	ApikeyToken  *string
 	// The slug of the toolset whose attached external OAuth server is updated
 	Slug types.Slug
-	// JSON object metadata to restore Gram-hosted compatibility mode. Supply
+	// JSON object metadata to restore Speakeasy-hosted compatibility mode. Supply
 	// exactly one of metadata and authorization_server_issuer.
 	Metadata any
-	// Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly
+	// Exact HTTPS issuer to set for provider-hosted discovery. Speakeasy strictly
 	// discovers and verifies it before the atomic update. Supply exactly one of
 	// authorization_server_issuer and metadata; clients may need to register or
 	// authenticate again after a mode change.

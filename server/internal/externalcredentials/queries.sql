@@ -41,7 +41,7 @@ RETURNING *;
 
 -- Tenancy for the reads and writes below is a single nullable parameter:
 -- @organization_id is a customer organization for organization-scoped rows, or
--- NULL for platform-scoped rows (Gram's own credentials, managed by the
+-- NULL for platform-scoped rows (Speakeasy's own credentials, managed by the
 -- platform-admin surface). IS NOT DISTINCT FROM makes NULL match NULL, so both
 -- tiers share one query set; the platform-admin handlers pass a NULL
 -- organization_id, exactly as they already do for CreateExternalCredential.

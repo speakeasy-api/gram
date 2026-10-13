@@ -45,7 +45,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 			workflows = append(workflows, "inspect current-cycle organization usage estimate")
 		}
 		if coverageReadsAvailable {
-			workflows = append(workflows, "inspect which agent surfaces Gram observes for an organization")
+			workflows = append(workflows, "inspect which agent surfaces Speakeasy observes for an organization")
 		}
 		if issuerReadsAvailable {
 			workflows = append(workflows, "inspect global issuers and bounded duplicate/migration preflights")

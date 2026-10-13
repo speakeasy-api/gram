@@ -13,7 +13,8 @@
 # pre-merge = "npm test"
 
 # Blocking: copies mise.local.toml/local/ from the main worktree, installs deps,
-# and remaps ports — everything else in the worktree depends on this.
+# remaps ports, and registers Platform MCP for OpenCode and Claude Code —
+# everything else in the worktree depends on this.
 [[pre-start]]
 workinit = "mise run git:workinit"
 
@@ -33,6 +34,11 @@ workinit = "mise run git:workinit"
 # `./zero --agent`.
 [post-start]
 stack = "mise run git:workboot"
+
+# Remove Claude's external, project-local MCP registration before deletion.
+# OpenCode's ignored config is deleted along with the worktree.
+[[pre-remove]]
+mcp = "mise run git:workmcp --remove || echo 'Warning: MCP cleanup failed' >&2"
 
 # Runs inside the worktree before deletion — nuke needs this worktree's
 # COMPOSE_PROJECT_NAME (mise.local.toml) and local/ dir to tear down the right

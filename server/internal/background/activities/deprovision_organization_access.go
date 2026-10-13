@@ -19,7 +19,7 @@ import (
 // ShouldProcessEvent guard; this routine only applies the teardown.
 type deprovisionOrganizationAccessParams struct {
 	organizationID string
-	// gramUserID may be empty when the WorkOS user has no local Gram user.
+	// gramUserID may be empty when the WorkOS user has no local Speakeasy user.
 	gramUserID string
 	// workosUserID may be empty (e.g. a relationship row created before the
 	// user ever logged in); it is then resolved from the users row so role

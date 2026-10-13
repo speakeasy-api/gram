@@ -19,7 +19,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
-import { ConfirmDialog } from "@/pages/remote-identity-providers/ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { SlackDirectoryConnection } from "@gram/client/models/components/slackdirectoryconnection.js";
 import { useBeginSlackDirectoryConnectionMutation } from "@gram/client/react-query/beginSlackDirectoryConnection.js";
 import { useDisconnectSlackDirectoryConnectionMutation } from "@gram/client/react-query/disconnectSlackDirectoryConnection.js";
