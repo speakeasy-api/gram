@@ -293,13 +293,13 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                   )}
                 </SettingsSection.Body>
                 {(canFinish || canReplace || canRotate) && (
-                  <SettingsSection.Footer>
+                  <SettingsSection.Footer className="flex-wrap">
                     <SettingsSection.FooterHint>
                       {canFinish
                         ? "The issuer URI stays the same."
                         : "If a signing key may be exposed, stop using it now and set up a new one."}
                     </SettingsSection.FooterHint>
-                    <SettingsSection.FooterActions>
+                    <SettingsSection.FooterActions className="shrink flex-wrap justify-end">
                       {canFinish && (
                         <Button
                           variant="primary"
@@ -499,12 +499,12 @@ function IssuerStatus({
     case "setup_required":
       message = issuer.canEnable
         ? "Enable Enterprise Managed Authorization to create your organization's issuer."
-        : "Enterprise Managed Authorization cannot be enabled right now. Contact your Speakeasy administrator to check availability and your plan.";
+        : "Enterprise Managed Authorization cannot be enabled on this deployment right now. Contact your Speakeasy administrator.";
       break;
     case "disabled":
       message = issuer.canEnable
         ? "Enterprise Managed Authorization is disabled. Re-enable it to restore automatic authorization."
-        : "Enterprise Managed Authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and your plan.";
+        : "Enterprise Managed Authorization is disabled and cannot be re-enabled right now. Check that your organization still has a verified domain on the Single sign-on tab; if it does, contact your Speakeasy administrator.";
       break;
     case "verified_domain_required":
       message = (

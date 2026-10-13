@@ -282,7 +282,7 @@ describe("Speakeasy identity provider page", () => {
     },
   );
 
-  it("does not offer re-enable after entitlement removal", () => {
+  it("does not offer re-enable when the server says the issuer can't be enabled", () => {
     mocks.issuer = { ...enabledIssuer, state: "disabled" };
     show();
     expect(
@@ -290,7 +290,7 @@ describe("Speakeasy identity provider page", () => {
         name: "Enable Enterprise Managed Authorization",
       }),
     ).toBeNull();
-    expect(screen.getByText(/check availability and your plan/)).toBeTruthy();
+    expect(screen.getByText(/still has a verified domain/)).toBeTruthy();
   });
 
   it.each(["rollout is disabled", "status lookup failed"])(
@@ -335,7 +335,9 @@ describe("Speakeasy identity provider page", () => {
         name: "Enable Enterprise Managed Authorization",
       }),
     ).toBeNull();
-    expect(screen.getByText(/cannot be enabled right now/)).toBeTruthy();
+    expect(
+      screen.getByText(/cannot be enabled on this deployment right now/),
+    ).toBeTruthy();
   });
 
   it.each(["reader", "support"])(
@@ -485,7 +487,7 @@ describe("Speakeasy identity provider page", () => {
 
   it.each([
     ["enabled", "Enabled", /vouches for your team/],
-    ["setup_required", "Off", /cannot be enabled right now/],
+    ["setup_required", "Off", /cannot be enabled on this deployment right now/],
     ["disabled", "Off", /cannot be re-enabled right now/],
     ["signing_paused", "Paused", /temporarily paused/],
     ["keyless", "Needs attention", /signing key was withdrawn/],

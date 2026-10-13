@@ -88,12 +88,15 @@ describe("issuer query access", () => {
 
 describe("rotation polling", () => {
   const now = Date.parse("2026-10-13T12:00:00Z");
-  it("polls only until the rotation is ready", () => {
+  it("polls quickly until ready, then slowly until automatic activation", () => {
     expect(rotationPollInterval(undefined, now)).toBe(false);
     expect(rotationPollInterval(new Date("2026-10-13T12:02:00Z"), now)).toBe(
       5_000,
     );
     expect(rotationPollInterval(new Date("2026-10-13T11:59:59Z"), now)).toBe(
+      60_000,
+    );
+    expect(rotationPollInterval(new Date("2026-10-13T10:00:00Z"), now)).toBe(
       false,
     );
   });
