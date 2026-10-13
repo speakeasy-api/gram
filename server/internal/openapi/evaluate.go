@@ -1001,53 +1001,128 @@ func parseInputObject(raw json.RawMessage) inputObjectSchema {
 	return obj
 }
 
+// maxInlinedSchemaNodes bounds how many schema nodes inlining one input may
+// produce. Shared schemas that reference each other more than once per level
+// expand exponentially; real tool inputs stay well under a few thousand
+// nodes, so ten thousand only stops pathological documents.
+const maxInlinedSchemaNodes = 10_000
+
+// schemaKeywords are the JSON Schema keywords whose value is one schema.
+var schemaKeywords = map[string]bool{
+	"items": true, "additionalItems": true, "additionalProperties": true,
+	"not": true, "if": true, "then": true, "else": true, "contains": true,
+	"propertyNames": true, "unevaluatedItems": true, "unevaluatedProperties": true,
+}
+
+// schemaListKeywords are the keywords whose value is a list of schemas.
+var schemaListKeywords = map[string]bool{
+	"allOf": true, "anyOf": true, "oneOf": true, "prefixItems": true,
+}
+
+// schemaMapKeywords are the keywords whose value maps names to schemas.
+var schemaMapKeywords = map[string]bool{
+	"properties": true, "patternProperties": true, "$defs": true,
+	"definitions": true, "dependentSchemas": true,
+}
+
 // inlineDefs returns the schema with every `#/$defs/` reference replaced by
-// the schema it points at. A reference that is already being expanded higher
-// up is left in place so recursive schemas terminate.
+// the schema it points at. Only schema keywords are followed, so literal data
+// such as defaults and examples is left untouched. A reference already being
+// expanded higher up is left in place so recursive schemas terminate. If the
+// result would exceed maxInlinedSchemaNodes, the schema is returned as is and
+// compared by its raw JSON instead.
 func inlineDefs(raw json.RawMessage, defs map[string]json.RawMessage) json.RawMessage {
 	var v any
 	if len(defs) == 0 || json.Unmarshal(raw, &v) != nil {
 		return raw
 	}
 
-	out, err := json.Marshal(inlineDefsValue(v, defs, map[string]bool{}))
+	in := &defInliner{defs: defs, expanding: map[string]bool{}, budget: maxInlinedSchemaNodes}
+	resolved := in.schema(v)
+	if in.budget < 0 {
+		return raw
+	}
+
+	out, err := json.Marshal(resolved)
 	if err != nil {
 		return raw
 	}
 	return out
 }
 
-func inlineDefsValue(v any, defs map[string]json.RawMessage, expanding map[string]bool) any {
-	switch node := v.(type) {
-	case map[string]any:
-		if ref, ok := node["$ref"].(string); ok {
-			name, isDef := strings.CutPrefix(ref, "#/$defs/")
-			def, found := defs[name]
-			if isDef && found && !expanding[name] {
-				var resolved any
-				if json.Unmarshal(def, &resolved) == nil {
-					expanding[name] = true
-					out := inlineDefsValue(resolved, defs, expanding)
-					delete(expanding, name)
-					return out
-				}
-			}
-		}
+type defInliner struct {
+	// defs holds the schemas references point at.
+	defs map[string]json.RawMessage
 
-		out := make(map[string]any, len(node))
-		for k, child := range node {
-			out[k] = inlineDefsValue(child, defs, expanding)
-		}
-		return out
-	case []any:
-		out := make([]any, len(node))
-		for i, child := range node {
-			out[i] = inlineDefsValue(child, defs, expanding)
-		}
-		return out
-	default:
+	// expanding holds the definitions on the current path, to stop cycles.
+	expanding map[string]bool
+
+	// budget counts the schema nodes that may still be produced. It goes
+	// negative once the limit is passed.
+	budget int
+}
+
+func (in *defInliner) schema(v any) any {
+	node, ok := v.(map[string]any)
+	if !ok {
 		return v
 	}
+
+	in.budget--
+	if in.budget < 0 {
+		return v
+	}
+
+	if ref, ok := node["$ref"].(string); ok {
+		name, isDef := strings.CutPrefix(ref, "#/$defs/")
+		def, found := in.defs[name]
+		var resolved any
+		if isDef && found && !in.expanding[name] && json.Unmarshal(def, &resolved) == nil {
+			in.expanding[name] = true
+			out := in.schema(resolved)
+			delete(in.expanding, name)
+			return out
+		}
+	}
+
+	out := make(map[string]any, len(node))
+	for key, child := range node {
+		switch {
+		case schemaKeywords[key]:
+			if list, ok := child.([]any); ok {
+				out[key] = in.schemaList(list)
+			} else {
+				out[key] = in.schema(child)
+			}
+		case schemaListKeywords[key]:
+			if list, ok := child.([]any); ok {
+				out[key] = in.schemaList(list)
+			} else {
+				out[key] = child
+			}
+		case schemaMapKeywords[key]:
+			if m, ok := child.(map[string]any); ok {
+				resolved := make(map[string]any, len(m))
+				for name, sub := range m {
+					resolved[name] = in.schema(sub)
+				}
+				out[key] = resolved
+			} else {
+				out[key] = child
+			}
+		default:
+			out[key] = child
+		}
+	}
+	return out
+}
+
+func (in *defInliner) schemaList(list []any) []any {
+	out := make([]any, len(list))
+	for i, child := range list {
+		out[i] = in.schema(child)
+	}
+	return out
 }
 
 // newRequiredFields lists the fields an object schema requires after a

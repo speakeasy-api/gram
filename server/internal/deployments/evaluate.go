@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -40,12 +40,6 @@ const (
 	evaluationStatusUnchanged evaluationStatus = "unchanged"
 	evaluationStatusRemoved   evaluationStatus = "removed"
 )
-
-// maxConcurrentSourceEvaluations bounds how many OpenAPI sources one
-// deployment evaluation extracts at once. Extraction is CPU-bound and already
-// parallel per operation, so a few sources at a time is enough to overlap
-// blob reads with work without starving other requests.
-const maxConcurrentSourceEvaluations = 4
 
 // codeSourceRemoved identifies the change reported when an OpenAPI source is
 // dropped from a deployment.
@@ -157,12 +151,7 @@ func (s *Service) GetDeploymentEvaluation(ctx context.Context, form *gen.GetDepl
 		baseBySlug[baseDocs[i].Slug] = &baseDocs[i]
 	}
 
-	// pairs holds each source that differs between the two deployments: a
-	// nil base is a new source and a nil next a removed one.
-	type sourcePair struct {
-		base, next *repo.DeploymentsOpenapiv3Asset
-	}
-	var pairs []sourcePair
+	documents := make([]*gen.OpenAPIv3Evaluation, 0, len(nextDocs))
 	seen := make(map[string]struct{}, len(nextDocs))
 	for i := range nextDocs {
 		next := &nextDocs[i]
@@ -172,31 +161,25 @@ func (s *Service) GetDeploymentEvaluation(ctx context.Context, form *gen.GetDepl
 		if base != nil && base.AssetID == next.AssetID {
 			continue
 		}
-		pairs = append(pairs, sourcePair{base: base, next: next})
-	}
-	for i := range baseDocs {
-		if _, ok := seen[baseDocs[i].Slug]; !ok {
-			pairs = append(pairs, sourcePair{base: &baseDocs[i], next: nil})
+
+		eval, err := s.evaluateSource(ctx, projectID, base, next)
+		if err != nil {
+			return nil, err
 		}
+		documents = append(documents, eval)
 	}
 
-	// Each source is read and extracted twice, so sources are evaluated in
-	// parallel, bounded so one request cannot monopolize the server.
-	documents := make([]*gen.OpenAPIv3Evaluation, len(pairs))
-	eg, egCtx := errgroup.WithContext(ctx)
-	eg.SetLimit(maxConcurrentSourceEvaluations)
-	for i, pair := range pairs {
-		eg.Go(func() error {
-			eval, err := s.evaluateSource(egCtx, projectID, pair.base, pair.next)
-			if err != nil {
-				return err
-			}
-			documents[i] = eval
-			return nil
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return nil, fmt.Errorf("evaluate sources: %w", err)
+	for i := range baseDocs {
+		base := &baseDocs[i]
+		if _, ok := seen[base.Slug]; ok {
+			continue
+		}
+
+		eval, err := s.evaluateSource(ctx, projectID, base, nil)
+		if err != nil {
+			return nil, err
+		}
+		documents = append(documents, eval)
 	}
 
 	slices.SortFunc(documents, func(a, b *gen.OpenAPIv3Evaluation) int {
@@ -420,9 +403,14 @@ func (s *Service) readOpenAPIv3Asset(ctx context.Context, projectID uuid.UUID, a
 	}
 	defer o11y.LogDefer(ctx, s.logger, "close openapi document reader", func() error { return rc.Close() })
 
-	data, err := io.ReadAll(rc)
+	// Read one byte past the upload limit to tell a document at the limit
+	// from one over it.
+	data, err := io.ReadAll(io.LimitReader(rc, assets.MaxFileSizeOpenAPI+1))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading openapi document").LogError(ctx, s.logger)
+	}
+	if len(data) > assets.MaxFileSizeOpenAPI {
+		return nil, oops.E(oops.CodeRequestTooLarge, nil, "openapi document is larger than the %d MiB upload limit", assets.MaxFileSizeOpenAPI>>20).LogWarn(ctx, s.logger)
 	}
 
 	return data, nil
