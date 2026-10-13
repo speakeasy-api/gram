@@ -24,8 +24,8 @@ import (
 
 // resolveMetaMemberResource returns the upstream resource (remote server URL
 // or tunneled resource identifier) of the meta MCP member whose upstream
-// authenticates against remoteSessionIssuerID, and that member's mcp_servers
-// id (the first, when members front one URL).
+// authenticates against remoteSessionIssuerID, and the mcp_servers id of the
+// member whose spelling of that URL was chosen.
 //
 // Tri-state: ("", true) means members claimed the issuer but no single member
 // wins, and the caller must not fall back to a weaker derivation; ("", false)
@@ -151,6 +151,8 @@ func (s *Service) authorizedMetaMembers(
 	return authorized, nil
 }
 
+var quietLogger = slog.New(slog.DiscardHandler)
+
 // gatewayMemberResourceScopes reads, for each card on a gateway, the cached
 // resource row of the member a login through that client would read, so the
 // card requests what the login will. A client no single member claims has no
@@ -162,7 +164,7 @@ func (s *Service) gatewayMemberResourceScopes(
 	clients []remotesessions.Client,
 	discover bool,
 ) map[uuid.UUID]remotesessions.ResourceScopes {
-	if !discover || !endpoint.MetaMcpServerID.Valid || challengeState.Subject == nil {
+	if !discover || !endpoint.MetaMcpServerID.Valid || challengeState.Subject == nil || len(clients) == 0 {
 		return nil
 	}
 	memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
@@ -172,7 +174,8 @@ func (s *Service) gatewayMemberResourceScopes(
 	}
 	out := make(map[uuid.UUID]remotesessions.ResourceScopes, len(clients))
 	for _, c := range clients {
-		resource, member, _, err := s.resolveMetaMemberResource(memberCtx, s.logger, endpoint, c.RemoteSessionIssuerID)
+		// The connect logs a shared authorization server; every render need not.
+		resource, member, _, err := s.resolveMetaMemberResource(memberCtx, quietLogger, endpoint, c.RemoteSessionIssuerID)
 		if err != nil {
 			s.logger.WarnContext(ctx, "resolve gateway member for consent card", attr.SlogError(err), attr.SlogRemoteSessionClientID(c.ID.String()))
 			continue

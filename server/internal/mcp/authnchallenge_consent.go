@@ -1436,12 +1436,18 @@ func (s *Service) buildRemoteSessionCards(
 		}
 	}
 
-	memberResources := s.gatewayMemberResourceScopes(ctx, endpoint, challengeState, clients, discoverScopes)
-
 	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients)
 	if err != nil {
 		return nil, err
 	}
+	// The member's scopes only feed the reconnect hint, which needs a session.
+	connectedClients := make([]remotesessions.Client, 0, len(clients))
+	for _, c := range clients {
+		if state, ok := statuses[c.ID]; ok && state.Status == remotesessions.RemoteSessionActive {
+			connectedClients = append(connectedClients, c)
+		}
+	}
+	memberResources := s.gatewayMemberResourceScopes(ctx, endpoint, challengeState, connectedClients, discoverScopes)
 	chainRequests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
 
 	cards := make([]remoteSessionCard, 0, len(clients))

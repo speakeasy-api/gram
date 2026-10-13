@@ -1296,7 +1296,7 @@ func (m *ChallengeManager) mintAuthorization(
 		if resolved.ProbeDuration > 0 {
 			m.scopeMetrics.RecordProbe(ctx, resolved.Outcome, resolved.ProbeDuration)
 		}
-		m.logger.InfoContext(ctx, "resolved login scope",
+		logAttrs := []any{
 			attr.SlogProjectID(parent.ProjectID.String()),
 			attr.SlogOrganizationID(parent.OrganizationID),
 			attr.SlogOAuthIssuer(client.IssuerURL),
@@ -1306,7 +1306,11 @@ func (m *ChallengeManager) mintAuthorization(
 			attr.SlogOAuthResourceProbeOutcome(resolved.Outcome),
 			attr.SlogOAuthScope(strings.Join(scopes, " ")),
 			attr.SlogOAuthResourceProbeDuration(resolved.ProbeDuration),
-		)
+		}
+		if parent.MetaMcpServerID.Valid {
+			logAttrs = append(logAttrs, attr.SlogMetaMcpServerID(parent.MetaMcpServerID.UUID.String()))
+		}
+		m.logger.InfoContext(ctx, "resolved login scope", logAttrs...)
 	}
 	if len(resolution.Unadvertised) > 0 {
 		m.logger.InfoContext(ctx, "resource scope pin requests scopes the resource does not advertise",

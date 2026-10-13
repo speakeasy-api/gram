@@ -180,7 +180,8 @@ func TestServeConsent_RemoteEndpointIdentityReconnectFollowsLogin(t *testing.T) 
 }
 
 // A gateway login reads the resource of the member it qualifies the client
-// to, and the card offers what that login requests.
+// to, ahead of the issuer override, and the card offers what that login
+// requests.
 func TestServeConsent_GatewayMemberResourceDecidesScopes(t *testing.T) {
 	t.Parallel()
 
@@ -190,6 +191,7 @@ func TestServeConsent_GatewayMemberResourceDecidesScopes(t *testing.T) {
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "scope-gw-member-m", member, conv.ToNullUUID(issuerID), 0)
 	cacheResourceScopes(t, ctx, fx, member, []string{"m:read", "openid"})
 	advertise(t, ctx, fx, issuerID, []string{"admin", "openid"})
+	overrideIssuerScopes(t, ctx, fx, issuerID, []string{"admin"})
 	grantScopedTo(t, ctx, fx, clientID, []string{"m:read"}, member)
 
 	expectIdentityHint(t, fx, true)

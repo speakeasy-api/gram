@@ -648,7 +648,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		Resource:            options.resource,
 	}
 	if options.gatewayMember {
-		parent.McpServerID, parent.ResourceMcpServerID = uuid.NullUUID{}, mcpServerID
+		parent.McpServerID, parent.ResourceMcpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID
 	}
 	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	require.NoError(t, err)
