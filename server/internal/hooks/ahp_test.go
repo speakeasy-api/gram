@@ -202,7 +202,7 @@ func TestAHPToolAfterPayload(t *testing.T) {
 		}
 		require.NotNil(t, payload, name)
 		require.Equal(t, tc.eventType, payload.Event.Type, name)
-		require.Equal(t, "ahp:example-harness", payload.Source.Adapter)
+		require.Equal(t, "example-harness", payload.Source.Adapter)
 		require.Equal(t, "1.2.3", *payload.Source.AdapterVersion)
 		require.Equal(t, "read_file", *payload.Data.ToolCall.Name)
 		require.Equal(t, map[string]any{"path": "example.txt"}, payload.Data.ToolCall.Input)

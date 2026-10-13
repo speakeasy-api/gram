@@ -18,9 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// ahpAdapter is the canonical hook source for AHP events. The self-reported
-// harness name is appended to it so it cannot collide with adapters that have
-// provider-specific ingest behavior.
+// ahpAdapter is the canonical hook source for AHP events that report no
+// harness name.
 const ahpAdapter = "ahp"
 
 // AttachAHP mounts the Agent Hooks Protocol endpoint. AHP events are
@@ -172,7 +171,7 @@ func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, ev
 		Raw:              nil,
 	}
 	if harness != nil && strings.TrimSpace(harness.Name) != "" {
-		payload.Source.Adapter = ahpAdapter + ":" + strings.TrimSpace(harness.Name)
+		payload.Source.Adapter = strings.TrimSpace(harness.Name)
 		payload.Source.AdapterVersion = conv.PtrEmpty(strings.TrimSpace(harness.Version))
 	}
 	if session.Present && session.Value != nil {
