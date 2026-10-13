@@ -361,6 +361,7 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, platformHostsCLIFlag())
+	flags = append(flags, callbackOriginFlags()...)
 	flags = append(flags, orgDefaultHostFlags()...)
 
 	return &cli.Command{
@@ -853,8 +854,13 @@ func newWorkerCommand() *cli.Command {
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+			// Issuer URLs are pinned to the outbound origin, as on the server.
+			callbackOrigins, err := callbackOriginsFromCLI(c, serverURL, c.String("environment"), platformHosts)
+			if err != nil {
+				return err
+			}
 			// Sweeps retired internal session issuer keys; nil where KMS provisioning is unconfigured.
-			issuerProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, serverURL)
+			issuerProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, callbackOrigins.Outbound)
 			if err != nil {
 				return fmt.Errorf("build identity provider provisioner: %w", err)
 			}
