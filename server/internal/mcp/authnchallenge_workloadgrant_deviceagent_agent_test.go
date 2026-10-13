@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -37,7 +38,7 @@ func TestDeviceAgentToken_ActsAsTheAgentAdmissionGranted(t *testing.T) {
 	reassignAfterAdmission := func(ctx context.Context, db *pgxpool.Pool) (authz.WorkloadSessionAdmission, error) {
 		admission, err := runtimepolicy.AdmitWorkloadSession(ctx, db)
 		if err != nil {
-			return admission, err
+			return admission, fmt.Errorf("admit workload session: %w", err)
 		}
 		unassignWorkloadAgent(t, ctx, f.ti, f.assignmentID)
 		assignAgentToWorkload(t, ctx, f.ti, f.fx.orgID, f.issuerID, f.subject, other.ID)
