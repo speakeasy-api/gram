@@ -287,14 +287,11 @@ func DescribeToolsetEntries(
 	// names leak into another's assembly (see Task 2's rationale).
 	headerDisplayNamesByToolsetID := make(map[uuid.UUID]map[string]string, len(toolsets))
 	for _, row := range displayNameRows {
-		if !row.ToolsetID.Valid {
-			continue
-		}
 		names := make(map[string]string)
 		if len(row.HeaderDisplayNames) > 0 {
 			_ = json.Unmarshal(row.HeaderDisplayNames, &names)
 		}
-		headerDisplayNamesByToolsetID[row.ToolsetID.UUID] = names
+		headerDisplayNamesByToolsetID[row.ToolsetID] = names
 	}
 
 	// Wave 1: everything keyed off the tool/resource URN unions wave 0 just
@@ -1308,7 +1305,7 @@ func readToolsetTools(
 			})
 		}
 
-		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, toolsetID, envQueries)
+		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, pid, toolsetID, envQueries)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").LogError(ctx, logger)
 		}
@@ -1753,7 +1750,7 @@ func AssembleEnvironmentVariablesForToolset(
 	return securityVars, serverVars
 }
 
-func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.UUID, tools []ToolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
+func environmentVariablesForTools(ctx context.Context, tx DBTX, projectID uuid.UUID, toolsetID uuid.UUID, tools []ToolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
 	if len(tools) == 0 {
 		return []*types.SecurityVariable{}, []*types.ServerVariable{}, nil
 	}
@@ -1766,7 +1763,7 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, toolsetID uuid.U
 	headerDisplayNames := make(map[string]string)
 	if toolsetID != uuid.Nil {
 		mcpmetadataRepo := mcpmetadataR.New(tx)
-		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
+		displayNamesJSON, err := mcpmetadataRepo.GetHeaderDisplayNames(ctx, mcpmetadataR.GetHeaderDisplayNamesParams{ProjectID: projectID, BackendID: toolsetID})
 		if err == nil && len(displayNamesJSON) > 0 {
 			_ = json.Unmarshal(displayNamesJSON, &headerDisplayNames)
 		}
