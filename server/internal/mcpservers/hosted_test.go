@@ -13,6 +13,7 @@ import (
 	toolsetsgen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -284,4 +285,113 @@ func TestUpdateMcpServerHostedWrapperIgnoresDeletedToolsetWithSameSlug(t *testin
 	deleted, err := queries.GetToolsetByIDIncludingDeletedFixture(ctx, toolsetsrepo.GetToolsetByIDIncludingDeletedFixtureParams{ID: deletedID, ProjectID: f.projectID})
 	require.NoError(t, err)
 	require.Equal(t, "Hosted wrapper", deleted.Name, "the deleted twin is not rewritten")
+}
+
+func (f *hostedFixture) pluginMemberships(t *testing.T, ctx context.Context) int {
+	t.Helper()
+
+	var count int
+	err := f.ti.conn.QueryRow(ctx, `SELECT count(*) FROM plugin_servers WHERE deleted IS FALSE AND (toolset_id = $1 OR mcp_server_id = $1)`, f.toolset.ID).Scan(&count)
+	require.NoError(t, err)
+	return count
+}
+
+func TestDeleteMcpServerHostedWrapperDisablesThroughToolset(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+	groupID := seedToolVariationsGroup(t, ctx, f.ti.conn, f.projectID)
+	_, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("public"), func(p *gen.UpdateMcpServerPayload) {
+		p.ToolVariationsGroupID = new(groupID.String())
+	}))
+	require.NoError(t, err)
+	_, before := f.requireProjected(t, ctx)
+	endpointsBefore, err := mcpendpointsrepo.New(f.ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: f.projectID, McpServerID: f.toolset.ID})
+	require.NoError(t, err)
+	membershipsBefore := f.pluginMemberships(t, ctx)
+	toolsetUpdates, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionToolsetUpdate)
+	require.NoError(t, err)
+	serverUpdates, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	serverDeletes, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionMcpServerDelete)
+	require.NoError(t, err)
+	endpointDeletes, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, audit.ActionMcpEndpointDelete)
+	require.NoError(t, err)
+
+	require.NoError(t, f.ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: f.toolset.ID.String()}))
+
+	toolset, server := f.requireProjected(t, ctx)
+	require.False(t, toolset.McpEnabled)
+	require.True(t, toolset.McpIsPublic, "disabling keeps the public flag, as a toolset disable does")
+	require.Equal(t, f.toolset.McpSlug, toolset.McpSlug)
+	require.Equal(t, groupID, toolset.ToolVariationsGroupID.UUID, "the tool filtering group is kept")
+	require.Equal(t, before.ID, server.ID, "the wrapper stays live")
+	require.False(t, f.resolve(t, ctx).Allowed)
+	endpointsAfter, err := mcpendpointsrepo.New(f.ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: f.projectID, McpServerID: f.toolset.ID})
+	require.NoError(t, err)
+	require.Equal(t, endpointsBefore[0].ID, endpointsAfter[0].ID, "the endpoint keeps its identity")
+	require.Equal(t, membershipsBefore, f.pluginMemberships(t, ctx))
+
+	f.requireAuditDelta(t, ctx, audit.ActionToolsetUpdate, toolsetUpdates, 1)
+	f.requireAuditDelta(t, ctx, audit.ActionMcpServerUpdate, serverUpdates, 1)
+	f.requireAuditDelta(t, ctx, audit.ActionMcpServerDelete, serverDeletes, 0)
+	f.requireAuditDelta(t, ctx, audit.ActionMcpEndpointDelete, endpointDeletes, 0)
+
+	view, err := f.ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{ID: new(f.toolset.ID.String())})
+	require.NoError(t, err)
+	require.Equal(t, "disabled", string(view.Visibility))
+
+	// The same wrapper serves again once re-enabled.
+	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("public"), func(p *gen.UpdateMcpServerPayload) {
+		p.ToolVariationsGroupID = new(groupID.String())
+	}))
+	require.NoError(t, err)
+	_, server = f.requireProjected(t, ctx)
+	require.Equal(t, before.ID, server.ID)
+	require.Equal(t, "public", server.Visibility)
+	require.True(t, f.resolve(t, ctx).Allowed)
+}
+
+func TestDeleteMcpServerHostedWrapperMatchesToolsetDisable(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+
+	require.NoError(t, f.ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: f.toolset.ID.String()}))
+	viaServer, serverRow := f.requireProjected(t, ctx)
+
+	_, err := f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), McpEnabled: new(true)})
+	require.NoError(t, err)
+	_, err = f.toolsets.UpdateToolset(ctx, &toolsetsgen.UpdateToolsetPayload{Slug: types.Slug(f.toolset.Slug), McpEnabled: new(false)})
+	require.NoError(t, err)
+	viaToolset, toolsetRow := f.requireProjected(t, ctx)
+
+	require.Equal(t, viaServer.McpEnabled, viaToolset.McpEnabled)
+	require.Equal(t, viaServer.McpIsPublic, viaToolset.McpIsPublic)
+	require.Equal(t, viaServer.McpSlug, viaToolset.McpSlug)
+	require.Equal(t, viaServer.CustomDomainID, viaToolset.CustomDomainID)
+	require.Equal(t, serverRow.Visibility, toolsetRow.Visibility)
+	require.Equal(t, serverRow.NetworkAccessMode, toolsetRow.NetworkAccessMode)
+	require.False(t, serverRow.Deleted)
+
+	// Deleting an already disabled server succeeds again, as a repeated toolset disable does.
+	require.NoError(t, f.ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: f.toolset.ID.String()}))
+	f.requireProjected(t, ctx)
+}
+
+func TestDeleteMcpServerHostedWrapperRejectedWithoutWriter(t *testing.T) {
+	t.Parallel()
+	ctx, f := newHostedFixture(t)
+	f.ti.service.WithHostedServerWriter(nil)
+
+	err := f.ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: f.toolset.ID.String()})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	toolset, _ := f.requireProjected(t, ctx)
+	require.Equal(t, f.toolset.McpEnabled, toolset.McpEnabled)
+}
+
+func (f *hostedFixture) requireAuditDelta(t *testing.T, ctx context.Context, action audit.Action, before int64, delta int64) {
+	t.Helper()
+
+	after, err := audittest.AuditLogCountByAction(ctx, f.ti.conn, action)
+	require.NoError(t, err)
+	require.Equal(t, before+delta, after, string(action))
 }

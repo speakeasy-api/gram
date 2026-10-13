@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * deleteMcpServer mcpServers
  *
  * @remarks
- * Delete an MCP server
+ * Delete an MCP server. A hosted (toolset-backed) server is disabled instead, as turning MCP off on its toolset does, and stays listed with visibility disabled.
  */
 export function mcpServersDelete(
   client: GramCore,

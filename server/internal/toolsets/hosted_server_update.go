@@ -5,6 +5,7 @@ import (
 	"errors"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -33,6 +34,23 @@ const maxToolsetNameLength = 60
 // UpdateHostedServer applies an mcpServers.update on a canonical hosted wrapper to its toolset's
 // hosting columns and re-syncs the wrapper, with the side effects of the equivalent toolset writes.
 func (s *Service) UpdateHostedServer(ctx context.Context, update mcpservers.HostedServerUpdate) (mcpserversrepo.McpServer, error) {
+	return s.writeHostedServer(ctx, update, false)
+}
+
+// DisableHostedServer applies an mcpServers.delete on a canonical hosted wrapper as a toolset MCP disable.
+func (s *Service) DisableHostedServer(ctx context.Context, toolsetID uuid.UUID) error {
+	_, err := s.writeHostedServer(ctx, mcpservers.HostedServerUpdate{
+		ToolsetID:             toolsetID,
+		Name:                  nil,
+		Visibility:            mcpservers.VisibilityDisabled,
+		UserSessionIssuerID:   uuid.NullUUID{},
+		ToolVariationsGroupID: uuid.NullUUID{},
+		NetworkAccessMode:     nil,
+	}, true)
+	return err
+}
+
+func (s *Service) writeHostedServer(ctx context.Context, update mcpservers.HostedServerUpdate, keepToolVariationsGroup bool) (mcpserversrepo.McpServer, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return mcpserversrepo.McpServer{}, oops.C(oops.CodeUnauthorized)
@@ -156,7 +174,7 @@ func (s *Service) UpdateHostedServer(ctx context.Context, update mcpservers.Host
 			return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "update hosted toolset user session issuer").LogError(ctx, logger)
 		}
 	}
-	if update.ToolVariationsGroupID != existing.ToolVariationsGroupID {
+	if !keepToolVariationsGroup && update.ToolVariationsGroupID != existing.ToolVariationsGroupID {
 		updated, err = tr.UpdateToolsetToolVariationsGroup(ctx, repo.UpdateToolsetToolVariationsGroupParams{ToolVariationsGroupID: update.ToolVariationsGroupID, Slug: existing.Slug, ProjectID: *authCtx.ProjectID})
 		if err != nil {
 			return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "update hosted toolset tool variations group").LogError(ctx, logger)
