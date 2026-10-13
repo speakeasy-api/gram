@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -52,12 +53,19 @@ const notFoundMaxAge = 30
 const (
 	documentCacheTTL  = 10 * time.Second
 	documentCacheSize = 4096
+	// Misses get their own smaller cache, so probes for many ids can't
+	// evict the documents of real issuers.
+	missingCacheSize = 1024
 	// At most this many distinct documents are read at once per process;
 	// further misses are refused rather than queued on the database pool.
 	documentFillLimit = 16
 	// A read gets this long whatever its callers do.
 	documentFillTimeout = 2 * time.Second
 )
+
+// organizationIDPattern bounds a path organization id before it reaches a
+// cache or the database.
+var organizationIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
 // errDiscoveryBusy refuses a miss while every fill slot is taken.
 var errDiscoveryBusy = errors.New("internalsessionissuers: discovery is busy")
@@ -122,7 +130,14 @@ type discoveryDocument struct {
 
 // AttachDiscovery mounts the public discovery and JWKS documents.
 func AttachDiscovery(mux goahttp.Muxer, db *pgxpool.Pool, logger *slog.Logger) {
-	h := &handler{db: db, logger: logger, cache: expirable.NewLRU[documentKey, cachedDocument](documentCacheSize, nil, documentCacheTTL), flights: singleflight.Group{}, fills: make(chan struct{}, documentFillLimit)}
+	h := &handler{
+		db:      db,
+		logger:  logger,
+		cache:   expirable.NewLRU[documentKey, cachedDocument](documentCacheSize, nil, documentCacheTTL),
+		missing: expirable.NewLRU[documentKey, struct{}](missingCacheSize, nil, documentCacheTTL),
+		flights: singleflight.Group{},
+		fills:   make(chan struct{}, documentFillLimit),
+	}
 	const path = "/oauth/idp/org/{organizationID}"
 	for _, route := range []string{
 		path,
@@ -143,6 +158,8 @@ type handler struct {
 	db     *pgxpool.Pool
 	logger *slog.Logger
 	cache  *expirable.LRU[documentKey, cachedDocument]
+	// missing caches ids with no issuer.
+	missing *expirable.LRU[documentKey, struct{}]
 	// flights collapses concurrent misses for one document into one read.
 	flights singleflight.Group
 	// fills bounds concurrent reads across documents.
@@ -154,7 +171,8 @@ type documentKey struct {
 	keys           bool
 }
 
-// cachedDocument is a rendered document; a nil body means no issuer.
+// cachedDocument is a rendered document; a nil body means no issuer and is
+// cached in missing instead.
 type cachedDocument struct {
 	body       []byte
 	renderedAt time.Time
@@ -167,12 +185,22 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 		return oops.E(oops.CodeNotFound, nil, "issuer not found")
 	}
 	key := documentKey{organizationID: chi.URLParam(r, "organizationID"), keys: keys}
+	if !organizationIDPattern.MatchString(key.organizationID) {
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", notFoundMaxAge))
+		return oops.E(oops.CodeNotFound, nil, "issuer not found")
+	}
 	cached, ok := h.cache.Get(key)
+	if !ok && h.missing.Contains(key) {
+		cached, ok = cachedDocument{body: nil, renderedAt: time.Time{}}, true
+	}
 	if !ok {
 		flight := fmt.Sprintf("%t/%s", key.keys, key.organizationID)
 		loaded, err, _ := h.flights.Do(flight, func() (any, error) {
 			if cached, ok := h.cache.Get(key); ok {
 				return cached, nil
+			}
+			if h.missing.Contains(key) {
+				return cachedDocument{body: nil, renderedAt: time.Time{}}, nil
 			}
 			select {
 			case h.fills <- struct{}{}:
@@ -191,7 +219,11 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 				return nil, err
 			}
 			document := cachedDocument{body: body, renderedAt: time.Now()}
-			h.cache.Add(key, document)
+			if body == nil {
+				h.missing.Add(key, struct{}{})
+			} else {
+				h.cache.Add(key, document)
+			}
 			return document, nil
 		})
 		switch {
