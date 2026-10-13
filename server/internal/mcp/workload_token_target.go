@@ -7,11 +7,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	domainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
@@ -98,44 +93,14 @@ func (s *Service) publicOriginContext(ctx context.Context, rawHost string) (cont
 	if err != nil {
 		return ctx, "", false, fmt.Errorf("canonicalize MCP server host: %w", err)
 	}
-	platformHost, _ := requestorigin.CanonicalHost(s.serverURL.Host)
-	baseURL, isPlatform := s.platformHosts[host]
-	if host == platformHost {
-		baseURL, isPlatform = strings.TrimSuffix(s.serverURL.String(), "/"), true
-	}
-	if isPlatform {
-		// The poll itself may have arrived on a custom domain; that domain must
-		// not scope the lookup of a platform-hosted server.
-		ctx = customdomains.WithContext(ctx, nil)
-		return requestorigin.WithContext(ctx, requestorigin.Origin{
-			Surface:          requestorigin.SurfacePlatform,
-			BaseURL:          baseURL,
-			OrganizationID:   "",
-			NetworkIngressID: uuid.Nil,
-			NetworkIdentity:  nil,
-		}), baseURL, true, nil
-	}
-
-	domain, err := domainsrepo.New(s.db).GetCustomDomainByDomain(ctx, host)
+	// Classified exactly as a shared-resource request would be, which also
+	// clears any custom domain or authentication host the poll arrived on.
+	resourceCtx, origin, rejection, err := s.sharedResourceContext(ctx, host)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return ctx, "", false, nil
 	case err != nil:
-		return ctx, "", false, fmt.Errorf("load custom domain: %w", err)
-	case !domain.Activated || !domain.Verified:
+		return ctx, "", false, err
+	case rejection != sharedResourceAccepted:
 		return ctx, "", false, nil
 	}
-	baseURL = "https://" + host
-	ctx = customdomains.WithContext(ctx, &customdomains.Context{
-		OrganizationID: domain.OrganizationID,
-		Domain:         domain.Domain,
-		DomainID:       domain.ID,
-	})
-	return requestorigin.WithContext(ctx, requestorigin.Origin{
-		Surface:          requestorigin.SurfaceCustomDomain,
-		BaseURL:          baseURL,
-		OrganizationID:   domain.OrganizationID,
-		NetworkIngressID: uuid.Nil,
-		NetworkIdentity:  nil,
-	}), baseURL, true, nil
+	return resourceCtx, origin.BaseURL, true, nil
 }

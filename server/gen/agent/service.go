@@ -395,7 +395,8 @@ type GetPluginsPayload struct {
 
 // GetPluginsResult is the result type of the agent service getPlugins method.
 type GetPluginsResult struct {
-	// Opaque revision identifier covering the marketplace, plugin, and
+	// Opaque revision identifier covering the marketplace, plugin, MCP server
+	// (including each server's token endpoint, audience and resource), and
 	// remote-configuration set. The agent stores this to detect changes between
 	// polls.
 	Etag string

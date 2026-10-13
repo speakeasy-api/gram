@@ -112,7 +112,8 @@ type CreateSessionHandoffRequestBody struct {
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
-	// Opaque revision identifier covering the marketplace, plugin, and
+	// Opaque revision identifier covering the marketplace, plugin, MCP server
+	// (including each server's token endpoint, audience and resource), and
 	// remote-configuration set. The agent stores this to detect changes between
 	// polls.
 	Etag *string `form:"etag,omitempty" json:"etag,omitempty" xml:"etag,omitempty"`

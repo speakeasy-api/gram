@@ -171,6 +171,33 @@ func TestGetPlugins_AgentListsSharedServerOnceAndSuffixesNameCollisions(t *testi
 	require.Equal(t, map[string]string{"speakeasy-dup-linear": dashURL, "speakeasy-dup-linear-2": underscoreURL}, mcpServersByName(res))
 }
 
+func TestGetPlugins_AgentSuffixNeverTakesAnotherServersNaturalName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	agentCtx, actor := withAgentKeyAuth(t, ctx, ti, "CI agent")
+	tool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "tool")
+	assignPlugin(t, ctx, ti.conn, tool, ti.orgID, actor.String())
+
+	// speakeasy-linear-2 is this server's own name, not a suffix.
+	_, ownURL := seedToolsetServer(t, ti, tool, "linear-2", "Linear 2")
+	_, dashURL := seedToolsetServer(t, ti, tool, "linear", "Linear")
+	before, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"speakeasy-linear": dashURL, "speakeasy-linear-2": ownURL}, mcpServersByName(before))
+
+	// A second server that reduces to speakeasy-linear skips the reserved -2.
+	_, underscoreURL := seedToolsetServer(t, ti, tool, "linear_", "Linear (eu)")
+	after, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
+	require.NoError(t, err)
+	require.Len(t, after.McpServers, 3)
+	byName := mcpServersByName(after)
+	require.Equal(t, ownURL, byName["speakeasy-linear-2"])
+	require.Contains(t, []string{dashURL, underscoreURL}, byName["speakeasy-linear"])
+	require.Contains(t, []string{dashURL, underscoreURL}, byName["speakeasy-linear-3"])
+}
+
 func TestGetPlugins_AgentMCPServerNamesStayStable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)

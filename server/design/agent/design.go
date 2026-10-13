@@ -429,7 +429,7 @@ var _ = Service("agent", func() {
 
 var GetPluginsResult = Type("GetPluginsResult", func() {
 	Required("etag", "marketplaces", "plugins", "mcp_servers")
-	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.")
+	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, MCP server (including each server's token endpoint, audience and resource), and remote-configuration set. The agent stores this to detect changes between polls.")
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
 	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.")
 	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")

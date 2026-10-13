@@ -381,12 +381,21 @@ func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPlugi
 	slices.SortFunc(candidates, func(a, b plugins.DeviceMCPServer) int {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.URL, b.URL))
 	})
+	// Every natural name is reserved up front, so a suffix never claims a name
+	// another server already has on its own (`speakeasy-linear-2`).
+	naturalNames := make(map[string]bool, len(candidates))
+	for _, server := range candidates {
+		naturalNames[server.Name] = true
+	}
 	servers := make([]*gen.AgentMCPServer, 0, len(candidates))
 	takenNames := make(map[string]bool, len(candidates))
 	for _, server := range candidates {
 		name := server.Name
 		for suffix := 2; takenNames[name]; suffix++ {
-			name = fmt.Sprintf("%s-%d", server.Name, suffix)
+			candidate := fmt.Sprintf("%s-%d", server.Name, suffix)
+			if !naturalNames[candidate] {
+				name = candidate
+			}
 		}
 		takenNames[name] = true
 		entry := &gen.AgentMCPServer{Name: name, URL: server.URL, Tools: nil, TokenEndpoint: nil, Audience: nil, Resource: nil}
