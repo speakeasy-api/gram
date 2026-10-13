@@ -103,9 +103,7 @@ describe("Speakeasy identity provider card", () => {
   it("shows a loading state and retry after failure", () => {
     mocks.loading = true;
     const view = show();
-    expect(
-      screen.getByRole("article", { name: "Speakeasy identity provider" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("Loading issuer…");
     mocks.loading = false;
     mocks.error = true;
     view.rerender(
@@ -226,7 +224,9 @@ describe("Speakeasy identity provider card", () => {
         name: "Enable Enterprise Managed Authorization",
       }),
     ).toBeNull();
-    expect(screen.getByText(/check availability and SSO access/)).toBeTruthy();
+    expect(
+      screen.getByText(/check availability and your verified domain/),
+    ).toBeTruthy();
   });
 
   it.each(["rollout is disabled", "status lookup failed"])(

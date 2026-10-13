@@ -317,9 +317,13 @@ export default function OrgIdentity(): JSX.Element {
   const { hasScope } = useRBAC();
   const issuer = useEnterpriseIssuer();
   const showExternalProviders = providerFlag.status === "enabled";
-  // Speakeasy's own issuer is listed once the organization is offered it.
+  // Speakeasy's own issuer is listed once the organization is offered it, and
+  // whenever one exists or its status failed to load, so Disable and Retry stay
+  // reachable.
   const showSpeakeasyProvider =
-    issuer.data !== undefined && issuer.data.state !== "unavailable";
+    issuer.isError ||
+    (issuer.data !== undefined &&
+      (issuer.data.state !== "unavailable" || !!issuer.data.issuer));
   const showIdentityProviders =
     (showExternalProviders || showSpeakeasyProvider) && hasScope("org:admin");
 

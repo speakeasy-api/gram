@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   admin: true,
   enabled: true,
   issuerAvailable: false,
+  issuerQuery: undefined as
+    | { data?: { state: string; issuer?: string }; isError?: boolean }
+    | undefined,
   ema: vi.fn(),
   slack: vi.fn(),
   features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
@@ -44,9 +47,10 @@ vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
   ),
 }));
 vi.mock("./identity-provider/useEnterpriseIssuer", () => ({
-  useEnterpriseIssuer: () => ({
-    data: mocks.issuerAvailable ? { state: "setup_required" } : undefined,
-  }),
+  useEnterpriseIssuer: () =>
+    mocks.issuerQuery ?? {
+      data: mocks.issuerAvailable ? { state: "setup_required" } : undefined,
+    },
 }));
 vi.mock("./identity-provider/IdentityProviders", () => ({
   IdentityProviders: (props: unknown) => {
@@ -142,6 +146,7 @@ afterEach(() => {
   mocks.admin = true;
   mocks.enabled = true;
   mocks.issuerAvailable = false;
+  mocks.issuerQuery = undefined;
   mocks.onboarding = {
     domainVerified: false,
     ssoConfigured: false,
@@ -214,6 +219,31 @@ describe("identity top-level tabs", () => {
       showExternal: false,
       showSpeakeasy: true,
     });
+  });
+
+  it.each([
+    [
+      "an existing issuer reports unavailable",
+      { data: { state: "unavailable", issuer: "https://issuer.example.com" } },
+    ],
+    ["its status failed to load", { isError: true }],
+  ])("keeps the Speakeasy provider reachable when %s", (_, query) => {
+    mocks.enabled = false;
+    mocks.issuerQuery = query;
+    show("?tab=identity-providers");
+    expect(mocks.ema).toHaveBeenCalledWith({
+      showExternal: false,
+      showSpeakeasy: true,
+    });
+  });
+
+  it("hides the Speakeasy provider when the issuer is not offered", () => {
+    mocks.enabled = false;
+    mocks.issuerQuery = { data: { state: "unavailable" } };
+    show("?tab=identity-providers");
+    expect(
+      screen.queryByRole("link", { name: "Identity providers" }),
+    ).toBeNull();
   });
 
   it("keeps the issuer off the Single sign-on tab", () => {

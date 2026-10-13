@@ -173,10 +173,11 @@ describe("provider cards", () => {
   });
 
   it("lists only Speakeasy without the external-provider rollout", () => {
-    show("?provider=okta", { showExternal: false, showSpeakeasy: true });
+    show("&provider=okta", { showExternal: false, showSpeakeasy: true });
     expect(
       screen.getByRole("article", { name: "Speakeasy identity provider" }),
     ).toBeTruthy();
     expect(screen.queryByText(/Okta content/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Okta/ })).toBeNull();
   });
 });

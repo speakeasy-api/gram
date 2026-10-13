@@ -34,7 +34,7 @@ const STATE_BADGE: Record<
   disabled: { label: "Off", variant: "neutral" },
   setup_required: { label: "Off", variant: "neutral" },
   entitlement_required: {
-    label: "Requires single sign-on",
+    label: "Needs a verified domain",
     variant: "neutral",
   },
   signing_paused: { label: "Paused", variant: "warning" },
@@ -95,7 +95,14 @@ function SpeakeasyProviderContent(): JSX.Element {
         servers with their organization sign-in, without authorizing each
         service individually.
       </Text>
-      {query.isPending && <SkeletonParagraph />}
+      {query.isPending && (
+        <>
+          <SkeletonParagraph />
+          <span role="status" className="sr-only">
+            Loading issuer…
+          </span>
+        </>
+      )}
       {query.isError && (
         <Alert variant="error">
           <Text small>Couldn't load the issuer. Try again.</Text>
@@ -241,21 +248,22 @@ function IssuerStatus({
     case "setup_required":
       message = issuer.canEnable
         ? "Enable Enterprise Managed Authorization to create your organization's issuer."
-        : "Enterprise Managed Authorization cannot be enabled right now. Contact your Speakeasy administrator to check availability and SSO access.";
+        : "Enterprise Managed Authorization cannot be enabled right now. Contact your Speakeasy administrator to check availability and your verified domain.";
       break;
     case "disabled":
       message = issuer.canEnable
         ? "Enterprise Managed Authorization is disabled. Re-enable it to restore automatic authorization."
-        : "Enterprise Managed Authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and SSO access.";
+        : "Enterprise Managed Authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and your verified domain.";
       break;
     case "entitlement_required":
       return (
         <Text small muted role="status">
-          Enterprise Managed Authorization requires single sign-on.{" "}
+          Enterprise Managed Authorization needs a verified domain for your
+          organization.{" "}
           <Link to="?tab=sso" className="underline underline-offset-2">
-            Set up single sign-on
+            Verify a domain
           </Link>
-          , or contact your Speakeasy administrator to enable it.
+          , or contact your Speakeasy administrator.
         </Text>
       );
     case "signing_paused":
