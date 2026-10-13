@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	"github.com/speakeasy-api/gram/server/internal/workloadpolicy"
 )
 
 func createJoinToken(t *testing.T, ctx context.Context, ti *testInstance, agentID uuid.UUID) string {
