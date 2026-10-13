@@ -51,11 +51,9 @@ func newHostedAttachmentFixtureKeyed(t *testing.T, name string, serverKey bool) 
 	require.NoError(t, err)
 	projectID := newProvisioningProject(t, db, name)
 	core := newProvisioningCore(t, db)
-	if serverKey {
-		flags := &feature.InMemory{}
-		flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, true)
-		core.SetFeatureProvider(flags)
-	}
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, serverKey)
+	core.SetFeatureProvider(flags)
 
 	for _, slug := range []string{"default-env", "staging"} {
 		_, err := environmentsrepo.New(db).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{

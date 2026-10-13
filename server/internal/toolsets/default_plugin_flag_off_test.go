@@ -19,6 +19,7 @@ func TestToolsetsService_CreateToolset_AttachesToDefaultPluginFlagOff(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	ti.service.WithFeatureProvider(serverKeyFlagsOff())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -62,6 +63,7 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttachFlagOff(t 
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	ti.service.WithFeatureProvider(serverKeyFlagsOff())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -106,6 +108,7 @@ func TestToolsetsService_UpdateToolset_EnableMcp_AttachesToDefaultPluginFlagOff(
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
+	ti.service.WithFeatureProvider(serverKeyFlagsOff())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

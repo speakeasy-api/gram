@@ -155,6 +155,10 @@ WHERE project_id = @project_id
 ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
 FOR UPDATE;
 
+-- name: AcquireMetadataBackendLock :exec
+-- Serializes saves for one backend so a save sees a row another save inserted under the other key.
+SELECT pg_advisory_xact_lock(hashtextextended('mcp_metadata:' || (@project_id::uuid)::text || ':' || (@backend_id::uuid)::text, 0));
+
 -- name: DeleteServerKeyedMetadata :execrows
 -- Cascades to the row's mcp_environment_configs.
 DELETE FROM mcp_metadata

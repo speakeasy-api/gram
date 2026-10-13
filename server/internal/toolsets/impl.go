@@ -174,6 +174,8 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	logger := s.logger
 
+	// Resolved before the transaction so flag latency never holds its locks.
+	serverKey := s.hostedServerKeyWrites(ctx, authCtx)
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing toolsets").LogError(ctx, logger)
@@ -200,7 +202,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		OriginRegistrySpecifier: originRegistrySpecifier,
 		ToolURNs:                payload.ToolUrns,
 		ResourceURNs:            payload.ResourceUrns,
-		HostedServerKey:         s.hostedServerKeyWrites(ctx, authCtx),
+		HostedServerKey:         serverKey,
 	})
 	if err != nil {
 		return nil, err
@@ -224,8 +226,8 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	return toolsetDetails, nil
 }
 
-func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
-	return attachToDefaultPluginInTransaction(ctx, dbtx, s.logger, s.audit, authCtx, toolsetID, displayName, s.hostedServerKeyWrites(ctx, authCtx))
+func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string, serverKey bool) (bool, error) {
+	return attachToDefaultPluginInTransaction(ctx, dbtx, s.logger, s.audit, authCtx, toolsetID, displayName, serverKey)
 }
 
 // triggerPluginPublish enqueues the marketplace publish for the project whose
@@ -479,6 +481,8 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
+	// Resolved before the transaction so flag latency never holds its locks.
+	serverKey := s.hostedServerKeyWrites(ctx, authCtx)
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error accessing toolsets").LogError(ctx, logger)
@@ -672,7 +676,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 	var pluginCreated bool
 	if !existingToolset.McpEnabled && updatedToolset.McpEnabled {
-		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name)
+		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name, serverKey)
 		if err != nil {
 			return nil, err
 		}

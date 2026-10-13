@@ -635,6 +635,9 @@ func TestCreateMCPFromFunctionsDefaultPluginEntryFlagOffKeepsToolsetKey(t *testi
 	t.Parallel()
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_flag_off")
 	ctx = fixture.createFromFunctionsContext(ctx)
+	off := &feature.InMemory{}
+	off.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, false)
+	fixture.service.WithFeatureProvider(off)
 	disableFixtureServer(t, ctx, fixture)
 
 	input := fixture.createInput("First Desk", fixture.tools[0])

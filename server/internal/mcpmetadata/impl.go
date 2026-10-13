@@ -388,6 +388,12 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		}
 	}
 
+	// Resolved before the transaction so flag latency never holds its locks.
+	serverKeyWrites, err := feature.HostedMCPServerKeyWrites(ctx, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
+	if err != nil {
+		logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "access mcp server metadata").LogError(ctx, logger)
@@ -416,6 +422,9 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	var existing *types.McpMetadata
+	if err := mcpr.AcquireMetadataBackendLock(ctx, repo.AcquireMetadataBackendLockParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID()}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock MCP server metadata").LogError(ctx, logger)
+	}
 	rows, err := mcpr.LockMetadataByBackendID(ctx, repo.LockMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID()})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "fetch existing MCP server metadata").LogError(ctx, logger)
@@ -434,10 +443,6 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 	// Until the server-key rollout is on, saves keep phase A row keys; responses still report both ids.
 	writeWrapperID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	serverKeyWrites, err := feature.HostedMCPServerKeyWrites(ctx, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
-	if err != nil {
-		logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
-	}
 	if serverKeyWrites && wrapperID.Valid {
 		writeWrapperID = wrapperID
 		if err := rekeyMetadataOntoWrapper(ctx, mcpr, *authCtx.ProjectID, wrapperID.UUID, rows); err != nil {

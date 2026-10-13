@@ -8,6 +8,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
@@ -15,7 +16,9 @@ import (
 // With the server-key rollout off, a toolset attach keeps the key phase A pods write.
 func TestPluginsService_AddPluginServer_FlagOffKeepsToolsetKey(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestPluginsService(t)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, false)
+	ctx, ti := newTestPluginsServiceWithOptions(t, 0, flags)
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Keys"})
 	require.NoError(t, err)

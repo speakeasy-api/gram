@@ -13,9 +13,17 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
+
+// serverKeyFlagsOff turns the hosted MCP server-key rollout explicitly off (phase A).
+func serverKeyFlagsOff() feature.Provider {
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagHostedMCPServerKeyWrites, feature.AnyDistinctID, false)
+	return flags
+}
 
 func userEnvConfigs(name string) []*types.McpEnvironmentConfigInput {
 	return []*types.McpEnvironmentConfigInput{{
@@ -29,6 +37,7 @@ func TestSetMcpMetadata_NewRowsKeepTheRequestedKeyFlagOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPMetadataService(t)
+	ti.service.WithFeatureProvider(serverKeyFlagsOff())
 	bySlug := createHostedToolset(t, ctx, ti, "off-hosted-new-slug")
 	createCanonicalWrapper(t, ctx, ti, bySlug)
 	byServer := createHostedToolset(t, ctx, ti, "off-hosted-new-server")
@@ -46,6 +55,7 @@ func TestSetMcpMetadata_ToolsetKeyedRowUpdatesInPlaceFlagOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPMetadataService(t)
+	ti.service.WithFeatureProvider(serverKeyFlagsOff())
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
@@ -112,6 +122,7 @@ func TestSetMcpMetadata_ServerKeyedRowFlagOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPMetadataService(t)
+	ti.service.WithFeatureProvider(serverKeyFlagsOff())
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)

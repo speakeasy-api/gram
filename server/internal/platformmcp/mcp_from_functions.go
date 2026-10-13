@@ -118,14 +118,6 @@ func (s *MCPToolExposureService) CreateMCPFromFunctions(ctx context.Context, pri
 	return output, nil
 }
 
-// sanitizeMCPFromFunctionsError is the boundary every error crosses on its way
-// to the MCP caller. Nothing downstream of the tool rewrites an error it does
-// not recognise — the SDK returns it to the client as text — so a database or
-// driver failure from any path, including the shared toolset and server cores,
-// would otherwise reach the caller verbatim. Only a hand-written refusal or an
-// authorization challenge passes through; anything else becomes the generic
-// unavailable refusal, and the underlying cause is logged here, server-side,
-// rather than the sanitized message.
 // hostedServerKeyWrites reports whether the organization's hosted writes use the canonical server key; errors keep the toolset key.
 func (s *MCPToolExposureService) hostedServerKeyWrites(ctx context.Context, organizationID, organizationSlug string) bool {
 	enabled, err := feature.HostedMCPServerKeyWrites(ctx, s.features, organizationID, organizationSlug)
@@ -135,6 +127,14 @@ func (s *MCPToolExposureService) hostedServerKeyWrites(ctx context.Context, orga
 	return enabled
 }
 
+// sanitizeMCPFromFunctionsError is the boundary every error crosses on its way
+// to the MCP caller. Nothing downstream of the tool rewrites an error it does
+// not recognise — the SDK returns it to the client as text — so a database or
+// driver failure from any path, including the shared toolset and server cores,
+// would otherwise reach the caller verbatim. Only a hand-written refusal or an
+// authorization challenge passes through; anything else becomes the generic
+// unavailable refusal, and the underlying cause is logged here, server-side,
+// rather than the sanitized message.
 func (s *MCPToolExposureService) sanitizeMCPFromFunctionsError(ctx context.Context, err error) error {
 	if _, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
 		return err
@@ -177,6 +177,8 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	if organizationSlug == "" {
 		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(errors.New("organization slug unavailable"))
 	}
+	// Resolved before the transaction so flag latency never holds its locks.
+	serverKey := s.hostedServerKeyWrites(ctx, principal.OrganizationID, organizationSlug)
 
 	payload, err := json.Marshal(mcpFromFunctionsRequest{ProjectID: project.ID.String(), Name: name, ToolURNs: toolURNStrings(requested)})
 	if err != nil {
@@ -215,7 +217,7 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 			return encoded, nil
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (mcpFromFunctionsReceipt, error) {
-			return s.createMCPFromFunctionsInTransaction(ctx, tx, principal, project, organizationSlug, name, requested)
+			return s.createMCPFromFunctionsInTransaction(ctx, tx, principal, project, organizationSlug, name, requested, serverKey)
 		},
 	})
 	if err != nil {
@@ -228,7 +230,7 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	return s.finishMCPFromFunctions(ctx, principal, project, stored, receipt, charge), nil
 }
 
-func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, organizationSlug, name string, requested []urn.Tool) (mcpFromFunctionsReceipt, error) {
+func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, organizationSlug, name string, requested []urn.Tool, serverKey bool) (mcpFromFunctionsReceipt, error) {
 	txQueries := s.queries.WithTx(tx)
 	// Held to commit, so the project cannot be deleted between the tool check
 	// and the two creates.
@@ -255,7 +257,7 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 		ActorUserID: principal.UserID, ActorEmail: email, Name: name, Description: nil,
 		DefaultEnvironmentSlug: nil, OriginRegistrySpecifier: nil,
 		ToolURNs: values, ResourceURNs: nil,
-		HostedServerKey: s.hostedServerKeyWrites(ctx, principal.OrganizationID, organizationSlug),
+		HostedServerKey: serverKey,
 	})
 	if err != nil {
 		return mcpFromFunctionsReceipt{}, classifyMCPFromFunctionsError(err)

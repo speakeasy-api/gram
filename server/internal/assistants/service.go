@@ -1195,9 +1195,11 @@ type assistantAttachmentRow struct {
 	server  *assistantrepo.AddAssistantMcpServersParams
 }
 
-// writeAssistantAttachments keeps toolsets without a dialable wrapper in
-// assistant_toolsets, stores every other hosted server under its wrapper, and
-// clears both tables for every written server so none is stored twice.
+// writeAssistantAttachments stores hosted servers under their wrapper when
+// serverKey is on, keeping toolsets without a dialable wrapper in
+// assistant_toolsets; with serverKey off every hosted server stays in
+// assistant_toolsets. It clears both tables for every written server so none
+// is stored twice.
 // toolsets replaces the hosted servers; mcpServers replaces the other servers
 // and adds hosted ones not yet attached.
 func writeAssistantAttachments(
@@ -1394,6 +1396,8 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
 	}
 
+	// Resolved before the transaction: the lookup takes its own pool connection.
+	serverKey := s.hostedServerKeyWrites(ctx, projectID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
@@ -1429,7 +1433,7 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true, s.hostedServerKeyWrites(ctx, projectID)); err != nil {
+	if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, true, resolvedMcpServers, true, serverKey); err != nil {
 		return assistantRecord{}, err
 	}
 
@@ -1529,6 +1533,8 @@ func (s *ServiceCore) UpdateAssistant(
 	maxConcurrency *int,
 	status *string,
 ) (assistantRecord, error) {
+	// Resolved before the transaction: the lookup takes its own pool connection.
+	serverKey := s.hostedServerKeyWrites(ctx, projectID)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
@@ -1578,7 +1584,7 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 	}
 	if toolsets != nil || mcpServers != nil {
-		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil, s.hostedServerKeyWrites(ctx, projectID)); err != nil {
+		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil, serverKey); err != nil {
 			return assistantRecord{}, err
 		}
 	}

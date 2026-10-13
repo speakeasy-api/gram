@@ -12,6 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireMetadataBackendLock = `-- name: AcquireMetadataBackendLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mcp_metadata:' || ($1::uuid)::text || ':' || ($2::uuid)::text, 0))
+`
+
+type AcquireMetadataBackendLockParams struct {
+	ProjectID uuid.UUID
+	BackendID uuid.UUID
+}
+
+// Serializes saves for one backend so a save sees a row another save inserted under the other key.
+func (q *Queries) AcquireMetadataBackendLock(ctx context.Context, arg AcquireMetadataBackendLockParams) error {
+	_, err := q.db.Exec(ctx, acquireMetadataBackendLock, arg.ProjectID, arg.BackendID)
+	return err
+}
+
 const deleteAllEnvironmentConfigs = `-- name: DeleteAllEnvironmentConfigs :exec
 DELETE FROM mcp_environment_configs
 WHERE mcp_metadata_id = $1
