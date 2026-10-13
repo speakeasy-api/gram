@@ -744,9 +744,9 @@ BEGIN
        ARRAY['user_demo_hana', 'user_demo_jonas'],
        ARRAY[]::text[]),
       ('tool-log-viewer', 'Tool Log Viewer',
-       'Reads tool-call logs, including arguments and results, without organization admin access.',
+       'Reads one project''s tool-call logs, including arguments and results, without organization admin access.',
        ARRAY['log:read'],
-       ARRAY['user_demo_lucas'],
+       ARRAY['user_demo_mateo'],
        ARRAY[]::text[]),
       ('collaborator', 'Collaborator',
        'Builds and ships MCP servers, skills and assistants, without organization settings.',
@@ -812,14 +812,15 @@ BEGIN
     custom_role_urn := 'role:organization:' || custom_role_id;
 
     -- Unrestricted selectors: the wildcard shape every scope stores when a
-    -- rule is not narrowed to one resource.
+    -- rule is not narrowed to one resource. log:read is granted per project,
+    -- so the Tool Log Viewer names the demo project instead.
     INSERT INTO principal_grants
       (organization_id, principal_urn, scope, selectors)
     SELECT demo_org, custom_role_urn, scope,
            jsonb_build_object(
              'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
                                    ELSE split_part(scope, ':', 1) END,
-             'resource_id', '*')
+             'resource_id', CASE WHEN scope = 'log:read' THEN proj_a::text ELSE '*' END)
     FROM unnest(custom_role.scopes) AS scope;
 
     FOR i IN 1 .. COALESCE(array_length(custom_role.members, 1), 0) LOOP

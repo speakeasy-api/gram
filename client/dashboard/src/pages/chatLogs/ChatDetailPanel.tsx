@@ -66,7 +66,8 @@ import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useIsPlatformAdmin, useProject, useSession } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { useSdkClient } from "@/contexts/Sdk";
 import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
@@ -1182,8 +1183,7 @@ function ChatDetailPanel({
   const canViewRisk = isPlatformAdmin || hasScope("org:admin");
   // A session's tool calls come from the project's raw tool logs, which need
   // log:read on the project on top of access to the transcript.
-  const project = useProject();
-  const canViewToolLogs = hasScope("log:read", project.id);
+  const canViewToolLogs = useCanViewToolLogs();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [view, setView] = useState<ViewMode>("chat");
   const [rawView, setRawView] = useState(false);
@@ -1381,6 +1381,13 @@ function ChatDetailPanel({
       },
     });
   }, [chatId, searchLogs, canViewToolLogs]);
+
+  // Losing log:read (a grants refetch) leaves the Tool calls view, whose
+  // already-fetched logs it may no longer read.
+  useEffect(() => {
+    if (!canViewToolLogs)
+      setView((current) => (current === "tools" ? "chat" : current));
+  }, [canViewToolLogs]);
 
   // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
@@ -1919,7 +1926,7 @@ function ChatDetailPanel({
           )}
         </CreateExclusionContext.Provider>
 
-        {view === "tools" && (
+        {view === "tools" && canViewToolLogs && (
           <div className="bg-background absolute inset-0 z-10 flex flex-col">
             <SubViewBar title="Tool calls" onBack={() => setView("chat")} />
             <div className="flex-1 overflow-y-auto">

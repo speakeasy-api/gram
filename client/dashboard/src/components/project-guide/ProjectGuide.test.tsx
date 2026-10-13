@@ -1264,6 +1264,26 @@ describe("ProjectGuide", () => {
     ).toBeTruthy();
   });
 
+  it("links a completed MCP journey to the server when Tool Logs is unavailable", () => {
+    statusByJourney.current = {
+      "third-party-mcp": "done",
+      "secret-block": "not-started",
+    };
+    mcpOperations.current.toolLogsHref = undefined;
+    render(<ProjectGuide />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Govern a third-party MCP/ }),
+    );
+
+    expect(screen.queryByRole("link", { name: "Open tool logs" })).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Open MCP server" })
+        .getAttribute("href"),
+    ).toBe("/projects/request-project/mcp/linear-governed");
+  });
+
   it("keeps installation disabled while existing project state is pending or unreadable", () => {
     mcpOperations.current.projectStatePending = true;
     const view = render(<ProjectGuide />);

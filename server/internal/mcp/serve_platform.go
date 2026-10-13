@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -284,6 +285,8 @@ func (s *Service) listPlatformToolsetTools(
 		return s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, feature, featureCache)
 	}
 
+	grantedScopes := s.grantedPlatformToolScopes(ctx, authCtx, toolset.Tools)
+
 	tools := make([]*toolListEntry, 0, len(toolset.Tools))
 	for _, extra := range toolset.Tools {
 		if extra.Executor == nil {
@@ -292,7 +295,7 @@ func (s *Service) listPlatformToolsetTools(
 		if !available(extra.RequiredFeature) {
 			continue
 		}
-		if !s.platformToolScopeGranted(ctx, authCtx, extra.RequiredScope) {
+		if extra.RequiredScope != "" && !grantedScopes[extra.RequiredScope] {
 			continue
 		}
 		entry := toolToListEntry(extra.Executor.Descriptor().ToTool(*authCtx.ProjectID))
@@ -348,7 +351,7 @@ func (s *Service) callPlatformToolsetTool(
 	if !s.platformToolFeatureAvailable(ctx, authCtx.ActiveOrganizationID, matched.RequiredFeature, nil) {
 		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogError(ctx, s.logger)
 	}
-	if !s.platformToolScopeGranted(ctx, authCtx, matched.RequiredScope) {
+	if matched.RequiredScope != "" && !s.grantedPlatformToolScopes(ctx, authCtx, []platformtools.ExternalTool{matched})[matched.RequiredScope] {
 		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogWarn(ctx, s.logger)
 	}
 
@@ -560,23 +563,37 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 	return oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, args...)
 }
 
-// platformToolScopeGranted reports whether the caller holds a tool's required
-// scope on the active project. Evaluate rather than Require: a tool the caller
-// cannot use is simply not offered, so a missing grant is not an access
-// challenge worth recording.
-func (s *Service) platformToolScopeGranted(ctx context.Context, authCtx *contextvalues.AuthContext, scope string) bool {
-	if scope == "" {
-		return true
-	}
+// grantedPlatformToolScopes reports which of the tools' required scopes the
+// caller holds on the active project. One FindMatched call covers the batch,
+// so a hidden tool leaves a filter record for diagnosis without recording a
+// denied requirement: a tool the caller cannot use is simply not offered.
+// Any failure hides every scope-gated tool.
+func (s *Service) grantedPlatformToolScopes(ctx context.Context, authCtx *contextvalues.AuthContext, tools []platformtools.ExternalTool) map[string]bool {
+	granted := map[string]bool{}
 	if authCtx.ProjectID == nil {
-		return false
+		return granted
 	}
-	allowed, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.Scope(scope), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	scopes := make([]string, 0, len(tools))
+	checks := make([]authz.Check, 0, len(tools))
+	for _, tool := range tools {
+		if tool.RequiredScope == "" || slices.Contains(scopes, tool.RequiredScope) {
+			continue
+		}
+		scopes = append(scopes, tool.RequiredScope)
+		checks = append(checks, authz.Check{Scope: authz.Scope(tool.RequiredScope), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+	}
+	if len(checks) == 0 {
+		return granted
+	}
+	matched, err := s.authz.FindMatched(ctx, checks)
 	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate platform tool scope; hiding tool", attr.SlogError(err))
-		return false
+		s.logger.WarnContext(ctx, "match platform tool scopes; hiding scope-gated tools", attr.SlogError(err))
+		return granted
 	}
-	return allowed
+	for i, scope := range scopes {
+		granted[scope] = matched[i]
+	}
+	return granted
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on

@@ -1,7 +1,6 @@
 package platformmcp
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,14 +8,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
-// logReadRefusingReader admits project reads but refuses log:read, as a caller
+// refusesLogReadOnly admits project reads but refuses log:read, as a caller
 // holding project or organization admin access without log:read is treated.
-type logReadRefusingReader struct {
-	diagnosticsProjectReader
-}
-
-func (logReadRefusingReader) ResolveProjectLogRead(context.Context, Principal, FindMCPInput) (ResolvedProject, error) {
-	return ResolvedProject{}, ErrForbidden
+func refusesLogReadOnly() refusingProjectReader {
+	return refusingProjectReader{diagnosticsProjectReader: diagnosticsProjectReader{output: ListProjectsOutput{}}, projectErr: nil, logReadErr: ErrForbidden, mcpErr: nil}
 }
 
 func TestSearchToolCallsRequiresLogReadBeforeSpendingBudget(t *testing.T) {
@@ -24,7 +19,7 @@ func TestSearchToolCallsRequiresLogReadBeforeSpendingBudget(t *testing.T) {
 
 	search := &recordingToolCallSearchReader{}
 	service := newToolCallSearchService(t, search, &recordingDrilldownAuditor{})
-	service.reader = logReadRefusingReader{diagnosticsProjectReader: diagnosticsProjectReader{output: ListProjectsOutput{}}}
+	service.reader = refusesLogReadOnly()
 	connection := &recordingOperationLimiter{}
 	service.sensitiveBudget = OperationBudget{Connection: connection, Organization: allowOperationLimiter{}}
 
@@ -39,7 +34,7 @@ func TestQueryMCPTracesRequiresLogReadBeforeSpendingBudget(t *testing.T) {
 	t.Parallel()
 
 	service := newToolCallSearchService(t, &recordingToolCallSearchReader{}, &recordingDrilldownAuditor{})
-	service.reader = logReadRefusingReader{diagnosticsProjectReader: diagnosticsProjectReader{output: ListProjectsOutput{}}}
+	service.reader = refusesLogReadOnly()
 	connection := &recordingOperationLimiter{}
 	service.sensitiveBudget = OperationBudget{Connection: connection, Organization: allowOperationLimiter{}}
 
@@ -53,7 +48,7 @@ func TestQueryMCPTracesValidatesTargetBeforeAuthorizing(t *testing.T) {
 	t.Parallel()
 
 	service := newToolCallSearchService(t, &recordingToolCallSearchReader{}, &recordingDrilldownAuditor{})
-	service.reader = logReadRefusingReader{diagnosticsProjectReader: diagnosticsProjectReader{output: ListProjectsOutput{}}}
+	service.reader = refusesLogReadOnly()
 
 	_, err := service.QueryMCPTraces(t.Context(), testPrincipal(), QueryMCPTracesInput{ProjectID: toolCallSearchTestProject})
 

@@ -9,9 +9,9 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
@@ -196,8 +196,7 @@ function PlaygroundInner() {
   const chat = useChatContext();
   const routes = useRoutes();
   const project = useProject();
-  const { hasScope } = useRBAC();
-  const canViewLogs = hasScope("log:read", project.id);
+  const canViewLogs = useCanViewToolLogs();
 
   const { servers, isLoading: isLoadingServers } = usePlaygroundServers();
 
@@ -208,6 +207,11 @@ function PlaygroundInner() {
     searchParams.get("environment") ?? null,
   );
   const [showLogs, setShowLogs] = useState(false);
+  // Losing log:read (a grants refetch) closes the panel rather than leaving
+  // it toggled on behind a disabled button.
+  useEffect(() => {
+    if (!canViewLogs) setShowLogs(false);
+  }, [canViewLogs]);
   const [temperature, setTemperature] = useState(0.5);
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [maxTokens, setMaxTokens] = useState(4096);

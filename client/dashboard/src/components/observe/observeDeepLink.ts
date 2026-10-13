@@ -145,7 +145,9 @@ export function buildObserveHref(
 export function useCanViewToolLogs(): boolean {
   const project = useProject();
   const { hasScope } = useRBAC();
-  return hasScope("log:read", project.id);
+  // An empty id would make this an "any project" check, so outside a project
+  // the answer is no.
+  return Boolean(project.id) && hasScope("log:read", project.id);
 }
 
 /**
