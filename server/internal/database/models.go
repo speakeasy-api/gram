@@ -5030,7 +5030,7 @@ type RemoteSessionEmaCredential struct {
 	// @access: confidential
 	InternalSessionIssuerKeyID uuid.NullUUID
 	// @access: confidential
-	SsoSignInID uuid.NullUUID
+	SignInID uuid.NullUUID
 	// @access: confidential
 	UserSessionID uuid.NullUUID
 	// @access: opaque-restricted
@@ -5624,6 +5624,77 @@ type SigintSensorSignal struct {
 	Deleted bool
 }
 
+type SignIn struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: restricted
+	WorkosSessionID string
+	// @access: confidential
+	AuthenticationMethod string
+	// @access: restricted
+	IdpHostedDomain pgtype.Text
+	// @access: opaque-confidential
+	IdpTenantID pgtype.Text
+	// @access: confidential-pii
+	VerifiedEmail pgtype.Text
+	// @access: confidential
+	IdpAuthenticatedAt pgtype.Timestamptz
+	// @access: confidential
+	AuthenticatedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokeReason pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type SignInRevocationCutoff struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	CutoffAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type SignInRevocationDelivery struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Kind string
+	// @access: secret-restricted
+	Target string
+	// @access: confidential
+	EffectiveAt pgtype.Timestamptz
+	// @access: confidential
+	Attempts int32
+	// @access: opaque-restricted
+	LastError pgtype.Text
+	// @access: confidential
+	ClaimedUntil pgtype.Timestamptz
+	// @access: confidential
+	NextAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DeliveredAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type Skill struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -6204,77 +6275,6 @@ type SpendRuleEvent struct {
 	WindowEnd pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
-}
-
-type SsoSignIn struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	OrganizationID string
-	// @access: confidential
-	UserID string
-	// @access: restricted
-	WorkosSessionID string
-	// @access: confidential
-	AuthenticationMethod string
-	// @access: restricted
-	IdpHostedDomain pgtype.Text
-	// @access: opaque-confidential
-	IdpTenantID pgtype.Text
-	// @access: confidential-pii
-	VerifiedEmail pgtype.Text
-	// @access: confidential
-	IdpAuthenticatedAt pgtype.Timestamptz
-	// @access: confidential
-	AuthenticatedAt pgtype.Timestamptz
-	// @access: confidential
-	RevokedAt pgtype.Timestamptz
-	// @access: confidential
-	RevokeReason pgtype.Text
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-}
-
-type SsoSignInRevocationCutoff struct {
-	// @access: confidential
-	OrganizationID string
-	// @access: confidential
-	UserID string
-	// @access: confidential
-	CutoffAt pgtype.Timestamptz
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
-}
-
-type SsoSignInRevocationDelivery struct {
-	// @access: confidential
-	ID uuid.UUID
-	// @access: confidential
-	OrganizationID string
-	// @access: confidential
-	Kind string
-	// @access: secret-restricted
-	Target string
-	// @access: confidential
-	EffectiveAt pgtype.Timestamptz
-	// @access: confidential
-	Attempts int32
-	// @access: opaque-restricted
-	LastError pgtype.Text
-	// @access: confidential
-	ClaimedUntil pgtype.Timestamptz
-	// @access: confidential
-	NextAttemptAt pgtype.Timestamptz
-	// @access: confidential
-	DeliveredAt pgtype.Timestamptz
-	// @access: confidential
-	CreatedAt pgtype.Timestamptz
-	// @access: confidential
-	UpdatedAt pgtype.Timestamptz
 }
 
 type StripeInvoice struct {
@@ -7257,7 +7257,7 @@ type UserSession struct {
 	// @access: restricted
 	Resource pgtype.Text
 	// @access: confidential
-	SsoSignInID uuid.NullUUID
+	SignInID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

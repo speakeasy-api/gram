@@ -4291,7 +4291,7 @@ WHERE deleted IS FALSE;
 -- One row per WorkOS session established by a Speakeasy sign-in, from the
 -- dashboard login or an MCP authorization. MCP grants (user_sessions) record
 -- the sign-in that created them, so revoking a sign-in revokes its grants.
-CREATE TABLE IF NOT EXISTS sso_sign_ins (
+CREATE TABLE IF NOT EXISTS sign_ins (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   -- Speakeasy users.id of the signed-in user.
@@ -4318,63 +4318,63 @@ CREATE TABLE IF NOT EXISTS sso_sign_ins (
   revoke_reason TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT sso_sign_ins_pkey PRIMARY KEY (id),
-  CONSTRAINT sso_sign_ins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT sign_ins_pkey PRIMARY KEY (id),
+  CONSTRAINT sign_ins_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
-COMMENT ON COLUMN sso_sign_ins.id IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.organization_id IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.user_id IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.workos_session_id IS '@access: restricted';
-COMMENT ON COLUMN sso_sign_ins.authentication_method IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.idp_hosted_domain IS '@access: restricted';
-COMMENT ON COLUMN sso_sign_ins.idp_tenant_id IS '@access: opaque-confidential';
-COMMENT ON COLUMN sso_sign_ins.authenticated_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.verified_email IS '@access: confidential-pii';
-COMMENT ON COLUMN sso_sign_ins.idp_authenticated_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.revoked_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.revoke_reason IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.created_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.updated_at IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.id IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.organization_id IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.user_id IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.workos_session_id IS '@access: restricted';
+COMMENT ON COLUMN sign_ins.authentication_method IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.idp_hosted_domain IS '@access: restricted';
+COMMENT ON COLUMN sign_ins.idp_tenant_id IS '@access: opaque-confidential';
+COMMENT ON COLUMN sign_ins.authenticated_at IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.verified_email IS '@access: confidential-pii';
+COMMENT ON COLUMN sign_ins.idp_authenticated_at IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.revoke_reason IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.created_at IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.updated_at IS '@access: confidential';
 
-CREATE UNIQUE INDEX IF NOT EXISTS sso_sign_ins_organization_id_workos_session_id_key
-ON sso_sign_ins (organization_id, workos_session_id);
+CREATE UNIQUE INDEX IF NOT EXISTS sign_ins_organization_id_workos_session_id_key
+ON sign_ins (organization_id, workos_session_id);
 
-CREATE INDEX IF NOT EXISTS sso_sign_ins_organization_id_user_id_idx
-ON sso_sign_ins (organization_id, user_id);
+CREATE INDEX IF NOT EXISTS sign_ins_organization_id_user_id_idx
+ON sign_ins (organization_id, user_id);
 
 -- Finds a WorkOS session's earliest sign-in across the user's orgs.
-CREATE INDEX IF NOT EXISTS sso_sign_ins_user_id_workos_session_id_idx
-ON sso_sign_ins (user_id, workos_session_id);
+CREATE INDEX IF NOT EXISTS sign_ins_user_id_workos_session_id_idx
+ON sign_ins (user_id, workos_session_id);
 
 -- Composite FK target so a grant can only link to a sign-in in its own org.
-CREATE UNIQUE INDEX IF NOT EXISTS sso_sign_ins_organization_id_id_key
-ON sso_sign_ins (organization_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS sign_ins_organization_id_id_key
+ON sign_ins (organization_id, id);
 
 -- A revocation fence per user and organization: a sign-in authenticated at or
 -- before cutoff_at is recorded revoked and never authorizes a grant, so a
 -- WorkOS exchange that began before a revocation cannot outlive it.
-CREATE TABLE IF NOT EXISTS sso_sign_in_revocation_cutoffs (
+CREATE TABLE IF NOT EXISTS sign_in_revocation_cutoffs (
   organization_id TEXT NOT NULL,
   -- Speakeasy users.id.
   user_id TEXT NOT NULL,
   cutoff_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT sso_sign_in_revocation_cutoffs_pkey PRIMARY KEY (organization_id, user_id),
-  CONSTRAINT sso_sign_in_revocation_cutoffs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT sign_in_revocation_cutoffs_pkey PRIMARY KEY (organization_id, user_id),
+  CONSTRAINT sign_in_revocation_cutoffs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
-COMMENT ON COLUMN sso_sign_in_revocation_cutoffs.organization_id IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_cutoffs.user_id IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_cutoffs.cutoff_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_cutoffs.created_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_cutoffs.updated_at IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_cutoffs.organization_id IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_cutoffs.user_id IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_cutoffs.cutoff_at IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_cutoffs.created_at IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_cutoffs.updated_at IS '@access: confidential';
 
 -- Side effects of a sign-in revocation outside Postgres, written in the
 -- revoking transaction and delivered with idempotent retries until
 -- delivered_at is set.
-CREATE TABLE IF NOT EXISTS sso_sign_in_revocation_deliveries (
+CREATE TABLE IF NOT EXISTS sign_in_revocation_deliveries (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   -- jti (revoke an access token), workos_session (end a WorkOS session) or
@@ -4394,35 +4394,35 @@ CREATE TABLE IF NOT EXISTS sso_sign_in_revocation_deliveries (
   delivered_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT sso_sign_in_revocation_deliveries_pkey PRIMARY KEY (id),
-  CONSTRAINT sso_sign_in_revocation_deliveries_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+  CONSTRAINT sign_in_revocation_deliveries_pkey PRIMARY KEY (id),
+  CONSTRAINT sign_in_revocation_deliveries_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.id IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.organization_id IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.kind IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.target IS '@access: secret-restricted';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.effective_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.attempts IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.last_error IS '@access: opaque-restricted';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.delivered_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.claimed_until IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.next_attempt_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.created_at IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_in_revocation_deliveries.updated_at IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.id IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.organization_id IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.kind IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.target IS '@access: secret-restricted';
+COMMENT ON COLUMN sign_in_revocation_deliveries.effective_at IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.attempts IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.last_error IS '@access: opaque-restricted';
+COMMENT ON COLUMN sign_in_revocation_deliveries.delivered_at IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.claimed_until IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.next_attempt_at IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.created_at IS '@access: confidential';
+COMMENT ON COLUMN sign_in_revocation_deliveries.updated_at IS '@access: confidential';
 
 -- Lets an organization's deletion cascade without scanning the table.
-CREATE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_organization_id_idx
-ON sso_sign_in_revocation_deliveries (organization_id);
+CREATE INDEX IF NOT EXISTS sign_in_revocation_deliveries_organization_id_idx
+ON sign_in_revocation_deliveries (organization_id);
 
 -- One pending delivery per target.
-CREATE UNIQUE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_pending_key
-ON sso_sign_in_revocation_deliveries (organization_id, kind, target)
+CREATE UNIQUE INDEX IF NOT EXISTS sign_in_revocation_deliveries_pending_key
+ON sign_in_revocation_deliveries (organization_id, kind, target)
 WHERE delivered_at IS NULL;
 
 -- The retry sweep reads pending deliveries that are due, oldest first.
-CREATE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_pending_idx
-ON sso_sign_in_revocation_deliveries (next_attempt_at NULLS FIRST, created_at)
+CREATE INDEX IF NOT EXISTS sign_in_revocation_deliveries_pending_idx
+ON sign_in_revocation_deliveries (next_attempt_at NULLS FIRST, created_at)
 WHERE delivered_at IS NULL;
 
 -- User Sessions are records representing active Gram sessions for a given Subject
@@ -4465,7 +4465,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   -- The sign-in that created this grant. NULL for grants created before
   -- sign-ins were recorded and for non-interactive grants; those never
   -- qualify for Speakeasy-issued ID-JAGs.
-  sso_sign_in_id uuid,
+  sign_in_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4477,11 +4477,11 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   CONSTRAINT user_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL,
-  CONSTRAINT user_sessions_sso_sign_in_tenant_fkey FOREIGN KEY (organization_id, sso_sign_in_id) REFERENCES sso_sign_ins (organization_id, id)
+  CONSTRAINT user_sessions_sign_in_tenant_fkey FOREIGN KEY (organization_id, sign_in_id) REFERENCES sign_ins (organization_id, id)
 );
 
 COMMENT ON COLUMN user_sessions.id IS '@access: confidential';
-COMMENT ON COLUMN user_sessions.sso_sign_in_id IS '@access: confidential';
+COMMENT ON COLUMN user_sessions.sign_in_id IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.project_id IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.organization_id IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.user_session_issuer_id IS '@access: confidential';
@@ -4503,9 +4503,9 @@ COMMENT ON COLUMN user_sessions.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN user_sessions.deleted IS '@access: confidential';
 
 -- Revocation cascade: find the live grants created by a sign-in.
-CREATE INDEX IF NOT EXISTS user_sessions_sso_sign_in_id_idx
-ON user_sessions (organization_id, sso_sign_in_id)
-WHERE sso_sign_in_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS user_sessions_sign_in_id_idx
+ON user_sessions (organization_id, sign_in_id)
+WHERE sign_in_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS user_sessions_organization_id_idx
 ON user_sessions (organization_id);
@@ -13761,9 +13761,9 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   internal_session_issuer_updated_at timestamptz,
   -- Key that signed the ID-JAG; a different active key prevents token reuse.
   internal_session_issuer_key_id uuid,
-  -- Verified enterprise SSO sign-in that authorized the exact MCP grant.
+  -- Verified sign-in that authorized the exact MCP grant.
   -- Reuse requires this sign-in to remain eligible and match the current grant.
-  sso_sign_in_id uuid,
+  sign_in_id uuid,
   -- Exact authenticated MCP grant used to obtain the vendor access token.
   -- A different grant cannot reuse this token, even for the same human.
   user_session_id uuid,
@@ -13791,7 +13791,7 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   -- project_ref_check and make a parent deletion fail. Postgres 15+ supports it.
   CONSTRAINT remote_session_ema_credentials_internal_session_issuer_id_fkey FOREIGN KEY (organization_id, internal_session_issuer_id) REFERENCES internal_session_issuers (organization_id, id) ON DELETE SET NULL (internal_session_issuer_id),
   CONSTRAINT remote_session_ema_credentials_internal_session_issuer_key_id_fkey FOREIGN KEY (organization_id, internal_session_issuer_key_id) REFERENCES json_web_keys (organization_id, id) ON DELETE SET NULL (internal_session_issuer_key_id),
-  CONSTRAINT remote_session_ema_credentials_sso_sign_in_id_fkey FOREIGN KEY (organization_id, sso_sign_in_id) REFERENCES sso_sign_ins (organization_id, id) ON DELETE SET NULL (sso_sign_in_id),
+  CONSTRAINT remote_session_ema_credentials_sign_in_id_fkey FOREIGN KEY (organization_id, sign_in_id) REFERENCES sign_ins (organization_id, id) ON DELETE SET NULL (sign_in_id),
   CONSTRAINT remote_session_ema_credentials_user_session_id_fkey FOREIGN KEY (organization_id, user_session_id) REFERENCES user_sessions (organization_id, id) ON DELETE SET NULL (user_session_id),
   CONSTRAINT remote_session_ema_credentials_trusted_issuer_session_id_fkey FOREIGN KEY (trusted_issuer_session_id) REFERENCES trusted_issuer_sessions (id) ON DELETE SET NULL
 );
@@ -13812,7 +13812,7 @@ COMMENT ON COLUMN remote_session_ema_credentials.ema_provider IS '@access: confi
 COMMENT ON COLUMN remote_session_ema_credentials.internal_session_issuer_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.internal_session_issuer_updated_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.internal_session_issuer_key_id IS '@access: confidential';
-COMMENT ON COLUMN remote_session_ema_credentials.sso_sign_in_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_credentials.sign_in_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.user_session_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.requested_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.granted_scopes IS '@access: opaque-restricted';
@@ -13845,7 +13845,7 @@ CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_org_provider_idx ON re
 
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_internal_session_issuer_id_idx ON remote_session_ema_credentials (organization_id, internal_session_issuer_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_internal_session_issuer_key_id_idx ON remote_session_ema_credentials (organization_id, internal_session_issuer_key_id);
-CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_sso_sign_in_id_idx ON remote_session_ema_credentials (organization_id, sso_sign_in_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_sign_in_id_idx ON remote_session_ema_credentials (organization_id, sign_in_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_user_session_id_idx ON remote_session_ema_credentials (organization_id, user_session_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_access_expires_at_idx
 ON remote_session_ema_credentials (access_expires_at, id);

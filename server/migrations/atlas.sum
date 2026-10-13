@@ -1,4 +1,4 @@
-h1:bVuCfToCNqwIppqNc6JgS4mcL6SyN0yx1oGn2vtijyA=
+h1:tQgwvUPrJKI29YFCCdPcwEFEGy9519ZJLo04iHyUrBQ=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -467,6 +467,6 @@ h1:bVuCfToCNqwIppqNc6JgS4mcL6SyN0yx1oGn2vtijyA=
 20261009115022_sigint_configuration.sql h1:Czu2BqmSrIi7LgYY/fBLPsq58UXwmJN0FaEmgCzHTw4=
 20261012223723_internal-session-issuers-and-ema-providers.sql h1:NIf1ZjA73avZU2y8u0p5fbsZQ1Fs6qrt+wLNsi+ehls=
 20261013101406_classify-columns.sql h1:grI9MggPb+V4ra2UO9lAcCCrKftrZr1dKrqDrcis5lU=
-20261013163249_sso-sign-ins.sql h1:RE5UJSu7+pwlGjye+wqBA5Q0ncKlSZk60TLP7dxoyeA=
-20261013164028_ema-credential-provenance.sql h1:tWtdyDs9qk0eXcrX1J/DyXEha5dZSk/N5keXgNsBcUU=
-20261013185707_sign-in-method-evidence.sql h1:PWjWdJoOx8Q1ejASQ0oDFpCqMD9NpyaOgvRSZ/ajzE0=
+20261013211408_sign-ins.sql h1:T4Fl1qf+5m8lyap/laM7MF4nH6E8665mDk+1Bwv+Mz8=
+20261013211446_ema-credential-provenance.sql h1:OvTvkQbVMAFR5Qd59N3xCOOrHIg51ss0uLTrFCmliEM=
+20261013211525_sign-in-method-evidence.sql h1:X7FFN0uW/6sXtWUtIfw9EUo7TV5bewZuQjxs+CSDsaI=
