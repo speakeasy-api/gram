@@ -249,16 +249,18 @@ async function resolveSecretKey(): Promise<{
   prompted: boolean;
   publishableKey: string;
 }> {
+  const fromEnv = process.env.STRIPE_API_KEY;
+  if (fromEnv && fromEnv !== "unset") {
+    // The saved secret may belong to a different Stripe account than the CLI
+    // login, so do not pair it with the CLI publishable key.
+    return { key: fromEnv, prompted: false, publishableKey: "" };
+  }
+
   const cliConfig = await $({
     nothrow: true,
     quiet: true,
   })`stripe config --list`;
   const publishableKey = publishableKeyFromStripeCLI(cliConfig.stdout);
-
-  const fromEnv = process.env.STRIPE_API_KEY;
-  if (fromEnv && fromEnv !== "unset") {
-    return { key: fromEnv, prompted: false, publishableKey };
-  }
 
   // An authenticated Stripe CLI carries a short-lived test-mode key. Use it
   // for provisioning, the server and listener; persist it consistently. It
@@ -296,7 +298,7 @@ async function resolveSecretKey(): Promise<{
     outro("Cancelled.");
     process.exit(1);
   }
-  return { key: entered, prompted: true, publishableKey };
+  return { key: entered, prompted: true, publishableKey: "" };
 }
 
 async function resolveWebhookSecret(key: string): Promise<string> {
