@@ -353,12 +353,14 @@ var _ = Service("hooks", func() {
 			Extend(ClaudeHookPayload)
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
+			Attribute("device_agent_token", String, "Optional `Bearer` device-agent token a headless device presents in place of an API key.")
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Speakeasy hook plugin.")
 			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 		Result(ClaudeHookResult)
 		HTTP(func() {
 			POST("/rpc/hooks.claude")
+			Header("device_agent_token:Authorization")
 			Header("apikey_token:Gram-Key")
 			Header("project_slug_input:Gram-Project")
 			Header("hook_hostname:X-Gram-Hook-Hostname")
@@ -433,6 +435,9 @@ var _ = Service("hooks", func() {
 	Method("ingest", func() {
 		Description("Feature-first unified endpoint for hook events from supported coding assistants.")
 
+		// A headless device sends a device-agent token in Authorization in place
+		// of Gram-Key; it is then required to name its Gram-Project.
+		//
 		// Gram-Key + Gram-Project are OPTIONAL: hook senders must stay
 		// non-blocking for machines that never signed in. A request with no
 		// key is acknowledged without processing (fail open); a request that
@@ -442,6 +447,7 @@ var _ = Service("hooks", func() {
 			Extend(IngestHookPayload)
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
+			Attribute("device_agent_token", String, "Optional `Bearer` device-agent token a headless device presents in place of an API key.")
 			Attribute("replayed", Boolean, "Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.")
 		})
 
@@ -449,6 +455,7 @@ var _ = Service("hooks", func() {
 
 		HTTP(func() {
 			POST("/rpc/hooks.ingest")
+			Header("device_agent_token:Authorization")
 			Header("apikey_token:Gram-Key")
 			Header("project_slug_input:Gram-Project")
 			Header("idempotency_key:Idempotency-Key")

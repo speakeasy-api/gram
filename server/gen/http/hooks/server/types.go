@@ -3590,7 +3590,7 @@ func NewGetStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetStatusGatew
 }
 
 // NewClaudePayload builds a hooks service claude endpoint payload.
-func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.ClaudePayload {
+func NewClaudePayload(body *ClaudeRequestBody, deviceAgentToken *string, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.ClaudePayload {
 	v := &hooks.ClaudePayload{
 		HookEventName:        *body.HookEventName,
 		ToolName:             body.ToolName,
@@ -3621,6 +3621,7 @@ func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugI
 			v.AdditionalData[tk] = tv
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
@@ -3712,7 +3713,7 @@ func NewCodexPayload(body *CodexRequestBody, deviceAgentToken *string, apikeyTok
 }
 
 // NewIngestPayload builds a hooks service ingest endpoint payload.
-func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string, replayed *bool) *hooks.IngestPayload {
+func NewIngestPayload(body *IngestRequestBody, deviceAgentToken *string, apikeyToken *string, projectSlugInput *string, idempotencyKey *string, replayed *bool) *hooks.IngestPayload {
 	v := &hooks.IngestPayload{
 		SchemaVersion: *body.SchemaVersion,
 		Raw:           body.Raw,
@@ -3725,6 +3726,7 @@ func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugI
 	if body.Data != nil {
 		v.Data = unmarshalHookIngestDataRequestBodyToHooksHookIngestData(body.Data)
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey

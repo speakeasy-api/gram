@@ -415,6 +415,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.Codex = deviceagenttoken.BearerChallenge(server.Codex)
 	server.Logs = deviceagenttoken.BearerChallenge(server.Logs)
 	server.Metrics = deviceagenttoken.BearerChallenge(server.Metrics)
+	server.Claude = deviceagenttoken.BearerChallenge(server.Claude)
+	server.Ingest = deviceagenttoken.BearerChallenge(server.Ingest)
 	srv.Mount(mux, server)
 	AttachServerNames(mux, service)
 }

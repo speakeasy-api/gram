@@ -96,6 +96,9 @@ type ClaudePayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Optional `Bearer` device-agent token a headless device presents in place of
+	// an API key.
+	DeviceAgentToken *string
 	// Optional endpoint hostname supplied by the Speakeasy hook plugin.
 	HookHostname *string
 	// Optional per-invocation token reused across retries so the server stores a
@@ -517,6 +520,9 @@ type IngestPayload struct {
 	ApikeyToken *string
 	// Optional project slug for plugin-driven attribution.
 	ProjectSlugInput *string
+	// Optional `Bearer` device-agent token a headless device presents in place of
+	// an API key.
+	DeviceAgentToken *string
 	// Set when the event is redelivered from a device's offline spool after
 	// control-plane downtime, under its original Idempotency-Key and occurred_at.
 	Replayed *bool

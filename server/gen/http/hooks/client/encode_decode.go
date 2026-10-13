@@ -43,6 +43,10 @@ func EncodeClaudeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "claude", "*hooks.ClaudePayload", v)
 		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			req.Header.Set("Authorization", head)
+		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
@@ -784,6 +788,10 @@ func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		p, ok := v.(*hooks.IngestPayload)
 		if !ok {
 			return goahttp.ErrInvalidType("hooks", "ingest", "*hooks.IngestPayload", v)
+		}
+		if p.DeviceAgentToken != nil {
+			head := *p.DeviceAgentToken
+			req.Header.Set("Authorization", head)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken

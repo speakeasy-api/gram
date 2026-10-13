@@ -58,11 +58,16 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		}
 
 		var (
+			deviceAgentToken *string
 			apikeyToken      *string
 			projectSlugInput *string
 			hookHostname     *string
 			idempotencyKey   *string
 		)
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -79,7 +84,7 @@ func DecodeClaudeRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if idempotencyKeyRaw != "" {
 			idempotencyKey = &idempotencyKeyRaw
 		}
-		payload = NewClaudePayload(&body, apikeyToken, projectSlugInput, hookHostname, idempotencyKey)
+		payload = NewClaudePayload(&body, deviceAgentToken, apikeyToken, projectSlugInput, hookHostname, idempotencyKey)
 
 		return payload, nil
 	}
@@ -773,11 +778,16 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		}
 
 		var (
+			deviceAgentToken *string
 			apikeyToken      *string
 			projectSlugInput *string
 			idempotencyKey   *string
 			replayed         *bool
 		)
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -803,7 +813,7 @@ func DecodeIngestRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewIngestPayload(&body, apikeyToken, projectSlugInput, idempotencyKey, replayed)
+		payload = NewIngestPayload(&body, deviceAgentToken, apikeyToken, projectSlugInput, idempotencyKey, replayed)
 
 		return payload, nil
 	}

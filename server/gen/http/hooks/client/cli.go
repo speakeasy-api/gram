@@ -19,7 +19,7 @@ import (
 
 // BuildClaudePayload builds the payload for the hooks claude endpoint from CLI
 // flags.
-func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string, hooksClaudeHookHostname string, hooksClaudeIdempotencyKey string) (*hooks.ClaudePayload, error) {
+func BuildClaudePayload(hooksClaudeBody string, hooksClaudeDeviceAgentToken string, hooksClaudeApikeyToken string, hooksClaudeProjectSlugInput string, hooksClaudeHookHostname string, hooksClaudeIdempotencyKey string) (*hooks.ClaudePayload, error) {
 	var err error
 	var body ClaudeRequestBody
 	{
@@ -32,6 +32,12 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var deviceAgentToken *string
+	{
+		if hooksClaudeDeviceAgentToken != "" {
+			deviceAgentToken = &hooksClaudeDeviceAgentToken
 		}
 	}
 	var apikeyToken *string
@@ -88,6 +94,7 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 			v.AdditionalData[tk] = tv
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
@@ -264,7 +271,7 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexDeviceAgentToken string,
 
 // BuildIngestPayload builds the payload for the hooks ingest endpoint from CLI
 // flags.
-func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, hooksIngestProjectSlugInput string, hooksIngestIdempotencyKey string, hooksIngestReplayed string) (*hooks.IngestPayload, error) {
+func BuildIngestPayload(hooksIngestBody string, hooksIngestDeviceAgentToken string, hooksIngestApikeyToken string, hooksIngestProjectSlugInput string, hooksIngestIdempotencyKey string, hooksIngestReplayed string) (*hooks.IngestPayload, error) {
 	var err error
 	var body IngestRequestBody
 	{
@@ -290,6 +297,12 @@ func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, h
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var deviceAgentToken *string
+	{
+		if hooksIngestDeviceAgentToken != "" {
+			deviceAgentToken = &hooksIngestDeviceAgentToken
 		}
 	}
 	var apikeyToken *string
@@ -337,6 +350,7 @@ func BuildIngestPayload(hooksIngestBody string, hooksIngestApikeyToken string, h
 	if body.Data != nil {
 		v.Data = marshalHookIngestDataRequestBodyToHooksHookIngestData(body.Data)
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey

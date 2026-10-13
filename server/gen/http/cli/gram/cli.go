@@ -1498,6 +1498,7 @@ func ParseEndpoint(
 
 		hooksClaudeFlags                = flag.NewFlagSet("claude", flag.ExitOnError)
 		hooksClaudeBodyFlag             = hooksClaudeFlags.String("body", "REQUIRED", "")
+		hooksClaudeDeviceAgentTokenFlag = hooksClaudeFlags.String("device-agent-token", "", "")
 		hooksClaudeApikeyTokenFlag      = hooksClaudeFlags.String("apikey-token", "", "")
 		hooksClaudeProjectSlugInputFlag = hooksClaudeFlags.String("project-slug-input", "", "")
 		hooksClaudeHookHostnameFlag     = hooksClaudeFlags.String("hook-hostname", "", "")
@@ -1521,6 +1522,7 @@ func ParseEndpoint(
 
 		hooksIngestFlags                = flag.NewFlagSet("ingest", flag.ExitOnError)
 		hooksIngestBodyFlag             = hooksIngestFlags.String("body", "REQUIRED", "")
+		hooksIngestDeviceAgentTokenFlag = hooksIngestFlags.String("device-agent-token", "", "")
 		hooksIngestApikeyTokenFlag      = hooksIngestFlags.String("apikey-token", "", "")
 		hooksIngestProjectSlugInputFlag = hooksIngestFlags.String("project-slug-input", "", "")
 		hooksIngestIdempotencyKeyFlag   = hooksIngestFlags.String("idempotency-key", "", "")
@@ -10159,7 +10161,7 @@ func ParseEndpoint(
 			switch epn {
 			case "claude":
 				endpoint = c.Claude()
-				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag, *hooksClaudeApikeyTokenFlag, *hooksClaudeProjectSlugInputFlag, *hooksClaudeHookHostnameFlag, *hooksClaudeIdempotencyKeyFlag)
+				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag, *hooksClaudeDeviceAgentTokenFlag, *hooksClaudeApikeyTokenFlag, *hooksClaudeProjectSlugInputFlag, *hooksClaudeHookHostnameFlag, *hooksClaudeIdempotencyKeyFlag)
 			case "cursor":
 				endpoint = c.Cursor()
 				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag, *hooksCursorDeviceAgentTokenFlag, *hooksCursorApikeyTokenFlag, *hooksCursorProjectSlugInputFlag, *hooksCursorHookHostnameFlag, *hooksCursorIdempotencyKeyFlag)
@@ -10168,7 +10170,7 @@ func ParseEndpoint(
 				data, err = hooksc.BuildCodexPayload(*hooksCodexBodyFlag, *hooksCodexDeviceAgentTokenFlag, *hooksCodexApikeyTokenFlag, *hooksCodexProjectSlugInputFlag, *hooksCodexHookHostnameFlag, *hooksCodexIdempotencyKeyFlag)
 			case "ingest":
 				endpoint = c.Ingest()
-				data, err = hooksc.BuildIngestPayload(*hooksIngestBodyFlag, *hooksIngestApikeyTokenFlag, *hooksIngestProjectSlugInputFlag, *hooksIngestIdempotencyKeyFlag, *hooksIngestReplayedFlag)
+				data, err = hooksc.BuildIngestPayload(*hooksIngestBodyFlag, *hooksIngestDeviceAgentTokenFlag, *hooksIngestApikeyTokenFlag, *hooksIngestProjectSlugInputFlag, *hooksIngestIdempotencyKeyFlag, *hooksIngestReplayedFlag)
 			case "upload-skill-content":
 				endpoint = c.UploadSkillContent()
 				data, err = hooksc.BuildUploadSkillContentPayload(*hooksUploadSkillContentBodyFlag, *hooksUploadSkillContentApikeyTokenFlag, *hooksUploadSkillContentProjectSlugInputFlag)
@@ -18127,6 +18129,7 @@ func hooksClaudeUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] hooks claude", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -device-agent-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -hook-hostname STRING")
@@ -18139,6 +18142,7 @@ func hooksClaudeUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -device-agent-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -hook-hostname STRING: `)
@@ -18146,7 +18150,7 @@ func hooksClaudeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"ConfigChange\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks claude --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"error\": \"abc123\",\n      \"hook_event_name\": \"ConfigChange\",\n      \"is_interrupt\": false,\n      \"last_assistant_message\": \"abc123\",\n      \"message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"notification_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"source\": \"abc123\",\n      \"stop_hook_active\": false,\n      \"title\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
 }
 
 func hooksCursorUsage() {
@@ -18209,6 +18213,7 @@ func hooksIngestUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] hooks ingest", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -device-agent-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -idempotency-key STRING")
@@ -18221,6 +18226,7 @@ func hooksIngestUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -device-agent-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -idempotency-key STRING: `)
@@ -18228,7 +18234,7 @@ func hooksIngestUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks ingest --body '{\n      \"data\": {\n         \"mcp\": {\n            \"command\": \"abc123\",\n            \"result_json\": \"abc123\",\n            \"server_identity\": \"abc123\",\n            \"server_name\": \"abc123\",\n            \"url\": \"abc123\"\n         },\n         \"mcp_attribution\": [\n            {\n               \"mcp_server\": \"abc123\",\n               \"mcp_tool\": \"abc123\",\n               \"request_id\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory\": [\n            {\n               \"command\": \"abc123\",\n               \"result_json\": \"abc123\",\n               \"server_identity\": \"abc123\",\n               \"server_name\": \"abc123\",\n               \"url\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory_collected\": false,\n         \"message\": {\n            \"duration_ms\": 1,\n            \"role\": \"abc123\",\n            \"text\": \"abc123\"\n         },\n         \"notification\": {\n            \"message\": \"abc123\",\n            \"title\": \"abc123\",\n            \"type\": \"abc123\"\n         },\n         \"prompt\": {\n            \"text\": \"abc123\"\n         },\n         \"prompt_attachments\": [\n            {\n               \"attachment_kind\": \"abc123\",\n               \"content\": \"abc123\",\n               \"display_path\": \"abc123\",\n               \"entry_uuid\": \"abc123\",\n               \"file_path\": \"abc123\",\n               \"num_lines\": 1,\n               \"prompt_id\": \"abc123\",\n               \"prompt_sha256\": \"abc123\",\n               \"start_line\": 1,\n               \"timestamp\": \"abc123\",\n               \"total_lines\": 1\n            }\n         ],\n         \"skill\": {\n            \"name\": \"aaa\",\n            \"raw_sha256\": \"aaa\",\n            \"source\": \"aaa\",\n            \"source_level\": \"aaa\",\n            \"source_path\": \"aaa\"\n         },\n         \"tool_call\": {\n            \"duration_ms\": 1,\n            \"error\": \"abc123\",\n            \"id\": \"abc123\",\n            \"input\": \"abc123\",\n            \"is_interrupt\": false,\n            \"name\": \"abc123\",\n            \"output\": \"abc123\",\n            \"permission_type\": \"abc123\",\n            \"status\": \"abc123\"\n         },\n         \"usage\": {\n            \"cache_read_tokens\": 1,\n            \"cache_write_tokens\": 1,\n            \"cost\": 1,\n            \"input_tokens\": 1,\n            \"loop_count\": 1,\n            \"output_tokens\": 1,\n            \"status\": \"abc123\"\n         }\n      },\n      \"event\": {\n         \"occurred_at\": \"1970-01-01T00:00:01Z\",\n         \"type\": \"session.updated\"\n      },\n      \"raw\": \"abc123\",\n      \"schema_version\": \"abc123\",\n      \"session\": {\n         \"cwd\": \"abc123\",\n         \"id\": \"abc123\",\n         \"model\": \"abc123\",\n         \"turn_id\": \"abc123\"\n      },\n      \"source\": {\n         \"adapter\": \"abc123\",\n         \"adapter_version\": \"abc123\",\n         \"hostname\": \"abc123\",\n         \"raw_event_name\": \"abc123\",\n         \"user_email\": \"abc123\"\n      }\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"abc123\" --replayed false")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks ingest --body '{\n      \"data\": {\n         \"mcp\": {\n            \"command\": \"abc123\",\n            \"result_json\": \"abc123\",\n            \"server_identity\": \"abc123\",\n            \"server_name\": \"abc123\",\n            \"url\": \"abc123\"\n         },\n         \"mcp_attribution\": [\n            {\n               \"mcp_server\": \"abc123\",\n               \"mcp_tool\": \"abc123\",\n               \"request_id\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory\": [\n            {\n               \"command\": \"abc123\",\n               \"result_json\": \"abc123\",\n               \"server_identity\": \"abc123\",\n               \"server_name\": \"abc123\",\n               \"url\": \"abc123\"\n            }\n         ],\n         \"mcp_inventory_collected\": false,\n         \"message\": {\n            \"duration_ms\": 1,\n            \"role\": \"abc123\",\n            \"text\": \"abc123\"\n         },\n         \"notification\": {\n            \"message\": \"abc123\",\n            \"title\": \"abc123\",\n            \"type\": \"abc123\"\n         },\n         \"prompt\": {\n            \"text\": \"abc123\"\n         },\n         \"prompt_attachments\": [\n            {\n               \"attachment_kind\": \"abc123\",\n               \"content\": \"abc123\",\n               \"display_path\": \"abc123\",\n               \"entry_uuid\": \"abc123\",\n               \"file_path\": \"abc123\",\n               \"num_lines\": 1,\n               \"prompt_id\": \"abc123\",\n               \"prompt_sha256\": \"abc123\",\n               \"start_line\": 1,\n               \"timestamp\": \"abc123\",\n               \"total_lines\": 1\n            }\n         ],\n         \"skill\": {\n            \"name\": \"aaa\",\n            \"raw_sha256\": \"aaa\",\n            \"source\": \"aaa\",\n            \"source_level\": \"aaa\",\n            \"source_path\": \"aaa\"\n         },\n         \"tool_call\": {\n            \"duration_ms\": 1,\n            \"error\": \"abc123\",\n            \"id\": \"abc123\",\n            \"input\": \"abc123\",\n            \"is_interrupt\": false,\n            \"name\": \"abc123\",\n            \"output\": \"abc123\",\n            \"permission_type\": \"abc123\",\n            \"status\": \"abc123\"\n         },\n         \"usage\": {\n            \"cache_read_tokens\": 1,\n            \"cache_write_tokens\": 1,\n            \"cost\": 1,\n            \"input_tokens\": 1,\n            \"loop_count\": 1,\n            \"output_tokens\": 1,\n            \"status\": \"abc123\"\n         }\n      },\n      \"event\": {\n         \"occurred_at\": \"1970-01-01T00:00:01Z\",\n         \"type\": \"session.updated\"\n      },\n      \"raw\": \"abc123\",\n      \"schema_version\": \"abc123\",\n      \"session\": {\n         \"cwd\": \"abc123\",\n         \"id\": \"abc123\",\n         \"model\": \"abc123\",\n         \"turn_id\": \"abc123\"\n      },\n      \"source\": {\n         \"adapter\": \"abc123\",\n         \"adapter_version\": \"abc123\",\n         \"hostname\": \"abc123\",\n         \"raw_event_name\": \"abc123\",\n         \"user_email\": \"abc123\"\n      }\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"abc123\" --replayed false")
 }
 
 func hooksUploadSkillContentUsage() {
