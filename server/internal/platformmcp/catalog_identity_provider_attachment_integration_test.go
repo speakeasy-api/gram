@@ -361,7 +361,7 @@ func attachmentTestRegister(t *testing.T, service *CatalogIdentityProviderAttach
 	ctx := t.Context()
 	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
-	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, metadata, existing, reuse, resource.Resource, resource))
+	commit := service.identity.Prepare(attachmentIdentityPlan(principal, project, uuid.New(), userSessionIssuerID, metadata, existing, reuse, resource.Resource, resource, remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resource.ScopesSupported, Live: true, UseDiscovered: true}))
 	require.NoError(t, commit.Preflight(ctx))
 	reg, err := commit.Register(ctx)
 	require.NoError(t, err)

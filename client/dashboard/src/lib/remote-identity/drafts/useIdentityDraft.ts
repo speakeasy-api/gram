@@ -1,5 +1,4 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import type { Gram } from "@gram/client";
 import { slugify } from "@/lib/constants";
 import {
   deriveRemoteSessionIssuerNameFromUrl,
@@ -172,22 +171,6 @@ function clientOptionHint(
 function sameSite(issuerHost: string, upstreamHost: string): boolean {
   if (issuerHost === "" || upstreamHost === "") return false;
   return issuerHost === upstreamHost || upstreamHost.endsWith(`.${issuerHost}`);
-}
-
-// refreshProtectedResource re-reads the server's protected resource metadata,
-// which records it for the server to read. A failed read is not fatal.
-async function refreshProtectedResource(
-  client: Gram,
-  remoteMcpServerId: string,
-): Promise<void> {
-  if (!remoteMcpServerId) return;
-  try {
-    await client.remoteMcp.discoverProtectedResourceMetadata({
-      discoverProtectedResourceMetadataRequestBody: { remoteMcpServerId },
-    });
-  } catch {
-    // The registration then names what the provider alone decides.
-  }
 }
 
 type ProviderTierQuery = {
@@ -799,12 +782,6 @@ export function useUserIdentityDraft({
         // automatic client sends none: the server discovers what to request
         // at each sign-in, so nothing copied here can go stale.
         const requestedScopes = manualNeeded ? scopes : [];
-        // The server names the resource's scopes at registration from its
-        // cached row, which only a probe writes. The up-front probe skips a
-        // server that already matched a provider, so refresh the row now.
-        if (!manualNeeded && !prm.metadata) {
-          await refreshProtectedResource(client, remoteMcpServerId);
-        }
         const secret = manualNeeded ? clientSecret.trim() : "";
         clientConfiguration = {
           clientId: manualNeeded ? clientId.trim() : undefined,

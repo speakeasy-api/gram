@@ -175,7 +175,7 @@ func TestCommitServerIdentityConfigurationNamesDiscoveredScopesAtRegistration(t 
 
 	ctx, ti := newTestService(t)
 	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-discovered-target")
-	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), "https://mcp.example.com/dcr-discovered-target", protectedResourceSeed{scopesSupported: []string{"files:read", "files:write"}})
+	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), closedTargetURL("dcr-discovered-target"), protectedResourceSeed{scopesSupported: []string{"files:read", "files:write"}})
 	var requestedScope atomic.Value
 	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -251,6 +251,44 @@ func TestCommitServerIdentityConfigurationNamesProviderScopesWithoutResourceRow(
 	require.NoError(t, err)
 	require.Equal(t, "registered", *result.Status)
 	require.Equal(t, "tickets:read", requestedScope.Load())
+}
+
+// A cached row past its last-good window does not decide: registration reads
+// the resource live, as the first login will.
+func TestCommitServerIdentityConfigurationReadsTheResourceLiveAtRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	resource, hits := fakeResource(t, []string{"files:read", "files:write"})
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dcr-live-target-issuer")
+	targetID := createServerIdentityTargetAt(t, ctx, ti, "dcr-live-target", resource.URL, userIssuerID)
+	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), resource.URL, protectedResourceSeed{scopesSupported: []string{"old:read"}, fetchedAgo: 8 * 24 * time.Hour})
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "live-client",
+			"client_secret":              "live-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-live-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "files:read files:write", requestedScope.Load())
+	require.EqualValues(t, 1, hits.Load())
 }
 
 func TestCommitServerIdentityConfigurationReturnsDCRRefusalWithoutChangingState(t *testing.T) {
@@ -623,7 +661,18 @@ func createServerIdentityTarget(t *testing.T, ctx context.Context, ti *testInsta
 	return createServerIdentityTargetOnIssuer(t, ctx, ti, slug, userIssuerID), userIssuerID
 }
 
+// createServerIdentityTargetOnIssuer serves from a closed loopback port, so
+// the live resource read at registration fails fast without leaving the host.
 func createServerIdentityTargetOnIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string, userIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	return createServerIdentityTargetAt(t, ctx, ti, slug, closedTargetURL(slug), userIssuerID)
+}
+
+func closedTargetURL(slug string) string {
+	return "http://127.0.0.1:9/" + slug
+}
+
+func createServerIdentityTargetAt(t *testing.T, ctx context.Context, ti *testInstance, slug, serverURL string, userIssuerID uuid.UUID) uuid.UUID {
 	t.Helper()
 	projectID := projectIDFromContext(t, ctx)
 	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
@@ -632,7 +681,7 @@ func createServerIdentityTargetOnIssuer(t *testing.T, ctx context.Context, ti *t
 		Name:          conv.ToPGText(slug),
 		Slug:          conv.ToPGText(slug),
 		TransportType: "streamable-http",
-		Url:           "https://mcp.example.com/" + slug,
+		Url:           serverURL,
 	})
 	require.NoError(t, err)
 	target, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{

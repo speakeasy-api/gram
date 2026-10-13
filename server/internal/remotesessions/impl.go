@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -72,6 +73,10 @@ type Service struct {
 	// rotator backs the administrator's rotate action with the same
 	// re-registration the authorize path runs automatically.
 	rotator *ClientRotator
+
+	// resources reads a server's protected resource live at registration, as
+	// the first login will.
+	resources *protectedresource.Prober
 
 	registrationTelemetry registration.Recorder
 
@@ -129,7 +134,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		revoker:           revoker,
 		// The refresher's lease cache single-flights rotations the same way it
 		// single-flights refreshes, so the two never race on one client.
-		rotator: NewClientRotator(logger, db, enc, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger, registrationTelemetry),
+		rotator:   NewClientRotator(logger, db, enc, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger, registrationTelemetry),
+		resources: protectedresource.NewProber(db, policy),
 
 		registrationTelemetry: registrationTelemetry,
 		origins:               DefaultCallbackOrigins(serverURL),

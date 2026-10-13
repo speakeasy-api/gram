@@ -82,7 +82,7 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 		return nil, err
 	}
 
-	plan := req.plan(authCtx, target, s.registrationResource(ctx, logger, *authCtx.ProjectID, target.ID))
+	plan := req.plan(authCtx, target, s.registrationResource(ctx, logger, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.ID))
 	commit := s.identity.Prepare(plan)
 	if err := commit.Preflight(ctx); err != nil {
 		return nil, identityOopsError(err, "check identity configuration").LogError(ctx, logger)
@@ -206,10 +206,10 @@ func (s *Service) checkServerIdentityRequest(ctx context.Context, logger *slog.L
 	return nil
 }
 
-// registrationResource is the cached protected resource row a login through a
-// scopeless client of the server reads, for registration to name. A server
-// with no row, or an unreadable one, has none.
-func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger, projectID, mcpServerID uuid.UUID) *ResourceScopes {
+// registrationResource reads the server's protected resource live, as the
+// first login through a scopeless client of it will, for registration to name
+// what that login requests. A server with no remote URL has none.
+func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, organizationID string, mcpServerID uuid.UUID) *ResourceScopes {
 	resourceURL, err := repo.New(s.db).GetRemoteURLForMcpServer(ctx, repo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID, ProjectID: projectID})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -217,15 +217,13 @@ func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger,
 		}
 		return nil
 	}
-	resource, found, err := CachedResourceScopes(ctx, s.db, projectID, resourceURL, true)
-	if err != nil {
-		logger.WarnContext(ctx, "get protected resource for registration scope", attr.SlogError(err))
-		return nil
+	resolved := s.resources.ResolveForLogin(ctx, logger, projectID, organizationID, resourceURL)
+	out := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resolved.ScopesSupported, Live: resolved.Live, UseDiscovered: true}
+	if resolved.Row != nil {
+		out.Pin = resolved.Row.ScopeOverride
+		out.ChallengeScopes = resolved.Row.ChallengeScopes
 	}
-	if !found {
-		return nil
-	}
-	return &resource
+	return &out
 }
 
 // plan describes the request as an identity plan: the server's current
