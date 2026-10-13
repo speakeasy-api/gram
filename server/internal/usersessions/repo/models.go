@@ -44,7 +44,7 @@ type UserSession struct {
 	// @access: restricted
 	Resource pgtype.Text
 	// @access: confidential
-	SsoSignInID uuid.NullUUID
+	SignInID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
