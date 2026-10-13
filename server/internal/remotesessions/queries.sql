@@ -5095,7 +5095,8 @@ WHERE EXISTS (
           AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE
       )
   )
-ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn)
+  WHERE deleted IS FALSE AND ema_provider = 'external'
 DO UPDATE SET
   ema_provider = 'external',
   internal_session_issuer_id = NULL,
@@ -5411,13 +5412,13 @@ FROM remote_session_ema_credentials c
 WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
   AND c.user_session_issuer_id = @user_session_issuer_id
   AND c.remote_session_client_id = @remote_session_client_id AND c.resource = @resource
-  AND c.subject_urn = @subject_urn AND c.deleted IS FALSE
-  AND c.ema_provider = 'speakeasy';
+  AND c.subject_urn = @subject_urn AND c.user_session_id = @user_session_id::uuid
+  AND c.deleted IS FALSE AND c.ema_provider = 'speakeasy';
 
 -- name: UpsertSpeakeasyEMACredential :one
 -- The caller locks the binding, sign-in and issuer and checks the exact
 -- grant before this statement. Client changes during redemption still fence
--- publication.
+-- publication. Each authenticated MCP grant keeps its own slot.
 INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
@@ -5443,7 +5444,8 @@ WHERE EXISTS (
     AND (rc.project_id = b.project_id OR (rc.project_id IS NULL AND rc.organization_id = b.organization_id))
     AND (ri.project_id = b.project_id OR (ri.project_id IS NULL AND (ri.organization_id = b.organization_id OR ri.organization_id IS NULL)))
 )
-ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn, user_session_id)
+  WHERE deleted IS FALSE AND ema_provider = 'speakeasy'
 DO UPDATE SET
   organization_id = EXCLUDED.organization_id,
   remote_session_issuer_id = EXCLUDED.remote_session_issuer_id,
@@ -5477,7 +5479,8 @@ WHERE i.id = @id AND i.organization_id = @organization_id
   AND i.deleted IS FALSE AND i.disabled_at IS NULL;
 
 -- name: GetSpeakeasyEMAStoredGrant :one
--- Status has no authenticated MCP JTI. Follow only this credential's retained grant;
+-- Status has no authenticated MCP JTI. Each grant has its own slot, so follow the
+-- most recently published credential whose grant is still live;
 -- GetSpeakeasyEMAGrant and the sign-in judge still validate its live authority.
 SELECT s.jti FROM remote_session_ema_credentials c
 JOIN user_sessions s ON s.id = c.user_session_id AND s.organization_id = c.organization_id
@@ -5485,7 +5488,22 @@ WHERE c.organization_id = @organization_id AND c.project_id = @project_id
   AND c.user_session_issuer_id = @user_session_issuer_id
   AND c.remote_session_issuer_id = @remote_session_issuer_id AND c.remote_session_client_id = @remote_session_client_id
   AND c.resource = @resource AND c.subject_urn = @subject_urn
-  AND c.ema_provider = 'speakeasy' AND c.deleted IS FALSE;
+  AND c.user_session_id IS NOT NULL
+  AND c.ema_provider = 'speakeasy' AND c.deleted IS FALSE
+  AND s.deleted IS FALSE AND s.refresh_expires_at > clock_timestamp()
+ORDER BY c.updated_at DESC, c.id DESC
+LIMIT 1;
+
+-- name: RetireLegacyEMACredentialSlot :exec
+-- Only while remote_session_ema_credentials_subject_key still exists: it allows
+-- one live row per subject, so a new grant's slot replaces the old one as before.
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
+  AND user_session_issuer_id = @user_session_issuer_id::uuid
+  AND remote_session_client_id = @remote_session_client_id::uuid
+  AND resource = @resource::text AND subject_urn = @subject_urn::text
+  AND deleted IS FALSE;
 
 -- name: ListEMAChainingResourceCandidates :many
 -- Diagnostic candidates only: an origin match can retain a configuration error

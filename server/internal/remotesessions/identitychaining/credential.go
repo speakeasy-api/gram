@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -106,7 +108,7 @@ func (c *Chainer) publish(ctx context.Context, logger *slog.Logger, req Request,
 		if err := c.checkSpeakeasyPublish(ctx, tx, req, sel); err != nil {
 			return err
 		}
-		_, err = q.UpsertSpeakeasyEMACredential(ctx, repo.UpsertSpeakeasyEMACredentialParams{
+		err = upsertSpeakeasyCredential(ctx, tx, repo.UpsertSpeakeasyEMACredentialParams{
 			OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, UserSessionIssuerID: req.UserSessionIssuerID,
 			RemoteSessionIssuerID: sel.remoteIssuerID, RemoteSessionClientID: sel.clientID, Resource: sel.resource,
 			SubjectUrn: urn.NewUserSubject(req.UserID).String(), BindingID: sel.bindingID, BindingGeneration: sel.generation,
@@ -145,6 +147,43 @@ func (c *Chainer) publish(ctx context.Context, logger *slog.Logger, req Request,
 		return fmt.Errorf("commit chained credential: %w", err)
 	}
 	return nil
+}
+
+// legacySubjectKey allows one live credential per subject regardless of
+// provider or grant. Drop the fallback below with the index.
+const legacySubjectKey = "remote_session_ema_credentials_subject_key"
+
+// upsertSpeakeasyCredential writes the grant's own slot. While the legacy
+// index exists, another grant's or provider's live row blocks that slot, so it
+// is retired and the write retried, matching the old replace-on-publish.
+func upsertSpeakeasyCredential(ctx context.Context, tx pgx.Tx, params repo.UpsertSpeakeasyEMACredentialParams) error {
+	sp, err := tx.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin Speakeasy credential savepoint: %w", err)
+	}
+	_, err = repo.New(sp).UpsertSpeakeasyEMACredential(ctx, params)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation || pgErr.ConstraintName != legacySubjectKey {
+		if err != nil {
+			return errors.Join(err, sp.Rollback(ctx))
+		}
+		if err := sp.Commit(ctx); err != nil {
+			return fmt.Errorf("release Speakeasy credential savepoint: %w", err)
+		}
+		return nil
+	}
+	if err := sp.Rollback(ctx); err != nil {
+		return fmt.Errorf("roll back Speakeasy credential savepoint: %w", err)
+	}
+	q := repo.New(tx)
+	if err := q.RetireLegacyEMACredentialSlot(ctx, repo.RetireLegacyEMACredentialSlotParams{
+		OrganizationID: params.OrganizationID, ProjectID: params.ProjectID, UserSessionIssuerID: params.UserSessionIssuerID,
+		RemoteSessionClientID: params.RemoteSessionClientID, Resource: params.Resource, SubjectUrn: params.SubjectUrn,
+	}); err != nil {
+		return fmt.Errorf("retire legacy EMA credential slot: %w", err)
+	}
+	_, err = q.UpsertSpeakeasyEMACredential(ctx, params)
+	return err
 }
 
 // storedScopes keeps NOT NULL array columns non-NULL for empty scope sets.

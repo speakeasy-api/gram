@@ -5599,8 +5599,8 @@ FROM remote_session_ema_credentials c
 WHERE c.organization_id = $11::text AND c.project_id = $12
   AND c.user_session_issuer_id = $13
   AND c.remote_session_client_id = $14 AND c.resource = $15
-  AND c.subject_urn = $16 AND c.deleted IS FALSE
-  AND c.ema_provider = 'speakeasy'
+  AND c.subject_urn = $16 AND c.user_session_id = $9::uuid
+  AND c.deleted IS FALSE AND c.ema_provider = 'speakeasy'
 `
 
 type GetSpeakeasyEMACredentialForUseParams struct {
@@ -5737,7 +5737,11 @@ WHERE c.organization_id = $1 AND c.project_id = $2
   AND c.user_session_issuer_id = $3
   AND c.remote_session_issuer_id = $4 AND c.remote_session_client_id = $5
   AND c.resource = $6 AND c.subject_urn = $7
+  AND c.user_session_id IS NOT NULL
   AND c.ema_provider = 'speakeasy' AND c.deleted IS FALSE
+  AND s.deleted IS FALSE AND s.refresh_expires_at > clock_timestamp()
+ORDER BY c.updated_at DESC, c.id DESC
+LIMIT 1
 `
 
 type GetSpeakeasyEMAStoredGrantParams struct {
@@ -5750,7 +5754,8 @@ type GetSpeakeasyEMAStoredGrantParams struct {
 	SubjectUrn            string
 }
 
-// Status has no authenticated MCP JTI. Follow only this credential's retained grant;
+// Status has no authenticated MCP JTI. Each grant has its own slot, so follow the
+// most recently published credential whose grant is still live;
 // GetSpeakeasyEMAGrant and the sign-in judge still validate its live authority.
 func (q *Queries) GetSpeakeasyEMAStoredGrant(ctx context.Context, arg GetSpeakeasyEMAStoredGrantParams) (string, error) {
 	row := q.db.QueryRow(ctx, getSpeakeasyEMAStoredGrant,
@@ -11663,6 +11668,39 @@ func (q *Queries) RetireEMACredential(ctx context.Context, arg RetireEMACredenti
 	return err
 }
 
+const retireLegacyEMACredentialSlot = `-- name: RetireLegacyEMACredentialSlot :exec
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND user_session_issuer_id = $3::uuid
+  AND remote_session_client_id = $4::uuid
+  AND resource = $5::text AND subject_urn = $6::text
+  AND deleted IS FALSE
+`
+
+type RetireLegacyEMACredentialSlotParams struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	Resource              string
+	SubjectUrn            string
+}
+
+// Only while remote_session_ema_credentials_subject_key still exists: it allows
+// one live row per subject, so a new grant's slot replaces the old one as before.
+func (q *Queries) RetireLegacyEMACredentialSlot(ctx context.Context, arg RetireLegacyEMACredentialSlotParams) error {
+	_, err := q.db.Exec(ctx, retireLegacyEMACredentialSlot,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+	)
+	return err
+}
+
 const revokeOrganizationRemoteSession = `-- name: RevokeOrganizationRemoteSession :one
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp(),
@@ -14787,7 +14825,8 @@ WHERE EXISTS (
           AND u.workos_deleted_at IS NULL AND m.deleted IS FALSE
       )
   )
-ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn)
+  WHERE deleted IS FALSE AND ema_provider = 'external'
 DO UPDATE SET
   ema_provider = 'external',
   internal_session_issuer_id = NULL,
@@ -15025,7 +15064,8 @@ WHERE EXISTS (
     AND (rc.project_id = b.project_id OR (rc.project_id IS NULL AND rc.organization_id = b.organization_id))
     AND (ri.project_id = b.project_id OR (ri.project_id IS NULL AND (ri.organization_id = b.organization_id OR ri.organization_id IS NULL)))
 )
-ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn, user_session_id)
+  WHERE deleted IS FALSE AND ema_provider = 'speakeasy'
 DO UPDATE SET
   organization_id = EXCLUDED.organization_id,
   remote_session_issuer_id = EXCLUDED.remote_session_issuer_id,
@@ -15073,7 +15113,7 @@ type UpsertSpeakeasyEMACredentialParams struct {
 
 // The caller locks the binding, sign-in and issuer and checks the exact
 // grant before this statement. Client changes during redemption still fence
-// publication.
+// publication. Each authenticated MCP grant keeps its own slot.
 func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSpeakeasyEMACredentialParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertSpeakeasyEMACredential,
 		arg.OrganizationID,

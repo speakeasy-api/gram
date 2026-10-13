@@ -241,6 +241,31 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	_, outcome = chainer.Acquire(ctx, f.req)
 	require.True(t, outcome.Succeeded(), "%+v", outcome)
 	require.EqualValues(t, 1, calls.Load(), "cached token is reused")
+	// A second live grant for the same human. While the legacy one-slot
+	// index exists, its publish replaces the first grant's slot.
+	second := f.req
+	second.UserSessionJTI = uuid.NewString()
+	_, err = usersessionsrepo.New(f.db).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{UserSessionIssuerID: f.req.UserSessionIssuerID, SubjectUrn: urn.NewUserSubject(f.req.UserID), Jti: second.UserSessionJTI, RefreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), ExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), SignInID: signIn.ID, SignInUserID: conv.ToPGText(f.req.UserID)})
+	require.NoError(t, err)
+	_, outcome = chainer.Acquire(ctx, second)
+	checkExchange()
+	require.True(t, outcome.Succeeded(), "%+v", outcome)
+	require.EqualValues(t, 2, calls.Load())
+	require.False(t, chainer.HasUsableCredential(ctx, f.req), "the legacy index keeps one slot per subject")
+	// Once the legacy index is dropped, each grant keeps its own slot.
+	_, err = f.db.Exec(ctx, "DROP INDEX remote_session_ema_credentials_subject_key")
+	require.NoError(t, err)
+	_, outcome = chainer.Acquire(ctx, f.req)
+	checkExchange()
+	require.True(t, outcome.Succeeded(), "%+v", outcome)
+	require.EqualValues(t, 3, calls.Load())
+	require.True(t, chainer.HasUsableCredential(ctx, f.req))
+	require.True(t, chainer.HasUsableCredential(ctx, second), "another grant's publish never evicts this one")
+	for _, r := range []Request{f.req, second} {
+		_, outcome = chainer.Acquire(ctx, r)
+		require.True(t, outcome.Succeeded(), "%+v", outcome)
+	}
+	require.EqualValues(t, 3, calls.Load(), "each grant reuses its own cached token")
 	wrongOrigin, err := url.Parse("https://other-deployment.example.test")
 	require.NoError(t, err)
 	for _, cfg := range []internalsessionissuers.SignerConfig{
@@ -265,7 +290,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 		selection, resolved, _ := governor.ProviderSelection(ctx, f.req)
 		require.True(t, resolved)
 		require.Equal(t, remotesessions.EMAProviderSigningUnavailable, selection.Provider.Unavailable)
-		require.EqualValues(t, 1, calls.Load())
+		require.EqualValues(t, 3, calls.Load())
 	}
 	chainer.SetSpeakeasyIssuer(gate, signer, flags)
 	governor.SetSpeakeasyIssuer(gate, signer, flags)
@@ -330,7 +355,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.Equal(t, ReasonStaleConfiguration, outcome.Reason, "revocation during redemption discards the token")
 	require.False(t, chainer.HasUsableCredential(ctx, f.req))
 	require.False(t, chainer.HasUsableCredential(ctx, preGrant), "status cannot revive a revoked retained grant")
-	require.EqualValues(t, 2, calls.Load())
+	require.EqualValues(t, 4, calls.Load())
 	require.Equal(t, ReasonReauthenticationRequired, chainer.CheckConsent(ctx, preGrant, signIn.ID.UUID).Reason, "revoked consent is not eligible")
 
 }
