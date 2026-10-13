@@ -213,6 +213,18 @@
               "help": ""
             },
             {
+              "type": "server_attachment",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
               "type": "checklist_item",
               "markdown": "",
               "src": "",

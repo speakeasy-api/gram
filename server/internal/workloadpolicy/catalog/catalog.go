@@ -109,6 +109,11 @@ const (
 	// BlockComputed shows one value Speakeasy derives, with a copy button.
 	BlockComputed BlockType = "computed"
 
+	// BlockServerAttachment attaches one MCP server to the selected user
+	// session issuer, so the platform's tokens reach it, and says whether the
+	// chosen agent may connect to that server.
+	BlockServerAttachment BlockType = "server_attachment"
+
 	// BlockChecklistItem is one thing to do in the platform's console, with a
 	// checkbox the operator ticks as they go: a console field and the value
 	// Speakeasy derives for it, or a field or control and what to do with it.
@@ -126,7 +131,7 @@ const (
 // platformBlocks are the blocks a catalog platform's guided setup may use.
 var platformBlocks = []BlockType{
 	BlockText, BlockImage, BlockLink, BlockField, BlockSubjectRule, BlockAgentPicker,
-	BlockTags, BlockComputedStatus, BlockComputed, BlockChecklistItem,
+	BlockTags, BlockComputedStatus, BlockComputed, BlockServerAttachment, BlockChecklistItem,
 }
 
 // Computed values a definition may place. Each is derived by the server, the
@@ -661,7 +666,7 @@ func validateBlock(b Block, allowed []BlockType, variables map[string]Variable) 
 		if strings.TrimSpace(b.Label) == "" {
 			return fmt.Errorf("input %s needs a label", b.Field)
 		}
-	case BlockSubjectRule, BlockAgentPicker, BlockTags, BlockComputedStatus, BlockWildcardCaution:
+	case BlockSubjectRule, BlockAgentPicker, BlockTags, BlockComputedStatus, BlockServerAttachment, BlockWildcardCaution:
 	default:
 		return fmt.Errorf("unknown block type %q", b.Type)
 	}

@@ -486,7 +486,7 @@ var WorkloadPlatformBlock = Type("WorkloadPlatformBlock", func() {
 	Description("One piece of a guided setup step. Which fields are set depends on type; the rest are empty.")
 
 	Attribute("type", String, "The kind of content.", func() {
-		Enum("text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "checklist_item")
+		Enum("text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "server_attachment", "checklist_item")
 	})
 	Attribute("markdown", String, "A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.")
 	Attribute("src", String, "An image's path on the dashboard's origin.")

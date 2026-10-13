@@ -1653,11 +1653,24 @@ BEGIN
     (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, demo_org, 'acme-agent-gateway',
      'interactive', make_interval(secs => 14 * 24 * 60 * 60));
 
+  -- An organization-owned shared authorization server, the kind the Access
+  -- Hub's guided setup creates: one token endpoint at /oauth/usi/<id> for
+  -- every MCP server attached to it. The pin is left NULL so the issuer URL
+  -- derives from whichever server URL this deployment serves, and Acme
+  -- Support Tools is attached so the setup shows an attached server.
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration,
+                                    authorization_server_mode) VALUES
+    (demo.det_uuid('gram-demo-issuer-shared'), NULL, demo_org,
+     'shared-authorization-server', 'interactive',
+     make_interval(secs => 14 * 24 * 60 * 60), 'shared');
+
   INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                            remote_mcp_server_id, user_session_issuer_id,
                            visibility) VALUES
     (demo.det_uuid('gram-demo-mcpserver-support'), proj_a, 'Acme Support Tools',
-     'acme-support-tools', toolset_1, NULL, NULL, 'private'),
+     'acme-support-tools', toolset_1, NULL,
+     demo.det_uuid('gram-demo-issuer-shared'), 'private'),
     (demo.det_uuid('gram-demo-mcpserver-ops'), proj_a, 'Acme Ops', 'acme-ops',
      toolset_2, NULL, NULL, 'private'),
     (demo.det_uuid('gram-demo-mcpserver-linear'), proj_a, 'Linear', 'linear',
@@ -3863,8 +3876,17 @@ Channel context stays in the Raw view.
 
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE organization_id = demo_org AND project_id IS NULL AND deleted IS FALSE;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 organization user session issuers, found %', stray;
+  END IF;
+
+  -- The shared authorization server stays in shared mode with one attached
+  -- server, so the Access Hub's guided setup lists a token endpoint.
+  SELECT count(*) INTO stray FROM mcp_servers
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND user_session_issuer_id = demo.det_uuid('gram-demo-issuer-shared');
   IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 organization user session issuer, found %', stray;
+    RAISE EXCEPTION 'demo seed postflight: expected 1 MCP server on the shared authorization server, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_clients

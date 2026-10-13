@@ -474,6 +474,16 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     wildcard would admit anyone able to push a branch. On `Acme CI`, open
     **+ Allow a machine** and type a subject ending in `*`: the warning appears
     in destructive red under the field and **Allow machine** stays disabled.
+    Back on **Catalog**, open **Claude Tag**, click **Set one up**, and follow
+    the steps with any organization ID and an existing agent through
+    **Connect Claude Tag**. The **Connect an authorization server** step
+    selects the organization's `shared-authorization-server` issuer, shows its
+    token endpoint and issuer URL, lists `Acme Support Tools (Default)` as
+    attached, and offers to attach another server; no "Create authorization
+    server" button appears, since an issuer already serves a token endpoint.
+    In the retargeted local organization, choosing a server that already uses
+    another authorization server and clicking **Attach server** opens the
+    "Change this server's authorization server?" warning first.
 
 26. **Explore widgets** — open `/<org>/projects/default/explore` and click
     the **Widgets** tab, which shows a count of 5. Five widgets, most

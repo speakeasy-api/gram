@@ -44,6 +44,7 @@ import {
   VariableField,
   type Option,
 } from "./SetupBlocks";
+import { ServerAttachment } from "./ServerAttachment";
 import { useSetupValues } from "./setupValues";
 import {
   stepComplete,
@@ -281,6 +282,14 @@ export function PlatformSetupSheet({
     ),
     tags: () => <TagsField tags={tags} onChange={setTags} />,
     computed_status: () => <ComputedStatus setupValues={setupValues} />,
+    server_attachment: () => (
+      <ServerAttachment
+        issuerId={setupValues.selectedEndpointId}
+        issuerProjectId={setupValues.selectedEndpointProjectId}
+        agentId={agentId}
+        agentName={agents.find((agent) => agent.id === agentId)?.name ?? null}
+      />
+    ),
     computed: (block) => (
       <LabeledValue
         label={block.label}

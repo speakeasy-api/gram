@@ -7081,8 +7081,8 @@ func ValidateWorkloadPlatformBlockResponseBody(body *WorkloadPlatformBlockRespon
 		err = goa.MergeErrors(err, goa.MissingFieldError("help", "body"))
 	}
 	if body.Type != nil {
-		if !(*body.Type == "text" || *body.Type == "image" || *body.Type == "link" || *body.Type == "field" || *body.Type == "subject_rule" || *body.Type == "agent_picker" || *body.Type == "tags" || *body.Type == "computed_status" || *body.Type == "computed" || *body.Type == "checklist_item") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "checklist_item"}))
+		if !(*body.Type == "text" || *body.Type == "image" || *body.Type == "link" || *body.Type == "field" || *body.Type == "subject_rule" || *body.Type == "agent_picker" || *body.Type == "tags" || *body.Type == "computed_status" || *body.Type == "computed" || *body.Type == "server_attachment" || *body.Type == "checklist_item") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"text", "image", "link", "field", "subject_rule", "agent_picker", "tags", "computed_status", "computed", "server_attachment", "checklist_item"}))
 		}
 	}
 	if body.Value != nil {

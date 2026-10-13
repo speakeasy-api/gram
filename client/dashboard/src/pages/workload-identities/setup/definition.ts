@@ -76,6 +76,7 @@ export type SetupBlock =
   | { type: "tags" }
   | { type: "computed_status" }
   | { type: "computed"; value: ComputedValueKey; label: string; help?: string }
+  | { type: "server_attachment" }
   | ChecklistItemBlock;
 
 /**

@@ -101,6 +101,8 @@ function toSetupBlock(block: WorkloadPlatformBlock): SetupBlock[] {
       return [{ type: "tags" }];
     case "computed_status":
       return [{ type: "computed_status" }];
+    case "server_attachment":
+      return [{ type: "server_attachment" }];
     case "computed":
       if (block.value === "") return [];
       return [

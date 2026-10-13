@@ -367,7 +367,7 @@ func validateCustomBlock(b Block, contract flowContract, placed map[FormField]bo
 		if !contract.wildcardCaution {
 			return errors.New("wildcard_caution is not allowed in this flow")
 		}
-	case BlockText, BlockLink, BlockImage, BlockField, BlockSubjectRule, BlockComputedStatus, BlockComputed, BlockChecklistItem:
+	case BlockText, BlockLink, BlockImage, BlockField, BlockSubjectRule, BlockComputedStatus, BlockComputed, BlockServerAttachment, BlockChecklistItem:
 	}
 	return nil
 }
@@ -385,7 +385,7 @@ func customBlockProperties(t BlockType) []string {
 		return []string{"field", "format", "label", "placeholder", "help", "multiline", "read_only"}
 	case BlockAgentPicker, BlockTags:
 		return []string{"label", "placeholder", "help"}
-	case BlockWildcardCaution, BlockImage, BlockField, BlockSubjectRule, BlockComputedStatus, BlockComputed, BlockChecklistItem:
+	case BlockWildcardCaution, BlockImage, BlockField, BlockSubjectRule, BlockComputedStatus, BlockComputed, BlockServerAttachment, BlockChecklistItem:
 		return nil
 	}
 	return nil
