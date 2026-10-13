@@ -9,8 +9,11 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useAiDetections } from "@gram/client/react-query/aiDetections.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
@@ -88,12 +91,57 @@ function AIToolGroupEmptyState({
 }): JSX.Element {
   if (failed) {
     return (
-      <Text small muted className="block px-4 py-6">
-        Detected {noun} could not be loaded. Reload to try again.
-      </Text>
+      <Alert variant="error" className="m-4 w-auto">
+        <AlertDescription>
+          Detected {noun} could not be loaded. Reload to try again.
+        </AlertDescription>
+      </Alert>
     );
   }
   return <ShadowAISetupEmptyState heading={`No ${noun} detected yet`} />;
+}
+
+/** The MCP servers group: the inventory table once the policy set, members
+ *  and roles are known, a skeleton meanwhile, and an error when the policy
+ *  list failed, since the decide sheet picks its write path from that set and
+ *  a failed read must not pass for "no policy". */
+function MCPServersGroupBody({
+  policiesFailed,
+  ready,
+  members,
+  roles,
+  policies,
+  projectId,
+  onOpenServer,
+}: {
+  policiesFailed: boolean;
+  ready: boolean;
+  members: AccessMember[];
+  roles: Role[];
+  policies: RiskPolicy[] | undefined;
+  projectId: string;
+  onOpenServer: (server: ShadowMCPInventoryServer) => void;
+}): JSX.Element {
+  if (policiesFailed) {
+    return (
+      <Alert variant="error">
+        <AlertDescription>
+          The project's policies could not be loaded, so MCP server decisions
+          are unavailable. Reload to try again.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  if (!ready) return <SkeletonTable />;
+  return (
+    <ShadowMCPInventoryTable
+      members={members}
+      onOpenServer={onOpenServer}
+      projectID={projectId}
+      roles={roles}
+      shadowMCPPolicies={eligibleShadowMCPAllowRulePolicies(policies)}
+    />
+  );
 }
 
 /** What "unreviewed" means under this policy, said once above the groups. The
@@ -208,26 +256,17 @@ export function ToolDecisionsSection({
           />
           {expanded[MCP_GROUP_KEY] ? (
             <div className="border-border border-t px-4 py-4">
-              {policiesQuery.isError ? (
-                <Text small muted className="block py-2">
-                  The project's policies could not be loaded, so MCP server
-                  decisions are unavailable. Reload to try again.
-                </Text>
-              ) : mcpReady ? (
-                <ShadowMCPInventoryTable
-                  members={membersQuery.data?.members ?? []}
-                  onOpenServer={(server) =>
-                    routes.shadowAI.mcps.detail.goTo(server.serverSlug)
-                  }
-                  projectID={project.id}
-                  roles={rolesQuery.data?.roles ?? []}
-                  shadowMCPPolicies={eligibleShadowMCPAllowRulePolicies(
-                    policiesQuery.data?.policies,
-                  )}
-                />
-              ) : (
-                <SkeletonTable />
-              )}
+              <MCPServersGroupBody
+                policiesFailed={policiesQuery.isError}
+                ready={mcpReady}
+                members={membersQuery.data?.members ?? []}
+                roles={rolesQuery.data?.roles ?? []}
+                policies={policiesQuery.data?.policies}
+                projectId={project.id}
+                onOpenServer={(server) =>
+                  routes.shadowAI.mcps.detail.goTo(server.serverSlug)
+                }
+              />
             </div>
           ) : null}
         </div>

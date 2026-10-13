@@ -25,13 +25,18 @@ export function SegmentedControl<T extends string>({
   options,
   disabled,
   className,
+  ariaLabel,
   trailing,
 }: {
-  value: T;
+  /** The active segment; null leaves every segment inactive, for a choice
+   *  that has not been made yet. */
+  value: T | null;
   onChange: (value: T) => void;
   options: { value: T; label: ReactNode; tooltip?: string }[];
   disabled?: boolean;
   className?: string;
+  /** Names the control as a group for assistive technology. */
+  ariaLabel?: string;
   // An extra control pinned inside the track after the options — for a set too
   // long to segment, where the tail lives behind an overflow menu. Style it with
   // SEGMENT_BASE + SEGMENT_INACTIVE so it reads as one of the segments.
@@ -39,6 +44,8 @@ export function SegmentedControl<T extends string>({
 }): JSX.Element {
   return (
     <div
+      role={ariaLabel ? "group" : undefined}
+      aria-label={ariaLabel}
       className={cn(
         "border-border bg-card divide-border inline-flex h-10 shrink-0 items-center divide-x border",
         disabled && "cursor-not-allowed opacity-50",

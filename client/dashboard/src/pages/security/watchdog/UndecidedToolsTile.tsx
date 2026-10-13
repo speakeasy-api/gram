@@ -1,44 +1,52 @@
-import { StatTile } from "@/components/chart/stat-tile";
+import { StatTile, type StatTileProps } from "@/components/chart/stat-tile";
 import { pluralize } from "@/lib/format";
 import { useRoutes } from "@/routes";
-import { useUndecidedToolCount } from "../shadow-ai/use-undecided-tool-count";
+import {
+  type UndecidedToolCount,
+  useUndecidedToolCount,
+} from "../shadow-ai/use-undecided-tool-count";
 
 const UNDECIDED_TOOLS_TOOLTIP =
   "Harnesses and assistants the device agent found, and MCP servers seen in agent traffic, that nobody has approved or disallowed yet. Decide in the Shadow AI policy under Guardrails.";
+
+/** What the tile shows for a count: a dash when a read failed (unknown is
+ *  not zero), a floor when the inventory has more pages, the number
+ *  otherwise. */
+function tileFacts(
+  undecided: UndecidedToolCount,
+): Pick<StatTileProps, "value" | "displayValue" | "subtext" | "tone"> {
+  if (undecided.isError) {
+    return {
+      value: 0,
+      displayValue: "–",
+      subtext: "could not be loaded",
+      tone: "neutral",
+    };
+  }
+  const breakdown = `${pluralize(undecided.aiTools, "tool")}, ${pluralize(undecided.mcpServers, "MCP server")}`;
+  return {
+    value: undecided.total,
+    displayValue: undecided.truncated ? `${undecided.total}+` : undefined,
+    subtext: undecided.truncated ? `${breakdown} on the first page` : breakdown,
+    tone: undecided.total > 0 ? "warning" : "neutral",
+  };
+}
 
 /** The Watchdog tile for the Shadow AI backlog. Rendered only while the
  *  Shadow AI fold-in is on, so its reads run only where they are shown. */
 export function UndecidedToolsTile(): JSX.Element {
   const routes = useRoutes();
   const undecided = useUndecidedToolCount();
-  if (undecided.isError) {
-    return (
-      <StatTile
-        title="AI tools without a decision"
-        tooltip={UNDECIDED_TOOLS_TOOLTIP}
-        value={0}
-        displayValue="–"
-        tone="neutral"
-        icon="laptop"
-        subtext="could not be loaded"
-        link={routes.policyCenter.href()}
-        linkText="Review"
-      />
-    );
-  }
   return (
     <StatTile
       title="AI tools without a decision"
       tooltip={UNDECIDED_TOOLS_TOOLTIP}
-      value={undecided.total}
       format="number"
-      displayValue={undecided.truncated ? `${undecided.total}+` : undefined}
-      tone={undecided.total > 0 ? "warning" : "neutral"}
       icon="laptop"
-      isRefreshing={undecided.isPending}
-      subtext={`${pluralize(undecided.aiTools, "tool")}, ${pluralize(undecided.mcpServers, "MCP server")}${undecided.truncated ? " on the first page" : ""}`}
+      isRefreshing={!undecided.isError && undecided.isPending}
       link={routes.policyCenter.href()}
       linkText="Review"
+      {...tileFacts(undecided)}
     />
   );
 }

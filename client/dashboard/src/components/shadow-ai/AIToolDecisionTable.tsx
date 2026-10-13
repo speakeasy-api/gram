@@ -2,7 +2,7 @@ import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { AIToolIcon } from "@/components/ai-tools/AIToolIcon";
 import { SignalBadges } from "@/components/shadow-ai/SignalBadges";
 import { accessOf } from "@/components/shadow-ai/access";
-import { ToggleButton } from "@/components/ui/SegmentedControl";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -16,6 +16,11 @@ import { CircleDashed } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { aiToolDecisionOf, nextAIToolDecision } from "./ai-tool-decision";
+
+const DECISION_OPTIONS: { value: "approved" | "blocked"; label: string }[] = [
+  { value: "approved", label: "Approve" },
+  { value: "blocked", label: "Disallow" },
+];
 
 const INVENTORY_ONLY_REASON =
   "This tool never identifies itself to the MCP gateway, so a decision about it would have nothing to enforce. It is listed for inventory.";
@@ -77,25 +82,13 @@ function AIToolDecisionControl({
 
   return (
     <div className="flex items-center gap-3">
-      <div
-        role="group"
-        aria-label={`Access decision for ${detection.displayName}`}
-        className="border-border bg-card divide-border inline-flex h-7 items-center divide-x border"
-        aria-busy={mutation.isPending}
-      >
-        <ToggleButton
-          active={current === "approved"}
-          onClick={() => record("approved")}
-        >
-          Approve
-        </ToggleButton>
-        <ToggleButton
-          active={current === "blocked"}
-          onClick={() => record("blocked")}
-        >
-          Disallow
-        </ToggleButton>
-      </div>
+      <SegmentedControl
+        ariaLabel={`Access decision for ${detection.displayName}`}
+        className="h-7"
+        value={current === "unreviewed" ? null : current}
+        onChange={record}
+        options={DECISION_OPTIONS}
+      />
       {current === "unreviewed" ? (
         <SimpleTooltip tooltip="No decision recorded. The tool connects until you disallow it.">
           <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">

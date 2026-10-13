@@ -335,6 +335,12 @@ function FindingDetail({
   // list under Guardrails rather than a page of its own.
   const shadowAIFolded =
     useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
+  const inventoryHref = shadowAIFolded
+    ? routes.policyCenter.href()
+    : routes.shadowAI.mcps.href();
+  const inventoryLabel = shadowAIFolded
+    ? "Open Shadow AI in Guardrails"
+    : "Open Shadow MCP inventory";
   // Payload reveals need unrestricted chat:read; chat reveals follow the chat.
   const canReveal = hasScope(
     REVEAL_SCOPE,
@@ -513,16 +519,8 @@ function FindingDetail({
           )}
           {kind === "shadow" && (
             <Button asChild variant="secondary">
-              <Link
-                to={
-                  shadowAIFolded
-                    ? routes.policyCenter.href()
-                    : routes.shadowAI.mcps.href()
-                }
-              >
-                {shadowAIFolded
-                  ? "Open Shadow AI in Guardrails"
-                  : "Open Shadow MCP inventory"}
+              <Link to={inventoryHref}>
+                {inventoryLabel}
                 <ArrowRight className="size-4" />
               </Link>
             </Button>
