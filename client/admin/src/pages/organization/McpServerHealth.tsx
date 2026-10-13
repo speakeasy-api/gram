@@ -540,3 +540,156 @@ function ToolCallsCard({
 function rangeLabel({ from, to }: { from: Date; to: Date }): string {
   return `${fmtBucketDay(from)} – ${fmtDate(to)}`;
 }
+
+// A stand-in column, never shown, that gives an empty plot the height of a
+// full one.
+const SPACER_POINT: AdminMcpServerToolCallBucket = {
+  bucketStart: new Date(0),
+  total: 0,
+  failed: 0,
+};
+
+function ToolCallsChart({
+  state,
+  window,
+  range,
+  prompt,
+}: {
+  state: ToolCallsState;
+  window: HealthWindow;
+  range: { from: Date; to: Date };
+  prompt: { serverName: string; serverId: string; projectName: string };
+}): JSX.Element {
+  const toolCalls = state.status === "ready" ? state.toolCalls : undefined;
+  const points = toolCalls?.daily ?? [];
+  // Before the answer lands, the window says which bucket it will use.
+  const weekly = toolCalls
+    ? (toolCalls.bucketSeconds ?? 86_400) >= 7 * 86_400
+    : window === 90;
+  const perSquare = callsPerSquare(points);
+  const total = points.reduce((sum, p) => sum + p.total, 0);
+  const failed = points.reduce((sum, p) => sum + p.failed, 0);
+  const share = total === 0 ? 0 : failed / total;
+  const worst = worstBucket(points);
+  // Past fifteen columns every label will not fit, so every other one shows.
+  const labelEvery = points.length > 15 ? 2 : 1;
+  const unit = weekly ? "week" : "day";
+
+  let summary = worst
+    ? `${failed} of ${total} calls failed; the worst ${unit} was ${bucketName(worst, weekly)} with ${worst.failed} of ${worst.total}.`
+    : `${total} calls, none failed.`;
+  let message: ReactNode;
+  if (state.status === "loading") {
+    summary = "Loading.";
+    message = "Loading tool calls...";
+  } else if (state.status === "error") {
+    summary = "Tool calls couldn't be loaded.";
+    message = <LoadFailed what="Tool calls" onRetry={state.retry} />;
+  } else if (total === 0) {
+    message = "No calls reached the server directly in this window.";
+  }
+
+  return (
+    <section className={CARD} aria-labelledby="tool-calls-chart">
+      <div className={CARD_HEAD}>
+        <h2 id="tool-calls-chart" className={CARD_TITLE}>
+          Tool calls per {unit}
+        </h2>
+        <span className={cn(MUTED, "text-xs")}>
+          {rangeLabel(range)}
+          {toolCalls?.watermark &&
+            ` · data as of ${fmtDateTime(toolCalls.watermark)}`}
+        </span>
+      </div>
+      <div className="flex flex-col gap-5 px-5 pt-4 pb-7">
+        <div
+          className={cn(
+            MUTED,
+            "flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.8125rem]",
+          )}
+        >
+          <span>Calls reaching the server</span>
+          <span className="inline-flex items-center gap-1.5">
+            <Square ok />
+            OK{" "}
+            <span className="text-foreground tabular-nums">
+              {toolCalls ? total - failed : "—"}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Square />
+            Failed{" "}
+            <span className="text-foreground tabular-nums">
+              {toolCalls ? failed : "—"}
+            </span>
+            {toolCalls && ` · ${fmtShare(share)}`}
+          </span>
+          <span>
+            Each square is {perSquare === 1 ? "1 call" : `${perSquare} calls`}
+          </span>
+        </div>
+        {/* One plot for every state, so the page below it never moves:
+            columns are a fixed height whatever the busiest bucket holds, and
+            an empty window lays its message over the same empty plot. */}
+        <div className="relative mx-6">
+          <div
+            role="img"
+            aria-label={`Tool calls per ${unit}, ${rangeLabel(range)}. ${summary}`}
+            className={cn(
+              PLOT,
+              "flex items-end justify-between gap-1 overflow-x-auto px-6 pt-8 pb-4",
+            )}
+          >
+            {points.map((point, index) => (
+              <BucketColumn
+                key={point.bucketStart.toISOString()}
+                point={point}
+                perSquare={perSquare}
+                label={index % labelEvery === 0}
+                weekly={weekly}
+                spike={point === worst}
+              />
+            ))}
+            {points.length === 0 && (
+              <div aria-hidden="true" className="invisible">
+                <BucketColumn
+                  point={SPACER_POINT}
+                  perSquare={1}
+                  label
+                  weekly={false}
+                  spike={false}
+                />
+              </div>
+            )}
+          </div>
+          {/* Beside the plot rather than in it: an image's children are hidden
+            from assistive technology, and the retry has to be reachable. */}
+          {message && (
+            <div
+              className={cn(
+                MUTED,
+                "absolute inset-0 flex items-center justify-center text-sm",
+              )}
+            >
+              <div className="bg-card rounded-md px-2 py-1">{message}</div>
+            </div>
+          )}
+        </div>
+      </div>
+      <p className={cn(MUTED, "border-t px-5 pt-2.5 pb-3.5 text-xs")}>
+        The chart counts calls that reach the server directly. The Tool calls
+        total above also counts calls reported by client hooks, so it can be
+        higher. Failed means status 400 or above. A single failed call still
+        fills a red square. Tool errors returned inside a 200 response count as
+        OK.
+      </p>
+      <PromptBlock
+        prompt={adminMcpPrompt({
+          ...prompt,
+          range: rangeLabel(range),
+          worst: worst && bucketName(worst, weekly),
+        })}
+      />
+    </section>
+  );
+}
