@@ -138,8 +138,8 @@ export default function UploadOpenAPI(): JSX.Element {
                 <UploadAssetStep step={3}>
                   <UploadAssetStep.Indicator />
                   <UploadAssetStep.Header
-                    title="Generate Tools"
-                    description="The platform will generate tools for your API."
+                    title="Deploy"
+                    description="Deploys your API so its tools are available to MCP servers."
                   />
                   <UploadAssetStep.Content>
                     <DeployStep
