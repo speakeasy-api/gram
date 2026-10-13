@@ -36,6 +36,9 @@ func TestPGIntervalToDuration(t *testing.T) {
 		{"days and hours", pgtype.Interval{Microseconds: (6 * time.Hour).Microseconds(), Days: 1, Months: 0, Valid: true}, 30 * time.Hour, true},
 		{"months", pgtype.Interval{Microseconds: 0, Days: 0, Months: 1, Valid: true}, 0, false},
 		{"null", pgtype.Interval{Microseconds: 0, Days: 0, Months: 0, Valid: false}, 0, false},
+		{"days overflow", pgtype.Interval{Microseconds: 0, Days: 300_000, Months: 0, Valid: true}, 0, false},
+		{"microseconds overflow", pgtype.Interval{Microseconds: math.MaxInt64, Days: 0, Months: 0, Valid: true}, 0, false},
+		{"sum overflows", pgtype.Interval{Microseconds: (math.MaxInt64 / int64(time.Microsecond)) - 1, Days: 1, Months: 0, Valid: true}, 0, false},
 	} {
 		got, ok := conv.PGIntervalToDuration(tc.in)
 		require.Equal(t, tc.ok, ok, tc.name)

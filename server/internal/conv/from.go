@@ -237,12 +237,25 @@ func PtrToPGInterval(d *time.Duration) pgtype.Interval {
 
 // PGIntervalToDuration converts a pgtype.Interval to a time.Duration, counting
 // a day as 24 hours the way Postgres normalizes intervals. It reports false for
-// a NULL interval or one with a Months component, which has no fixed length.
+// a NULL interval, one with a Months component (which has no fixed length), or
+// one too large for a time.Duration.
 func PGIntervalToDuration(iv pgtype.Interval) (time.Duration, bool) {
 	if !iv.Valid || iv.Months != 0 {
 		return 0, false
 	}
-	return time.Duration(iv.Days)*24*time.Hour + time.Duration(iv.Microseconds)*time.Microsecond, true
+	const dayNanos = int64(24 * time.Hour)
+	const microNanos = int64(time.Microsecond)
+	days, micros := int64(iv.Days), iv.Microseconds
+	if days > math.MaxInt64/dayNanos || days < math.MinInt64/dayNanos ||
+		micros > math.MaxInt64/microNanos || micros < math.MinInt64/microNanos {
+		return 0, false
+	}
+	dayPart, microPart := days*dayNanos, micros*microNanos
+	if (microPart > 0 && dayPart > math.MaxInt64-microPart) ||
+		(microPart < 0 && dayPart < math.MinInt64-microPart) {
+		return 0, false
+	}
+	return time.Duration(dayPart + microPart), true
 }
 
 // PtrToPGInt8 converts an int pointer to a pgtype.Int8. If the pointer is nil,
