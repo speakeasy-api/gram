@@ -98,8 +98,12 @@ export function AppSidebar({
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
+  const isShadowAIFolded = !navAccess.has(routes.shadowAI.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
   const isAgentManagementEnabled = navAccess.has(routes.agents.url);
+  const isSignalsIntelligenceEnabled = navAccess.has(
+    routes.signalsIntelligence.url,
+  );
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
   // highlight and the page header always agree on the area. "Organization"
@@ -272,7 +276,11 @@ export function AppSidebar({
                   ]),
               { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.shadowAI, ...accessFor(routes.shadowAI) },
+              // Folded into Guardrails as the Shadow AI policy once the
+              // Shadow AI guardrails flag is on, mirroring useProjectNavRoutes.
+              ...(isShadowAIFolded
+                ? []
+                : [{ item: routes.shadowAI, ...accessFor(routes.shadowAI) }]),
             ]}
           />
 
@@ -283,13 +291,27 @@ export function AppSidebar({
             items={[
               { item: routes.costs, ...accessFor(routes.costs) },
               ...(isExploreEnabled
-                ? [{ item: routes.explore, ...accessFor(routes.explore) }]
+                ? [
+                    { item: routes.explore, ...accessFor(routes.explore) },
+                    {
+                      item: routes.dashboards,
+                      ...accessFor(routes.dashboards),
+                    },
+                  ]
                 : []),
               { item: routes.insights, ...accessFor(routes.insights) },
               {
                 item: routes.agentSessions,
                 ...accessFor(routes.agentSessions),
               },
+              ...(isSignalsIntelligenceEnabled
+                ? [
+                    {
+                      item: routes.signalsIntelligence,
+                      ...accessFor(routes.signalsIntelligence),
+                    },
+                  ]
+                : []),
               ...(isOrgMemoryEnabled
                 ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
                 : []),

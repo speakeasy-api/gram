@@ -12,6 +12,21 @@ import (
 type Key = attribute.Key
 
 const (
+	// SigintSensorIDKey identifies the sensor configuration responsible for an evaluation.
+	SigintSensorIDKey = attribute.Key("gram.sigint.sensor.id")
+
+	// SigintSensorModeKey identifies the sensor's classification mode.
+	SigintSensorModeKey = attribute.Key("gram.sigint.sensor.mode")
+
+	// ClassifierErrorKey preserves classifier failure details without input or provider bodies.
+	ClassifierErrorKey = attribute.Key("gram.classifier.error")
+
+	// SigintEventIDKey identifies the logical event independently of transport delivery.
+	SigintEventIDKey = attribute.Key("gram.sigint.event.id")
+
+	// SigintEventKindKey namespaces the event identity within its tenant.
+	SigintEventKindKey = attribute.Key("gram.sigint.event.kind")
+
 	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
 	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
 	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
@@ -389,10 +404,17 @@ const (
 	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
+	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
 	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
+
+	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
+	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
+	McpFallbackCanonicalWrapperKey    = attribute.Key("gram.mcp.fallback.canonical_wrapper")
+	McpFallbackToolsetCustomDomainKey = attribute.Key("gram.mcp.fallback.toolset_custom_domain")
+
 	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
 	// self-reported identity from the initialize handshake (or the
 	// per-request _meta hint). Untrusted client input: attribution only,
@@ -491,6 +513,12 @@ const (
 	OAuthResourceScopesSupportedKey = attribute.Key("gram.oauth.resource_scopes_supported")
 	// OAuthScopeSourceKey names which precedence step produced a login's scope request.
 	OAuthScopeSourceKey = attribute.Key("gram.oauth.scope_source")
+	// OAuthFederatedCallbackRejectReasonKey is why a federated IdP callback was rejected.
+	OAuthFederatedCallbackRejectReasonKey = attribute.Key("gram.oauth.federated_callback_reject_reason")
+	// OAuthResponseIssuerAdvertisedKey reports RFC 9207 iss support in issuer metadata.
+	OAuthResponseIssuerAdvertisedKey = attribute.Key("gram.oauth.response_issuer_advertised")
+	// OAuthScopeGrantedKey lists the scopes a token endpoint reported granting.
+	OAuthScopeGrantedKey = attribute.Key("gram.oauth.scope_granted")
 	// OAuthScopeUnadvertisedKey lists pinned scopes the resource's advertised list lacks.
 	OAuthScopeUnadvertisedKey = attribute.Key("gram.oauth.scope_unadvertised")
 	// OAuthResourceProbeOutcomeKey is how a login resolved its resource's metadata.
@@ -905,6 +933,7 @@ const (
 	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
 
 	RemoteMCPProxyInterceptorKey       = attribute.Key("gram.remote_mcp.proxy.interceptor")
+	RemoteMCPConfiguredHeaderNameKey   = attribute.Key("gram.remote_mcp.configured_header.name")
 	RemoteMCPProxyRemoteStatusCodeKey  = attribute.Key("gram.remote_mcp.proxy.remote_status_code")
 	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
@@ -949,7 +978,25 @@ const (
 )
 
 func WideEvent() attribute.KeyValue { return WideEventKey.Bool(true) }
-func SlogWideEvent() slog.Attr      { return slog.Bool(string(WideEventKey), true) }
+
+// SlogSigintSensorID identifies the sensor configuration responsible for an evaluation.
+func SlogSigintSensorID(v string) slog.Attr { return slog.String(string(SigintSensorIDKey), v) }
+
+// SlogSigintSensorMode identifies the sensor's classification mode.
+func SlogSigintSensorMode(v string) slog.Attr { return slog.String(string(SigintSensorModeKey), v) }
+
+// SlogClassifierError records the classifier's safe operation and question failures.
+func SlogClassifierError(err error) slog.Attr {
+	return slog.String(string(ClassifierErrorKey), err.Error())
+}
+
+// SlogSigintEventID identifies the logical event independently of transport delivery.
+func SlogSigintEventID(v string) slog.Attr { return slog.String(string(SigintEventIDKey), v) }
+
+// SlogSigintEventKind namespaces the event identity within its tenant.
+func SlogSigintEventKind(v string) slog.Attr { return slog.String(string(SigintEventKindKey), v) }
+
+func SlogWideEvent() slog.Attr { return slog.Bool(string(WideEventKey), true) }
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
 func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageKey), v.Error()) }
@@ -2055,6 +2102,18 @@ func SlogOAuthScopeSource[V ~string](v V) slog.Attr {
 	return slog.String(string(OAuthScopeSourceKey), string(v))
 }
 
+func SlogOAuthFederatedCallbackRejectReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthFederatedCallbackRejectReasonKey), string(v))
+}
+
+func SlogOAuthResponseIssuerAdvertised(v bool) slog.Attr {
+	return slog.Bool(string(OAuthResponseIssuerAdvertisedKey), v)
+}
+
+func SlogOAuthScopeGranted(v []string) slog.Attr {
+	return slog.Any(string(OAuthScopeGrantedKey), v)
+}
+
 func SlogOAuthScopeUnadvertised(v []string) slog.Attr {
 	return slog.Any(string(OAuthScopeUnadvertisedKey), v)
 }
@@ -2460,6 +2519,13 @@ func SlogUserSessionClientMigratedCount(v int64) slog.Attr {
 	return slog.Int64(string(UserSessionClientMigratedCountKey), v)
 }
 
+func RemoteMCPConfiguredHeaderName(v string) attribute.KeyValue {
+	return RemoteMCPConfiguredHeaderNameKey.String(v)
+}
+func SlogRemoteMCPConfiguredHeaderName(v string) slog.Attr {
+	return slog.String(string(RemoteMCPConfiguredHeaderNameKey), v)
+}
+
 func RemoteMCPServerID(v string) attribute.KeyValue { return RemoteMCPServerIDKey.String(v) }
 func SlogRemoteMCPServerID(v string) slog.Attr {
 	return slog.String(string(RemoteMCPServerIDKey), v)
@@ -2762,6 +2828,9 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
 
+func McpEndpointID(v string) attribute.KeyValue { return McpEndpointIDKey.String(v) }
+func SlogMcpEndpointID(v string) slog.Attr      { return slog.String(string(McpEndpointIDKey), v) }
+
 func MetaMcpServerID(v string) attribute.KeyValue   { return MetaMcpServerIDKey.String(v) }
 func SlogMetaMcpServerID(v string) slog.Attr        { return slog.String(string(MetaMcpServerIDKey), v) }
 func MetaMemberBackend(v string) attribute.KeyValue { return MetaMemberBackendKey.String(v) }
@@ -2806,6 +2875,21 @@ func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
 }
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
+func SlogMcpEntryPoint[V ~string](v V) slog.Attr {
+	return slog.String(string(McpEntryPointKey), string(v))
+}
+
+func SlogMcpFallbackRequestHost[V ~string](v V) slog.Attr {
+	return slog.String(string(McpFallbackRequestHostKey), string(v))
+}
+
+func SlogMcpFallbackCanonicalWrapper(v bool) slog.Attr {
+	return slog.Bool(string(McpFallbackCanonicalWrapperKey), v)
+}
+
+func SlogMcpFallbackToolsetCustomDomain[V ~string](v V) slog.Attr {
+	return slog.String(string(McpFallbackToolsetCustomDomainKey), string(v))
+}
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {
 	return McpKillswitchSurfaceKey.String(string(v))

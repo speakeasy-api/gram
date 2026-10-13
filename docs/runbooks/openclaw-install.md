@@ -266,7 +266,7 @@ rather than bolted on here.
   **respawns when killed**. Relevant when a customer asks what installing
   OpenClaw touches on a laptop.
 - `--dev` isolates state under `~/.openclaw-dev` on port 19001; `--profile
-<name>` isolates under `~/.openclaw-<name>`. Use one of these when testing so
+  <name>` isolates under `~/.openclaw-<name>`. Use one of these when testing so
   you do not disturb a real install.
 - **Plugins see gateway secrets.** `gateway_start` hands the plugin the full
   gateway config including `gateway.auth.token`. The provider scrubs

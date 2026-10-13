@@ -478,3 +478,42 @@ WHERE o.identity_provider_connection_id = @identity_provider_connection_id
       AND c.deleted IS FALSE AND c.token_endpoint_auth_method = 'client_secret_basic'
       AND c.client_id = @client_id
   );
+
+-- Organization-owned, unmanaged sign-in clients registered for the recorded
+-- Okta agent under the connection's issuer, with the active signing key.
+-- name: ListOktaSignInClients :many
+SELECT c.id, c.token_endpoint_auth_method, c.token_endpoint_auth_audience_format,
+  c.json_web_key_set_id, c.scope, c.callback_base_url,
+  k.kid AS active_kid, k.public_jwk AS active_public_jwk
+FROM remote_session_clients AS c
+LEFT JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.state = 'active'
+ AND k.deleted IS FALSE
+WHERE c.organization_id = @organization_id
+  AND c.project_id IS NULL
+  AND c.identity_provider_connection_id IS NULL
+  AND c.remote_session_issuer_id = @remote_session_issuer_id
+  AND c.client_id = @client_id
+  AND c.deleted IS FALSE
+ORDER BY c.id;
+
+-- Organization sign-in issuers that trust an unmanaged client of the connection's issuer.
+-- name: ListOktaSignInIssuerTrusts :many
+SELECT u.id, u.slug, c.id AS trusted_client_row_id, c.client_id AS trusted_client_id,
+  c.deleted AS trusted_client_deleted
+FROM user_session_issuers AS u
+JOIN remote_session_clients AS c
+  ON c.organization_id = u.organization_id
+ AND c.id = u.trusted_remote_session_client_id
+WHERE u.organization_id = @organization_id
+  AND u.project_id IS NULL
+  AND u.trusted_remote_session_issuer_id = @remote_session_issuer_id
+  AND u.deleted IS FALSE
+  AND c.identity_provider_connection_id IS NULL
+ORDER BY u.slug, u.id;

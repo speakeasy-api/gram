@@ -30,14 +30,6 @@ const (
 	// keeps the default limit.
 	FlagRiskEnforcementMaxContentBytes Flag = "risk-enforcement-max-content-bytes"
 
-	// FlagAgentManagement gates the first-class agent management API. It is
-	// evaluated per organization and fails closed unless explicitly on.
-	FlagAgentManagement Flag = "agent-management"
-	// FlagAgentIdentityCredentials gates agent credential issuance, management,
-	// and agent identity selection in MCP OAuth authorization.
-	// It is evaluated per organization and fails closed unless explicitly on.
-	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
-
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
 	// its hardware serial against device-keyed ones, falling back to email
@@ -69,15 +61,6 @@ const (
 	// approval decisions exposed through Platform MCP. It is evaluated at
 	// invocation time and fails closed independently of the dashboard workflow.
 	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
-	// FlagPlatformMCPShadowAudienceEnforcement selects legacy, report, or enforce
-	// behavior for direct-remote distribution. An enabled flag must carry a closed
-	// mode payload; missing or invalid configuration fails closed for expanding
-	// writes.
-	FlagPlatformMCPShadowAudienceEnforcement Flag = "platform-mcp-shadow-audience-enforcement"
-	// FlagPlatformMCPDirectRemoteDistributionDisabled is the emergency stop for
-	// expanding direct-remote distribution. Cleanup, audience narrowing, and
-	// disable paths remain available while it is enabled.
-	FlagPlatformMCPDirectRemoteDistributionDisabled Flag = "platform-mcp-direct-remote-distribution-disabled"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform

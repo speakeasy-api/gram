@@ -48,6 +48,14 @@ type Client struct {
 	// getDeploymentLogs endpoint.
 	GetDeploymentLogsDoer goahttp.Doer
 
+	// EvaluateOpenAPIv3 Doer is the HTTP client used to make requests to the
+	// evaluateOpenAPIv3 endpoint.
+	EvaluateOpenAPIv3Doer goahttp.Doer
+
+	// GetDeploymentEvaluation Doer is the HTTP client used to make requests to the
+	// getDeploymentEvaluation endpoint.
+	GetDeploymentEvaluationDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -68,19 +76,21 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetDeploymentDoer:       doer,
-		GetLatestDeploymentDoer: doer,
-		GetActiveDeploymentDoer: doer,
-		CreateDeploymentDoer:    doer,
-		EvolveDoer:              doer,
-		RedeployDoer:            doer,
-		ListDeploymentsDoer:     doer,
-		GetDeploymentLogsDoer:   doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		GetDeploymentDoer:           doer,
+		GetLatestDeploymentDoer:     doer,
+		GetActiveDeploymentDoer:     doer,
+		CreateDeploymentDoer:        doer,
+		EvolveDoer:                  doer,
+		RedeployDoer:                doer,
+		ListDeploymentsDoer:         doer,
+		GetDeploymentLogsDoer:       doer,
+		EvaluateOpenAPIv3Doer:       doer,
+		GetDeploymentEvaluationDoer: doer,
+		RestoreResponseBody:         restoreBody,
+		scheme:                      scheme,
+		host:                        host,
+		decoder:                     dec,
+		encoder:                     enc,
 	}
 }
 
@@ -271,6 +281,54 @@ func (c *Client) GetDeploymentLogs() goa.Endpoint {
 		resp, err := c.GetDeploymentLogsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("deployments", "getDeploymentLogs", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EvaluateOpenAPIv3 returns an endpoint that makes HTTP requests to the
+// deployments service evaluateOpenAPIv3 server.
+func (c *Client) EvaluateOpenAPIv3() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEvaluateOpenAPIv3Request(c.encoder)
+		decodeResponse = DecodeEvaluateOpenAPIv3Response(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEvaluateOpenAPIv3Request(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EvaluateOpenAPIv3Doer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deployments", "evaluateOpenAPIv3", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDeploymentEvaluation returns an endpoint that makes HTTP requests to the
+// deployments service getDeploymentEvaluation server.
+func (c *Client) GetDeploymentEvaluation() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDeploymentEvaluationRequest(c.encoder)
+		decodeResponse = DecodeGetDeploymentEvaluationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDeploymentEvaluationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDeploymentEvaluationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deployments", "getDeploymentEvaluation", err)
 		}
 		return decodeResponse(resp)
 	}

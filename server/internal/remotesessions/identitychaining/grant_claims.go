@@ -41,7 +41,7 @@ func (claims grantClaims) check(header jose.Header, idpIssuer, upstreamSubject s
 	if !remotesessions.IssuerURLsEqual(claims.Issuer, idpIssuer) {
 		return errors.New("iss is not the trusted identity provider")
 	}
-	if len(claims.Audience) != 1 || !remotesessions.IssuerURLsEqual(claims.Audience[0], sel.audience) {
+	if len(claims.Audience) != 1 || (!remotesessions.IssuerURLsEqual(claims.Audience[0], sel.audience) && !remotesessions.IssuerURLsEqual(claims.Audience[0], sel.issuer)) {
 		return errors.New("aud is not the requested audience")
 	}
 	if claims.Expiry == nil || claims.IssuedAt == nil {
@@ -67,10 +67,25 @@ func (claims grantClaims) check(header jose.Header, idpIssuer, upstreamSubject s
 			return errors.New("resource is not the canonical upstream resource")
 		}
 	}
-	// A present scope must be exactly the requested set: extra scopes exceed
-	// the binding, and missing ones would record a grant never made.
-	if claims.Scope != "" && len(sel.scopes) > 0 {
-		granted := strings.Fields(claims.Scope)
+	return claims.checkScope(sel)
+}
+
+// scopeError is a scope check failure that names its policy reason.
+type scopeError struct {
+	reason Reason
+	msg    string
+}
+
+func (e scopeError) Error() string { return e.msg }
+
+// checkScope requires the requested scope set exactly. With none requested,
+// a present scope must stay within the configured set when there is one.
+func (claims grantClaims) checkScope(sel selection) error {
+	granted := strings.Fields(claims.Scope)
+	switch {
+	case len(sel.scopes) > 0 && len(granted) == 0:
+		return scopeError{reason: ReasonInsufficientScope, msg: "scope is omitted although scopes were requested"}
+	case len(sel.scopes) > 0:
 		for _, scope := range granted {
 			if !slices.Contains(sel.scopes, scope) {
 				return errors.New("scope exceeds the requested scope")
@@ -78,7 +93,13 @@ func (claims grantClaims) check(header jose.Header, idpIssuer, upstreamSubject s
 		}
 		for _, scope := range sel.scopes {
 			if !slices.Contains(granted, scope) {
-				return errors.New("scope narrows the requested scope")
+				return scopeError{reason: ReasonInsufficientScope, msg: "scope narrows the requested scope"}
+			}
+		}
+	case len(sel.configuredScopes) > 0:
+		for _, scope := range granted {
+			if !slices.Contains(sel.configuredScopes, scope) {
+				return errors.New("scope exceeds the configured scope")
 			}
 		}
 	}

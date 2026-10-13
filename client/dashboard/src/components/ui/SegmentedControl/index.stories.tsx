@@ -28,3 +28,21 @@ export const Default: Story = {
     );
   },
 };
+
+/** A choice not yet made: no segment is active until the reader picks one. */
+export const NothingSelected: Story = {
+  render: function NothingSelectedStory() {
+    const [value, setValue] = useState<"approved" | "blocked" | null>(null);
+    return (
+      <SegmentedControl
+        ariaLabel="Access decision"
+        value={value}
+        onChange={setValue}
+        options={[
+          { value: "approved", label: "Approve" },
+          { value: "blocked", label: "Disallow" },
+        ]}
+      />
+    );
+  },
+};

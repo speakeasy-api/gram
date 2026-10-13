@@ -240,6 +240,7 @@ func TestPrivateRouteCensus(t *testing.T) {
 		{http.MethodGet, "/mcp/remote_login_bind"},
 		{http.MethodGet, "/x/mcp/idp_callback"},
 		{http.MethodGet, "/x/mcp/remote_login_callback"},
+		{http.MethodGet, "/mcp/idp_callback/0190a6f8-5b2c-7d3e-8f41-2a6b9c0d1e2f"},
 		{http.MethodPost, "/mcp/idp_callback/"},
 		{http.MethodGet, "/x/mcp/idp_callback/"},
 		{http.MethodGet, "/mcp/remote_login_callback/"},

@@ -501,19 +501,6 @@ UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
 WHERE id = @id;
 
--- name: InsertLegacyDenyPrincipalGrantFixture :exec
--- Test-only fixture for exercising allow-only writes against legacy rows.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id, @principal_urn, @scope, 'deny', @selectors);
-
--- name: GetPrincipalGrantEffectFixture :one
-SELECT effect
-FROM principal_grants
-WHERE organization_id = @organization_id
-  AND principal_urn = @principal_urn
-  AND scope = @scope
-  AND selectors = @selectors;
-
 -- name: InsertChatContentPartFixture :one
 -- Test-only fixture: seeds a minimal chat content part so tests can anchor a
 -- risk_results row to it.
@@ -545,6 +532,21 @@ WHERE id = @id;
 UPDATE platform_mcp_setup_handoffs
 SET expires_at = clock_timestamp() - interval '1 second'
 WHERE id = @id;
+
+-- name: ExpirePlatformMCPOperationReceiptFixture :one
+-- Test-only fixture expiring an idempotency receipt by the database clock,
+-- the clock both the replay pre-check and the locked path judge expiry with.
+UPDATE platform_mcp_operation_receipts
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+RETURNING expires_at;
+
+-- name: ListPlatformMCPOperationReceiptIDsFixture :many
+-- Test-only inspection of which receipts an organization still holds.
+SELECT id
+FROM platform_mcp_operation_receipts
+WHERE organization_id = @organization_id
+ORDER BY id;
 
 -- name: GetPlatformMCPReadinessFingerprintFixture :one
 -- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
@@ -723,7 +725,6 @@ WITH deleted AS (
 INSERT INTO trials (organization_id, tier, created_at, ends_at)
 SELECT deleted.organization_id, @tier, @created_at, @ends_at
 FROM deleted;
-
 
 -- name: TryAcquireOpenRouterKeyBillingLockFixture :one
 -- Test-only non-blocking probe of the production OpenRouter billing lock key.
@@ -1033,6 +1034,9 @@ INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
 VALUES (@id, @project_id, @toolset_id, @visibility)
 RETURNING id;
 
+-- name: SetMCPServerVisibilityFixture :exec
+UPDATE mcp_servers SET visibility = @visibility WHERE id = @id AND project_id = @project_id;
+
 -- name: CreateMCPServerCatalogueFixtures :execrows
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
 SELECT
@@ -1138,7 +1142,6 @@ UPDATE workload_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id;
-
 
 -- Shared attachment fixtures exercise authorization boundaries in remote-session,
 -- issuer-gate, and user-session projection tests.
@@ -1562,7 +1565,8 @@ WHERE remote_session_issuers.id = @id
 -- name: SetPreparationFixtureIssuerCapability :exec
 UPDATE remote_session_issuers
 SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer']
+    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer'],
+    metadata_fetched_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureClientGrants :exec
@@ -1687,6 +1691,22 @@ UPDATE remote_session_issuers SET client_id_metadata_document_supported = true, 
 
 -- name: SetPreparationFixtureCIMDURI :exec
 UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
+
+-- name: SetPreparationFixtureConfidentialClient :execrows
+-- Identity chaining refuses public clients: make a fixture client authenticate
+-- with private_key_jwt against a key set, and its issuer accept that method.
+WITH issuer AS (
+    UPDATE remote_session_issuers
+    SET token_endpoint_auth_methods_supported = array_append(array_remove(token_endpoint_auth_methods_supported, 'private_key_jwt'), 'private_key_jwt')
+    WHERE remote_session_issuers.id = @remote_session_issuer_id AND remote_session_issuers.project_id = @project_id
+    RETURNING remote_session_issuers.id
+)
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = @json_web_key_set_id, client_secret_encrypted = NULL,
+    organization_id = @organization_id
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.project_id = @project_id
+  AND remote_session_clients.remote_session_issuer_id IN (SELECT issuer.id FROM issuer);
 
 -- name: MovePreparationFixtureClientProject :execrows
 UPDATE remote_session_clients SET project_id = @target_project_id
@@ -1828,7 +1848,6 @@ SELECT id FROM external_oauth_server_metadata WHERE id = @id AND project_id = @p
 -- Transaction-scoped advisory locks for testing the synchronization helpers themselves.
 SELECT pg_advisory_xact_lock(@key::bigint);
 
-
 -- name: LockPublishOutboxRowFixture :one
 SELECT id FROM publish_outbox WHERE id = @id AND organization_id = @organization_id FOR UPDATE;
 
@@ -1899,3 +1918,21 @@ SET omit_scope_fallback = @omit_scope_fallback
 WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;
+
+-- name: CountMcpMetadataForBackendIDFixture :one
+SELECT count(*)
+FROM mcp_metadata
+WHERE project_id = @project_id
+  AND (toolset_id = @backend_id::uuid OR mcp_server_id = @backend_id::uuid);
+
+-- name: RekeyMcpMetadataToMcpServerFixture :execrows
+UPDATE mcp_metadata
+SET toolset_id = NULL, mcp_server_id = toolset_id
+WHERE project_id = @project_id
+  AND toolset_id = @toolset_id;
+
+-- name: SetMcpMetadataHeaderDisplayNamesFixture :execrows
+UPDATE mcp_metadata
+SET header_display_names = @header_display_names
+WHERE id = @id
+  AND project_id = @project_id;

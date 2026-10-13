@@ -52,7 +52,7 @@ Failed runs exit nonzero; rows commit one toolset at a time, and an `-apply` run
 ## Post-run checks
 
 - The `mcp.toolset_slug_fallback` counter drops for traffic to the covered toolsets.
-- Plugin publication logs no `toolset_wrapper_ambiguous`.
+- Plugin publication logs no `mcp_server_ambiguous` or "ambiguous toolset MCP serving wrapper".
 
 ## Later phase
 

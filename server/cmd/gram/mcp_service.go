@@ -112,14 +112,22 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	service.SetPlatformHosts(d.PlatformHosts)
 	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
 	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
+	chainer, err := newIdentityChainer(d.Logger, d.Meter, d.DB, d.Redis, d.Encryption, d.Guardian, d.Challenges, delegation, d.Audit)
+	if err != nil {
+		return nil, err
+	}
+	service.SetIdentityChainer(chainer)
+	return service, nil
+}
+
+func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgxpool.Pool, redisClient *redis.Client, enc *encryption.Client, policy *guardian.Policy, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, auditLogger *audit.Logger) (*identitychaining.Chainer, error) {
 	// Identity-assertion grants are verified against the trusted IdP's keys
 	// under the same fetch budgets as its ID tokens.
-	assertionKeys, err := remotesessions.NewIDTokenKeyResolver(d.Logger, d.Guardian, d.Meter, ratelimit.NewRedisStore(d.Redis))
+	assertionKeys, err := remotesessions.NewIDTokenKeyResolver(logger, policy, meter, ratelimit.NewRedisStore(redisClient))
 	if err != nil {
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
-	chainer := identitychaining.New(d.Logger, d.DB, d.Encryption, d.Challenges, delegation, assertionKeys, cacheImpl)
-	chainer.SetObserver(oktaresourceconnections.NewObserver(d.Logger, d.Meter, d.DB, d.Audit))
-	service.SetIdentityChainer(chainer)
-	return service, nil
+	chainer := identitychaining.New(logger, db, enc, challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
+	chainer.SetObserver(oktaresourceconnections.NewObserver(logger, meter, db, auditLogger))
+	return chainer, nil
 }

@@ -83,6 +83,16 @@ func handleResourcesRead(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
 	}
 
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
+	}
+
+	// Attribution must not turn an otherwise valid resource read into an error.
+	if err := payload.resolveServingAttribution(ctx, logger, db, toolsetID); err != nil {
+		logger.WarnContext(ctx, "failed to resolve resource serving attribution", attr.SlogError(err))
+	}
+
 	var resourceURN urn.Resource
 	var resourceDef *types.FunctionResourceDefinition
 	for _, resource := range toolset.Resources {
@@ -111,11 +121,6 @@ func handleResourcesRead(
 	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	toolsetID, err := uuid.Parse(toolset.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
 	}
 
 	systemConfig, err := env.LoadSystemEnv(ctx, payload.projectID, toolsetID, string(resourceURN.Kind), resourceURN.Source)
@@ -163,6 +168,8 @@ func handleResourcesRead(
 			ToolsetID:             &toolset.ID,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
+			MCPServerID:           optionalUUIDString(payload.servingServerID()),
+			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
 			MetaMCPServerID:       nil,
 			ChatID:                nil,
 			Type:                  plan.BillingType,
@@ -186,6 +193,7 @@ func handleResourcesRead(
 		}
 
 		logAttrs.RecordToolsetSlug(payload.toolset)
+		recordServingLogAttrs(logAttrs, payload.servingServerID(), payload.mcpEndpointID)
 		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
 			Timestamp: time.Now(),

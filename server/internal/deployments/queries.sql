@@ -774,3 +774,70 @@ RETURNING id;
 -- name: CreateDeploymentStatus :exec
 INSERT INTO deployment_statuses (deployment_id, status)
 VALUES (@deployment_id, @status);
+
+-- name: GetEvaluationBaseDeploymentID :one
+-- The deployment a deployment is compared with: the one it was cloned from,
+-- or else the latest earlier deployment that completed, so failed attempts
+-- in between are skipped.
+SELECT base.id
+FROM (
+  SELECT src.id, 0 AS preference
+  FROM deployments cur
+  JOIN deployments src ON src.id = cur.cloned_from AND src.project_id = @project_id
+  WHERE cur.id = @deployment_id AND cur.project_id = @project_id
+  UNION ALL
+  (
+    SELECT d.id, 1 AS preference
+    FROM deployments d
+    WHERE d.project_id = @project_id
+      AND d.seq < (
+        SELECT cur.seq FROM deployments cur
+        WHERE cur.id = @deployment_id AND cur.project_id = @project_id
+      )
+      AND (
+        SELECT ds.status FROM deployment_statuses ds
+        WHERE ds.deployment_id = d.id
+        ORDER BY ds.seq DESC
+        LIMIT 1
+      ) = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+  )
+) base
+ORDER BY base.preference
+LIMIT 1;
+
+-- name: ListProjectDeploymentOpenAPIv3 :many
+SELECT a.*
+FROM deployments_openapiv3_assets a
+JOIN deployments d ON d.id = a.deployment_id
+WHERE a.deployment_id = @deployment_id
+  AND d.project_id = @project_id;
+
+-- name: ListToolsetsUsingOpenAPIv3Source :many
+SELECT
+    t.id
+  , t.name
+  , t.slug
+  , t.mcp_slug
+  , t.mcp_enabled
+  , (t.external_oauth_server_id IS NOT NULL OR t.oauth_proxy_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
+  , ARRAY(
+      SELECT u FROM unnest(tv.tool_urns) AS u
+      WHERE starts_with(u, @tool_urn_prefix::TEXT)
+    )::TEXT[] AS source_tool_urns
+FROM toolsets t
+JOIN LATERAL (
+  SELECT tool_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+WHERE t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM unnest(tv.tool_urns) AS u
+    WHERE starts_with(u, @tool_urn_prefix::TEXT)
+  )
+ORDER BY t.name;

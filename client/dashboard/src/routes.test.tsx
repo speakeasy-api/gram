@@ -44,6 +44,18 @@ function ShadowAIHrefs(): JSX.Element {
   );
 }
 
+function ClientSettingsHref(): JSX.Element {
+  const routes = useRoutes();
+  return (
+    <output>
+      {routes.remoteIdentityProviders.clientDetail.settings.href(
+        "issuer-1",
+        "client-1",
+      )}
+    </output>
+  );
+}
+
 function LocationPath(): JSX.Element {
   const location = useLocation();
   return <output>{location.pathname + location.search + location.hash}</output>;
@@ -106,6 +118,21 @@ describe("project routes", () => {
       "/org/projects/project/shadow-ai/mcps",
       "/org/projects/project/shadow-ai/mcps/server-slug",
     ]);
+  });
+
+  // RemoteSessionClientDetail redirects this retired tab to Overview.
+  it("keeps the retired remote session client settings route", () => {
+    render(
+      <MemoryRouter initialEntries={["/org/projects/project"]}>
+        <ClientSettingsHref />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText(
+        "/org/projects/project/remote-identity-providers/issuer-1/clients/client-1/settings",
+      ),
+    ).toBeTruthy();
   });
 
   // Block messages and bookmarks carry the old paths with a query and a

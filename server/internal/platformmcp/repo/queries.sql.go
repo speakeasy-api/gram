@@ -1264,6 +1264,31 @@ func (q *Queries) DeleteExpiredPlatformMCPOperationReceipt(ctx context.Context, 
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredPlatformMCPOperationReceiptsBatch = `-- name: DeleteExpiredPlatformMCPOperationReceiptsBatch :execrows
+DELETE FROM platform_mcp_operation_receipts
+WHERE id IN (
+    SELECT id
+    FROM platform_mcp_operation_receipts
+    WHERE expires_at <= clock_timestamp()
+    ORDER BY expires_at
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+)
+`
+
+// The periodic sweep that bounds the receipt table. The per-key reclaim in the
+// receipt transaction only reaches a key that is written again, and a
+// project-creation receipt is never reclaimed that way at all. Bounded by
+// batch so one tick never holds a long delete; SKIP LOCKED leaves rows a
+// receipt transaction is touching to the next tick.
+func (q *Queries) DeleteExpiredPlatformMCPOperationReceiptsBatch(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPlatformMCPOperationReceiptsBatch, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredPlatformMCPReadiness = `-- name: DeleteExpiredPlatformMCPReadiness :execrows
 DELETE FROM platform_mcp_readiness AS stale
 WHERE stale.organization_id = $1
@@ -2385,7 +2410,8 @@ LEFT JOIN LATERAL (
      AND plugin.organization_id = $3
      AND plugin.deleted IS FALSE
     WHERE membership.deleted IS FALSE
-      AND (($1::text = 'mcp_server' AND membership.mcp_server_id = server.id)
+      AND (($1::text = 'mcp_server' AND (membership.mcp_server_id = server.id
+          OR (membership.toolset_id = server.id AND server.toolset_id = membership.toolset_id)))
         OR ($1::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
 ) memberships ON TRUE
 WHERE project.id = $4
@@ -3828,6 +3854,71 @@ func (q *Queries) GetPlatformMCPSubjectConnectionAuthState(ctx context.Context, 
 		&i.LatestRefreshExpiresAt,
 		&i.LatestSessionRevokedAt,
 		&i.Ready,
+	)
+	return i, err
+}
+
+const getUnexpiredPlatformMCPOperationReceipt = `-- name: GetUnexpiredPlatformMCPOperationReceipt :one
+SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.result_payload, receipt.expires_at, receipt.created_at, receipt.updated_at
+FROM platform_mcp_operation_receipts AS receipt
+LEFT JOIN platform_mcp_connections AS connection
+  ON connection.id = receipt.connection_id
+ AND connection.organization_id = receipt.organization_id
+WHERE receipt.organization_id = $1
+  AND receipt.project_id = $2
+  AND receipt.operation = $3
+  AND receipt.idempotency_key = $4
+  AND receipt.expires_at > clock_timestamp()
+  AND (
+    receipt.user_id = $5
+    OR (receipt.user_id IS NULL AND connection.subject_urn = $6)
+  )
+ORDER BY receipt.created_at DESC, receipt.id DESC
+LIMIT 1
+`
+
+type GetUnexpiredPlatformMCPOperationReceiptParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Operation      string
+	IdempotencyKey string
+	UserID         pgtype.Text
+	SubjectUrn     string
+}
+
+// The unlocked replay pre-check that runs before a write charges its budget.
+// Same match as GetPlatformMCPOperationReceipt, but expiry is judged here with
+// the database clock, the same clock DeleteExpiredPlatformMCPOperationReceipt
+// uses under the lock, so the pre-check can never replay a receipt the locked
+// path would already treat as expired.
+func (q *Queries) GetUnexpiredPlatformMCPOperationReceipt(ctx context.Context, arg GetUnexpiredPlatformMCPOperationReceiptParams) (PlatformMcpOperationReceipt, error) {
+	row := q.db.QueryRow(ctx, getUnexpiredPlatformMCPOperationReceipt,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Operation,
+		arg.IdempotencyKey,
+		arg.UserID,
+		arg.SubjectUrn,
+	)
+	var i PlatformMcpOperationReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
+		&i.Operation,
+		&i.IdempotencyKey,
+		&i.InputHash,
+		&i.Status,
+		&i.ResultCode,
+		&i.ResultPayload,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -5824,28 +5915,29 @@ SELECT
     ps.policy,
     ps.sort_order,
     CASE
+      WHEN ps.mcp_server_id IS NOT NULL OR s.id IS NOT NULL THEN 'mcp_server'
       WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
-      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
       WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
     END::text AS target_kind,
     COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
 CROSS JOIN membership_version
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
+LEFT JOIN mcp_servers s
+  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  AND s.project_id = p.project_id
+  AND s.deleted IS FALSE
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
   ON t.id = ps.toolset_id
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
-LEFT JOIN mcp_servers s
-  ON s.id = ps.mcp_server_id
-  AND s.project_id = p.project_id
-  AND s.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -5951,22 +6043,23 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    (ps.toolset_id IS NOT NULL)::boolean AS toolset_backed,
+    (ps.toolset_id IS NOT NULL AND s.id IS NULL)::boolean AS toolset_backed,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
+LEFT JOIN mcp_servers s
+  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
+  AND s.project_id = p.project_id
+  AND s.deleted IS FALSE
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
   ON t.id = ps.toolset_id
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
-LEFT JOIN mcp_servers s
-  ON s.id = ps.mcp_server_id
-  AND s.project_id = p.project_id
-  AND s.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -6013,6 +6106,7 @@ type ListPlatformMCPPluginServersRow struct {
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
+// A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6467,7 +6561,16 @@ WITH server AS (
         m.toolset_id,
         COALESCE(m.name, '')::text AS mcp_name,
         COALESCE(m.slug, '')::text AS mcp_slug,
-        COALESCE(toolset.slug, '')::text AS toolset_slug
+        COALESCE(toolset.slug, '')::text AS toolset_slug,
+        (m.toolset_id IS NOT NULL AND (m.id = m.toolset_id OR NOT EXISTS (
+            SELECT 1 FROM mcp_servers AS canonical
+            WHERE canonical.id = m.toolset_id AND canonical.project_id = m.project_id AND canonical.deleted IS FALSE
+        )))::boolean AS hosts_toolset,
+        EXISTS (
+            SELECT 1 FROM mcp_servers AS sibling
+            WHERE sibling.toolset_id = m.toolset_id AND sibling.project_id = m.project_id
+              AND sibling.deleted IS FALSE AND sibling.id <> m.id
+        )::boolean AS toolset_shared
     FROM mcp_servers AS m
     JOIN projects AS project
       ON project.id = m.project_id
@@ -6511,13 +6614,14 @@ server_membership AS (
     FROM server
     JOIN membership
       ON membership.toolset_id = server.toolset_id
-    WHERE server.toolset_id IS NOT NULL
+    WHERE server.hosts_toolset
 )
 SELECT
     server.id AS mcp_server_id,
     server.mcp_name,
     server.mcp_slug,
-    server.toolset_slug,
+    (CASE WHEN server.hosts_toolset THEN server.toolset_slug ELSE '' END)::text AS toolset_slug,
+    (server.hosts_toolset AND server.toolset_shared)::boolean AS toolset_shared,
     COALESCE(server_membership.plugin_slug, '')::text AS plugin_slug,
     COALESCE(server_membership.display_name, '')::text AS plugin_display_name
 FROM server
@@ -6536,6 +6640,7 @@ type ListPlatformMCPServerIdentitiesRow struct {
 	McpName           string
 	McpSlug           string
 	ToolsetSlug       string
+	ToolsetShared     bool
 	PluginSlug        string
 	PluginDisplayName string
 }
@@ -6546,10 +6651,13 @@ type ListPlatformMCPServerIdentitiesRow struct {
 // display name (the key the plugin's mcp.json ships it under). One row per
 // (server, membership); a server with no membership yields one row with empty
 // plugin columns. Hosted servers are also reached through memberships attached
-// by toolset, so those memberships are included for the server fronting that
-// toolset. Memberships are gathered from the project's live plugins through the
-// (plugin_id, backend) indexes, one arm per backend kind: a live membership has
-// exactly one backend, so the arms never repeat a row.
+// by toolset, so those memberships, and the toolset slug, belong to the
+// toolset's hosting server: its canonical row (id = toolset id), or every
+// server fronting it when it has none. Memberships are gathered from the
+// project's live plugins through the (plugin_id, backend) indexes, one arm per
+// backend kind: a live membership has exactly one backend, so the arms never
+// repeat a row. toolset_shared marks a hosting server whose toolset other live
+// servers also front, since their calls carry the same toolset slug.
 func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListPlatformMCPServerIdentitiesParams) ([]ListPlatformMCPServerIdentitiesRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPServerIdentities, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
@@ -6564,6 +6672,7 @@ func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListP
 			&i.McpName,
 			&i.McpSlug,
 			&i.ToolsetSlug,
+			&i.ToolsetShared,
 			&i.PluginSlug,
 			&i.PluginDisplayName,
 		); err != nil {
@@ -6965,6 +7074,38 @@ func (q *Queries) LockPlatformMCPOperationReceipt(ctx context.Context, arg LockP
 	return err
 }
 
+const lockPlatformMCPOperationReceiptInput = `-- name: LockPlatformMCPOperationReceiptInput :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-receipt-input', $1::text, $2::text, $3::text, $4::text, $5::text)::text,
+        0
+    )
+)
+`
+
+type LockPlatformMCPOperationReceiptInputParams struct {
+	OrganizationID string
+	SubjectUrn     string
+	ProjectID      string
+	Operation      string
+	InputHash      string
+}
+
+// A single-use preview is claimed by its input, so confirmations racing for
+// one input serialize here. The namespace differs from the key lock above so
+// a caller-chosen idempotency key can never name this lock, which is what
+// keeps two confirmations from taking the pair in opposite orders.
+func (q *Queries) LockPlatformMCPOperationReceiptInput(ctx context.Context, arg LockPlatformMCPOperationReceiptInputParams) error {
+	_, err := q.db.Exec(ctx, lockPlatformMCPOperationReceiptInput,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.ProjectID,
+		arg.Operation,
+		arg.InputHash,
+	)
+	return err
+}
+
 const lockPlatformMCPRemoteIssuerAttachment = `-- name: LockPlatformMCPRemoteIssuerAttachment :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -7144,6 +7285,45 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const platformMCPOperationReceiptInputClaimed = `-- name: PlatformMCPOperationReceiptInputClaimed :one
+SELECT EXISTS (
+    SELECT 1
+    FROM platform_mcp_operation_receipts
+    WHERE organization_id = $1
+      AND project_id = $2
+      AND operation = $3
+      AND user_id = $4
+      AND input_hash = $5
+      AND idempotency_key <> $6
+)
+`
+
+type PlatformMCPOperationReceiptInputClaimedParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Operation      string
+	UserID         pgtype.Text
+	InputHash      string
+	IdempotencyKey string
+}
+
+// Whether another idempotency key already holds this exact input for the same
+// user, project and operation. A write whose input is single-use, such as a
+// preview token, commits under one key only.
+func (q *Queries) PlatformMCPOperationReceiptInputClaimed(ctx context.Context, arg PlatformMCPOperationReceiptInputClaimedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, platformMCPOperationReceiptInputClaimed,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Operation,
+		arg.UserID,
+		arg.InputHash,
+		arg.IdempotencyKey,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const recordPlatformMCPCatalogExplored = `-- name: RecordPlatformMCPCatalogExplored :execrows

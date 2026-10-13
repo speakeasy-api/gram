@@ -761,6 +761,7 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 
 	// Set after the audit snapshot so it matches the snapshot before.
 	afterView.CallbackURL = s.clientCallbackURL(updated)
+	afterView.FederatedCallbackURL = s.origins.ClientFederatedCallbackURL(updated)
 	return afterView, nil
 }
 

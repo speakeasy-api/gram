@@ -262,19 +262,20 @@ func TestUpdateRiskPolicy_ShadowMCPDispositionRejectedOnNonShadowPolicy(t *testi
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
-func TestUpdateRiskPolicy_ShadowMCPExplicitDispositionBlocksSourceChange(t *testing.T) {
+func TestUpdateRiskPolicy_ShadowMCPAllowAllBlocksSourceChange(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestRiskService(t)
 
-	// A policy with an explicitly stored disposition cannot morph away from
-	// being a blocking shadow MCP policy — that would silently drop the
-	// posture (and orphan any blocked-URL list).
+	// An allow_all policy is its blocked-server list: outside the blocking
+	// posture the list has nothing to deny, so the edit is refused and the
+	// rejection says which part of it was the problem.
 	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
 		Name:                 new("Morph Away Disposition"),
 		Sources:              []string{"shadow_mcp"},
 		Action:               "block",
 		ShadowMcpDisposition: new("allow_all"),
+		ShadowMcpBlockedUrls: []string{"https://sketchy.example.com/mcp"},
 	})
 	require.NoError(t, err)
 
@@ -286,6 +287,8 @@ func TestUpdateRiskPolicy_ShadowMCPExplicitDispositionBlocksSourceChange(t *test
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "turning off shadow_mcp detection")
+	require.Contains(t, oopsErr.Error(), "Delete this policy and create the one you want instead")
 
 	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
 		ID:     created.ID,
@@ -294,9 +297,67 @@ func TestUpdateRiskPolicy_ShadowMCPExplicitDispositionBlocksSourceChange(t *test
 	})
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), `changing the action from "block" to "flag"`)
 
 	fetched, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: created.ID})
 	require.NoError(t, err)
 	require.NotNil(t, fetched.ShadowMcpDisposition)
 	require.Equal(t, "allow_all", *fetched.ShadowMcpDisposition)
+	require.Equal(t, []string{"https://sketchy.example.com/mcp"}, shadowMCPPolicyBlockedURLs(t, ctx, ti.conn, created.ID))
+}
+
+func TestUpdateRiskPolicy_ShadowMCPStoredBlockAllRetiresOnActionChange(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+
+	// Every shadow MCP policy the dashboard creates stores block_all, so the
+	// stored value must not make a policy harder to edit than the legacy
+	// policies that predate the column. block_all's URL list is a set of
+	// exceptions to a deny, and it retires along with the deny.
+	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Stored Block All"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpDisposition: new("block_all"),
+		ShadowMcpAllowedUrls: []string{"https://allowed.example.com/mcp"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://allowed.example.com/mcp"}, shadowMCPPolicyAllowedURLs(t, ctx, ti.conn, created.ID))
+
+	updated, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:     created.ID,
+		Name:   created.Name,
+		Action: new("warn"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "warn", updated.Action)
+	require.Nil(t, updated.ShadowMcpDisposition)
+	// The caller sent no URL list: the server retires the bypass grants itself
+	// rather than leave them to reappear the next time the policy denies.
+	require.Empty(t, shadowMCPPolicyAllowedURLs(t, ctx, ti.conn, created.ID))
+}
+
+func TestUpdateRiskPolicy_ShadowMCPStoredBlockAllRetiresOnSourceChange(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+
+	created, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Stored Block All Source Swap"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpDisposition: new("block_all"),
+		ShadowMcpAllowedUrls: []string{"https://allowed.example.com/mcp"},
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:      created.ID,
+		Name:    created.Name,
+		Sources: []string{"gitleaks"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gitleaks"}, updated.Sources)
+	require.Empty(t, shadowMCPPolicyAllowedURLs(t, ctx, ti.conn, created.ID))
 }

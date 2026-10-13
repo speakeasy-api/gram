@@ -560,8 +560,8 @@ func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool)
 	}
 }
 
-// standardScopes are appended when advertised: openid, email, profile for
-// identity; offline_access for a refresh token.
+// standardScopes are added to a challenge when the resource advertises them:
+// openid, email, profile for identity; offline_access for a refresh token.
 var standardScopes = []string{"openid", "email", "profile", "offline_access"}
 
 // ResourceScopes is what the protected resource a login is for says about
@@ -591,7 +591,7 @@ type ScopeResolution struct {
 	// Scopes is the scope parameter to send; empty sends none.
 	Scopes []string
 
-	// Widened lists the standard scopes appended to the chosen base.
+	// Widened lists the standard scopes appended to a challenge base.
 	Widened []string
 
 	// Source is the precedence step that supplied the base.
@@ -604,42 +604,44 @@ type ScopeResolution struct {
 
 // RequestedScopes resolves the authorize scope set, in order: the client's
 // scope, the resource's challenge scopes, the resource pin, the resource's
-// scopes_supported, the issuer's override (verbatim), the issuer's
-// scopes_supported. Every base but the issuer override gains the standard
-// scopes the issuer advertises. Without resource discovery the issuer's
-// override still beats the client's scope, as before the rollout flag.
+// scopes_supported, the issuer's override, the issuer's scopes_supported.
+// Operator-set scopes (client scope, pin, override) are sent exactly as set.
+// A challenge gains the standard scopes the resource itself advertises; the
+// advertised lists already carry whichever their own server offers. Without
+// resource discovery the issuer's override still beats the client's scope,
+// as before the rollout flag.
 func (c Client) RequestedScopes(resource ResourceScopes) ScopeResolution {
-	var base []string
-	var source remotesessionmetrics.ScopeSource
-	var unadvertised []string
+	asSet := func(scopes []string, source remotesessionmetrics.ScopeSource) ScopeResolution {
+		return ScopeResolution{Scopes: slices.Clone(scopes), Widened: nil, Source: source, Unadvertised: nil}
+	}
 	switch {
 	case !resource.UseDiscovered && len(c.IssuerScopeOverride) > 0:
-		return ScopeResolution{Scopes: slices.Clone(c.IssuerScopeOverride), Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerOverride, Unadvertised: nil}
+		return asSet(c.IssuerScopeOverride, remotesessionmetrics.ScopeSourceIssuerOverride)
 	case len(c.ClientScope) > 0:
-		base, source = c.ClientScope, remotesessionmetrics.ScopeSourceClientScope
+		return asSet(c.ClientScope, remotesessionmetrics.ScopeSourceClientScope)
 	case resource.UseDiscovered && len(resource.ChallengeScopes) > 0:
-		base, source = resource.ChallengeScopes, remotesessionmetrics.ScopeSourceChallengeScope
+		scopes, widened := withStandardScopes(resource.ChallengeScopes, resource.ScopesSupported)
+		return ScopeResolution{Scopes: scopes, Widened: widened, Source: remotesessionmetrics.ScopeSourceChallengeScope, Unadvertised: nil}
 	case resource.UseDiscovered && len(resource.Pin) > 0:
-		base, source = resource.Pin, remotesessionmetrics.ScopeSourceResourcePin
+		out := asSet(resource.Pin, remotesessionmetrics.ScopeSourceResourcePin)
 		if resource.ScopesSupported != nil {
 			for _, scope := range resource.Pin {
 				if !slices.Contains(resource.ScopesSupported, scope) {
-					unadvertised = append(unadvertised, scope)
+					out.Unadvertised = append(out.Unadvertised, scope)
 				}
 			}
 		}
+		return out
 	case resource.UseDiscovered && len(resource.ScopesSupported) > 0:
-		base, source = resource.ScopesSupported, remotesessionmetrics.ScopeSourceCachedResource
 		if resource.Live {
-			source = remotesessionmetrics.ScopeSourceLiveResource
+			return asSet(resource.ScopesSupported, remotesessionmetrics.ScopeSourceLiveResource)
 		}
+		return asSet(resource.ScopesSupported, remotesessionmetrics.ScopeSourceCachedResource)
 	case len(c.IssuerScopeOverride) > 0:
-		return ScopeResolution{Scopes: slices.Clone(c.IssuerScopeOverride), Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerOverride, Unadvertised: nil}
+		return asSet(c.IssuerScopeOverride, remotesessionmetrics.ScopeSourceIssuerOverride)
 	default:
 		return c.issuerCatalogueScopes()
 	}
-	scopes, widened := c.withStandardScopes(base)
-	return ScopeResolution{Scopes: scopes, Widened: widened, Source: source, Unadvertised: unadvertised}
 }
 
 // issuerCatalogueScopes is the last resort: the issuer's whole
@@ -651,16 +653,15 @@ func (c Client) issuerCatalogueScopes() ScopeResolution {
 	if len(c.IssuerScopesSupported) == 0 {
 		return ScopeResolution{Scopes: nil, Widened: nil, Source: remotesessionmetrics.ScopeSourceNone, Unadvertised: nil}
 	}
-	scopes, widened := c.withStandardScopes(c.IssuerScopesSupported)
-	return ScopeResolution{Scopes: scopes, Widened: widened, Source: remotesessionmetrics.ScopeSourceIssuerCatalogue, Unadvertised: nil}
+	return ScopeResolution{Scopes: slices.Clone(c.IssuerScopesSupported), Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerCatalogue, Unadvertised: nil}
 }
 
-// withStandardScopes copies base and appends each standard scope the issuer
-// advertises that base lacks, returning what was appended.
-func (c Client) withStandardScopes(base []string) (scopes []string, widened []string) {
+// withStandardScopes copies base and appends each standard scope in offered
+// that base lacks, returning what was appended.
+func withStandardScopes(base, offered []string) (scopes []string, widened []string) {
 	scopes = slices.Clone(base)
 	for _, scope := range standardScopes {
-		if slices.Contains(scopes, scope) || !slices.Contains(c.IssuerScopesSupported, scope) {
+		if slices.Contains(scopes, scope) || !slices.Contains(offered, scope) {
 			continue
 		}
 		scopes = append(scopes, scope)
@@ -1304,12 +1305,7 @@ func (m *ChallengeManager) mintAuthorization(
 		)
 	}
 	if len(resolution.Widened) > 0 {
-		// Widening an operator's pin is worth seeing; widening a discovered base is routine.
-		logWidened := m.logger.DebugContext
-		if resolution.Source == remotesessionmetrics.ScopeSourceResourcePin {
-			logWidened = m.logger.InfoContext
-		}
-		logWidened(ctx, "requested scope widens the chosen scope base",
+		m.logger.DebugContext(ctx, "requested scope widens the chosen scope base",
 			attr.SlogProjectID(parent.ProjectID.String()),
 			attr.SlogOrganizationID(parent.OrganizationID),
 			attr.SlogOAuthIssuer(client.IssuerURL),

@@ -14,10 +14,10 @@ import (
 )
 
 // HandleFirstPartyConnect is the chi handler at
-// `GET /mcp/{mcpSlug}/connect/first-party` on the toolset-keyed surface. It
+// `GET /mcp/{mcpSlug}/connect/first-party`. It
 // resolves the slug to a `/mcp`-keyed ResolvedMcpEndpoint and delegates to
 // ServeFirstPartyConnect — the dashboard's entry point for linking an
-// issuer-gated toolset's upstream sessions. /x/mcp registers the equivalent
+// issuer-gated server's upstream sessions. /x/mcp registers the equivalent
 // via its mcp_endpoint-keyed adapter (see xmcp.Service.handleFirstPartyConnect).
 func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -36,7 +36,7 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // ServeFirstPartyConnect is the dashboard's entry point for establishing the
 // upstream remote_sessions an issuer-gated MCP server needs. It mints a
 // first-party authn challenge and bounces through the gram server's own IDP
-// login — the same flow a real MCP client runs via /x/mcp/{slug}/authorize —
+// login — the same flow a real MCP client runs via /mcp/{slug}/authorize —
 // rather than borrowing the dashboard's gram_session.
 //
 // This is deliberately decoupled from the dashboard session: the subject is

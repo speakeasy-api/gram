@@ -1,11 +1,11 @@
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { AlertCircle, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { usePlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { PlaygroundChat } from "./PlaygroundChat";
@@ -33,10 +33,13 @@ export function PlaygroundElements({
   playgroundEnvironmentSlug,
 }: PlaygroundElementsProps): JSX.Element {
   // Get toolset data to construct MCP URL
-  const { data: toolset } = useToolset(toolsetSlug ?? undefined);
-
-  // Always use the platform domain for the playground to avoid CSP issues
-  const mcpUrl = useInternalMcpUrl(toolset);
+  const {
+    data: toolset,
+    isLoading: isToolsetLoading,
+    isError: isToolsetError,
+    isFetching: isToolsetFetching,
+    refetch: refetchToolset,
+  } = useToolset(toolsetSlug ?? undefined, { throwOnError: false });
 
   // Get environments and MCP metadata for auth status check
   const { data: environmentsData } = useListEnvironments();
@@ -82,13 +85,57 @@ export function PlaygroundElements({
   // a real MCP client would after an OAuth dance — no special-casing in
   // ApplyIssuerGate.
   const gatewayToken = issuerConnection.accessToken;
+  const mcpUrl = issuerConnection.mcpUrl;
 
-  // Don't render until we have a valid MCP URL
-  if (!mcpUrl || !toolsetSlug) {
+  if (!toolsetSlug) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Text muted>Select an MCP server to start chatting</Text>
-      </div>
+      <ConnectionNotice>
+        Select an MCP server to start chatting
+      </ConnectionNotice>
+    );
+  }
+
+  if (
+    isToolsetLoading ||
+    (isToolsetError && isToolsetFetching) ||
+    issuerConnection.isLoading
+  ) {
+    return (
+      <ConnectionNotice>
+        Connecting to the selected MCP server…
+      </ConnectionNotice>
+    );
+  }
+
+  if (isToolsetError || issuerConnection.isError) {
+    return (
+      <ConnectionNotice
+        error
+        onRetry={
+          isToolsetError
+            ? () => void refetchToolset({ cancelRefetch: false })
+            : issuerConnection.refetch
+        }
+      >
+        {isToolsetError
+          ? "Unable to load the selected MCP server. Try again."
+          : issuerConnection.errorMessage}
+      </ConnectionNotice>
+    );
+  }
+
+  if (!mcpUrl || !toolset) {
+    return (
+      <ConnectionNotice
+        error
+        onRetry={
+          !toolset
+            ? () => void refetchToolset({ cancelRefetch: false })
+            : issuerConnection.refetch
+        }
+      >
+        The selected MCP server is unavailable.
+      </ConnectionNotice>
     );
   }
 
@@ -98,6 +145,18 @@ export function PlaygroundElements({
   // PlaygroundAuth (the sidebar), which shares this hook's probe state.
   if (issuerConnection.isIssuerGated && issuerConnection.needsAuth) {
     return <LoginRequiredNotice providerName={toolset?.name ?? "provider"} />;
+  }
+
+  // A cached token alone is not proof that the upstream session is linked.
+  if (
+    issuerConnection.isIssuerGated &&
+    (!gatewayToken || !issuerConnection.connected)
+  ) {
+    return (
+      <ConnectionNotice>
+        Connecting to the selected MCP server…
+      </ConnectionNotice>
+    );
   }
 
   return (
@@ -118,6 +177,30 @@ export function PlaygroundElements({
         ) : undefined
       }
     />
+  );
+}
+
+function ConnectionNotice({
+  children,
+  error = false,
+  onRetry,
+}: {
+  children: React.ReactNode;
+  error?: boolean;
+  onRetry?: () => void;
+}) {
+  return (
+    <div
+      className="flex h-full flex-col gap-3 items-center justify-center"
+      role={error ? "alert" : "status"}
+    >
+      <Text muted>{children}</Text>
+      {onRetry && (
+        <Button variant="secondary" onClick={onRetry}>
+          Retry
+        </Button>
+      )}
+    </div>
   );
 }
 

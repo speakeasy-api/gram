@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.134.0",
+  "version": "0.137.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -25,11 +25,11 @@
     "build:storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "2.0.63",
+    "@ai-sdk/mcp": "2.0.67",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
-    "@assistant-ui/react-ai-sdk": "~1.4.13",
-    "@assistant-ui/react-markdown": "^0.14.17",
+    "@assistant-ui/react-ai-sdk": "~1.4.14",
+    "@assistant-ui/react-markdown": "^0.14.18",
     "@calcom/embed-react": "^1.5.3",
     "@cfworker/json-schema": "catalog:",
     "@datadog/browser-rum": "^7.7.0",
@@ -76,7 +76,6 @@
     "monaco-editor": "^0.57.0",
     "motion": "^13.2.0",
     "nanoid": "^6.0.0",
-    "next-themes": "^0.4.6",
     "nuqs": "^2.9.0",
     "posthog-js": "^1.411.0",
     "radix-ui": "^1.6.7",
@@ -120,7 +119,7 @@
     "@vitejs/plugin-react": "catalog:",
     "happy-dom": "^20.11.1",
     "knip": "^6.20.0",
-    "oxlint": "^1.86.0",
+    "oxlint": "^1.87.0",
     "oxlint-tsgolint": "^7.0.2003",
     "react-grab": "^0.2.0",
     "storybook": "^10.6.1",

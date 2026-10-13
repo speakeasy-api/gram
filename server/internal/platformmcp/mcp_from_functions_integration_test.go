@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -302,9 +303,7 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_first_server")
 	ctx = fixture.createFromFunctionsContext(ctx)
 	// Leave the organization with no enabled server, so the next is its first.
-	require.NoError(t, toolsetsrepo.New(fixture.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
-	}))
+	disableFixtureServer(t, ctx, fixture)
 
 	input := fixture.createInput("First Desk", fixture.tools[0])
 	input.Confirmed = false
@@ -347,6 +346,23 @@ func TestCreateMCPFromFunctionsReportsTheFirstServerJoiningTheDefaultPlugin(t *t
 	require.Equal(t, "not_requested", second.PublicationRequest)
 }
 
+// disableFixtureServer disables the fixture's server through the hosted mirror, as the dashboard does.
+func disableFixtureServer(t *testing.T, ctx context.Context, fixture toolExposureFixture) {
+	t.Helper()
+	tx, err := fixture.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction for the hosted mirror write.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := toolsetsrepo.New(tx)
+	require.NoError(t, q.SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
+	}))
+	toolset, err := q.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: fixture.toolsetID, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+	_, err = hostedmcp.Sync(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), toolset, nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+}
+
 type recordingPublishSignaler struct{ projects []uuid.UUID }
 
 func (r *recordingPublishSignaler) SignalPluginPublish(_ context.Context, projectID uuid.UUID, _ string) error {
@@ -362,9 +378,7 @@ func TestCreateMCPFromFunctionsRequestsTheFirstPublishWithoutAMarketplaceConnect
 	t.Parallel()
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_create_from_functions_first_publish")
 	ctx = fixture.createFromFunctionsContext(ctx)
-	require.NoError(t, toolsetsrepo.New(fixture.conn).SetToolsetMCPEnabledByID(ctx, toolsetsrepo.SetToolsetMCPEnabledByIDParams{
-		McpEnabled: false, ID: fixture.toolsetID, ProjectID: fixture.project.ID,
-	}))
+	disableFixtureServer(t, ctx, fixture)
 	signaler := &recordingPublishSignaler{}
 	fixture.service.publication = plugins.PublicationRequests{Enabled: true}
 	fixture.service.publisher = signaler
@@ -491,7 +505,13 @@ func TestCreateMCPFromFunctionsChargesOutsideAnyTransaction(t *testing.T) {
 	charges := len(*acquired)
 	_, err = fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, input)
 	require.NoError(t, err)
-	require.Len(t, *acquired, charges, "a replay is not charged")
+	// The replay itself is free, but re-sending its publish and index signals
+	// is charged once (see chargeRerun), and that charge is outside any
+	// transaction too.
+	require.Len(t, *acquired, 2*charges, "a replay is charged only for the signals it re-sends")
+	for _, held := range *acquired {
+		require.Zero(t, held, "the replay's charge is never consulted while a connection, transaction, or receipt lock is held")
+	}
 }
 
 // The tool is a second caller of the dashboard's authoring path, so what it
