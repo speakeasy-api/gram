@@ -462,7 +462,7 @@ type OpenAPIv3Evaluation struct {
 	WarningCount int
 	// The number of informational changes.
 	InfoCount int
-	// MCP servers that include tools from this source.
+	// Toolsets (MCP servers) that include tools from this source.
 	AffectedToolsets []*OpenAPIv3AffectedToolset
 }
 

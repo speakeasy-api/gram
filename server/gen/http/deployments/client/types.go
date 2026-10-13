@@ -220,7 +220,7 @@ type EvaluateOpenAPIv3ResponseBody struct {
 	WarningCount *int `form:"warning_count,omitempty" json:"warning_count,omitempty" xml:"warning_count,omitempty"`
 	// The number of informational changes.
 	InfoCount *int `form:"info_count,omitempty" json:"info_count,omitempty" xml:"info_count,omitempty"`
-	// MCP servers that include tools from this source.
+	// Toolsets (MCP servers) that include tools from this source.
 	AffectedToolsets []*OpenAPIv3AffectedToolsetResponseBody `form:"affected_toolsets,omitempty" json:"affected_toolsets,omitempty" xml:"affected_toolsets,omitempty"`
 }
 
@@ -2413,7 +2413,7 @@ type OpenAPIv3EvaluationResponseBody struct {
 	WarningCount *int `form:"warning_count,omitempty" json:"warning_count,omitempty" xml:"warning_count,omitempty"`
 	// The number of informational changes.
 	InfoCount *int `form:"info_count,omitempty" json:"info_count,omitempty" xml:"info_count,omitempty"`
-	// MCP servers that include tools from this source.
+	// Toolsets (MCP servers) that include tools from this source.
 	AffectedToolsets []*OpenAPIv3AffectedToolsetResponseBody `form:"affected_toolsets,omitempty" json:"affected_toolsets,omitempty" xml:"affected_toolsets,omitempty"`
 }
 

@@ -5,11 +5,17 @@
 import * as z from "zod/v4-mini";
 import { ClosedEnum } from "../../types/enums.js";
 
+/**
+ * The part of the MCP an OpenAPI change affects.
+ */
 export const OpenAPIv3EvaluationCategory = {
   Security: "security",
   Tools: "tools",
   Server: "server",
 } as const;
+/**
+ * The part of the MCP an OpenAPI change affects.
+ */
 export type OpenAPIv3EvaluationCategory = ClosedEnum<
   typeof OpenAPIv3EvaluationCategory
 >;

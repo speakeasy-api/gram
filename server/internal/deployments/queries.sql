@@ -775,16 +775,44 @@ RETURNING id;
 INSERT INTO deployment_statuses (deployment_id, status)
 VALUES (@deployment_id, @status);
 
--- name: GetPreviousDeploymentID :one
-SELECT d.id
-FROM deployments d
-WHERE d.project_id = @project_id
-  AND d.seq < (
-    SELECT cur.seq FROM deployments cur
-    WHERE cur.id = @deployment_id AND cur.project_id = @project_id
+-- name: GetEvaluationBaseDeploymentID :one
+-- The deployment a deployment is compared with: the one it was cloned from,
+-- or else the latest earlier deployment that completed, so failed attempts
+-- in between are skipped.
+SELECT base.id
+FROM (
+  SELECT src.id, 0 AS preference
+  FROM deployments cur
+  JOIN deployments src ON src.id = cur.cloned_from AND src.project_id = @project_id
+  WHERE cur.id = @deployment_id AND cur.project_id = @project_id
+  UNION ALL
+  (
+    SELECT d.id, 1 AS preference
+    FROM deployments d
+    WHERE d.project_id = @project_id
+      AND d.seq < (
+        SELECT cur.seq FROM deployments cur
+        WHERE cur.id = @deployment_id AND cur.project_id = @project_id
+      )
+      AND (
+        SELECT ds.status FROM deployment_statuses ds
+        WHERE ds.deployment_id = d.id
+        ORDER BY ds.seq DESC
+        LIMIT 1
+      ) = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
   )
-ORDER BY d.seq DESC
+) base
+ORDER BY base.preference
 LIMIT 1;
+
+-- name: ListProjectDeploymentOpenAPIv3 :many
+SELECT a.*
+FROM deployments_openapiv3_assets a
+JOIN deployments d ON d.id = a.deployment_id
+WHERE a.deployment_id = @deployment_id
+  AND d.project_id = @project_id;
 
 -- name: ListToolsetsUsingOpenAPIv3Source :many
 SELECT

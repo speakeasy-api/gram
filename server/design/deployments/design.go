@@ -577,7 +577,7 @@ var OpenAPIv3Evaluation = Type("OpenAPIv3Evaluation", func() {
 	Attribute("breaking_count", Int, "The number of breaking changes.")
 	Attribute("warning_count", Int, "The number of changes that need attention.")
 	Attribute("info_count", Int, "The number of informational changes.")
-	Attribute("affected_toolsets", ArrayOf(OpenAPIv3AffectedToolset), "MCP servers that include tools from this source.")
+	Attribute("affected_toolsets", ArrayOf(OpenAPIv3AffectedToolset), "Toolsets (MCP servers) that include tools from this source.")
 })
 
 var OpenAPIv3DocumentSnapshot = Type("OpenAPIv3DocumentSnapshot", func() {

@@ -32,7 +32,13 @@ export type OpenAPIv3EvaluationChange = {
    * The names of the tools the change affects.
    */
   tools: Array<string>;
+  /**
+   * How likely the change is to break existing MCP servers.
+   */
   severity: OpenAPIv3EvaluationSeverity;
+  /**
+   * The part of the MCP the change affects.
+   */
   category: OpenAPIv3EvaluationCategory;
 };
 

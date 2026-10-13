@@ -244,8 +244,8 @@ export function ReviewChangesStep({
           name: existingDocument.name,
         },
       }),
-    // The comparison is of two fixed files, so it never goes stale.
-    staleTime: Infinity,
+    // The baseline is the active deployment, which can change while the
+    // review is open, so the comparison revalidates like any other query.
     retry: false,
   });
 

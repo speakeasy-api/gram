@@ -42,7 +42,7 @@ export type OpenAPIv3EvaluationStatus = ClosedEnum<
  */
 export type OpenAPIv3Evaluation = {
   /**
-   * MCP servers that include tools from this source.
+   * Toolsets (MCP servers) that include tools from this source.
    */
   affectedToolsets: Array<OpenAPIv3AffectedToolset>;
   /**

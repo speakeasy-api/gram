@@ -5,11 +5,17 @@
 import * as z from "zod/v4-mini";
 import { ClosedEnum } from "../../types/enums.js";
 
+/**
+ * How likely an OpenAPI change is to break existing MCP servers.
+ */
 export const OpenAPIv3EvaluationSeverity = {
   Breaking: "breaking",
   Warning: "warning",
   Info: "info",
 } as const;
+/**
+ * How likely an OpenAPI change is to break existing MCP servers.
+ */
 export type OpenAPIv3EvaluationSeverity = ClosedEnum<
   typeof OpenAPIv3EvaluationSeverity
 >;

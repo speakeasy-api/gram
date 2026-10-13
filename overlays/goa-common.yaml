@@ -42,17 +42,27 @@ actions:
   - target: $.components.schemas
     update:
       OpenAPIv3EvaluationSeverity:
-        { type: string, enum: [breaking, warning, info] }
+        type: string
+        description: How likely an OpenAPI change is to break existing MCP servers.
+        enum: [breaking, warning, info]
       OpenAPIv3EvaluationCategory:
-        { type: string, enum: [security, tools, server] }
+        type: string
+        description: The part of the MCP an OpenAPI change affects.
+        enum: [security, tools, server]
   - target: $.components.schemas.OpenAPIv3EvaluationChange.properties.severity
     remove: true
   - target: $.components.schemas.OpenAPIv3EvaluationChange.properties.category
     remove: true
   - target: $.components.schemas.OpenAPIv3EvaluationChange.properties
     update:
-      severity: { $ref: "#/components/schemas/OpenAPIv3EvaluationSeverity" }
-      category: { $ref: "#/components/schemas/OpenAPIv3EvaluationCategory" }
+      severity:
+        allOf:
+          - $ref: "#/components/schemas/OpenAPIv3EvaluationSeverity"
+        description: How likely the change is to break existing MCP servers.
+      category:
+        allOf:
+          - $ref: "#/components/schemas/OpenAPIv3EvaluationCategory"
+        description: The part of the MCP the change affects.
   - target: $.paths["/rpc/killswitches.list"].get.parameters[?@.name=='capability_key'].schema
     remove: true
   - target: $.paths["/rpc/killswitches.list"].get.parameters[?@.name=='capability_key']

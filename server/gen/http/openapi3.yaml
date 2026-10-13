@@ -104205,7 +104205,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/OpenAPIv3AffectedToolset'
-                    description: MCP servers that include tools from this source.
+                    description: Toolsets (MCP servers) that include tools from this source.
                 asset_id:
                     type: string
                     description: The asset ID of the evaluated document. Absent when the source was removed.

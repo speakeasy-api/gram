@@ -95353,7 +95353,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OpenAPIv3AffectedToolset'
-          description: MCP servers that include tools from this source.
+          description: Toolsets (MCP servers) that include tools from this source.
         asset_id:
           type: string
           description: The asset ID of the evaluated document. Absent when the source was removed.
@@ -95424,8 +95424,14 @@ components:
           items:
             type: string
           description: The names of the tools the change affects.
-        severity: {$ref: "#/components/schemas/OpenAPIv3EvaluationSeverity"}
-        category: {$ref: "#/components/schemas/OpenAPIv3EvaluationCategory"}
+        severity:
+          allOf:
+            - $ref: "#/components/schemas/OpenAPIv3EvaluationSeverity"
+          description: How likely the change is to break existing MCP servers.
+        category:
+          allOf:
+            - $ref: "#/components/schemas/OpenAPIv3EvaluationCategory"
+          description: The part of the MCP the change affects.
       required:
         - severity
         - category
@@ -111310,8 +111316,14 @@ components:
     KillswitchOverlapStatus: {type: string, enum: [active, scheduled]}
     KillswitchConflictName: {type: string, enum: [operation_conflict, version_conflict]}
     AnalyticsFilterOperator: {type: string, enum: [equals, in]}
-    OpenAPIv3EvaluationSeverity: {type: string, enum: [breaking, warning, info]}
-    OpenAPIv3EvaluationCategory: {type: string, enum: [security, tools, server]}
+    OpenAPIv3EvaluationSeverity:
+      type: string
+      description: How likely an OpenAPI change is to break existing MCP servers.
+      enum: [breaking, warning, info]
+    OpenAPIv3EvaluationCategory:
+      type: string
+      description: The part of the MCP an OpenAPI change affects.
+      enum: [security, tools, server]
     KillswitchScopeAllServersType: {type: string, enum: [all_servers]}
     KillswitchScopeSelectedServersType: {type: string, enum: [selected_servers]}
     KillswitchScheduleStartNow: {type: string, enum: [now]}

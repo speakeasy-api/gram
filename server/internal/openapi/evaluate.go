@@ -53,15 +53,12 @@ const (
 	EvaluationCategoryServer EvaluationCategory = "server"
 )
 
-const (
-	// maxEvaluationDetails bounds the detail lines on one change so a large
-	// document cannot produce an unbounded response. Fifty lines is more than
-	// a reviewer reads before acting.
-	maxEvaluationDetails = 50
-
-	// maxEvaluationTools bounds the tool names listed on one change.
-	maxEvaluationTools = 200
-)
+// maxEvaluationDetails bounds the detail lines on one change so a large
+// document cannot produce an unbounded response. Fifty lines is more than a
+// reviewer reads before acting. Tool names are never capped: callers use them
+// to count the tools each MCP server loses, and the document size already
+// bounds them.
+const maxEvaluationDetails = 50
 
 // evaluationPlaceholderID stands in for the project, deployment and document
 // ids that tool extraction requires. Evaluation never writes rows, so the
@@ -432,7 +429,7 @@ func compareSecurityScheme(key string, before, after *repo.CreateHTTPSecurityPar
 	}
 
 	if flowChange, ok := compareOAuthFlows(key, before.OauthFlows, after.OauthFlows); ok {
-		flowChange.Tools = capList(toolsUsingScheme(next, key), maxEvaluationTools)
+		flowChange.Tools = toolsUsingScheme(next, key)
 		changes = append(changes, flowChange)
 	}
 
@@ -959,10 +956,15 @@ func compareToolInputs(beforeRaw, afterRaw []byte) (warnings, info []string) {
 		}
 
 		for _, name := range slices.Sorted(maps.Keys(aObj.Properties)) {
-			aProp := aObj.Properties[name]
-			bProp, ok := bObj.Properties[name]
+			bPropRaw, ok := bObj.Properties[name]
 			requiredAfter := slices.Contains(aObj.Required, name)
 			requiredBefore := slices.Contains(bObj.Required, name)
+
+			// Properties often point at shared schemas under $defs, so a
+			// change to the shared schema leaves the property itself
+			// untouched. Compare the resolved schemas instead.
+			aProp := inlineDefs(aObj.Properties[name], after.Defs)
+			bProp := inlineDefs(bPropRaw, before.Defs)
 
 			switch {
 			case !ok && requiredAfter:
@@ -973,8 +975,12 @@ func compareToolInputs(beforeRaw, afterRaw []byte) (warnings, info []string) {
 				warnings = append(warnings, fmt.Sprintf("%s `%s` is now required", label, name))
 			case schemaType(bProp) != schemaType(aProp):
 				warnings = append(warnings, fmt.Sprintf("%s `%s` type %s → %s", label, name, schemaType(bProp), schemaType(aProp)))
-			case !jsonEqual(bProp, aProp):
-				info = append(info, fmt.Sprintf("%s `%s` schema changed", label, name))
+			default:
+				if fields := newRequiredFields(bProp, aProp); len(fields) > 0 {
+					warnings = append(warnings, fmt.Sprintf("%s `%s` has new required %s %s", label, name, pluralWord(len(fields), "field", "fields"), quoteAll(fields)))
+				} else if !jsonEqual(bProp, aProp) {
+					info = append(info, fmt.Sprintf("%s `%s` schema changed", label, name))
+				}
 			}
 		}
 	}
@@ -1000,6 +1006,87 @@ func resolveInputObject(raw json.RawMessage, defs map[string]json.RawMessage) in
 	}
 
 	return obj
+}
+
+// inlineDefs returns the schema with every `#/$defs/` reference replaced by
+// the schema it points at. A reference that is already being expanded higher
+// up is left in place so recursive schemas terminate.
+func inlineDefs(raw json.RawMessage, defs map[string]json.RawMessage) json.RawMessage {
+	var v any
+	if len(defs) == 0 || json.Unmarshal(raw, &v) != nil {
+		return raw
+	}
+
+	out, err := json.Marshal(inlineDefsValue(v, defs, map[string]bool{}))
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
+func inlineDefsValue(v any, defs map[string]json.RawMessage, expanding map[string]bool) any {
+	switch node := v.(type) {
+	case map[string]any:
+		if ref, ok := node["$ref"].(string); ok {
+			name, isDef := strings.CutPrefix(ref, "#/$defs/")
+			def, found := defs[name]
+			if isDef && found && !expanding[name] {
+				var resolved any
+				if json.Unmarshal(def, &resolved) == nil {
+					expanding[name] = true
+					out := inlineDefsValue(resolved, defs, expanding)
+					delete(expanding, name)
+					return out
+				}
+			}
+		}
+
+		out := make(map[string]any, len(node))
+		for k, child := range node {
+			out[k] = inlineDefsValue(child, defs, expanding)
+		}
+		return out
+	case []any:
+		out := make([]any, len(node))
+		for i, child := range node {
+			out[i] = inlineDefsValue(child, defs, expanding)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+// newRequiredFields lists the fields an object schema requires after a
+// change that it did not require before.
+func newRequiredFields(before, after json.RawMessage) []string {
+	var b, a inputObjectSchema
+	_ = json.Unmarshal(before, &b)
+	_ = json.Unmarshal(after, &a)
+
+	var fields []string
+	for _, name := range a.Required {
+		if !slices.Contains(b.Required, name) {
+			fields = append(fields, name)
+		}
+	}
+	slices.Sort(fields)
+	return fields
+}
+
+func quoteAll(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = "`" + n + "`"
+	}
+	return strings.Join(quoted, ", ")
+}
+
+func pluralWord(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 func schemaType(raw json.RawMessage) string {
@@ -1123,7 +1210,7 @@ func newChange(severity EvaluationSeverity, category EvaluationCategory, code, t
 		Code:     code,
 		Title:    title,
 		Details:  capList(details, maxEvaluationDetails),
-		Tools:    capList(tools, maxEvaluationTools),
+		Tools:    tools,
 	}
 }
 

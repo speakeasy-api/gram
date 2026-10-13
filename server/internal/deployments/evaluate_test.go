@@ -211,3 +211,48 @@ func TestDeploymentsService_GetDeploymentEvaluation_NotFound(t *testing.T) {
 	})
 	require.Error(t, err)
 }
+
+func createOpenAPIv3Deployment(t *testing.T, ctx context.Context, ti *testInstance, key string, assets []*gen.AddOpenAPIv3DeploymentAssetForm) *gen.CreateDeploymentResult {
+	t.Helper()
+
+	res, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:   key,
+		Openapiv3Assets:  assets,
+		Functions:        []*gen.AddFunctionsForm{},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+	require.Equal(t, "completed", res.Deployment.Status)
+
+	return res
+}
+
+func TestDeploymentsService_GetDeploymentEvaluation_UnclonedDeploymentUsesPreviousCompleted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
+	todoID := uploadOpenAPIv3Fixture(t, ctx, ti, "fixtures/todo-valid.yaml")
+	taggedID := uploadOpenAPIv3Fixture(t, ctx, ti, "fixtures/todo-with-tags.yaml")
+
+	first := createOpenAPIv3Deployment(t, ctx, ti, "evaluation-base-first", []*gen.AddOpenAPIv3DeploymentAssetForm{{AssetID: todoID, Name: "todo", Slug: "todo"}})
+	second := createOpenAPIv3Deployment(t, ctx, ti, "evaluation-base-second", []*gen.AddOpenAPIv3DeploymentAssetForm{{AssetID: taggedID, Name: "todo", Slug: "todo"}})
+
+	res, err := ti.service.GetDeploymentEvaluation(ctx, &gen.GetDeploymentEvaluationPayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     second.Deployment.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.Deployment.ID, *res.BaseDeploymentID)
+	require.Len(t, res.Documents, 1)
+	require.Equal(t, todoID, *res.Documents[0].BaseAssetID)
+}

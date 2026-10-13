@@ -274,3 +274,69 @@ func TestEvaluateDocumentChange_InvalidDocument(t *testing.T) {
 	_, err := openapi.EvaluateDocumentChange(t.Context(), tracer, docInfo, nil, []byte("{not: [valid"))
 	require.Error(t, err)
 }
+
+func TestEvaluateDocumentChange_OptionalInputSchemaChangeIsInfo(t *testing.T) {
+	t.Parallel()
+
+	next := strings.Replace(tokenOnlyDoc, `        - name: limit
+          in: query
+          schema: {type: integer}`, `        - name: limit
+          in: query
+          schema: {type: integer, maximum: 100}`, 1)
+
+	eval := evaluate(t, tokenOnlyDoc, next)
+
+	schema := findChange(t, eval, "tool_input_schema_changed")
+	require.Equal(t, openapi.EvaluationSeverityInfo, schema.Severity)
+	require.Equal(t, []string{"pets_list_pets"}, schema.Tools)
+	require.Equal(t, []string{"pets_list_pets: query parameter `limit` schema changed"}, schema.Details)
+}
+
+const sharedOwnerDoc = `
+openapi: 3.1.0
+info: {title: Pets, version: 1.0.0}
+servers:
+  - url: https://api.example.com
+paths:
+  /pets:
+    post:
+      operationId: createPet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NewPet'}
+      responses:
+        "200": {description: ok}
+components:
+  schemas:
+    NewPet:
+      type: object
+      properties:
+        name: {type: string}
+        owner: {$ref: '#/components/schemas/Owner'}
+    Owner:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+`
+
+func TestEvaluateDocumentChange_SharedSchemaRequiredFieldIsWarning(t *testing.T) {
+	t.Parallel()
+
+	next := strings.Replace(sharedOwnerDoc, `      required: [name]
+      properties:
+        name: {type: string}
+`, `      required: [name, email]
+      properties:
+        name: {type: string}
+        email: {type: string}
+`, 1)
+
+	eval := evaluate(t, sharedOwnerDoc, next)
+
+	inputs := findChange(t, eval, "tool_inputs_changed")
+	require.Equal(t, openapi.EvaluationSeverityWarning, inputs.Severity)
+	require.Equal(t, []string{"pets_create_pet: body field `owner` has new required field `email`"}, inputs.Details)
+}

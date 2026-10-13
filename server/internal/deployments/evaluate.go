@@ -72,7 +72,7 @@ func (s *Service) EvaluateOpenAPIv3(ctx context.Context, form *gen.EvaluateOpenA
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting active deployment").LogError(ctx, s.logger)
 	default:
-		docs, err := s.repo.GetDeploymentOpenAPIv3(ctx, activeID)
+		docs, err := s.repo.ListProjectDeploymentOpenAPIv3(ctx, repo.ListProjectDeploymentOpenAPIv3Params{DeploymentID: activeID, ProjectID: projectID})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error listing deployed openapi documents").LogError(ctx, s.logger)
 		}
@@ -124,24 +124,24 @@ func (s *Service) GetDeploymentEvaluation(ctx context.Context, form *gen.GetDepl
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting deployment").LogError(ctx, s.logger)
 	}
 
-	nextDocs, err := s.repo.GetDeploymentOpenAPIv3(ctx, deploymentID)
+	nextDocs, err := s.repo.ListProjectDeploymentOpenAPIv3(ctx, repo.ListProjectDeploymentOpenAPIv3Params{DeploymentID: deploymentID, ProjectID: projectID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing deployment openapi documents").LogError(ctx, s.logger)
 	}
 
 	var baseDeploymentID *string
 	var baseDocs []repo.DeploymentsOpenapiv3Asset
-	prevID, err := s.repo.GetPreviousDeploymentID(ctx, repo.GetPreviousDeploymentIDParams{ProjectID: projectID, DeploymentID: deploymentID})
+	prevID, err := s.repo.GetEvaluationBaseDeploymentID(ctx, repo.GetEvaluationBaseDeploymentIDParams{ProjectID: projectID, DeploymentID: deploymentID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting previous deployment").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting base deployment").LogError(ctx, s.logger)
 	default:
 		baseDeploymentID = new(prevID.String())
 
-		baseDocs, err = s.repo.GetDeploymentOpenAPIv3(ctx, prevID)
+		baseDocs, err = s.repo.ListProjectDeploymentOpenAPIv3(ctx, repo.ListProjectDeploymentOpenAPIv3Params{DeploymentID: prevID, ProjectID: projectID})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error listing previous deployment openapi documents").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error listing base deployment openapi documents").LogError(ctx, s.logger)
 		}
 	}
 
