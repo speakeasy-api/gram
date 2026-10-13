@@ -6,6 +6,7 @@ import { Text } from "@/components/ui/Text";
 
 import { PROVIDERS } from "./providers";
 import { SpeakeasyProviderCard } from "./SpeakeasyProviderCard";
+import { SpeakeasyWorkspace } from "./SpeakeasyWorkspace";
 import { PROVIDER_IDS } from "./tabs";
 
 type IdentityProvidersProps = {
@@ -36,6 +37,8 @@ function ProviderContent({
     ? PROVIDERS.find((provider) => provider.id === providerId)
     : undefined;
   if (provider) return <provider.Workspace />;
+  if (providerId === "speakeasy" && showSpeakeasy)
+    return <SpeakeasyWorkspace />;
   return (
     <section
       className="flex min-w-0 flex-col gap-6"

@@ -40,7 +40,7 @@ false or missing, report `next_step` and stop; do not direct the administrator
 to enable an unavailable issuer. When eligible, explain that enabling provisions or resumes
 the organization's public issuer; it does not establish vendor trust or grant
 user access. Ask the organization administrator to open **IDP and SSO → Identity
-providers**, find the **Speakeasy** card, and choose **Enable** for the confirmed
+providers → Speakeasy** and choose **Enable** under **Status** for the confirmed
 organization. There is no issuer mutation
 tool in this workflow. Do not substitute raw API requests, database writes,
 credentials, or an invented tool.
@@ -52,9 +52,10 @@ that setup failed; read again before suggesting another dashboard action.
 For `signing_paused`, explain signing is unavailable and ask the organization
 administrator to contact Speakeasy support. For `keyless`, explain that no active
 signing key exists, so nothing is signed, and ask an organization administrator
-to open the **Speakeasy** card and choose **Finish setting up a new key**. The
+to open **IDP and SSO → Identity providers → Speakeasy** and, under **Signing
+keys**, choose **Finish setting up a new key**. The
 issuer URI stays the same. If the administrator suspects a key is compromised,
-point them to **Replace compromised key** on the same card. There is no key
+point them to **Replace compromised key** on the same page. There is no key
 mutation tool in this workflow: do not attempt rotation or revocation yourself,
 or imply that support staff may mutate the organization's issuer.
 

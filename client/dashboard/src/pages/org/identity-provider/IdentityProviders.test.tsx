@@ -45,6 +45,9 @@ vi.mock("./SpeakeasyProviderCard", () => ({
     <article aria-label="Speakeasy identity provider" />
   ),
 }));
+vi.mock("./SpeakeasyWorkspace", () => ({
+  SpeakeasyWorkspace: () => <div>Speakeasy page</div>,
+}));
 function show(
   query = "",
   props = { showExternal: true, showSpeakeasy: false },
@@ -179,5 +182,21 @@ describe("provider cards", () => {
     ).toBeTruthy();
     expect(screen.queryByText(/Okta content/)).toBeNull();
     expect(screen.queryByRole("link", { name: /Okta/ })).toBeNull();
+  });
+
+  it("opens the Speakeasy page from its provider link", () => {
+    show("&provider=speakeasy", { showExternal: false, showSpeakeasy: true });
+    expect(screen.getByText("Speakeasy page")).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Identity providers" }),
+    ).toBeNull();
+  });
+
+  it("does not open the Speakeasy page when it is not offered", () => {
+    show("&provider=speakeasy", { showExternal: true, showSpeakeasy: false });
+    expect(screen.queryByText("Speakeasy page")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Identity providers" }),
+    ).toBeTruthy();
   });
 });

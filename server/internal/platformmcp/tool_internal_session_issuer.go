@@ -28,11 +28,11 @@ type InternalSessionIssuerStatus struct {
 var internalSessionIssuerNextSteps = map[internalsessionissuers.State]string{
 	internalsessionissuers.StateUnavailable:            "The issuer is not available to this organization yet.",
 	internalsessionissuers.StateVerifiedDomainRequired: "Verify at least one email domain for this organization on IDP and SSO first; Speakeasy only vouches for emails on verified domains.",
-	internalsessionissuers.StateSetupRequired:          "An organization administrator can enable Enterprise Managed Authorization on IDP and SSO, in the Speakeasy card on the Identity providers tab.",
+	internalsessionissuers.StateSetupRequired:          "An organization administrator can enable Enterprise Managed Authorization in the dashboard (IDP and SSO > Identity providers > Speakeasy).",
 	internalsessionissuers.StateEnabled:                "Register this URI in each supported service's enterprise-managed authorization settings. Each user needs a company sign-in to Speakeasy (SSO, company-managed Google or Microsoft account, magic link, or password with MFA) with an email on a verified domain; personal accounts and passwords without MFA don't qualify. Configuration alone does not verify access.",
-	internalsessionissuers.StateDisabled:               "Signing is disabled. An organization administrator can re-enable Enterprise Managed Authorization on IDP and SSO, in the Speakeasy card on the Identity providers tab.",
+	internalsessionissuers.StateDisabled:               "Signing is disabled. An organization administrator can re-enable Enterprise Managed Authorization in the dashboard (IDP and SSO > Identity providers > Speakeasy).",
 	internalsessionissuers.StateSigningPaused:          "Speakeasy has paused issuer signing. Contact your Speakeasy administrator to resume it.",
-	internalsessionissuers.StateKeyless:                "No signing key is active, so nothing is signed. An organization administrator can choose Finish setting up a new key in the Speakeasy card on the Identity providers tab of IDP and SSO; the issuer URI stays the same. This read-only tool can't do it.",
+	internalsessionissuers.StateKeyless:                "No signing key is active, so nothing is signed. An organization administrator can choose Finish setting up a new key in the dashboard (IDP and SSO > Identity providers > Speakeasy); the issuer URI stays the same. This read-only tool can't do it.",
 }
 
 func internalSessionIssuerNextStep(state internalsessionissuers.State, canEnable bool) string {
