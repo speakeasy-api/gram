@@ -3,9 +3,7 @@ package unproxiedmcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -34,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -102,8 +101,8 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	// Clients reach an unproxied server directly and Speakeasy never does, so
 	// the URL only has to work from the client's network (a tailnet or VPN
 	// host included). Check its shape only; never resolve or dial it.
-	if err := validateServerURL(payload.URL); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid server url").LogWarn(ctx, logger)
+	if !urls.IsAbsoluteHTTP(payload.URL) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "url must be an absolute http(s) URL with a host and no credentials").LogWarn(ctx, logger)
 	}
 
 	// Generate the server ID up front so the slug can include its suffix and
@@ -302,23 +301,6 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
-	}
-
-	return nil
-}
-
-// validateServerURL checks that rawURL is an absolute http or https URL with a
-// host. It does not resolve the host.
-func validateServerURL(rawURL string) error {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("parse url: %w", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("url scheme must be http or https")
-	}
-	if u.Hostname() == "" {
-		return fmt.Errorf("url must include a host")
 	}
 
 	return nil

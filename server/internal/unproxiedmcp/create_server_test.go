@@ -160,6 +160,23 @@ func TestCreateServer_RejectsMissingHost(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
+func TestCreateServer_RejectsCredentialsInURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withStaffEmail(t, ctx)
+
+	_, err := ti.service.CreateServer(ctx, &gen.CreateServerPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             nil,
+		URL:              "https://user:secret@vendor.example.com/mcp",
+		Description:      nil,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
 func TestCreateServer_RejectsInvalidScheme(t *testing.T) {
 	t.Parallel()
 
