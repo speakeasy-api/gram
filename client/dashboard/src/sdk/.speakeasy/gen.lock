@@ -217,6 +217,8 @@ trackedFiles:
   src/funcs/dataExportsUpdateRoute.ts: {}
   src/funcs/deploymentsActive.ts: {}
   src/funcs/deploymentsCreate.ts: {}
+  src/funcs/deploymentsEvaluateOpenAPIv3.ts: {}
+  src/funcs/deploymentsEvaluation.ts: {}
   src/funcs/deploymentsEvolveDeployment.ts: {}
   src/funcs/deploymentsGetById.ts: {}
   src/funcs/deploymentsLatest.ts: {}
@@ -1085,6 +1087,7 @@ trackedFiles:
   src/models/components/environment.ts: {}
   src/models/components/environmententry.ts: {}
   src/models/components/environmententryinput.ts: {}
+  src/models/components/evaluateopenapiv3form.ts: {}
   src/models/components/evaluatepromptguardrailrequestbody.ts: {}
   src/models/components/eventlogentry.ts: {}
   src/models/components/eventvolumebucket.ts: {}
@@ -1130,6 +1133,7 @@ trackedFiles:
   src/models/components/generateworkosadminportallinkrequestbody.ts: {}
   src/models/components/generateworkosadminportallinkresult.ts: {}
   src/models/components/getactivedeploymentresult.ts: {}
+  src/models/components/getdeploymentevaluationresult.ts: {}
   src/models/components/getdeploymentlogsresult.ts: {}
   src/models/components/getdeploymentresult.ts: {}
   src/models/components/getemployeedataflowgraphpayload.ts: {}
@@ -1477,7 +1481,14 @@ trackedFiles:
   src/models/components/oktaserversuggestionremoteheader.ts: {}
   src/models/components/onboardinghookevent.ts: {}
   src/models/components/onboardingstatusresult.ts: {}
+  src/models/components/openapiv3affectedtoolset.ts: {}
   src/models/components/openapiv3deploymentasset.ts: {}
+  src/models/components/openapiv3documentsnapshot.ts: {}
+  src/models/components/openapiv3evaluation.ts: {}
+  src/models/components/openapiv3evaluationcategory.ts: {}
+  src/models/components/openapiv3evaluationchange.ts: {}
+  src/models/components/openapiv3evaluationseverity.ts: {}
+  src/models/components/openapiv3securityschemesummary.ts: {}
   src/models/components/organization.ts: {}
   src/models/components/organizationclientdelegationstatus.ts: {}
   src/models/components/organizationclientdeletepreflight.ts: {}
@@ -2215,6 +2226,7 @@ trackedFiles:
   src/models/operations/ensuremanagedassistant.ts: {}
   src/models/operations/ensuremcpserverreview.ts: {}
   src/models/operations/enterdemo.ts: {}
+  src/models/operations/evaluateopenapiv3.ts: {}
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/explainresourceaccess.ts: {}
@@ -2243,6 +2255,7 @@ trackedFiles:
   src/models/operations/getcustomdetectionrule.ts: {}
   src/models/operations/getdashboard.ts: {}
   src/models/operations/getdeployment.ts: {}
+  src/models/operations/getdeploymentevaluation.ts: {}
   src/models/operations/getdeploymentlogs.ts: {}
   src/models/operations/getdeviceagentconfiguration.ts: {}
   src/models/operations/getdeviceintegrationconfig.ts: {}
@@ -3028,6 +3041,8 @@ trackedFiles:
   src/react-query/deleteWidget.ts: {}
   src/react-query/deployment.core.ts: {}
   src/react-query/deployment.ts: {}
+  src/react-query/deploymentEvaluation.core.ts: {}
+  src/react-query/deploymentEvaluation.ts: {}
   src/react-query/deploymentLogs.core.ts: {}
   src/react-query/deploymentLogs.ts: {}
   src/react-query/detachOrganizationRemoteSessionClientKeySet.ts: {}
@@ -3069,6 +3084,7 @@ trackedFiles:
   src/react-query/ensureManagedAssistant.ts: {}
   src/react-query/ensureMcpServerReview.ts: {}
   src/react-query/enterDemo.ts: {}
+  src/react-query/evaluateOpenAPIv3.ts: {}
   src/react-query/evolveDeployment.ts: {}
   src/react-query/explainResourceAccess.core.ts: {}
   src/react-query/explainResourceAccess.ts: {}
@@ -6477,6 +6493,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  evaluateOpenAPIv3:
+    speakeasy-default-evaluate-open-AP-iv3:
+      requestBody:
+        application/json: {"asset_id": "<id>", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"affected_toolsets": [{"affected_tool_count": 745765, "id": "<id>", "mcp_enabled": true, "name": "<value>", "oauth_configured": true, "slug": "<value>", "tool_count": 185129}], "breaking_count": 647782, "changes": [], "info_count": 721312, "name": "<value>", "slug": "<value>", "status": "unchanged", "warning_count": 274582}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   evaluatePromptGuardrail:
     speakeasy-default-evaluate-prompt-guardrail:
       requestBody:
@@ -6845,6 +6872,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getDeploymentEvaluation:
+    speakeasy-default-get-deployment-evaluation:
+      parameters:
+        query:
+          deployment_id: "<id>"
+      responses:
+        "200":
+          application/json: {"deployment_id": "<id>", "documents": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getDeploymentLogs:
     speakeasy-default-get-deployment-logs:
       parameters:
