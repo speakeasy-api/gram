@@ -78,7 +78,7 @@ COMMENT ON COLUMN chat_messages.content IS 'Raw message text.
 @access: opaque-restricted';
 ```
 
-Classify by reading the code that writes the column, because column names are often misleading, and choose the stricter class when unsure. The class records what the data is; consumers such as read-only SQL agents decide which classes they read. `mise run lint:column-classification` (and CI) fails when a column lacks a valid marker. Classes and parsing live in `server/internal/dataclassification`.
+Classify by reading the code that writes the column, because column names are often misleading, and choose the stricter class when unsure. The class records what the data is; consumers such as read-only SQL agents decide which classes they read. The server test suite in CI fails when a column lacks a valid marker (run `go test ./internal/dataclassification/...` from `server/` locally; needs Docker). Classes and parsing live in `server/internal/dataclassification`.
 
 ### Change tracking
 
