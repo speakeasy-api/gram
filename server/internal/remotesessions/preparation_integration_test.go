@@ -37,6 +37,23 @@ func preparationAdvertise(t *testing.T, ctx context.Context, ti *testInstance, i
 	require.NoError(t, err)
 }
 
+// preparationConfidentialClient makes client authenticate with
+// private_key_jwt: identity chaining refuses public clients.
+func preparationConfidentialClient(t *testing.T, ctx context.Context, ti *testInstance, issuer, client uuid.UUID) {
+	t.Helper()
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	setID := createJsonWebKeySet(t, ctx, ti.conn, auth.ActiveOrganizationID, "preparation-"+client.String())
+	rows, err := testrepo.New(ti.conn).SetPreparationFixtureConfidentialClient(ctx, testrepo.SetPreparationFixtureConfidentialClientParams{
+		JsonWebKeySetID:       conv.ToNullUUID(setID),
+		OrganizationID:        conv.ToPGText(auth.ActiveOrganizationID),
+		ID:                    client,
+		ProjectID:             conv.ToNullUUID(*auth.ProjectID),
+		RemoteSessionIssuerID: issuer,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), rows)
+}
+
 func preparationRecordGrants(t *testing.T, ctx context.Context, ti *testInstance, client uuid.UUID, grants []string) {
 	t.Helper()
 	auth, _ := contextvalues.GetAuthContext(ctx)
@@ -228,6 +245,7 @@ func TestPreparationIntegration_CIMDExactGrantsStableIdentity(t *testing.T) {
 	client := createCimdClient(t, ctx, ti, issuer.String(), user.String(), []string{"openid"})
 	otherUser := createUserSessionIssuer(t, ctx, ti.conn, "cimd-unselected-human")
 	other := createCimdClient(t, ctx, ti, issuer.String(), otherUser.String(), []string{"openid"})
+	preparationConfidentialClient(t, ctx, ti, issuer, uuid.MustParse(client.ID))
 	grants := []string{"authorization_code", "refresh_token", oauthwire.GrantTypeJWTBearer}
 	in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: uuid.MustParse(client.ID), Resource: "https://resource.example.com/", Mechanism: "cimd", ConfirmGrants: grants, Scopes: []string{"openid"}}
 	prepared, err := ti.service.PrepareIdentityChaining(ctx, in)

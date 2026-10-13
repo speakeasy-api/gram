@@ -12,10 +12,12 @@ toolset_metrics AS (
     p.organization_id,
     COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
     COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
-    COUNT(CASE WHEN t.mcp_enabled = true THEN 1 END) as total_enabled_servers,
+    (COUNT(CASE WHEN w.id IS NULL AND t.mcp_enabled = true THEN 1 END)
+      + COUNT(CASE WHEN w.visibility <> 'disabled' THEN 1 END))::bigint as total_enabled_servers,
     COUNT(t.id) as total_toolsets
   FROM projects p
   LEFT JOIN toolsets t ON p.id = t.project_id AND t.deleted = false
+  LEFT JOIN mcp_servers w ON w.id = t.id AND w.toolset_id = t.id AND w.project_id = t.project_id AND w.deleted IS FALSE
   GROUP BY p.organization_id
 ),
 tool_metrics AS (

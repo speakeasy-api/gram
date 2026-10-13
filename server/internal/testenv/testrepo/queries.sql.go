@@ -1981,34 +1981,6 @@ func (q *Queries) GetPreparationFixtureRegistration(ctx context.Context, arg Get
 	return i, err
 }
 
-const getPrincipalGrantEffectFixture = `-- name: GetPrincipalGrantEffectFixture :one
-SELECT effect
-FROM principal_grants
-WHERE organization_id = $1
-  AND principal_urn = $2
-  AND scope = $3
-  AND selectors = $4
-`
-
-type GetPrincipalGrantEffectFixtureParams struct {
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	Scope          string
-	Selectors      []byte
-}
-
-func (q *Queries) GetPrincipalGrantEffectFixture(ctx context.Context, arg GetPrincipalGrantEffectFixtureParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getPrincipalGrantEffectFixture,
-		arg.OrganizationID,
-		arg.PrincipalUrn,
-		arg.Scope,
-		arg.Selectors,
-	)
-	var effect pgtype.Text
-	err := row.Scan(&effect)
-	return effect, err
-}
-
 const getPrincipalRemoteSessionBindingIssuerFixture = `-- name: GetPrincipalRemoteSessionBindingIssuerFixture :one
 SELECT user_session_issuer_id
 FROM principal_remote_session_bindings
@@ -2644,29 +2616,6 @@ func (q *Queries) InsertKillswitchPrescriptionFixture(ctx context.Context, arg I
 		arg.ResourceScope,
 		arg.InternalNote,
 		arg.ExternalNote,
-	)
-	return err
-}
-
-const insertLegacyDenyPrincipalGrantFixture = `-- name: InsertLegacyDenyPrincipalGrantFixture :exec
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, $2, $3, 'deny', $4)
-`
-
-type InsertLegacyDenyPrincipalGrantFixtureParams struct {
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	Scope          string
-	Selectors      []byte
-}
-
-// Test-only fixture for exercising allow-only writes against legacy rows.
-func (q *Queries) InsertLegacyDenyPrincipalGrantFixture(ctx context.Context, arg InsertLegacyDenyPrincipalGrantFixtureParams) error {
-	_, err := q.db.Exec(ctx, insertLegacyDenyPrincipalGrantFixture,
-		arg.OrganizationID,
-		arg.PrincipalUrn,
-		arg.Scope,
-		arg.Selectors,
 	)
 	return err
 }
@@ -5557,6 +5506,45 @@ type SetPreparationFixtureClientSecretExpiryParams struct {
 func (q *Queries) SetPreparationFixtureClientSecretExpiry(ctx context.Context, arg SetPreparationFixtureClientSecretExpiryParams) error {
 	_, err := q.db.Exec(ctx, setPreparationFixtureClientSecretExpiry, arg.ExpiresAt, arg.ID, arg.ProjectID)
 	return err
+}
+
+const setPreparationFixtureConfidentialClient = `-- name: SetPreparationFixtureConfidentialClient :execrows
+WITH issuer AS (
+    UPDATE remote_session_issuers
+    SET token_endpoint_auth_methods_supported = array_append(array_remove(token_endpoint_auth_methods_supported, 'private_key_jwt'), 'private_key_jwt')
+    WHERE remote_session_issuers.id = $5 AND remote_session_issuers.project_id = $4
+    RETURNING remote_session_issuers.id
+)
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = $1, client_secret_encrypted = NULL,
+    organization_id = $2
+WHERE remote_session_clients.id = $3
+  AND remote_session_clients.project_id = $4
+  AND remote_session_clients.remote_session_issuer_id IN (SELECT issuer.id FROM issuer)
+`
+
+type SetPreparationFixtureConfidentialClientParams struct {
+	JsonWebKeySetID       uuid.NullUUID
+	OrganizationID        pgtype.Text
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// Identity chaining refuses public clients: make a fixture client authenticate
+// with private_key_jwt against a key set, and its issuer accept that method.
+func (q *Queries) SetPreparationFixtureConfidentialClient(ctx context.Context, arg SetPreparationFixtureConfidentialClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPreparationFixtureConfidentialClient,
+		arg.JsonWebKeySetID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ProjectID,
+		arg.RemoteSessionIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setPreparationFixtureDCREndpoint = `-- name: SetPreparationFixtureDCREndpoint :exec

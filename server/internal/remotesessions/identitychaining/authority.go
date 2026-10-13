@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -18,8 +19,8 @@ import (
 // authority authorizes use of a human's retained delegation for one endpoint.
 // It is the delegation service's Authorizer for identity chaining.
 type authority struct {
-	chainer *Chainer
-	req     Request
+	db  *pgxpool.Pool
+	req Request
 }
 
 // AuthorizeDelegation requires the endpoint's organization-level user session
@@ -29,7 +30,7 @@ func (a authority) AuthorizeDelegation(ctx context.Context, b remotesessions.Del
 	if b.OrganizationID != a.req.OrganizationID || b.HumanID != a.req.UserID || b.IssuerID == uuid.Nil || b.ClientID == uuid.Nil {
 		return remotesessions.ErrDelegationConfiguration
 	}
-	authorized, err := repo.New(a.chainer.db).AuthorizeEMADelegation(ctx, repo.AuthorizeEMADelegationParams{
+	authorized, err := repo.New(a.db).AuthorizeEMADelegation(ctx, repo.AuthorizeEMADelegationParams{
 		UserSessionIssuerID: a.req.UserSessionIssuerID,
 		OrganizationID:      conv.ToPGText(a.req.OrganizationID),
 		TrustedIssuerID:     uuid.NullUUID{UUID: b.IssuerID, Valid: true},
@@ -51,7 +52,7 @@ func (a authority) AuthorizeDelegation(ctx context.Context, b remotesessions.Del
 // released, so a rotated or reconfigured registration retires stored tokens.
 func (c *Chainer) checkDelegation(ctx context.Context, req Request, sel selection) Outcome {
 	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
-	switch err := c.delegation.Check(ctx, binding, authority{chainer: c, req: req}); {
+	switch err := c.delegation.Check(ctx, binding, authority{db: c.db, req: req}); {
 	case err == nil:
 		return success
 	case errors.Is(err, remotesessions.ErrDelegationReauthentication):
@@ -90,7 +91,7 @@ func (c *Chainer) authorize(ctx context.Context, logger *slog.Logger, req Reques
 		sel.audience = audience
 	}
 	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
-	if err := (authority{chainer: c, req: req}).AuthorizeDelegation(ctx, binding); err != nil {
+	if err := (authority{db: c.db, req: req}).AuthorizeDelegation(ctx, binding); err != nil {
 		if errors.Is(err, remotesessions.ErrDelegationConfiguration) {
 			return newOutcome(StageAuthorization, ReasonConfigurationRequired, ConfidenceVerified, false)
 		}

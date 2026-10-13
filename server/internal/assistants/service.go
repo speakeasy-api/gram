@@ -3272,7 +3272,20 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// assistant can tell the user which integration is broken.
 	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.MCPServers, platformSlugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread, baselineSkills.Skills)
+	// Only the managed assistant's saved prompt is swapped for the current
+	// built-in one; a user-created assistant keeps its prompt verbatim.
+	baseInstructions := assistant.Instructions
+	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
+	case mErr == nil:
+		if managed.ID == assistant.ID {
+			baseInstructions = currentAssistantInstructions(assistant.Instructions)
+		}
+	case errors.Is(mErr, pgx.ErrNoRows):
+	default:
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, mErr, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
+	}
+
+	instructions, err := composeInstructions(baseInstructions, thread, baselineSkills.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}

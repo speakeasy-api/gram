@@ -369,12 +369,18 @@ func (q *Queries) GetBillingOrganizationAccountType(ctx context.Context, organiz
 
 const getEnabledServerCount = `-- name: GetEnabledServerCount :one
 SELECT COUNT(*)
-FROM toolsets
-WHERE organization_id = $1
-  AND mcp_enabled IS TRUE
-  AND deleted IS FALSE
+FROM toolsets t
+LEFT JOIN mcp_servers w
+  ON w.id = t.id
+ AND w.toolset_id = t.id
+ AND w.project_id = t.project_id
+ AND w.deleted IS FALSE
+WHERE t.organization_id = $1
+  AND t.deleted IS FALSE
+  AND CASE WHEN w.id IS NULL THEN t.mcp_enabled ELSE w.visibility <> 'disabled' END
 `
 
+// Hosted servers count via their canonical wrapper; unwrapped enabled toolsets by flag.
 func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID string) (int64, error) {
 	row := q.db.QueryRow(ctx, getEnabledServerCount, organizationID)
 	var count int64
