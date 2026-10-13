@@ -480,7 +480,7 @@ for (const skipped of ["", "*", "zero:tailscale", "zero:tailscale-other"]) {
       `http://${hostname}:4000`,
     );
     assert.equal(resolved.WORKOS_API_URL, `http://${hostname}:35291/workos`);
-    assert.equal(resolved.GRAM_DEVIDP_ADDRESS, ":35291");
+    assert.equal(resolved.GRAM_DEVIDP_ADDRESS, "127.0.0.1:35291");
     assert.equal(resolved.GRAM_DEVIDP_CONTROL_ADDRESS, "127.0.0.1:35292");
     const call = JSON.parse(readFileSync(f.calls, "utf8").trim());
     assert.deepEqual(call.args, ["status", "--json", "--peers=false"]);
