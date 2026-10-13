@@ -1,24 +1,24 @@
-package ssosignins
+package signins
 
 import (
 	"context"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins/repo"
 )
 
-// Enforced reports whether SSO sign-in linking and revocation enforcement
+// Enforced reports whether sign-in linking and revocation enforcement
 // are on for an organization. Callers evaluate it once per request.
 func Enforced(ctx context.Context, flags feature.Provider, organizationID string) bool {
-	return feature.SSOSignInEnforced(ctx, flags, organizationID)
+	return feature.SignInEnforced(ctx, flags, organizationID)
 }
 
 // EnableForTests turns enforcement on for the given organizations in an
 // in-memory provider.
 func EnableForTests(flags *feature.InMemory, organizationID string, more ...string) {
 	for _, organizationID := range append([]string{organizationID}, more...) {
-		flags.SetFlag(feature.FlagSSOSignInEnforcement, organizationID, true)
+		flags.SetFlag(feature.FlagSignInEnforcement, organizationID, true)
 	}
 }
 

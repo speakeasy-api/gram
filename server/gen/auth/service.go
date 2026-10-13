@@ -28,8 +28,8 @@ type Service interface {
 	// Logs out the current user by clearing their session.
 	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
 	// Signs the caller out everywhere: ends every dashboard and identity provider
-	// session, revokes their SSO sign-ins in every organization, and revokes every
-	// MCP grant made from them.
+	// session, revokes their sign-ins in every organization, and revokes every MCP
+	// grant made from them.
 	LogoutEverywhere(context.Context, *LogoutEverywherePayload) (res *LogoutEverywhereResult, err error)
 	// Register a new org for a user with their session information.
 	Register(context.Context, *RegisterPayload) (err error)
@@ -181,7 +181,7 @@ type LogoutEverywherePayload struct {
 type LogoutEverywhereResult struct {
 	// Empty string to clear the session
 	SessionCookie string
-	// Number of SSO sign-ins revoked.
+	// Number of sign-ins revoked.
 	RevokedSignIns int
 	// Number of MCP grants revoked.
 	RevokedSessions int

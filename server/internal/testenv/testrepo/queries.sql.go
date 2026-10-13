@@ -368,15 +368,15 @@ func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType s
 	return count, err
 }
 
-const countPendingSSOSignInRevocationDeliveries = `-- name: CountPendingSSOSignInRevocationDeliveries :one
+const countPendingSignInRevocationDeliveries = `-- name: CountPendingSignInRevocationDeliveries :one
 SELECT count(*)
-FROM sso_sign_in_revocation_deliveries
+FROM sign_in_revocation_deliveries
 WHERE organization_id = $1
   AND delivered_at IS NULL
 `
 
-func (q *Queries) CountPendingSSOSignInRevocationDeliveries(ctx context.Context, organizationID string) (int64, error) {
-	row := q.db.QueryRow(ctx, countPendingSSOSignInRevocationDeliveries, organizationID)
+func (q *Queries) CountPendingSignInRevocationDeliveries(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingSignInRevocationDeliveries, organizationID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -3459,14 +3459,14 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 	return items, nil
 }
 
-const listSSOSignInRevocationDeliveriesFixture = `-- name: ListSSOSignInRevocationDeliveriesFixture :many
+const listSignInRevocationDeliveriesFixture = `-- name: ListSignInRevocationDeliveriesFixture :many
 SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until, delivered_at
-FROM sso_sign_in_revocation_deliveries
+FROM sign_in_revocation_deliveries
 WHERE organization_id = $1
 ORDER BY created_at, id
 `
 
-type ListSSOSignInRevocationDeliveriesFixtureRow struct {
+type ListSignInRevocationDeliveriesFixtureRow struct {
 	ID            uuid.UUID
 	Kind          string
 	Target        string
@@ -3477,15 +3477,15 @@ type ListSSOSignInRevocationDeliveriesFixtureRow struct {
 	DeliveredAt   pgtype.Timestamptz
 }
 
-func (q *Queries) ListSSOSignInRevocationDeliveriesFixture(ctx context.Context, organizationID string) ([]ListSSOSignInRevocationDeliveriesFixtureRow, error) {
-	rows, err := q.db.Query(ctx, listSSOSignInRevocationDeliveriesFixture, organizationID)
+func (q *Queries) ListSignInRevocationDeliveriesFixture(ctx context.Context, organizationID string) ([]ListSignInRevocationDeliveriesFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listSignInRevocationDeliveriesFixture, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListSSOSignInRevocationDeliveriesFixtureRow
+	var items []ListSignInRevocationDeliveriesFixtureRow
 	for rows.Next() {
-		var i ListSSOSignInRevocationDeliveriesFixtureRow
+		var i ListSignInRevocationDeliveriesFixtureRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Kind,
@@ -3694,8 +3694,8 @@ func (q *Queries) MakeAttachmentIssuerGlobalFixture(ctx context.Context, id uuid
 	return result.RowsAffected(), nil
 }
 
-const makeSSOSignInRevocationDeliveriesDueFixture = `-- name: MakeSSOSignInRevocationDeliveriesDueFixture :exec
-UPDATE sso_sign_in_revocation_deliveries
+const makeSignInRevocationDeliveriesDueFixture = `-- name: MakeSignInRevocationDeliveriesDueFixture :exec
+UPDATE sign_in_revocation_deliveries
 SET next_attempt_at = NULL,
     claimed_until = NULL
 WHERE organization_id = $1
@@ -3703,8 +3703,8 @@ WHERE organization_id = $1
 `
 
 // Skips the backoff so a test can retry failed deliveries at once.
-func (q *Queries) MakeSSOSignInRevocationDeliveriesDueFixture(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, makeSSOSignInRevocationDeliveriesDueFixture, organizationID)
+func (q *Queries) MakeSignInRevocationDeliveriesDueFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, makeSignInRevocationDeliveriesDueFixture, organizationID)
 	return err
 }
 

@@ -182,11 +182,11 @@ const (
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
 
-	// FlagSSOSignInEnforcement turns on, per organization (keyed by its id),
-	// linking MCP grants to SSO sign-ins, sign-in evidence lookups, sign out
+	// FlagSignInEnforcement turns on, per organization (keyed by its id),
+	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
 	// everywhere, member sign-in revocation and revocation on deprovisioning.
 	// Enable it only once every pod runs the code that honours it.
-	FlagSSOSignInEnforcement Flag = "sso-sign-in-enforcement"
+	FlagSignInEnforcement Flag = "sign-in-enforcement"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

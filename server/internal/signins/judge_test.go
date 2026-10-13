@@ -1,4 +1,4 @@
-package ssosignins
+package signins
 
 import (
 	"strings"
@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -20,7 +20,7 @@ func eligibleRow(now time.Time) repo.GetSignInEligibilityRow {
 	return repo.GetSignInEligibilityRow{
 		UserSessionID:             uuid.New(),
 		SubjectUrn:                urn.NewUserSubject("user-1").String(),
-		SsoSignInID:               uuid.NullUUID{UUID: signIn, Valid: true},
+		LinkedSignInID:            uuid.NullUUID{UUID: signIn, Valid: true},
 		SessionLive:               true,
 		SignInID:                  uuid.NullUUID{UUID: signIn, Valid: true},
 		SignInUserID:              pgtype.Text{String: "user-1", Valid: true},
@@ -64,7 +64,7 @@ func TestJudge(t *testing.T) {
 	}{
 		{name: "eligible", mutate: func(*repo.GetSignInEligibilityRow) {}, want: ReasonEligible},
 		{name: "expired session", mutate: func(r *repo.GetSignInEligibilityRow) { r.SessionLive = false }, want: ReasonSessionExpired},
-		{name: "not linked", mutate: func(r *repo.GetSignInEligibilityRow) { r.SsoSignInID.Valid = false }, want: ReasonNotLinked},
+		{name: "not linked", mutate: func(r *repo.GetSignInEligibilityRow) { r.LinkedSignInID.Valid = false }, want: ReasonNotLinked},
 		{name: "sign-in in another organization", mutate: func(r *repo.GetSignInEligibilityRow) { r.SignInID.Valid = false }, want: ReasonNotLinked},
 		{name: "agent subject", mutate: func(r *repo.GetSignInEligibilityRow) { r.SubjectUrn = urn.NewAgentSubject(uuid.New()).String() }, want: ReasonNotUserSubject},
 		{name: "another user", mutate: func(r *repo.GetSignInEligibilityRow) { r.SubjectUrn = urn.NewUserSubject("user-2").String() }, want: ReasonNotUserSubject},

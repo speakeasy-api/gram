@@ -11,7 +11,7 @@ import (
 // The sweep's activity must be registered on the worker that runs the
 // workflow. Dependencies are nil, so the activity itself fails; what matters
 // is that the worker finds it rather than reporting an unknown activity type.
-func TestSSOSignInRevocationSweepWorkflow_ActivityIsRegistered(t *testing.T) {
+func TestSignInRevocationSweepWorkflow_ActivityIsRegistered(t *testing.T) {
 	t.Parallel()
 
 	env, _ := infra.NewTemporalEnv(t)
@@ -21,10 +21,10 @@ func TestSSOSignInRevocationSweepWorkflow_ActivityIsRegistered(t *testing.T) {
 
 	ctx := t.Context()
 	run, err := env.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:                 "sso-sign-in-revocation-sweep-registration",
+		ID:                 "sign-in-revocation-sweep-registration",
 		TaskQueue:          string(env.Queue()),
 		WorkflowRunTimeout: time.Minute,
-	}, SSOSignInRevocationSweepWorkflow)
+	}, SignInRevocationSweepWorkflow)
 	require.NoError(t, err)
 
 	err = run.Get(ctx, nil)

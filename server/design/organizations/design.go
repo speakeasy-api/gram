@@ -160,7 +160,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("revokeMemberSignIns", func() {
-		Description("Revoke a member's SSO sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.")
+		Description("Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.")
 
 		Payload(func() {
 			Attribute("user_id", String, "Speakeasy user ID of the member.")

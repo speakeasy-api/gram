@@ -21,7 +21,7 @@ import (
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
@@ -446,7 +446,7 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 	}
 }
 
-func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationRevokesSSOSignIns(t *testing.T) {
+func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationRevokesSignIns(t *testing.T) {
 	t.Parallel()
 
 	for _, enforced := range []bool{true, false} {
@@ -480,9 +480,9 @@ func deactivateDirectoryUserWithSignIn(t *testing.T, enforced bool) {
 		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
-	signIn, err := ssosignins.Record(ctx, conn, ssosignins.RecordParams{
+	signIn, err := signins.Record(ctx, conn, signins.RecordParams{
 		OrganizationID: organizationID, UserID: userID, WorkOSSessionID: workosSessionID,
-		AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now(),
+		AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 	require.True(t, signIn.ID.Valid)
@@ -498,22 +498,22 @@ func deactivateDirectoryUserWithSignIn(t *testing.T, enforced bool) {
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, newCaptureCache(), signals)
 	flags := &feature.InMemory{}
 	if enforced {
-		ssosignins.EnableForTests(flags, organizationID)
+		signins.EnableForTests(flags, organizationID)
 	}
-	activity.SetSSOSignInEnforcement(flags, testenv.NewMeterProvider(t), nil)
+	activity.SetSignInEnforcement(flags, testenv.NewMeterProvider(t), nil)
 
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	activity.WaitForDeliveries()
 
 	if !enforced {
-		live, err := ssosignins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
+		live, err := signins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
 		require.NoError(t, err)
 		require.True(t, live.Valid, "deprovisioning leaves sign-ins alone while enforcement is off")
 		require.Empty(t, workosClient.RevokedSessions())
 		return
 	}
-	live, err := ssosignins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
+	live, err := signins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
 	require.NoError(t, err)
 	require.False(t, live.Valid, "deprovisioning revokes the user's sign-ins")
 	require.Equal(t, []string{workosSessionID}, workosClient.RevokedSessions(), "the revoked sign-in's WorkOS session is ended")

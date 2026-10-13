@@ -11,15 +11,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 )
 
-func enforceSSOSignIns(t *testing.T, ctx context.Context, ti *testInstance) {
+func enforceSignIns(t *testing.T, ctx context.Context, ti *testInstance) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	flags := &feature.InMemory{}
-	ssosignins.EnableForTests(flags, authCtx.ActiveOrganizationID)
+	signins.EnableForTests(flags, authCtx.ActiveOrganizationID)
 	ti.sessionManager.SetFlags(flags)
 }
 
@@ -30,7 +30,7 @@ func TestSessionEpoch_PreDeploySessionKeepsWorking(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enforceSSOSignIns(t, ctx, ti)
+	enforceSignIns(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	sessionID := *authCtx.SessionID
@@ -56,7 +56,7 @@ func TestSessionEpoch_OnlyMovesForwardAndRestoringKeepsIssuance(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enforceSSOSignIns(t, ctx, ti)
+	enforceSignIns(t, ctx, ti)
 	userID := "epoch-user-" + uuid.NewString()
 
 	issued := time.Now().Add(-time.Minute)

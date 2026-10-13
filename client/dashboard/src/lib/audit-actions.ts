@@ -355,7 +355,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:revoke_sign_ins":
-      return "revoked SSO sign-ins for";
+      return "revoked sign-ins for";
     case "access_member:update_role":
       return "changed member role for";
     case "access_role:create":

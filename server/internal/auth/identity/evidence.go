@@ -87,7 +87,7 @@ func newEvidenceCollector(cfg EvidenceConfig) evidenceCollector {
 		provider = cfg.MeterProvider
 	}
 	lookups, err := provider.Meter("github.com/speakeasy-api/gram/server/internal/auth/identity").Int64Counter(
-		"sso_sign_in.evidence_lookups",
+		"sign_in.evidence_lookups",
 		metric.WithDescription("Sign-in evidence lookups by kind and outcome."),
 		metric.WithUnit("{lookup}"),
 	)

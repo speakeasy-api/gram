@@ -181,7 +181,7 @@ var _ = Service("auth", func() {
 	})
 
 	Method("logoutEverywhere", func() {
-		Description("Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their SSO sign-ins in every organization, and revokes every MCP grant made from them.")
+		Description("Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -189,7 +189,7 @@ var _ = Service("auth", func() {
 
 		Result(func() {
 			Attribute("session_cookie", String, "Empty string to clear the session")
-			Attribute("revoked_sign_ins", Int, "Number of SSO sign-ins revoked.")
+			Attribute("revoked_sign_ins", Int, "Number of sign-ins revoked.")
 			Attribute("revoked_sessions", Int, "Number of MCP grants revoked.")
 			Required("session_cookie", "revoked_sign_ins", "revoked_sessions")
 		})

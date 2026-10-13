@@ -364,13 +364,13 @@ func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) er
 	return nil
 }
 
-// SetFlags wires the flag provider gating SSO sign-in enforcement.
+// SetFlags wires the flag provider gating sign-in enforcement.
 func (s *Manager) SetFlags(flags feature.Provider) { s.flags = flags }
 
-// SSOSignInEnforced reports whether SSO sign-in enforcement is on for the
+// SignInEnforced reports whether sign-in enforcement is on for the
 // organization.
-func (s *Manager) SSOSignInEnforced(ctx context.Context, organizationID string) bool {
-	return feature.SSOSignInEnforced(ctx, s.flags, organizationID)
+func (s *Manager) SignInEnforced(ctx context.Context, organizationID string) bool {
+	return feature.SignInEnforced(ctx, s.flags, organizationID)
 }
 
 // storeIssuedAt records issuance. It is best effort while enforcement is off
@@ -384,7 +384,7 @@ func (s *Manager) storeIssuedAt(ctx context.Context, session Session, write func
 	if err == nil {
 		return nil
 	}
-	if s.SSOSignInEnforced(ctx, session.ActiveOrganizationID) {
+	if s.SignInEnforced(ctx, session.ActiveOrganizationID) {
 		return fmt.Errorf("store session issuance: %w", err)
 	}
 	s.logger.WarnContext(ctx, "store session issuance", attr.SlogError(err))

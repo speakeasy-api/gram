@@ -215,7 +215,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
 		AuthorizerUserID:         "",
 		AuthorizerImpersonated:   nil,
-		SSOSignInID:              nil,
+		SignInID:                 nil,
 		FreshLoginForced:         false,
 		AgentAuthorizationTarget: agentTarget,
 		Endpoint:                 endpointRef,

@@ -414,7 +414,7 @@ func TestServePublic_SharedSessionReconnectUsesIssuancePolicy(t *testing.T) {
 				UserSessionIssuerID: fixture.UserSessionIssuer.ID, SubjectUrn: subject, Jti: jti,
 				RefreshTokenHash: tc.hash, ExpiresAt: conv.ToPGTimestamptz(now.Add(time.Hour)),
 				RefreshExpiresAt: conv.ToPGTimestamptz(now.Add(time.Hour)),
-				SsoSignInID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				SignInID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			})
 			require.NoError(t, err)
 			for range 2 {

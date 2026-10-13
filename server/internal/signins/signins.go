@@ -1,6 +1,6 @@
-// Package ssosignins records the sign-ins that authorize MCP grants and judges
+// Package signins records the sign-ins that authorize MCP grants and judges
 // whether a grant still traces to a current, revocable one of an accepted tier.
-package ssosignins
+package signins
 
 import (
 	"context"
@@ -16,13 +16,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // MaxAge is the longest any sign-in can back a grant: the SSO tier's bound.
-// TODO: prune revoked and expired sso_sign_ins rows (retention sweep follow-up).
+// TODO: prune revoked and expired sign_ins rows (retention sweep follow-up).
 const MaxAge = 7 * 24 * time.Hour
 
 // RevokeReason records why a sign-in was revoked.
@@ -113,7 +113,7 @@ type Recorded struct {
 	Revoked        bool
 }
 
-var errSignInOwnedByAnotherUser = errors.New("sso sign-in session belongs to another user")
+var errSignInOwnedByAnotherUser = errors.New("sign-in session belongs to another user")
 
 // Beginner is a pool or transaction that Record runs its own transaction on.
 type Beginner interface {
@@ -142,7 +142,7 @@ func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) 
 	if !p.Evidence.IDPAuthenticatedAt.IsZero() {
 		idpAuthenticatedAt = pgtype.Timestamptz{Time: p.Evidence.IDPAuthenticatedAt, InfinityModifier: pgtype.Finite, Valid: true}
 	}
-	row, err := q.UpsertSSOSignIn(ctx, repo.UpsertSSOSignInParams{
+	row, err := q.UpsertSignIn(ctx, repo.UpsertSignInParams{
 		OrganizationID:       p.OrganizationID,
 		UserID:               p.UserID,
 		WorkosSessionID:      p.WorkOSSessionID,
@@ -157,7 +157,7 @@ func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) 
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, errSignInOwnedByAnotherUser
 	case err != nil:
-		return none, fmt.Errorf("upsert sso sign-in: %w", err)
+		return none, fmt.Errorf("upsert sign-in: %w", err)
 	}
 	// A sign-in recorded already revoked (fenced or signed out) must not
 	// leave its WorkOS session usable, unless another organization still
@@ -180,7 +180,7 @@ func LiveSignInForSession(ctx context.Context, db repo.DBTX, organizationID, use
 	if organizationID == "" || userID == "" || workosSessionID == "" {
 		return none, nil
 	}
-	id, err := repo.New(db).GetLiveSSOSignInBySession(ctx, repo.GetLiveSSOSignInBySessionParams{
+	id, err := repo.New(db).GetLiveSignInBySession(ctx, repo.GetLiveSignInBySessionParams{
 		OrganizationID:  organizationID,
 		UserID:          userID,
 		WorkosSessionID: workosSessionID,
@@ -189,7 +189,7 @@ func LiveSignInForSession(ctx context.Context, db repo.DBTX, organizationID, use
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, nil
 	case err != nil:
-		return none, fmt.Errorf("get sso sign-in for session: %w", err)
+		return none, fmt.Errorf("get sign-in for session: %w", err)
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
@@ -201,7 +201,7 @@ func SignInForSession(ctx context.Context, db repo.DBTX, organizationID, userID,
 	if organizationID == "" || userID == "" || workosSessionID == "" {
 		return none, nil
 	}
-	id, err := repo.New(db).GetSSOSignInBySession(ctx, repo.GetSSOSignInBySessionParams{
+	id, err := repo.New(db).GetSignInBySession(ctx, repo.GetSignInBySessionParams{
 		OrganizationID:  organizationID,
 		UserID:          userID,
 		WorkosSessionID: workosSessionID,
@@ -210,7 +210,7 @@ func SignInForSession(ctx context.Context, db repo.DBTX, organizationID, userID,
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, nil
 	case err != nil:
-		return none, fmt.Errorf("get sso sign-in for session: %w", err)
+		return none, fmt.Errorf("get sign-in for session: %w", err)
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
@@ -262,7 +262,7 @@ func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration
 	if !row.SessionLive {
 		return reject(ReasonSessionExpired)
 	}
-	if !row.SsoSignInID.Valid || !row.SignInID.Valid {
+	if !row.LinkedSignInID.Valid || !row.SignInID.Valid {
 		return reject(ReasonNotLinked)
 	}
 	userID := row.SignInUserID.String
@@ -339,17 +339,17 @@ func RevokeSession(ctx context.Context, db repo.DBTX, organizationIDs []string, 
 	if err := lockUser(ctx, q, organizationIDs, userID); err != nil {
 		return out, err
 	}
-	if _, err := q.LockSSOSignInsBySession(ctx, repo.LockSSOSignInsBySessionParams{OrganizationIds: organizationIDs, UserID: userID, WorkosSessionID: workosSessionID}); err != nil {
-		return out, fmt.Errorf("lock sso sign-ins for session: %w", err)
+	if _, err := q.LockSignInsBySession(ctx, repo.LockSignInsBySessionParams{OrganizationIds: organizationIDs, UserID: userID, WorkosSessionID: workosSessionID}); err != nil {
+		return out, fmt.Errorf("lock sign-ins for session: %w", err)
 	}
-	rows, err := q.RevokeSSOSignInsBySession(ctx, repo.RevokeSSOSignInsBySessionParams{
+	rows, err := q.RevokeSignInsBySession(ctx, repo.RevokeSignInsBySessionParams{
 		RevokeReason:    conv.ToPGText(string(RevokeReasonSignOut)),
 		OrganizationIds: organizationIDs,
 		UserID:          userID,
 		WorkosSessionID: workosSessionID,
 	})
 	if err != nil {
-		return out, fmt.Errorf("revoke sso sign-ins for session: %w", err)
+		return out, fmt.Errorf("revoke sign-ins for session: %w", err)
 	}
 	if len(rows) == 0 {
 		if err := q.MarkWorkOSSessionSignedOut(ctx, repo.MarkWorkOSSessionSignedOutParams{OrganizationID: organizationIDs[0], UserID: userID, WorkosSessionID: workosSessionID}); err != nil {
@@ -385,9 +385,9 @@ func SignInOrganizations(ctx context.Context, db repo.DBTX, userID string) ([]st
 	if userID == "" {
 		return nil, nil
 	}
-	orgs, err := repo.New(db).ListSSOSignInOrganizationsForUser(ctx, userID)
+	orgs, err := repo.New(db).ListSignInOrganizationsForUser(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("list sso sign-in organizations: %w", err)
+		return nil, fmt.Errorf("list sign-in organizations: %w", err)
 	}
 	return orgs, nil
 }
@@ -448,32 +448,32 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 	}
 	q := repo.New(db)
 	if err := q.LockAllSignInsForUser(ctx, userID); err != nil {
-		return out, fmt.Errorf("lock user sso sign-ins: %w", err)
+		return out, fmt.Errorf("lock user sign-ins: %w", err)
 	}
 	// Lock every organization the user has signed in to, not only the ones
 	// being revoked, so recordings elsewhere wait for the check below that
 	// keeps their WorkOS sessions up. Listed under the user lock, so a
 	// recording either committed already or waits for this revocation.
-	recorded, err := q.ListSSOSignInOrganizationsForUser(ctx, userID)
+	recorded, err := q.ListSignInOrganizationsForUser(ctx, userID)
 	if err != nil {
-		return out, fmt.Errorf("list sso sign-in organizations: %w", err)
+		return out, fmt.Errorf("list sign-in organizations: %w", err)
 	}
 	if err := lockUser(ctx, q, slices.Concat(organizationIDs, recorded), userID); err != nil {
 		return out, err
 	}
-	if _, err := q.LockUserSSOSignIns(ctx, repo.LockUserSSOSignInsParams{OrganizationIds: organizationIDs, UserID: userID}); err != nil {
-		return out, fmt.Errorf("lock user sso sign-ins: %w", err)
+	if _, err := q.LockUserSignIns(ctx, repo.LockUserSignInsParams{OrganizationIds: organizationIDs, UserID: userID}); err != nil {
+		return out, fmt.Errorf("lock user sign-ins: %w", err)
 	}
 	if err := q.RaiseRevocationCutoffs(ctx, repo.RaiseRevocationCutoffsParams{UserID: userID, OrganizationIds: organizationIDs}); err != nil {
-		return out, fmt.Errorf("raise sso sign-in revocation cutoffs: %w", err)
+		return out, fmt.Errorf("raise sign-in revocation cutoffs: %w", err)
 	}
-	signIns, err := q.RevokeUserSSOSignIns(ctx, repo.RevokeUserSSOSignInsParams{
+	signIns, err := q.RevokeUserSignIns(ctx, repo.RevokeUserSignInsParams{
 		RevokeReason:    conv.ToPGText(string(reason)),
 		OrganizationIds: organizationIDs,
 		UserID:          userID,
 	})
 	if err != nil {
-		return out, fmt.Errorf("revoke user sso sign-ins: %w", err)
+		return out, fmt.Errorf("revoke user sign-ins: %w", err)
 	}
 	workosByOrg := map[string][]string{}
 	seenSession := map[string]struct{}{}
@@ -490,7 +490,7 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 		UserID:          userID,
 	})
 	if err != nil {
-		return out, fmt.Errorf("revoke grants for user sso sign-ins: %w", err)
+		return out, fmt.Errorf("revoke grants for user sign-ins: %w", err)
 	}
 	jtisByOrg := map[string][]string{}
 	for _, s := range sessions {
@@ -582,7 +582,7 @@ func WorkOSSessionUsedElsewhere(ctx context.Context, db repo.DBTX, userID, worko
 // recorded until the transaction ends.
 func LockUser(ctx context.Context, db repo.DBTX, userID string) error {
 	if err := repo.New(db).LockAllSignInsForUser(ctx, userID); err != nil {
-		return fmt.Errorf("lock user sso sign-ins: %w", err)
+		return fmt.Errorf("lock user sign-ins: %w", err)
 	}
 	return nil
 }
@@ -592,11 +592,11 @@ func LockUser(ctx context.Context, db repo.DBTX, userID string) error {
 // order.
 func lockUser(ctx context.Context, q *repo.Queries, organizationIDs []string, userID string) error {
 	if err := q.LockAllSignInsForUser(ctx, userID); err != nil {
-		return fmt.Errorf("lock user sso sign-ins: %w", err)
+		return fmt.Errorf("lock user sign-ins: %w", err)
 	}
 	for _, organizationID := range slices.Compact(slices.Sorted(slices.Values(organizationIDs))) {
 		if err := q.LockSignInsForUser(ctx, repo.LockSignInsForUserParams{OrganizationID: organizationID, UserID: userID}); err != nil {
-			return fmt.Errorf("lock sso sign-ins: %w", err)
+			return fmt.Errorf("lock sign-ins: %w", err)
 		}
 	}
 	return nil

@@ -17,7 +17,7 @@ export type RevokeSignInsResult = {
    */
   revokedSessions: number;
   /**
-   * Number of SSO sign-ins revoked.
+   * Number of sign-ins revoked.
    */
   revokedSignIns: number;
 };

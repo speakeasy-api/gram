@@ -33,9 +33,9 @@ type Service interface {
 	// Remove a user from the active organization in Speakeasy and delete their
 	// WorkOS organization membership.
 	RemoveUser(context.Context, *RemoveUserPayload) (err error)
-	// Revoke a member's SSO sign-ins in the active organization, end their
-	// identity provider sessions, and revoke every MCP grant made from those
-	// sign-ins. Requires organization admin.
+	// Revoke a member's sign-ins in the active organization, end their identity
+	// provider sessions, and revoke every MCP grant made from those sign-ins.
+	// Requires organization admin.
 	RevokeMemberSignIns(context.Context, *RevokeMemberSignInsPayload) (res *types.RevokeSignInsResult, err error)
 	// Enable  webhooks for the active organization.
 	EnableWebhooks(context.Context, *EnableWebhooksPayload) (err error)

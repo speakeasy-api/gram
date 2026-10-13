@@ -18,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -93,7 +93,7 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	idpClient := identity.NewWorkOSAdapter(umClient).WithGoogleUserInfoURL(googleUserInfoURL).WithEvidence(identity.EvidenceConfig{
 		Logger:        logger,
 		MeterProvider: otel.GetMeterProvider(),
-		Enabled:       ssosignins.EvidenceGate(db, featureFlags),
+		Enabled:       signins.EvidenceGate(db, featureFlags),
 	})
 	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 

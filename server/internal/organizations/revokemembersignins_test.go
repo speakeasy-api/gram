@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 )
 
 func TestService_RevokeMemberSignIns_ForbiddenWithoutOrgAdmin(t *testing.T) {
@@ -26,7 +26,7 @@ func TestService_RevokeMemberSignIns_ForbiddenWithoutOrgAdmin(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	workosSessionID := "session_" + uuid.NewString()
-	_, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: testOtherUserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
+	_, err := signins.Record(ctx, ti.conn, signins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: testOtherUserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now()})
 	require.NoError(t, err)
 
 	denied := authztest.WithExactGrants(t, ctx)
@@ -35,7 +35,7 @@ func TestService_RevokeMemberSignIns_ForbiddenWithoutOrgAdmin(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
-	live, err := ssosignins.LiveSignInForSession(ctx, ti.conn, authCtx.ActiveOrganizationID, testOtherUserID, workosSessionID)
+	live, err := signins.LiveSignInForSession(ctx, ti.conn, authCtx.ActiveOrganizationID, testOtherUserID, workosSessionID)
 	require.NoError(t, err)
 	require.True(t, live.Valid, "nothing is revoked without organization admin")
 }
@@ -47,10 +47,10 @@ func TestService_RevokeMemberSignIns_RevokesOnlyTheActiveOrganization(t *testing
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	flags := &feature.InMemory{}
-	ssosignins.EnableForTests(flags, authCtx.ActiveOrganizationID)
+	signins.EnableForTests(flags, authCtx.ActiveOrganizationID)
 	ti.sessionManager.SetFlags(flags)
 	here := "session_" + uuid.NewString()
-	_, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: testOtherUserID, WorkOSSessionID: here, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
+	_, err := signins.Record(ctx, ti.conn, signins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: testOtherUserID, WorkOSSessionID: here, AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now()})
 	require.NoError(t, err)
 
 	otherOrg := "org-" + uuid.NewString()
@@ -65,7 +65,7 @@ func TestService_RevokeMemberSignIns_RevokesOnlyTheActiveOrganization(t *testing
 	})
 	require.NoError(t, err)
 	elsewhere := "session_" + uuid.NewString()
-	_, err = ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: otherOrg, UserID: testOtherUserID, WorkOSSessionID: elsewhere, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
+	_, err = signins.Record(ctx, ti.conn, signins.RecordParams{OrganizationID: otherOrg, UserID: testOtherUserID, WorkOSSessionID: elsewhere, AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now()})
 	require.NoError(t, err)
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessMemberSignInsRevoke)
 	require.NoError(t, err)
@@ -74,10 +74,10 @@ func TestService_RevokeMemberSignIns_RevokesOnlyTheActiveOrganization(t *testing
 	require.NoError(t, err)
 	require.Equal(t, 1, result.RevokedSignIns)
 
-	gone, err := ssosignins.LiveSignInForSession(ctx, ti.conn, authCtx.ActiveOrganizationID, testOtherUserID, here)
+	gone, err := signins.LiveSignInForSession(ctx, ti.conn, authCtx.ActiveOrganizationID, testOtherUserID, here)
 	require.NoError(t, err)
 	require.False(t, gone.Valid)
-	kept, err := ssosignins.LiveSignInForSession(ctx, ti.conn, otherOrg, testOtherUserID, elsewhere)
+	kept, err := signins.LiveSignInForSession(ctx, ti.conn, otherOrg, testOtherUserID, elsewhere)
 	require.NoError(t, err)
 	require.True(t, kept.Valid, "another organization's sign-ins are untouched")
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessMemberSignInsRevoke)

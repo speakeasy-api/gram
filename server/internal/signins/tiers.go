@@ -1,4 +1,4 @@
-package ssosignins
+package signins
 
 import (
 	"slices"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 

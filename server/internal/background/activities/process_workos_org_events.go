@@ -33,7 +33,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -77,8 +77,8 @@ type ProcessWorkOSOrganizationEvents struct {
 	// instead of waiting out the cache TTL.
 	userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo]
 	// revokedTokens is the access-token revocation cache.
-	revokedTokens ssosignins.TokenRevoker
-	deliverer     *ssosignins.Deliverer
+	revokedTokens signins.TokenRevoker
+	deliverer     *signins.Deliverer
 	flags         feature.Provider
 
 	// newOrganizationDefaultHost is recorded as the default host of
@@ -95,18 +95,18 @@ func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, w
 		identityMap:   identityMap,
 		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cacheAdapter, cache.SuffixNone),
 		revokedTokens: revokedTokens,
-		deliverer:     ssosignins.NewDeliverer(logger, noop.NewMeterProvider(), db, revokedTokens, workosClient, nil),
+		deliverer:     signins.NewDeliverer(logger, noop.NewMeterProvider(), db, revokedTokens, workosClient, nil),
 		flags:         nil,
 
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 	}
 }
 
-// SetSSOSignInEnforcement wires the flags gating sign-in revocation on
+// SetSignInEnforcement wires the flags gating sign-in revocation on
 // deprovisioning, and the meter provider and epoch store for deliveries.
-func (p *ProcessWorkOSOrganizationEvents) SetSSOSignInEnforcement(flags feature.Provider, meterProvider metric.MeterProvider, epochs ssosignins.EpochRaiser) {
+func (p *ProcessWorkOSOrganizationEvents) SetSignInEnforcement(flags feature.Provider, meterProvider metric.MeterProvider, epochs signins.EpochRaiser) {
 	p.flags = flags
-	p.deliverer = ssosignins.NewDeliverer(p.logger, meterProvider, p.db, p.revokedTokens, p.workosClient, epochs)
+	p.deliverer = signins.NewDeliverer(p.logger, meterProvider, p.db, p.revokedTokens, p.workosClient, epochs)
 }
 
 // SetNewOrganizationDefaultHost sets the default host recorded on
@@ -235,7 +235,7 @@ func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Conte
 	if len(effects.revocationDeliveries) > 0 {
 		p.deliverer.DeliverNow(ctx, []string{effects.revocationOrganizationID}, effects.revocationDeliveries)
 	}
-	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonDeprovisioned, effects.revokedSignIns)
+	signins.RecordRevoked(ctx, signins.RevokeReasonDeprovisioned, effects.revokedSignIns)
 
 	if effects.refreshIdentityMap && p.identityMap != nil {
 		if err := p.identityMap.SignalIdentityMapRefresh(ctx); err != nil {
@@ -311,7 +311,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	if err != nil {
 		return "", err
 	}
-	if r := effects.revokeSignIns; r != nil && ssosignins.Enforced(ctx, p.flags, r.organizationID) {
+	if r := effects.revokeSignIns; r != nil && signins.Enforced(ctx, p.flags, r.organizationID) {
 		if err := revokeDeprovisionedSignIns(ctx, dbtx, *r, &effects); err != nil {
 			return "", err
 		}
@@ -1006,12 +1006,12 @@ func (c revokedTokenCache) RevokeToken(ctx context.Context, jti string) error {
 	return nil
 }
 
-// SweepSSOSignInRevocations retries one batch of pending SSO sign-in
+// SweepSignInRevocations retries one batch of pending sign-in
 // revocation deliveries and returns how many it claimed.
-func (p *ProcessWorkOSOrganizationEvents) SweepSSOSignInRevocations(ctx context.Context) (int, error) {
+func (p *ProcessWorkOSOrganizationEvents) SweepSignInRevocations(ctx context.Context) (int, error) {
 	n, err := p.deliverer.Sweep(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("sweep sso sign-in revocation deliveries: %w", err)
+		return 0, fmt.Errorf("sweep sign-in revocation deliveries: %w", err)
 	}
 	return n, nil
 }

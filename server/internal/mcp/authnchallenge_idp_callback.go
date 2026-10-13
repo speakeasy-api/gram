@@ -23,7 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -290,7 +290,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 
 	var federatedIdentity *remotesessions.FederatedIdentity
 	var gramUserID string
-	var exchange *ssosignins.ExchangeParams
+	var exchange *signins.ExchangeParams
 	impersonated := false
 	if federation := challengeState.Federation; federation != nil {
 		verified := federation.ValidatedIdentity
@@ -332,14 +332,14 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		}
 		gramUserID = login.UserID
 		impersonated = idpUser.ImpersonatorEmail() != ""
-		exchange = &ssosignins.ExchangeParams{
-			Flow:                   ssosignins.FlowMCPAuthorize,
+		exchange = &signins.ExchangeParams{
+			Flow:                   signins.FlowMCPAuthorize,
 			WorkOSOrganizationID:   idpUser.OrganizationID,
 			ExpectedOrganizationID: endpoint.OrganizationID,
 			UserID:                 gramUserID,
 			WorkOSSessionID:        idpUser.WorkOSSessionID,
 			AuthenticationMethod:   idpUser.AuthenticationMethod,
-			Evidence: ssosignins.Evidence{
+			Evidence: signins.Evidence{
 				HostedDomain:       idpUser.Evidence.HostedDomain,
 				TenantID:           idpUser.Evidence.TenantID,
 				VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
@@ -372,11 +372,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").LogError(ctx, logger)
 	}
 	// Recorded only for members, and only in the endpoint's organization.
-	ssoSignInID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	enforced := ssosignins.Enforced(ctx, s.features, endpoint.OrganizationID)
+	signInID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	enforced := signins.Enforced(ctx, s.features, endpoint.OrganizationID)
 	if exchange != nil {
-		recorded := ssosignins.RecordExchange(ctx, logger, s.db, *exchange)
-		ssoSignInID = recorded.ID
+		recorded := signins.RecordExchange(ctx, logger, s.db, *exchange)
+		signInID = recorded.ID
 		if recorded.Revoked && enforced {
 			if challengeState.FreshLoginForced {
 				s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
@@ -462,9 +462,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
-	challengeState.SSOSignInID = nil
-	if ssoSignInID.Valid && enforced {
-		challengeState.SSOSignInID = &ssoSignInID.UUID
+	challengeState.SignInID = nil
+	if signInID.Valid && enforced {
+		challengeState.SignInID = &signInID.UUID
 	}
 	if federation := challengeState.Federation; federation != nil {
 		challengeState.FederatedBinding = &FederatedConsentBinding{IssuerID: federation.IssuerID, ClientID: federation.ClientID, Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject}

@@ -24,7 +24,7 @@ type RegisterRequestBody struct {
 // LogoutEverywhereResponseBody is the type of the "auth" service
 // "logoutEverywhere" endpoint HTTP response body.
 type LogoutEverywhereResponseBody struct {
-	// Number of SSO sign-ins revoked.
+	// Number of sign-ins revoked.
 	RevokedSignIns *int `form:"revoked_sign_ins,omitempty" json:"revoked_sign_ins,omitempty" xml:"revoked_sign_ins,omitempty"`
 	// Number of MCP grants revoked.
 	RevokedSessions *int `form:"revoked_sessions,omitempty" json:"revoked_sessions,omitempty" xml:"revoked_sessions,omitempty"`

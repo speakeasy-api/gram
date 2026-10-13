@@ -158,8 +158,8 @@ type AuthnChallengeState struct {
 	// IDP callback. Impersonated humans may authorize themselves but must never
 	// authorize an agent.
 	AuthorizerImpersonated *bool `json:"authorizer_impersonated,omitempty"`
-	// SSOSignInID is the authorizing user's recorded SSO sign-in; nil leaves the grant unlinked.
-	SSOSignInID *uuid.UUID `json:"sso_sign_in_id,omitempty"`
+	// SignInID is the authorizing user's recorded sign-in; nil leaves the grant unlinked.
+	SignInID *uuid.UUID `json:"sign_in_id,omitempty"`
 	// FreshLoginForced marks a flow already sent back to the identity
 	// provider because its sign-in was revoked, so it never loops.
 	FreshLoginForced bool `json:"fresh_login_forced,omitempty"`
@@ -267,9 +267,9 @@ type UserSessionGrant struct {
 	// validated against the endpoint's live tool inventory and resource-bound.
 	// Nil means all tools.
 	ToolSelection *toolfilter.SessionSelection `json:"tool_selection,omitempty"`
-	// SSOSignInID carries the authorizing user's SSO sign-in to the session row.
-	SSOSignInID *uuid.UUID `json:"sso_sign_in_id,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
+	// SignInID carries the authorizing user's sign-in to the session row.
+	SignInID  *uuid.UUID `json:"sign_in_id,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)

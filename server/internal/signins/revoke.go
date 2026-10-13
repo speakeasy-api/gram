@@ -1,4 +1,4 @@
-package ssosignins
+package signins
 
 import (
 	"context"

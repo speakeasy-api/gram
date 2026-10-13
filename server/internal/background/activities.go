@@ -77,10 +77,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
 	spendrulesch "github.com/speakeasy-api/gram/server/internal/spendrules/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -257,7 +257,7 @@ func NewActivities(
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
 	startupSeeds []activities.StartupSeed,
-	ssoSignInEpochs ssosignins.EpochRaiser,
+	signInEpochs signins.EpochRaiser,
 ) *Activities {
 	spendRulesCH := spendrulesch.New(chConn)
 	riskFindingsCH := riskchrepo.New(chConn)
@@ -393,7 +393,7 @@ func NewActivities(
 
 	processWorkOSOrganizationEvents := activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter, identityMapRefresh)
 	processWorkOSOrganizationEvents.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
-	processWorkOSOrganizationEvents.SetSSOSignInEnforcement(features, meterProvider, ssoSignInEpochs)
+	processWorkOSOrganizationEvents.SetSignInEnforcement(features, meterProvider, signInEpochs)
 
 	// Built here rather than threaded in: this constructor already holds every
 	// dependency the emitter needs, and only the device sync reports growth
@@ -604,8 +604,8 @@ func (a *Activities) SendPaygActivatedEmail(ctx context.Context, input billingno
 	return nil
 }
 
-func (a *Activities) SweepSSOSignInRevocations(ctx context.Context) (int, error) {
-	return a.processWorkOSOrganizationEvents.SweepSSOSignInRevocations(ctx) //nolint:wrapcheck // wrapped by the activity
+func (a *Activities) SweepSignInRevocations(ctx context.Context) (int, error) {
+	return a.processWorkOSOrganizationEvents.SweepSignInRevocations(ctx) //nolint:wrapcheck // wrapped by the activity
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {

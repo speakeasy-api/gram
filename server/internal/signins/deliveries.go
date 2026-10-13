@@ -1,4 +1,4 @@
-package ssosignins
+package signins
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -92,7 +92,7 @@ func (d *Deliverer) DeliverNow(ctx context.Context, organizationIDs []string, id
 			Ids:             ids,
 		})
 		if err != nil {
-			d.logger.ErrorContext(ctx, "claim sso sign-in revocation deliveries", attr.SlogError(err))
+			d.logger.ErrorContext(ctx, "claim sign-in revocation deliveries", attr.SlogError(err))
 			return
 		}
 		claimed := make([]repo.ClaimPendingRevocationDeliveriesRow, len(rows))
@@ -124,7 +124,7 @@ func (d *Deliverer) Sweep(ctx context.Context) (int, error) {
 	d.deliver(ctx, rows)
 	backlog, err := q.RevocationDeliveryBacklog(ctx, stuckAttempts)
 	if err != nil {
-		d.logger.WarnContext(ctx, "read sso sign-in revocation backlog", attr.SlogError(err))
+		d.logger.WarnContext(ctx, "read sign-in revocation backlog", attr.SlogError(err))
 	} else {
 		d.metrics.recordBacklog(ctx, backlog)
 	}
@@ -152,11 +152,11 @@ func (d *Deliverer) deliver(ctx context.Context, rows []repo.ClaimPendingRevocat
 		}
 		if err != nil {
 			// The lease expires and the sweep retries the idempotent push.
-			d.logger.ErrorContext(ctx, "acknowledge sso sign-in revocation delivery", attr.SlogError(err))
+			d.logger.ErrorContext(ctx, "acknowledge sign-in revocation delivery", attr.SlogError(err))
 		}
 	}
 	if failed > 0 {
-		d.logger.WarnContext(ctx, "sso sign-in revocation deliveries left pending", attr.SlogValueInt(failed))
+		d.logger.WarnContext(ctx, "sign-in revocation deliveries left pending", attr.SlogValueInt(failed))
 	}
 }
 

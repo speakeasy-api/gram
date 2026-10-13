@@ -185,13 +185,13 @@ const (
 	// AuthWorkOSSessionFingerprintKey is a short one-way digest of a WorkOS
 	// session id, enough to tell whether two flows shared a session.
 	AuthWorkOSSessionFingerprintKey = attribute.Key("gram.auth.workos_session_fingerprint")
-	// SSOSignInRecordOutcomeKey is how a WorkOS code exchange resolved to an
-	// SSO sign-in row.
-	SSOSignInRecordOutcomeKey = attribute.Key("gram.sso_sign_in.record_outcome")
-	// SSOSignInRevokeReasonKey is why SSO sign-ins were revoked.
-	SSOSignInRevokeReasonKey = attribute.Key("gram.sso_sign_in.revoke_reason")
-	// SSOSignInDeliveryKindKey is what a revocation delivery pushes.
-	SSOSignInDeliveryKindKey = attribute.Key("gram.sso_sign_in.delivery_kind")
+	// SignInRecordOutcomeKey is how a WorkOS code exchange resolved to a
+	// sign-in row.
+	SignInRecordOutcomeKey = attribute.Key("gram.sign_in.record_outcome")
+	// SignInRevokeReasonKey is why sign-ins were revoked.
+	SignInRevokeReasonKey = attribute.Key("gram.sign_in.revoke_reason")
+	// SignInDeliveryKindKey is what a revocation delivery pushes.
+	SignInDeliveryKindKey = attribute.Key("gram.sign_in.delivery_kind")
 
 	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
@@ -1545,14 +1545,14 @@ func SlogAuthAuthenticationMethod(v string) slog.Attr {
 }
 func SlogAuthSignInFlow(v string) slog.Attr      { return slog.String(string(AuthSignInFlowKey), v) }
 func AuthSignInFlow(v string) attribute.KeyValue { return AuthSignInFlowKey.String(v) }
-func SSOSignInRecordOutcome(v string) attribute.KeyValue {
-	return SSOSignInRecordOutcomeKey.String(v)
+func SignInRecordOutcome(v string) attribute.KeyValue {
+	return SignInRecordOutcomeKey.String(v)
 }
-func SlogSSOSignInRecordOutcome(v string) slog.Attr {
-	return slog.String(string(SSOSignInRecordOutcomeKey), v)
+func SlogSignInRecordOutcome(v string) slog.Attr {
+	return slog.String(string(SignInRecordOutcomeKey), v)
 }
-func SSOSignInRevokeReason(v string) attribute.KeyValue { return SSOSignInRevokeReasonKey.String(v) }
-func SSOSignInDeliveryKind(v string) attribute.KeyValue { return SSOSignInDeliveryKindKey.String(v) }
+func SignInRevokeReason(v string) attribute.KeyValue { return SignInRevokeReasonKey.String(v) }
+func SignInDeliveryKind(v string) attribute.KeyValue { return SignInDeliveryKindKey.String(v) }
 func SlogAuthWorkOSSessionFingerprint(v string) slog.Attr {
 	return slog.String(string(AuthWorkOSSessionFingerprintKey), v)
 }

@@ -172,7 +172,7 @@ type ListUsersResponseBody struct {
 // RevokeMemberSignInsResponseBody is the type of the "organizations" service
 // "revokeMemberSignIns" endpoint HTTP response body.
 type RevokeMemberSignInsResponseBody struct {
-	// Number of SSO sign-ins revoked.
+	// Number of sign-ins revoked.
 	RevokedSignIns *int `form:"revoked_sign_ins,omitempty" json:"revoked_sign_ins,omitempty" xml:"revoked_sign_ins,omitempty"`
 	// Number of MCP grants revoked.
 	RevokedSessions *int `form:"revoked_sessions,omitempty" json:"revoked_sessions,omitempty" xml:"revoked_sessions,omitempty"`

@@ -35,7 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -1494,18 +1494,18 @@ func TestE2E_Logout(t *testing.T) {
 	assert.Error(t, err, "session should be invalidated after logout")
 }
 
-func TestE2E_LoginRecordsSSOSignInAndLogoutRevokesIt(t *testing.T) {
+func TestE2E_LoginRecordsSignInAndLogoutRevokesIt(t *testing.T) {
 	t.Parallel()
 
 	const (
-		workosUserID    = "user_01SSOSIGNIN"
-		workosOrgID     = "org_01SSOSIGNIN"
-		workosSessionID = "session_01SSOSIGNIN"
+		workosUserID    = "user_01SIGNIN"
+		workosOrgID     = "org_01SIGNIN"
+		workosSessionID = "session_01SIGNIN"
 	)
 	fetcher := &mockWorkOSFetcher{
 		members: map[string][]workos.Member{
 			workosUserID: {
-				{ID: "om_SSOSIGNIN", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Sign-in Corp", RoleSlugs: []string{"admin"}},
+				{ID: "om_SIGNIN", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Sign-in Corp", RoleSlugs: []string{"admin"}},
 			},
 		},
 		orgs: map[string]*workos.Organization{
@@ -1517,7 +1517,7 @@ func TestE2E_LoginRecordsSSOSignInAndLogoutRevokesIt(t *testing.T) {
 		Email:                "sso@example.com",
 		OrganizationID:       workosOrgID,
 		WorkOSSessionID:      workosSessionID,
-		AuthenticationMethod: ssosignins.MethodSSO,
+		AuthenticationMethod: signins.MethodSSO,
 		Organizations:        []MockOrganizationEntry{},
 	}
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
@@ -1530,14 +1530,14 @@ func TestE2E_LoginRecordsSSOSignInAndLogoutRevokesIt(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	signIn, err := ssosignins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	signIn, err := signins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
 	require.NoError(t, err)
-	require.True(t, signIn.Valid, "the dashboard login records the SSO sign-in in the WorkOS-selected organization")
+	require.True(t, signIn.Valid, "the dashboard login records the sign-in in the WorkOS-selected organization")
 
 	_, err = inst.service.Logout(ctx, &gen.LogoutPayload{})
 	require.NoError(t, err)
 
-	revoked, err := ssosignins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	revoked, err := signins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
 	require.NoError(t, err)
 	require.False(t, revoked.Valid, "signing out revokes that session's sign-in")
 	audited, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionAccessMemberSignInsRevoke)
@@ -1545,9 +1545,9 @@ func TestE2E_LoginRecordsSSOSignInAndLogoutRevokesIt(t *testing.T) {
 	require.Equal(t, int64(1), audited, "the sign-out revocation is audited")
 }
 
-func enableSSOSignInEnforcement(inst *e2eInstance, organizationID string) {
+func enableSignInEnforcement(inst *e2eInstance, organizationID string) {
 	flags := &feature.InMemory{}
-	ssosignins.EnableForTests(flags, organizationID)
+	signins.EnableForTests(flags, organizationID)
 	inst.sessionManager.SetFlags(flags)
 }
 
@@ -1576,7 +1576,7 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 		Email:                "everywhere@example.com",
 		OrganizationID:       workosOrgID,
 		WorkOSSessionID:      workosSessionID,
-		AuthenticationMethod: ssosignins.MethodSSO,
+		AuthenticationMethod: signins.MethodSSO,
 		Organizations:        []MockOrganizationEntry{},
 		IDPSessions:          idpSessions,
 	}
@@ -1590,14 +1590,14 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 	require.NoError(t, err)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	enableSSOSignInEnforcement(inst, authCtx.ActiveOrganizationID)
+	enableSignInEnforcement(inst, authCtx.ActiveOrganizationID)
 
 	result, err := inst.service.LogoutEverywhere(ctx, &gen.LogoutEverywherePayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.Empty(t, result.SessionCookie)
 	require.Equal(t, 1, result.RevokedSignIns)
 	inst.service.WaitForDeliveries()
-	pending, err := testrepo.New(inst.conn).CountPendingSSOSignInRevocationDeliveries(ctx, authCtx.ActiveOrganizationID)
+	pending, err := testrepo.New(inst.conn).CountPendingSignInRevocationDeliveries(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
 	require.Zero(t, pending, "the epoch and every WorkOS session were delivered durably")
 
@@ -1606,7 +1606,7 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 		require.Error(t, err, "every dashboard session issued before signing out everywhere is rejected")
 	}
 	require.ElementsMatch(t, idpSessions.Listed, idpSessions.Revoked(), "every listed WorkOS session is ended, across pages")
-	live, err := ssosignins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	live, err := signins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
 	require.NoError(t, err)
 	require.False(t, live.Valid)
 	audited, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionAccessMemberSignInsRevoke)
@@ -1647,7 +1647,7 @@ func TestE2E_LogoutEverywhereIsUnavailableWhileEnforcementIsOff(t *testing.T) {
 		Email:                "everywhere-off@example.com",
 		OrganizationID:       workosOrgID,
 		WorkOSSessionID:      "session_01EVERYWHEREOFF",
-		AuthenticationMethod: ssosignins.MethodSSO,
+		AuthenticationMethod: signins.MethodSSO,
 		Organizations:        []MockOrganizationEntry{},
 	}
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
@@ -1943,7 +1943,7 @@ func TestE2E_RevokedSignInOnASharedWorkOSSessionLetsTheNextLoginThrough(t *testi
 		Email:                "shared@example.com",
 		OrganizationID:       workosOrgID,
 		WorkOSSessionID:      workosSessionID,
-		AuthenticationMethod: ssosignins.MethodSSO,
+		AuthenticationMethod: signins.MethodSSO,
 		Organizations:        []MockOrganizationEntry{},
 		IDPSessions:          idpSessions,
 	}
@@ -1955,7 +1955,7 @@ func TestE2E_RevokedSignInOnASharedWorkOSSessionLetsTheNextLoginThrough(t *testi
 	require.NoError(t, err)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	enableSSOSignInEnforcement(inst, authCtx.ActiveOrganizationID)
+	enableSignInEnforcement(inst, authCtx.ActiveOrganizationID)
 
 	otherOrg := "org-" + uuid.NewString()
 	_, err = orgRepo.New(inst.conn).UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
@@ -1968,9 +1968,9 @@ func TestE2E_RevokedSignInOnASharedWorkOSSessionLetsTheNextLoginThrough(t *testi
 		DefaultHost:    pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	_, err = ssosignins.Record(ctx, inst.conn, ssosignins.RecordParams{OrganizationID: otherOrg, UserID: authCtx.UserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: ssosignins.MethodSSO, Evidence: ssosignins.Evidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", IDPAuthenticatedAt: time.Time{}}, AuthenticatedAt: time.Now()})
+	_, err = signins.Record(ctx, inst.conn, signins.RecordParams{OrganizationID: otherOrg, UserID: authCtx.UserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: signins.MethodSSO, Evidence: signins.Evidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", IDPAuthenticatedAt: time.Time{}}, AuthenticatedAt: time.Now()})
 	require.NoError(t, err)
-	_, err = ssosignins.RevokeUser(ctx, inst.conn, []string{authCtx.ActiveOrganizationID}, authCtx.UserID, ssosignins.RevokeReasonAdmin)
+	_, err = signins.RevokeUser(ctx, inst.conn, []string{authCtx.ActiveOrganizationID}, authCtx.UserID, signins.RevokeReasonAdmin)
 	require.NoError(t, err)
 
 	blocked, err := inst.callbackWithNonce(t.Context(), t)
@@ -2004,7 +2004,7 @@ func TestE2E_LogoutEverywhereIsRefusedFromASupportSession(t *testing.T) {
 		Email:                "support@example.com",
 		OrganizationID:       workosOrgID,
 		WorkOSSessionID:      "session_01EVERYWHERESUPPORT",
-		AuthenticationMethod: ssosignins.MethodSSO,
+		AuthenticationMethod: signins.MethodSSO,
 		Organizations:        []MockOrganizationEntry{},
 	}
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
@@ -2014,7 +2014,7 @@ func TestE2E_LogoutEverywhereIsRefusedFromASupportSession(t *testing.T) {
 	require.NoError(t, err)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	enableSSOSignInEnforcement(inst, authCtx.ActiveOrganizationID)
+	enableSignInEnforcement(inst, authCtx.ActiveOrganizationID)
 
 	support := *authCtx
 	support.SupportOrganizationID = authCtx.ActiveOrganizationID

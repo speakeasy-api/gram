@@ -1,4 +1,4 @@
-package ssosignins
+package signins
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins/repo"
 )
 
 // Flows that exchange a WorkOS code.
@@ -77,7 +77,7 @@ func RecordExchange(ctx context.Context, logger *slog.Logger, db Beginner, p Exc
 	case errors.Is(err, pgx.ErrNoRows):
 		return outcome(OutcomeUnknownOrganization)
 	case err != nil:
-		logger.ErrorContext(ctx, "resolve organization for sso sign-in", attr.SlogError(err))
+		logger.ErrorContext(ctx, "resolve organization for sign-in", attr.SlogError(err))
 		return outcome(OutcomeError)
 	case p.ExpectedOrganizationID != "" && organizationID != p.ExpectedOrganizationID:
 		return outcome(OutcomeOrganizationMismatch)
@@ -93,10 +93,10 @@ func RecordExchange(ctx context.Context, logger *slog.Logger, db Beginner, p Exc
 	})
 	switch {
 	case errors.Is(err, errSignInOwnedByAnotherUser):
-		logger.ErrorContext(ctx, "record sso sign-in", attr.SlogUserID(p.UserID), attr.SlogError(err))
+		logger.ErrorContext(ctx, "record sign-in", attr.SlogUserID(p.UserID), attr.SlogError(err))
 		return outcome(OutcomeOtherUser)
 	case err != nil:
-		logger.ErrorContext(ctx, "record sso sign-in", attr.SlogUserID(p.UserID), attr.SlogError(err))
+		logger.ErrorContext(ctx, "record sign-in", attr.SlogUserID(p.UserID), attr.SlogError(err))
 		return outcome(OutcomeError)
 	case recorded.Revoked:
 		recordOutcome(ctx, p.Flow, OutcomeRecordedRevoked)

@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * logoutEverywhere auth
  *
  * @remarks
- * Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their SSO sign-ins in every organization, and revokes every MCP grant made from them.
+ * Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.
  */
 export function authLogoutEverywhere(
   client: GramCore,

@@ -23,8 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
-	ssosigninsrepo "github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins"
+	signinsrepo "github.com/speakeasy-api/gram/server/internal/signins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -72,17 +72,17 @@ const workTenant = "00000000-0000-4000-8000-0000000000aa"
 
 // evidence is what WorkOS vouched for: the fixture user's verified email and
 // an authentication at the given time.
-func evidence(hostedDomain, tenantID string, authenticatedAt time.Time) ssosignins.Evidence {
-	return ssosignins.Evidence{HostedDomain: hostedDomain, TenantID: tenantID, VerifiedEmail: mockidp.MockUserEmail, IDPAuthenticatedAt: authenticatedAt}
+func evidence(hostedDomain, tenantID string, authenticatedAt time.Time) signins.Evidence {
+	return signins.Evidence{HostedDomain: hostedDomain, TenantID: tenantID, VerifiedEmail: mockidp.MockUserEmail, IDPAuthenticatedAt: authenticatedAt}
 }
 
-// signInParams records an SSO sign-in that authenticated at at.
-func (f ssoFixture) signInParams(workosSessionID string, at time.Time) ssosignins.RecordParams {
-	return ssosignins.RecordParams{
+// signInParams records a sign-in that authenticated at at.
+func (f ssoFixture) signInParams(workosSessionID string, at time.Time) signins.RecordParams {
+	return signins.RecordParams{
 		OrganizationID:       f.orgID,
 		UserID:               f.userID,
 		WorkOSSessionID:      workosSessionID,
-		AuthenticationMethod: ssosignins.MethodSSO,
+		AuthenticationMethod: signins.MethodSSO,
 		Evidence:             evidence("", "", at),
 		AuthenticatedAt:      at,
 	}
@@ -93,13 +93,13 @@ func (f ssoFixture) recordSignIn(t *testing.T, ctx context.Context, method strin
 	return f.recordSignInWith(t, ctx, method, evidence("", "", at), at)
 }
 
-func (f ssoFixture) recordSignInWith(t *testing.T, ctx context.Context, method string, ev ssosignins.Evidence, at time.Time) uuid.UUID {
+func (f ssoFixture) recordSignInWith(t *testing.T, ctx context.Context, method string, ev signins.Evidence, at time.Time) uuid.UUID {
 	t.Helper()
 
 	params := f.signInParams("session_"+uuid.NewString(), at)
 	params.AuthenticationMethod = method
 	params.Evidence = ev
-	id, err := ssosignins.Record(ctx, f.ti.conn, params)
+	id, err := signins.Record(ctx, f.ti.conn, params)
 	require.NoError(t, err)
 	require.True(t, id.ID.Valid)
 	return id.ID.UUID
@@ -122,8 +122,8 @@ func (f ssoFixture) seedSession(t *testing.T, ctx context.Context, subject urn.S
 		ExpiresAt:              pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 		ToolSelection:          nil,
 		Resource:               pgtype.Text{String: "", Valid: false},
-		SsoSignInID:            signInID,
-		SsoSignInUserID:        conv.ToPGText(subject.ID),
+		SignInID:               signInID,
+		SignInUserID:           conv.ToPGText(subject.ID),
 	})
 	require.NoError(t, err)
 	return row
@@ -135,7 +135,7 @@ func (f ssoFixture) linkedSession(t *testing.T, ctx context.Context, method stri
 	return f.seedSession(t, ctx, urn.NewUserSubject(f.userID), uuid.NullUUID{UUID: signIn, Valid: true})
 }
 
-func (f ssoFixture) linkedSessionWith(t *testing.T, ctx context.Context, method string, ev ssosignins.Evidence, at time.Time) repo.UserSession {
+func (f ssoFixture) linkedSessionWith(t *testing.T, ctx context.Context, method string, ev signins.Evidence, at time.Time) repo.UserSession {
 	t.Helper()
 	signIn := f.recordSignInWith(t, ctx, method, ev, at)
 	return f.seedSession(t, ctx, urn.NewUserSubject(f.userID), uuid.NullUUID{UUID: signIn, Valid: true})
@@ -158,24 +158,24 @@ func (f ssoFixture) seedIssuer(t *testing.T, ctx context.Context, tiers, microso
 	}))
 }
 
-func (f ssoFixture) check(t *testing.T, ctx context.Context, orgID string, sessionID uuid.UUID) ssosignins.Result {
+func (f ssoFixture) check(t *testing.T, ctx context.Context, orgID string, sessionID uuid.UUID) signins.Result {
 	t.Helper()
-	result, err := ssosignins.CheckSignInIdentity(ctx, f.ti.conn, orgID, sessionID, time.Now(), 0)
+	result, err := signins.CheckSignInIdentity(ctx, f.ti.conn, orgID, sessionID, time.Now(), 0)
 	require.NoError(t, err)
 	return result
 }
 
-func TestCheckSignInIdentity_EligibleSSOSignIn(t *testing.T) {
+func TestCheckSignInIdentity_EligibleSignIn(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
-	session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
+	session := f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
 
 	result := f.check(t, ctx, f.orgID, session.ID)
 	require.True(t, result.Eligible(), result.Reason)
 	require.Equal(t, f.userID, result.Identity.UserID)
 	require.Equal(t, mockidp.MockUserEmail, result.Identity.Email)
-	require.Equal(t, session.SsoSignInID.UUID, result.Identity.SignInID)
+	require.Equal(t, session.SignInID.UUID, result.Identity.SignInID)
 }
 
 func TestCheckSignInIdentity_AcceptsEachTierByDefault(t *testing.T) {
@@ -186,14 +186,14 @@ func TestCheckSignInIdentity_AcceptsEachTierByDefault(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		method   string
-		evidence ssosignins.Evidence
+		evidence signins.Evidence
 		tier     string
 	}{
-		{name: "sso", method: ssosignins.MethodSSO, evidence: none, tier: ssosignins.TierSSO},
-		{name: "google workspace", method: ssosignins.MethodGoogleOAuth, evidence: evidence("example.com", "", now), tier: ssosignins.TierGoogle},
-		{name: "microsoft work account in a pinned tenant", method: ssosignins.MethodMicrosoftOAuth, evidence: evidence("example.com", workTenant, now), tier: ssosignins.TierMicrosoft},
-		{name: "magic link", method: ssosignins.MethodMagicAuth, evidence: none, tier: ssosignins.TierMagicLink},
-		{name: "password", method: ssosignins.MethodPassword, evidence: none, tier: ssosignins.TierPassword},
+		{name: "sso", method: signins.MethodSSO, evidence: none, tier: signins.TierSSO},
+		{name: "google workspace", method: signins.MethodGoogleOAuth, evidence: evidence("example.com", "", now), tier: signins.TierGoogle},
+		{name: "microsoft work account in a pinned tenant", method: signins.MethodMicrosoftOAuth, evidence: evidence("example.com", workTenant, now), tier: signins.TierMicrosoft},
+		{name: "magic link", method: signins.MethodMagicAuth, evidence: none, tier: signins.TierMagicLink},
+		{name: "password", method: signins.MethodPassword, evidence: none, tier: signins.TierPassword},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -212,11 +212,11 @@ func TestCheckSignInIdentity_HonoursTheTiersTheAdminKept(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
-	f.limitSignInMethods(t, ctx, ssosignins.TierSSO, ssosignins.TierMagicLink)
-	require.True(t, f.check(t, ctx, f.orgID, f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now()).ID).Eligible())
-	require.True(t, f.check(t, ctx, f.orgID, f.linkedSession(t, ctx, ssosignins.MethodMagicAuth, time.Now()).ID).Eligible())
-	password := f.linkedSessionWith(t, ctx, ssosignins.MethodPassword, evidence("", "", time.Now()), time.Now())
-	require.Equal(t, ssosignins.ReasonMethodNotAllowed, f.check(t, ctx, f.orgID, password.ID).Reason)
+	f.limitSignInMethods(t, ctx, signins.TierSSO, signins.TierMagicLink)
+	require.True(t, f.check(t, ctx, f.orgID, f.linkedSession(t, ctx, signins.MethodSSO, time.Now()).ID).Eligible())
+	require.True(t, f.check(t, ctx, f.orgID, f.linkedSession(t, ctx, signins.MethodMagicAuth, time.Now()).ID).Eligible())
+	password := f.linkedSessionWith(t, ctx, signins.MethodPassword, evidence("", "", time.Now()), time.Now())
+	require.Equal(t, signins.ReasonMethodNotAllowed, f.check(t, ctx, f.orgID, password.ID).Reason)
 }
 
 func TestCheckSignInIdentity_RejectsEachFailedRequirement(t *testing.T) {
@@ -224,97 +224,97 @@ func TestCheckSignInIdentity_RejectsEachFailedRequirement(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
-		want    ssosignins.Reason
+		want    signins.Reason
 		prepare func(t *testing.T, ctx context.Context, f ssoFixture) (orgID string, sessionID uuid.UUID)
 	}{
-		{name: "legacy grant without a sign-in", want: ssosignins.ReasonNotLinked, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "legacy grant without a sign-in", want: signins.ReasonNotLinked, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
 			return f.orgID, f.seedSession(t, ctx, urn.NewUserSubject(f.userID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}).ID
 		}},
-		{name: "password turned off by the admin", want: ssosignins.ReasonMethodNotAllowed, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "password turned off by the admin", want: signins.ReasonMethodNotAllowed, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			f.limitSignInMethods(t, ctx, ssosignins.TierSSO, ssosignins.TierGoogle, ssosignins.TierMicrosoft, ssosignins.TierMagicLink)
-			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodPassword, time.Now()).ID
+			f.limitSignInMethods(t, ctx, signins.TierSSO, signins.TierGoogle, signins.TierMicrosoft, signins.TierMagicLink)
+			return f.orgID, f.linkedSession(t, ctx, signins.MethodPassword, time.Now()).ID
 		}},
-		{name: "password older than four hours", want: ssosignins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "password older than four hours", want: signins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodPassword, time.Now().Add(-5*time.Hour)).ID
+			return f.orgID, f.linkedSession(t, ctx, signins.MethodPassword, time.Now().Add(-5*time.Hour)).ID
 		}},
-		{name: "personal google account on the company email", want: ssosignins.ReasonUnmanagedAccount, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "personal google account on the company email", want: signins.ReasonUnmanagedAccount, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodGoogleOAuth, evidence("", "", time.Now()), time.Now()).ID
+			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodGoogleOAuth, evidence("", "", time.Now()), time.Now()).ID
 		}},
-		{name: "microsoft tenant the organization never pinned", want: ssosignins.ReasonTenantNotAllowed, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "microsoft tenant the organization never pinned", want: signins.ReasonTenantNotAllowed, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodMicrosoftOAuth, evidence("example.com", workTenant, time.Now()), time.Now()).ID
+			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodMicrosoftOAuth, evidence("example.com", workTenant, time.Now()), time.Now()).ID
 		}},
-		{name: "email the identity provider did not verify", want: ssosignins.ReasonEmailNotVerified, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "email the identity provider did not verify", want: signins.ReasonEmailNotVerified, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
 			ev := evidence("", "", time.Now())
 			ev.VerifiedEmail = ""
-			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodSSO, ev, time.Now()).ID
+			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodSSO, ev, time.Now()).ID
 		}},
-		{name: "profile email changed after sign-in", want: ssosignins.ReasonEmailChanged, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "profile email changed after sign-in", want: signins.ReasonEmailChanged, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
+			session := f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
 			require.NoError(t, usersrepo.New(f.ti.conn).SetOrganizationUserEmailFixture(ctx, usersrepo.SetOrganizationUserEmailFixtureParams{Email: "renamed@example.com", UserID: f.userID, OrganizationID: f.orgID}))
 			return f.orgID, session.ID
 		}},
-		{name: "authentication time unknown", want: ssosignins.ReasonAuthTimeUnknown, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "authentication time unknown", want: signins.ReasonAuthTimeUnknown, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
 			ev := evidence("", "", time.Time{})
-			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodSSO, ev, time.Now()).ID
+			return f.orgID, f.linkedSessionWith(t, ctx, signins.MethodSSO, ev, time.Now()).ID
 		}},
-		{name: "magic link older than its tier allows", want: ssosignins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "magic link older than its tier allows", want: signins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodMagicAuth, time.Now().Add(-5*time.Hour)).ID
+			return f.orgID, f.linkedSession(t, ctx, signins.MethodMagicAuth, time.Now().Add(-5*time.Hour)).ID
 		}},
-		{name: "tier turned off by the admin", want: ssosignins.ReasonMethodNotAllowed, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "tier turned off by the admin", want: signins.ReasonMethodNotAllowed, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			f.limitSignInMethods(t, ctx, ssosignins.TierSSO)
-			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodMagicAuth, time.Now()).ID
+			f.limitSignInMethods(t, ctx, signins.TierSSO)
+			return f.orgID, f.linkedSession(t, ctx, signins.MethodMagicAuth, time.Now()).ID
 		}},
-		{name: "sign-in older than the maximum age", want: ssosignins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "sign-in older than the maximum age", want: signins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now().Add(-ssosignins.MaxAge-time.Hour)).ID
+			return f.orgID, f.linkedSession(t, ctx, signins.MethodSSO, time.Now().Add(-signins.MaxAge-time.Hour)).ID
 		}},
-		{name: "signed-out sign-in", want: ssosignins.ReasonSignInRevoked, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "signed-out sign-in", want: signins.ReasonSignInRevoked, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
 			workosSessionID := "session_" + uuid.NewString()
-			signIn, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
+			signIn, err := signins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
 			require.NoError(t, err)
 			session := f.seedSession(t, ctx, urn.NewUserSubject(f.userID), signIn.ID)
-			_, err = ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, workosSessionID)
+			_, err = signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, workosSessionID)
 			require.NoError(t, err)
 			return f.orgID, session.ID
 		}},
-		{name: "removed member", want: ssosignins.ReasonNotMember, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "removed member", want: signins.ReasonNotMember, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
+			session := f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
 			require.NoError(t, testrepo.New(f.ti.conn).ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, f.orgID))
 			return f.orgID, session.ID
 		}},
-		{name: "deprovisioned in the directory", want: ssosignins.ReasonDeprovisioned, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "deprovisioned in the directory", want: signins.ReasonDeprovisioned, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
+			session := f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
 			deprovisionDirectoryUser(t, ctx, f)
 			return f.orgID, session.ID
 		}},
-		{name: "email outside the verified domains", want: ssosignins.ReasonEmailDomain, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "email outside the verified domains", want: signins.ReasonEmailDomain, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
+			session := f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
 			setVerifiedDomains(t, ctx, f.ti.conn, f.orgID, "other.test")
 			return f.orgID, session.ID
 		}},
-		{name: "no verified domains", want: ssosignins.ReasonEmailDomain, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "no verified domains", want: signins.ReasonEmailDomain, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
+			session := f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
 			setVerifiedDomains(t, ctx, f.ti.conn, f.orgID)
 			return f.orgID, session.ID
 		}},
-		{name: "disabled organization", want: ssosignins.ReasonOrganizationDisabled, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "disabled organization", want: signins.ReasonOrganizationDisabled, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
+			session := f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
 			_, err := orgrepo.New(f.ti.conn).DisableOrganizationByWorkosID(ctx, orgrepo.DisableOrganizationByWorkosIDParams{
 				WorkosLastEventID: conv.ToPGText("event_" + uuid.NewString()),
 				WorkosID:          conv.ToPGText(mockidp.MockOrgID),
@@ -322,14 +322,14 @@ func TestCheckSignInIdentity_RejectsEachFailedRequirement(t *testing.T) {
 			require.NoError(t, err)
 			return f.orgID, session.ID
 		}},
-		{name: "another user's sign-in is never linked", want: ssosignins.ReasonNotLinked, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "another user's sign-in is never linked", want: signins.ReasonNotLinked, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			signIn := f.recordSignIn(t, ctx, ssosignins.MethodSSO, time.Now())
+			signIn := f.recordSignIn(t, ctx, signins.MethodSSO, time.Now())
 			return f.orgID, f.seedSession(t, ctx, urn.NewUserSubject("someone-else"), uuid.NullUUID{UUID: signIn, Valid: true}).ID
 		}},
-		{name: "checked against another organization", want: ssosignins.ReasonSessionNotFound, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "checked against another organization", want: signins.ReasonSessionNotFound, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			return seedOtherOrganization(t, ctx, f.ti.conn), f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now()).ID
+			return seedOtherOrganization(t, ctx, f.ti.conn), f.linkedSession(t, ctx, signins.MethodSSO, time.Now()).ID
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -388,23 +388,23 @@ func seedOtherOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	return orgID
 }
 
-func TestRecordSSOSignIn_IdempotentPerSessionAndBoundToUser(t *testing.T) {
+func TestRecordSignIn_IdempotentPerSessionAndBoundToUser(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
 	params := f.signInParams("session_"+uuid.NewString(), time.Now())
-	first, err := ssosignins.Record(ctx, f.ti.conn, params)
+	first, err := signins.Record(ctx, f.ti.conn, params)
 	require.NoError(t, err)
-	again, err := ssosignins.Record(ctx, f.ti.conn, params)
+	again, err := signins.Record(ctx, f.ti.conn, params)
 	require.NoError(t, err)
 	require.Equal(t, first, again)
 
 	params.UserID = "another-user"
-	_, err = ssosignins.Record(ctx, f.ti.conn, params)
+	_, err = signins.Record(ctx, f.ti.conn, params)
 	require.Error(t, err, "a WorkOS session never moves to another user")
 
 	params.WorkOSSessionID = ""
-	none, err := ssosignins.Record(ctx, f.ti.conn, params)
+	none, err := signins.Record(ctx, f.ti.conn, params)
 	require.NoError(t, err)
 	require.False(t, none.ID.Valid, "an exchange without a WorkOS session records nothing")
 }
@@ -414,20 +414,20 @@ func TestRevokeSession_StopsVouchingButKeepsTheGrant(t *testing.T) {
 
 	ctx, f := newSSOFixture(t)
 	params := f.signInParams("session_"+uuid.NewString(), time.Now())
-	signIn, err := ssosignins.Record(ctx, f.ti.conn, params)
+	signIn, err := signins.Record(ctx, f.ti.conn, params)
 	require.NoError(t, err)
 	session := f.seedSession(t, ctx, urn.NewUserSubject(f.userID), signIn.ID)
-	other := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
+	other := f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
 
-	orgs, err := ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, params.WorkOSSessionID)
+	orgs, err := signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, params.WorkOSSessionID)
 	require.NoError(t, err)
 	require.Equal(t, []string{f.orgID}, orgs.Organizations)
 
-	require.Equal(t, ssosignins.ReasonSignInRevoked, f.check(t, ctx, f.orgID, session.ID).Reason)
+	require.Equal(t, signins.ReasonSignInRevoked, f.check(t, ctx, f.orgID, session.ID).Reason)
 	require.True(t, f.check(t, ctx, f.orgID, other.ID).Eligible(), "only the signed-out WorkOS session is revoked")
 	requireSessionLive(t, ctx, f, session.ID)
 
-	again, err := ssosignins.Record(ctx, f.ti.conn, params)
+	again, err := signins.Record(ctx, f.ti.conn, params)
 	require.NoError(t, err)
 	require.Equal(t, signIn.ID, again.ID, "a repeated exchange links to the same sign-in")
 	require.True(t, again.Revoked, "a repeated exchange never revives a revoked sign-in")
@@ -454,7 +454,7 @@ func ssoSessionByID(ctx context.Context, f ssoFixture, id uuid.UUID) (repo.UserS
 	return row, nil
 }
 
-func TestRecordSSOSignIn_NewOrganizationKeepsTheSessionsFirstSignInTime(t *testing.T) {
+func TestRecordSignIn_NewOrganizationKeepsTheSessionsFirstSignInTime(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
@@ -463,28 +463,28 @@ func TestRecordSSOSignIn_NewOrganizationKeepsTheSessionsFirstSignInTime(t *testi
 	otherOrg := seedOtherOrganization(t, ctx, f.ti.conn)
 	elsewhere := f.signInParams(sessionID, first)
 	elsewhere.OrganizationID = otherOrg
-	_, err := ssosignins.Record(ctx, f.ti.conn, elsewhere)
+	_, err := signins.Record(ctx, f.ti.conn, elsewhere)
 	require.NoError(t, err)
 
-	here, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(sessionID, time.Now()))
+	here, err := signins.Record(ctx, f.ti.conn, f.signInParams(sessionID, time.Now()))
 	require.NoError(t, err)
 	session := f.seedSession(t, ctx, urn.NewUserSubject(f.userID), here.ID)
 
 	require.True(t, f.check(t, ctx, f.orgID, session.ID).Eligible())
-	later, err := ssosignins.CheckSignInIdentity(ctx, f.ti.conn, f.orgID, session.ID, first.Add(ssosignins.MaxAge+time.Minute), 0)
+	later, err := signins.CheckSignInIdentity(ctx, f.ti.conn, f.orgID, session.ID, first.Add(signins.MaxAge+time.Minute), 0)
 	require.NoError(t, err)
-	require.Equal(t, ssosignins.ReasonExpired, later.Reason, "recording in a second organization does not restart the age window")
+	require.Equal(t, signins.ReasonExpired, later.Reason, "recording in a second organization does not restart the age window")
 }
 
 func TestCheckSignInIdentity_MaxAgeOverride(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
-	session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now().Add(-2*time.Hour))
+	session := f.linkedSession(t, ctx, signins.MethodSSO, time.Now().Add(-2*time.Hour))
 
-	result, err := ssosignins.CheckSignInIdentity(ctx, f.ti.conn, f.orgID, session.ID, time.Now(), time.Hour)
+	result, err := signins.CheckSignInIdentity(ctx, f.ti.conn, f.orgID, session.ID, time.Now(), time.Hour)
 	require.NoError(t, err)
-	require.Equal(t, ssosignins.ReasonExpired, result.Reason)
+	require.Equal(t, signins.ReasonExpired, result.Reason)
 }
 
 type recordingRevoker struct {
@@ -515,19 +515,19 @@ func (r *recordingRevoker) RevokeSession(ctx context.Context, id string) error {
 
 func pendingDeliveries(t *testing.T, ctx context.Context, f ssoFixture) int {
 	t.Helper()
-	n, err := testrepo.New(f.ti.conn).CountPendingSSOSignInRevocationDeliveries(ctx, f.orgID)
+	n, err := testrepo.New(f.ti.conn).CountPendingSignInRevocationDeliveries(ctx, f.orgID)
 	require.NoError(t, err)
 	return int(n)
 }
 
-func newDeliverer(t *testing.T, f ssoFixture, revoker *recordingRevoker, epochs ssosignins.EpochRaiser) *ssosignins.Deliverer {
+func newDeliverer(t *testing.T, f ssoFixture, revoker *recordingRevoker, epochs signins.EpochRaiser) *signins.Deliverer {
 	t.Helper()
-	return ssosignins.NewDeliverer(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.ti.conn, revoker, revoker, epochs)
+	return signins.NewDeliverer(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.ti.conn, revoker, revoker, epochs)
 }
 
-func deliveries(t *testing.T, ctx context.Context, f ssoFixture) []testrepo.ListSSOSignInRevocationDeliveriesFixtureRow {
+func deliveries(t *testing.T, ctx context.Context, f ssoFixture) []testrepo.ListSignInRevocationDeliveriesFixtureRow {
 	t.Helper()
-	rows, err := testrepo.New(f.ti.conn).ListSSOSignInRevocationDeliveriesFixture(ctx, f.orgID)
+	rows, err := testrepo.New(f.ti.conn).ListSignInRevocationDeliveriesFixture(ctx, f.orgID)
 	require.NoError(t, err)
 	return rows
 }
@@ -536,9 +536,9 @@ func TestRevokeUser_DeliveriesSurviveAFailedPushAndTheSweepRetriesThem(t *testin
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
-	session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
+	session := f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
 
-	revoked, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonAdmin)
+	revoked, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonAdmin)
 	require.NoError(t, err)
 	require.Len(t, revoked.DeliveryIDs, 2, "one JTI and one WorkOS session delivery")
 	requireSessionGone(t, ctx, f, session.ID)
@@ -567,7 +567,7 @@ func TestRevokeUser_DeliveriesSurviveAFailedPushAndTheSweepRetriesThem(t *testin
 	require.NotContains(t, up.calls, session.Jti, "the sweep waits out the backoff")
 	_ = claimed
 
-	require.NoError(t, testrepo.New(f.ti.conn).MakeSSOSignInRevocationDeliveriesDueFixture(ctx, f.orgID))
+	require.NoError(t, testrepo.New(f.ti.conn).MakeSignInRevocationDeliveriesDueFixture(ctx, f.orgID))
 	for pendingDeliveries(t, ctx, f) > 0 {
 		claimed, err := deliverer.Sweep(ctx)
 		require.NoError(t, err)
@@ -580,19 +580,19 @@ func TestDeliveries_ALeaseKeepsOtherWorkersOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
-	f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
-	revoked, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonAdmin)
+	f.linkedSession(t, ctx, signins.MethodSSO, time.Now())
+	revoked, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonAdmin)
 	require.NoError(t, err)
 
-	q := ssosigninsrepo.New(f.ti.conn)
-	first, err := q.ClaimRevocationDeliveries(ctx, ssosigninsrepo.ClaimRevocationDeliveriesParams{LeaseSeconds: 60, OrganizationIds: []string{f.orgID}, Ids: revoked.DeliveryIDs})
+	q := signinsrepo.New(f.ti.conn)
+	first, err := q.ClaimRevocationDeliveries(ctx, signinsrepo.ClaimRevocationDeliveriesParams{LeaseSeconds: 60, OrganizationIds: []string{f.orgID}, Ids: revoked.DeliveryIDs})
 	require.NoError(t, err)
 	require.Len(t, first, 2)
-	second, err := q.ClaimRevocationDeliveries(ctx, ssosigninsrepo.ClaimRevocationDeliveriesParams{LeaseSeconds: 60, OrganizationIds: []string{f.orgID}, Ids: revoked.DeliveryIDs})
+	second, err := q.ClaimRevocationDeliveries(ctx, signinsrepo.ClaimRevocationDeliveriesParams{LeaseSeconds: 60, OrganizationIds: []string{f.orgID}, Ids: revoked.DeliveryIDs})
 	require.NoError(t, err)
 	require.Empty(t, second, "a leased delivery is not claimed twice")
 
-	require.NoError(t, q.MarkRevocationDelivered(ctx, ssosigninsrepo.MarkRevocationDeliveredParams{ID: first[0].ID, OrganizationID: f.orgID, EffectiveAt: first[0].EffectiveAt}))
+	require.NoError(t, q.MarkRevocationDelivered(ctx, signinsrepo.MarkRevocationDeliveredParams{ID: first[0].ID, OrganizationID: f.orgID, EffectiveAt: first[0].EffectiveAt}))
 	require.Equal(t, 1, pendingDeliveries(t, ctx, f), "each delivery is acknowledged on its own")
 }
 
@@ -614,9 +614,9 @@ func TestDeliveries_AUserEpochOnlyMovesForward(t *testing.T) {
 	ctx, f := newSSOFixture(t)
 	earlier := time.Now().Add(-time.Minute).Truncate(time.Microsecond)
 	later := earlier.Add(30 * time.Second)
-	first, err := ssosignins.EnqueueUserEpoch(ctx, f.ti.conn, f.orgID, f.userID, later)
+	first, err := signins.EnqueueUserEpoch(ctx, f.ti.conn, f.orgID, f.userID, later)
 	require.NoError(t, err)
-	again, err := ssosignins.EnqueueUserEpoch(ctx, f.ti.conn, f.orgID, f.userID, earlier)
+	again, err := signins.EnqueueUserEpoch(ctx, f.ti.conn, f.orgID, f.userID, earlier)
 	require.NoError(t, err)
 	require.Equal(t, first, again, "a pending epoch is reused")
 
@@ -628,51 +628,51 @@ func TestDeliveries_AUserEpochOnlyMovesForward(t *testing.T) {
 	require.Equal(t, 0, pendingDeliveries(t, ctx, f))
 }
 
-func TestRecordSSOSignIn_SilentSessionReuseKeepsTheAuthenticationTime(t *testing.T) {
+func TestRecordSignIn_SilentSessionReuseKeepsTheAuthenticationTime(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
 	workosSessionID := "session_" + uuid.NewString()
 	authenticated := time.Now().Add(-6 * 24 * time.Hour)
-	first, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, authenticated))
+	first, err := signins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, authenticated))
 	require.NoError(t, err)
 
 	// AuthKit hands the same session to a later authorization without a new
 	// authentication; the exchange time is now but WorkOS reports the old one.
 	reuse := f.signInParams(workosSessionID, time.Now())
 	reuse.Evidence.IDPAuthenticatedAt = time.Now()
-	again, err := ssosignins.Record(ctx, f.ti.conn, reuse)
+	again, err := signins.Record(ctx, f.ti.conn, reuse)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, again.ID)
 
 	session := f.seedSession(t, ctx, urn.NewUserSubject(f.userID), again.ID)
-	later, err := ssosignins.CheckSignInIdentity(ctx, f.ti.conn, f.orgID, session.ID, authenticated.Add(ssosignins.MaxAge+time.Minute), 0)
+	later, err := signins.CheckSignInIdentity(ctx, f.ti.conn, f.orgID, session.ID, authenticated.Add(signins.MaxAge+time.Minute), 0)
 	require.NoError(t, err)
-	require.Equal(t, ssosignins.ReasonExpired, later.Reason, "reusing a session never restarts its age")
+	require.Equal(t, signins.ReasonExpired, later.Reason, "reusing a session never restarts its age")
 }
 
-func TestRecordSSOSignIn_FillsEvidenceAMissedLookupLeftOut(t *testing.T) {
+func TestRecordSignIn_FillsEvidenceAMissedLookupLeftOut(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
 	workosSessionID := "session_" + uuid.NewString()
 	missed := f.signInParams(workosSessionID, time.Now())
-	missed.AuthenticationMethod = ssosignins.MethodGoogleOAuth
-	first, err := ssosignins.Record(ctx, f.ti.conn, missed)
+	missed.AuthenticationMethod = signins.MethodGoogleOAuth
+	first, err := signins.Record(ctx, f.ti.conn, missed)
 	require.NoError(t, err)
 	session := f.seedSession(t, ctx, urn.NewUserSubject(f.userID), first.ID)
-	require.Equal(t, ssosignins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason)
+	require.Equal(t, signins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason)
 
 	other := missed
-	other.AuthenticationMethod = ssosignins.MethodMicrosoftOAuth
+	other.AuthenticationMethod = signins.MethodMicrosoftOAuth
 	other.Evidence.HostedDomain = "example.com"
-	_, err = ssosignins.Record(ctx, f.ti.conn, other)
+	_, err = signins.Record(ctx, f.ti.conn, other)
 	require.NoError(t, err)
-	require.Equal(t, ssosignins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason, "another method's evidence never lands")
+	require.Equal(t, signins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason, "another method's evidence never lands")
 
 	found := missed
 	found.Evidence.HostedDomain = "example.com"
-	_, err = ssosignins.Record(ctx, f.ti.conn, found)
+	_, err = signins.Record(ctx, f.ti.conn, found)
 	require.NoError(t, err)
 	require.True(t, f.check(t, ctx, f.orgID, session.ID).Eligible(), "a later exchange of the same method fills the gap")
 }
@@ -686,16 +686,16 @@ func TestRecord_WaitsForAConcurrentRevocation(t *testing.T) {
 	tx, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: holds the revocation open so a second connection can interleave
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
-	_, err = ssosignins.RevokeUser(ctx, tx, []string{f.orgID}, f.userID, ssosignins.RevokeReasonSignOutEverywhere)
+	_, err = signins.RevokeUser(ctx, tx, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
 	require.NoError(t, err)
 
 	type outcome struct {
-		recorded ssosignins.Recorded
+		recorded signins.Recorded
 		err      error
 	}
 	done := make(chan outcome, 1)
 	go func() {
-		recorded, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), startedBefore))
+		recorded, err := signins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), startedBefore))
 		done <- outcome{recorded: recorded, err: err}
 	}()
 	select {
@@ -718,14 +718,14 @@ func TestRecord_AFirstSignInInAnotherOrganizationWaitsForARevocation(t *testing.
 	tx, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: holds the revocation open so a second connection can interleave
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
-	_, err = ssosignins.RevokeUser(ctx, tx, []string{f.orgID}, f.userID, ssosignins.RevokeReasonSignOutEverywhere)
+	_, err = signins.RevokeUser(ctx, tx, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
 	require.NoError(t, err)
 
 	done := make(chan error, 1)
 	go func() {
 		elsewhere := f.signInParams("session_"+uuid.NewString(), time.Now())
 		elsewhere.OrganizationID = otherOrg
-		_, err := ssosignins.Record(ctx, f.ti.conn, elsewhere)
+		_, err := signins.Record(ctx, f.ti.conn, elsewhere)
 		done <- err
 	}()
 	select {
@@ -742,17 +742,17 @@ func TestRevokeSession_FencesASignInRecordedAfterwards(t *testing.T) {
 
 	ctx, f := newSSOFixture(t)
 	workosSessionID := "session_" + uuid.NewString()
-	_, err := ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, workosSessionID)
+	_, err := signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, workosSessionID)
 	require.NoError(t, err)
 
-	late, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
+	late, err := signins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
 	require.NoError(t, err)
 	require.True(t, late.Revoked, "an exchange that lands after sign-out is recorded revoked")
 
 	otherOrg := seedOtherOrganization(t, ctx, f.ti.conn)
 	elsewhere := f.signInParams(workosSessionID, time.Now())
 	elsewhere.OrganizationID = otherOrg
-	inherited, err := ssosignins.Record(ctx, f.ti.conn, elsewhere)
+	inherited, err := signins.Record(ctx, f.ti.conn, elsewhere)
 	require.NoError(t, err)
 	require.True(t, inherited.Revoked, "and so is the same session recorded in another organization")
 }
@@ -762,29 +762,29 @@ func TestRevokeUser_KeepsAWorkOSSessionAnotherOrganizationStillUses(t *testing.T
 
 	ctx, f := newSSOFixture(t)
 	shared := "session_" + uuid.NewString()
-	_, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(shared, time.Now()))
+	_, err := signins.Record(ctx, f.ti.conn, f.signInParams(shared, time.Now()))
 	require.NoError(t, err)
 	otherOrg := seedOtherOrganization(t, ctx, f.ti.conn)
 	elsewhere := f.signInParams(shared, time.Now())
 	elsewhere.OrganizationID = otherOrg
-	_, err = ssosignins.Record(ctx, f.ti.conn, elsewhere)
+	_, err = signins.Record(ctx, f.ti.conn, elsewhere)
 	require.NoError(t, err)
 	own := "session_" + uuid.NewString()
-	_, err = ssosignins.Record(ctx, f.ti.conn, f.signInParams(own, time.Now()))
+	_, err = signins.Record(ctx, f.ti.conn, f.signInParams(own, time.Now()))
 	require.NoError(t, err)
 
-	revoked, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonAdmin)
+	revoked, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonAdmin)
 	require.NoError(t, err)
 	require.Equal(t, 2, revoked.SignIns())
 	var ended []string
 	for _, d := range deliveries(t, ctx, f) {
-		if d.Kind == string(ssosignins.DeliveryWorkOSSession) {
+		if d.Kind == string(signins.DeliveryWorkOSSession) {
 			ended = append(ended, d.Target)
 		}
 	}
 	require.Equal(t, []string{own}, ended, "a WorkOS session still backing another organization stays up")
 
-	stillLive, err := ssosignins.LiveSignInForSession(ctx, f.ti.conn, otherOrg, f.userID, shared)
+	stillLive, err := signins.LiveSignInForSession(ctx, f.ti.conn, otherOrg, f.userID, shared)
 	require.NoError(t, err)
 	require.True(t, stillLive.Valid, "only this organization's rows are revoked")
 }
@@ -794,14 +794,14 @@ func TestRevokeUser_UpgradesASignedOutSignIn(t *testing.T) {
 
 	ctx, f := newSSOFixture(t)
 	sessionID := "session_" + uuid.NewString()
-	signIn, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(sessionID, time.Now()))
+	signIn, err := signins.Record(ctx, f.ti.conn, f.signInParams(sessionID, time.Now()))
 	require.NoError(t, err)
-	_, err = ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, sessionID)
+	_, err = signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, sessionID)
 	require.NoError(t, err)
 	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), signIn.ID.UUID)
 	require.NoError(t, err, "a signed-out sign-in still links")
 
-	revoked, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonAdmin)
+	revoked, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonAdmin)
 	require.NoError(t, err)
 	require.Equal(t, 1, revoked.SignIns(), "a broad revocation upgrades a signed-out sign-in")
 	require.Len(t, revoked.Sessions, 1)
@@ -815,16 +815,16 @@ func TestRecord_AnExchangeStartedBeforeABroadRevocationIsFencedOut(t *testing.T)
 
 	ctx, f := newSSOFixture(t)
 	startedBefore := time.Now()
-	_, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonSignOutEverywhere)
+	_, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
 	require.NoError(t, err)
 
-	late, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), startedBefore))
+	late, err := signins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), startedBefore))
 	require.NoError(t, err)
 	require.True(t, late.Revoked, "a sign-in in flight during the revocation is recorded revoked")
 	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), late.ID.UUID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
-	fresh, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), time.Now()))
+	fresh, err := signins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), time.Now()))
 	require.NoError(t, err)
 	require.False(t, fresh.Revoked, "a later sign-in works")
 	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), fresh.ID.UUID)
@@ -836,10 +836,10 @@ func TestRevokeSession_EnqueuesEndingTheWorkOSSession(t *testing.T) {
 
 	ctx, f := newSSOFixture(t)
 	sessionID := "session_" + uuid.NewString()
-	_, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(sessionID, time.Now()))
+	_, err := signins.Record(ctx, f.ti.conn, f.signInParams(sessionID, time.Now()))
 	require.NoError(t, err)
 
-	out, err := ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, sessionID)
+	out, err := signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, sessionID)
 	require.NoError(t, err)
 	require.Equal(t, []string{f.orgID}, out.Organizations)
 	require.Len(t, out.DeliveryIDs, 1)
@@ -850,8 +850,8 @@ func TestCreateUserSession_RefusesAGrantFromARevokedSignIn(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
-	signIn := f.recordSignIn(t, ctx, ssosignins.MethodSSO, time.Now())
-	_, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonAdmin)
+	signIn := f.recordSignIn(t, ctx, signins.MethodSSO, time.Now())
+	_, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonAdmin)
 	require.NoError(t, err)
 
 	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), signIn)
@@ -863,26 +863,26 @@ func TestCreateUserSession_KeepsALinkAfterSingleSignOut(t *testing.T) {
 
 	ctx, f := newSSOFixture(t)
 	sessionID := "session_" + uuid.NewString()
-	signIn, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(sessionID, time.Now()))
+	signIn, err := signins.Record(ctx, f.ti.conn, f.signInParams(sessionID, time.Now()))
 	require.NoError(t, err)
-	_, err = ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, sessionID)
+	_, err = signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, sessionID)
 	require.NoError(t, err)
 
 	row, err := createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), signIn.ID.UUID)
 	require.NoError(t, err)
-	require.Equal(t, signIn.ID, row.SsoSignInID, "the grant stays reachable by later revocations")
-	require.Equal(t, ssosignins.ReasonSignInRevoked, f.check(t, ctx, f.orgID, row.ID).Reason)
+	require.Equal(t, signIn.ID, row.SignInID, "the grant stays reachable by later revocations")
+	require.Equal(t, signins.ReasonSignInRevoked, f.check(t, ctx, f.orgID, row.ID).Reason)
 }
 
 func TestCreateUserSession_DropsALinkToAnotherUsersSignIn(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
-	signIn := f.recordSignIn(t, ctx, ssosignins.MethodSSO, time.Now())
+	signIn := f.recordSignIn(t, ctx, signins.MethodSSO, time.Now())
 
 	row, err := createLinkedSession(ctx, f, urn.NewUserSubject("someone-else"), signIn)
 	require.NoError(t, err)
-	require.False(t, row.SsoSignInID.Valid)
+	require.False(t, row.SignInID.Valid)
 }
 
 func createLinkedSession(ctx context.Context, f ssoFixture, subject urn.SessionSubject, signIn uuid.UUID) (repo.UserSession, error) {
@@ -900,8 +900,8 @@ func createLinkedSession(ctx context.Context, f ssoFixture, subject urn.SessionS
 		ExpiresAt:              pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 		ToolSelection:          nil,
 		Resource:               pgtype.Text{String: "", Valid: false},
-		SsoSignInID:            uuid.NullUUID{UUID: signIn, Valid: true},
-		SsoSignInUserID:        conv.ToPGText(subject.ID),
+		SignInID:               uuid.NullUUID{UUID: signIn, Valid: true},
+		SignInUserID:           conv.ToPGText(subject.ID),
 	})
 	if err != nil {
 		return repo.UserSession{}, err //nolint:wrapcheck // test helper surfaces pgx sentinels
@@ -916,15 +916,15 @@ func TestMintUserSession_LinksTheDashboardSignIn(t *testing.T) {
 		name         string
 		enforced     bool
 		impersonated bool
-		revoke       ssosignins.RevokeReason
+		revoke       signins.RevokeReason
 		wantLinked   bool
 		wantRefused  bool
 	}{
 		{name: "own sign-in", enforced: true, impersonated: false, revoke: "", wantLinked: true, wantRefused: false},
 		{name: "impersonated session", enforced: true, impersonated: true, revoke: "", wantLinked: false, wantRefused: false},
 		{name: "enforcement off", enforced: false, impersonated: false, revoke: "", wantLinked: false, wantRefused: false},
-		{name: "signed-out sign-in", enforced: true, impersonated: false, revoke: ssosignins.RevokeReasonSignOut, wantLinked: true, wantRefused: false},
-		{name: "revoked sign-in", enforced: true, impersonated: false, revoke: ssosignins.RevokeReasonAdmin, wantLinked: false, wantRefused: true},
+		{name: "signed-out sign-in", enforced: true, impersonated: false, revoke: signins.RevokeReasonSignOut, wantLinked: true, wantRefused: false},
+		{name: "revoked sign-in", enforced: true, impersonated: false, revoke: signins.RevokeReasonAdmin, wantLinked: false, wantRefused: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -934,7 +934,7 @@ func TestMintUserSession_LinksTheDashboardSignIn(t *testing.T) {
 			require.True(t, ok)
 			if tc.enforced {
 				flags := &feature.InMemory{}
-				ssosignins.EnableForTests(flags, authCtx.ActiveOrganizationID)
+				signins.EnableForTests(flags, authCtx.ActiveOrganizationID)
 				ti.sessionManager.SetFlags(flags)
 			}
 			workosSessionID := "session_" + uuid.NewString()
@@ -946,15 +946,15 @@ func TestMintUserSession_LinksTheDashboardSignIn(t *testing.T) {
 				replacement.ImpersonatorEmail = "operator@example.com"
 			}
 			require.NoError(t, ti.sessionManager.UpdateSession(ctx, current, replacement))
-			signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: authCtx.UserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: ssosignins.MethodSSO, Evidence: evidence("", "", time.Now()), AuthenticatedAt: time.Now()})
+			signIn, err := signins.Record(ctx, ti.conn, signins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: authCtx.UserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: signins.MethodSSO, Evidence: evidence("", "", time.Now()), AuthenticatedAt: time.Now()})
 			require.NoError(t, err)
 			switch tc.revoke {
-			case ssosignins.RevokeReasonSignOut:
-				_, err = ssosignins.RevokeSession(ctx, ti.conn, []string{authCtx.ActiveOrganizationID}, authCtx.UserID, workosSessionID)
+			case signins.RevokeReasonSignOut:
+				_, err = signins.RevokeSession(ctx, ti.conn, []string{authCtx.ActiveOrganizationID}, authCtx.UserID, workosSessionID)
 				require.NoError(t, err)
 			case "":
 			default:
-				_, err = ssosignins.RevokeUser(ctx, ti.conn, []string{authCtx.ActiveOrganizationID}, authCtx.UserID, tc.revoke)
+				_, err = signins.RevokeUser(ctx, ti.conn, []string{authCtx.ActiveOrganizationID}, authCtx.UserID, tc.revoke)
 				require.NoError(t, err)
 			}
 
@@ -974,9 +974,9 @@ func TestMintUserSession_LinksTheDashboardSignIn(t *testing.T) {
 			row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{UserSessionIssuerID: toolset.UserSessionIssuerID.UUID, Jti: claims.ID})
 			require.NoError(t, err)
 			if tc.wantLinked {
-				require.Equal(t, signIn.ID, row.SsoSignInID)
+				require.Equal(t, signIn.ID, row.SignInID)
 			} else {
-				require.False(t, row.SsoSignInID.Valid)
+				require.False(t, row.SignInID.Valid)
 			}
 		})
 	}
@@ -986,7 +986,7 @@ func TestMintUserSession_FailsClosedWhenTheSignInLookupFails(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enforceSSOSignIns(t, ctx, ti)
+	enforceSignIns(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	current, err := ti.sessionManager.GetSession(ctx, *authCtx.SessionID)
@@ -1007,7 +1007,7 @@ func TestRecord_ASessionAuthenticatedBeforeARevocationStaysFencedWhenReused(t *t
 
 	ctx, f := newSSOFixture(t)
 	authenticated := time.Now().Add(-time.Hour)
-	_, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonSignOutEverywhere)
+	_, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
 	require.NoError(t, err)
 
 	// A WorkOS session never recorded here, authenticated before the
@@ -1015,13 +1015,13 @@ func TestRecord_ASessionAuthenticatedBeforeARevocationStaysFencedWhenReused(t *t
 	workosSessionID := "session_" + uuid.NewString()
 	reused := f.signInParams(workosSessionID, time.Now())
 	reused.Evidence.IDPAuthenticatedAt = authenticated
-	recorded, err := ssosignins.Record(ctx, f.ti.conn, reused)
+	recorded, err := signins.Record(ctx, f.ti.conn, reused)
 	require.NoError(t, err)
 	require.True(t, recorded.Revoked, "the real authentication predates the cutoff")
 
 	var ended []string
 	for _, d := range deliveries(t, ctx, f) {
-		if d.Kind == string(ssosignins.DeliveryWorkOSSession) && d.DeliveredAt.Time.IsZero() {
+		if d.Kind == string(signins.DeliveryWorkOSSession) && d.DeliveredAt.Time.IsZero() {
 			ended = append(ended, d.Target)
 		}
 	}
@@ -1036,12 +1036,12 @@ func TestRecord_InheritsOnlySessionWideRevocations(t *testing.T) {
 	workosSessionID := "session_" + uuid.NewString()
 	elsewhere := f.signInParams(workosSessionID, time.Now())
 	elsewhere.OrganizationID = otherOrg
-	_, err := ssosignins.Record(ctx, f.ti.conn, elsewhere)
+	_, err := signins.Record(ctx, f.ti.conn, elsewhere)
 	require.NoError(t, err)
-	_, err = ssosignins.RevokeUser(ctx, f.ti.conn, []string{otherOrg}, f.userID, ssosignins.RevokeReasonAdmin)
+	_, err = signins.RevokeUser(ctx, f.ti.conn, []string{otherOrg}, f.userID, signins.RevokeReasonAdmin)
 	require.NoError(t, err)
 
-	here, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
+	here, err := signins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
 	require.NoError(t, err)
 	require.False(t, here.Revoked, "an administrator's revocation stays in its organization")
 }
@@ -1050,7 +1050,7 @@ func TestRevokeSession_WithNothingRecordedStillEndsTheWorkOSSession(t *testing.T
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
-	out, err := ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, "session_"+uuid.NewString())
+	out, err := signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, "session_"+uuid.NewString())
 	require.NoError(t, err)
 	require.Len(t, out.DeliveryIDs, 1, "the signed-out WorkOS session is ended durably")
 	require.Equal(t, []string{f.orgID}, out.Organizations)
@@ -1069,11 +1069,11 @@ func TestDeliveries_AWorkOSSessionThatIsGoneCountsAsDelivered(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
-	out, err := ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, "session_"+uuid.NewString())
+	out, err := signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, "session_"+uuid.NewString())
 	require.NoError(t, err)
 
 	gone := &goneRevoker{recordingRevoker: recordingRevoker{mu: sync.Mutex{}, calls: nil, fail: false, ctxErrs: nil}}
-	deliverer := ssosignins.NewDeliverer(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.ti.conn, gone, gone, nil)
+	deliverer := signins.NewDeliverer(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.ti.conn, gone, gone, nil)
 	deliverer.DeliverNow(ctx, out.Organizations, out.DeliveryIDs)
 	deliverer.Wait()
 	require.Len(t, gone.calls, 1)

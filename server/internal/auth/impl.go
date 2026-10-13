@@ -42,7 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -154,8 +154,8 @@ type Service struct {
 	auditLogger          *audit.Logger
 	trialNotifier        trialemails.Notifier
 	transferManager      *authsessions.TransferManager
-	tokens               ssosignins.TokenRevoker
-	deliverer            *ssosignins.Deliverer
+	tokens               signins.TokenRevoker
+	deliverer            *signins.Deliverer
 
 	// siteOrigin is the dashboard's "scheme://host", derived from
 	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
@@ -216,7 +216,7 @@ func NewService(
 		trialNotifier:        trialNotifier,
 		transferManager:      authsessions.NewTransferManager(nonceStore),
 		tokens:               nil,
-		deliverer:            ssosignins.NewDeliverer(logger, noop.NewMeterProvider(), db, nil, sessions, sessions),
+		deliverer:            signins.NewDeliverer(logger, noop.NewMeterProvider(), db, nil, sessions, sessions),
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
@@ -427,14 +427,14 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
 	}
-	recorded := ssosignins.RecordExchange(ctx, logger, s.db, ssosignins.ExchangeParams{
-		Flow:                   ssosignins.FlowDashboard,
+	recorded := signins.RecordExchange(ctx, logger, s.db, signins.ExchangeParams{
+		Flow:                   signins.FlowDashboard,
 		WorkOSOrganizationID:   idpUser.OrganizationID,
 		ExpectedOrganizationID: "",
 		UserID:                 userID,
 		WorkOSSessionID:        idpUser.WorkOSSessionID,
 		AuthenticationMethod:   idpUser.AuthenticationMethod,
-		Evidence: ssosignins.Evidence{
+		Evidence: signins.Evidence{
 			HostedDomain:       idpUser.Evidence.HostedDomain,
 			TenantID:           idpUser.Evidence.TenantID,
 			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
@@ -443,7 +443,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		Impersonated:    idpUser.ImpersonatorEmail() != "",
 		AuthenticatedAt: authenticatedAt,
 	})
-	if recorded.Revoked && s.sessions.SSOSignInEnforced(ctx, recorded.OrganizationID) {
+	if recorded.Revoked && s.sessions.SignInEnforced(ctx, recorded.OrganizationID) {
 		// No dashboard session from a revoked sign-in. Ending the WorkOS
 		// session makes the next login authenticate afresh.
 		s.endRevokedWorkOSSession(ctx, logger, idpUser.WorkOSSessionID)
@@ -1034,9 +1034,9 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 
 	// The dashboard session is cleared even when revoking its sign-in fails,
 	// so a sign-out always signs out; the failure is logged for follow-up.
-	signedOut, revokeErr := s.revokeSignedOutSSOSignIn(ctx, *authCtx.SessionID, authCtx)
+	signedOut, revokeErr := s.revokeSignedOutSignIn(ctx, *authCtx.SessionID, authCtx)
 	if revokeErr != nil {
-		s.logger.ErrorContext(ctx, "revoke sso sign-in on sign-out", attr.SlogError(revokeErr))
+		s.logger.ErrorContext(ctx, "revoke sign-in on sign-out", attr.SlogError(revokeErr))
 	}
 
 	if err := s.sessions.ClearSession(ctx, authsessions.Session{

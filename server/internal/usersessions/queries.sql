@@ -1828,7 +1828,7 @@ RETURNING *;
 -- LockLiveUserSessionIssuerForChildWrite first so this wait never sits behind
 -- a lock the migration is queued on.
 --
--- The SSO sign-in link is kept only for a sign-in of the same organization
+-- The sign-in link is kept only for a sign-in of the same organization
 -- and user, read FOR SHARE so a concurrent revocation waits for this insert
 -- and then soft-deletes it. A sign-in revoked other than by a single
 -- sign-out, or fenced by a revocation cutoff, yields no rows: the grant must
@@ -1848,15 +1848,15 @@ sign_in AS (
         si.revoke_reason,
         EXISTS (
             SELECT 1
-            FROM sso_sign_in_revocation_cutoffs AS c
+            FROM sign_in_revocation_cutoffs AS c
             WHERE c.organization_id = si.organization_id
               AND c.user_id = si.user_id
               AND c.cutoff_at >= LEAST(si.authenticated_at, COALESCE(si.idp_authenticated_at, si.authenticated_at))
         ) AS fenced
-    FROM sso_sign_ins AS si
+    FROM sign_ins AS si
     JOIN issuer ON si.organization_id = issuer.organization_id
-    WHERE si.id = sqlc.narg('sso_sign_in_id')
-      AND si.user_id = sqlc.narg('sso_sign_in_user_id')
+    WHERE si.id = sqlc.narg('sign_in_id')
+      AND si.user_id = sqlc.narg('sign_in_user_id')
     FOR SHARE OF si
 )
 INSERT INTO user_sessions (
@@ -1874,7 +1874,7 @@ INSERT INTO user_sessions (
     expires_at,
     tool_selection,
     resource,
-    sso_sign_in_id
+    sign_in_id
 )
 SELECT
     issuer.project_id,
@@ -2188,7 +2188,7 @@ WHERE wia.organization_id = @organization_id::text
   AND wia.deleted IS FALSE
 ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC;
 
--- name: LockSSOSignInForGrant :one
+-- name: LockSignInForGrant :one
 -- Taken before a refresh claims its session row, so grant rotation locks
 -- sign-ins before sessions in the same order revocation does.
 SELECT
@@ -2197,12 +2197,12 @@ SELECT
     si.revoke_reason,
     EXISTS (
         SELECT 1
-        FROM sso_sign_in_revocation_cutoffs AS c
+        FROM sign_in_revocation_cutoffs AS c
         WHERE c.organization_id = si.organization_id
           AND c.user_id = si.user_id
           AND c.cutoff_at >= LEAST(si.authenticated_at, COALESCE(si.idp_authenticated_at, si.authenticated_at))
     ) AS fenced
-FROM sso_sign_ins AS si
+FROM sign_ins AS si
 WHERE si.id = @id
   AND si.organization_id = @organization_id
 FOR SHARE OF si;

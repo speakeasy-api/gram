@@ -12,17 +12,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // SetTokenRevoker wires the access-token revocation cache used when revoking
 // a member's sign-ins.
-func (s *Service) SetTokenRevoker(tokens ssosignins.TokenRevoker, meterProvider metric.MeterProvider) {
-	s.deliverer = ssosignins.NewDeliverer(s.logger, meterProvider, s.db, tokens, s.sessions, s.sessions)
+func (s *Service) SetTokenRevoker(tokens signins.TokenRevoker, meterProvider metric.MeterProvider) {
+	s.deliverer = signins.NewDeliverer(s.logger, meterProvider, s.db, tokens, s.sessions, s.sessions)
 }
 
-// RevokeMemberSignIns revokes a member's SSO sign-ins in the active
+// RevokeMemberSignIns revokes a member's sign-ins in the active
 // organization, ends their identity provider sessions and revokes every MCP
 // grant made from those sign-ins.
 func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMemberSignInsPayload) (*types.RevokeSignInsResult, error) {
@@ -36,7 +36,7 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	if !s.sessions.SSOSignInEnforced(ctx, ac.ActiveOrganizationID) {
+	if !s.sessions.SignInEnforced(ctx, ac.ActiveOrganizationID) {
 		return nil, oops.E(oops.CodeForbidden, nil, "sign-in revocation is not available")
 	}
 	if payload.UserID == "" {
@@ -56,20 +56,20 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	revoked, err := ssosignins.RevokeUser(ctx, dbtx, organizationIDs, payload.UserID, ssosignins.RevokeReasonAdmin)
+	revoked, err := signins.RevokeUser(ctx, dbtx, organizationIDs, payload.UserID, signins.RevokeReasonAdmin)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "revoke sso sign-ins").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "revoke sign-ins").LogError(ctx, logger)
 	}
-	actor := ssosignins.Actor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), DisplayName: ac.Email}
-	if err := ssosignins.AuditRevocation(ctx, dbtx, s.audit, actor, payload.UserID, memberEmail, ssosignins.RevokeReasonAdmin, organizationIDs, revoked); err != nil {
+	actor := signins.Actor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), DisplayName: ac.Email}
+	if err := signins.AuditRevocation(ctx, dbtx, s.audit, actor, payload.UserID, memberEmail, signins.RevokeReasonAdmin, organizationIDs, revoked); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sign-in revocation").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonAdmin, revoked.SignIns())
+	signins.RecordRevoked(ctx, signins.RevokeReasonAdmin, revoked.SignIns())
 	s.deliverer.DeliverNow(ctx, organizationIDs, revoked.DeliveryIDs)
 
-	logger.InfoContext(ctx, "revoked member sso sign-ins", attr.SlogValueInt(revoked.SignIns()))
+	logger.InfoContext(ctx, "revoked member sign-ins", attr.SlogValueInt(revoked.SignIns()))
 	return &types.RevokeSignInsResult{RevokedSignIns: revoked.SignIns(), RevokedSessions: len(revoked.Sessions)}, nil
 }

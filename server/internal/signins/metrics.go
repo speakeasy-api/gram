@@ -1,4 +1,4 @@
-package ssosignins
+package signins
 
 import (
 	"context"
@@ -9,12 +9,12 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins/repo"
 )
 
 const (
-	meterRecorded = "sso_sign_in.recorded"
-	meterRevoked  = "sso_sign_in.revoked"
+	meterRecorded = "sign_in.recorded"
+	meterRevoked  = "sign_in.revoked"
 )
 
 // Record outcomes.
@@ -42,11 +42,11 @@ var (
 
 func loadInstruments() instruments {
 	instrumentsOnce.Do(func() {
-		meter := otel.GetMeterProvider().Meter("github.com/speakeasy-api/gram/server/internal/ssosignins")
-		if c, err := meter.Int64Counter(meterRecorded, metric.WithDescription("WorkOS code exchanges by flow and how they resolved to an SSO sign-in."), metric.WithUnit("{exchange}")); err == nil {
+		meter := otel.GetMeterProvider().Meter("github.com/speakeasy-api/gram/server/internal/signins")
+		if c, err := meter.Int64Counter(meterRecorded, metric.WithDescription("WorkOS code exchanges by flow and how they resolved to a sign-in."), metric.WithUnit("{exchange}")); err == nil {
 			meters.recorded = c
 		}
-		if c, err := meter.Int64Counter(meterRevoked, metric.WithDescription("SSO sign-ins revoked, by reason."), metric.WithUnit("{sign_in}")); err == nil {
+		if c, err := meter.Int64Counter(meterRevoked, metric.WithDescription("Sign-ins revoked, by reason."), metric.WithUnit("{sign_in}")); err == nil {
 			meters.revoked = c
 		}
 	})
@@ -55,7 +55,7 @@ func loadInstruments() instruments {
 
 func recordOutcome(ctx context.Context, flow, outcome string) {
 	if c := loadInstruments().recorded; c != nil {
-		c.Add(ctx, 1, metric.WithAttributes(attr.AuthSignInFlow(flow), attr.SSOSignInRecordOutcome(outcome)))
+		c.Add(ctx, 1, metric.WithAttributes(attr.AuthSignInFlow(flow), attr.SignInRecordOutcome(outcome)))
 	}
 }
 
@@ -65,15 +65,15 @@ func RecordRevoked(ctx context.Context, reason RevokeReason, n int) {
 		return
 	}
 	if c := loadInstruments().revoked; c != nil {
-		c.Add(ctx, int64(n), metric.WithAttributes(attr.SSOSignInRevokeReason(string(reason))))
+		c.Add(ctx, int64(n), metric.WithAttributes(attr.SignInRevokeReason(string(reason))))
 	}
 }
 
 const (
-	meterDeliveryAttempts = "sso_sign_in.revocation_delivery.attempts"
-	meterDeliveryPending  = "sso_sign_in.revocation_delivery.pending"
-	meterDeliveryStuck    = "sso_sign_in.revocation_delivery.stuck"
-	meterDeliveryOldest   = "sso_sign_in.revocation_delivery.oldest_age"
+	meterDeliveryAttempts = "sign_in.revocation_delivery.attempts"
+	meterDeliveryPending  = "sign_in.revocation_delivery.pending"
+	meterDeliveryStuck    = "sign_in.revocation_delivery.stuck"
+	meterDeliveryOldest   = "sign_in.revocation_delivery.oldest_age"
 )
 
 type deliveryMetrics struct {
@@ -85,19 +85,19 @@ type deliveryMetrics struct {
 
 func newDeliveryMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) deliveryMetrics {
 	ctx := context.Background()
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/ssosignins")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/signins")
 	var m deliveryMetrics
 	var err error
-	if m.attempts, err = meter.Int64Counter(meterDeliveryAttempts, metric.WithDescription("SSO sign-in revocation delivery attempts by kind and outcome."), metric.WithUnit("{attempt}")); err != nil {
+	if m.attempts, err = meter.Int64Counter(meterDeliveryAttempts, metric.WithDescription("Sign-in revocation delivery attempts by kind and outcome."), metric.WithUnit("{attempt}")); err != nil {
 		logger.ErrorContext(ctx, "create revocation delivery attempts counter", attr.SlogError(err))
 	}
-	if m.pending, err = meter.Int64Gauge(meterDeliveryPending, metric.WithDescription("Undelivered SSO sign-in revocation deliveries."), metric.WithUnit("{delivery}")); err != nil {
+	if m.pending, err = meter.Int64Gauge(meterDeliveryPending, metric.WithDescription("Undelivered sign-in revocation deliveries."), metric.WithUnit("{delivery}")); err != nil {
 		logger.ErrorContext(ctx, "create revocation delivery pending gauge", attr.SlogError(err))
 	}
-	if m.stuck, err = meter.Int64Gauge(meterDeliveryStuck, metric.WithDescription("Undelivered SSO sign-in revocation deliveries that failed repeatedly."), metric.WithUnit("{delivery}")); err != nil {
+	if m.stuck, err = meter.Int64Gauge(meterDeliveryStuck, metric.WithDescription("Undelivered sign-in revocation deliveries that failed repeatedly."), metric.WithUnit("{delivery}")); err != nil {
 		logger.ErrorContext(ctx, "create revocation delivery stuck gauge", attr.SlogError(err))
 	}
-	if m.oldest, err = meter.Int64Gauge(meterDeliveryOldest, metric.WithDescription("Age of the oldest undelivered SSO sign-in revocation delivery."), metric.WithUnit("s")); err != nil {
+	if m.oldest, err = meter.Int64Gauge(meterDeliveryOldest, metric.WithDescription("Age of the oldest undelivered sign-in revocation delivery."), metric.WithUnit("s")); err != nil {
 		logger.ErrorContext(ctx, "create revocation delivery age gauge", attr.SlogError(err))
 	}
 	return m
@@ -111,7 +111,7 @@ func (m deliveryMetrics) recordAttempt(ctx context.Context, kind string, ok bool
 	if !ok {
 		outcome = "failed"
 	}
-	m.attempts.Add(ctx, 1, metric.WithAttributes(attr.SSOSignInDeliveryKind(kind), attr.Outcome(outcome)))
+	m.attempts.Add(ctx, 1, metric.WithAttributes(attr.SignInDeliveryKind(kind), attr.Outcome(outcome)))
 }
 
 func (m deliveryMetrics) recordBacklog(ctx context.Context, b repo.RevocationDeliveryBacklogRow) {

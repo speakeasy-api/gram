@@ -20,7 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -30,13 +30,13 @@ const epochTimeout = 5 * time.Second
 
 // SetTokenRevoker wires the access-token revocation cache used when signing
 // out, and the deliverer that pushes revocations durably.
-func (s *Service) SetTokenRevoker(tokens ssosignins.TokenRevoker, meterProvider metric.MeterProvider) {
+func (s *Service) SetTokenRevoker(tokens signins.TokenRevoker, meterProvider metric.MeterProvider) {
 	s.tokens = tokens
-	s.deliverer = ssosignins.NewDeliverer(s.logger, meterProvider, s.db, tokens, s.sessions, s.sessions)
+	s.deliverer = signins.NewDeliverer(s.logger, meterProvider, s.db, tokens, s.sessions, s.sessions)
 }
 
 // LogoutEverywhere ends every dashboard and identity provider session the
-// caller holds, revokes their SSO sign-ins in every organization they ever
+// caller holds, revokes their sign-ins in every organization they ever
 // signed in to, and revokes every MCP grant made from them. The revocation,
 // including the dashboard epoch, commits durably first; the epoch is then
 // raised right away and retried from the delivery table if that fails.
@@ -51,7 +51,7 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 	// Gated on the caller's active organization. Once available it signs the
 	// user out of every organization: the user's own action over their own
 	// sessions.
-	if !s.sessions.SSOSignInEnforced(ctx, authCtx.ActiveOrganizationID) {
+	if !s.sessions.SignInEnforced(ctx, authCtx.ActiveOrganizationID) {
 		return nil, oops.E(oops.CodeForbidden, nil, "sign out everywhere is not available")
 	}
 	logger := s.logger.With(attr.SlogUserID(authCtx.UserID))
@@ -87,8 +87,8 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 
 	// Re-list under the user lock: a first sign-in recorded since the list
 	// above is revoked here, a later one waits for this transaction.
-	if err := ssosignins.LockUser(ctx, dbtx, authCtx.UserID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock sso sign-ins").LogError(ctx, logger)
+	if err := signins.LockUser(ctx, dbtx, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock sign-ins").LogError(ctx, logger)
 	}
 	locked, err := s.userSignInOrganizations(ctx, dbtx, authCtx.UserID)
 	if err != nil {
@@ -100,30 +100,30 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 		}
 	}
 
-	revoked, err := ssosignins.RevokeUser(ctx, dbtx, organizationIDs, authCtx.UserID, ssosignins.RevokeReasonSignOutEverywhere)
+	revoked, err := signins.RevokeUser(ctx, dbtx, organizationIDs, authCtx.UserID, signins.RevokeReasonSignOutEverywhere)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "revoke sso sign-ins").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "revoke sign-ins").LogError(ctx, logger)
 	}
 	deliveryIDs := revoked.DeliveryIDs
 	if deliveryOrg != "" {
-		listed, err := ssosignins.EnqueueWorkOSSessionRevocations(ctx, dbtx, deliveryOrg, idpSessions)
+		listed, err := signins.EnqueueWorkOSSessionRevocations(ctx, dbtx, deliveryOrg, idpSessions)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enqueue identity provider sign-out").LogError(ctx, logger)
 		}
-		epoch, err := ssosignins.EnqueueUserEpoch(ctx, dbtx, deliveryOrg, authCtx.UserID, epochAt)
+		epoch, err := signins.EnqueueUserEpoch(ctx, dbtx, deliveryOrg, authCtx.UserID, epochAt)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enqueue dashboard sign-out").LogError(ctx, logger)
 		}
 		deliveryIDs = slices.Concat(deliveryIDs, listed, []uuid.UUID{epoch})
 	}
-	actor := ssosignins.Actor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), DisplayName: authCtx.Email}
-	if err := ssosignins.AuditRevocation(ctx, dbtx, s.auditLogger, actor, authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), ssosignins.RevokeReasonSignOutEverywhere, organizationIDs, revoked); err != nil {
+	actor := signins.Actor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), DisplayName: authCtx.Email}
+	if err := signins.AuditRevocation(ctx, dbtx, s.auditLogger, actor, authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), signins.RevokeReasonSignOutEverywhere, organizationIDs, revoked); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sign-in revocation").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonSignOutEverywhere, revoked.SignIns())
+	signins.RecordRevoked(ctx, signins.RevokeReasonSignOutEverywhere, revoked.SignIns())
 
 	if deliveryOrg != "" {
 		if err := s.raiseEpoch(ctx, authCtx.UserID, epochAt); err != nil {
@@ -176,7 +176,7 @@ func (s *Service) userSignInOrganizations(ctx context.Context, db orgRepo.DBTX, 
 	for _, org := range orgs {
 		organizationIDs = append(organizationIDs, org.ID)
 	}
-	recorded, err := ssosignins.SignInOrganizations(ctx, db, userID)
+	recorded, err := signins.SignInOrganizations(ctx, db, userID)
 	if err != nil {
 		return nil, err //nolint:wrapcheck // wrapped by callers
 	}
@@ -192,12 +192,12 @@ func (s *Service) userSignInOrganizations(ctx context.Context, db orgRepo.DBTX, 
 // deadlock or serialization race.
 const signOutAttempts = 3
 
-// revokeSignedOutSSOSignIn durably revokes the sign-ins recorded for the
+// revokeSignedOutSignIn durably revokes the sign-ins recorded for the
 // WorkOS session behind a dashboard session being signed out and enqueues
 // ending that WorkOS session. Grants made from them keep working but stop
 // qualifying for vouching.
-func (s *Service) revokeSignedOutSSOSignIn(ctx context.Context, sessionID string, authCtx *contextvalues.AuthContext) (ssosignins.SignedOut, error) {
-	var none ssosignins.SignedOut
+func (s *Service) revokeSignedOutSignIn(ctx context.Context, sessionID string, authCtx *contextvalues.AuthContext) (signins.SignedOut, error) {
+	var none signins.SignedOut
 	session, err := s.sessions.GetSession(ctx, sessionID)
 	if err != nil {
 		return none, fmt.Errorf("load session: %w", err)
@@ -222,30 +222,30 @@ func (s *Service) revokeSignedOutSSOSignIn(ctx context.Context, sessionID string
 	}
 }
 
-func (s *Service) revokeSignedOutOnce(ctx context.Context, organizationIDs []string, workosSessionID string, authCtx *contextvalues.AuthContext) (ssosignins.SignedOut, error) {
-	var none ssosignins.SignedOut
+func (s *Service) revokeSignedOutOnce(ctx context.Context, organizationIDs []string, workosSessionID string, authCtx *contextvalues.AuthContext) (signins.SignedOut, error) {
+	var none signins.SignedOut
 	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{}) //nolint:exhaustruct // default transaction options
 	if err != nil {
 		return none, fmt.Errorf("begin: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	out, err := ssosignins.RevokeSession(ctx, dbtx, organizationIDs, authCtx.UserID, workosSessionID)
+	out, err := signins.RevokeSession(ctx, dbtx, organizationIDs, authCtx.UserID, workosSessionID)
 	if err != nil {
 		return none, fmt.Errorf("revoke: %w", err)
 	}
-	revoked := ssosignins.Revoked{SignInsByOrganization: map[string]int{}, WorkOSSessionIDs: nil, Sessions: nil, DeliveryIDs: nil}
+	revoked := signins.Revoked{SignInsByOrganization: map[string]int{}, WorkOSSessionIDs: nil, Sessions: nil, DeliveryIDs: nil}
 	for _, id := range out.Organizations {
 		revoked.SignInsByOrganization[id]++
 	}
-	actor := ssosignins.Actor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), DisplayName: authCtx.Email}
-	if err := ssosignins.AuditRevocation(ctx, dbtx, s.auditLogger, actor, authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), ssosignins.RevokeReasonSignOut, out.Organizations, revoked); err != nil {
+	actor := signins.Actor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), DisplayName: authCtx.Email}
+	if err := signins.AuditRevocation(ctx, dbtx, s.auditLogger, actor, authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), signins.RevokeReasonSignOut, out.Organizations, revoked); err != nil {
 		return none, fmt.Errorf("audit: %w", err)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return none, fmt.Errorf("commit: %w", err)
 	}
-	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonSignOut, revoked.SignIns())
+	signins.RecordRevoked(ctx, signins.RevokeReasonSignOut, revoked.SignIns())
 	return out, nil
 }
 

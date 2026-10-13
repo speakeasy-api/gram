@@ -54,7 +54,7 @@ export type RevokeOrganizationMemberSignInsMutationError =
  * revokeMemberSignIns organizations
  *
  * @remarks
- * Revoke a member's SSO sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
+ * Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
  */
 export function useRevokeOrganizationMemberSignInsMutation(
   options?: MutationHookOptions<
