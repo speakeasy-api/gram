@@ -291,8 +291,11 @@ describe("McpServerHealth", () => {
     expect(login.searchParams.get("from_ts")).toBeTruthy();
   });
 
-  it("copies the Platform MCP prompt", async () => {
+  it("copies the Admin MCP prompt", async () => {
     await open();
+    expect(
+      screen.getByText("Investigate with the Speakeasy Admin MCP server"),
+    ).toBeTruthy();
     const copy = await screen.findByRole("button", { name: "Copy prompt" });
     await act(async () => {
       fireEvent.click(copy);
@@ -301,6 +304,8 @@ describe("McpServerHealth", () => {
 
     expect(writeText).toHaveBeenCalledTimes(1);
     const [prompt] = writeText.mock.calls[0] as unknown as [string];
+    expect(prompt).toContain("Using the Speakeasy Admin MCP server");
+    expect(prompt).not.toContain("Platform MCP");
     expect(prompt).toContain(`MCP server with mcp_id ${SERVER_ID}.`);
     expect(prompt).toContain('named "crm" in the project "default"');
   });
