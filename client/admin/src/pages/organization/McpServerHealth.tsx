@@ -295,3 +295,248 @@ function HealthReport({
     </div>
   );
 }
+
+function WindowPicker({
+  value,
+  onChange,
+}: {
+  value: HealthWindow;
+  onChange: (window: HealthWindow) => void;
+}): JSX.Element {
+  return (
+    <Select
+      value={String(value)}
+      onValueChange={(next) => onChange(Number(next) as HealthWindow)}
+    >
+      <SelectTrigger size="sm" aria-label="Window" className="bg-card">
+        <CalendarIcon />
+        <span className={MUTED}>Window</span>
+        <SelectValue>
+          <span className="font-medium">Last {value} days</span>
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent position="popper" align="end">
+        {HEALTH_WINDOWS.map((days) => (
+          <SelectItem key={days} value={String(days)}>
+            Last {days} days
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// Sessions belong to the issuer, so an issuer attached above the project
+// counts every project that uses it.
+const SHARED_ISSUER_NOTE = "Counts cover every project using this issuer";
+
+function sharedIssuerNote(
+  issuer: AdminMcpServerHealthUserSessionIssuer,
+): string | undefined {
+  return issuer.attachmentScope === "project" ? undefined : SHARED_ISSUER_NOTE;
+}
+
+function StatCard({
+  label,
+  value,
+  badge,
+  detail,
+  note,
+  muted = false,
+}: {
+  label: string;
+  value: ReactNode;
+  badge?: ReactNode;
+  detail: string;
+  // A caveat on what the figures cover, below the detail.
+  note?: string;
+  muted?: boolean;
+}): JSX.Element {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className={cn(CARD, "flex flex-col gap-2 px-5 py-4")}
+    >
+      <span className={cn(MUTED, "text-xs")}>{label}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={cn(
+            "text-[1.375rem] font-light tabular-nums",
+            muted && MUTED,
+          )}
+        >
+          {value}
+        </span>
+        {badge}
+      </div>
+      <span className={cn(MUTED, "text-[0.8125rem]")}>{detail}</span>
+      {note && <span className={cn(MUTED, "text-xs")}>{note}</span>}
+    </div>
+  );
+}
+
+function IssuerCard({ health }: { health: AdminMcpServerHealth }): JSX.Element {
+  const issuer = health.userSessionIssuer;
+  if (issuer) {
+    const clients = issuer.remoteSessionClients.length;
+    return (
+      <StatCard
+        label="User session issuer"
+        value="Configured"
+        badge={
+          <Badge variant="outline" className={badgeTone.success}>
+            {CHALLENGE_MODE_LABELS[issuer.authnChallengeMode]}
+          </Badge>
+        }
+        detail={`${durationLabel(issuer.sessionDurationHours)} sessions · ${clients === 1 ? "1 upstream client" : `${clients} upstream clients`}`}
+      />
+    );
+  }
+  const legacy = health.legacyAuth;
+  return (
+    <StatCard
+      label="User session issuer"
+      value="None"
+      badge={
+        legacy && (
+          <Badge variant="outline" className={badgeTone.warning}>
+            legacy: {LEGACY_AUTH_LABELS[legacy] ?? legacy}
+          </Badge>
+        )
+      }
+      detail={
+        legacy
+          ? "Uses an older auth mode this page does not describe"
+          : "No user sign-in configured"
+      }
+    />
+  );
+}
+
+function PeopleCard({
+  issuer,
+}: {
+  issuer: AdminMcpServerHealthUserSessionIssuer | undefined;
+}): JSX.Element {
+  if (!issuer) {
+    return (
+      <StatCard
+        label="People signed in"
+        value="—"
+        muted
+        detail="No issuer, so no sessions to count"
+      />
+    );
+  }
+  const { sessions } = issuer;
+  return (
+    <StatCard
+      label="People signed in"
+      value={
+        <>
+          {sessions.distinctSubjectsEver}{" "}
+          <span className={cn(MUTED, "text-sm")}>ever</span>
+        </>
+      }
+      detail={`${sessions.distinctSubjectsInWindow} in window · ${sessions.live === 1 ? "1 live session" : `${sessions.live} live sessions`}`}
+      note={sharedIssuerNote(issuer)}
+    />
+  );
+}
+
+function UpstreamCard({
+  issuer,
+}: {
+  issuer: AdminMcpServerHealthUserSessionIssuer | undefined;
+}): JSX.Element {
+  const clients = issuer?.remoteSessionClients ?? [];
+  if (clients.length === 0) {
+    return (
+      <StatCard
+        label="Upstream accounts linked"
+        value="—"
+        muted
+        detail="No remote session clients"
+      />
+    );
+  }
+  const accounts = linkedAccounts(clients);
+  return (
+    <StatCard
+      label="Upstream accounts linked"
+      value={accounts.linked}
+      badge={
+        accounts.invalid > 0 && (
+          <Badge variant="outline" className={badgeTone.warning}>
+            {accounts.invalid} invalid
+          </Badge>
+        )
+      }
+      detail={
+        accounts.reauthorizations === 1
+          ? "1 reauthorization"
+          : `${accounts.reauthorizations} reauthorizations`
+      }
+    />
+  );
+}
+
+function ToolCallsCard({
+  toolCalls: state,
+}: {
+  toolCalls: ToolCallsState;
+}): JSX.Element {
+  if (state.status === "loading") {
+    return <StatCard label="Tool calls" value="—" muted detail="Loading..." />;
+  }
+  if (state.status === "error") {
+    return (
+      <StatCard
+        label="Tool calls"
+        value="Unavailable"
+        muted
+        detail="Tool call telemetry did not load"
+      />
+    );
+  }
+  const { toolCalls } = state;
+  if (toolCalls.type === "logging:disabled" || !toolCalls.outcomes) {
+    return (
+      <StatCard
+        label="Tool calls"
+        value="Unknown"
+        badge={
+          <Badge variant="outline" className={badgeTone.neutral}>
+            logging off
+          </Badge>
+        }
+        detail="Not zero: nothing is recorded"
+      />
+    );
+  }
+  const totals = toolCallTotals(toolCalls.outcomes);
+  return (
+    <StatCard
+      label="Tool calls"
+      value={totals.total}
+      badge={
+        totals.total > 0 && (
+          <Badge
+            variant="outline"
+            className={
+              totals.failed > 0 ? badgeTone.warning : badgeTone.success
+            }
+          >
+            {fmtShare(totals.failedShare)} failed
+          </Badge>
+        )
+      }
+      detail={`${totals.failed} failed · ${totals.unauthorized} unauthorized`}
+    />
+  );
+}
+
+function rangeLabel({ from, to }: { from: Date; to: Date }): string {
+  return `${fmtBucketDay(from)} – ${fmtDate(to)}`;
+}
