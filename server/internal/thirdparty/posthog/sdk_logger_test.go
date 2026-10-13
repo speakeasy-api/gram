@@ -205,3 +205,21 @@ func TestDefinitionsTransportRecordsSuccessfulDefinitionFetches(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, refreshed.After(first), "an unchanged response confirms the cached definitions")
 }
+
+func TestDefinitionsTransportRefusesOversizedDefinitions(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"flags":[],"pad":"`))
+		_, _ = w.Write(bytes.Repeat([]byte("a"), maxDefinitionsBytes))
+		_, _ = w.Write([]byte(`"}`))
+	}))
+	t.Cleanup(server.Close)
+	confirmedAt := &atomic.Int64{}
+	transport := &definitionsTransport{base: http.DefaultTransport, confirmedAt: confirmedAt}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/api/feature_flag/local_evaluation", nil)
+	require.NoError(t, err)
+	res, err := transport.RoundTrip(req) //nolint:bodyclose // Refused before a body is returned.
+	require.Error(t, err)
+	require.Nil(t, res)
+	require.Zero(t, confirmedAt.Load())
+}

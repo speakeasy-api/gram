@@ -120,6 +120,10 @@ func newSDKConfig(logger *slog.Logger, endpoint string, personalAPIKey string, d
 	return config
 }
 
+// maxDefinitionsBytes caps a buffered definitions response; a larger one is
+// refused and the cached definitions keep aging.
+const maxDefinitionsBytes = 16 << 20
+
 // definitionsTransport records when the SDK last received current flag
 // definitions: a 304, or a 200 whose body decodes the way the SDK decodes it
 // before installing it.
@@ -139,10 +143,13 @@ func (t *definitionsTransport) RoundTrip(req *http.Request) (*http.Response, err
 	case http.StatusOK:
 		// Only definitions the SDK can load count, so a malformed body
 		// leaves the cached definitions aging.
-		body, readErr := io.ReadAll(res.Body)
+		body, readErr := io.ReadAll(io.LimitReader(res.Body, maxDefinitionsBytes+1))
 		_ = res.Body.Close()
 		if readErr != nil {
 			return nil, fmt.Errorf("read feature flag definitions: %w", readErr)
+		}
+		if len(body) > maxDefinitionsBytes {
+			return nil, fmt.Errorf("feature flag definitions exceed %d bytes", maxDefinitionsBytes)
 		}
 		res.Body = io.NopCloser(bytes.NewReader(body))
 		var definitions posthog.FeatureFlagsResponse
