@@ -2401,6 +2401,8 @@ type InternalSessionIssuer struct {
 	DisabledAt pgtype.Timestamptz
 	// @access: confidential
 	AllowedSignInMethods []string
+	// @access: opaque-confidential
+	AllowedMicrosoftTenantIds []string
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -6221,6 +6223,10 @@ type SsoSignIn struct {
 	IdpHostedDomain pgtype.Text
 	// @access: opaque-confidential
 	IdpTenantID pgtype.Text
+	// @access: confidential-pii
+	VerifiedEmail pgtype.Text
+	// @access: confidential
+	IdpAuthenticatedAt pgtype.Timestamptz
 	// @access: confidential
 	AuthenticatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -6261,6 +6267,10 @@ type SsoSignInRevocationDelivery struct {
 	Attempts int32
 	// @access: opaque-restricted
 	LastError pgtype.Text
+	// @access: confidential
+	ClaimedUntil pgtype.Timestamptz
+	// @access: confidential
+	NextAttemptAt pgtype.Timestamptz
 	// @access: confidential
 	DeliveredAt pgtype.Timestamptz
 	// @access: confidential

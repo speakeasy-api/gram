@@ -2973,6 +2973,9 @@ CREATE TABLE IF NOT EXISTS internal_session_issuers (
   -- Sign-in tiers that may back a signed assertion: sso, google, microsoft,
   -- magic_link, password_mfa. NULL allows every tier; validated in application code.
   allowed_sign_in_methods TEXT[],
+  -- Microsoft Entra tenant ids whose work accounts may back the microsoft tier.
+  -- NULL or empty means no Microsoft sign-in qualifies.
+  allowed_microsoft_tenant_ids TEXT[],
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2992,6 +2995,7 @@ COMMENT ON COLUMN internal_session_issuers.updated_at IS '@access: confidential'
 COMMENT ON COLUMN internal_session_issuers.deleted_at IS '@access: confidential';
 COMMENT ON COLUMN internal_session_issuers.deleted IS '@access: confidential';
 COMMENT ON COLUMN internal_session_issuers.allowed_sign_in_methods IS '@access: confidential';
+COMMENT ON COLUMN internal_session_issuers.allowed_microsoft_tenant_ids IS '@access: opaque-confidential';
 
 -- One live internal session issuer per organization.
 CREATE UNIQUE INDEX IF NOT EXISTS internal_session_issuers_organization_id_key
@@ -4302,6 +4306,13 @@ CREATE TABLE IF NOT EXISTS sso_sign_ins (
   idp_hosted_domain TEXT,
   -- Microsoft Entra tenant of a work or school account.
   idp_tenant_id TEXT,
+  -- The email WorkOS reported as verified for this sign-in; the only address
+  -- Speakeasy will vouch for.
+  verified_email TEXT,
+  -- When WorkOS created the session, i.e. when the user actually
+  -- authenticated. NULL when unknown, which never qualifies.
+  idp_authenticated_at timestamptz,
+  -- When the code exchange started; orders sign-ins against revocation cutoffs.
   authenticated_at timestamptz NOT NULL,
   revoked_at timestamptz,
   -- sign_out, sign_out_everywhere, admin or deprovisioned; validated in
@@ -4322,6 +4333,8 @@ COMMENT ON COLUMN sso_sign_ins.mfa_verified IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_ins.idp_hosted_domain IS '@access: restricted';
 COMMENT ON COLUMN sso_sign_ins.idp_tenant_id IS '@access: opaque-confidential';
 COMMENT ON COLUMN sso_sign_ins.authenticated_at IS '@access: confidential';
+COMMENT ON COLUMN sso_sign_ins.verified_email IS '@access: confidential-pii';
+COMMENT ON COLUMN sso_sign_ins.idp_authenticated_at IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_ins.revoked_at IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_ins.revoke_reason IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_ins.created_at IS '@access: confidential';
@@ -4377,6 +4390,10 @@ CREATE TABLE IF NOT EXISTS sso_sign_in_revocation_deliveries (
   effective_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   attempts integer NOT NULL DEFAULT 0,
   last_error TEXT,
+  -- A worker holds the delivery until then; NULL or past means unclaimed.
+  claimed_until timestamptz,
+  -- Earliest next attempt after a failure (exponential backoff).
+  next_attempt_at timestamptz,
   delivered_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4392,6 +4409,8 @@ COMMENT ON COLUMN sso_sign_in_revocation_deliveries.effective_at IS '@access: co
 COMMENT ON COLUMN sso_sign_in_revocation_deliveries.attempts IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_in_revocation_deliveries.last_error IS '@access: opaque-restricted';
 COMMENT ON COLUMN sso_sign_in_revocation_deliveries.delivered_at IS '@access: confidential';
+COMMENT ON COLUMN sso_sign_in_revocation_deliveries.claimed_until IS '@access: confidential';
+COMMENT ON COLUMN sso_sign_in_revocation_deliveries.next_attempt_at IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_in_revocation_deliveries.created_at IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_in_revocation_deliveries.updated_at IS '@access: confidential';
 
@@ -4400,9 +4419,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_pending_key
 ON sso_sign_in_revocation_deliveries (organization_id, kind, target)
 WHERE delivered_at IS NULL;
 
--- The retry sweep reads pending deliveries oldest first.
+-- The retry sweep reads pending deliveries that are due, oldest first.
 CREATE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_pending_idx
-ON sso_sign_in_revocation_deliveries (created_at)
+ON sso_sign_in_revocation_deliveries (next_attempt_at, created_at)
 WHERE delivered_at IS NULL;
 
 -- User Sessions are records representing active Gram sessions for a given Subject
