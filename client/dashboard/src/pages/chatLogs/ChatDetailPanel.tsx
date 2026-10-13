@@ -1401,9 +1401,12 @@ function ChatDetailPanel({
     setActiveOccurrenceKey(null);
   }, [chatId]);
 
+  // Logs fetched before log:read went away are ignored everywhere: the Tool
+  // calls view, its count, and the session export.
   const logs = useMemo(
-    () => filterPanelTelemetryLogs(logsData?.logs ?? []),
-    [logsData?.logs],
+    () =>
+      canViewToolLogs ? filterPanelTelemetryLogs(logsData?.logs ?? []) : [],
+    [canViewToolLogs, logsData?.logs],
   );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
