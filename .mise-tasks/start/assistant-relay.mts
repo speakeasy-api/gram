@@ -1,0 +1,189 @@
+#!/usr/bin/env node
+
+//MISE description="Relay local assistant callbacks from the Docker bridge to the API listener"
+//MISE dir="{{ config_root }}"
+//MISE hide=true
+//USAGE flag "--server-address <address>" env="GRAM_SERVER_ADDRESS" required=#true help="API listener to forward connections to."
+//USAGE flag "--server-url <url>" env="GRAM_SERVER_URL" required=#true help="API URL whose port the local runtime uses."
+//USAGE flag "--runtime-server-url <url>" env="GRAM_ASSISTANT_RUNTIME_SERVER_URL" help="Explicit runtime callback URL, if configured."
+//USAGE flag "--listen-host <host>" env="GRAM_ASSISTANT_RELAY_HOST" help="Override Docker's default bridge gateway when host-gateway is customized. Must be a local interface IP."
+
+import { once } from "node:events";
+import net from "node:net";
+import { networkInterfaces } from "node:os";
+import { $ } from "zx";
+
+interface Address {
+  host: string;
+  port: number;
+}
+
+export function parseAddress(address: string): Address {
+  const match = /^(?:\[([^\]]+)\]|([^:]*)):(\d+)$/.exec(address);
+  const port = Number(match?.[3]);
+  if (!match || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid API listener address: ${address}`);
+  }
+  return { host: match[1] ?? match[2] ?? "", port };
+}
+
+export function callbackPort(
+  serverURL: string,
+  runtimeURL?: string,
+): number | null {
+  const url = new URL(runtimeURL || serverURL);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Assistant callback URL must use HTTP or HTTPS.");
+  }
+  // An explicit endpoint bypasses the local backend's host-gateway rewrite.
+  if (runtimeURL && url.hostname !== "host.docker.internal") return null;
+  return Number(url.port || (url.protocol === "https:" ? 443 : 80));
+}
+
+export function relayTarget(
+  upstream: Address,
+  listen: Address,
+): Address | null {
+  const wildcard = ["", "0.0.0.0", "::"].includes(upstream.host);
+  if (
+    upstream.port === listen.port &&
+    (wildcard || upstream.host === listen.host)
+  ) {
+    // The API already accepts this endpoint; binding would conflict or recurse.
+    return null;
+  }
+  return {
+    host: wildcard
+      ? upstream.host === "::"
+        ? "::1"
+        : "127.0.0.1"
+      : upstream.host,
+    port: upstream.port,
+  };
+}
+
+export function bridgeGateway(network: {
+  IPAM?: { Config?: { Gateway?: string }[] };
+}): string {
+  const gateway = network.IPAM?.Config?.find(
+    (config) => net.isIP(config.Gateway ?? "") === 4,
+  )?.Gateway;
+  if (!gateway) throw new Error("Docker's default bridge has no IPv4 gateway.");
+  return gateway;
+}
+
+export function createRelay(upstream: Address) {
+  const sockets = new Set<net.Socket>();
+  const server = net.createServer({ allowHalfOpen: true }, (client) => {
+    const target = net.createConnection({ ...upstream, allowHalfOpen: true });
+    sockets.add(client);
+    sockets.add(target);
+    const destroy = () => {
+      client.destroy();
+      target.destroy();
+    };
+    client.on("error", destroy);
+    target.on("error", destroy);
+    client.on("close", () => {
+      sockets.delete(client);
+      target.destroy();
+    });
+    target.on("close", () => {
+      sockets.delete(target);
+      // A graceful EOF has already queued client.end() through pipe. Let its
+      // pending writes drain rather than truncating a large response.
+      if (!target.readableEnded) client.destroy();
+    });
+    // Bound connection establishment, not stream lifetime: turns and SSE may
+    // remain idle for a long time. Piping preserves TLS and backpressure.
+    target.setTimeout(10_000, destroy);
+    target.once("connect", () => target.setTimeout(0));
+    client.pipe(target);
+    target.pipe(client);
+  });
+  return {
+    server,
+    async close() {
+      const closed = server.listening ? once(server, "close") : undefined;
+      server.close();
+      for (const socket of sockets) socket.destroy();
+      await closed;
+    },
+  };
+}
+
+async function main() {
+  const upstream = parseAddress(process.env["usage_server_address"] ?? "");
+  const port = callbackPort(
+    process.env["usage_server_url"] ?? "",
+    process.env["usage_runtime_server_url"],
+  );
+  let relay: ReturnType<typeof createRelay> | undefined;
+  let reason = "explicit runtime callback URL";
+  if (port !== null) {
+    const info = await $({
+      quiet: true,
+      timeout: 15_000,
+    })`docker info --format ${"{{json .}}"}`.json<{
+      OperatingSystem: string;
+    }>();
+    if (/docker desktop/i.test(info.OperatingSystem)) {
+      // Docker Desktop provides its own host forwarding; its VM's bridge
+      // gateway is not an interface we can bind on the developer's host.
+      reason = "Docker Desktop host forwarding";
+    } else {
+      const host =
+        process.env["usage_listen_host"] ||
+        bridgeGateway(
+          (
+            await $({
+              quiet: true,
+              timeout: 15_000,
+            })`docker network inspect bridge`.json()
+          )[0],
+        );
+      const localIPs = Object.values(networkInterfaces()).flatMap(
+        (addresses) => addresses?.map((address) => address.address) ?? [],
+      );
+      if (
+        !net.isIP(host) ||
+        !localIPs.includes(host) ||
+        host === "::1" ||
+        host.startsWith("127.")
+      ) {
+        throw new Error(
+          "Assistant relay requires a Docker gateway IP on a local non-loopback interface. " +
+            "For a customized host-gateway, set GRAM_ASSISTANT_RELAY_HOST. " +
+            "Remote/rootless Docker needs an explicit reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
+        );
+      }
+      const listen = { host, port };
+      const target = relayTarget(upstream, listen);
+      if (target) {
+        relay = createRelay(target);
+        relay.server.listen(listen);
+        await once(relay.server, "listening");
+        reason = `${host}:${port} -> ${upstream.host}:${upstream.port}`;
+      } else {
+        reason = "API already listens on the Docker callback endpoint";
+      }
+    }
+  }
+  console.log(`Assistant relay ready: ${reason}`);
+  // Keep the supervised daemon alive when forwarding is unnecessary too.
+  // A restart re-evaluates configuration after bind or Docker context changes.
+  const keepAlive = setInterval(() => {}, 60_000);
+  const stop = async () => {
+    clearInterval(keepAlive);
+    await relay?.close();
+  };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+}
+
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

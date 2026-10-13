@@ -16,6 +16,14 @@ Declining adds `zero:tailscale` to the comma-separated `GRAM_ZERO_SKIP` setting.
 
 When you accept Tailscale configuration, setup stages the edits and applies them with an atomic replacement after successful writes. Concurrent-edit detection is best-effort, not a shared writer lock: avoid editing `mise.local.toml` or running other configuration-writing mise commands while setup saves it.
 
+### Local assistant callbacks from Docker
+
+On native Linux Docker, the `assistant-relay` Pitchfork daemon forwards TCP from the default Docker bridge gateway to `GRAM_SERVER_ADDRESS`. It uses the callback port from `GRAM_SERVER_URL`, so runtime containers keep using `host.docker.internal` while the API stays on loopback (or an opted-in Tailnet address). TLS passes through unchanged, including the existing certificate and runtime CA trust. The relay starts before the server and worker and stops with the stack.
+
+If the API already listens on the gateway or a wildcard address at the callback port, the relay does not open another listener. Docker Desktop uses its built-in host forwarding instead; its VM bridge address is not bound on the host. An explicit `GRAM_ASSISTANT_RUNTIME_SERVER_URL` using a hostname other than `host.docker.internal` also bypasses the relay.
+
+For a customized Docker `host-gateway`, set `GRAM_ASSISTANT_RELAY_HOST` in `mise.local.toml` to the corresponding local interface IP. The relay never falls back to a wildcard listener. Remote/rootless Docker configurations without a host-local bridge need an explicit container-reachable `GRAM_ASSISTANT_RUNTIME_SERVER_URL`. Restart the stack after changing listener settings or Docker contexts.
+
 ### Seeding the database
 
 Once `./zero` succeeds and all services are running, seed the local database with sample data:
