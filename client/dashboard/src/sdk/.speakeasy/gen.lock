@@ -611,6 +611,8 @@ trackedFiles:
   src/funcs/riskPolicyChallengesAcknowledge.ts: {}
   src/funcs/riskPolicyChallengesDecline.ts: {}
   src/funcs/riskPolicyChallengesGet.ts: {}
+  src/funcs/riskPresetsList.ts: {}
+  src/funcs/riskPresetsSuggest.ts: {}
   src/funcs/riskResultsByChat.ts: {}
   src/funcs/riskResultsList.ts: {}
   src/funcs/riskResultsListDismissed.ts: {}
@@ -1651,6 +1653,9 @@ trackedFiles:
   src/models/components/riskpolicybypassrequest.ts: {}
   src/models/components/riskpolicyevalreview.ts: {}
   src/models/components/riskpolicymodelconfig.ts: {}
+  src/models/components/riskpreset.ts: {}
+  src/models/components/riskpresetmatch.ts: {}
+  src/models/components/riskpresetsresult.ts: {}
   src/models/components/riskresult.ts: {}
   src/models/components/riskresultredacted.ts: {}
   src/models/components/riskrevealpayloadresult.ts: {}
@@ -1810,6 +1815,8 @@ trackedFiles:
   src/models/components/suggestcustomdetectionruleresult.ts: {}
   src/models/components/suggestexclusionrequestbody.ts: {}
   src/models/components/suggestexclusionresult.ts: {}
+  src/models/components/suggestriskpolicyrequestbody.ts: {}
+  src/models/components/suggestriskpolicyresult.ts: {}
   src/models/components/summarizechatresult.ts: {}
   src/models/components/summarizerequestbody.ts: {}
   src/models/components/summarizetoolcallrequestbody.ts: {}
@@ -2499,6 +2506,7 @@ trackedFiles:
   src/models/operations/listriskpolicies.ts: {}
   src/models/operations/listriskpoliciesformcpserver.ts: {}
   src/models/operations/listriskpolicybypassrequests.ts: {}
+  src/models/operations/listriskpresets.ts: {}
   src/models/operations/listriskresults.ts: {}
   src/models/operations/listriskresultsbychat.ts: {}
   src/models/operations/listriskresultsforagent.ts: {}
@@ -2710,6 +2718,7 @@ trackedFiles:
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
   src/models/operations/suggestexclusion.ts: {}
+  src/models/operations/suggestriskpolicy.ts: {}
   src/models/operations/summarizechat.ts: {}
   src/models/operations/summarizetoolcall.ts: {}
   src/models/operations/suspendagent.ts: {}
@@ -3646,6 +3655,8 @@ trackedFiles:
   src/react-query/riskPoliciesGet.ts: {}
   src/react-query/riskPoliciesTrigger.ts: {}
   src/react-query/riskPoliciesUpdate.ts: {}
+  src/react-query/riskPresets.core.ts: {}
+  src/react-query/riskPresets.ts: {}
   src/react-query/riskReleaseSessionQuarantine.ts: {}
   src/react-query/riskRevealResultPayload.ts: {}
   src/react-query/riskRevokePolicyBypassRequest.ts: {}
@@ -3657,6 +3668,7 @@ trackedFiles:
   src/react-query/riskSubmitBlockFeedback.ts: {}
   src/react-query/riskSuggestCustomRule.ts: {}
   src/react-query/riskSuggestExclusion.ts: {}
+  src/react-query/riskSuggestPolicy.ts: {}
   src/react-query/riskTestDetectionRule.ts: {}
   src/react-query/riskUnmarkResultsFalsePositive.ts: {}
   src/react-query/riskUnmaskResult.ts: {}
@@ -4019,6 +4031,7 @@ trackedFiles:
   src/sdk/policies.ts: {}
   src/sdk/policybypassrequests.ts: {}
   src/sdk/policychallenges.ts: {}
+  src/sdk/presets.ts: {}
   src/sdk/projects.ts: {}
   src/sdk/registrydiscovery.ts: {}
   src/sdk/remotemcp.ts: {}
@@ -9841,6 +9854,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listRiskPresets:
+    speakeasy-default-list-risk-presets:
+      responses:
+        "200":
+          application/json: {"presets": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listRiskResults:
     speakeasy-default-list-risk-results:
       responses:
@@ -12337,6 +12359,17 @@ examples:
       responses:
         "200":
           application/json: {"match_type": "<value>", "match_value": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  suggestRiskPolicy:
+    speakeasy-default-suggest-risk-policy:
+      requestBody:
+        application/json: {"prompt": "<value>"}
+      responses:
+        "200":
+          application/json: {"action": "warn", "alternatives": [], "confidence": 2490.3, "name": "<value>", "policy_type": "standard", "preset_id": "<id>", "presidio_entities": ["<value 1>", "<value 2>"], "prompt": "<value>", "rationale": "<value>", "score": 9398.92, "sources": ["<value 1>", "<value 2>", "<value 3>"], "user_message": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
