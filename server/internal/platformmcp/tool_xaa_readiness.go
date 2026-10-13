@@ -17,11 +17,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
+	oktarepo "github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -42,7 +45,35 @@ type xaaReadinessService struct {
 	signIn      oktaSignInReader
 	enabled     FeatureChecker
 	identity    xaaIdentityInspector
+
+	// emaEnabled and servers report vendors the Okta connection does not
+	// describe: orgs without one, and vendors that selected the Speakeasy
+	// issuer.
+	emaEnabled FeatureChecker
+	servers    xaaServerReader
 }
+
+// xaaServer is one eligible server and its vendor's selected EMA provider.
+type xaaServer struct {
+	issuerID        uuid.UUID
+	resource        string
+	advertisesIDJAG bool
+	provider        remotesessions.EMAProviderKind
+}
+
+// xaaServerReader reads one server identity chaining could serve, in the
+// caller's organization, that the caller may read. False when there is none.
+type xaaServerReader interface {
+	Server(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (xaaServer, bool, error)
+}
+
+// Provider-agnostic readiness states, reported whenever the Okta resource
+// connection does not describe the vendor's EMA provider.
+const (
+	xaaStateNotApplicable = "not_applicable"
+	xaaStateReady         = "ready"
+	xaaStateNotReady      = "not_ready"
+)
 
 // xaaIdentityInspector reads identity chaining bindings and the federated
 // sign-in callback for one server the List snapshot already authorized.
@@ -54,16 +85,19 @@ type xaaIdentityInspector interface {
 // MCP visibility filtering and readiness derivation. List itself is not gated,
 // so the agent surface checks the same rollout flag before reading it.
 func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, signIn oktaSignInReader, flags feature.Provider) *PostgresReader {
-	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: func(ctx context.Context, orgID string) (bool, error) {
-		if flags == nil {
-			return false, ErrUnavailable
+	flagChecker := func(flag feature.Flag) FeatureChecker {
+		return func(ctx context.Context, orgID string) (bool, error) {
+			if flags == nil {
+				return false, ErrUnavailable
+			}
+			slug, err := NewPostgresOrganizationSlugResolver(r.db).OrganizationSlug(ctx, orgID)
+			if err != nil {
+				return false, err
+			}
+			return flags.IsFlagEnabled(ctx, flag, orgID, feature.OrgProjectGroups(slug, ""))
 		}
-		slug, err := NewPostgresOrganizationSlugResolver(r.db).OrganizationSlug(ctx, orgID)
-		if err != nil {
-			return false, err
-		}
-		return flags.IsFlagEnabled(ctx, feature.FlagOktaConnections, orgID, feature.OrgProjectGroups(slug, ""))
-	}}
+	}
+	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: flagChecker(feature.FlagOktaConnections), identity: nil, emaEnabled: flagChecker(feature.FlagEMAProviders), servers: nil}
 	return r
 }
 
@@ -73,8 +107,55 @@ func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, sign
 func (r *PostgresReader) WithXAAIdentityChaining(governor IdentityChainingGovernor, outbound *url.URL) *PostgresReader {
 	if r.xaaReadiness != nil && r.db != nil {
 		r.xaaReadiness.identity = &postgresXAAIdentityInspector{logger: r.logger, db: r.db, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil}}
+		r.xaaReadiness.servers = &postgresXAAServerReader{reader: r}
 	}
 	return r
+}
+
+// postgresXAAServerReader reads the authorization engine at call time, since
+// WithAuthorization may compose after WithXAAIdentityChaining.
+type postgresXAAServerReader struct {
+	reader *PostgresReader
+}
+
+func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (xaaServer, bool, error) {
+	var none xaaServer
+	engine := s.reader.authz
+	if engine == nil {
+		return none, false, ErrUnavailable
+	}
+	row, err := oktarepo.New(s.reader.db).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: organizationID, McpServerID: serverID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return none, false, nil
+	case err != nil:
+		return none, false, fmt.Errorf("load XAA readiness server: %w", err)
+	case row.ProjectID != projectID:
+		return none, false, nil
+	}
+	// org:admin does not imply mcp:read, as in the dashboard's readiness list.
+	allowed, err := engine.Filter(ctx, []authz.Check{authz.MCPCheck(authz.ScopeMCPRead, serverID.String(), projectID.String())})
+	if err != nil {
+		return none, false, fmt.Errorf("filter XAA readiness server: %w", err)
+	}
+	if !slices.Contains(allowed, serverID.String()) {
+		return none, false, nil
+	}
+	vendor, err := remotesessions.NormalizeVendorIssuer(row.Issuer)
+	if err != nil {
+		vendor = row.Issuer
+	}
+	// Only the selected kind is read here; Inspect reports live availability.
+	selection, err := remotesessions.EndpointEMAProvider(ctx, remotesessionsrepo.New(s.reader.db), organizationID, row.UserSessionIssuerID.UUID, vendor, false)
+	if err != nil {
+		return none, false, fmt.Errorf("resolve XAA readiness EMA provider: %w", err)
+	}
+	return xaaServer{
+		issuerID:        row.IssuerID,
+		resource:        oktaresourceconnections.ResourceIndicator(oktarepo.ListEligibleServersRow(row)),
+		advertisesIDJAG: oktaresourceconnections.AdvertisesIDJAG(row.GrantTypesSupported, row.AuthorizationGrantProfilesSupported),
+		provider:        selection.Provider.Kind,
+	}, true, nil
 }
 
 type GetXAAReadinessInput struct {
@@ -88,7 +169,7 @@ type GetXAAReadinessInput struct {
 type GetXAAReadinessOutput struct {
 	ProjectID           string  `json:"project_id"`
 	MCPServerID         string  `json:"mcp_server_id"`
-	State               string  `json:"state"`
+	State               string  `json:"state" jsonschema:"when the vendor's EMA provider is external and the organization has an Okta connection, the Okta resource connection state: not_applicable, needs_agent, needs_connection, broken, connected or verified. Otherwise, including whenever the Speakeasy issuer is the vendor's provider: not_applicable, ready (identity chaining serves this server now) or not_ready (identity_chaining says why)"`
 	Pending             bool    `json:"pending"`
 	NotApplicableReason *string `json:"not_applicable_reason,omitempty"`
 	BrokenReason        *string `json:"broken_reason,omitempty"`
@@ -153,7 +234,7 @@ type OktaChecklistStep struct {
 func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name: "get_xaa_readiness", Title: "Check Cross-App Access Readiness",
-		Description: "Inspect stored Cross-App Access (XAA) readiness, the enterprise-managed authorization path where an EMA provider (an external identity provider such as Okta, or the organization's Speakeasy issuer) issues ID-JAGs, for one exact project and MCP server. Reports the dashboard's derived state and exchange evidence; may fetch read-only OAuth resource metadata to resolve the endpoint; does not exchange tokens, connect or change configuration. Connected means administrator-confirmed, not verified. identity_chaining lists this server's identity-chaining bindings with state, remediation, configured scopes and the scopes actually requested after dropping OpenID Connect scopes; served is true only when exactly one ready binding serves the upstream at runtime and the vendor's EMA provider can serve now; provider is that vendor's provider: the trusted external issuer by default or the administrator's explicit selection, with unavailable_reason when it cannot serve; a provider that cannot serve never falls back to another, and not_served_reason says why served is false. The Speakeasy issuer serves only vendors it is explicitly selected for, and only while the organization's sign-in enforcement is on. Selecting the EMA provider is not available here or in the dashboard yet; organization admins set it with the organizationRemoteSessionIssuers.setEMAProvider API while the ema-providers rollout is on. federated_callback_url is the redirect URI to register in the identity provider sign-in app for this server's user sign-in. okta_sign_in reports the organization's Okta sign-in setup: whether the agent's sign-in client exists, the public key to paste in the agent's Credentials in Okta and Activate (re-register it after rotating or publishing a new key), the redirect URI for the linked app, which sign-in issuers trust it or still trust a previous agent's client, and the next setup step. Changing bindings or setting up sign-in is not available here; sign-in setup needs a signing key choice and a confirmed trust change, so send the administrator to the dashboard for it. Requires organization administration and read access to the server. Unlike get_mcp_readiness, this checks organization XAA configuration, not a registration's provider readiness.",
+		Description: "Inspect stored Cross-App Access (XAA) readiness, the enterprise-managed authorization path where an EMA provider (an external identity provider such as Okta, or the organization's Speakeasy issuer) issues ID-JAGs, for one exact project and MCP server. When the vendor's EMA provider is external and the organization has an Okta connection, reports the dashboard's derived Okta resource connection state and exchange evidence (connected means administrator-confirmed, not verified). Otherwise, including for any vendor that selected the Speakeasy issuer and in organizations with no Okta connection, state comes from identity chaining alone: ready, not_ready or not_applicable, without the Okta fields. May fetch read-only OAuth resource metadata to resolve the endpoint; does not exchange tokens, connect or change configuration. identity_chaining lists this server's identity-chaining bindings with state, remediation, configured scopes and the scopes actually requested after dropping OpenID Connect scopes; served is true only when exactly one ready binding serves the upstream at runtime and the vendor's EMA provider can serve now; provider is that vendor's provider: the trusted external issuer by default or the administrator's explicit selection, with unavailable_reason when it cannot serve; a provider that cannot serve never falls back to another, and not_served_reason says why served is false. The Speakeasy issuer serves only vendors it is explicitly selected for, and only while the organization's sign-in enforcement is on. Selecting the EMA provider is not available here or in the dashboard yet; organization admins set it with the organizationRemoteSessionIssuers.setEMAProvider API while the ema-providers rollout is on. federated_callback_url is the redirect URI to register in the identity provider sign-in app for this server's user sign-in. okta_sign_in reports the organization's Okta sign-in setup: whether the agent's sign-in client exists, the public key to paste in the agent's Credentials in Okta and Activate (re-register it after rotating or publishing a new key), the redirect URI for the linked app, which sign-in issuers trust it or still trust a previous agent's client, and the next setup step. Changing bindings or setting up sign-in is not available here; sign-in setup needs a signing key choice and a confirmed trust change, so send the administrator to the dashboard for it. Requires organization administration and read access to the server. Unlike get_mcp_readiness, this checks organization XAA configuration, not a registration's provider readiness.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, DiscoveryScopes: discoveryMCPRead, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetXAAReadinessInput) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
 		// External-only: the service reads an org-wide snapshot under a live member
@@ -174,49 +255,121 @@ func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 		if err != nil || serverID == uuid.Nil {
 			return xaaReadinessRefusal("invalid_request", "Provide an exact project ID and MCP server ID.")
 		}
-		if service == nil || service.connections == nil || service.enabled == nil {
+		if service == nil {
 			return xaaReadinessRefusal(unavailableCode, "XAA readiness is unavailable on this server.")
 		}
-		enabled, err := service.enabled(ctx, principal.OrganizationID)
-		if err != nil {
-			return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
-		}
-		if !enabled {
-			return xaaReadinessRefusal(unavailableCode, "XAA readiness is not enabled for this organization.")
-		}
-		result, err := service.connections.List(ctx, &srv.ListPayload{IncludeAll: true})
-		if err != nil {
-			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
-				if shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized {
-					return xaaReadinessRefusal("forbidden", "XAA readiness requires organization administration and server read access.")
-				}
-				if shareable.Code == oops.CodeFailedPrecondition {
-					return xaaReadinessRefusal("setup_required", "Connect an identity provider before checking XAA readiness.")
-				}
-			}
-			return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
-		}
-		if result != nil {
-			for _, row := range result.Servers {
-				if row != nil && row.ProjectID == projectID.String() && row.McpServerID == serverID.String() {
-					output := GetXAAReadinessOutput{ProjectID: row.ProjectID, MCPServerID: row.McpServerID, State: row.State, Pending: row.Pending, NotApplicableReason: row.NotApplicableReason, BrokenReason: row.BrokenReason, ObservedResult: row.ObservedResult, ObservedAt: row.ObservedAt, OktaSignIn: service.readSignIn(ctx, principal.OrganizationID)}
-					if service.identity != nil {
-						issuerID := uuid.Nil
-						if row.IssuerID != nil {
-							issuerID, _ = uuid.Parse(*row.IssuerID)
-						}
-						chaining, callback, err := service.identity.Inspect(ctx, principal.OrganizationID, projectID, serverID, issuerID, row.ResourceIndicator)
-						if err != nil {
-							return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
-						}
-						output.IdentityChaining, output.FederatedCallbackURL = &chaining, callback
-					}
-					return nil, output, nil
-				}
-			}
-		}
-		return xaaReadinessRefusal("not_found", "That project or eligible MCP server is not available to you.")
+		return service.read(ctx, principal.OrganizationID, projectID, serverID)
 	})
+}
+
+func (s *xaaReadinessService) providerAgnostic() bool {
+	return s.emaEnabled != nil && s.servers != nil && s.identity != nil
+}
+
+// read prefers the Okta resource connection when the organization has one;
+// otherwise readiness comes from identity chaining for any EMA provider.
+func (s *xaaReadinessService) read(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
+	okta := s.connections != nil && s.enabled != nil
+	if !okta && !s.providerAgnostic() {
+		return xaaReadinessRefusal(unavailableCode, "XAA readiness is unavailable on this server.")
+	}
+	oktaOn, emaOn := false, false
+	if okta {
+		on, err := s.enabled(ctx, organizationID)
+		if err != nil {
+			return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
+		}
+		oktaOn = on
+	}
+	if s.providerAgnostic() {
+		on, err := s.emaEnabled(ctx, organizationID)
+		if err != nil {
+			return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
+		}
+		emaOn = on
+	}
+	if !oktaOn && !emaOn {
+		return xaaReadinessRefusal(unavailableCode, "XAA readiness is not enabled for this organization.")
+	}
+	if !oktaOn {
+		return s.readProviderAgnostic(ctx, organizationID, projectID, serverID)
+	}
+	result, err := s.connections.List(ctx, &srv.ListPayload{IncludeAll: true})
+	if err != nil {
+		shareable, ok := errors.AsType[*oops.ShareableError](err)
+		switch {
+		case ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized):
+			return xaaReadinessRefusal("forbidden", "XAA readiness requires organization administration and server read access.")
+		case ok && shareable.Code == oops.CodeFailedPrecondition && emaOn:
+			return s.readProviderAgnostic(ctx, organizationID, projectID, serverID)
+		case ok && shareable.Code == oops.CodeFailedPrecondition:
+			return xaaReadinessRefusal("setup_required", "Connect an identity provider before checking XAA readiness.")
+		}
+		return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
+	}
+	if result != nil {
+		for _, row := range result.Servers {
+			if row != nil && row.ProjectID == projectID.String() && row.McpServerID == serverID.String() {
+				return s.readOkta(ctx, organizationID, projectID, serverID, row)
+			}
+		}
+	}
+	return xaaReadinessRefusal("not_found", "That project or eligible MCP server is not available to you.")
+}
+
+// readOkta reports the Okta resource connection, unless the vendor selected
+// the Speakeasy issuer, whose readiness that connection does not describe.
+func (s *xaaReadinessService) readOkta(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, row *srv.OktaResourceConnectionServer) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
+	if s.providerAgnostic() {
+		server, ok, err := s.servers.Server(ctx, organizationID, projectID, serverID)
+		if err != nil {
+			return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
+		}
+		if ok && server.provider == remotesessions.EMAProviderSpeakeasy {
+			return s.providerOutput(ctx, organizationID, projectID, serverID, server)
+		}
+	}
+	output := GetXAAReadinessOutput{ProjectID: row.ProjectID, MCPServerID: row.McpServerID, State: row.State, Pending: row.Pending, NotApplicableReason: row.NotApplicableReason, BrokenReason: row.BrokenReason, ObservedResult: row.ObservedResult, ObservedAt: row.ObservedAt, OktaSignIn: s.readSignIn(ctx, organizationID)}
+	if s.identity != nil {
+		issuerID := uuid.Nil
+		if row.IssuerID != nil {
+			issuerID, _ = uuid.Parse(*row.IssuerID)
+		}
+		chaining, callback, err := s.identity.Inspect(ctx, organizationID, projectID, serverID, issuerID, row.ResourceIndicator)
+		if err != nil {
+			return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
+		}
+		output.IdentityChaining, output.FederatedCallbackURL = &chaining, callback
+	}
+	return nil, output, nil
+}
+
+func (s *xaaReadinessService) readProviderAgnostic(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
+	server, ok, err := s.servers.Server(ctx, organizationID, projectID, serverID)
+	if err != nil {
+		return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
+	}
+	if !ok {
+		return xaaReadinessRefusal("not_found", "That project or eligible MCP server is not available to you.")
+	}
+	return s.providerOutput(ctx, organizationID, projectID, serverID, server)
+}
+
+// providerOutput derives readiness from identity chaining alone, so it holds
+// for any EMA provider and needs no identity provider connection.
+func (s *xaaReadinessService) providerOutput(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, server xaaServer) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
+	chaining, callback, err := s.identity.Inspect(ctx, organizationID, projectID, serverID, server.issuerID, server.resource)
+	if err != nil {
+		return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
+	}
+	output := GetXAAReadinessOutput{ProjectID: projectID.String(), MCPServerID: serverID.String(), State: xaaStateNotReady, Pending: true, IdentityChaining: &chaining, FederatedCallbackURL: callback}
+	switch {
+	case !server.advertisesIDJAG:
+		output.State, output.Pending, output.NotApplicableReason = xaaStateNotApplicable, false, new(oktaresourceconnections.ReasonNoIDJAG)
+	case chaining.Served:
+		output.State, output.Pending = xaaStateReady, false
+	}
+	return nil, output, nil
 }
 
 // readSignIn is advisory: a failed read omits it rather than failing readiness.
