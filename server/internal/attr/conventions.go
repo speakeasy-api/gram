@@ -501,16 +501,16 @@ const (
 	// IdentityChainingUnavailableReasonKey says why the selected EMA provider
 	// could not serve.
 	IdentityChainingUnavailableReasonKey = attribute.Key("gram.identity_chaining.unavailable_reason")
-	OAuthRedirectURICountKey            = attribute.Key("gram.oauth.redirect_uri.count")
-	OAuthRedirectURIFullKey             = attribute.Key("gram.oauth.redirect_uri.full")
-	OAuthRegisteredAuthMethodKey        = attribute.Key("gram.oauth.registered_auth_method")
-	OAuthRegistrationEndpointKey        = attribute.Key("gram.oauth.registration_endpoint")
-	OAuthRegistrationMethodKey          = attribute.Key("gram.oauth.registration_method")
-	OAuthRegistrationOutcomeKey         = attribute.Key("gram.oauth.registration_outcome")
-	OAuthRegistrationReasonKey          = attribute.Key("gram.oauth.registration_reason")
-	OAuthRegistrationRetryableKey       = attribute.Key("gram.oauth.registration_retryable")
-	OAuthRequiredKey                    = attribute.Key("gram.oauth.required")
-	OAuthScopeKey                       = attribute.Key("gram.oauth.scope")
+	OAuthRedirectURICountKey             = attribute.Key("gram.oauth.redirect_uri.count")
+	OAuthRedirectURIFullKey              = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegisteredAuthMethodKey         = attribute.Key("gram.oauth.registered_auth_method")
+	OAuthRegistrationEndpointKey         = attribute.Key("gram.oauth.registration_endpoint")
+	OAuthRegistrationMethodKey           = attribute.Key("gram.oauth.registration_method")
+	OAuthRegistrationOutcomeKey          = attribute.Key("gram.oauth.registration_outcome")
+	OAuthRegistrationReasonKey           = attribute.Key("gram.oauth.registration_reason")
+	OAuthRegistrationRetryableKey        = attribute.Key("gram.oauth.registration_retryable")
+	OAuthRequiredKey                     = attribute.Key("gram.oauth.required")
+	OAuthScopeKey                        = attribute.Key("gram.oauth.scope")
 	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
 	// client's configured scope because the issuer advertises them.
 	OAuthScopeAddedKey = attribute.Key("gram.oauth.scope_added")
