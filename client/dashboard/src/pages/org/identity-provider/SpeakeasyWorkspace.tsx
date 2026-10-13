@@ -271,17 +271,14 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                   )}
                   {issuer.state === "enabled" && rotationWaiting && (
                     <Text small muted role="status">
-                      New key publishing. From {formatReadyAt(readyAt!)} it
-                      activates automatically within the hour, or sooner with
-                      Activate new key. Speakeasy keeps signing with the current
-                      key until then.
+                      New key publishing, active after {formatReadyAt(readyAt!)}
+                      . Speakeasy keeps signing with the current key until then.
                     </Text>
                   )}
-                  {issuer.state === "enabled" && rotationReady && (
+                  {canRotate && rotationReady && (
                     <Text small muted role="status">
-                      The new key is published and activates automatically
-                      within the hour, or now with Activate new key. The old key
-                      stays published for a short overlap.
+                      The new key is published. Activate it to start signing
+                      with it; the old key stays published for a short overlap.
                     </Text>
                   )}
                   {rotate.isError && action === null && (
@@ -422,9 +419,9 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
         description={
           <>
             Speakeasy publishes a new key now and keeps signing with the current
-            one. The new key activates automatically within the hour, or you can
-            activate it here after a couple of minutes. The old key stays
-            published for a short overlap, so services keep working throughout.
+            one. After a couple of minutes, activate the new key here; the old
+            key stays published for a short overlap, so services keep working
+            throughout.
           </>
         }
         isPending={rotate.isPending}

@@ -117,9 +117,6 @@ type Provisioner struct {
 	cfg         Config
 	// emaTokenPurger drops vendor tokens obtained with a disabled issuer.
 	emaTokenPurger EMAIssuerTokenPurger
-	// emaActivationCheck approves the sweep activating a ready pending issuer
-	// key; without one the sweep never activates.
-	emaActivationCheck EMAIssuerActivationCheck
 	// sweepPage is how many organizations one sweep query returns.
 	sweepPage int32
 	// issuerKeyCleanupTimeout bounds each revoked issuer key's KMS cleanup.
@@ -149,15 +146,14 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.
 	}
 
 	return &Provisioner{
-		logger:             logger.With(attr.SlogComponent("identityproviderconnections")),
-		db:                 db,
-		gcpIdentity:        gcpIdentity,
-		kmsClients:         kmsClients,
-		audit:              auditLogger,
-		cfg:                cfg,
-		emaTokenPurger:     nil,
-		emaActivationCheck: nil,
-		sweepPage:          sweepOrganizationPage,
+		logger:         logger.With(attr.SlogComponent("identityproviderconnections")),
+		db:             db,
+		gcpIdentity:    gcpIdentity,
+		kmsClients:     kmsClients,
+		audit:          auditLogger,
+		cfg:            cfg,
+		emaTokenPurger: nil,
+		sweepPage:      sweepOrganizationPage,
 
 		issuerKeyCleanupTimeout:  keyCleanupTimeout,
 		sweepOrganizationTimeout: sweepOrganizationTimeout,

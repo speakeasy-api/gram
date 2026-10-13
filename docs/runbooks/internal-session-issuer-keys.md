@@ -38,8 +38,6 @@ An organization admin can also stop their own organization's signing with `inter
 
 ## Manual KMS cleanup
 
-The same sweep finishes routine rotations: a pending key past the activation delay is activated through the same locked path as a second `rotate` call, audited as the system, and counted in `gram.internal_session_issuer.key_activations`. It skips any issuer that couldn't sign right now (rollout off, no verified domain, disabled, paused, or failing the deployment, KMS ring or signing identity checks), and the key waits.
-
 Revoked and expired keys have their KMS versions disabled and the signer's grant removed automatically: on rotation and by the hourly `internal-session-issuer-key-sweep` schedule, which runs on the shared task queue only. Reading the issuer never does. Each run sweeps in pages of about 8 minutes, resuming by organization id, for up to three pages, and the next run resumes where it stopped; it starts over only after reaching the last organization, so organizations that keep failing can't starve the rest. Each revoked key stays pending (`json_web_keys.kms_disabled_at` NULL) until both steps succeed, including when the key's credential names no service account for its grant, and the sweep reports the count still pending as `gram.internal_session_issuer.kms_cleanup.pending`. A value that stays above 0 across sweeps needs a look. To clean up by hand:
 
 ```sh

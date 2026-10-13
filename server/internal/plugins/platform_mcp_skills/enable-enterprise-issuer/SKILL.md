@@ -56,8 +56,8 @@ to open **IDP and SSO → Identity providers → Speakeasy** and, under **Signin
 keys**, choose **Finish setting up a new key**. The
 issuer URI stays the same. If the administrator suspects a key is compromised,
 point them to **Replace compromised key** on the same page. For a routine key
-change, **Rotate key** there publishes a new key, which activates automatically
-within the hour; **Activate new key** switches to it sooner. There is no key
+change, **Rotate key** there publishes a new key, and **Activate new key**
+switches to it after a short wait. There is no key
 mutation tool in this workflow: do not attempt rotation or revocation yourself,
 or imply that support staff may mutate the organization's issuer.
 

@@ -1803,15 +1803,6 @@ func internalSessionIssuerManager(provisioner *identityproviderconnections.Provi
 	return provisioner
 }
 
-// enableIssuerKeyAutoActivation lets the key sweep finish routine rotations,
-// approving each key with the same checks a signature passes.
-func enableIssuerKeyAutoActivation(provisioner *identityproviderconnections.Provisioner, signer *internalsessionissuers.Signer) {
-	if provisioner == nil {
-		return
-	}
-	provisioner.SetEMAIssuerActivationCheck(signer.CheckActivation)
-}
-
 // issuerKeySweeper keeps a nil provisioner a nil interface.
 func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) background.InternalSessionIssuerKeySweeper {
 	if provisioner == nil {

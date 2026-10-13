@@ -429,8 +429,8 @@ SELECT EXISTS (
 );
 
 -- System sweep: organizations whose live issuer has retired keys past the
--- overlap, revoked keys from any issuer row whose KMS cleanup is still
--- pending, or an enabled issuer with a pending key past the activation delay. Paged by organization id so every organization is reached each
+-- overlap, or with revoked keys from any issuer row whose KMS cleanup is still
+-- pending. Paged by organization id so every organization is reached each
 -- run. Returns only organization ids; each is then swept org-qualified.
 -- name: ListOrganizationsWithPendingEMAIssuerWork :many
 SELECT DISTINCT isi.organization_id
@@ -443,12 +443,7 @@ WHERE isi.organization_id > @after_organization_id::text
       AND k.state = 'retired'
       AND k.deleted IS FALSE
       AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer))
-    OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL)
-    OR (isi.deleted IS FALSE
-      AND isi.disabled_at IS NULL
-      AND k.state = 'pending'
-      AND k.deleted IS FALSE
-      AND k.updated_at <= clock_timestamp() - make_interval(secs => @activation_seconds::integer)))
+    OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL))
 ORDER BY isi.organization_id
 LIMIT @max_organizations;
 

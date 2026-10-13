@@ -89,8 +89,6 @@ var (
 type SweepProgress struct {
 	// Swept counts organizations visited.
 	Swept int
-	// Activated counts ready pending keys the sweep activated.
-	Activated int
 	// Pending is the fleet-wide count of revoked keys awaiting KMS cleanup,
 	// or -1 when unknown.
 	Pending int
