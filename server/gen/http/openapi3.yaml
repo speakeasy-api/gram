@@ -75718,7 +75718,11 @@ paths:
                 name: AddExternalOAuthServer
     /rpc/toolsets.checkMCPSlugAvailability:
         get:
-            description: Check if a MCP slug is available
+            deprecated: true
+            description: |-
+                Check if a MCP slug is taken in any scope (true means taken).
+
+                Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
             operationId: checkMCPSlugAvailability
             parameters:
                 - allowEmptyValue: true
@@ -76868,7 +76872,11 @@ paths:
                 name: SetToolsetToolVariationsGroup
     /rpc/toolsets.setUserSessionIssuer:
         post:
-            description: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
+            deprecated: true
+            description: |-
+                Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
+
+                Deprecated: use mcpServers.update instead.
             operationId: setToolsetUserSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -119837,8 +119845,9 @@ components:
             type: object
             properties:
                 custom_domain_id:
+                    description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
                     type: string
-                    description: The ID of the custom domain to use for the toolset
+                    x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -119848,11 +119857,13 @@ components:
                     type: string
                     description: The new description of the toolset
                 mcp_enabled:
+                    description: 'Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP'
                     type: boolean
-                    description: Whether the toolset is enabled for MCP
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_is_public:
+                    description: 'Deprecated: use mcpServers.update. Whether the toolset is public in MCP'
                     type: boolean
-                    description: Whether the toolset is public in MCP
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -119899,8 +119910,9 @@ components:
             type: object
             properties:
                 custom_domain_id:
+                    description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
                     type: string
-                    description: The ID of the custom domain to use for the toolset
+                    x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
                 default_environment_slug:
                     type: string
                     description: The slug of the environment to use as the default for the toolset
@@ -119910,26 +119922,30 @@ components:
                     type: string
                     description: The new description of the toolset
                 mcp_enabled:
+                    description: 'Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP'
                     type: boolean
-                    description: Whether the toolset is enabled for MCP
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_is_public:
+                    description: 'Deprecated: use mcpServers.update. Whether the toolset is public in MCP'
                     type: boolean
-                    description: Whether the toolset is public in MCP
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_slug:
-                    type: string
-                    description: The slug of the MCP to use for the toolset
-                    pattern: ^[a-z0-9_-]{1,128}$
+                    description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset'
                     maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                    x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
                 name:
                     type: string
                     description: The new name of the toolset
                 network_access_mode:
-                    type: string
-                    description: 'Where the hosted MCP is accessible: public_only, dual, or private_only'
+                    description: 'Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only'
                     enum:
                         - public_only
                         - dual
                         - private_only
+                    type: string
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 prompt_template_names:
                     type: array
                     items:
