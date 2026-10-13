@@ -954,8 +954,19 @@ func compareToolInputs(beforeRaw, afterRaw []byte) (warnings, info []string) {
 		// Inputs often point at shared schemas under $defs, so a change to a
 		// shared schema leaves the input itself untouched. Compare the
 		// schemas with every reference resolved.
-		bObj := parseInputObject(inlineDefs(b, before.Defs))
-		aObj := parseInputObject(inlineDefs(a, after.Defs))
+		bInlined, bOK := inlineDefs(b, before.Defs)
+		aInlined, aOK := inlineDefs(a, after.Defs)
+		if !bOK || !aOK {
+			// Comparing a resolved schema with an unresolved one would report
+			// every field as added or removed.
+			if !jsonEqual(b, a) || !defsEqual(before.Defs, after.Defs) {
+				warnings = append(warnings, "shared input schema too large to compare in detail")
+			}
+			continue
+		}
+
+		bObj := parseInputObject(bInlined)
+		aObj := parseInputObject(aInlined)
 
 		for _, name := range slices.Sorted(maps.Keys(bObj.Properties)) {
 			if _, ok := aObj.Properties[name]; !ok {
@@ -1028,26 +1039,31 @@ var schemaMapKeywords = map[string]bool{
 // inlineDefs returns the schema with every `#/$defs/` reference replaced by
 // the schema it points at. Only schema keywords are followed, so literal data
 // such as defaults and examples is left untouched. A reference already being
-// expanded higher up is left in place so recursive schemas terminate. If the
-// result would exceed maxInlinedSchemaNodes, the schema is returned as is and
-// compared by its raw JSON instead.
-func inlineDefs(raw json.RawMessage, defs map[string]json.RawMessage) json.RawMessage {
+// expanded higher up is left in place so recursive schemas terminate. It
+// reports false, with the schema unchanged, when the result would exceed
+// maxInlinedSchemaNodes.
+func inlineDefs(raw json.RawMessage, defs map[string]json.RawMessage) (json.RawMessage, bool) {
 	var v any
 	if len(defs) == 0 || json.Unmarshal(raw, &v) != nil {
-		return raw
+		return raw, true
 	}
 
 	in := &defInliner{defs: defs, expanding: map[string]bool{}, budget: maxInlinedSchemaNodes}
 	resolved := in.schema(v)
 	if in.budget < 0 {
-		return raw
+		return raw, false
 	}
 
 	out, err := json.Marshal(resolved)
 	if err != nil {
-		return raw
+		return raw, true
 	}
-	return out
+	return out, true
+}
+
+// defsEqual reports whether two sets of shared schemas are the same.
+func defsEqual(a, b map[string]json.RawMessage) bool {
+	return maps.EqualFunc(a, b, jsonEqual)
 }
 
 type defInliner struct {
