@@ -38,6 +38,9 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		return nil, err
 	}
 
+	// The toolset grant is the only boundary this write needs: the issuer
+	// reaches only the toolset's own route, package and hosted wrapper. Other
+	// wrappers keep their own issuer, and their grants key on this toolset id.
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: beforeView.ID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
