@@ -261,6 +261,25 @@ type GetUserSessionIssuerResponseBody struct {
 	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// GetAttachImpactResponseBody is the type of the "userSessionIssuers" service
+// "getAttachImpact" endpoint HTTP response body.
+type GetAttachImpactResponseBody struct {
+	// The issuer the server uses now. Absent when it has none.
+	CurrentIssuer *UserSessionIssuerResponseBody `form:"current_issuer,omitempty" json:"current_issuer,omitempty" xml:"current_issuer,omitempty"`
+	// The issuer that would be attached. Absent when previewing a detach.
+	CandidateIssuer *UserSessionIssuerResponseBody `form:"candidate_issuer,omitempty" json:"candidate_issuer,omitempty" xml:"candidate_issuer,omitempty"`
+	// True when the server has an issuer and the change replaces or removes it.
+	// Its clients' registrations and sessions belong to the current issuer, so
+	// every client must register and authorize again.
+	ReauthorizationRequired bool `form:"reauthorization_required" json:"reauthorization_required" xml:"reauthorization_required"`
+	// True when the authorization server the server advertises to clients changes:
+	// its own per-server authorization server, a shared authorization server's
+	// issuer URL, or none. Anything configured with the current authorization
+	// server, such as an identity provider or a federated platform, must be
+	// updated.
+	AuthorizationServerChanges bool `form:"authorization_server_changes" json:"authorization_server_changes" xml:"authorization_server_changes"`
+}
+
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
 // "userSessionIssuers" service "createUserSessionIssuer" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -1021,6 +1040,196 @@ type GetUserSessionIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetAttachImpactUnauthorizedResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetAttachImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactForbiddenResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "forbidden"
+// error.
+type GetAttachImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactBadRequestResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "bad_request" error.
+type GetAttachImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactNotFoundResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "not_found"
+// error.
+type GetAttachImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactConflictResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "conflict"
+// error.
+type GetAttachImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactUnsupportedMediaResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetAttachImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactInvalidResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "invalid"
+// error.
+type GetAttachImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactInvariantViolationResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetAttachImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactUnexpectedResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "unexpected" error.
+type GetAttachImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAttachImpactGatewayErrorResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetAttachImpactGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteUserSessionIssuerUnauthorizedResponseBody is the type of the
 // "userSessionIssuers" service "deleteUserSessionIssuer" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -1380,6 +1589,22 @@ func NewGetUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *GetUserS
 		ProjectName:                          res.ProjectName,
 		CreatedAt:                            res.CreatedAt,
 		UpdatedAt:                            res.UpdatedAt,
+	}
+	return body
+}
+
+// NewGetAttachImpactResponseBody builds the HTTP response body from the result
+// of the "getAttachImpact" endpoint of the "userSessionIssuers" service.
+func NewGetAttachImpactResponseBody(res *usersessionissuers.UserSessionIssuerAttachImpact) *GetAttachImpactResponseBody {
+	body := &GetAttachImpactResponseBody{
+		ReauthorizationRequired:    res.ReauthorizationRequired,
+		AuthorizationServerChanges: res.AuthorizationServerChanges,
+	}
+	if res.CurrentIssuer != nil {
+		body.CurrentIssuer = marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(res.CurrentIssuer)
+	}
+	if res.CandidateIssuer != nil {
+		body.CandidateIssuer = marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(res.CandidateIssuer)
 	}
 	return body
 }
@@ -1984,6 +2209,155 @@ func NewGetUserSessionIssuerGatewayErrorResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
+// NewGetAttachImpactUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getAttachImpact" endpoint of the
+// "userSessionIssuers" service.
+func NewGetAttachImpactUnauthorizedResponseBody(res *goa.ServiceError) *GetAttachImpactUnauthorizedResponseBody {
+	body := &GetAttachImpactUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactForbiddenResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactForbiddenResponseBody(res *goa.ServiceError) *GetAttachImpactForbiddenResponseBody {
+	body := &GetAttachImpactForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactBadRequestResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactBadRequestResponseBody(res *goa.ServiceError) *GetAttachImpactBadRequestResponseBody {
+	body := &GetAttachImpactBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactNotFoundResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactNotFoundResponseBody(res *goa.ServiceError) *GetAttachImpactNotFoundResponseBody {
+	body := &GetAttachImpactNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactConflictResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactConflictResponseBody(res *goa.ServiceError) *GetAttachImpactConflictResponseBody {
+	body := &GetAttachImpactConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getAttachImpact" endpoint of the
+// "userSessionIssuers" service.
+func NewGetAttachImpactUnsupportedMediaResponseBody(res *goa.ServiceError) *GetAttachImpactUnsupportedMediaResponseBody {
+	body := &GetAttachImpactUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactInvalidResponseBody builds the HTTP response body from the
+// result of the "getAttachImpact" endpoint of the "userSessionIssuers" service.
+func NewGetAttachImpactInvalidResponseBody(res *goa.ServiceError) *GetAttachImpactInvalidResponseBody {
+	body := &GetAttachImpactInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getAttachImpact" endpoint of the
+// "userSessionIssuers" service.
+func NewGetAttachImpactInvariantViolationResponseBody(res *goa.ServiceError) *GetAttachImpactInvariantViolationResponseBody {
+	body := &GetAttachImpactInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getAttachImpact" endpoint of the "userSessionIssuers"
+// service.
+func NewGetAttachImpactUnexpectedResponseBody(res *goa.ServiceError) *GetAttachImpactUnexpectedResponseBody {
+	body := &GetAttachImpactUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAttachImpactGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getAttachImpact" endpoint of the
+// "userSessionIssuers" service.
+func NewGetAttachImpactGatewayErrorResponseBody(res *goa.ServiceError) *GetAttachImpactGatewayErrorResponseBody {
+	body := &GetAttachImpactGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteUserSessionIssuerUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "deleteUserSessionIssuer" endpoint of the
 // "userSessionIssuers" service.
@@ -2186,6 +2560,21 @@ func NewGetUserSessionIssuerPayload(id *string, slug *string, sessionToken *stri
 	v := &usersessionissuers.GetUserSessionIssuerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetAttachImpactPayload builds a userSessionIssuers service
+// getAttachImpact endpoint payload.
+func NewGetAttachImpactPayload(mcpServerID *string, toolsetID *string, metaMcpServerID *string, userSessionIssuerID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuers.GetAttachImpactPayload {
+	v := &usersessionissuers.GetAttachImpactPayload{}
+	v.McpServerID = mcpServerID
+	v.ToolsetID = toolsetID
+	v.MetaMcpServerID = metaMcpServerID
+	v.UserSessionIssuerID = userSessionIssuerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

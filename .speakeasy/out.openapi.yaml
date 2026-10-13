@@ -75441,6 +75441,137 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: UserSessionIssuer
+  /rpc/userSessionIssuers.getAttachImpact:
+    get:
+      description: 'Preview what attaching a user_session_issuer to an existing MCP server, toolset, or meta MCP server changes for its clients, before calling the matching update. Name exactly one of mcp_server_id, toolset_id, or meta_mcp_server_id; omit user_session_issuer_id to preview detaching the current issuer. Clients and sessions belong to an issuer, so any change of issuer requires the server''s clients to authorize again. Advisory only: the update does not require it. Requires the mcp:write access the matching update requires.'
+      operationId: getUserSessionIssuerAttachImpact
+      parameters:
+        - allowEmptyValue: true
+          description: The MCP server the issuer would be attached to.
+          in: query
+          name: mcp_server_id
+          schema:
+            description: The MCP server the issuer would be attached to.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The toolset the issuer would be attached to.
+          in: query
+          name: toolset_id
+          schema:
+            description: The toolset the issuer would be attached to.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The meta MCP server the issuer would be attached to.
+          in: query
+          name: meta_mcp_server_id
+          schema:
+            description: The meta MCP server the issuer would be attached to.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The issuer to attach. Omit to preview detaching the current issuer.
+          in: query
+          name: user_session_issuer_id
+          schema:
+            description: The issuer to attach. Omit to preview detaching the current issuer.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionIssuerAttachImpact'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getAttachImpact userSessionIssuers
+      tags:
+        - userSessionIssuers
+      x-speakeasy-name-override: getAttachImpact
+      x-speakeasy-react-hook:
+        name: UserSessionIssuerAttachImpact
   /rpc/userSessionIssuers.list:
     get:
       description: List user_session_issuers in the caller's project.
@@ -110471,6 +110602,23 @@ components:
         - issuer_url_pinned
         - created_at
         - updated_at
+    UserSessionIssuerAttachImpact:
+      type: object
+      properties:
+        authorization_server_changes:
+          type: boolean
+          description: 'True when the authorization server the server advertises to clients changes: its own per-server authorization server, a shared authorization server''s issuer URL, or none. Anything configured with the current authorization server, such as an identity provider or a federated platform, must be updated.'
+        candidate_issuer:
+          $ref: '#/components/schemas/UserSessionIssuer'
+        current_issuer:
+          $ref: '#/components/schemas/UserSessionIssuer'
+        reauthorization_required:
+          type: boolean
+          description: True when the server has an issuer and the change replaces or removes it. Its clients' registrations and sessions belong to the current issuer, so every client must register and authorize again.
+      description: What attaching a user_session_issuer to an existing MCP server changes for its clients.
+      required:
+        - reauthorization_required
+        - authorization_server_changes
     UserSessionIssuerCimdClient:
       type: object
       properties:

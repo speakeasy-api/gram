@@ -790,6 +790,7 @@ trackedFiles:
   src/funcs/userSessionIssuersCreate.ts: {}
   src/funcs/userSessionIssuersDelete.ts: {}
   src/funcs/userSessionIssuersGet.ts: {}
+  src/funcs/userSessionIssuersGetAttachImpact.ts: {}
   src/funcs/userSessionIssuersList.ts: {}
   src/funcs/userSessionIssuersUpdate.ts: {}
   src/funcs/userSessionsList.ts: {}
@@ -1975,6 +1976,7 @@ trackedFiles:
   src/models/components/usersessionconsent.ts: {}
   src/models/components/usersessionfacetoption.ts: {}
   src/models/components/usersessionissuer.ts: {}
+  src/models/components/usersessionissuerattachimpact.ts: {}
   src/models/components/usersessionissuercimdclient.ts: {}
   src/models/components/usersessionissuerfieldmismatch.ts: {}
   src/models/components/usersessionissuermcpserver.ts: {}
@@ -2364,6 +2366,7 @@ trackedFiles:
   src/models/operations/getusermetricssummary.ts: {}
   src/models/operations/getusersessionclient.ts: {}
   src/models/operations/getusersessionissuer.ts: {}
+  src/models/operations/getusersessionissuerattachimpact.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
   src/models/operations/getwidget.ts: {}
   src/models/operations/getworkloadcustomflows.ts: {}
@@ -3898,6 +3901,8 @@ trackedFiles:
   src/react-query/userSessionFacets.ts: {}
   src/react-query/userSessionIssuer.core.ts: {}
   src/react-query/userSessionIssuer.ts: {}
+  src/react-query/userSessionIssuerAttachImpact.core.ts: {}
+  src/react-query/userSessionIssuerAttachImpact.ts: {}
   src/react-query/userSessionIssuerCimdClient.core.ts: {}
   src/react-query/userSessionIssuerCimdClient.ts: {}
   src/react-query/userSessionIssuerCimdClients.core.ts: {}
@@ -8258,6 +8263,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getUserSessionIssuerAttachImpact:
+    speakeasy-default-get-user-session-issuer-attach-impact:
+      responses:
+        "200":
+          application/json: {"authorization_server_changes": true, "reauthorization_required": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getUserSessionIssuerCimdClient:
     speakeasy-default-get-user-session-issuer-cimd-client:
       parameters:

@@ -491,6 +491,7 @@ const target: AuthTarget = {
   slug: "remote-server",
   projectId: "project-1",
   permissionResourceId: "mcp-server-1",
+  attachImpactTarget: { mcpServerId: "mcp-server-1" },
   supportsOrganizationIssuers: true,
   userSessionIssuerId: "user-session-issuer-1",
   remoteMcpServerId: "remote-source-1",

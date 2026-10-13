@@ -25,8 +25,7 @@ export function UserSessionIssuerSelect({
 }): JSX.Element {
   const labelCounts = new Map<string, number>();
   for (const issuer of issuers) {
-    const ownership = issuer.projectId === "" ? "Organization" : "Project";
-    const label = `${issuer.slug} — ${ownership}`;
+    const label = issuerLabel(issuer);
     labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
   }
 
@@ -42,9 +41,7 @@ export function UserSessionIssuerSelect({
           </SelectItem>
         ) : null}
         {issuers.map((issuer) => {
-          const ownership =
-            issuer.projectId === "" ? "Organization" : "Project";
-          const label = `${issuer.slug} — ${ownership}`;
+          const label = issuerLabel(issuer);
           const disambiguator =
             (labelCounts.get(label) ?? 0) > 1
               ? ` · ${issuer.id.slice(0, 8)}`
@@ -60,4 +57,16 @@ export function UserSessionIssuerSelect({
       </SelectContent>
     </Select>
   );
+}
+
+// Names an issuer by slug and owner, and marks one whose servers share a
+// single authorization server, since attaching to it changes where clients
+// sign in.
+function issuerLabel(issuer: UserSessionIssuer): string {
+  const ownership = issuer.projectId === "" ? "Organization" : "Project";
+  const shared =
+    issuer.authorizationServerMode === "shared"
+      ? " · Shared authorization server"
+      : "";
+  return `${issuer.slug} — ${ownership}${shared}`;
 }
