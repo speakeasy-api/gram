@@ -112,7 +112,9 @@ func (e *RotationPendingError) Error() string {
 // so key rotation and replacement never change what vendors trust. It must be
 // HTTPS; allowLoopback admits plain-HTTP loopback for local development only.
 func URL(origin *url.URL, organizationID string, allowLoopback bool) (*url.URL, error) {
-	valid := origin != nil && (urls.IsAbsoluteHTTPS(origin.String()) || (allowLoopback && urls.IsAbsoluteHTTPSOrLoopback(origin.String())))
+	// Discovery is mounted at the root, so an origin with a path can't serve it.
+	valid := origin != nil && (origin.Path == "" || origin.Path == "/") &&
+		(urls.IsAbsoluteHTTPS(origin.String()) || (allowLoopback && urls.IsAbsoluteHTTPSOrLoopback(origin.String())))
 	if !valid || organizationID == "" {
 		return nil, errors.New("internalsessionissuers: issuer origin is unavailable")
 	}

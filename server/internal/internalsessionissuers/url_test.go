@@ -21,6 +21,7 @@ func TestURLRequiresHTTPSOutsideLocalDevelopment(t *testing.T) {
 		{origin: "http://localhost:8080", allowLoopback: false, ok: false},
 		{origin: "http://localhost:8080", allowLoopback: true, ok: true},
 		{origin: "http://app.example.com", allowLoopback: true, ok: false},
+		{origin: "https://app.example.com/base", allowLoopback: false, ok: false},
 	} {
 		origin, err := url.Parse(tc.origin)
 		require.NoError(t, err)
