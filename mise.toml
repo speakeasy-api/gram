@@ -134,7 +134,7 @@ GRAM_ENVIRONMENT = "local"
 GRAM_HOST = "localhost" # Only needed for local development. In production, you should set GRAM_SERVER_URL and GRAM_SITE_URL directly.
 ## Public listener hosts accept IPv4 or bracketed IPv6 literals (e.g. [::1]).
 ## Empty uses wildcard public listeners; health/control listeners use loopback.
-GRAM_BIND_IP = "" # Only needed for local development.
+GRAM_BIND_IP = "127.0.0.1" # Only needed for local development.
 ## Setting this to 1 will run the server and worker in a single process.
 ## This is useful when debugging during local development. It can also be used
 ## for simple production deployments although you are encouraged to run the gram

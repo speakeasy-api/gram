@@ -31,8 +31,8 @@ const keys = new Set<string>([
   ]),
 ]);
 
-for (const bindIP of ["", "100.64.0.1", "[::1]"]) {
-  test(`listener templates render ${bindIP || "default hosts"}`, (t) => {
+for (const bindIP of [config.env.GRAM_BIND_IP, "", "100.64.0.1", "[::1]"]) {
+  test(`listener templates render ${bindIP || "wildcard hosts"}`, (t) => {
     const dir = mkdtempSync(join(tmpdir(), "local-listeners-test-"));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
     const entries = Object.entries(config.env).filter(([key]) => keys.has(key));

@@ -223,11 +223,26 @@ export async function setupTailscale(
   const config = parseTOML(readFileSync(join(root, "mise.toml"), "utf8")) as {
     env: Record<string, unknown>;
   };
-  const dependents = dependentEnvVars(config.env, ["GRAM_HOST"]);
+  const bindAddress = isIP(address) === 6 ? `[${address}]` : address;
+  const dependents = [
+    ...dependentEnvVars(config.env, ["GRAM_HOST"]),
+    ...dependentEnvVars(config.env, ["GRAM_BIND_IP"]).map(
+      ([key, value]): [string, string] => {
+        const saved = local.env?.[key];
+        // Templates follow the shared config; literal listener overrides are
+        // developer-owned and remain intact when setup is refreshed.
+        return [
+          key,
+          saved !== undefined && !saved.includes("{{") ? saved : value,
+        ];
+      },
+    ),
+  ];
   const savedHosts = new Set(commaList(local.env?.["GRAM_SSL_EXTRA_HOSTS"]));
   if (
     !force &&
     local.env?.["GRAM_HOST"] === hostname &&
+    local.env?.["GRAM_BIND_IP"] === bindAddress &&
     [hostname, ...ips].every((host) => savedHosts.has(host)) &&
     dependents.every(([key, value]) => local.env?.[key] === value)
   ) {
@@ -244,7 +259,7 @@ export async function setupTailscale(
     options.prompt ??
     ((host, ip) =>
       confirm({
-        message: `Configure local development for ${host} (${ip}) over Tailscale?`,
+        message: `Configure local development for ${host} over Tailscale and bind public services to ${ip}?`,
         initialValue: false,
       }))
   )(hostname, address);
@@ -275,6 +290,7 @@ export async function setupTailscale(
 
   const settings: [string, string][] = [
     ["GRAM_HOST", hostname],
+    ["GRAM_BIND_IP", bindAddress],
     ...dependents,
     [
       "GRAM_SSL_EXTRA_HOSTS",
