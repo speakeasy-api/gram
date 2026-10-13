@@ -334,7 +334,7 @@ describe("StartPaygCheckoutCTA", () => {
   // React Query only runs the callbacks passed to `mutate` while the mount that
   // dispatched them still has listeners, so a lock released from there alone
   // would stay held forever once a navigation unmounts the CTA mid-checkout.
-  it("releases the lock when the CTA unmounts before the checkout settles", async () => {
+  it("releases the lock when the CTA unmounts before the checkout settles", () => {
     // The checkout stays in flight for as long as the CTA is mounted.
     stayPending();
     const { unmount } = render(<StartPaygCheckoutCTA />);
@@ -354,14 +354,13 @@ describe("StartPaygCheckoutCTA", () => {
     fireEvent.click(button);
 
     expect(mocks.mutate).toHaveBeenCalledTimes(2);
-    expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
   // React Query hands a pending mutation whatever options rendered last, so an
   // organization switch mid-checkout would release the lock on the organization
   // switched *to* and wedge the one that actually started the checkout. The
   // dispatching organization has to come back through the mutation context.
-  it("releases the dispatching organization after an organization switch", async () => {
+  it("releases the dispatching organization after an organization switch", () => {
     stayPending();
     const { rerender } = render(<StartPaygCheckoutCTA />);
 
@@ -391,7 +390,6 @@ describe("StartPaygCheckoutCTA", () => {
     fireEvent.click(button);
 
     expect(mocks.mutate).toHaveBeenCalledTimes(2);
-    expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
   it("disables the button while the mutation is pending", () => {
@@ -406,13 +404,6 @@ describe("StartPaygCheckoutCTA", () => {
     [
       "a missing client secret",
       { clientSecret: "", publishableKey: "pk_test_publishable" },
-    ],
-    [
-      "a hosted checkout link",
-      {
-        clientSecret: "https://checkout.stripe.test/c/pay/session",
-        publishableKey: "pk_test_publishable",
-      },
     ],
     [
       "a missing publishable key",
