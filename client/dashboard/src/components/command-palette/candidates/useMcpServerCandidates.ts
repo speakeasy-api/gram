@@ -6,6 +6,7 @@ import {
   mcpServerVisibilityUpdateForm,
 } from "@/lib/mcp-server-visibility";
 import { mcpServerRouteParam } from "@/lib/sources";
+import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { useRoutes } from "@/routes";
 import type {
   McpServer,
@@ -152,8 +153,17 @@ export function useMcpServerCandidates({
       void invalidateMcpServerQueries(queryClient).catch(() => {});
     };
 
-    const setVisibility = (server: McpServer, verb: Verb) =>
-      applyVisibility(server, verb === "enable" ? "private" : "disabled", true);
+    // A hosted server keeps its public flag on the toolset while disabled, so enabling restores it.
+    const setVisibility = (
+      server: McpServer,
+      verb: Verb,
+      hostedPublic = false,
+    ) =>
+      applyVisibility(
+        server,
+        verb === "disable" ? "disabled" : hostedPublic ? "public" : "private",
+        true,
+      );
 
     const toolsetCandidates: LauncherCandidate[] = toolsets.map((toolset) => {
       const linked = byToolsetId.get(toolset.id);
@@ -168,7 +178,11 @@ export function useMcpServerCandidates({
         group: GROUP,
         run: (verb) => {
           if (linked && (verb === "enable" || verb === "disable")) {
-            return setVisibility(linked, verb);
+            return setVisibility(
+              linked,
+              verb,
+              isCanonicalHostedWrapper(linked) && toolset.mcpIsPublic === true,
+            );
           }
           routes.mcp.details.goTo(toolset.slug);
         },

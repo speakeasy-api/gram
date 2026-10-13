@@ -40,6 +40,7 @@ import {
   type SourceBackedDeleteTarget,
 } from "./sourceDelete";
 import { invalidateWrapperDeleteAuthViews } from "./sourceInvalidation";
+import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
 
 function ServerControlRow({
   title,
@@ -211,6 +212,8 @@ export function DangerZoneSection({
   };
 
   const enabled = mcpServer.visibility !== "disabled";
+  // The switch has no public state; a hosted server's availability stays on the toolset page.
+  const hostedWrapper = isCanonicalHostedWrapper(mcpServer);
 
   return (
     <>
@@ -242,7 +245,7 @@ export function DangerZoneSection({
                 >
                   <Switch
                     checked={enabled}
-                    disabled={isUpdatingVisibility}
+                    disabled={isUpdatingVisibility || hostedWrapper}
                     aria-label="Enable MCP server"
                     onCheckedChange={requestAvailabilityChange}
                   />
