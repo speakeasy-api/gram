@@ -100,7 +100,6 @@ func TestAHPToolBeforeDeny(t *testing.T) {
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
-	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{Action: "block", PolicyName: "Example policy"}}
 	h, err := ti.service.ahpHandler()
 	require.NoError(t, err)
 
@@ -111,8 +110,11 @@ func TestAHPToolBeforeDeny(t *testing.T) {
 		"deny granted":     {effects: []string{"deny"}, denied: true},
 		"deny not granted": {effects: []string{}, denied: false},
 	} {
+		scanner := &countingBlockScanner{stubResultScanner: stubResultScanner{result: &risk.ScanResult{Action: "block", PolicyName: "Example policy"}}}
+		ti.service.riskScanner = scanner
 		w := ahpRequest(t, h, "hooks/intercept", ahpToolEvent("tool.before"), tc.effects, ahpAuthHeaders)
 		require.Equal(t, http.StatusOK, w.Code, name)
+		require.Equal(t, tc.denied, scanner.scans > 0, "policy is evaluated only when the host can deny: %s", name)
 		require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
 		var response struct {
 			Result struct {
@@ -138,9 +140,26 @@ func TestAHPToolBeforeAllow(t *testing.T) {
 	h, err := ti.service.ahpHandler()
 	require.NoError(t, err)
 
-	w := ahpRequest(t, h, "hooks/intercept", ahpToolEvent("tool.before"), []string{"deny"}, ahpAuthHeaders)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NotContains(t, w.Body.String(), `"deny"`)
+	for name, headers := range map[string]map[string]string{
+		"bearer":           ahpAuthHeaders,
+		"lowercase bearer": {"Authorization": "bearer example", "Gram-Project": "chosen"},
+		"gram key":         {"Gram-Key": "example", "Gram-Project": "chosen"},
+	} {
+		w := ahpRequest(t, h, "hooks/intercept", ahpToolEvent("tool.before"), []string{"deny"}, headers)
+		require.Equal(t, http.StatusOK, w.Code, name)
+		require.NotContains(t, w.Body.String(), `"deny"`, name)
+	}
+}
+
+// countingBlockScanner counts enforcement scans while returning a fixed result.
+type countingBlockScanner struct {
+	stubResultScanner
+	scans int
+}
+
+func (s *countingBlockScanner) ScanForEnforcement(ctx context.Context, req risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+	s.scans++
+	return s.stubResultScanner.ScanForEnforcement(ctx, req)
 }
 
 func TestAHPObservationPersistsWithoutEvaluation(t *testing.T) {
@@ -222,9 +241,14 @@ func TestAHPTurnStartPayload(t *testing.T) {
 			"id": uuid.NewString(), "source": "https://harness.example/runtime", "type": "turn.start", "time": "2026-10-13T08:51:14Z",
 			"harness": map[string]any{"name": "example-harness", "version": "1.2.3"},
 			"trigger": tc.trigger, "turn": map[string]any{"id": "turn-1"},
-			"items": []any{map[string]any{"id": "m1", "role": "user", "parts": []any{
-				map[string]any{"id": "p1", "kind": "text", "selection": "body", "mediaType": "text/plain", "text": "hello"},
-			}}},
+			"items": []any{
+				map[string]any{"id": "m0", "role": "system", "parts": []any{
+					map[string]any{"id": "p0", "kind": "text", "selection": "body", "mediaType": "text/plain", "text": "system context"},
+				}},
+				map[string]any{"id": "m1", "role": "user", "parts": []any{
+					map[string]any{"id": "p1", "kind": "text", "selection": "body", "mediaType": "text/plain", "text": "hello"},
+				}},
+			},
 		}
 		b, err := json.Marshal(raw)
 		require.NoError(t, err)

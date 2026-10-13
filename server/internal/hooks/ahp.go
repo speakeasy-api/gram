@@ -110,7 +110,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 func (s *Service) ahpAuthenticate(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := strings.TrimSpace(r.Header.Get("Gram-Key"))
-		if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+		if scheme, token, ok := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " "); ok && strings.EqualFold(scheme, "Bearer") {
 			key = strings.TrimSpace(token)
 		}
 		project := strings.TrimSpace(r.Header.Get("Gram-Project"))
@@ -224,7 +224,10 @@ func ahpTurnStartPayload(e *ahp.TurnStartEvent) *gen.IngestPayload {
 		return nil
 	}
 	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "prompt.submitted", e.Session, e.Turn.ID)
-	payload.Data.Prompt = &gen.HookPromptData{Text: new(ahpText(e.Items))}
+	userItems := slices.DeleteFunc(slices.Clone(e.Items), func(item *ahp.ModelVisibleItem) bool {
+		return item == nil || item.Role != ahp.ModelVisibleItemRoleUser
+	})
+	payload.Data.Prompt = &gen.HookPromptData{Text: new(ahpText(userItems))}
 	return payload
 }
 
