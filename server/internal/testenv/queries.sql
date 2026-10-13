@@ -1142,7 +1142,9 @@ SET hooks_project_id = sqlc.narg(hooks_project_id),
     hooks_project_organization_id = CASE WHEN sqlc.narg(hooks_project_id)::uuid IS NULL THEN NULL ELSE organization_id END,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
+  AND project_id IS NULL
   AND workload_issuer_id = @workload_issuer_id
+  AND match_kind = 'exact'
   AND subject = @subject
   AND deleted IS FALSE;
 

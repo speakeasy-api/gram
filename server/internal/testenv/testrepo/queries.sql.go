@@ -5994,7 +5994,9 @@ SET hooks_project_id = $1,
     hooks_project_organization_id = CASE WHEN $1::uuid IS NULL THEN NULL ELSE organization_id END,
     updated_at = clock_timestamp()
 WHERE organization_id = $2
+  AND project_id IS NULL
   AND workload_issuer_id = $3
+  AND match_kind = 'exact'
   AND subject = $4
   AND deleted IS FALSE
 `

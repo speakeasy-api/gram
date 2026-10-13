@@ -176,8 +176,8 @@ WHERE organization_id = @organization_id
 -- More than one admission can match a subject, so the row is chosen exactly as
 -- ResolveWorkloadAgentAssignment chooses an agent: exact before wildcard, then
 -- the longer stem. The same live-issuer and wildcard-permission predicates as
--- WorkloadIdentityIsAdmitted apply, so a rule admission ignores cannot bind a
--- project either.
+-- WorkloadIdentityIsAdmitted apply, so disabled wildcard admission also
+-- prevents wildcard rules from binding a project.
 --
 -- hooks_project_live is false when the project was deleted, which binds the
 -- workload to no project rather than to one that no longer exists.

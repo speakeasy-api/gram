@@ -227,6 +227,33 @@ func TestCodex_WorkloadTokenRefusedForAnotherProject(t *testing.T) {
 	requireShareableCode(t, err, oops.CodeForbidden)
 }
 
+// A workload that names no project sends into the one its admission names,
+// even in an organization with several projects it could read.
+func TestCodex_WorkloadWithoutGramProjectUsesItsAdmittedProject(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti, true)
+	otherReadableProject(t, ctx, ti, workload)
+
+	admitted, err := authenticateWorkload(t, ti, "codex", workload.token, "")
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(admitted)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectSlug)
+	require.Equal(t, workload.projectSlug, *authCtx.ProjectSlug)
+}
+
+// With no Gram-Project and no hooks project on its admission, a workload has
+// nowhere to send hooks.
+func TestCodex_WorkloadWithoutGramProjectOrHooksProjectIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti, false)
+
+	_, err := authenticateWorkload(t, ti, "codex", workload.token, "")
+	requireShareableCode(t, err, oops.CodeForbidden)
+}
+
 // A workload whose admission names no hooks project carries no hooks grant, so
 // its hooks are refused even for a project its agent may send to.
 func TestCursor_WorkloadWithoutAHooksProjectIsRefused(t *testing.T) {
@@ -349,4 +376,12 @@ func TestJWTAuth_DeploymentWithoutTokensRecordsTheRefusal(t *testing.T) {
 	refusedCtx, err := ti.service.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "cursor"), token, workloadTokenScheme)
 	requireShareableCode(t, err, oops.CodeUnauthorized)
 	require.ErrorContains(t, deviceagenttoken.AuthFailure(refusedCtx), "does not accept device-agent tokens")
+
+	// The key requirement Goa tries next, with no key, reports the refusal
+	// rather than a missing key.
+	_, err = ti.service.APIKeyAuth(refusedCtx, "", &security.APIKeyScheme{
+		Name: constants.KeySecurityScheme, Scopes: []string{}, RequiredScopes: []string{"hooks"},
+	})
+	require.ErrorContains(t, err, "device-agent token refused")
+	require.ErrorContains(t, err, "does not accept device-agent tokens")
 }

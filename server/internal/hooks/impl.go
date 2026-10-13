@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -338,18 +340,24 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	if err != nil {
 		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
 	}
-	if schema.Name != constants.KeySecurityScheme || !isAgentActor(ctx) {
+	if !isAgentActor(ctx) {
 		return ctx, nil
 	}
 
-	// Agent-principal keys may only reach the ingestion methods.
-	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
-	case "cursor", "codex", "logs", "metrics":
-	default:
-		return ctx, oops.C(oops.CodeForbidden)
-	}
-	if err := s.requireAgentHooksIngest(ctx); err != nil {
-		return ctx, err
+	switch schema.Name {
+	case constants.KeySecurityScheme:
+		// Agent-principal keys may only reach the ingestion methods.
+		switch method, _ := ctx.Value(goa.MethodKey).(string); method {
+		case "cursor", "codex", "logs", "metrics":
+		default:
+			return ctx, oops.C(oops.CodeForbidden)
+		}
+	case constants.ProjectSlugSecuritySchema:
+		// Every method an agent key reaches pairs the key with this scheme, so
+		// the project-scoped hooks check runs here, once the project resolves.
+		if err := s.requireAgentHooksIngest(ctx); err != nil {
+			return ctx, err
+		}
 	}
 	return ctx, nil
 }
@@ -362,7 +370,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // A request with no device-agent token returns unchanged for the API key
 // requirement Goa tries next.
 func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
-	if token == "" || !deviceagenttoken.IsToken(token) {
+	if token == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if !deviceagenttoken.IsToken(token) {
+		// A bearer is presented but is not a device-agent token.
+		deviceagenttoken.MarkInvalidToken(ctx)
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	if s.deviceAgentTokens == nil {
@@ -391,6 +404,15 @@ func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, sche
 	if _, ok := deviceagenttoken.AssignedAgentFromContext(ctx); !ok {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
+	// A device that names no project sends into the one its admission names.
+	// An explicit Gram-Project is still checked against that bound below.
+	if strings.TrimSpace(key) == "" {
+		slug, err := s.admittedHooksProjectSlug(ctx)
+		if err != nil {
+			return deviceagenttoken.WithAuthFailure(ctx, err), err
+		}
+		key = slug
+	}
 
 	authorized, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
@@ -403,6 +425,25 @@ func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, sche
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
 	return authorized, nil
+}
+
+// admittedHooksProjectSlug returns the slug of the hooks project the
+// workload's admission names. A workload with none is refused, since there is
+// no project its hooks may be sent to.
+func (s *Service) admittedHooksProjectSlug(ctx context.Context) (string, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	projectID, hasProject := deviceagenttoken.HooksProject(ctx)
+	if !ok || authCtx == nil || !hasProject {
+		return "", oops.E(oops.CodeForbidden, nil, "hooks must name the project they are sent to")
+	}
+	project, err := projectsRepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsRepo.GetProjectByIDAndOrganizationIDParams{
+		ID:             projectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return "", oops.E(oops.CodeForbidden, err, "the admission's hooks project is unavailable")
+	}
+	return project.Slug, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {

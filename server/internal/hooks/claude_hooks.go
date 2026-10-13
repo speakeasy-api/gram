@@ -702,9 +702,6 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 		}
 		return ctx, fmt.Errorf("authorize hook api key: %w", err)
 	}
-	if err := s.requireAgentHooksIngest(ctx); err != nil {
-		return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
-	}
 	projectScheme := &security.APIKeyScheme{
 		Name:           constants.ProjectSlugSecuritySchema,
 		Scopes:         []string{},
@@ -716,6 +713,11 @@ func (s *Service) authorizePluginRequest(ctx context.Context, key, projectSlug s
 			return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
 		}
 		return ctx, fmt.Errorf("authorize hook project slug: %w", err)
+	}
+	// The hooks grant may be bounded to one project, so it is checked only
+	// once the project slug has resolved.
+	if err := s.requireAgentHooksIngest(ctx); err != nil {
+		return ctx, fmt.Errorf("%w: %w", errAgentHooksDenied, err)
 	}
 	return ctx, nil
 }

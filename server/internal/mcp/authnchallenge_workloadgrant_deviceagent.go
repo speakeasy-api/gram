@@ -116,6 +116,12 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	presented.issuerURL = unverified.Issuer
 	presented.subject = unverified.Subject
 
+	// Decided before any organization lookup, so whether the grant is served
+	// never depends on, or reveals, which organizations exist.
+	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, logger); refused {
+		return err
+	}
+
 	organizationID := chi.URLParam(r, deviceagenttoken.TokenPathOrganizationParam)
 	if !validPathOrganizationID(organizationID) {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("organization_unknown", errors.New("the path names no organization")))
@@ -139,10 +145,6 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	// is issued; the refusal looks like any other bad assertion.
 	if org.DisabledAt.Valid {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("organization_unknown", errors.New("the organization is disabled")))
-	}
-
-	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, logger); refused {
-		return err
 	}
 
 	tenancy := workloadTenancy{

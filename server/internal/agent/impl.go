@@ -161,7 +161,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // A request with no device-agent token returns unchanged for the API key
 // requirement Goa tries next.
 func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
-	if token == "" || !deviceagenttoken.IsToken(token) {
+	if token == "" {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if !deviceagenttoken.IsToken(token) {
+		// A bearer is presented but is not a device-agent token.
+		deviceagenttoken.MarkInvalidToken(ctx)
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	if s.deviceAgentTokens == nil {

@@ -173,7 +173,12 @@ func IsToken(raw string) bool {
 	if err != nil {
 		return false
 	}
-	return token.Header["typ"] == TokenType
+	// A typ that is present but not a string is treated as this token too, so
+	// it reaches the validator and is refused there rather than passing for
+	// some other credential.
+	typ, present := token.Header["typ"]
+	_, isString := typ.(string)
+	return (present && !isString) || typ == TokenType
 }
 
 // Authenticate verifies raw and returns a context authenticated as its
@@ -229,12 +234,25 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 		AccountType: org.GramAccountType, HasActiveSubscription: false, Whitelisted: org.Whitelisted, ProjectSlug: nil,
 		APIKeyScopes: nil, IsAdmin: false, SupportOrganizationID: "",
 	}
-	return contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, principal, contextvalues.PrincipalCredential{
+	authed := contextvalues.WithPrincipalCredentialAuthorization(ctx, ac, principal, contextvalues.PrincipalCredential{
 		// A workload records no approving human.
 		AuthorizerUserID:       "",
 		DelegatedGrants:        ceiling,
 		DelegatedGrantsVersion: version,
-	}), nil
+	})
+	if hooksProjectID.Valid {
+		authed = context.WithValue(authed, hooksProjectKey{}, hooksProjectID.UUID)
+	}
+	return authed, nil
+}
+
+type hooksProjectKey struct{}
+
+// HooksProject returns the hooks project the workload's admission names, as
+// read when its token was authenticated for this request.
+func HooksProject(ctx context.Context) (uuid.UUID, bool) {
+	id, ok := ctx.Value(hooksProjectKey{}).(uuid.UUID)
+	return id, ok
 }
 
 // AssignedAgent is the agent an authenticated workload acts as.
@@ -246,41 +264,27 @@ type AssignedAgent struct {
 	Agent agentsrepo.Agent
 }
 
-// ResolveAssignedAgent returns the agent the authenticated workload in ctx is
-// assigned to. Call it after admission, which has already refused a workload
-// whose agent is missing, suspended, revoked, or awaiting an owner.
-func (i *Issuer) ResolveAssignedAgent(ctx context.Context) (AssignedAgent, error) {
+// admittedAgent returns the agent whose policy admission granted the workload
+// in ctx. It reads the agent admission recorded rather than resolving the
+// assignment again, so an assignment that changes mid-request cannot pair one
+// agent's grants with another agent's identity. The row is loaded only for the
+// agent's name.
+func (i *Issuer) admittedAgent(ctx context.Context) (AssignedAgent, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
-	if !ok || authCtx == nil || !hasActor || actor.Type != urn.PrincipalTypeWorkload {
+	if !ok || authCtx == nil || !IsWorkloadActor(ctx) {
 		return AssignedAgent{}, oops.C(oops.CodeUnauthorized)
 	}
-	workloadIssuerID, subject, err := actor.Workload()
-	if err != nil {
+	principal, ok := contextvalues.EffectiveAgent(ctx)
+	if !ok {
 		return AssignedAgent{}, oops.C(oops.CodeUnauthorized)
 	}
-
-	agentID, assigned, err := workloadidentity.ResolveAssignedAgent(ctx, i.db, workloadidentity.AssignmentParams{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		WorkloadIssuerID: workloadIssuerID,
-		Subject:          subject,
-	})
-	if err != nil {
-		return AssignedAgent{}, fmt.Errorf("resolve workload agent assignment: %w", err)
-	}
-	if !assigned {
-		return AssignedAgent{}, oops.C(oops.CodeUnauthorized)
-	}
-
-	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String())
 	agent, err := agents.ResolvePrincipal(ctx, i.db, authCtx.ActiveOrganizationID, principal)
 	switch {
 	case errors.Is(err, agents.ErrPrincipalInvalid), errors.Is(err, agents.ErrPrincipalNotFound):
 		return AssignedAgent{}, oops.C(oops.CodeUnauthorized)
 	case err != nil:
-		return AssignedAgent{}, fmt.Errorf("resolve assigned agent: %w", err)
+		return AssignedAgent{}, fmt.Errorf("resolve admitted agent: %w", err)
 	}
-
 	return AssignedAgent{Principal: principal, Agent: agent}, nil
 }
 
@@ -314,14 +318,13 @@ func (i *Issuer) Admit(ctx context.Context, raw string, engine *authz.Engine) (_
 		return ctx, AssignedAgent{}, oops.E(oops.CodeUnexpected, err, "admit device-agent token")
 	}
 
-	agent, err := i.ResolveAssignedAgent(admitted)
+	agent, err := i.admittedAgent(admitted)
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code != oops.CodeUnexpected {
 			return ctx, AssignedAgent{}, err
 		}
 		return ctx, AssignedAgent{}, oops.E(oops.CodeUnexpected, err, "resolve device-agent token agent")
 	}
-	admitted = contextvalues.WithWorkloadAgent(admitted, agent.Principal)
 	return context.WithValue(admitted, assignedAgentKey{}, agent), agent, nil
 }
 
@@ -373,8 +376,10 @@ func AuthFailure(ctx context.Context) error {
 // Wrap only the handlers that accept device-agent tokens.
 func BearerChallenge(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
-		if !ok || !strings.EqualFold(scheme, "Bearer") || !IsToken(token) {
+		// Any bearer presented here is meant for this route, so a refusal of a
+		// mis-shaped or non-device-agent bearer is challenged as well.
+		scheme, token, ok := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
+		if !ok || !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(token) == "" {
 			next.ServeHTTP(w, r)
 			return
 		}

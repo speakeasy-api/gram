@@ -165,8 +165,9 @@ func AuthenticatedActor(ctx context.Context) (urn.Principal, bool) {
 
 type workloadAgentKey struct{}
 
-// WithWorkloadAgent records the agent an admitted workload acts for. Only the
-// path that admitted the workload may set it; the workload stays the actor.
+// WithWorkloadAgent records the agent an admitted workload acts for. Only
+// workload admission sets it, with the agent whose policy it admitted; the
+// workload stays the actor.
 func WithWorkloadAgent(ctx context.Context, agent urn.Principal) context.Context {
 	return context.WithValue(ctx, workloadAgentKey{}, agent)
 }

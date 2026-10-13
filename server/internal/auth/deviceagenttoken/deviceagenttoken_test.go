@@ -1,6 +1,7 @@
 package deviceagenttoken_test
 
 import (
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,6 +43,15 @@ func TestIsToken_RecognizesOnlyDeviceAgentTokens(t *testing.T) {
 	require.True(t, deviceagenttoken.IsToken(mintToken(t)))
 	require.False(t, deviceagenttoken.IsToken("not-a-jwt"))
 	require.False(t, deviceagenttoken.IsToken(""))
+
+	// A typ that is present but not a string is treated as this token, so it is
+	// refused by the validator instead of passing for another credential.
+	numericTyp := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":7}`)) + "." +
+		base64.RawURLEncoding.EncodeToString([]byte(`{}`)) + ".c2ln"
+	require.True(t, deviceagenttoken.IsToken(numericTyp))
+	untyped := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256"}`)) + "." +
+		base64.RawURLEncoding.EncodeToString([]byte(`{}`)) + ".c2ln"
+	require.False(t, deviceagenttoken.IsToken(untyped))
 }
 
 func TestNew_NilSignerServesNothing(t *testing.T) {
@@ -126,6 +136,26 @@ func TestBearerChallenge_ChallengesARefusedDeviceAgentToken(t *testing.T) {
 	}
 }
 
+// Any bearer presented on these routes is challenged when refused, including a
+// bearer that is not a device-agent token and one wrapped in whitespace.
+func TestBearerChallenge_ChallengesAnyRefusedBearer(t *testing.T) {
+	t.Parallel()
+
+	for _, authorization := range []string{
+		"Bearer not-a-device-agent-token",
+		"  bearer  " + mintToken(t) + "  ",
+	} {
+		handler := deviceagenttoken.BearerChallenge(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		}))
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/rpc/agent.getPlugins", nil)
+		req.Header.Set("Authorization", authorization)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		require.Equal(t, "Bearer", w.Header().Get("WWW-Authenticate"), authorization)
+	}
+}
+
 func TestBearerChallenge_LeavesOtherRequestsAlone(t *testing.T) {
 	t.Parallel()
 
@@ -135,7 +165,8 @@ func TestBearerChallenge_LeavesOtherRequestsAlone(t *testing.T) {
 		status        int
 	}{
 		{name: "no authorization", authorization: "", status: http.StatusUnauthorized},
-		{name: "other bearer", authorization: "Bearer not-a-device-agent-token", status: http.StatusUnauthorized},
+		{name: "another scheme", authorization: "Basic dXNlcjpwYXNz", status: http.StatusUnauthorized},
+		{name: "empty bearer", authorization: "Bearer   ", status: http.StatusUnauthorized},
 		{name: "success", authorization: "Bearer " + mintToken(t), status: http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
