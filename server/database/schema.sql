@@ -10384,6 +10384,13 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   remote_session_ema_binding_id uuid,
   ema_binding_generation bigint,
   trusted_issuer_session_id uuid,
+  -- NULL marks credentials written before provider provenance was introduced.
+  ema_provider TEXT,
+  internal_session_issuer_id uuid,
+  internal_session_issuer_updated_at timestamptz,
+  internal_session_issuer_key_id uuid,
+  sso_sign_in_id uuid,
+  user_session_id uuid,
   requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   access_token_encrypted TEXT,
@@ -10403,6 +10410,10 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   CONSTRAINT remote_session_ema_credentials_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_binding_id_fkey FOREIGN KEY (remote_session_ema_binding_id) REFERENCES remote_session_ema_bindings (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_internal_session_issuer_id_fkey FOREIGN KEY (internal_session_issuer_id) REFERENCES internal_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_internal_session_issuer_key_id_fkey FOREIGN KEY (internal_session_issuer_key_id) REFERENCES json_web_keys (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_sso_sign_in_id_fkey FOREIGN KEY (sso_sign_in_id) REFERENCES sso_sign_ins (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_user_session_id_fkey FOREIGN KEY (user_session_id) REFERENCES user_sessions (id) ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_trusted_issuer_session_id_fkey FOREIGN KEY (trusted_issuer_session_id) REFERENCES trusted_issuer_sessions (id) ON DELETE SET NULL
 );
 
@@ -10422,6 +10433,10 @@ CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_binding_id_idx
 ON remote_session_ema_credentials (remote_session_ema_binding_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_trusted_issuer_session_id_idx
 ON remote_session_ema_credentials (trusted_issuer_session_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_internal_session_issuer_id_idx ON remote_session_ema_credentials (internal_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_internal_session_issuer_key_id_idx ON remote_session_ema_credentials (internal_session_issuer_key_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_sso_sign_in_id_idx ON remote_session_ema_credentials (sso_sign_in_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_user_session_id_idx ON remote_session_ema_credentials (user_session_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_access_expires_at_idx
 ON remote_session_ema_credentials (access_expires_at, id);
 
