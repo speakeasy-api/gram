@@ -619,7 +619,7 @@ var AddPluginServerForm = Type("AddPluginServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.")
+		Description("Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {

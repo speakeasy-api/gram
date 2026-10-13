@@ -975,6 +975,14 @@ type serverBackend struct {
 }
 
 func parseServerBackend(toolsetID, mcpServerID, metaMcpServerID *string) (serverBackend, error) {
+	// A hosted entry echoed from a read carries both ids, equal; it names the toolset.
+	if toolsetID != nil && mcpServerID != nil {
+		if t, err := uuid.Parse(*toolsetID); err == nil {
+			if m, err := uuid.Parse(*mcpServerID); err == nil && t == m {
+				mcpServerID = nil
+			}
+		}
+	}
 	count := 0
 	for _, id := range []*string{toolsetID, mcpServerID, metaMcpServerID} {
 		if id != nil && *id != "" {

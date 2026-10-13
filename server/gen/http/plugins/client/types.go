@@ -40,7 +40,8 @@ type UpdatePluginRequestBody struct {
 type AddPluginServerRequestBody struct {
 	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
 	// Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
-	// meta_mcp_server_id.
+	// meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may
+	// both be sent when equal.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// Speakeasy MCP server ID. Provide exactly one backend ID.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`

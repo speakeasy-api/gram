@@ -112,7 +112,8 @@ type AddPluginServerPayload struct {
 	ProjectSlugInput *string
 	PluginID         string
 	// Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
-	// meta_mcp_server_id.
+	// meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may
+	// both be sent when equal.
 	ToolsetID *string
 	// Speakeasy MCP server ID. Provide exactly one backend ID.
 	McpServerID *string

@@ -131,4 +131,17 @@ func TestGetPluginEndpointlessWrapperKeepsToolsetSlugUnderEitherKey(t *testing.T
 	for _, server := range got.Servers {
 		require.Equal(t, "mcp_server", server.Backend)
 	}
+
+	// The member-facing projection resolves the same fallback.
+	member, err := platformrepo.New(conn).ListPlatformMCPPluginServers(ctx, platformrepo.ListPlatformMCPPluginServersParams{
+		PluginID: plugin.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, ResultLimit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, member, 3)
+	require.Equal(t, toolsetKeyed.McpSlug.String, member[0].McpSlug)
+	require.Equal(t, serverKeyed.McpSlug.String, member[1].McpSlug)
+	require.Empty(t, member[2].McpSlug)
+	for _, row := range member {
+		require.False(t, row.ToolsetBacked)
+	}
 }
