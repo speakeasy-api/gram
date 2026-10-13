@@ -224,9 +224,7 @@ describe("Speakeasy identity provider card", () => {
         name: "Enable Enterprise Managed Authorization",
       }),
     ).toBeNull();
-    expect(
-      screen.getByText(/check availability and your verified domain/),
-    ).toBeTruthy();
+    expect(screen.getByText(/check availability and your plan/)).toBeTruthy();
   });
 
   it.each(["rollout is disabled", "status lookup failed"])(
@@ -288,6 +286,21 @@ describe("Speakeasy identity provider card", () => {
       ).toBeNull();
     },
   );
+
+  it("says the plan is missing when the organization lacks the entitlement", () => {
+    mocks.issuer = {
+      keys: [],
+      kmsCleanupPending: 0,
+      state: "entitlement_required",
+      canEnable: false,
+    };
+    show();
+    expect(screen.getByText("Not on your plan")).toBeTruthy();
+    expect(
+      screen.getByText(/isn't included in your organization's plan/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/verified domain|single sign-on/i)).toBeNull();
+  });
 
   it("keeps the shared demo read-only", () => {
     mocks.issuer = enabledIssuer;

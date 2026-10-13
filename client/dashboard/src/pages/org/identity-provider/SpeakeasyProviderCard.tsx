@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import { invalidateAllInternalSessionIssuer } from "@gram/client/react-query/internalSessionIssuer.js";
@@ -34,7 +33,7 @@ const STATE_BADGE: Record<
   disabled: { label: "Off", variant: "neutral" },
   setup_required: { label: "Off", variant: "neutral" },
   entitlement_required: {
-    label: "Needs a verified domain",
+    label: "Not on your plan",
     variant: "neutral",
   },
   signing_paused: { label: "Paused", variant: "warning" },
@@ -248,24 +247,17 @@ function IssuerStatus({
     case "setup_required":
       message = issuer.canEnable
         ? "Enable Enterprise Managed Authorization to create your organization's issuer."
-        : "Enterprise Managed Authorization cannot be enabled right now. Contact your Speakeasy administrator to check availability and your verified domain.";
+        : "Enterprise Managed Authorization cannot be enabled right now. Contact your Speakeasy administrator to check availability and your plan.";
       break;
     case "disabled":
       message = issuer.canEnable
         ? "Enterprise Managed Authorization is disabled. Re-enable it to restore automatic authorization."
-        : "Enterprise Managed Authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and your verified domain.";
+        : "Enterprise Managed Authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and your plan.";
       break;
     case "entitlement_required":
-      return (
-        <Text small muted role="status">
-          Enterprise Managed Authorization needs a verified domain for your
-          organization.{" "}
-          <Link to="?tab=sso" className="underline underline-offset-2">
-            Verify a domain
-          </Link>
-          , or contact your Speakeasy administrator.
-        </Text>
-      );
+      message =
+        "Enterprise Managed Authorization isn't included in your organization's plan. Contact your Speakeasy administrator to enable it.";
+      break;
     case "signing_paused":
       message =
         "Enterprise Managed Authorization is temporarily paused. Contact your Speakeasy administrator for help.";
