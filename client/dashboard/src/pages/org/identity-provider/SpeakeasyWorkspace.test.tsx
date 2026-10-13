@@ -425,7 +425,7 @@ describe("Speakeasy identity provider page", () => {
     const dialog = within(screen.getByRole("dialog"));
     expect(
       dialog.getByText(
-        /publishes a new key now.*activates automatically within the hour/,
+        /publishes a new key now.*activates automatically within about an hour/,
       ),
     ).toBeTruthy();
     fireEvent.click(dialog.getByRole("button", { name: "Rotate key" }));
@@ -449,7 +449,7 @@ describe("Speakeasy identity provider page", () => {
     show();
     expect(
       screen.getByText(
-        /New key publishing\. From .+ it activates automatically within the hour/,
+        /New key published\. From .+ it activates automatically within the hour/,
       ),
     ).toBeTruthy();
     const button = screen.getByRole("button", { name: "Rotate key" });
@@ -469,7 +469,7 @@ describe("Speakeasy identity provider page", () => {
       rotationReadyAt: new Date(Date.now() - 1_000),
     };
     show();
-    expect(screen.queryByText(/New key publishing/)).toBeNull();
+    expect(screen.queryByText(/New key published\./)).toBeNull();
     expect(
       screen.getByText(
         /The new key is published and activates automatically within the hour/,

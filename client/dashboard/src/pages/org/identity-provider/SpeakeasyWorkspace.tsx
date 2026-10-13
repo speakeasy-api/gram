@@ -271,7 +271,7 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                   )}
                   {issuer.state === "enabled" && rotationWaiting && (
                     <Text small muted role="status">
-                      New key publishing. From {formatReadyAt(readyAt!)} it
+                      New key published. From {formatReadyAt(readyAt!)} it
                       activates automatically within the hour, or sooner with
                       Activate new key. Speakeasy keeps signing with the current
                       key until then.
@@ -422,9 +422,10 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
         description={
           <>
             Speakeasy publishes a new key now and keeps signing with the current
-            one. The new key activates automatically within the hour, or you can
-            activate it here after a couple of minutes. The old key stays
-            published for a short overlap, so services keep working throughout.
+            one. The new key activates automatically within about an hour, or
+            you can activate it here after a couple of minutes. The old key
+            stays published for a short overlap, so services keep working
+            throughout.
           </>
         }
         isPending={rotate.isPending}
