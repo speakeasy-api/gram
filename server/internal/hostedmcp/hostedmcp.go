@@ -89,6 +89,16 @@ func LockDomains(ctx context.Context, tx pgx.Tx, organizationID string, ids ...u
 
 // Sync mirrors a locked toolset onto its canonical wrapper; returned domains need a post-commit reconcile.
 func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset, requested *networkaccess.Mode) ([]uuid.UUID, error) {
+	return syncHosted(ctx, tx, auditLogger, actor, toolset, requested, true)
+}
+
+// SyncDeferringIssuerResync is Sync without the project-wide remote-session issuer resync; the caller must
+// run remotesessions.ResyncMCPServerRemoteSessionIssuers for the old and new issuers before commit.
+func SyncDeferringIssuerResync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error) {
+	return syncHosted(ctx, tx, auditLogger, actor, toolset, nil, false)
+}
+
+func syncHosted(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset, requested *networkaccess.Mode, resync bool) ([]uuid.UUID, error) {
 	principal, ok := actor.principal(ctx)
 	if auditLogger == nil || !ok {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
@@ -190,7 +200,7 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP creation")
 		}
-		if err := resyncIssuers(ctx, tx, toolset, toolset.UserSessionIssuerID); err != nil {
+		if err := resyncIssuersIf(ctx, tx, resync, toolset, toolset.UserSessionIssuerID); err != nil {
 			return nil, err
 		}
 	case canonical.Name.String != toolset.Name || canonical.Slug != toolset.McpSlug || canonical.Visibility != wantVisibility ||
@@ -216,7 +226,7 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 			return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP update")
 		}
 		if previous.UserSessionIssuerID != toolset.UserSessionIssuerID {
-			if err := resyncIssuers(ctx, tx, toolset, previous.UserSessionIssuerID, toolset.UserSessionIssuerID); err != nil {
+			if err := resyncIssuersIf(ctx, tx, resync, toolset, previous.UserSessionIssuerID, toolset.UserSessionIssuerID); err != nil {
 				return nil, err
 			}
 		}
@@ -485,6 +495,13 @@ func displayName(server mcpserversrepo.McpServer) string {
 
 func isRoot(endpoint mcpendpointsrepo.McpEndpoint) bool {
 	return endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool
+}
+
+func resyncIssuersIf(ctx context.Context, tx pgx.Tx, enabled bool, toolset toolsetsrepo.Toolset, issuers ...uuid.NullUUID) error {
+	if !enabled {
+		return nil
+	}
+	return resyncIssuers(ctx, tx, toolset, issuers...)
 }
 
 // resyncIssuers recomputes the derived remote_session_issuer_id for each issuer touched.

@@ -515,7 +515,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list MCP server projects for issuer migration").LogError(ctx, logger)
 	}
-	if err := migrateHostedToolsetsToUserSessionIssuer(ctx, logger, dbtx, s.audit, authCtx, source.ID, target.ID); err != nil {
+	if err := migrateHostedToolsetsToUserSessionIssuer(ctx, logger, dbtx, s.audit, s.hostedSync, authCtx, source.ID, target.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "migrate hosted MCP servers").LogError(ctx, logger)
 	}
 	ownerUpdates := []struct {
@@ -572,7 +572,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 // migrateHostedToolsetsToUserSessionIssuer moves each hosted toolset like a toolset save: column write, then wrapper Sync with its audit.
 // Sync runs only where it would change nothing but the issuer; every other wrapper keeps the bulk issuer update, as before.
 // Lock order matches UpdateToolset: toolsets in id order, then their domains in one sorted pass, then each wrapper's endpoints and row.
-func migrateHostedToolsetsToUserSessionIssuer(ctx context.Context, logger *slog.Logger, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, sourceID, targetID uuid.UUID) error {
+func migrateHostedToolsetsToUserSessionIssuer(ctx context.Context, logger *slog.Logger, tx pgx.Tx, auditLogger *audit.Logger, syncWrapper HostedSyncFunc, authCtx *contextvalues.AuthContext, sourceID, targetID uuid.UUID) error {
 	toolsets := toolsetsrepo.New(tx)
 	locked, err := toolsets.LockHostedToolsetsByUserSessionIssuer(ctx, toolsetsrepo.LockHostedToolsetsByUserSessionIssuerParams{
 		OrganizationID: authCtx.ActiveOrganizationID, UserSessionIssuerID: sourceID,
@@ -619,7 +619,12 @@ func migrateHostedToolsetsToUserSessionIssuer(ctx context.Context, logger *slog.
 		if err != nil {
 			return fmt.Errorf("lock hosted MCP server %s: %w", toolset.ID, err)
 		}
-		if drift := hostedmcp.NonIssuerDrift(toolset, wrapper, wrapperEndpoints, dead); len(drift) > 0 {
+		drift := hostedmcp.NonIssuerDrift(toolset, wrapper, wrapperEndpoints, dead)
+		// Only wrappers the bulk update would move take Sync; one on another issuer stays where it is.
+		if wrapper.UserSessionIssuerID != conv.ToNullUUID(sourceID) {
+			drift = append(drift, "user_session_issuer")
+		}
+		if len(drift) > 0 {
 			logger.WarnContext(ctx, "hosted MCP server drifted from its toolset; issuer migration leaves it to the issuer-only update", attr.SlogToolsetID(toolset.ID.String()), attr.SlogReason(strings.Join(drift, ",")))
 			skipped[toolset.ID] = true
 		}
@@ -627,7 +632,7 @@ func migrateHostedToolsetsToUserSessionIssuer(ctx context.Context, logger *slog.
 	actor := hostedmcp.Actor{UserID: authCtx.UserID, Email: authCtx.Email, System: ""}
 	// One savepoint per attempt, not per toolset, keeps the subtransaction count bounded.
 	for attempt := 0; attempt < maxHostedSyncAttempts; attempt++ {
-		rejected, err := syncHostedToolsetsInSavepoint(ctx, tx, auditLogger, actor, updated, skipped)
+		rejected, err := syncHostedToolsetsInSavepoint(ctx, tx, auditLogger, syncWrapper, actor, updated, skipped)
 		if err != nil {
 			return err
 		}
@@ -643,6 +648,9 @@ func migrateHostedToolsetsToUserSessionIssuer(ctx context.Context, logger *slog.
 
 const maxHostedSyncAttempts = 4
 
+// HostedSyncFunc syncs one hosted wrapper during an issuer migration; the migration's per-project pass resyncs remote issuers.
+type HostedSyncFunc func(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor hostedmcp.Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error)
+
 var errHostedSyncClearedRoot = errors.New("hosted MCP sync would clear a custom domain root")
 
 type hostedSyncRejection struct {
@@ -651,7 +659,7 @@ type hostedSyncRejection struct {
 }
 
 // syncHostedToolsetsInSavepoint syncs every non-skipped toolset, rolling all of them back on the first rejection.
-func syncHostedToolsetsInSavepoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor hostedmcp.Actor, toolsets []toolsetsrepo.Toolset, skipped map[uuid.UUID]bool) (*hostedSyncRejection, error) {
+func syncHostedToolsetsInSavepoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, syncWrapper HostedSyncFunc, actor hostedmcp.Actor, toolsets []toolsetsrepo.Toolset, skipped map[uuid.UUID]bool) (*hostedSyncRejection, error) {
 	savepoint, err := tx.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin hosted MCP sync savepoint: %w", err)
@@ -660,7 +668,7 @@ func syncHostedToolsetsInSavepoint(ctx context.Context, tx pgx.Tx, auditLogger *
 		if skipped[toolset.ID] {
 			continue
 		}
-		cleared, syncErr := hostedmcp.Sync(ctx, savepoint, auditLogger, actor, toolset, nil)
+		cleared, syncErr := syncWrapper(ctx, savepoint, auditLogger, actor, toolset)
 		if syncErr == nil && len(cleared) > 0 {
 			syncErr = errHostedSyncClearedRoot
 		}
