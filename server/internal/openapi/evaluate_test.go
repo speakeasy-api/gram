@@ -340,3 +340,27 @@ func TestEvaluateDocumentChange_SharedSchemaRequiredFieldIsWarning(t *testing.T)
 	require.Equal(t, openapi.EvaluationSeverityWarning, inputs.Severity)
 	require.Equal(t, []string{"pets_create_pet: body field `owner` now requires `email`"}, inputs.Details)
 }
+
+func TestEvaluateDocumentChange_RenamedToolReportsDeployedName(t *testing.T) {
+	t.Parallel()
+
+	next := strings.Replace(tokenOnlyDoc, "operationId: listPets", "operationId: fetchPets", 1)
+
+	eval := evaluate(t, tokenOnlyDoc, next)
+
+	renamed := findChange(t, eval, "tool_renamed")
+	require.Equal(t, openapi.EvaluationSeverityBreaking, renamed.Severity)
+	require.Equal(t, []string{"pets_list_pets"}, renamed.Tools)
+}
+
+func TestEvaluateDocumentChange_OptionalAuthIsNotBreaking(t *testing.T) {
+	t.Parallel()
+
+	base := strings.Replace(tokenOnlyDoc, "security:\n  - token: []\n", "", 1)
+	next := strings.Replace(tokenOnlyDoc, "security:\n  - token: []\n", "security:\n  - {}\n  - token: []\n", 1)
+
+	eval := evaluate(t, base, next)
+
+	security := findChange(t, eval, "tool_security_changed")
+	require.Equal(t, openapi.EvaluationSeverityInfo, security.Severity)
+}

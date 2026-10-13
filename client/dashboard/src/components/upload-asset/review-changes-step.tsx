@@ -245,7 +245,10 @@ export function ReviewChangesStep({
         },
       }),
     // The baseline is the active deployment, which can change while the
-    // review is open, so the comparison revalidates like any other query.
+    // review is open, so the comparison is not cached across visits. It runs
+    // two full extractions on the server, so it does not rerun on focus.
+    staleTime: 0,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 

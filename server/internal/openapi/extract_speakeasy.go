@@ -125,6 +125,10 @@ type operationResult struct {
 	deploymentEvents []*repo.LogDeploymentEventParams
 }
 
+// errSerializeGlobalSecurity marks a document whose top-level security
+// requirement could not be serialized, as opposed to one that failed to parse.
+var errSerializeGlobalSecurity = errors.New("serialize global security")
+
 // extractedDocumentSpeakeasy is everything the extractor derives from an
 // OpenAPI document before anything is written to the database.
 type extractedDocumentSpeakeasy struct {
@@ -203,7 +207,7 @@ func extractDocumentSpeakeasy(
 
 	globalSecurity, err := serializeSecuritySpeakeasy(doc.GetSecurity())
 	if err != nil {
-		return nil, fmt.Errorf("serialize global security: %w", err)
+		return nil, fmt.Errorf("%w: %w", errSerializeGlobalSecurity, err)
 	}
 
 	securitySchemes, securitySchemeErrors := extractSecuritySchemesSpeakeasy(ctx, logger, docInfo, doc, task)
@@ -378,7 +382,10 @@ func (p *ToolExtractor) doSpeakeasy(
 	logger.InfoContext(ctx, fmt.Sprintf("[%s] processing OpenAPI source", docInfo.Name))
 
 	extracted, err := extractDocumentSpeakeasy(ctx, logger, tracer, data, task)
-	if err != nil {
+	switch {
+	case errors.Is(err, errSerializeGlobalSecurity):
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error serializing global security").LogError(ctx, logger)
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document.\n%s", err.Error()).LogError(ctx, logger)
 	}
 

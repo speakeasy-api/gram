@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -75,6 +76,11 @@ var noEvaluationChange = EvaluationChange{
 	Details:  nil,
 	Tools:    nil,
 }
+
+// ErrDeployedDocumentUnreadable reports that the deployed version of a
+// document could not be extracted. The fault lies with the stored document,
+// not with the new version being evaluated.
+var ErrDeployedDocumentUnreadable = errors.New("extract deployed document")
 
 // EvaluationChange is one finding from comparing two versions of a document.
 type EvaluationChange struct {
@@ -190,7 +196,7 @@ func EvaluateDocumentChange(
 
 	baseDoc, err := extractDocumentSpeakeasy(ctx, logger, tracer, base, task)
 	if err != nil {
-		return nil, fmt.Errorf("extract deployed document: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrDeployedDocumentUnreadable, err)
 	}
 
 	baseSnapshot := snapshotDocument(baseDoc)
@@ -448,7 +454,7 @@ func compareSecurityScheme(key string, before, after *repo.CreateHTTPSecurityPar
 			"security_env_vars_changed",
 			fmt.Sprintf("Environment variables for `%s` changed", key),
 			details,
-			nil,
+			toolsUsingScheme(next, key),
 		))
 	}
 
@@ -641,7 +647,9 @@ func toolChanges(base, next *extractedDocumentSpeakeasy) []EvaluationChange {
 		}
 
 		if before.Name != after.Name {
-			renamed = append(renamed, after.Name)
+			// MCP servers hold the deployed name, so report that one: it is
+			// the tool they lose.
+			renamed = append(renamed, before.Name)
 			renamedDetails = append(renamedDetails, fmt.Sprintf("%s → %s (%s)", before.Name, after.Name, key))
 		}
 
@@ -807,6 +815,8 @@ func (t *securityTransition) change(pair [2]string) EvaluationChange {
 	}
 
 	switch {
+	case len(t.before) == 0 && slices.ContainsFunc(t.after, func(req securityRequirement) bool { return len(req) == 0 }):
+		details = append(details, "Credentials are now accepted but still optional, so existing calls keep working.")
 	case len(t.before) == 0:
 		severity = EvaluationSeverityBreaking
 		details = append(details, "These tools did not need credentials before. Calls fail until the MCP server environment supplies them.")
@@ -834,7 +844,8 @@ func (t *securityTransition) change(pair [2]string) EvaluationChange {
 			details = append(details, "Newly accepted: "+strings.Join(gained, ", "))
 		}
 
-		for key, b := range beforeAlts {
+		for _, key := range slices.Sorted(maps.Keys(beforeAlts)) {
+			b := beforeAlts[key]
 			a, ok := afterAlts[key]
 			if ok && renderSecurityAlternative(a) != renderSecurityAlternative(b) {
 				if severity != EvaluationSeverityBreaking {
