@@ -95,8 +95,7 @@ agent identifier and must show unavailable, never human-owner activity or zeros.
 
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
-`agent-management` enables inventory; `agent-identity-credentials` enables API key
-management. PG `agents` ×5 includes Release assistant, Support triage, Retired
+PG `agents` ×5 includes Release assistant, Support triage, Retired
 documentation bot, the active Release notes assistant, and the dedicated
 Identity-bound assistant agent (empty grants), covering active,
 suspended, and revoked identities with three existing fictional owners (display names and

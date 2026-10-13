@@ -82,3 +82,51 @@ func TestNewLakeStorageWhitespaceMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestNewLakeStorageLocalWithEmulatedPubSubUsesFilesystem(t *testing.T) {
+	t.Parallel()
+	flags := flag.NewFlagSet("lake", flag.ContinueOnError)
+	flags.String("environment", "local", "")
+	flags.String("storage-buckets", "", "")
+	flags.String("pubsub-emulator-host", "localhost:8085", "")
+	flags.String("lake-directory", filepath.Join(t.TempDir(), "objects"), "")
+	c := cli.NewContext(cli.NewApp(), flags, nil)
+
+	store, buckets, shutdown, err := newLakeStorage(t.Context(), testenv.NewLogger(t), c)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, shutdown(t.Context())) })
+	require.IsType(t, &lake.FilesystemStore{}, store)
+	require.Equal(t, "lake", buckets["lake"])
+}
+
+func TestNewLakeStorageEmulatedPubSubWithoutMappingDisablesLake(t *testing.T) {
+	t.Parallel()
+	flags := flag.NewFlagSet("lake", flag.ContinueOnError)
+	flags.String("environment", "dev", "")
+	flags.String("storage-buckets", "", "")
+	flags.String("pubsub-emulator-host", "pubsub-emulator:8085", "")
+	c := cli.NewContext(cli.NewApp(), flags, nil)
+
+	store, buckets, shutdown, err := newLakeStorage(t.Context(), testenv.NewLogger(t), c)
+	require.NoError(t, err)
+	require.NoError(t, shutdown(t.Context()))
+	require.Nil(t, store)
+	require.Empty(t, buckets["lake"])
+}
+
+func TestNewLakeStorageEmulatedPubSubWithMappingUsesGCS(t *testing.T) {
+	// The storage emulator host lets the GCS client build without application
+	// default credentials. It is never dialled here.
+	t.Setenv("STORAGE_EMULATOR_HOST", "localhost:9023")
+	flags := flag.NewFlagSet("lake", flag.ContinueOnError)
+	flags.String("environment", "dev", "")
+	flags.String("storage-buckets", `{"lake":"preview-lake"}`, "")
+	flags.String("pubsub-emulator-host", "pubsub-emulator:8085", "")
+	c := cli.NewContext(cli.NewApp(), flags, nil)
+
+	store, buckets, shutdown, err := newLakeStorage(t.Context(), testenv.NewLogger(t), c)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, shutdown(t.Context())) })
+	require.IsType(t, &storage.GCSStore{}, store)
+	require.Equal(t, "preview-lake", buckets["lake"])
+}

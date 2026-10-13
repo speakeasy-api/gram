@@ -10,6 +10,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { Children, isValidElement, type ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shadowMCPPolicyInventoryQueryKey } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -283,11 +284,13 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
     });
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <PolicyNew />
-        </TooltipProvider>
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <PolicyNew />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     expect(

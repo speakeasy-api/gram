@@ -107,7 +107,7 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     **Key-authenticated** badge, `Vendor Sync (misconfigured)` a red **Cannot
     authenticate** one, and the remaining three carry none (a missing badge on
     the first two means the credential columns did not land). `Acme Legacy
-Connector` appears under **Inactive** with no connections. Its row menu's
+    Connector` appears under **Inactive** with no connections. Its row menu's
     **View registration** opens the detail sheet with an **Authentication**
     field. The organization **MCP Sessions** page shows the same five
     connections and the same two badges.
@@ -211,8 +211,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     view all agents and authorize credentials (for example, the local seeded
     admin). Shared demo impersonation remains intentionally restricted by the
     ordinary-human authorization requirement; it is not the browser verification
-    target. Enable `agent-management` for inventory and
-    `agent-identity-credentials` for API key management.
+    target.
     - Open **Agents**. Confirm **Release assistant** is Active, **Support triage**
       is Suspended, and **Retired documentation bot** is Revoked. Confirm
       **Release notes assistant** is Active with its attachment-backed session. List and detail
@@ -221,13 +220,11 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       avatars. Local seeded fixtures must be visible to the authorized human.
     - Open Release assistant's sessions. Its one display-only session is
       expired; suspended/revoked agents have no seeded sessions. This fixture has no signing token, an invalid refresh
-      hash, and empty delegation: it must not authenticate or refresh. The
-      `agent-identity-credentials` flag gates live MCP authorization, not
-      the inventory check; no live connection is promised by these fixtures.
-    - API keys are empty after the shared SQL runs. With the credentials flag
-      enabled, only the active agent permits key creation; suspended/revoked
-      agents must not offer usable credentials. With the flag disabled, confirm
-      the unavailable-rollout state, not a misleading empty-key success state.
+      hash, and empty delegation: it must not authenticate or refresh. No live
+      connection is promised by these fixtures.
+    - API keys are empty after the shared SQL runs. Only the active agent
+      permits key creation; suspended/revoked agents must not offer usable
+      credentials.
       Never add usable keys to shared SQL.
     - Both active release agents have one direct `mcp:connect` grant scoped to
       the demo project and Linear MCP server. Release assistant also inherits
@@ -309,9 +306,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     - **Allowed and denied usage (local only):** use a private standalone MCP
       endpoint without a session issuer and a locally executable harmless tool.
       Send the UI-issued key in `Authorization: Bearer <key>` to its `/mcp/…`
-      endpoint. Issuer-gated gateways require OAuth/session credentials instead;
-      `agent-identity-credentials` controls OAuth agent selection and agent
-      API-key issuance and management, not standalone API-key admission.
+      endpoint. Issuer-gated gateways require OAuth/session credentials instead.
       Display-only seeded tools cannot prove
       successful tool execution; filtered `tools/list` proves discovery only.
       Create a short-lived key from the UI's narrowed candidate. Confirm the

@@ -7,8 +7,6 @@ import { CreateRoleDialog } from "./CreateRoleDialog";
 import type { Role } from "@gram/client/models/components/role.js";
 
 const mocks = vi.hoisted(() => ({
-  status: "ready" as "ready" | "loading" | "error",
-  enabled: false as boolean | undefined,
   agents: vi.fn(() => ({ data: [] })),
   create: vi.fn(),
   update: vi.fn(),
@@ -19,12 +17,6 @@ const mocks = vi.hoisted(() => ({
     email: string;
     roleIds: string[];
   }[],
-}));
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetryContext: () => ({
-    featureFlags: { status: mocks.status },
-    telemetry: { isFeatureEnabled: () => mocks.enabled },
-  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ projects: [], scimEnabled: mocks.scimEnabled }),
@@ -175,8 +167,6 @@ function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.status = "ready";
-  mocks.enabled = false;
   mocks.scimEnabled = false;
   mocks.members = [];
 });
@@ -245,25 +235,10 @@ describe("role assignment confirmation", () => {
   });
 });
 
-describe("agent management rollout", () => {
-  it.each(["false", "loading", "missing", "error"] as const)(
-    "does not enable the query or show the picker when %s",
-    (state) => {
-      if (state === "loading" || state === "error") mocks.status = state;
-      if (state === "missing") mocks.enabled = undefined;
-      renderEditor();
-      expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
-        enabled: false,
-        throwOnError: false,
-      });
-      expect(screen.queryByText("Assign Agents")).toBeNull();
-    },
-  );
-  it("enables the query and picker when enabled", () => {
-    mocks.enabled = true;
+describe("agent assignment", () => {
+  it("requests agents and shows the picker", () => {
     renderEditor();
     expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
-      enabled: true,
       throwOnError: false,
     });
     fireEvent.click(screen.getByText("Assign Agents"));
@@ -271,7 +246,7 @@ describe("agent management rollout", () => {
       screen.getByText("No agents in this organization yet."),
     ).toBeTruthy();
   });
-  it("saves an ordinary role without replacing existing agents when unavailable", () => {
+  it("keeps an edited role's existing agents when nothing about them changes", () => {
     renderEditor(role);
     fireEvent.change(
       screen.getByPlaceholderText("Describe what this role can do..."),
@@ -281,9 +256,9 @@ describe("agent management rollout", () => {
     expect(mocks.update).toHaveBeenCalledOnce();
     const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
     expect(form.description).toBe("Updated description");
-    expect(form).not.toHaveProperty("agentIds");
+    expect(form.agentIds).toEqual(["agent-test"]);
   });
-  it("creates an ordinary role without agent assignments when unavailable", () => {
+  it("creates a role without agent assignments when none are selected", () => {
     renderEditor();
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Test role" },
