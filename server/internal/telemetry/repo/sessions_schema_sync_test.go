@@ -116,8 +116,8 @@ func TestSessionSummaryDimensionBindings(t *testing.T) {
 	schemaText := string(schema)
 	start := strings.Index(schemaText, "CREATE TABLE IF NOT EXISTS chat_session_summaries (")
 	require.GreaterOrEqual(t, start, 0, "chat_session_summaries not found in schema.sql")
-	end := strings.Index(schemaText[start:], "COMMENT ")
-	require.Positive(t, end, "expected the chat_session_summaries table to end with a COMMENT")
+	end := strings.Index(schemaText[start:], "\n) ENGINE")
+	require.Positive(t, end, "expected the chat_session_summaries column list to close with \") ENGINE\"")
 	tableSQL := schemaText[start : start+end]
 
 	for key, dim := range telemetryDimensionRegistry {
