@@ -756,7 +756,6 @@ trackedFiles:
   src/funcs/unproxiedMcpDeleteServer.ts: {}
   src/funcs/unproxiedMcpGetServer.ts: {}
   src/funcs/unproxiedMcpListServers.ts: {}
-  src/funcs/unproxiedMcpListTools.ts: {}
   src/funcs/usageCancelStripeSubscription.ts: {}
   src/funcs/usageCreateCheckout.ts: {}
   src/funcs/usageCreateCustomerSession.ts: {}
@@ -1407,7 +1406,6 @@ trackedFiles:
   src/models/components/listtunneledmcpserversresult.ts: {}
   src/models/components/listunknownskillactivationsresult.ts: {}
   src/models/components/listunproxiedmcpserversresult.ts: {}
-  src/models/components/listunproxiedmcpservertoolsresult.ts: {}
   src/models/components/listusergrantsresult.ts: {}
   src/models/components/listusersessionclientsresult.ts: {}
   src/models/components/listusersessionconsentsresult.ts: {}
@@ -1895,7 +1893,6 @@ trackedFiles:
   src/models/components/unmarkriskresultsfalsepositiverequestbody.ts: {}
   src/models/components/unproxiedmcpserver.ts: {}
   src/models/components/unproxiedmcpserverclientusagerow.ts: {}
-  src/models/components/unproxiedmcpservertool.ts: {}
   src/models/components/unproxiedmcpservertoolusagerow.ts: {}
   src/models/components/unproxiedmcpserverusagebreakdownpayload.ts: {}
   src/models/components/unproxiedmcpserverusagebucket.ts: {}
@@ -2547,7 +2544,6 @@ trackedFiles:
   src/models/operations/listtunneledmcpservers.ts: {}
   src/models/operations/listunknownskillactivations.ts: {}
   src/models/operations/listunproxiedmcpservers.ts: {}
-  src/models/operations/listunproxiedmcpservertools.ts: {}
   src/models/operations/listusersessionclients.ts: {}
   src/models/operations/listusersessionconsents.ts: {}
   src/models/operations/listusersessionfacets.ts: {}
@@ -3826,8 +3822,6 @@ trackedFiles:
   src/react-query/undistributeSkill.ts: {}
   src/react-query/unknownSkillActivations.core.ts: {}
   src/react-query/unknownSkillActivations.ts: {}
-  src/react-query/unproxiedMcpServerTools.core.ts: {}
-  src/react-query/unproxiedMcpServerTools.ts: {}
   src/react-query/unproxiedMcpServers.core.ts: {}
   src/react-query/unproxiedMcpServers.ts: {}
   src/react-query/unshareSkill.ts: {}
