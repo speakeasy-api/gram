@@ -1185,7 +1185,11 @@ function ChatDetailPanel({
   // log:read on the project on top of access to the transcript.
   const canViewToolLogs = useCanViewToolLogs();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [view, setView] = useState<ViewMode>("chat");
+  const [selectedView, setView] = useState<ViewMode>("chat");
+  // The Tool calls view reads the project's raw tool logs, so without log:read
+  // (including after a grants refetch takes it away) the transcript shows.
+  const view: ViewMode =
+    selectedView === "tools" && !canViewToolLogs ? "chat" : selectedView;
   const [rawView, setRawView] = useState(false);
   useEffect(() => setRawView(false), [chatId]);
   const [riskyOnly, setRiskyOnly] = useState(false);
@@ -1381,13 +1385,6 @@ function ChatDetailPanel({
       },
     });
   }, [chatId, searchLogs, canViewToolLogs]);
-
-  // Losing log:read (a grants refetch) leaves the Tool calls view, whose
-  // already-fetched logs it may no longer read.
-  useEffect(() => {
-    if (!canViewToolLogs)
-      setView((current) => (current === "tools" ? "chat" : current));
-  }, [canViewToolLogs]);
 
   // Reset transient UI state when the panel is pointed at a new session.
   useEffect(() => {
@@ -1929,7 +1926,7 @@ function ChatDetailPanel({
           )}
         </CreateExclusionContext.Provider>
 
-        {view === "tools" && canViewToolLogs && (
+        {view === "tools" && (
           <div className="bg-background absolute inset-0 z-10 flex flex-col">
             <SubViewBar title="Tool calls" onBack={() => setView("chat")} />
             <div className="flex-1 overflow-y-auto">

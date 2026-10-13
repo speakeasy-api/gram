@@ -207,11 +207,10 @@ function PlaygroundInner() {
     searchParams.get("environment") ?? null,
   );
   const [showLogs, setShowLogs] = useState(false);
-  // Losing log:read (a grants refetch) closes the panel rather than leaving
-  // it toggled on behind a disabled button.
-  useEffect(() => {
-    if (!canViewLogs) setShowLogs(false);
-  }, [canViewLogs]);
+  // The panel is only open while log:read is held, so losing it (a grants
+  // refetch) closes the panel instead of leaving it toggled behind a disabled
+  // button.
+  const logsOpen = showLogs && canViewLogs;
   const [temperature, setTemperature] = useState(0.5);
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [maxTokens, setMaxTokens] = useState(4096);
@@ -293,10 +292,10 @@ function PlaygroundInner() {
       <Button
         size="sm"
         variant="tertiary"
-        onClick={() => setShowLogs(!showLogs)}
+        onClick={() => setShowLogs(!logsOpen)}
       >
         <ScrollTextIcon className="mr-2 size-4" />
-        {showLogs ? "Hide" : "Show"} Logs
+        {logsOpen ? "Hide" : "Show"} Logs
       </Button>
     </RequireScope>
   );
@@ -376,7 +375,7 @@ function PlaygroundInner() {
               )}
             </div>
           </ResizablePanel.Pane>
-          {showLogs && canViewLogs && (
+          {logsOpen && (
             <ResizablePanel.Pane minSize="20%" defaultSize="30%">
               <PlaygroundLogsPanel
                 chatId={chat.id}
