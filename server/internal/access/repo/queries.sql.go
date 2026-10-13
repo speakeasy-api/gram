@@ -770,7 +770,6 @@ const getPrincipalGrants = `-- name: GetPrincipalGrants :many
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
-  AND COALESCE(effect, 'allow') = 'allow'
   AND principal_urn = ANY($2::text[])
 `
 
@@ -879,10 +878,7 @@ const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :exe
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
-DO UPDATE SET
-  effect = NULL,
-  updated_at = clock_timestamp()
-WHERE principal_grants.effect IS NOT NULL
+DO NOTHING
 `
 
 type InsertPrincipalGrantIfAbsentParams struct {
@@ -892,8 +888,7 @@ type InsertPrincipalGrantIfAbsentParams struct {
 	Selectors      []byte
 }
 
-// Creates a single grant row, leaves existing allow rows untouched, and converts
-// a conflicting legacy effect row to the allow-only NULL representation.
+// Creates a single grant row and leaves an existing identical row untouched.
 func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPrincipalGrantIfAbsentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertPrincipalGrantIfAbsent,
 		arg.OrganizationID,
@@ -1100,7 +1095,6 @@ WITH user_grants AS (
     (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = $1
-    AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY($2::text[])
     AND pg.scope IN (
       'mcp:connect', 'mcp:read', 'mcp:write',
@@ -1226,7 +1220,6 @@ WITH user_grants AS (
     (pg.principal_type = 'user' AND pg.principal_urn <> 'user:all') AS direct
   FROM principal_grants pg
   WHERE pg.organization_id = $1
-    AND COALESCE(pg.effect, 'allow') = 'allow'
     AND pg.principal_urn = ANY($2::text[])
     AND pg.scope IN (
       'skill:read', 'skill:write',
@@ -2330,7 +2323,6 @@ const listPrincipalGrantsByOrg = `-- name: ListPrincipalGrantsByOrg :many
 SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = $1
-  AND COALESCE(effect, 'allow') = 'allow'
   AND ($2::text = '' OR principal_urn = $2)
 ORDER BY principal_urn, scope
 `
@@ -2387,7 +2379,6 @@ const listPrincipalGrantsByResource = `-- name: ListPrincipalGrantsByResource :m
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = $2
   AND selectors @> jsonb_build_object(
     'resource_kind', $3::text,
@@ -2439,7 +2430,6 @@ const listPrincipalGrantsByResourceIDs = `-- name: ListPrincipalGrantsByResource
 SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
-  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = $2
   AND selectors @> jsonb_build_object(
     'resource_kind', $3::text
@@ -3571,7 +3561,6 @@ INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
-  effect = NULL,
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 `
@@ -3595,7 +3584,7 @@ type UpsertPrincipalGrantRow struct {
 }
 
 // Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
-// any legacy effect is normalized to the allow-only NULL representation.
+// the existing row is kept and its updated_at is bumped.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,

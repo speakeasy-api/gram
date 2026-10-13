@@ -3,7 +3,6 @@ package agentmanagement
 import (
 	"context"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"testing"
@@ -26,7 +25,6 @@ func TestCreateAgentWithInitialPolicy(t *testing.T) {
 	seedOrganizationUser(t, conn, "org-create-policy", "owner")
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
-	service.features = &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
 	ctx := validatedHumanContext(t, "org-create-policy", "owner")
 	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Configured agent", PolicyGrants: []*gen.AgentPolicyGrantForm{initialMCPGrant()}})
 	require.NoError(t, err)

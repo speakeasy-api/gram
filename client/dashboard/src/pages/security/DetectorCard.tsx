@@ -24,6 +24,8 @@ export type DetectorCardProps = {
   onCustomize: () => void;
   /** Hide the Customize action, for forms that do not edit per-rule settings. */
   hideCustomize?: boolean;
+  /** The category was turned on by the use case the policy started from. */
+  fromUseCase?: boolean;
 };
 
 /** The rules the card can offer for customization. A category-level detector
@@ -45,6 +47,7 @@ export function DetectorCard({
   onToggle,
   onCustomize,
   hideCustomize = false,
+  fromUseCase = false,
 }: DetectorCardProps): JSX.Element {
   const meta = ruleCategoryMeta(category, mode);
   const available = availableCategories(mode).has(category);
@@ -79,6 +82,11 @@ export function DetectorCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">{meta.label}</span>
+          {fromUseCase && (
+            <span className="text-muted-foreground font-mono text-[10px] tracking-[0.1em] uppercase">
+              From use case
+            </span>
+          )}
           {!available && (
             <Badge variant="neutral">
               <Badge.Text>Coming soon</Badge.Text>
