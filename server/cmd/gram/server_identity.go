@@ -24,6 +24,7 @@ import (
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
@@ -84,7 +85,12 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	if umClient == nil {
 		return nil, fmt.Errorf("failed to create IDP user management client: idp-client-secret is required")
 	}
-	idpClient := identity.NewWorkOSAdapter(umClient).WithGoogleUserInfoURL(c.String("google-userinfo-url")).WithEvidence(identity.EvidenceConfig{
+	// The URL receives Google bearer tokens: HTTPS only, plain loopback locally.
+	googleUserInfoURL := c.String("google-userinfo-url")
+	if googleUserInfoURL != "" && !urls.IsAbsoluteHTTPS(googleUserInfoURL) && (c.String("environment") != "local" || !urls.IsAbsoluteHTTPSOrLoopback(googleUserInfoURL)) {
+		return nil, fmt.Errorf("google-userinfo-url must be an absolute HTTPS URL")
+	}
+	idpClient := identity.NewWorkOSAdapter(umClient).WithGoogleUserInfoURL(googleUserInfoURL).WithEvidence(identity.EvidenceConfig{
 		Logger:        logger,
 		MeterProvider: otel.GetMeterProvider(),
 		Enabled:       ssosignins.EvidenceGate(db, featureFlags),

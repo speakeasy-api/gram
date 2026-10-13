@@ -143,6 +143,7 @@ func (h *Handler) Handler() http.Handler {
 
 	mux.HandleFunc("POST /user_management/authenticate", h.routeAuthenticate)
 	mux.HandleFunc("POST /sso/token", h.proxySSOToken)
+	mux.Handle("GET /google/userinfo", googleUserInfoProxy())
 	mux.Handle("/", h.proxy)
 	return h.authenticateClients(mux)
 }
@@ -182,14 +183,15 @@ func (h *Handler) isPublicRoute(mux *http.ServeMux, r *http.Request) bool {
 	if _, pattern := mux.Handler(r); strings.HasPrefix(pattern, "GET /_inspect/") {
 		return true
 	}
+	// Google userinfo authenticates with the Google token: the local mock's
+	// or, under the workos backend, a real one forwarded to Google.
+	if r.Method == http.MethodGet && r.URL.Path == "/google/userinfo" {
+		return true
+	}
 	if h.cfg.Backend != BackendLocal {
 		return false
 	}
 	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/passwordless/sessions/") && strings.HasSuffix(r.URL.Path, "/authorize") {
-		return true
-	}
-	// The Google userinfo mock authenticates with the mock Google token.
-	if r.Method == http.MethodGet && r.URL.Path == "/google/userinfo" {
 		return true
 	}
 	return r.Method == http.MethodGet && r.URL.Path == "/portal"
@@ -625,4 +627,19 @@ func authenticationMethod() string {
 	default:
 		return v
 	}
+}
+
+// googleUserInfoURL is where the workos backend forwards userinfo requests,
+// so the same configured URL works under both backends.
+var googleUserInfoURL = "https://openidconnect.googleapis.com/v1/userinfo"
+
+func googleUserInfoProxy() http.Handler {
+	return &httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) {
+		target, err := url.Parse(googleUserInfoURL)
+		if err != nil {
+			return
+		}
+		r.Out.URL = target
+		r.Out.Host = target.Host
+	}}
 }

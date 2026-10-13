@@ -266,7 +266,7 @@ func TestEmulatorBrowserRoutesAreNotPublicUnderWorkOSBackend(t *testing.T) {
 		APIKey:       "",
 	}, stubHandler("emulator"))
 
-	for _, path := range []string{"/portal", "/passwordless/sessions/session_1/authorize", "/google/userinfo"} {
+	for _, path := range []string{"/portal", "/passwordless/sessions/session_1/authorize"} {
 		rec := httptest.NewRecorder()
 		workosHandler.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		require.Equal(t, http.StatusUnauthorized, rec.Code)
@@ -397,4 +397,41 @@ func TestWorkOSAuthorizationCodeClientMismatchDoesNotConsumeCode(t *testing.T) {
 		Ts:       time.Now(),
 	})
 	require.NoError(t, err, "a mismatched client must not burn the authorization code")
+}
+
+// Under the workos backend Google userinfo goes to Google with the caller's
+// token, never through the WorkOS proxy or its client-secret check.
+func TestGoogleUserInfoIsForwardedToGoogleUnderWorkOSBackend(t *testing.T) { //nolint:paralleltest // overrides the package's Google endpoint
+	var gotAuth string
+	google := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"hd":"example.com"}`))
+	}))
+	t.Cleanup(google.Close)
+	previous := googleUserInfoURL
+	googleUserInfoURL = google.URL + "/v1/userinfo"
+	t.Cleanup(func() { googleUserInfoURL = previous })
+
+	proxied := false
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		proxied = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	h := newTestHandler(t, Config{
+		Backend:      BackendWorkOS,
+		ClientSecret: testClientValue,
+		UpstreamURL:  upstream.URL,
+		APIKey:       "sk_test_upstream",
+	}, stubHandler("emulator"))
+
+	req := httptest.NewRequest(http.MethodGet, "/google/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer google-token")
+	rec := httptest.NewRecorder()
+	h.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, `{"hd":"example.com"}`, rec.Body.String())
+	require.Equal(t, "Bearer google-token", gotAuth)
+	require.False(t, proxied)
 }
