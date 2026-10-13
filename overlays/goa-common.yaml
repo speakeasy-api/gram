@@ -36,6 +36,23 @@ actions:
   - target: $.components.schemas.AnalyticsFilter.properties
     update:
       operator: { $ref: "#/components/schemas/AnalyticsFilterOperator" }
+  # The OpenAPI evaluation change's inline severity enum would generate as
+  # Severity and rename the custom detection rule's enum, so both enums on the
+  # change get named schemas.
+  - target: $.components.schemas
+    update:
+      OpenAPIv3EvaluationSeverity:
+        { type: string, enum: [breaking, warning, info] }
+      OpenAPIv3EvaluationCategory:
+        { type: string, enum: [security, tools, server] }
+  - target: $.components.schemas.OpenAPIv3EvaluationChange.properties.severity
+    remove: true
+  - target: $.components.schemas.OpenAPIv3EvaluationChange.properties.category
+    remove: true
+  - target: $.components.schemas.OpenAPIv3EvaluationChange.properties
+    update:
+      severity: { $ref: "#/components/schemas/OpenAPIv3EvaluationSeverity" }
+      category: { $ref: "#/components/schemas/OpenAPIv3EvaluationCategory" }
   - target: $.paths["/rpc/killswitches.list"].get.parameters[?@.name=='capability_key'].schema
     remove: true
   - target: $.paths["/rpc/killswitches.list"].get.parameters[?@.name=='capability_key']

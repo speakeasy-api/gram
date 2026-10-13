@@ -774,3 +774,42 @@ RETURNING id;
 -- name: CreateDeploymentStatus :exec
 INSERT INTO deployment_statuses (deployment_id, status)
 VALUES (@deployment_id, @status);
+
+-- name: GetPreviousDeploymentID :one
+SELECT d.id
+FROM deployments d
+WHERE d.project_id = @project_id
+  AND d.seq < (
+    SELECT cur.seq FROM deployments cur
+    WHERE cur.id = @deployment_id AND cur.project_id = @project_id
+  )
+ORDER BY d.seq DESC
+LIMIT 1;
+
+-- name: ListToolsetsUsingOpenAPIv3Source :many
+SELECT
+    t.id
+  , t.name
+  , t.slug
+  , t.mcp_slug
+  , t.mcp_enabled
+  , (t.external_oauth_server_id IS NOT NULL OR t.oauth_proxy_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
+  , ARRAY(
+      SELECT u FROM unnest(tv.tool_urns) AS u
+      WHERE starts_with(u, @tool_urn_prefix::TEXT)
+    )::TEXT[] AS source_tool_urns
+FROM toolsets t
+JOIN LATERAL (
+  SELECT tool_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+WHERE t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM unnest(tv.tool_urns) AS u
+    WHERE starts_with(u, @tool_urn_prefix::TEXT)
+  )
+ORDER BY t.name;

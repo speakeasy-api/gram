@@ -1558,6 +1558,30 @@ func (q *Queries) GetLatestDeploymentID(ctx context.Context, projectID uuid.UUID
 	return id, err
 }
 
+const getPreviousDeploymentID = `-- name: GetPreviousDeploymentID :one
+SELECT d.id
+FROM deployments d
+WHERE d.project_id = $1
+  AND d.seq < (
+    SELECT cur.seq FROM deployments cur
+    WHERE cur.id = $2 AND cur.project_id = $1
+  )
+ORDER BY d.seq DESC
+LIMIT 1
+`
+
+type GetPreviousDeploymentIDParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+}
+
+func (q *Queries) GetPreviousDeploymentID(ctx context.Context, arg GetPreviousDeploymentIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPreviousDeploymentID, arg.ProjectID, arg.DeploymentID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertDeployment = `-- name: InsertDeployment :one
 INSERT INTO deployments (project_id, organization_id, user_id, idempotency_key)
 VALUES ($1, $2, $3, $4)
@@ -1741,6 +1765,78 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 			&i.FunctionsToolCount,
 			&i.ExternalMcpAssetCount,
 			&i.ExternalMcpToolCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listToolsetsUsingOpenAPIv3Source = `-- name: ListToolsetsUsingOpenAPIv3Source :many
+SELECT
+    t.id
+  , t.name
+  , t.slug
+  , t.mcp_slug
+  , t.mcp_enabled
+  , (t.external_oauth_server_id IS NOT NULL OR t.oauth_proxy_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
+  , ARRAY(
+      SELECT u FROM unnest(tv.tool_urns) AS u
+      WHERE starts_with(u, $1::TEXT)
+    )::TEXT[] AS source_tool_urns
+FROM toolsets t
+JOIN LATERAL (
+  SELECT tool_urns
+  FROM toolset_versions
+  WHERE toolset_id = t.id AND deleted IS FALSE
+  ORDER BY version DESC
+  LIMIT 1
+) tv ON TRUE
+WHERE t.project_id = $2
+  AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM unnest(tv.tool_urns) AS u
+    WHERE starts_with(u, $1::TEXT)
+  )
+ORDER BY t.name
+`
+
+type ListToolsetsUsingOpenAPIv3SourceParams struct {
+	ToolUrnPrefix string
+	ProjectID     uuid.UUID
+}
+
+type ListToolsetsUsingOpenAPIv3SourceRow struct {
+	ID              uuid.UUID
+	Name            string
+	Slug            string
+	McpSlug         pgtype.Text
+	McpEnabled      bool
+	OauthConfigured bool
+	SourceToolUrns  []string
+}
+
+func (q *Queries) ListToolsetsUsingOpenAPIv3Source(ctx context.Context, arg ListToolsetsUsingOpenAPIv3SourceParams) ([]ListToolsetsUsingOpenAPIv3SourceRow, error) {
+	rows, err := q.db.Query(ctx, listToolsetsUsingOpenAPIv3Source, arg.ToolUrnPrefix, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolsetsUsingOpenAPIv3SourceRow
+	for rows.Next() {
+		var i ListToolsetsUsingOpenAPIv3SourceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.McpSlug,
+			&i.McpEnabled,
+			&i.OauthConfigured,
+			&i.SourceToolUrns,
 		); err != nil {
 			return nil, err
 		}
