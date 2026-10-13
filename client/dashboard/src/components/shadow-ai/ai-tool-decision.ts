@@ -1,7 +1,4 @@
-import { accessOf } from "@/components/shadow-ai/access";
-import type { AIDetection } from "@gram/client/models/components/aidetection.js";
-
-/** What the decision control shows for one tool. `inventory_only` is a tool
+/** What a decision control shows for one tool. `inventory_only` is a tool
  *  with no gateway identity (every local model, and any tool with no client
  *  metadata document): nothing could enforce a decision, so none is offered. */
 export type AIToolDecision =
@@ -9,14 +6,6 @@ export type AIToolDecision =
   | "blocked"
   | "unreviewed"
   | "inventory_only";
-
-export function aiToolDecisionOf(detection: AIDetection): AIToolDecision {
-  const access = accessOf(detection);
-  if (!access.enforceable) return "inventory_only";
-  if (access.decision === "approved") return "approved";
-  if (access.decision === "blocked") return "blocked";
-  return "unreviewed";
-}
 
 /** The decision to record when `clicked` is pressed while `current` is shown.
  *  Pressing the option already in force clears it back to unreviewed, which

@@ -407,7 +407,7 @@ export function SectionHeader({
 const SEVERITY_MIN = 0.1;
 const SEVERITY_MAX = 10;
 
-function SeveritySection({
+export function SeveritySection({
   score,
   setScore,
 }: {
@@ -503,27 +503,46 @@ export function ActionStep({
             setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
           />
           {action !== "flag" && (
-            <div className="space-y-2">
-              <Label
-                className="text-sm font-medium"
-                htmlFor={POLICY_ACTION_MESSAGE_FIELD_ID}
-              >
-                {POLICY_ACTION_MESSAGE[action].label}
-              </Label>
-              <p className="text-muted-foreground text-xs">
-                {POLICY_ACTION_MESSAGE[action].description}
-              </p>
-              <TextArea
-                id={POLICY_ACTION_MESSAGE_FIELD_ID}
-                value={userMessage}
-                onChange={setUserMessage}
-                placeholder={POLICY_ACTION_MESSAGE[action].placeholder}
-                rows={3}
-              />
-            </div>
+            <ActionMessageField
+              action={action}
+              userMessage={userMessage}
+              setUserMessage={setUserMessage}
+            />
           )}
         </Stack>
       </Card>
+    </div>
+  );
+}
+
+/** The message a user sees when an interrupting action fires. */
+export function ActionMessageField({
+  action,
+  userMessage,
+  setUserMessage,
+}: {
+  action: Exclude<PolicyAction, "flag">;
+  userMessage: string;
+  setUserMessage: React.Dispatch<React.SetStateAction<string>>;
+}): JSX.Element {
+  return (
+    <div className="space-y-2">
+      <Label
+        className="text-sm font-medium"
+        htmlFor={POLICY_ACTION_MESSAGE_FIELD_ID}
+      >
+        {POLICY_ACTION_MESSAGE[action].label}
+      </Label>
+      <p className="text-muted-foreground text-xs">
+        {POLICY_ACTION_MESSAGE[action].description}
+      </p>
+      <TextArea
+        id={POLICY_ACTION_MESSAGE_FIELD_ID}
+        value={userMessage}
+        onChange={setUserMessage}
+        placeholder={POLICY_ACTION_MESSAGE[action].placeholder}
+        rows={3}
+      />
     </div>
   );
 }

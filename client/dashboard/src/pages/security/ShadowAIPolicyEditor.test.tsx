@@ -1,19 +1,23 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { TooltipProvider } from "@/components/ui/Tooltip";
 import {
-  SHADOW_AI_ACTION_LOCK_REASON,
-  ShadowAIPolicyEditor,
-} from "./ShadowAIPolicyEditor";
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { accessLibrary, detection } from "./shadow-ai/access-fixtures";
+import { ShadowAIPolicyEditor } from "./ShadowAIPolicyEditor";
 
 const mocks = vi.hoisted(() => ({
-  mutateCreate: vi.fn(),
-  mutateUpdate: vi.fn(),
+  mutateCreate: vi.fn<(variables: unknown) => Promise<{ id: string }>>(),
+  mutateUpdate: vi.fn<(variables: unknown) => Promise<unknown>>(),
+  setDecision: vi.fn<(variables: unknown) => Promise<unknown>>(),
   goToDetail: vi.fn(),
-  pinnedActions: [] as Array<{ value: string; reason: string } | undefined>,
-  decisionsFor: [] as string[],
   step: null as string | null,
 }));
 
@@ -37,36 +41,48 @@ vi.mock("./use-toggle-policy-enabled", () => ({
 }));
 
 vi.mock("./PolicyCenter", () => ({
-  ActionPicker: ({
-    pinnedAction,
-  }: {
-    pinnedAction?: { value: string; reason: string };
-  }) => {
-    mocks.pinnedActions.push(pinnedAction);
-    return null;
-  },
-  PolicyAudiencePicker: () => null,
-}));
-
-vi.mock("./shadow-ai/ToolDecisionsSection", () => ({
-  ToolDecisionsSection: ({ policy }: { policy: RiskPolicy }) => {
-    mocks.decisionsFor.push(policy.id);
-    return <p>decisions for {policy.name}</p>;
-  },
+  ActionPicker: () => null,
+  PolicyAudiencePicker: () => <p>audience picker</p>,
 }));
 
 vi.mock("@gram/client/react-query/riskCreatePolicy.js", () => ({
   useRiskCreatePolicyMutation: () => ({
     isPending: false,
-    mutate: mocks.mutateCreate,
+    mutateAsync: mocks.mutateCreate,
   }),
 }));
 
 vi.mock("@gram/client/react-query/riskPoliciesUpdate.js", () => ({
   useRiskPoliciesUpdateMutation: () => ({
     isPending: false,
-    mutate: mocks.mutateUpdate,
+    mutateAsync: mocks.mutateUpdate,
   }),
+}));
+
+vi.mock("@gram/client/react-query/setAIToolDecision.js", () => ({
+  useSetAIToolDecisionMutation: () => ({ mutateAsync: mocks.setDecision }),
+}));
+
+vi.mock("@gram/client/react-query/aiScanTargets.js", () => ({
+  useAiScanTargets: () => ({
+    data: { listVersion: 7, targets: accessLibrary() },
+    isPending: false,
+    isError: false,
+  }),
+  invalidateAllAiScanTargets: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/aiDetections.js", () => ({
+  useAiDetections: () => ({
+    data: { detections: [detection()] },
+    isPending: false,
+    isError: false,
+  }),
+  invalidateAllAiDetections: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/aiDetectionUsers.js", () => ({
+  invalidateAllAiDetectionUsers: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
@@ -110,39 +126,47 @@ function renderEditor(target: RiskPolicy | null) {
   );
 }
 
+const cursorControl = () =>
+  screen.getByRole("group", { name: "Access decision for Cursor" });
+
 describe("ShadowAIPolicyEditor", () => {
+  beforeEach(() => {
+    mocks.mutateCreate.mockResolvedValue({ id: "policy-new" });
+    mocks.mutateUpdate.mockResolvedValue({});
+    mocks.setDecision.mockResolvedValue({});
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
-    mocks.pinnedActions.length = 0;
-    mocks.decisionsFor.length = 0;
     mocks.step = null;
   });
 
-  it("pins the action to Deny with the reason", () => {
+  it("walks Access, Scope and Review over the whole target library", () => {
     renderEditor(null);
 
-    expect(mocks.pinnedActions[0]).toEqual({
-      value: "block",
-      reason: SHADOW_AI_ACTION_LOCK_REASON,
-    });
+    for (const title of ["Access", "Scope", "Review"]) {
+      expect(screen.getAllByText(title).length).toBeGreaterThan(0);
+    }
+    expect(screen.getByText("Cursor")).toBeTruthy();
+    expect(screen.getByText("Acme Tool")).toBeTruthy();
+    expect(screen.getByText("Not seen yet")).toBeTruthy();
   });
 
-  it("creates a blocking shadow_mcp policy that allows what it has no decision for", () => {
+  it("creates the policy, then applies the changed decisions", async () => {
     renderEditor(null);
 
-    expect(
-      screen.getByText(/approve or disallow them one by one/),
-    ).toBeTruthy();
-    expect(mocks.decisionsFor).toEqual([]);
-
+    fireEvent.click(within(cursorControl()).getByText("Deny"));
     fireEvent.click(screen.getByText("Create policy"));
 
+    await waitFor(() =>
+      expect(mocks.goToDetail).toHaveBeenCalledWith("policy-new"),
+    );
     expect(mocks.mutateCreate).toHaveBeenCalledTimes(1);
-    expect(
-      mocks.mutateCreate.mock.calls[0]?.[0]?.request
-        .createRiskPolicyRequestBody,
-    ).toEqual(
+    const created = mocks.mutateCreate.mock.calls[0]?.[0] as
+      | { request: { createRiskPolicyRequestBody: unknown } }
+      | undefined;
+    expect(created?.request.createRiskPolicyRequestBody).toEqual(
       expect.objectContaining({
         name: "Shadow AI",
         enabled: true,
@@ -154,19 +178,75 @@ describe("ShadowAIPolicyEditor", () => {
         shadowMcpDisposition: "allow_all",
       }),
     );
+    expect(mocks.setDecision).toHaveBeenCalledTimes(1);
+    expect(mocks.setDecision).toHaveBeenCalledWith({
+      request: {
+        setAIToolDecisionRequestBody: {
+          targetId: "cursor",
+          decision: "blocked",
+          rationale: undefined,
+        },
+      },
+    });
+    expect(mocks.setDecision.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mocks.mutateCreate.mock.invocationCallOrder[0] ?? 0,
+    );
   });
 
-  it("carries the tool decisions once the policy exists", () => {
+  it("writes nothing until the policy is created", () => {
+    renderEditor(null);
+
+    fireEvent.click(within(cursorControl()).getByText("Deny"));
+
+    expect(mocks.setDecision).not.toHaveBeenCalled();
+    expect(mocks.mutateCreate).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing for a decision withdrawn before Create", async () => {
+    renderEditor(null);
+
+    fireEvent.click(within(cursorControl()).getByText("Deny"));
+    fireEvent.click(within(cursorControl()).getByText("Deny"));
+    fireEvent.click(screen.getByText("Create policy"));
+
+    await waitFor(() => expect(mocks.goToDetail).toHaveBeenCalled());
+    expect(mocks.setDecision).not.toHaveBeenCalled();
+  });
+
+  it("saves an existing policy before applying its changed decisions", async () => {
     renderEditor(policy());
 
-    expect(screen.getByText("decisions for Shadow AI")).toBeTruthy();
-    expect(mocks.decisionsFor).toEqual(["policy-1"]);
+    fireEvent.click(within(cursorControl()).getByText("Approve"));
+    fireEvent.click(screen.getByText("Save changes"));
+
+    await waitFor(() => expect(mocks.setDecision).toHaveBeenCalledTimes(1));
+    expect(mocks.mutateUpdate).toHaveBeenCalledTimes(1);
+    expect(mocks.setDecision.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mocks.mutateUpdate.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(mocks.goToDetail).not.toHaveBeenCalled();
   });
 
-  it("summarizes a stored block_all posture on the review step", () => {
+  it("scopes the audience to MCP enforcement and keeps the action fixed", () => {
+    mocks.step = "scope";
+    renderEditor(null);
+
+    expect(screen.getByText("audience picker")).toBeTruthy();
+    expect(
+      screen.getByText(/Audience applies to MCP server enforcement/),
+    ).toBeTruthy();
+    expect(screen.getByText("Deny the request")).toBeTruthy();
+    expect(screen.getByText("Block message")).toBeTruthy();
+  });
+
+  it("counts the drafted decisions on the review step", () => {
     mocks.step = "review";
     renderEditor(policy({ shadowMcpDisposition: "block_all" }));
 
+    expect(
+      screen.getByText("0 approved · 0 denied · 2 unreviewed"),
+    ).toBeTruthy();
+    expect(screen.getByText("1 inventory only")).toBeTruthy();
     expect(screen.getByText("MCP servers blocked until allowed")).toBeTruthy();
   });
 });
