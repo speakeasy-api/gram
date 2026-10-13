@@ -142,6 +142,11 @@ func GetOrganizationStatsAdminPath() string {
 	return "/admin/organizations.stats"
 }
 
+// RepairInferenceKeyAdminPath returns the URL path to the admin service repairInferenceKey HTTP endpoint.
+func RepairInferenceKeyAdminPath() string {
+	return "/admin/organization.repairInferenceKey"
+}
+
 // GetInferenceKeysAdminPath returns the URL path to the admin service getInferenceKeys HTTP endpoint.
 func GetInferenceKeysAdminPath() string {
 	return "/admin/organization.inferenceKeys"

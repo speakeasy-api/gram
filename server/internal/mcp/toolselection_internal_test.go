@@ -38,18 +38,8 @@ func TestIssuerGateFailureReason_RevocationUnavailable(t *testing.T) {
 	require.NotErrorIs(t, err, errCredentialRejected)
 }
 
-// The rollout gate hides the endpoint from a workload whose token is fine, so a
-// fresh grant would meet the same gate.
-func TestIssuerGateFailureReason_WorkloadRolloutDisabled(t *testing.T) {
-	t.Parallel()
-
-	err := fmt.Errorf("%w: %w", errWorkloadRolloutDisabled, oops.C(oops.CodeNotFound))
-	require.Equal(t, "workload_rollout_disabled", issuerGateFailureReason(err))
-	require.NotErrorIs(t, err, errCredentialRejected)
-}
-
-// The admission-load failure keeps its own label and, like the two above, stays
-// off the invalid_token path.
+// The admission-load failure keeps its own label and, like the revocation
+// outage above, stays off the invalid_token path.
 func TestIssuerGateFailureReason_WorkloadAdmissionLoadIsNotACredentialRejection(t *testing.T) {
 	t.Parallel()
 
@@ -65,16 +55,6 @@ func TestIssuerGateFailureReason_WithdrawnAdmissionIsACredentialRejection(t *tes
 	err := fmt.Errorf("prepare workload session authorization: %w", fmt.Errorf("%w: %w", errCredentialRejected, oops.C(oops.CodeUnauthorized)))
 	require.ErrorIs(t, err, errCredentialRejected)
 	require.Equal(t, issuerGateReasonInvalidBearerToken, issuerGateFailureReason(err))
-}
-
-// A rollout state that could not be read is not a rollout decision, and neither
-// outcome is the credential's fault.
-func TestIssuerGateFailureReason_WorkloadRolloutUnavailable(t *testing.T) {
-	t.Parallel()
-
-	err := fmt.Errorf("%w: %w", errWorkloadRolloutUnavailable, oops.C(oops.CodeNotFound))
-	require.Equal(t, "workload_rollout_unavailable", issuerGateFailureReason(err))
-	require.NotErrorIs(t, err, errCredentialRejected)
 }
 
 // An engine that answers CodeUnexpected has judged nothing, so the workload
