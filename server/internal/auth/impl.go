@@ -320,7 +320,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
 		logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
-			Location:      fmt.Sprintf("%s?signin_error=%s", s.platformHostURL(ctx, s.cfg.SignInRedirectURL), err.Error()),
+			Location:      s.platformHostURL(ctx, s.cfg.SignInRedirectURL) + "?" + url.Values{"signin_error": {string(code)}}.Encode(),
 			SessionToken:  "",
 			SessionCookie: "",
 		}, nil

@@ -16,7 +16,7 @@ func eligibleRow(now time.Time) repo.GetSignInEligibilityRow {
 	signIn := uuid.New()
 	return repo.GetSignInEligibilityRow{
 		UserSessionID:          uuid.New(),
-		SubjectUrn:             urn.NewUserSubject("user-1"),
+		SubjectUrn:             urn.NewUserSubject("user-1").String(),
 		SsoSignInID:            uuid.NullUUID{UUID: signIn, Valid: true},
 		SessionLive:            true,
 		SignInID:               uuid.NullUUID{UUID: signIn, Valid: true},
@@ -45,8 +45,8 @@ func TestJudge(t *testing.T) {
 		{name: "expired session", mutate: func(r *repo.GetSignInEligibilityRow) { r.SessionLive = false }, want: ReasonSessionExpired},
 		{name: "not linked", mutate: func(r *repo.GetSignInEligibilityRow) { r.SsoSignInID.Valid = false }, want: ReasonNotLinked},
 		{name: "sign-in in another organization", mutate: func(r *repo.GetSignInEligibilityRow) { r.SignInID.Valid = false }, want: ReasonNotLinked},
-		{name: "agent subject", mutate: func(r *repo.GetSignInEligibilityRow) { r.SubjectUrn = urn.NewAgentSubject(uuid.New()) }, want: ReasonNotUserSubject},
-		{name: "another user", mutate: func(r *repo.GetSignInEligibilityRow) { r.SubjectUrn = urn.NewUserSubject("user-2") }, want: ReasonNotUserSubject},
+		{name: "agent subject", mutate: func(r *repo.GetSignInEligibilityRow) { r.SubjectUrn = urn.NewAgentSubject(uuid.New()).String() }, want: ReasonNotUserSubject},
+		{name: "another user", mutate: func(r *repo.GetSignInEligibilityRow) { r.SubjectUrn = urn.NewUserSubject("user-2").String() }, want: ReasonNotUserSubject},
 		{name: "revoked", mutate: func(r *repo.GetSignInEligibilityRow) { r.RevokedAt.Valid = true }, want: ReasonSignInRevoked},
 		{name: "magic auth", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = "MagicAuth" }, want: ReasonNotSSO},
 		{name: "impersonation", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = "Impersonation" }, want: ReasonNotSSO},
