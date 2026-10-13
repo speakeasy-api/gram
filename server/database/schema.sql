@@ -2971,7 +2971,7 @@ CREATE TABLE IF NOT EXISTS internal_session_issuers (
   -- Set while the issuer is turned off: discovery still resolves, signing refuses.
   disabled_at timestamptz,
   -- Sign-in tiers that may back a signed assertion: sso, google, microsoft,
-  -- magic_link, password_mfa. NULL allows every tier; validated in application code.
+  -- magic_link, password. NULL allows every tier; validated in application code.
   allowed_sign_in_methods TEXT[],
   -- Microsoft Entra tenant ids whose work accounts may back the microsoft tier.
   -- NULL or empty means no Microsoft sign-in qualifies.
@@ -4299,8 +4299,6 @@ CREATE TABLE IF NOT EXISTS sso_sign_ins (
   workos_session_id TEXT NOT NULL,
   -- WorkOS authentication method, e.g. 'SSO'; validated in application code.
   authentication_method TEXT NOT NULL,
-  -- Whether a password sign-in completed a second factor.
-  mfa_verified boolean NOT NULL DEFAULT false,
   -- Domain the social identity provider vouches the account belongs to: the
   -- Google Workspace hosted domain, or a Microsoft work account's UPN domain.
   idp_hosted_domain TEXT,
@@ -4329,7 +4327,6 @@ COMMENT ON COLUMN sso_sign_ins.organization_id IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_ins.user_id IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_ins.workos_session_id IS '@access: restricted';
 COMMENT ON COLUMN sso_sign_ins.authentication_method IS '@access: confidential';
-COMMENT ON COLUMN sso_sign_ins.mfa_verified IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_ins.idp_hosted_domain IS '@access: restricted';
 COMMENT ON COLUMN sso_sign_ins.idp_tenant_id IS '@access: opaque-confidential';
 COMMENT ON COLUMN sso_sign_ins.authenticated_at IS '@access: confidential';
