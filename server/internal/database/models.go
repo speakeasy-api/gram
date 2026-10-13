@@ -2802,6 +2802,12 @@ type RemoteSessionEmaCredential struct {
 	RemoteSessionEmaBindingID      uuid.NullUUID
 	EmaBindingGeneration           pgtype.Int8
 	TrustedIssuerSessionID         uuid.NullUUID
+	EmaProvider                    pgtype.Text
+	InternalSessionIssuerID        uuid.NullUUID
+	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
+	InternalSessionIssuerKeyID     uuid.NullUUID
+	SsoSignInID                    uuid.NullUUID
+	UserSessionID                  uuid.NullUUID
 	RequestedScopes                []string
 	GrantedScopes                  []string
 	AccessTokenEncrypted           pgtype.Text
