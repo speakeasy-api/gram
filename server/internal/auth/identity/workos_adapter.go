@@ -23,7 +23,7 @@ func NewWorkOSAdapter(client *usermanagement.Client) *WorkOSAdapter {
 	if client == nil {
 		return nil
 	}
-	return &WorkOSAdapter{client: client, googleUserInfoURL: DefaultGoogleUserInfoURL, evidence: newEvidenceCollector(EvidenceConfig{Logger: nil, MeterProvider: nil, Enabled: nil, MFAEnforced: false})}
+	return &WorkOSAdapter{client: client, googleUserInfoURL: DefaultGoogleUserInfoURL, evidence: newEvidenceCollector(EvidenceConfig{Logger: nil, MeterProvider: nil, Enabled: nil})}
 }
 
 // WithEvidence enables sign-in evidence collection. Without it only the
@@ -113,7 +113,7 @@ func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID,
 		AuthenticationMethod: string(resp.AuthenticationMethod),
 		// The server redeems this code itself, so nothing here was proven by
 		// the user and the sign-in never qualifies.
-		Evidence: SignInEvidence{MFAVerified: false, HostedDomain: "", TenantID: "", VerifiedEmail: "", AuthenticatedAt: time.Time{}},
+		Evidence: SignInEvidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", AuthenticatedAt: time.Time{}},
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,

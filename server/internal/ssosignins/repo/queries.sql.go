@@ -275,7 +275,6 @@ SELECT
     si.id AS sign_in_id,
     si.user_id AS sign_in_user_id,
     si.authentication_method,
-    si.mfa_verified,
     si.idp_hosted_domain,
     si.idp_tenant_id,
     si.verified_email,
@@ -346,7 +345,6 @@ type GetSignInEligibilityRow struct {
 	SignInID                  uuid.NullUUID
 	SignInUserID              pgtype.Text
 	AuthenticationMethod      pgtype.Text
-	MfaVerified               pgtype.Bool
 	IdpHostedDomain           pgtype.Text
 	IdpTenantID               pgtype.Text
 	VerifiedEmail             pgtype.Text
@@ -381,7 +379,6 @@ func (q *Queries) GetSignInEligibility(ctx context.Context, arg GetSignInEligibi
 		&i.SignInID,
 		&i.SignInUserID,
 		&i.AuthenticationMethod,
-		&i.MfaVerified,
 		&i.IdpHostedDomain,
 		&i.IdpTenantID,
 		&i.VerifiedEmail,
@@ -849,8 +846,8 @@ WITH prior AS (
 ),
 auth AS (
     SELECT
-        LEAST($9::timestamptz, (SELECT min(prior.authenticated_at) FROM prior)) AS at,
-        LEAST($10::timestamptz, (SELECT min(prior.idp_authenticated_at) FROM prior)) AS idp_at
+        LEAST($8::timestamptz, (SELECT min(prior.authenticated_at) FROM prior)) AS at,
+        LEAST($9::timestamptz, (SELECT min(prior.idp_authenticated_at) FROM prior)) AS idp_at
 ),
 inherited AS (
     SELECT prior.revoke_reason
@@ -874,7 +871,6 @@ INSERT INTO sso_sign_ins (
     user_id,
     workos_session_id,
     authentication_method,
-    mfa_verified,
     idp_hosted_domain,
     idp_tenant_id,
     verified_email,
@@ -888,10 +884,9 @@ SELECT
     $2,
     $3,
     $4,
-    $5::boolean,
+    $5::text,
     $6::text,
     $7::text,
-    $8::text,
     auth.idp_at,
     auth.at,
     CASE WHEN fence.fenced OR EXISTS (SELECT 1 FROM inherited) THEN clock_timestamp() END,
@@ -901,9 +896,7 @@ SELECT
     END
 FROM auth, fence
 ON CONFLICT (organization_id, workos_session_id) DO UPDATE
-SET mfa_verified = sso_sign_ins.mfa_verified
-        OR (EXCLUDED.mfa_verified AND sso_sign_ins.authentication_method = EXCLUDED.authentication_method),
-    idp_hosted_domain = COALESCE(
+SET idp_hosted_domain = COALESCE(
         sso_sign_ins.idp_hosted_domain,
         CASE WHEN sso_sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_hosted_domain END
     ),
@@ -923,7 +916,6 @@ type UpsertSSOSignInParams struct {
 	UserID               string
 	WorkosSessionID      string
 	AuthenticationMethod string
-	MfaVerified          bool
 	IdpHostedDomain      pgtype.Text
 	IdpTenantID          pgtype.Text
 	VerifiedEmail        pgtype.Text
@@ -951,7 +943,6 @@ func (q *Queries) UpsertSSOSignIn(ctx context.Context, arg UpsertSSOSignInParams
 		arg.UserID,
 		arg.WorkosSessionID,
 		arg.AuthenticationMethod,
-		arg.MfaVerified,
 		arg.IdpHostedDomain,
 		arg.IdpTenantID,
 		arg.VerifiedEmail,

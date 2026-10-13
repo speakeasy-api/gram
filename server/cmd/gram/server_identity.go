@@ -88,7 +88,6 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 		Logger:        logger,
 		MeterProvider: otel.GetMeterProvider(),
 		Enabled:       ssosignins.EvidenceGate(db, featureFlags),
-		MFAEnforced:   c.Bool("workos-mfa-enforced"),
 	})
 	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 

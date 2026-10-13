@@ -22,25 +22,25 @@ const (
 
 // Sign-in tiers an organization can allow to back a signed assertion.
 const (
-	TierSSO         = "sso"
-	TierGoogle      = "google"
-	TierMicrosoft   = "microsoft"
-	TierMagicLink   = "magic_link"
-	TierPasswordMFA = "password_mfa"
+	TierSSO       = "sso"
+	TierGoogle    = "google"
+	TierMicrosoft = "microsoft"
+	TierMagicLink = "magic_link"
+	TierPassword  = "password"
 )
 
 // AllTiers is every tier, the default when an organization sets none.
-var AllTiers = []string{TierSSO, TierGoogle, TierMicrosoft, TierMagicLink, TierPasswordMFA}
+var AllTiers = []string{TierSSO, TierGoogle, TierMicrosoft, TierMagicLink, TierPassword}
 
 // MicrosoftConsumerTenantID is the Entra tenant of personal Microsoft accounts.
 const MicrosoftConsumerTenantID = "9188040d-6c67-4c5b-b112-36a304b66dad"
 
 var tierMaxAge = map[string]time.Duration{
-	TierSSO:         MaxAge,
-	TierGoogle:      24 * time.Hour,
-	TierMicrosoft:   24 * time.Hour,
-	TierMagicLink:   4 * time.Hour,
-	TierPasswordMFA: 4 * time.Hour,
+	TierSSO:       MaxAge,
+	TierGoogle:    24 * time.Hour,
+	TierMicrosoft: 24 * time.Hour,
+	TierMagicLink: 4 * time.Hour,
+	TierPassword:  4 * time.Hour,
 }
 
 // TierMaxAge is how long after sign-in a grant of that tier may be vouched for.
@@ -72,10 +72,7 @@ func classify(row repo.GetSignInEligibilityRow) (string, Reason) {
 	case MethodMagicAuth:
 		return TierMagicLink, ReasonEligible
 	case MethodPassword:
-		if !row.MfaVerified.Valid || !row.MfaVerified.Bool {
-			return "", ReasonMFARequired
-		}
-		return TierPasswordMFA, ReasonEligible
+		return TierPassword, ReasonEligible
 	default:
 		return "", ReasonMethodNotEligible
 	}

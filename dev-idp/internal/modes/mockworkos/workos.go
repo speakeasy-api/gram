@@ -87,7 +87,6 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /user_management/sessions/revoke", h.handleWorkosRevokeSession)
 	mux.HandleFunc("GET /user_management/users/{id}/sessions", h.handleWorkosListSessions)
 	mux.HandleFunc("GET /user_management/users/{id}", h.handleWorkosGetUser)
-	mux.HandleFunc("GET /user_management/users/{id}/auth_factors", h.handleWorkosListAuthFactors)
 	mux.HandleFunc("GET /google/userinfo", h.handleGoogleUserInfo)
 	mux.HandleFunc("GET /user_management/users", h.handleWorkosListUsers)
 

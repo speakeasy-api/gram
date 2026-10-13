@@ -11,7 +11,6 @@ import (
 
 // Sign-in evidence knobs, so each Speakeasy sign-in tier is testable locally:
 //
-//	DEVIDP_MFA=true                      password users have an enrolled TOTP factor
 //	DEVIDP_IDP_HOSTED_DOMAIN=<domain>    Google/Microsoft managed domain (default: the user's email domain; "none" = personal account)
 //	DEVIDP_IDP_TENANT_ID=<id>            Microsoft tenant (default: a fixed work tenant; "consumer" = personal account)
 const (
@@ -89,21 +88,4 @@ func (h *Handler) handleGoogleUserInfo(w http.ResponseWriter, r *http.Request) {
 		info["hd"] = string(hd)
 	}
 	writeJSON(w, http.StatusOK, info)
-}
-
-// handleWorkosListAuthFactors mocks GET /user_management/users/{id}/auth_factors.
-func (h *Handler) handleWorkosListAuthFactors(w http.ResponseWriter, r *http.Request) {
-	factors := []map[string]any{}
-	if os.Getenv("DEVIDP_MFA") == "true" {
-		now := time.Now().UTC().Format(time.RFC3339)
-		factors = append(factors, map[string]any{
-			"object":     "authentication_factor",
-			"id":         "auth_factor_dev_totp",
-			"type":       "totp",
-			"created_at": now,
-			"updated_at": now,
-			"user_id":    r.PathValue("id"),
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": factors, "list_metadata": map[string]any{"before": nil, "after": nil}})
 }

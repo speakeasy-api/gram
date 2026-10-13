@@ -9,11 +9,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
-	"github.com/workos/workos-go/v6/pkg/mfa"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -47,9 +45,6 @@ const evidenceSession = "session"
 // SignInEvidence is what the identity provider vouched for at sign-in, beyond
 // the authentication method.
 type SignInEvidence struct {
-	// MFAVerified is set for a password sign-in when the WorkOS environment
-	// enforces MFA and the user has an enrolled TOTP factor.
-	MFAVerified bool
 	// HostedDomain is the domain a social provider says manages the account:
 	// Google's Workspace hosted domain (hd) or a Microsoft work account's UPN
 	// domain.
@@ -74,17 +69,12 @@ type EvidenceConfig struct {
 	MeterProvider metric.MeterProvider
 	// Enabled gates every external lookup; nil disables them.
 	Enabled EvidenceGate
-	// MFAEnforced asserts that the WorkOS environment requires a second
-	// factor on every password sign-in. Without it password sign-ins carry
-	// no MFA evidence.
-	MFAEnforced bool
 }
 
 type evidenceCollector struct {
-	logger      *slog.Logger
-	lookups     metric.Int64Counter
-	enabled     EvidenceGate
-	mfaEnforced bool
+	logger  *slog.Logger
+	lookups metric.Int64Counter
+	enabled EvidenceGate
 }
 
 func newEvidenceCollector(cfg EvidenceConfig) evidenceCollector {
@@ -104,7 +94,7 @@ func newEvidenceCollector(cfg EvidenceConfig) evidenceCollector {
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create sign-in evidence counter", attr.SlogError(err))
 	}
-	return evidenceCollector{logger: logger, lookups: lookups, enabled: cfg.Enabled, mfaEnforced: cfg.MFAEnforced}
+	return evidenceCollector{logger: logger, lookups: lookups, enabled: cfg.Enabled}
 }
 
 func (c evidenceCollector) count(ctx context.Context, kind, outcome string) {
@@ -136,18 +126,6 @@ func (a *WorkOSAdapter) signInEvidence(ctx context.Context, resp usermanagement.
 
 	method := string(resp.AuthenticationMethod)
 	switch resp.AuthenticationMethod {
-	case usermanagement.Password:
-		if !c.mfaEnforced {
-			return ev
-		}
-		factors, err := a.client.ListAuthFactors(ctx, usermanagement.ListAuthFactorsOpts{User: resp.User.ID})
-		if err != nil {
-			c.count(ctx, method, lookupOutcome(ctx, err))
-			return ev
-		}
-		c.count(ctx, method, evidenceOK)
-		ev.MFAVerified = slices.ContainsFunc(factors.Data, func(f mfa.Factor) bool { return f.Type == mfa.TOTP })
-		return ev
 	case usermanagement.GoogleOAuth:
 		if resp.OAuthTokens == nil || resp.OAuthTokens.AccessToken == "" {
 			c.missingTokens(ctx, method)

@@ -216,8 +216,6 @@ GRAM_GOOGLE_USERINFO_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos/google/useri
 ##   DEVIDP_AUTHENTICATION_METHOD = "SSO" (default) | "GoogleOAuth" | "MicrosoftOAuth" | "MagicAuth" | "Password" | "none"
 ##   DEVIDP_IDP_HOSTED_DOMAIN     = managed domain (default: the user's email domain; "none" = personal account)
 ##   DEVIDP_IDP_TENANT_ID         = Microsoft tenant (default: a fixed work tenant; "consumer" = personal account)
-##   DEVIDP_MFA                   = "true" gives password users an enrolled TOTP factor
-## Password sign-ins also need GRAM_WORKOS_MFA_ENFORCED = "true" to count.
 ## Real WorkOS API the workos backend proxies to.
 # GRAM_DEVIDP_WORKOS_UPSTREAM_URL = "https://api.workos.com"
 ## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.

@@ -337,12 +337,6 @@ func mcpRuntimeFlags() []cli.Flag {
 			Usage:   "Google OpenID Connect userinfo endpoint used to confirm a Google sign-in's Workspace domain. Leave unset in production.",
 			EnvVars: []string{"GRAM_GOOGLE_USERINFO_URL"},
 		},
-		&cli.BoolFlag{
-			Name:    "workos-mfa-enforced",
-			Usage:   "Set only when the WorkOS environment requires MFA on every password sign-in. Only then can a password sign-in with an enrolled TOTP factor back a signed assertion.",
-			EnvVars: []string{"GRAM_WORKOS_MFA_ENFORCED"},
-			Value:   false,
-		},
 		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",

@@ -72,8 +72,8 @@ const workTenant = "00000000-0000-4000-8000-0000000000aa"
 
 // evidence is what WorkOS vouched for: the fixture user's verified email and
 // an authentication at the given time.
-func evidence(mfa bool, hostedDomain, tenantID string, authenticatedAt time.Time) ssosignins.Evidence {
-	return ssosignins.Evidence{MFAVerified: mfa, HostedDomain: hostedDomain, TenantID: tenantID, VerifiedEmail: mockidp.MockUserEmail, IDPAuthenticatedAt: authenticatedAt}
+func evidence(hostedDomain, tenantID string, authenticatedAt time.Time) ssosignins.Evidence {
+	return ssosignins.Evidence{HostedDomain: hostedDomain, TenantID: tenantID, VerifiedEmail: mockidp.MockUserEmail, IDPAuthenticatedAt: authenticatedAt}
 }
 
 // signInParams records an SSO sign-in that authenticated at at.
@@ -83,14 +83,14 @@ func (f ssoFixture) signInParams(workosSessionID string, at time.Time) ssosignin
 		UserID:               f.userID,
 		WorkOSSessionID:      workosSessionID,
 		AuthenticationMethod: ssosignins.MethodSSO,
-		Evidence:             evidence(false, "", "", at),
+		Evidence:             evidence("", "", at),
 		AuthenticatedAt:      at,
 	}
 }
 
 func (f ssoFixture) recordSignIn(t *testing.T, ctx context.Context, method string, at time.Time) uuid.UUID {
 	t.Helper()
-	return f.recordSignInWith(t, ctx, method, evidence(false, "", "", at), at)
+	return f.recordSignInWith(t, ctx, method, evidence("", "", at), at)
 }
 
 func (f ssoFixture) recordSignInWith(t *testing.T, ctx context.Context, method string, ev ssosignins.Evidence, at time.Time) uuid.UUID {
@@ -182,7 +182,7 @@ func TestCheckSignInIdentity_AcceptsEachTierByDefault(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	none := evidence(false, "", "", now)
+	none := evidence("", "", now)
 	for _, tc := range []struct {
 		name     string
 		method   string
@@ -190,10 +190,10 @@ func TestCheckSignInIdentity_AcceptsEachTierByDefault(t *testing.T) {
 		tier     string
 	}{
 		{name: "sso", method: ssosignins.MethodSSO, evidence: none, tier: ssosignins.TierSSO},
-		{name: "google workspace", method: ssosignins.MethodGoogleOAuth, evidence: evidence(false, "example.com", "", now), tier: ssosignins.TierGoogle},
-		{name: "microsoft work account in a pinned tenant", method: ssosignins.MethodMicrosoftOAuth, evidence: evidence(false, "example.com", workTenant, now), tier: ssosignins.TierMicrosoft},
+		{name: "google workspace", method: ssosignins.MethodGoogleOAuth, evidence: evidence("example.com", "", now), tier: ssosignins.TierGoogle},
+		{name: "microsoft work account in a pinned tenant", method: ssosignins.MethodMicrosoftOAuth, evidence: evidence("example.com", workTenant, now), tier: ssosignins.TierMicrosoft},
 		{name: "magic link", method: ssosignins.MethodMagicAuth, evidence: none, tier: ssosignins.TierMagicLink},
-		{name: "password with mfa", method: ssosignins.MethodPassword, evidence: evidence(true, "", "", now), tier: ssosignins.TierPasswordMFA},
+		{name: "password", method: ssosignins.MethodPassword, evidence: none, tier: ssosignins.TierPassword},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -215,7 +215,7 @@ func TestCheckSignInIdentity_HonoursTheTiersTheAdminKept(t *testing.T) {
 	f.limitSignInMethods(t, ctx, ssosignins.TierSSO, ssosignins.TierMagicLink)
 	require.True(t, f.check(t, ctx, f.orgID, f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now()).ID).Eligible())
 	require.True(t, f.check(t, ctx, f.orgID, f.linkedSession(t, ctx, ssosignins.MethodMagicAuth, time.Now()).ID).Eligible())
-	password := f.linkedSessionWith(t, ctx, ssosignins.MethodPassword, evidence(true, "", "", time.Now()), time.Now())
+	password := f.linkedSessionWith(t, ctx, ssosignins.MethodPassword, evidence("", "", time.Now()), time.Now())
 	require.Equal(t, ssosignins.ReasonMethodNotAllowed, f.check(t, ctx, f.orgID, password.ID).Reason)
 }
 
@@ -231,21 +231,26 @@ func TestCheckSignInIdentity_RejectsEachFailedRequirement(t *testing.T) {
 			t.Helper()
 			return f.orgID, f.seedSession(t, ctx, urn.NewUserSubject(f.userID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}).ID
 		}},
-		{name: "password sign-in without mfa", want: ssosignins.ReasonMFARequired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "password turned off by the admin", want: ssosignins.ReasonMethodNotAllowed, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
+			f.limitSignInMethods(t, ctx, ssosignins.TierSSO, ssosignins.TierGoogle, ssosignins.TierMicrosoft, ssosignins.TierMagicLink)
 			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodPassword, time.Now()).ID
+		}},
+		{name: "password older than four hours", want: ssosignins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+			t.Helper()
+			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodPassword, time.Now().Add(-5*time.Hour)).ID
 		}},
 		{name: "personal google account on the company email", want: ssosignins.ReasonUnmanagedAccount, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodGoogleOAuth, evidence(false, "", "", time.Now()), time.Now()).ID
+			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodGoogleOAuth, evidence("", "", time.Now()), time.Now()).ID
 		}},
 		{name: "microsoft tenant the organization never pinned", want: ssosignins.ReasonTenantNotAllowed, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodMicrosoftOAuth, evidence(false, "example.com", workTenant, time.Now()), time.Now()).ID
+			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodMicrosoftOAuth, evidence("example.com", workTenant, time.Now()), time.Now()).ID
 		}},
 		{name: "email the identity provider did not verify", want: ssosignins.ReasonEmailNotVerified, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			ev := evidence(false, "", "", time.Now())
+			ev := evidence("", "", time.Now())
 			ev.VerifiedEmail = ""
 			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodSSO, ev, time.Now()).ID
 		}},
@@ -257,7 +262,7 @@ func TestCheckSignInIdentity_RejectsEachFailedRequirement(t *testing.T) {
 		}},
 		{name: "authentication time unknown", want: ssosignins.ReasonAuthTimeUnknown, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			ev := evidence(false, "", "", time.Time{})
+			ev := evidence("", "", time.Time{})
 			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodSSO, ev, time.Now()).ID
 		}},
 		{name: "magic link older than its tier allows", want: ssosignins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
@@ -658,18 +663,18 @@ func TestRecordSSOSignIn_FillsEvidenceAMissedLookupLeftOut(t *testing.T) {
 	session := f.seedSession(t, ctx, urn.NewUserSubject(f.userID), first.ID)
 	require.Equal(t, ssosignins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason)
 
+	other := missed
+	other.AuthenticationMethod = ssosignins.MethodMicrosoftOAuth
+	other.Evidence.HostedDomain = "example.com"
+	_, err = ssosignins.Record(ctx, f.ti.conn, other)
+	require.NoError(t, err)
+	require.Equal(t, ssosignins.ReasonUnmanagedAccount, f.check(t, ctx, f.orgID, session.ID).Reason, "another method's evidence never lands")
+
 	found := missed
 	found.Evidence.HostedDomain = "example.com"
 	_, err = ssosignins.Record(ctx, f.ti.conn, found)
 	require.NoError(t, err)
 	require.True(t, f.check(t, ctx, f.orgID, session.ID).Eligible(), "a later exchange of the same method fills the gap")
-
-	other := missed
-	other.AuthenticationMethod = ssosignins.MethodSSO
-	other.Evidence.MFAVerified = true
-	_, err = ssosignins.Record(ctx, f.ti.conn, other)
-	require.NoError(t, err)
-	require.Equal(t, ssosignins.TierGoogle, f.check(t, ctx, f.orgID, session.ID).Identity.Tier, "another method's evidence never lands")
 }
 
 func TestRecord_WaitsForAConcurrentRevocation(t *testing.T) {
@@ -913,7 +918,7 @@ func TestMintUserSession_LinksTheDashboardSignIn(t *testing.T) {
 				replacement.ImpersonatorEmail = "operator@example.com"
 			}
 			require.NoError(t, ti.sessionManager.UpdateSession(ctx, current, replacement))
-			signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: authCtx.UserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: ssosignins.MethodSSO, Evidence: evidence(false, "", "", time.Now()), AuthenticatedAt: time.Now()})
+			signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: authCtx.UserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: ssosignins.MethodSSO, Evidence: evidence("", "", time.Now()), AuthenticatedAt: time.Now()})
 			require.NoError(t, err)
 			switch tc.revoke {
 			case ssosignins.RevokeReasonSignOut:

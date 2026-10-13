@@ -47,7 +47,6 @@ const (
 	ReasonSignInRevoked        Reason = "sign_in_revoked"
 	ReasonMethodNotEligible    Reason = "sign_in_method_not_eligible"
 	ReasonUnmanagedAccount     Reason = "unmanaged_account"
-	ReasonMFARequired          Reason = "mfa_required"
 	ReasonMethodNotAllowed     Reason = "sign_in_method_not_allowed"
 	ReasonExpired              Reason = "expired"
 	ReasonOrganizationDisabled Reason = "organization_disabled"
@@ -92,8 +91,6 @@ type RecordParams struct {
 // Evidence is what the identity provider vouched for at sign-in, beyond the
 // method itself.
 type Evidence struct {
-	// MFAVerified is set when a password sign-in completed a second factor.
-	MFAVerified bool
 	// HostedDomain is the domain a social provider says manages the account:
 	// the Google Workspace hosted domain or a Microsoft work account's UPN domain.
 	HostedDomain string
@@ -128,7 +125,7 @@ type Beginner interface {
 // per-organization lock, so it serializes with revocation. It records nothing
 // when the exchange carries no session, organization or user.
 func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) {
-	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Revoked: false}
+	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: "", Revoked: false}
 	if p.OrganizationID == "" || p.UserID == "" || p.WorkOSSessionID == "" {
 		return none, nil
 	}
@@ -150,7 +147,6 @@ func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) 
 		UserID:               p.UserID,
 		WorkosSessionID:      p.WorkOSSessionID,
 		AuthenticationMethod: p.AuthenticationMethod,
-		MfaVerified:          p.Evidence.MFAVerified,
 		IdpHostedDomain:      conv.ToPGTextEmpty(p.Evidence.HostedDomain),
 		IdpTenantID:          conv.ToPGTextEmpty(p.Evidence.TenantID),
 		VerifiedEmail:        conv.ToPGTextEmpty(conv.NormalizeEmail(p.Evidence.VerifiedEmail)),

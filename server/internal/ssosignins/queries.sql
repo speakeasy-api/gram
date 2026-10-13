@@ -58,7 +58,6 @@ INSERT INTO sso_sign_ins (
     user_id,
     workos_session_id,
     authentication_method,
-    mfa_verified,
     idp_hosted_domain,
     idp_tenant_id,
     verified_email,
@@ -72,7 +71,6 @@ SELECT
     @user_id,
     @workos_session_id,
     @authentication_method,
-    @mfa_verified::boolean,
     sqlc.narg('idp_hosted_domain')::text,
     sqlc.narg('idp_tenant_id')::text,
     sqlc.narg('verified_email')::text,
@@ -85,9 +83,7 @@ SELECT
     END
 FROM auth, fence
 ON CONFLICT (organization_id, workos_session_id) DO UPDATE
-SET mfa_verified = sso_sign_ins.mfa_verified
-        OR (EXCLUDED.mfa_verified AND sso_sign_ins.authentication_method = EXCLUDED.authentication_method),
-    idp_hosted_domain = COALESCE(
+SET idp_hosted_domain = COALESCE(
         sso_sign_ins.idp_hosted_domain,
         CASE WHEN sso_sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_hosted_domain END
     ),
@@ -143,7 +139,6 @@ SELECT
     si.id AS sign_in_id,
     si.user_id AS sign_in_user_id,
     si.authentication_method,
-    si.mfa_verified,
     si.idp_hosted_domain,
     si.idp_tenant_id,
     si.verified_email,

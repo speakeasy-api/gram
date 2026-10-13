@@ -18,10 +18,8 @@ const testSessionID = "session_1"
 var sessionCreated = time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 
 type evidenceSetup struct {
-	factors     string
-	googleHD    string
-	mfaEnforced bool
-	disabled    bool
+	googleHD string
+	disabled bool
 }
 
 func evidenceAdapter(t *testing.T, setup evidenceSetup) *WorkOSAdapter {
@@ -29,8 +27,6 @@ func evidenceAdapter(t *testing.T, setup evidenceSetup) *WorkOSAdapter {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/user_management/users/user_1/auth_factors":
-			_, _ = w.Write([]byte(`{"data":[` + setup.factors + `],"list_metadata":{}}`))
 		case "/user_management/users/user_1/sessions":
 			_, _ = w.Write([]byte(`{"data":[{"object":"session","id":"session_0","created_at":"2026-10-02T09:00:00Z"},{"object":"session","id":"` + testSessionID + `","created_at":"` + sessionCreated.Format(time.RFC3339) + `"}],"list_metadata":{}}`))
 		case "/userinfo":
@@ -56,7 +52,6 @@ func evidenceAdapter(t *testing.T, setup evidenceSetup) *WorkOSAdapter {
 		Logger:        nil,
 		MeterProvider: nil,
 		Enabled:       enabled,
-		MFAEnforced:   setup.mfaEnforced,
 	})
 }
 
@@ -84,13 +79,12 @@ func unsignedJWT(t *testing.T, claims map[string]string) string {
 	return "e30." + base64.RawURLEncoding.EncodeToString(payload) + "."
 }
 
-func want(mfa bool, hostedDomain, tenantID string) SignInEvidence {
-	return SignInEvidence{MFAVerified: mfa, HostedDomain: hostedDomain, TenantID: tenantID, VerifiedEmail: "jane@example.com", AuthenticatedAt: sessionCreated}
+func want(hostedDomain, tenantID string) SignInEvidence {
+	return SignInEvidence{HostedDomain: hostedDomain, TenantID: tenantID, VerifiedEmail: "jane@example.com", AuthenticatedAt: sessionCreated}
 }
 
 func TestSignInEvidence(t *testing.T) {
 	t.Parallel()
-	const totp = `{"id":"f1","object":"authentication_factor","type":"totp"}`
 	ctx := context.Background()
 
 	for _, tc := range []struct {
@@ -99,66 +93,58 @@ func TestSignInEvidence(t *testing.T) {
 		resp  func(t *testing.T) usermanagement.AuthenticateResponse
 		want  SignInEvidence
 	}{
-		{name: "password with a totp factor where WorkOS enforces mfa", setup: evidenceSetup{factors: totp, googleHD: "", mfaEnforced: true, disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
+		{name: "password has no extra evidence", resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.Password, "")
-		}, want: want(true, "", "")},
-		{name: "password with a totp factor without enforced mfa", setup: evidenceSetup{factors: totp, googleHD: "", mfaEnforced: false, disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
-			t.Helper()
-			return authResponse(t, usermanagement.Password, "")
-		}, want: want(false, "", "")},
-		{name: "password without a factor", setup: evidenceSetup{factors: "", googleHD: "", mfaEnforced: true, disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
-			t.Helper()
-			return authResponse(t, usermanagement.Password, "")
-		}, want: want(false, "", "")},
-		{name: "google workspace account", setup: evidenceSetup{factors: "", googleHD: "Example.com", mfaEnforced: false, disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
+		}, want: want("", "")},
+		{name: "google workspace account", setup: evidenceSetup{googleHD: "Example.com", disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.GoogleOAuth, "google-token")
-		}, want: want(false, "example.com", "")},
+		}, want: want("example.com", "")},
 		{name: "personal google account", resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.GoogleOAuth, "google-token")
-		}, want: want(false, "", "")},
-		{name: "google without provider tokens", setup: evidenceSetup{factors: "", googleHD: "example.com", mfaEnforced: false, disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
+		}, want: want("", "")},
+		{name: "google without provider tokens", setup: evidenceSetup{googleHD: "example.com", disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.GoogleOAuth, "")
-		}, want: want(false, "", "")},
-		{name: "google token google rejects", setup: evidenceSetup{factors: "", googleHD: "example.com", mfaEnforced: false, disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
+		}, want: want("", "")},
+		{name: "google token google rejects", setup: evidenceSetup{googleHD: "example.com", disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.GoogleOAuth, "stale")
-		}, want: want(false, "", "")},
+		}, want: want("", "")},
 		{name: "microsoft work account", resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.MicrosoftOAuth, unsignedJWT(t, map[string]string{"tid": "tenant-1", "upn": "jane@Example.com"}))
-		}, want: want(false, "example.com", "tenant-1")},
+		}, want: want("example.com", "tenant-1")},
 		{name: "microsoft preferred username alone is not enough", resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.MicrosoftOAuth, unsignedJWT(t, map[string]string{"tid": "tenant-1", "preferred_username": "jane@example.com"}))
-		}, want: want(false, "", "")},
+		}, want: want("", "")},
 		{name: "microsoft opaque token", resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.MicrosoftOAuth, "EwBwA8l6BAAU")
-		}, want: want(false, "", "")},
-		{name: "sso has no extra evidence", setup: evidenceSetup{factors: totp, googleHD: "", mfaEnforced: true, disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
+		}, want: want("", "")},
+		{name: "sso has no extra evidence", setup: evidenceSetup{googleHD: "", disabled: false}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.SSO, "")
-		}, want: want(false, "", "")},
+		}, want: want("", "")},
 		{name: "unverified email is never recorded", resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			resp := authResponse(t, usermanagement.SSO, "")
 			resp.User.EmailVerified = false
 			return resp
-		}, want: SignInEvidence{MFAVerified: false, HostedDomain: "", TenantID: "", VerifiedEmail: "", AuthenticatedAt: sessionCreated}},
+		}, want: SignInEvidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", AuthenticatedAt: sessionCreated}},
 		{name: "session WorkOS does not list has no authentication time", resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			resp := authResponse(t, usermanagement.SSO, "")
 			resp.AccessToken = unsignedJWT(t, map[string]string{"sid": "session_unknown"})
 			return resp
-		}, want: SignInEvidence{MFAVerified: false, HostedDomain: "", TenantID: "", VerifiedEmail: "jane@example.com", AuthenticatedAt: time.Time{}}},
-		{name: "enforcement off makes no lookups", setup: evidenceSetup{factors: totp, googleHD: "example.com", mfaEnforced: true, disabled: true}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
+		}, want: SignInEvidence{HostedDomain: "", TenantID: "", VerifiedEmail: "jane@example.com", AuthenticatedAt: time.Time{}}},
+		{name: "enforcement off makes no lookups", setup: evidenceSetup{googleHD: "example.com", disabled: true}, resp: func(t *testing.T) usermanagement.AuthenticateResponse {
 			t.Helper()
 			return authResponse(t, usermanagement.GoogleOAuth, "google-token")
-		}, want: SignInEvidence{MFAVerified: false, HostedDomain: "", TenantID: "", VerifiedEmail: "jane@example.com", AuthenticatedAt: time.Time{}}},
+		}, want: SignInEvidence{HostedDomain: "", TenantID: "", VerifiedEmail: "jane@example.com", AuthenticatedAt: time.Time{}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

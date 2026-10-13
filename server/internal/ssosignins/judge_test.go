@@ -25,7 +25,6 @@ func eligibleRow(now time.Time) repo.GetSignInEligibilityRow {
 		SignInID:                  uuid.NullUUID{UUID: signIn, Valid: true},
 		SignInUserID:              pgtype.Text{String: "user-1", Valid: true},
 		AuthenticationMethod:      pgtype.Text{String: MethodSSO, Valid: true},
-		MfaVerified:               pgtype.Bool{Bool: false, Valid: true},
 		IdpHostedDomain:           pgtype.Text{String: "", Valid: false},
 		IdpTenantID:               pgtype.Text{String: "", Valid: false},
 		VerifiedEmail:             pgtype.Text{String: "jane@example.com", Valid: true},
@@ -105,15 +104,16 @@ func TestJudge(t *testing.T) {
 			r.AuthenticationMethod.String = MethodMagicAuth
 			r.IdpAuthenticatedAt.Time = now.Add(-5 * time.Hour)
 		}, want: ReasonExpired},
-		{name: "password with mfa", mutate: func(r *repo.GetSignInEligibilityRow) {
+		{name: "password", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = MethodPassword }, want: ReasonEligible},
+		{name: "password older than four hours", mutate: func(r *repo.GetSignInEligibilityRow) {
 			r.AuthenticationMethod.String = MethodPassword
-			r.MfaVerified.Bool = true
-		}, want: ReasonEligible},
-		{name: "password without mfa", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = MethodPassword }, want: ReasonMFARequired},
-		{name: "password with unknown mfa", mutate: func(r *repo.GetSignInEligibilityRow) {
+			r.IdpAuthenticatedAt.Time = now.Add(-5 * time.Hour)
+		}, want: ReasonExpired},
+		{name: "password turned off by the admin", mutate: func(r *repo.GetSignInEligibilityRow) {
 			r.AuthenticationMethod.String = MethodPassword
-			r.MfaVerified = pgtype.Bool{Bool: true, Valid: false}
-		}, want: ReasonMFARequired},
+			r.AllSignInMethodsAllowed = false
+			r.AllowedSignInMethods = []string{TierSSO, TierGoogle, TierMicrosoft, TierMagicLink}
+		}, want: ReasonMethodNotAllowed},
 		{name: "tier turned off by the admin", mutate: func(r *repo.GetSignInEligibilityRow) {
 			r.AuthenticationMethod.String = MethodMagicAuth
 			r.AllSignInMethodsAllowed = false

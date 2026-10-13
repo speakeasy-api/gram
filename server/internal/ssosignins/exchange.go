@@ -48,7 +48,7 @@ type ExchangeParams struct {
 // ExpectedOrganizationID when set); anything else leaves the grant unlinked.
 // It is best effort: failures are logged and counted, never returned.
 func RecordExchange(ctx context.Context, logger *slog.Logger, db Beginner, p ExchangeParams) Recorded {
-	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Revoked: false}
+	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: "", Revoked: false}
 	logger = logger.With(
 		attr.SlogAuthSignInFlow(p.Flow),
 		attr.SlogAuthAuthenticationMethod(p.AuthenticationMethod),
