@@ -101,7 +101,7 @@ func (s *Service) updateHostedServer(ctx context.Context, logger *slog.Logger, e
 // deleteHostedServer disables rather than tombstones: the wrapper id is the toolset id and cannot be reused.
 func (s *Service) deleteHostedServer(ctx context.Context, toolsetID uuid.UUID) error {
 	if s.hostedServers == nil {
-		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
+		return oops.E(oops.CodeInvalid, nil, "manage hosted MCP servers through the toolset")
 	}
 	return s.hostedServers.DisableHostedServer(ctx, toolsetID) //nolint:wrapcheck // The writer returns oops errors whose codes reach the caller.
 }
