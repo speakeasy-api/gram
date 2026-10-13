@@ -310,17 +310,18 @@ func (s *xaaReadinessService) read(ctx context.Context, organizationID string, p
 	if result != nil {
 		for _, row := range result.Servers {
 			if row != nil && row.ProjectID == projectID.String() && row.McpServerID == serverID.String() {
-				return s.readOkta(ctx, organizationID, projectID, serverID, row)
+				return s.readOkta(ctx, organizationID, projectID, serverID, row, emaOn)
 			}
 		}
 	}
 	return xaaReadinessRefusal("not_found", "That project or eligible MCP server is not available to you.")
 }
 
-// readOkta reports the Okta resource connection, unless the vendor selected
-// the Speakeasy issuer, whose readiness that connection does not describe.
-func (s *xaaReadinessService) readOkta(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, row *srv.OktaResourceConnectionServer) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
-	if s.providerAgnostic() {
+// readOkta reports the Okta resource connection, unless the EMA providers
+// rollout is on and the vendor selected the Speakeasy issuer, whose readiness
+// that connection does not describe.
+func (s *xaaReadinessService) readOkta(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, row *srv.OktaResourceConnectionServer, emaOn bool) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
+	if emaOn {
 		server, ok, err := s.servers.Server(ctx, organizationID, projectID, serverID)
 		if err != nil {
 			return xaaReadinessRefusal(unavailableCode, "XAA readiness is temporarily unavailable.")
