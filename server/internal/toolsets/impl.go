@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -35,9 +34,7 @@ import (
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -528,67 +525,15 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.DefaultEnvironmentSlug = conv.ToPGText(conv.ToLower(*payload.DefaultEnvironmentSlug))
 	}
 
-	var activeCustomDomainID *uuid.UUID
-	toolsetDomainID := conv.FromNullableUUID(existingToolset.CustomDomainID)
-	if domain, err := s.domainsRepo.WithTx(dbtx).GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID); err == nil && domain.Activated && domain.Verified {
-		activeCustomDomainID = &domain.ID
+	customDomainID, err := s.resolveCustomDomain(ctx, dbtx, logger, authCtx, existingToolset, payload.CustomDomainID)
+	if err != nil {
+		return nil, err
 	}
-
-	if payload.CustomDomainID != nil && activeCustomDomainID != nil && *payload.CustomDomainID == activeCustomDomainID.String() {
-		updateParams.CustomDomainID = uuid.NullUUID{UUID: *activeCustomDomainID, Valid: true}
-		toolsetDomainID = payload.CustomDomainID
+	mcpSlug, err := s.resolveMCPAddress(ctx, dbtx, logger, authCtx, existingToolset, (*string)(payload.McpSlug), customDomainID)
+	if err != nil {
+		return nil, err
 	}
-
-	slugChanged := payload.McpSlug != nil && *payload.McpSlug != ""
-	domainChanged := updateParams.CustomDomainID.Valid &&
-		(!existingToolset.CustomDomainID.Valid || existingToolset.CustomDomainID.UUID != updateParams.CustomDomainID.UUID)
-	slug := existingToolset.McpSlug.String
-	if slugChanged {
-		slug = conv.ToLower(*payload.McpSlug)
-	}
-
-	// Probe whenever the effective (slug, domain) address changes: a domain
-	// change alone re-scopes the existing slug and can collide there too.
-	if slug != "" && (slugChanged || domainChanged) {
-		domainID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		// Slugs on the platform domain (no custom domain, or free accounts) must be prefixed with the org slug
-		if toolsetDomainID == nil || authCtx.AccountType == "free" {
-			if !strings.HasPrefix(slug, authCtx.OrganizationSlug+"-") {
-				return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts")
-			}
-		} else {
-			domainID = uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true}
-		}
-
-		// Domain rows lock before the slug scope, the order endpoint writers use.
-		if _, err := hostedmcp.LockDomains(ctx, dbtx, authCtx.ActiveOrganizationID, existingToolset.CustomDomainID, domainID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
-		}
-		if err := mcpendpoints.LockSlugScope(ctx, dbtx, domainID, slug); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
-		}
-		// The scope is the toolset's own domain or the org's verified one, so
-		// the ownership guard is skipped: a soft-deleted domain must not block
-		// renames within its scope.
-		available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
-			Slug:                     slug,
-			CustomDomainID:           domainID,
-			OrganizationID:           authCtx.ActiveOrganizationID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: existingToolset.ID, Valid: true},
-			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			SkipDomainOwnershipCheck: true,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
-		}
-		if !available {
-			return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
-		}
-		if slugChanged {
-			updateParams.McpSlug = conv.ToPGText(slug)
-		}
-	}
-
+	updateParams.McpSlug, updateParams.CustomDomainID = mcpSlug, customDomainID
 	if payload.McpIsPublic != nil {
 		oAuthIsAttached := existingToolset.ExternalOauthServerID.Valid || existingToolset.OauthProxyServerID.Valid
 		if (existingToolset.McpIsPublic != *payload.McpIsPublic) && oAuthIsAttached {
