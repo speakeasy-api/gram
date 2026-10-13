@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/posthog/posthog-go"
@@ -21,6 +24,9 @@ type Posthog struct {
 	disabled        bool
 	localEvaluation bool
 	logger          *slog.Logger
+	// definitionsConfirmedAt is the unix nanosecond time the SDK last fetched
+	// flag definitions successfully; zero until it has.
+	definitionsConfirmedAt *atomic.Int64
 }
 
 func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthogEndpoint string, posthogPersonalAPIKey string) *Posthog {
@@ -29,60 +35,66 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 	if posthogAPIKey == "" {
 		logger.InfoContext(ctx, "posthog API key not found, disabling posthog")
 		return &Posthog{
-			disabled:        true,
-			localEvaluation: false,
-			logger:          logger,
-			client:          nil,
+			disabled:               true,
+			localEvaluation:        false,
+			logger:                 logger,
+			client:                 nil,
+			definitionsConfirmedAt: nil,
 		}
 	}
 
 	if posthogEndpoint == "" {
 		logger.InfoContext(ctx, "posthog endpoint not found, disabling posthog")
 		return &Posthog{
-			disabled:        true,
-			localEvaluation: false,
-			logger:          logger,
-			client:          nil,
+			disabled:               true,
+			localEvaluation:        false,
+			logger:                 logger,
+			client:                 nil,
+			definitionsConfirmedAt: nil,
 		}
 	}
 
+	definitionsConfirmedAt := &atomic.Int64{}
 	client, err := posthog.NewWithConfig(
 		posthogAPIKey,
-		newSDKConfig(logger, posthogEndpoint, posthogPersonalAPIKey),
+		newSDKConfig(logger, posthogEndpoint, posthogPersonalAPIKey, definitionsConfirmedAt),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to instantiate posthog client", attr.SlogError(err))
 		return &Posthog{
-			disabled:        true,
-			localEvaluation: false,
-			logger:          logger,
-			client:          nil,
+			disabled:               true,
+			localEvaluation:        false,
+			logger:                 logger,
+			client:                 nil,
+			definitionsConfirmedAt: nil,
 		}
 	}
 
 	return &Posthog{
-		client:          client,
-		disabled:        false,
-		localEvaluation: posthogPersonalAPIKey != "",
-		logger:          logger,
+		client:                 client,
+		disabled:               false,
+		localEvaluation:        posthogPersonalAPIKey != "",
+		logger:                 logger,
+		definitionsConfirmedAt: definitionsConfirmedAt,
 	}
 }
 
 // NewWithClient wraps an existing SDK client.
 func NewWithClient(logger *slog.Logger, client posthog.Client) *Posthog {
 	return &Posthog{
-		client:          client,
-		disabled:        false,
-		localEvaluation: false,
-		logger:          logger.With(attr.SlogComponent("posthog")),
+		client:                 client,
+		disabled:               false,
+		localEvaluation:        false,
+		logger:                 logger.With(attr.SlogComponent("posthog")),
+		definitionsConfirmedAt: nil,
 	}
 }
 
 // newSDKConfig builds the PostHog client configuration. SDK diagnostics are
 // routed through logger so they carry its attributes. A personal API key
 // turns on local flag evaluation, with the SDK polling flag definitions every
-// minute.
-func newSDKConfig(logger *slog.Logger, endpoint string, personalAPIKey string) posthog.Config {
+// minute and each successful poll recorded in definitionsConfirmedAt.
+func newSDKConfig(logger *slog.Logger, endpoint string, personalAPIKey string, definitionsConfirmedAt *atomic.Int64) posthog.Config {
 	config := posthog.Config{
 		Endpoint: endpoint,
 		Logger:   &sdkLogger{logger: logger},
@@ -90,8 +102,42 @@ func newSDKConfig(logger *slog.Logger, endpoint string, personalAPIKey string) p
 	if personalAPIKey != "" {
 		config.PersonalApiKey = personalAPIKey
 		config.DefaultFeatureFlagsPollingInterval = 1 * time.Minute
+		if base, ok := http.DefaultTransport.(*http.Transport); ok {
+			config.Transport = &definitionsTransport{base: base.Clone(), confirmedAt: definitionsConfirmedAt}
+		}
 	}
 	return config
+}
+
+// definitionsTransport records when the SDK last received current flag
+// definitions: a 200 or a 304 from the local evaluation endpoint.
+type definitionsTransport struct {
+	base        http.RoundTripper
+	confirmedAt *atomic.Int64
+}
+
+func (t *definitionsTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	res, err := t.base.RoundTrip(req)
+	if err == nil && strings.HasSuffix(strings.TrimSuffix(req.URL.Path, "/"), "/feature_flag/local_evaluation") &&
+		(res.StatusCode == http.StatusOK || res.StatusCode == http.StatusNotModified) {
+		t.confirmedAt.Store(time.Now().UnixNano())
+	}
+	return res, err //nolint:wrapcheck // A transport passes its base's errors through.
+}
+
+// FlagDefinitionsConfirmedAt reports when the flag definitions behind
+// EvaluateFlag were last confirmed current. Remote evaluation fetches the
+// decision on every call, so it is always current.
+func (p *Posthog) FlagDefinitionsConfirmedAt() (time.Time, bool) {
+	switch {
+	case p == nil || p.disabled || p.client == nil:
+		return time.Time{}, false
+	case !p.localEvaluation:
+		return time.Now(), true
+	case p.definitionsConfirmedAt == nil || p.definitionsConfirmedAt.Load() == 0:
+		return time.Time{}, false
+	}
+	return time.Unix(0, p.definitionsConfirmedAt.Load()), true
 }
 
 func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {

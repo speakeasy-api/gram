@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 type Provider interface {
@@ -154,6 +155,14 @@ const (
 // unavailable or inconclusive lookup from an explicit flag result.
 type EvaluationProvider interface {
 	EvaluateFlag(ctx context.Context, flag Flag, distinctID string, groups map[string]string) (Evaluation, error)
+}
+
+// DefinitionsFreshness is implemented by providers that evaluate flags from
+// periodically refreshed definitions. A provider that keeps serving cached
+// definitions through an outage reports their age here, so callers can stop
+// trusting an old result. ok is false when the definitions were never current.
+type DefinitionsFreshness interface {
+	FlagDefinitionsConfirmedAt() (at time.Time, ok bool)
 }
 
 // EvaluateFlag returns an indeterminate result for providers that only expose

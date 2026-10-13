@@ -62,11 +62,20 @@ type testInstance struct {
 	orgID   string
 	// providersFail makes every flag lookup error.
 	providersFail *atomic.Bool
+	// flagsStaleFor is how long ago the flag definitions were last current.
+	flagsStaleFor *atomic.Int64
 }
 
 type failingFlags struct {
 	*feature.InMemory
 	fail *atomic.Bool
+	// staleFor ages the flag definitions, as a provider serving its cache
+	// through an outage would.
+	staleFor *atomic.Int64
+}
+
+func (f failingFlags) FlagDefinitionsConfirmedAt() (time.Time, bool) {
+	return time.Now().Add(-time.Duration(f.staleFor.Load())), true
 }
 
 var errProviderDown = errors.New("provider unavailable")
@@ -86,7 +95,7 @@ func (f failingFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, disti
 }
 
 // newTestService builds the service for a fresh organization with the
-// rollout flag on and the SSO entitlement granted. A nil-provisioner
+// rollout flag on and a verified domain. A nil-provisioner
 // deployment passes provisioning=false.
 func newTestService(t *testing.T, provisioning bool) (context.Context, *testInstance) {
 	t.Helper()
@@ -121,13 +130,14 @@ func newTestServiceWithMintStore(t *testing.T, provisioning, mintStoreDown bool)
 	flags.SetFlag(feature.FlagInternalSessionIssuer, orgID, true)
 	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, orgID, false)
 	providersFail := &atomic.Bool{}
+	flagsStaleFor := &atomic.Int64{}
 
 	var manager internalsessionissuers.Manager
 	if provisioning {
 		credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, conn)
 		manager = provisiontest.NewProvisioner(t, conn, freshKeys, issuerOrigin, credentialID, "")
 	}
-	gate := internalsessionissuers.NewGate(conn, failingFlags{InMemory: flags, fail: providersFail}, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
+	gate := internalsessionissuers.NewGate(conn, failingFlags{InMemory: flags, fail: providersFail, staleFor: flagsStaleFor}, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	mintStore := ratelimit.NewRedisStore(redisClient)
 	if mintStoreDown {
@@ -137,7 +147,7 @@ func newTestServiceWithMintStore(t *testing.T, provisioning, mintStoreDown bool)
 		mintStore = ratelimit.NewRedisStore(down)
 	}
 	service := internalsessionissuers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, audit.NewLogger(), gate, manager, mintStore)
-	return ctx, &testInstance{gate: gate, service: service, conn: conn, flags: flags, orgID: orgID, providersFail: providersFail}
+	return ctx, &testInstance{gate: gate, service: service, conn: conn, flags: flags, orgID: orgID, providersFail: providersFail, flagsStaleFor: flagsStaleFor}
 }
 
 // provisionIssuer creates the organization's issuer outside the service, for

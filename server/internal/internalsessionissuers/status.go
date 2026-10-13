@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -152,15 +153,27 @@ func ActiveKey(ctx context.Context, db repo.DBTX, organizationID string, setID u
 	return &key, nil
 }
 
+// PauseFlagMaxAge bounds how old the flag definitions behind an "off" pause
+// switch may be: two missed one-minute polls, so a pause set during a flag
+// provider outage takes effect within this window.
+const PauseFlagMaxAge = 150 * time.Second
+
 // signingPaused fails closed: signing runs only when the kill switch is
-// authoritatively off. A missing flag, an unavailable provider or a lookup
-// error all pause signing.
+// authoritatively and recently off. A missing flag, an unavailable provider,
+// a lookup error or stale definitions all pause signing.
 func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups map[string]string) bool {
 	if g.paused {
 		return true
 	}
 	evaluation, err := feature.EvaluateFlag(ctx, g.flags, feature.FlagInternalSessionIssuerSigningPaused, organizationID, groups)
-	return err != nil || evaluation != feature.EvaluationDisabled
+	if err != nil || evaluation != feature.EvaluationDisabled {
+		return true
+	}
+	if freshness, ok := g.flags.(feature.DefinitionsFreshness); ok {
+		confirmedAt, known := freshness.FlagDefinitionsConfirmedAt()
+		return !known || time.Since(confirmedAt) > PauseFlagMaxAge
+	}
+	return false
 }
 
 func (g *Gate) flagEnabled(ctx context.Context, flag feature.Flag, organizationID string, groups map[string]string) (bool, error) {

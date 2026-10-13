@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -168,4 +169,22 @@ func TestSetEnabled_RequiresEnableAuthority(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, view.CanEnable)
 	require.Nil(t, view.Issuer, "unavailable authority must not provision issuer keys")
+}
+
+func TestStatus_StalePauseFlagPausesSigning(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t, true)
+	enable(t, ti, adminCtx(t, ctx))
+
+	status, err := ti.gate.Status(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, internalsessionissuers.StateEnabled, status.State, "a current off pause switch lets the issuer sign")
+
+	ti.flagsStaleFor.Store(int64(internalsessionissuers.PauseFlagMaxAge + time.Second))
+	status, err = ti.gate.Status(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, internalsessionissuers.StateSigningPaused, status.State, "an off read from definitions the provider stopped refreshing is indeterminate")
+	ready, err := ti.gate.Ready(ctx, ti.orgID, status.Issuer.ID)
+	require.NoError(t, err)
+	require.False(t, ready, "signing is refused")
 }
