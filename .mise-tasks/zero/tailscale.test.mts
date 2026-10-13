@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -104,6 +107,25 @@ process.exit(Number(process.env.TEST_EXIT || 0));
   const raw = () => readFileSync(join(root, "mise.local.toml"), "utf8");
   const read = () => (parseTOML(raw()) as { env: Record<string, string> }).env;
   return { root, env, local, calls, messages, raw, read, writeConfig };
+}
+
+function miseWrapper(root: string, before: string, after = ""): void {
+  const path = join(root, "bin", "mise");
+  unlinkSync(path);
+  writeFileSync(
+    path,
+    `#!${process.execPath}
+const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const args = process.argv.slice(2);
+const file = args[args.indexOf('--file') + 1];
+${before}
+const result = spawnSync(${JSON.stringify(mise)}, args, { env: process.env, stdio: 'inherit' });
+if (result.status !== 0) process.exit(result.status || 1);
+${after}
+`,
+    { mode: 0o755 },
+  );
 }
 
 for (const skipped of [
@@ -281,6 +303,133 @@ test("setup amends and deduplicates existing local certificate hosts", async (t)
   assert.equal(
     f.read().GRAM_SSL_EXTRA_HOSTS,
     `existing.example.com,${hostname},${ipv4},${ipv6}`,
+  );
+});
+
+test("completed setup does not prompt again or persist an accidental decline", async (t) => {
+  const f = fixture(t);
+  await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
+  const before = f.raw();
+  const prompt = t.mock.fn(async () => false);
+  await setupTailscale({ root: f.root, env: f.env, prompt });
+  assert.equal(prompt.mock.callCount(), 0);
+  assert.equal(f.raw(), before);
+  assert.equal(f.read().GRAM_ZERO_SKIP, undefined);
+  assert.match(f.messages.join("\n"), /already configured/);
+  assert.match(f.messages.join("\n"), /zero:tailscale --force/);
+});
+
+test("force repeats a completed setup", async (t) => {
+  const f = fixture(t);
+  await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
+  const prompt = t.mock.fn(async () => true);
+  await setupTailscale({
+    root: f.root,
+    env: { ...f.env, usage_force: "true" },
+    prompt,
+  });
+  assert.equal(prompt.mock.callCount(), 1);
+});
+
+test("completed setup refreshes newly introduced host dependencies", async (t) => {
+  const f = fixture(t);
+  await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
+  f.writeConfig("mise.toml", {
+    ...config,
+    NEW_HOST_URL: "https://{{env.GRAM_HOST}}/new",
+  });
+  const prompt = t.mock.fn(async () => true);
+  await setupTailscale({ root: f.root, env: f.env, prompt });
+  assert.equal(prompt.mock.callCount(), 1);
+  assert.equal(f.read().NEW_HOST_URL, "https://{{env.GRAM_HOST}}/new");
+});
+
+test("completed setup refreshes changed Tailnet IPs", async (t) => {
+  const f = fixture(t);
+  await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
+  const prompt = t.mock.fn(async () => true);
+  await setupTailscale({
+    root: f.root,
+    env: {
+      ...f.env,
+      TEST_STATUS: JSON.stringify({
+        ...status,
+        Self: { ...status.Self, TailscaleIPs: ["100.64.0.2", ipv6] },
+      }),
+    },
+    prompt,
+  });
+  assert.equal(prompt.mock.callCount(), 1);
+  assert.ok(f.read().GRAM_SSL_EXTRA_HOSTS.split(",").includes("100.64.0.2"));
+});
+
+for (const operation of ["unset", "set"]) {
+  test(`failed ${operation} leaves the original configuration untouched and cleans staging`, async (t) => {
+    const f = fixture(t);
+    const before = f.raw();
+    miseWrapper(
+      f.root,
+      `
+if (args[0] === ${JSON.stringify(operation)}) {
+  fs.writeFileSync(file, '[env]\\nGRAM_HOST="partial"\\n');
+  process.stderr.write('simulated config write failure');
+  process.exit(1);
+}`,
+    );
+    await assert.rejects(
+      setupTailscale({ root: f.root, env: f.env, prompt: async () => true }),
+      /simulated config write failure/,
+    );
+    assert.equal(f.raw(), before);
+    assert.deepEqual(
+      readdirSync(f.root).filter((name) => name.startsWith("mise.tailscale-")),
+      [],
+    );
+  });
+}
+
+test("failed setup does not create a partial configuration when none existed", async (t) => {
+  const f = fixture(t);
+  unlinkSync(join(f.root, "mise.local.toml"));
+  miseWrapper(
+    f.root,
+    `if (args[0] === 'set') { fs.writeFileSync(file, '[env]\\nGRAM_HOST="partial"\\n'); process.exit(1); }`,
+  );
+  await assert.rejects(
+    setupTailscale({ root: f.root, env: f.env, prompt: async () => true }),
+  );
+  assert.equal(existsSync(join(f.root, "mise.local.toml")), false);
+  assert.deepEqual(
+    readdirSync(f.root).filter((name) => name.startsWith("mise.tailscale-")),
+    [],
+  );
+});
+
+test("atomic replacement preserves configuration permissions", async (t) => {
+  const f = fixture(t);
+  const path = join(f.root, "mise.local.toml");
+  chmodSync(path, 0o600);
+  await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
+  assert.equal(statSync(path).mode & 0o777, 0o600);
+  assert.equal(f.read().GRAM_HOST, hostname);
+});
+
+test("atomic replacement does not overwrite detected concurrent edits", async (t) => {
+  const f = fixture(t);
+  const before = f.raw();
+  miseWrapper(
+    f.root,
+    "",
+    `if (args[0] === 'set') fs.appendFileSync(${JSON.stringify(join(f.root, "mise.local.toml"))}, '# concurrent edit\\n');`,
+  );
+  await assert.rejects(
+    setupTailscale({ root: f.root, env: f.env, prompt: async () => true }),
+    /changed during Tailscale setup/,
+  );
+  assert.equal(f.raw(), before + "# concurrent edit\n");
+  assert.deepEqual(
+    readdirSync(f.root).filter((name) => name.startsWith("mise.tailscale-")),
+    [],
   );
 });
 

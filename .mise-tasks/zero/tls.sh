@@ -184,10 +184,32 @@ found_keypair() {
   [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]
 }
 
+extra_cert_names() {
+  local extras="${usage_extra_hosts-${GRAM_SSL_EXTRA_HOSTS:-}}"
+  [ -n "$extras" ] || return 0
+  check_command node
+  node --input-type=module - "$extras" <<'NODE'
+import { isIP } from "node:net";
+import { domainToASCII } from "node:url";
+const names = process.argv[2].split(",").map((name) => name.trim()).filter(Boolean);
+const hostname = /^(?:\*\.)?[0-9a-z_-](?:[0-9a-z._-]*[0-9a-z_-])?$/i;
+for (const [index, name] of names.entries()) {
+  if (isIP(name) !== 0) continue;
+  const ascii = name.startsWith("*.") ? `*.${domainToASCII(name.slice(2))}` : domainToASCII(name);
+  if (/[\/\s:@]/.test(name) || name.startsWith("-") || !hostname.test(ascii)) {
+    console.error(`Invalid GRAM_SSL_EXTRA_HOSTS entry ${index + 1}: use a DNS name or bare IP address, without a scheme, path, whitespace, or port.`);
+    process.exit(1);
+  }
+}
+if (names.length) console.log(names.join("\n"));
+NODE
+}
+
 cert_names() {
-  local site_host server_host
+  local site_host server_host extra_hosts
   site_host="$(extract_hostname "$GRAM_SITE_URL")"
   server_host="$(extract_hostname "$GRAM_SERVER_URL")"
+  extra_hosts="$(extra_cert_names)" || return 1
 
   # host.docker.internal lets local assistant runtime containers dial the
   # server over TLS through Docker's host gateway alias.
@@ -199,7 +221,7 @@ cert_names() {
       "host.docker.internal" \
       "127.0.0.1" \
       "::1"
-    printf "%s\n" "${usage_extra_hosts-${GRAM_SSL_EXTRA_HOSTS:-}}" | tr ',' '\n'
+    printf "%s\n" "$extra_hosts"
   } | awk '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "") } NF && !seen[$0]++'
 }
 
@@ -210,7 +232,7 @@ gen_keypair() {
   names=()
   while IFS= read -r name; do
     names+=("$name")
-  done < <(cert_names)
+  done <<< "$1"
 
   echo "Generating cert and key for ${names[*]}..."
   mkcert \
@@ -231,13 +253,15 @@ gen_keypair() {
 }
 
 main() {
+  local hosts
   if ! detect_tls; then turn_off_tls && exit 0; fi
 
   check_command mkcert
+  hosts="$(cert_names)"
   turn_on_tls
   configure_linux_browser_trust
   trust_local_ca
-  gen_keypair
+  gen_keypair "$hosts"
 }
 
 main "$@"

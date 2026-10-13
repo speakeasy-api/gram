@@ -6,7 +6,15 @@
 //USAGE flag "--skip <tasks>" env="GRAM_ZERO_SKIP" default="" help="Comma-separated onboarding tasks to skip."
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import {
+  chmodSync,
+  lstatSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { isIP } from "node:net";
 import { join } from "node:path";
 import { confirm, isCancel } from "@clack/prompts";
@@ -34,6 +42,71 @@ function commaList(value: string | undefined): string[] {
 function skip(reason: string): void {
   console.log(reason);
   console.log("Run `mise run zero:tailscale --force` to run this setup again.");
+}
+
+function localSnapshot(
+  path: string,
+): { contents: string; mode: number } | undefined {
+  try {
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.nlink !== 1) {
+      throw new Error(
+        "Tailscale setup requires a regular mise.local.toml, not a link.",
+      );
+    }
+    return { contents: readFileSync(path, "utf8"), mode: stat.mode & 0o777 };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+function saveSettings(
+  root: string,
+  env: NodeJS.ProcessEnv,
+  settings: [string, string][],
+  original: ReturnType<typeof localSnapshot>,
+): void {
+  const localPath = join(root, "mise.local.toml");
+  // This name is gitignored, and staging stays on the same filesystem for rename.
+  const stagingPath = join(root, `mise.tailscale-${randomUUID()}.local.toml`);
+  writeFileSync(stagingPath, original?.contents ?? "", {
+    flag: "wx",
+    mode: 0o600,
+  });
+  try {
+    // Reinsert templates in dependency order without exposing an intermediate file.
+    if (original) {
+      execFileSync(
+        "mise",
+        ["unset", "--file", stagingPath, ...settings.map(([key]) => key)],
+        { cwd: root, env },
+      );
+    }
+    execFileSync(
+      "mise",
+      [
+        "set",
+        "--file",
+        stagingPath,
+        ...settings.map(([key, value]) => `${key}=${value}`),
+      ],
+      { cwd: root, env },
+    );
+    const current = localSnapshot(localPath);
+    if (
+      current?.contents !== original?.contents ||
+      current?.mode !== original?.mode
+    ) {
+      throw new Error(
+        "mise.local.toml changed during Tailscale setup; rerun setup to keep those edits.",
+      );
+    }
+    chmodSync(stagingPath, original?.mode ?? 0o600);
+    renameSync(stagingPath, localPath);
+  } finally {
+    rmSync(stagingPath, { force: true });
+  }
 }
 
 export function dependentEnvVars(
@@ -89,11 +162,9 @@ export async function setupTailscale(
 ): Promise<void> {
   const root = options.root ?? process.cwd();
   const env = options.env ?? process.env;
+  const force = env["usage_force"] === "true";
   const skipped = commaList(env["usage_skip"] ?? env["GRAM_ZERO_SKIP"]);
-  if (
-    env["usage_force"] !== "true" &&
-    (skipped.includes("*") || skipped.includes("zero:tailscale"))
-  ) {
+  if (!force && (skipped.includes("*") || skipped.includes("zero:tailscale"))) {
     skip("Tailscale setup is disabled by GRAM_ZERO_SKIP.");
     return;
   }
@@ -142,6 +213,27 @@ export async function setupTailscale(
     );
     return;
   }
+  const localPath = join(root, "mise.local.toml");
+  const original = localSnapshot(localPath);
+  const local = original
+    ? (parseTOML(original.contents) as { env?: Record<string, string> })
+    : {};
+  const config = parseTOML(readFileSync(join(root, "mise.toml"), "utf8")) as {
+    env: Record<string, unknown>;
+  };
+  const dependents = dependentEnvVars(config.env, ["GRAM_HOST"]);
+  const savedHosts = new Set(commaList(local.env?.["GRAM_SSL_EXTRA_HOSTS"]));
+  if (
+    !force &&
+    local.env?.["GRAM_HOST"] === hostname &&
+    [hostname, ...ips].every((host) => savedHosts.has(host)) &&
+    dependents.every(([key, value]) => local.env?.[key] === value)
+  ) {
+    skip(
+      "Tailscale development settings are already configured for this machine.",
+    );
+    return;
+  }
   if (!options.prompt && !process.stdin.isTTY) {
     skip("Tailscale setup needs an interactive terminal.");
     return;
@@ -159,12 +251,6 @@ export async function setupTailscale(
     return;
   }
 
-  const localPath = join(root, "mise.local.toml");
-  const local = existsSync(localPath)
-    ? (parseTOML(readFileSync(localPath, "utf8")) as {
-        env?: Record<string, string>;
-      })
-    : {};
   if (!answer) {
     const values = new Set([
       ...commaList(local.env?.["GRAM_ZERO_SKIP"]),
@@ -185,12 +271,9 @@ export async function setupTailscale(
     return;
   }
 
-  const config = parseTOML(readFileSync(join(root, "mise.toml"), "utf8")) as {
-    env: Record<string, unknown>;
-  };
   const settings: [string, string][] = [
     ["GRAM_HOST", hostname],
-    ...dependentEnvVars(config.env, ["GRAM_HOST"]),
+    ...dependents,
     [
       "GRAM_SSL_EXTRA_HOSTS",
       [
@@ -204,25 +287,7 @@ export async function setupTailscale(
       ].join(","),
     ],
   ];
-  // mise set preserves existing key positions. Reinsert affected settings so
-  // templates follow their dependencies while keeping port pins and other settings.
-  if (existsSync(localPath)) {
-    execFileSync(
-      "mise",
-      ["unset", "--file", "mise.local.toml", ...settings.map(([key]) => key)],
-      { cwd: root, env },
-    );
-  }
-  execFileSync(
-    "mise",
-    [
-      "set",
-      "--file",
-      "mise.local.toml",
-      ...settings.map(([key, value]) => `${key}=${value}`),
-    ],
-    { cwd: root, env },
-  );
+  saveSettings(root, env, settings, original);
   console.log("Tailscale development settings saved in mise.local.toml.");
   console.log(
     "Run `mise run zero:tls` to refresh certificates; ./zero runs it next.",

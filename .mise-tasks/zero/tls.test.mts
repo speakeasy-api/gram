@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,6 +21,7 @@ function fixture(t: TestContext) {
   const bin = join(root, "bin");
   const ca = join(root, "ca");
   mkdirSync(bin);
+  symlinkSync(process.execPath, join(bin, "node"));
   mkdirSync(ca);
   writeFileSync(join(ca, "rootCA.pem"), "synthetic CA");
   const calls = join(root, "calls.jsonl");
@@ -40,7 +42,7 @@ ${body}
       { mode: 0o755 },
     );
   }
-  const run = (overrides: NodeJS.ProcessEnv = {}) => {
+  const runResult = (overrides: NodeJS.ProcessEnv = {}) => {
     const result = spawnSync("bash", [task], {
       cwd: root,
       env: {
@@ -54,13 +56,18 @@ ${body}
       },
       encoding: "utf8",
     });
-    assert.equal(result.status, 0, result.stderr);
-    return readFileSync(calls, "utf8")
+    const recorded = readFileSync(calls, "utf8")
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line) as { name: string; args: string[] });
+    return { result, calls: recorded };
   };
-  return { run };
+  const run = (overrides: NodeJS.ProcessEnv = {}) => {
+    const { result, calls } = runResult(overrides);
+    assert.equal(result.status, 0, result.stderr);
+    return calls;
+  };
+  return { run, runResult };
 }
 
 for (const [extras, expected] of [
@@ -119,4 +126,49 @@ test("extra hosts do not enable TLS for HTTP-only endpoints", (t) => {
     calls.some((call) => call.name === "mkcert"),
     false,
   );
+});
+
+for (const host of [
+  "https://dev.example.ts.net:443",
+  "dev.example.ts.net:443",
+  "dev.example.ts.net/path",
+  "dev machine.example.ts.net",
+  "dev\tmachine.example.ts.net",
+  "dev\nmachine.example.ts.net",
+  "[fd7a:115c:a1e0::1]:443",
+  "developer@example.com",
+  "-install",
+]) {
+  test(`invalid extra host fails before TLS configuration or CA trust (${JSON.stringify(host)})`, (t) => {
+    const f = fixture(t);
+    const { result, calls } = f.runResult({
+      GRAM_SSL_EXTRA_HOSTS: `valid.example.com,${host}`,
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Invalid GRAM_SSL_EXTRA_HOSTS entry 2/);
+    assert.equal(
+      calls.some((call) => call.name === "mise" || call.name === "mkcert"),
+      false,
+    );
+  });
+}
+
+test("validation accepts wildcard and international DNS names alongside IPv6", (t) => {
+  const f = fixture(t);
+  const calls = f.run({
+    GRAM_SSL_EXTRA_HOSTS: "*.example.com,bücher.example,fd7a:115c:a1e0::1",
+  });
+  const generated = calls.find(
+    (call) => call.name === "mkcert" && call.args[0] === "-cert-file",
+  );
+  assert.ok(generated);
+  assert.deepEqual(generated.args.slice(4), [
+    "localhost",
+    "host.docker.internal",
+    "127.0.0.1",
+    "::1",
+    "*.example.com",
+    "bücher.example",
+    "fd7a:115c:a1e0::1",
+  ]);
 });
