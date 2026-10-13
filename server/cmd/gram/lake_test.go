@@ -82,3 +82,21 @@ func TestNewLakeStorageWhitespaceMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestNewLakeStorageEmulatedPubSubUsesFilesystem(t *testing.T) {
+	t.Parallel()
+	directory := filepath.Join(t.TempDir(), "objects")
+	flags := flag.NewFlagSet("lake", flag.ContinueOnError)
+	flags.String("environment", "dev", "")
+	flags.String("storage-buckets", "", "")
+	flags.String("pubsub-emulator-host", "pubsub-emulator:8085", "")
+	flags.String("lake-directory", "", "")
+	require.NoError(t, flags.Set("lake-directory", directory))
+	c := cli.NewContext(cli.NewApp(), flags, nil)
+
+	store, buckets, shutdown, err := newLakeStorage(t.Context(), testenv.NewLogger(t), c)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, shutdown(t.Context())) })
+	require.IsType(t, &lake.FilesystemStore{}, store)
+	require.Equal(t, "lake", buckets["lake"])
+}

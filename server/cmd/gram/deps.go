@@ -1313,12 +1313,19 @@ func newLakeStorage(ctx context.Context, logger *slog.Logger, c *cli.Context) (s
 		return nil, nil, noopShutdown, fmt.Errorf("parse storage bucket mapping: %w", err)
 	}
 
-	if c.String("environment") == "local" {
+	// An emulated Pub/Sub broker emulates storage notifications too, so it pairs
+	// with a filesystem lake. Preview environments run this way.
+	emulated := c.String("pubsub-emulator-host") != ""
+	if c.String("environment") == "local" || (emulated && buckets["lake"] == "") {
 		if buckets["lake"] == "" {
 			buckets["lake"] = "lake"
 		}
 
-		store, err := lake.NewFilesystemStore(ctx, logger, c.String("lake-directory"))
+		directory := c.String("lake-directory")
+		if c.String("environment") != "local" && !c.IsSet("lake-directory") {
+			directory = filepath.Join(os.TempDir(), "gram-lake")
+		}
+		store, err := lake.NewFilesystemStore(ctx, logger, directory)
 		if err != nil {
 			return nil, nil, noopShutdown, fmt.Errorf("create filesystem lake: %w", err)
 		}
