@@ -138,6 +138,80 @@ func TestRegisterDevice_TokenIsSingleUse(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
+// A device that crashed after registering but before saving the result retries
+// with the same token and key, and gets its existing enrollment back rather than
+// a refusal or a second device.
+func TestRegisterDevice_SameKeyRetryReturnsTheExistingEnrollment(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	agentID := newAgent(t, ctx, ti, "retrying")
+	token := createJoinToken(t, ctx, ti, agentID)
+	jwk := publicJWK(t, newDeviceKey(t).Public())
+
+	first, err := registerDevice(ctx, ti, token, jwk)
+	require.NoError(t, err)
+	admits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+
+	again, err := registerDevice(ctx, ti, token, jwk)
+	require.NoError(t, err)
+	require.Equal(t, first, again)
+
+	keys, err := testrepo.New(ti.conn).CountLiveWorkloadDeviceKeysFixture(ctx, testrepo.CountLiveWorkloadDeviceKeysFixtureParams{OrganizationID: ti.orgID, Subject: first.DeviceSubject})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), keys)
+	afterAdmits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	require.Equal(t, admits, afterAdmits, "a retry must not admit the device again")
+}
+
+// The retry is honoured only within the token's lifetime and while the device
+// is still enrolled.
+func TestRegisterDevice_SameKeyRetryRefusedOnceExpiredOrWithdrawn(t *testing.T) {
+	t.Parallel()
+
+	t.Run("expired", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		token := createJoinToken(t, ctx, ti, newAgent(t, ctx, ti, "retry-expired"))
+		jwk := publicJWK(t, newDeviceKey(t).Public())
+		_, err := registerDevice(ctx, ti, token, jwk)
+		require.NoError(t, err)
+
+		_, err = testrepo.New(ti.conn).ExpireWorkloadDeviceJoinTokensFixture(ctx, ti.orgID)
+		require.NoError(t, err)
+		_, err = registerDevice(ctx, ti, token, jwk)
+		requireOopsCode(t, err, oops.CodeUnauthorized)
+	})
+
+	t.Run("withdrawn", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		token := createJoinToken(t, ctx, ti, newAgent(t, ctx, ti, "retry-withdrawn"))
+		jwk := publicJWK(t, newDeviceKey(t).Public())
+		reg, err := registerDevice(ctx, ti, token, jwk)
+		require.NoError(t, err)
+
+		withdrawDevice(t, ctx, ti, reg.DeviceSubject)
+		_, err = registerDevice(ctx, ti, token, jwk)
+		requireOopsCode(t, err, oops.CodeUnauthorized)
+	})
+}
+
+func withdrawDevice(t *testing.T, ctx context.Context, ti *testInstance, subject string) {
+	t.Helper()
+	policy, err := ti.service.List(ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	for _, admission := range policy.Admissions {
+		if admission.Subject == subject {
+			_, err = ti.service.WithdrawSubject(ctx, &gen.WithdrawSubjectPayload{ID: admission.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+			require.NoError(t, err)
+			return
+		}
+	}
+	t.Fatalf("no admission for %s", subject)
+}
+
 // Grants removed after the token was issued are caught at redemption, and the
 // refusal leaves the token unspent.
 func TestRegisterDevice_RechecksTheDeviceAgentGrants(t *testing.T) {

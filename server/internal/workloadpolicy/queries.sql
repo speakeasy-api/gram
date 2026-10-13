@@ -281,6 +281,40 @@ WHERE token_hash = @token_hash
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetReplayedDeviceRegistration :one
+-- The enrollment a spent join token already produced, when the same key asks
+-- again: a device that crashed after registering but before saving the result
+-- retries with its token and key. Only within the token's original lifetime,
+-- and only while that device is still enrolled under the token's agent.
+SELECT t.organization_id, t.agent_id, t.consumed_by_subject AS subject, i.issuer
+FROM workload_device_join_tokens t
+JOIN workload_device_keys k
+  ON k.organization_id = t.organization_id
+  AND k.subject = t.consumed_by_subject
+  AND k.deleted IS FALSE
+JOIN workload_issuers i
+  ON i.organization_id = k.organization_id
+  AND i.id = k.workload_issuer_id
+  AND i.deleted IS FALSE
+JOIN workload_identity_admissions a
+  ON a.organization_id = k.organization_id
+  AND a.workload_issuer_id = k.workload_issuer_id
+  AND a.subject = k.subject
+  AND a.match_kind = 'exact'
+  AND a.deleted IS FALSE
+JOIN workload_agent_assignments w
+  ON w.organization_id = k.organization_id
+  AND w.workload_issuer_id = k.workload_issuer_id
+  AND w.subject = k.subject
+  AND w.match_kind = 'exact'
+  AND w.agent_id = t.agent_id
+  AND w.deleted IS FALSE
+WHERE t.token_hash = @token_hash
+  AND t.consumed_at IS NOT NULL
+  AND t.expires_at > clock_timestamp()
+  AND t.deleted IS FALSE
+  AND k.thumbprint = @thumbprint;
+
 -- name: FindDeviceIssuer :many
 -- The organization's Speakeasy device issuer, at the organization tier so its
 -- devices are recognised under both organization and project authorization

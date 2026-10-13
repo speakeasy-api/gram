@@ -25,6 +25,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -231,9 +232,7 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// Unknown, expired, and already redeemed are deliberately
-		// indistinguishable to the caller.
-		return nil, oops.C(oops.CodeUnauthorized)
+		return s.replayedDeviceRegistration(ctx, q, payload.JoinToken, key.thumbprint)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error redeeming join token").LogError(ctx, s.logger)
 	}
@@ -340,6 +339,45 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 		Issuer:         issuer.Issuer,
 		AgentID:        agent.ID.String(),
 		OrganizationID: org,
+	}, nil
+}
+
+// replayedDeviceRegistration answers a join token that is already spent. The
+// one replay it accepts is the device that spent it presenting the same key
+// again, within the token's lifetime and while still enrolled: a device that
+// crashed between registering and saving the result would otherwise need a new
+// token. Unknown, expired, and spent-by-another-key tokens stay
+// indistinguishable to the caller.
+func (s *Service) replayedDeviceRegistration(ctx context.Context, q *repo.Queries, joinToken string, thumbprint string) (*gen.WorkloadDeviceRegistration, error) {
+	replay, err := q.GetReplayedDeviceRegistration(ctx, repo.GetReplayedDeviceRegistrationParams{
+		TokenHash:  hashDeviceJoinToken(joinToken),
+		Thumbprint: thumbprint,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.C(oops.CodeUnauthorized)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error redeeming join token").LogError(ctx, s.logger)
+	}
+
+	agent, err := q.GetDeviceJoinAgent(ctx, repo.GetDeviceJoinAgentParams{OrganizationID: replay.OrganizationID, ID: replay.AgentID})
+	if err != nil || !deviceJoinAgentRunnable(agent) {
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent").LogError(ctx, s.logger)
+		}
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	s.logger.InfoContext(ctx, "device re-presented its enrollment",
+		attr.SlogWorkloadSubject(replay.Subject.String),
+		attr.SlogOrganizationID(replay.OrganizationID),
+	)
+
+	return &gen.WorkloadDeviceRegistration{
+		DeviceSubject:  replay.Subject.String,
+		Issuer:         replay.Issuer,
+		AgentID:        replay.AgentID.String(),
+		OrganizationID: replay.OrganizationID,
 	}, nil
 }
 

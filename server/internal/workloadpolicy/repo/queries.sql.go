@@ -489,6 +489,65 @@ func (q *Queries) GetOrganizationAgent(ctx context.Context, arg GetOrganizationA
 	return i, err
 }
 
+const getReplayedDeviceRegistration = `-- name: GetReplayedDeviceRegistration :one
+SELECT t.organization_id, t.agent_id, t.consumed_by_subject AS subject, i.issuer
+FROM workload_device_join_tokens t
+JOIN workload_device_keys k
+  ON k.organization_id = t.organization_id
+  AND k.subject = t.consumed_by_subject
+  AND k.deleted IS FALSE
+JOIN workload_issuers i
+  ON i.organization_id = k.organization_id
+  AND i.id = k.workload_issuer_id
+  AND i.deleted IS FALSE
+JOIN workload_identity_admissions a
+  ON a.organization_id = k.organization_id
+  AND a.workload_issuer_id = k.workload_issuer_id
+  AND a.subject = k.subject
+  AND a.match_kind = 'exact'
+  AND a.deleted IS FALSE
+JOIN workload_agent_assignments w
+  ON w.organization_id = k.organization_id
+  AND w.workload_issuer_id = k.workload_issuer_id
+  AND w.subject = k.subject
+  AND w.match_kind = 'exact'
+  AND w.agent_id = t.agent_id
+  AND w.deleted IS FALSE
+WHERE t.token_hash = $1
+  AND t.consumed_at IS NOT NULL
+  AND t.expires_at > clock_timestamp()
+  AND t.deleted IS FALSE
+  AND k.thumbprint = $2
+`
+
+type GetReplayedDeviceRegistrationParams struct {
+	TokenHash  string
+	Thumbprint string
+}
+
+type GetReplayedDeviceRegistrationRow struct {
+	OrganizationID string
+	AgentID        uuid.UUID
+	Subject        pgtype.Text
+	Issuer         string
+}
+
+// The enrollment a spent join token already produced, when the same key asks
+// again: a device that crashed after registering but before saving the result
+// retries with its token and key. Only within the token's original lifetime,
+// and only while that device is still enrolled under the token's agent.
+func (q *Queries) GetReplayedDeviceRegistration(ctx context.Context, arg GetReplayedDeviceRegistrationParams) (GetReplayedDeviceRegistrationRow, error) {
+	row := q.db.QueryRow(ctx, getReplayedDeviceRegistration, arg.TokenHash, arg.Thumbprint)
+	var i GetReplayedDeviceRegistrationRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.AgentID,
+		&i.Subject,
+		&i.Issuer,
+	)
+	return i, err
+}
+
 const getWorkloadAdmission = `-- name: GetWorkloadAdmission :one
 SELECT id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, hooks_project_id, hooks_project_organization_id, created_at, updated_at, deleted_at, deleted
 FROM workload_identity_admissions
