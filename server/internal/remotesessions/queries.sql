@@ -4993,7 +4993,7 @@ SELECT EXISTS (
 -- NULL provenance left by a parent delete reads as unusable, never as NULL.
 SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
-    COALESCE(c.ema_provider, 'external') = 'external'
+    c.ema_provider = 'external'
     AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
     AND c.client_selection = 'binding'
     AND c.remote_session_ema_binding_id = @binding_id::uuid
@@ -5027,7 +5027,7 @@ WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
   AND c.user_session_issuer_id = @user_session_issuer_id
   AND c.remote_session_client_id = @remote_session_client_id AND c.resource = @resource
   AND c.subject_urn = @subject_urn AND c.deleted IS FALSE
-  AND COALESCE(c.ema_provider, 'external') = 'external';
+  AND c.ema_provider = 'external';
 
 -- name: UpsertEMACredential :one
 -- Publishes a chained credential only while the binding generation, the
@@ -5137,9 +5137,8 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 
 -- name: PurgeSpeakeasyEMACredentials :exec
 -- Issuer containment is organization-scoped and covers every project. The
--- provider discriminator excludes external-provider credentials, including
--- rows written before provider provenance was introduced. Retired rows may
--- still contain ciphertext and must be erased as well.
+-- provider discriminator excludes external-provider credentials. Retired
+-- rows may still contain ciphertext and must be erased as well.
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL,
     deleted_at = COALESCE(deleted_at, clock_timestamp()),
@@ -5157,7 +5156,7 @@ INSERT INTO remote_session_ema_credentials (
 )
 VALUES (
   @organization_id, @project_id, 'https://resource.example.test', @subject_urn,
-  'implicit', sqlc.narg(ema_provider)::text, 'encrypted-fixture', clock_timestamp() + interval '1 hour',
+  'implicit', @ema_provider::text, 'encrypted-fixture', clock_timestamp() + interval '1 hour',
   CASE WHEN @retired::boolean THEN clock_timestamp() ELSE NULL END
 )
 RETURNING id;
@@ -5345,7 +5344,7 @@ SELECT s.id, s.sso_sign_in_id
 FROM user_sessions AS s
 JOIN user_session_issuers AS i ON i.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = @project_id::uuid AND p.organization_id = s.organization_id AND p.deleted IS FALSE
-WHERE s.jti = @jti AND s.organization_id = @organization_id
+WHERE s.sso_sign_in_id IS NOT NULL AND s.jti = @jti AND s.organization_id = @organization_id
   AND s.user_session_issuer_id = @user_session_issuer_id
   AND (s.project_id IS NULL OR s.project_id = p.id)
   AND s.subject_urn = @subject_urn AND s.deleted IS FALSE
@@ -5466,3 +5465,23 @@ JOIN json_web_keys k ON k.json_web_key_set_id = i.json_web_key_set_id
 JOIN organization_metadata o ON o.id = i.organization_id AND o.disabled_at IS NULL
 WHERE i.id = @id AND i.organization_id = @organization_id
   AND i.deleted IS FALSE AND i.disabled_at IS NULL;
+
+-- name: GetSpeakeasyEMAStoredGrant :one
+-- Status has no authenticated MCP JTI. Follow only this credential's retained grant;
+-- GetSpeakeasyEMAGrant and the SSO judge still validate its live authority.
+SELECT s.jti FROM remote_session_ema_credentials c
+JOIN user_sessions s ON s.id = c.user_session_id AND s.organization_id = c.organization_id
+WHERE c.organization_id = @organization_id AND c.project_id = @project_id
+  AND c.user_session_issuer_id = @user_session_issuer_id
+  AND c.remote_session_issuer_id = @remote_session_issuer_id AND c.remote_session_client_id = @remote_session_client_id
+  AND c.resource = @resource AND c.subject_urn = @subject_urn
+  AND c.ema_provider = 'speakeasy' AND c.deleted IS FALSE;
+
+-- name: ListEMAChainingResourceCandidates :many
+-- Diagnostic candidates only: an origin match can retain a configuration error
+-- after invalid discovery, but never authorizes an alias or selects a token.
+SELECT resource FROM remote_session_ema_bindings
+WHERE project_id = @project_id AND organization_id = @organization_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
+  AND state = 'ready' AND remote_session_client_id IS NOT NULL;

@@ -30,7 +30,7 @@ func TestEMAIssuerTokenPurger_OrganizationAndProviderScope(t *testing.T) {
 	for _, project := range projects {
 		_, err := fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: project.id, OrganizationID: project.org, Name: "Purge test", Slug: project.id.String()})
 		require.NoError(t, err)
-		for _, provider := range []pgtype.Text{{String: "speakeasy", Valid: true}, {String: "external", Valid: true}, {}} {
+		for _, provider := range []string{"speakeasy", "external", "unknown"} {
 			for _, retired := range []bool{false, true} {
 				_, err := q.CreateEMAIssuerPurgeCredentialFixture(ctx, repo.CreateEMAIssuerPurgeCredentialFixtureParams{
 					OrganizationID: pgtype.Text{String: project.org, Valid: true}, ProjectID: uuid.NullUUID{UUID: project.id, Valid: true},
@@ -51,9 +51,9 @@ func TestEMAIssuerTokenPurger_OrganizationAndProviderScope(t *testing.T) {
 		retiredCounts := make(map[string]int)
 		for _, row := range rows {
 			if row.Deleted {
-				retiredCounts[row.EmaProvider.String]++
+				retiredCounts[row.EmaProvider]++
 			}
-			purged := project.org == targetOrg && row.EmaProvider.String == "speakeasy"
+			purged := project.org == targetOrg && row.EmaProvider == "speakeasy"
 			if purged {
 				require.True(t, row.Deleted)
 				require.False(t, row.AccessTokenEncrypted.Valid)
@@ -63,7 +63,7 @@ func TestEMAIssuerTokenPurger_OrganizationAndProviderScope(t *testing.T) {
 			}
 		}
 		require.Equal(t, 1, retiredCounts["external"])
-		require.Equal(t, 1, retiredCounts[""])
+		require.Equal(t, 1, retiredCounts["unknown"])
 		if project.org == targetOrg {
 			require.Equal(t, 2, retiredCounts["speakeasy"])
 		} else {

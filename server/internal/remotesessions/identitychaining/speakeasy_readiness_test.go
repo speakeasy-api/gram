@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -78,4 +79,11 @@ func TestSpeakeasyConfigurationReadiness(t *testing.T) {
 			require.False(t, outcome.Succeeded())
 		})
 	}
+}
+
+func TestSpeakeasyNilSignerDisablesProvider(t *testing.T) {
+	t.Parallel()
+	g := &Governor{sources: make(map[remotesessions.EMAProviderKind]sourceFactory)}
+	g.SetSpeakeasyIssuer(new(internalsessionissuers.Gate), nil)
+	require.Empty(t, g.sources)
 }

@@ -12,10 +12,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -85,13 +87,18 @@ func seedXAAInspectorFixture(t *testing.T, ctx context.Context, conn *pgxpool.Po
 // under issuer.
 func bindXAAInspectorUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f xaaInspectorFixture, issuer uuid.UUID) {
 	t.Helper()
+	bindXAAInspectorResource(t, ctx, conn, f, issuer, "https://upstream.example.test/mcp")
+}
+
+func bindXAAInspectorResource(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f xaaInspectorFixture, issuer uuid.UUID, resource string) {
+	t.Helper()
 	q := remotesessionsrepo.New(conn)
 	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 		OrganizationID: conv.ToPGText(f.organizationID), ProjectID: conv.ToNullUUID(f.projectID), RemoteSessionIssuerID: issuer, ClientID: "resource-" + uuid.NewString()[:8],
 		ClientIDIssuedAt: conv.ToPGTimestamptz(time.Now().UTC()), TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{},
 	})
 	require.NoError(t, err)
-	key := remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: issuer, Resource: "https://upstream.example.test/mcp"}
+	key := remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: issuer, Resource: resource}
 	require.NoError(t, q.EnsureEMABinding(ctx, remotesessionsrepo.EnsureEMABindingParams(key)))
 	current, err := q.GetEMABinding(ctx, key)
 	require.NoError(t, err)
@@ -183,4 +190,47 @@ func TestXAAIdentityInspectorReportsAvailableProviders(t *testing.T) {
 	unbound := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: nil}, ordered: false})
 	require.Equal(t, "binding_not_ready", conv.PtrValOr(unbound.NotServedReason, ""))
 	require.Empty(t, unbound.Providers)
+}
+
+type failedResourceGovernor struct {
+	*recordingGovernor
+	err   error
+	calls int
+}
+
+func (g *failedResourceGovernor) ResolveResource(context.Context, identitychaining.Request) (protectedresource.EndpointResource, error) {
+	g.calls++
+	return protectedresource.EndpointResource{}, g.err
+}
+func (*failedResourceGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool) {
+	panic("failed discovery must not be probed a second time")
+}
+
+func TestXAAIdentityInspectorPreservesSnapshotAfterDiscoveryFailure(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"invalid metadata", protectedresource.ErrEndpointResourceInvalid},
+		{"transient metadata failure", context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			conn, err := platformMCPInfra.CloneTestDatabase(t, "xaa_failed_resource")
+			require.NoError(t, err)
+			f := seedXAAInspectorFixture(t, ctx, conn, conv.ToPGText("https://recorded.example.test"))
+			bindXAAInspectorResource(t, ctx, conn, f, f.issuerA, "https://upstream.example.test")
+			governor := &failedResourceGovernor{recordingGovernor: &recordingGovernor{}, err: tc.err}
+			inspector := &postgresXAAIdentityInspector{logger: testenv.NewLogger(t), db: conn, governor: governor, origins: remotesessions.CallbackOrigins{}}
+			result, callback, err := inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
+			require.NoError(t, err)
+			require.False(t, result.Served)
+			require.Equal(t, "resource_unavailable", conv.PtrValOr(result.NotServedReason, ""))
+			require.Len(t, result.Bindings, 1, "stored diagnostics survive failed metadata resolution")
+			require.NotNil(t, callback)
+			require.Equal(t, 1, governor.calls)
+		})
+	}
 }

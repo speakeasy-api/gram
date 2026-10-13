@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -80,6 +81,21 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 	if err != nil {
 		logger.WarnContext(ctx, "resolve identity chaining resource", attr.SlogError(err))
 		if errors.Is(err, protectedresource.ErrEndpointResourceInvalid) {
+			// A failed alias must retain its configuration error when a resource
+			// on this origin is bound. This is diagnostic ownership only; fresh,
+			// valid metadata is still required to select a resource or token.
+			resources, readErr := repo.New(g.db).ListEMAChainingResourceCandidates(ctx, repo.ListEMAChainingResourceCandidatesParams{
+				ProjectID: req.ProjectID, OrganizationID: req.OrganizationID, UserSessionIssuerID: req.UserSessionIssuerID,
+				RemoteSessionIssuerID: req.RemoteSessionIssuerID,
+			})
+			if readErr != nil {
+				logger.WarnContext(ctx, "list identity chaining diagnostic candidates", attr.SlogError(readErr))
+				return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceUnknown, true)
+			}
+			bound := slices.ContainsFunc(resources, func(resource string) bool { return MatchesDiagnosticOrigin(req.UpstreamResource, resource) })
+			if !bound {
+				return none, notApplicable
+			}
 			return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
 		}
 		return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceUnknown, true)
@@ -147,4 +163,31 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		audience:              "",
 		internalIssuerVersion: time.Time{}, internalKeyID: uuid.Nil, userSessionID: uuid.Nil, signInID: uuid.Nil, email: "",
 	}, success
+}
+
+// MatchesDiagnosticOrigin does not establish authorization-resource identity.
+// It only keeps a known origin's invalid metadata from masquerading as an
+// unconfigured endpoint. Exact non-URL resources remain scoped to themselves.
+func MatchesDiagnosticOrigin(endpoint, resource string) bool {
+	if strings.TrimRight(endpoint, "/") == strings.TrimRight(resource, "/") {
+		return true
+	}
+	a, errA := url.Parse(endpoint)
+	b, errB := url.Parse(resource)
+	if errA != nil || errB != nil || a.Hostname() == "" || b.Hostname() == "" {
+		return false
+	}
+	port := func(u *url.URL) string {
+		if u.Port() != "" {
+			return u.Port()
+		}
+		if u.Scheme == "https" {
+			return "443"
+		}
+		if u.Scheme == "http" {
+			return "80"
+		}
+		return ""
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Hostname(), b.Hostname()) && port(a) == port(b)
 }

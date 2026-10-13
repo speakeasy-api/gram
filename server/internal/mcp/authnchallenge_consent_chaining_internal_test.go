@@ -219,7 +219,6 @@ func TestConsentChainedMetaClients_ServesEachRequestOnce(t *testing.T) {
 	require.Len(t, g.requests, 1, "one render judges each distinct request once")
 }
 
-func (g *funcGovernor) CheckConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) identitychaining.Outcome {
-	_, outcome := g.Acquire(ctx, req)
-	return outcome
+func (g *funcGovernor) CheckConsent(context.Context, identitychaining.Request, uuid.UUID) identitychaining.Outcome {
+	return identitychaining.Outcome{}
 }

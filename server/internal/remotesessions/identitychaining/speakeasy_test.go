@@ -2,6 +2,7 @@ package identitychaining
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -111,7 +112,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 		}
 	}
 	var expectedAudience string
-	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	endpoint := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
 			http.NotFound(w, r)
 			return
@@ -191,7 +192,9 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	f.setBinding(t, remotesessions.PreparationStateUnlinked)
 	f.req.UpstreamResource = endpoint.URL + "/mcp"
 	require.NoError(t, repo.New(f.db).InsertEMAProvider(ctx, repo.InsertEMAProviderParams{OrganizationID: f.req.OrganizationID, VendorIssuer: endpoint.URL, InternalSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}}))
-	policy, err := guardian.NewUnsafePolicy(tp, nil)
+	roots := x509.NewCertPool()
+	roots.AddCert(endpoint.Certificate())
+	policy, err := guardian.NewUnsafePolicy(tp, nil, guardian.WithTLSRootCAs(roots))
 	require.NoError(t, err)
 	sharedCache := cache.NewRedisCacheAdapter(redisClient)
 	challenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.chainer.enc, policy, nil, sharedCache, base)
@@ -237,6 +240,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.Equal(t, "live-downstream", token.Value())
 	require.EqualValues(t, 1, calls.Load())
 	require.True(t, chainer.HasUsableCredential(ctx, f.req))
+	require.True(t, chainer.HasUsableCredential(ctx, preGrant), "status follows the stored grant without inventing current session authority")
 	_, outcome = chainer.Acquire(ctx, f.req)
 	require.True(t, outcome.Succeeded(), "%+v", outcome)
 	require.EqualValues(t, 1, calls.Load(), "cached token is reused")
@@ -320,6 +324,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	checkExchange()
 	require.Equal(t, ReasonStaleConfiguration, outcome.Reason, "revocation during redemption discards the token")
 	require.False(t, chainer.HasUsableCredential(ctx, f.req))
+	require.False(t, chainer.HasUsableCredential(ctx, preGrant), "status cannot revive a revoked retained grant")
 	require.EqualValues(t, 2, calls.Load())
 	require.Equal(t, ReasonReauthenticationRequired, chainer.CheckConsent(ctx, preGrant, signIn.ID.UUID).Reason, "revoked consent is not eligible")
 

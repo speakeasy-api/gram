@@ -156,7 +156,22 @@ func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 		current.provider = p
 		if p.Kind == remotesessions.EMAProviderSpeakeasy {
 			source := g.source(p)
-			if !source.authorize(ctx, g.logger, req, &current).Succeeded() {
+			statusReq := req
+			if statusReq.UserSessionJTI == "" {
+				jti, err := repo.New(g.db).GetSpeakeasyEMAStoredGrant(ctx, repo.GetSpeakeasyEMAStoredGrantParams{
+					OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, UserSessionIssuerID: uuid.NullUUID{UUID: req.UserSessionIssuerID, Valid: true},
+					RemoteSessionIssuerID: uuid.NullUUID{UUID: current.remoteIssuerID, Valid: true}, RemoteSessionClientID: uuid.NullUUID{UUID: current.clientID, Valid: true},
+					Resource: current.resource, SubjectUrn: urn.NewUserSubject(req.UserID).String(),
+				})
+				if err != nil {
+					if !errors.Is(err, pgx.ErrNoRows) {
+						g.logger.WarnContext(ctx, "read retained Speakeasy EMA grant", attr.SlogError(err))
+					}
+					continue
+				}
+				statusReq.UserSessionJTI = jti
+			}
+			if !source.authorize(ctx, g.logger, statusReq, &current).Succeeded() {
 				continue
 			}
 			row, err := readCredential(ctx, repo.New(g.db), req, current, g.now())

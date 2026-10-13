@@ -37,7 +37,12 @@ type emaResourceCacheEntry struct {
 // transport URLs remain unchanged for actual HTTP requests.
 func (m *ChallengeManager) ResolveEMAResource(ctx context.Context, organizationID string, projectID uuid.UUID, endpoint string) (protectedresource.EndpointResource, error) {
 	var none protectedresource.EndpointResource
-	if organizationID == "" || projectID == uuid.Nil || endpoint == "" || m.policy == nil {
+	if m.policy == nil {
+		err := fmt.Errorf("EMA resource discovery has no egress policy")
+		m.logger.ErrorContext(ctx, "EMA resource discovery unavailable", attr.SlogError(err))
+		return none, err
+	}
+	if organizationID == "" || projectID == uuid.Nil || endpoint == "" {
 		return none, protectedresource.ErrEndpointResourceInvalid
 	}
 	digest := sha256.Sum256([]byte(organizationID + "\n" + projectID.String() + "\n" + endpoint))

@@ -25,10 +25,6 @@ const (
 	EMAProviderSpeakeasy EMAProviderKind = "speakeasy"
 )
 
-// SpeakeasyEMASigning reports whether this build implements internal ID-JAG signing.
-// Runtime sources additionally require a configured signer and an enabled issuer.
-const SpeakeasyEMASigning = true
-
 // EMAProviderUnavailableReason says why a provider in the order cannot serve.
 type EMAProviderUnavailableReason string
 

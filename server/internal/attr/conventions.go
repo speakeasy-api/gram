@@ -496,6 +496,8 @@ const (
 	// IdentityChainingProviderKey is the EMA provider kind serving an
 	// identity chaining attempt (external or speakeasy).
 	IdentityChainingProviderKey = attribute.Key("gram.identity_chaining.provider")
+	// IdentityChainingPathKey distinguishes consent checks from token requests.
+	IdentityChainingPathKey = attribute.Key("gram.identity_chaining.path")
 	// IdentityChainingFallbackKey reports an attempt after an earlier provider failed.
 	IdentityChainingFallbackKey = attribute.Key("gram.identity_chaining.fallback")
 	// IdentityChainingSkippedProvidersKey counts providers an order could not use.
@@ -2034,6 +2036,8 @@ func IdentityChainingProvider(v string) attribute.KeyValue {
 func SlogIdentityChainingProvider(v string) slog.Attr {
 	return slog.String(string(IdentityChainingProviderKey), v)
 }
+func IdentityChainingPath(v string) attribute.KeyValue { return IdentityChainingPathKey.String(v) }
+
 func IdentityChainingFallback(v bool) attribute.KeyValue { return IdentityChainingFallbackKey.Bool(v) }
 func SlogIdentityChainingFallback(v bool) slog.Attr {
 	return slog.Bool(string(IdentityChainingFallbackKey), v)

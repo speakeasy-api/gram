@@ -53,7 +53,7 @@ const ReadinessEvidenceIdentityChainingConfigured = "identity_chaining_configure
 const ReadinessEvidenceIdentityChainingActive = "identity_chaining_active"
 
 // IdentityChainingGovernor answers identity chaining configuration questions
-// from the database. It never acquires a token or contacts a provider.
+// from stored state and read-only resource metadata discovery. It never acquires a token.
 type IdentityChainingGovernor interface {
 	Serves(ctx context.Context, req identitychaining.Request) (uuid.UUID, bool)
 	HasUsableCredential(ctx context.Context, req identitychaining.Request) bool

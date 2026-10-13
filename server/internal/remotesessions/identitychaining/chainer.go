@@ -43,8 +43,8 @@ const (
 	// refresh, the token exchange and the redemption.
 	attemptTimeout = 25 * time.Second
 
-	// acquireTimeout bounds Acquire across every provider in the order, so
-	// falling through never multiplies a request's worst case.
+	// acquireTimeout bounds the complete selected-provider acquisition,
+	// including queueing and token publication.
 	acquireTimeout = 30 * time.Second
 
 	// legTimeout bounds each token endpoint request.
@@ -161,15 +161,15 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 	if !outcome.Succeeded() {
 		return none, outcome
 	}
-	// Every available provider is tried in order within one deadline; any
-	// failure falls through to the next. The first failure is reported.
+	// ResolveEMAProviders returns at most the selected provider. Its failure
+	// is returned without trying another signing authority.
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
 	var first Outcome
 	for i, p := range providers {
 		token, attempt := c.acquireFrom(ctx, logger.With(attr.SlogIdentityChainingProvider(string(p.Kind))), req, sel, p)
 		attempt.Provider = p.Kind
-		c.attempts.Add(ctx, 1, metric.WithAttributes(attr.IdentityChainingProvider(string(p.Kind)), attr.Outcome(attempt.Reason), attr.IdentityChainingFallback(i > 0)))
+		c.attempts.Add(ctx, 1, metric.WithAttributes(attr.IdentityChainingPath("acquire"), attr.IdentityChainingProvider(string(p.Kind)), attr.Outcome(attempt.Reason), attr.IdentityChainingFallback(i > 0)))
 		if attempt.Succeeded() {
 			if i > 0 {
 				logger.InfoContext(ctx, "identity chaining served by a fallback ema provider", attr.SlogIdentityChainingProvider(string(p.Kind)), attr.SlogIdentityChainingFallback(true))

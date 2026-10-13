@@ -81,13 +81,13 @@ func (s speakeasySource) authorize(ctx context.Context, logger *slog.Logger, req
 	return s.authorizeIdentity(ctx, logger, req, sel, result)
 }
 
-func (s speakeasySource) checkConsent(ctx context.Context, req Request, sel selection, signInID uuid.UUID) Outcome {
+func (s speakeasySource) checkConsent(ctx context.Context, logger *slog.Logger, req Request, sel selection, signInID uuid.UUID) Outcome {
 	result, err := ssosignins.CheckConsentIdentity(ctx, s.g.db, req.OrganizationID, req.UserID, signInID, s.g.now())
 	if err != nil {
-		s.g.logger.ErrorContext(ctx, "check EMA consent sign-in", attr.SlogError(err))
+		logger.ErrorContext(ctx, "check EMA consent sign-in", attr.SlogError(err))
 		return newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
 	}
-	return s.authorizeIdentity(ctx, s.g.logger, req, &sel, result)
+	return s.authorizeIdentity(ctx, logger, req, &sel, result)
 }
 
 func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Logger, req Request, sel *selection, result ssosignins.Result) Outcome {

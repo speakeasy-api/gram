@@ -1312,7 +1312,7 @@ type CreateEMAIssuerPurgeCredentialFixtureParams struct {
 	OrganizationID pgtype.Text
 	ProjectID      uuid.NullUUID
 	SubjectUrn     string
-	EmaProvider    pgtype.Text
+	EmaProvider    string
 	Retired        bool
 }
 
@@ -3455,7 +3455,7 @@ func (q *Queries) GetEMAChainingUserIssuer(ctx context.Context, arg GetEMAChaini
 const getEMACredentialForUse = `-- name: GetEMACredentialForUse :one
 SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
-    COALESCE(c.ema_provider, 'external') = 'external'
+    c.ema_provider = 'external'
     AND c.remote_session_issuer_id = $1::uuid
     AND c.client_selection = 'binding'
     AND c.remote_session_ema_binding_id = $2::uuid
@@ -3489,7 +3489,7 @@ WHERE c.organization_id = $7::text AND c.project_id = $8
   AND c.user_session_issuer_id = $9
   AND c.remote_session_client_id = $10 AND c.resource = $11
   AND c.subject_urn = $12 AND c.deleted IS FALSE
-  AND COALESCE(c.ema_provider, 'external') = 'external'
+  AND c.ema_provider = 'external'
 `
 
 type GetEMACredentialForUseParams struct {
@@ -5667,7 +5667,7 @@ SELECT s.id, s.sso_sign_in_id
 FROM user_sessions AS s
 JOIN user_session_issuers AS i ON i.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = $1::uuid AND p.organization_id = s.organization_id AND p.deleted IS FALSE
-WHERE s.jti = $2 AND s.organization_id = $3
+WHERE s.sso_sign_in_id IS NOT NULL AND s.jti = $2 AND s.organization_id = $3
   AND s.user_session_issuer_id = $4
   AND (s.project_id IS NULL OR s.project_id = p.id)
   AND s.subject_urn = $5 AND s.deleted IS FALSE
@@ -5728,6 +5728,43 @@ func (q *Queries) GetSpeakeasyEMAIssuerVersion(ctx context.Context, arg GetSpeak
 	var i GetSpeakeasyEMAIssuerVersionRow
 	err := row.Scan(&i.UpdatedAt, &i.KeyID)
 	return i, err
+}
+
+const getSpeakeasyEMAStoredGrant = `-- name: GetSpeakeasyEMAStoredGrant :one
+SELECT s.jti FROM remote_session_ema_credentials c
+JOIN user_sessions s ON s.id = c.user_session_id AND s.organization_id = c.organization_id
+WHERE c.organization_id = $1 AND c.project_id = $2
+  AND c.user_session_issuer_id = $3
+  AND c.remote_session_issuer_id = $4 AND c.remote_session_client_id = $5
+  AND c.resource = $6 AND c.subject_urn = $7
+  AND c.ema_provider = 'speakeasy' AND c.deleted IS FALSE
+`
+
+type GetSpeakeasyEMAStoredGrantParams struct {
+	OrganizationID        pgtype.Text
+	ProjectID             uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
+	Resource              string
+	SubjectUrn            string
+}
+
+// Status has no authenticated MCP JTI. Follow only this credential's retained grant;
+// GetSpeakeasyEMAGrant and the SSO judge still validate its live authority.
+func (q *Queries) GetSpeakeasyEMAStoredGrant(ctx context.Context, arg GetSpeakeasyEMAStoredGrantParams) (string, error) {
+	row := q.db.QueryRow(ctx, getSpeakeasyEMAStoredGrant,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+	)
+	var jti string
+	err := row.Scan(&jti)
+	return jti, err
 }
 
 const getTenantRemoteSessionIssuerByID = `-- name: GetTenantRemoteSessionIssuerByID :one
@@ -6637,6 +6674,48 @@ func (q *Queries) ListEMAChainingBindings(ctx context.Context, arg ListEMAChaini
 	return items, nil
 }
 
+const listEMAChainingResourceCandidates = `-- name: ListEMAChainingResourceCandidates :many
+SELECT resource FROM remote_session_ema_bindings
+WHERE project_id = $1 AND organization_id = $2
+  AND user_session_issuer_id = $3
+  AND ($4::uuid IS NULL OR remote_session_issuer_id = $4::uuid)
+  AND state = 'ready' AND remote_session_client_id IS NOT NULL
+`
+
+type ListEMAChainingResourceCandidatesParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.NullUUID
+}
+
+// Diagnostic candidates only: an origin match can retain a configuration error
+// after invalid discovery, but never authorizes an alias or selects a token.
+func (q *Queries) ListEMAChainingResourceCandidates(ctx context.Context, arg ListEMAChainingResourceCandidatesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listEMAChainingResourceCandidates,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var resource string
+		if err := rows.Scan(&resource); err != nil {
+			return nil, err
+		}
+		items = append(items, resource)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEMACredentialsFixture = `-- name: ListEMACredentialsFixture :many
 SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at
 FROM remote_session_ema_credentials
@@ -6731,7 +6810,7 @@ ORDER BY id
 `
 
 type ListEMAIssuerPurgeCredentialsFixtureRow struct {
-	EmaProvider          pgtype.Text
+	EmaProvider          string
 	Deleted              bool
 	AccessTokenEncrypted pgtype.Text
 }
@@ -10995,9 +11074,8 @@ WHERE organization_id = $1::text
 `
 
 // Issuer containment is organization-scoped and covers every project. The
-// provider discriminator excludes external-provider credentials, including
-// rows written before provider provenance was introduced. Retired rows may
-// still contain ciphertext and must be erased as well.
+// provider discriminator excludes external-provider credentials. Retired
+// rows may still contain ciphertext and must be erased as well.
 func (q *Queries) PurgeSpeakeasyEMACredentials(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, purgeSpeakeasyEMACredentials, organizationID)
 	return err

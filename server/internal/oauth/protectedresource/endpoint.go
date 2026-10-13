@@ -33,6 +33,10 @@ type EndpointResource struct {
 // the strict Record boundary for an already-known resource remains unchanged.
 func DiscoverEndpointResource(ctx context.Context, policy *guardian.Policy, endpoint string) (EndpointResource, error) {
 	var none EndpointResource
+	transport, err := url.Parse(endpoint)
+	if err != nil || transport.Scheme != "https" || transport.Hostname() == "" || transport.User != nil || transport.Fragment != "" {
+		return none, ErrEndpointResourceInvalid
+	}
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, policy, endpoint)
 	if err != nil {
 		if failure, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok && failure.Code() == "not_found" {
@@ -40,11 +44,10 @@ func DiscoverEndpointResource(ctx context.Context, policy *guardian.Policy, endp
 		}
 		return none, fmt.Errorf("discover endpoint resource: %w", err)
 	}
-	transport, transportErr := url.Parse(endpoint)
 	resource, resourceErr := url.Parse(doc.Resource)
-	if transportErr != nil || resourceErr != nil || resource == nil || transport == nil ||
+	if resourceErr != nil || resource == nil ||
 		resource.User != nil || resource.Fragment != "" ||
-		!strings.EqualFold(resource.Scheme, transport.Scheme) || !strings.EqualFold(resource.Host, transport.Host) {
+		!sameHTTPSOrigin(resource, transport) {
 		return none, ErrEndpointResourceInvalid
 	}
 	if !doc.ValidForResource(doc.Resource) {
@@ -52,6 +55,9 @@ func DiscoverEndpointResource(ctx context.Context, policy *guardian.Policy, endp
 		// it at that resource's canonical location before trusting the alias.
 		canonical, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, policy, doc.Resource)
 		if err != nil {
+			if failure, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok && failure.Code() == "not_found" {
+				return none, ErrEndpointResourceInvalid
+			}
 			return none, fmt.Errorf("confirm endpoint resource: %w", err)
 		}
 		if !canonical.ValidForResource(doc.Resource) {
@@ -63,4 +69,15 @@ func DiscoverEndpointResource(ctx context.Context, policy *guardian.Policy, endp
 		return none, ErrEndpointResourceInvalid
 	}
 	return EndpointResource{Resource: doc.Resource, AuthorizationServers: doc.AuthorizationServers, Discovered: true}, nil
+}
+
+// HTTPS's default port does not create a distinct origin.
+func sameHTTPSOrigin(a, b *url.URL) bool {
+	port := func(u *url.URL) string {
+		if u.Port() == "" {
+			return "443"
+		}
+		return u.Port()
+	}
+	return strings.EqualFold(a.Scheme, "https") && strings.EqualFold(b.Scheme, "https") && strings.EqualFold(a.Hostname(), b.Hostname()) && port(a) == port(b)
 }
