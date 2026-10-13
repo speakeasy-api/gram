@@ -52,7 +52,7 @@ func TestHandleIDPCallback_RecordsSignInOnChallenge(t *testing.T) {
 	signins.EnableForTests(ti.features, toolset.OrganizationID)
 	mock.exchangeResult.OrganizationID = workOSOrganizationID(t, ctx, ti, toolset.OrganizationID)
 
-	rotated := runSSOLinkIDPCallback(t, ctx, ti, toolset)
+	rotated := runSignInLinkIDPCallback(t, ctx, ti, toolset)
 
 	signIn, err := signins.LiveSignInForSession(ctx, ti.conn, toolset.OrganizationID, gramUserID, workosSessionID)
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestHandleIDPCallback_EnforcementOffRecordsButLeavesTheGrantUnlinked(t *tes
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	mock.exchangeResult.OrganizationID = workOSOrganizationID(t, ctx, ti, toolset.OrganizationID)
 
-	rotated := runSSOLinkIDPCallback(t, ctx, ti, toolset)
+	rotated := runSignInLinkIDPCallback(t, ctx, ti, toolset)
 
 	signIn, err := signins.LiveSignInForSession(ctx, ti.conn, toolset.OrganizationID, gramUserID, workosSessionID)
 	require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestHandleIDPCallback_NoWorkOSSessionLeavesChallengeUnlinked(t *testing.T) 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
-	rotated := runSSOLinkIDPCallback(t, ctx, ti, toolset)
+	rotated := runSignInLinkIDPCallback(t, ctx, ti, toolset)
 	require.Nil(t, rotated.SignInID)
 }
 
@@ -166,7 +166,7 @@ type linkedTokens struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func runSSOLinkIDPCallback(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset) mcp.AuthnChallengeState {
+func runSignInLinkIDPCallback(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset) mcp.AuthnChallengeState {
 	t.Helper()
 
 	challengeID := uuid.NewString()
@@ -346,7 +346,7 @@ func TestHandleIDPCallback_OrganizationAttributionFailsClosed(t *testing.T) {
 			workosOrgID, otherOrg := tc.orgFn(t, ctx, ti)
 			mock.exchangeResult.OrganizationID = workosOrgID
 
-			rotated := runSSOLinkIDPCallback(t, ctx, ti, toolset)
+			rotated := runSignInLinkIDPCallback(t, ctx, ti, toolset)
 			require.Nil(t, rotated.SignInID, "the grant stays unlinked")
 			for _, org := range []string{toolset.OrganizationID, otherOrg} {
 				if org == "" {
