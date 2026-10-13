@@ -16,7 +16,6 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -234,23 +233,6 @@ func requireBareChallenge(t *testing.T, ti *testInstance, slug string, w *httpte
 		`Bearer resource_metadata="`+ti.serverURL.String()+`/.well-known/oauth-protected-resource/mcp/`+slug+`"`,
 		w.Header().Get("WWW-Authenticate"),
 	)
-}
-
-// The rollout gate hides the endpoint from a workload whose token is perfectly
-// good. Naming that invalid_token would send the workload to the token endpoint
-// for a credential that meets the same gate, forever.
-func TestServePublic_WorkloadSessionHiddenByRolloutGetsBareChallenge(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	fx := newWorkloadChallengeFixture(t, ctx, ti)
-	slug := fx.toolset.McpSlug.String
-
-	requireAdmitted(t, serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token))
-
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
-
-	requireBareChallenge(t, ti, slug, serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token))
 }
 
 func TestServePublic_ForgedWorkloadBearerGetsBareChallenge(t *testing.T) {

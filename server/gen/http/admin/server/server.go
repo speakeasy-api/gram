@@ -48,6 +48,7 @@ type Server struct {
 	CreateOrganization                    http.Handler
 	RearmTrial                            http.Handler
 	GetOrganizationStats                  http.Handler
+	RepairInferenceKey                    http.Handler
 	GetInferenceKeys                      http.Handler
 	SetInferenceKeyMonthlyLimit           http.Handler
 	GetInferenceSpendHistory              http.Handler
@@ -161,6 +162,7 @@ func New(
 			{"CreateOrganization", "POST", "/admin/organization.create"},
 			{"RearmTrial", "POST", "/admin/trial.rearm"},
 			{"GetOrganizationStats", "GET", "/admin/organizations.stats"},
+			{"RepairInferenceKey", "POST", "/admin/organization.repairInferenceKey"},
 			{"GetInferenceKeys", "GET", "/admin/organization.inferenceKeys"},
 			{"SetInferenceKeyMonthlyLimit", "POST", "/admin/organization.setInferenceKeyMonthlyLimit"},
 			{"GetInferenceSpendHistory", "GET", "/admin/organization.inferenceSpendHistory"},
@@ -246,6 +248,7 @@ func New(
 		CreateOrganization:                    NewCreateOrganizationHandler(e.CreateOrganization, mux, decoder, encoder, errhandler, formatter),
 		RearmTrial:                            NewRearmTrialHandler(e.RearmTrial, mux, decoder, encoder, errhandler, formatter),
 		GetOrganizationStats:                  NewGetOrganizationStatsHandler(e.GetOrganizationStats, mux, decoder, encoder, errhandler, formatter),
+		RepairInferenceKey:                    NewRepairInferenceKeyHandler(e.RepairInferenceKey, mux, decoder, encoder, errhandler, formatter),
 		GetInferenceKeys:                      NewGetInferenceKeysHandler(e.GetInferenceKeys, mux, decoder, encoder, errhandler, formatter),
 		SetInferenceKeyMonthlyLimit:           NewSetInferenceKeyMonthlyLimitHandler(e.SetInferenceKeyMonthlyLimit, mux, decoder, encoder, errhandler, formatter),
 		GetInferenceSpendHistory:              NewGetInferenceSpendHistoryHandler(e.GetInferenceSpendHistory, mux, decoder, encoder, errhandler, formatter),
@@ -338,6 +341,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateOrganization = m(s.CreateOrganization)
 	s.RearmTrial = m(s.RearmTrial)
 	s.GetOrganizationStats = m(s.GetOrganizationStats)
+	s.RepairInferenceKey = m(s.RepairInferenceKey)
 	s.GetInferenceKeys = m(s.GetInferenceKeys)
 	s.SetInferenceKeyMonthlyLimit = m(s.SetInferenceKeyMonthlyLimit)
 	s.GetInferenceSpendHistory = m(s.GetInferenceSpendHistory)
@@ -429,6 +433,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateOrganizationHandler(mux, h.CreateOrganization)
 	MountRearmTrialHandler(mux, h.RearmTrial)
 	MountGetOrganizationStatsHandler(mux, h.GetOrganizationStats)
+	MountRepairInferenceKeyHandler(mux, h.RepairInferenceKey)
 	MountGetInferenceKeysHandler(mux, h.GetInferenceKeys)
 	MountSetInferenceKeyMonthlyLimitHandler(mux, h.SetInferenceKeyMonthlyLimit)
 	MountGetInferenceSpendHistoryHandler(mux, h.GetInferenceSpendHistory)
@@ -1909,6 +1914,59 @@ func NewGetOrganizationStatsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationStats")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRepairInferenceKeyHandler configures the mux to serve the "admin"
+// service "repairInferenceKey" endpoint.
+func MountRepairInferenceKeyHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.repairInferenceKey", f)
+}
+
+// NewRepairInferenceKeyHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "repairInferenceKey" endpoint.
+func NewRepairInferenceKeyHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRepairInferenceKeyRequest(mux, decoder)
+		encodeResponse = EncodeRepairInferenceKeyResponse(encoder)
+		encodeError    = EncodeRepairInferenceKeyError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "repairInferenceKey")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

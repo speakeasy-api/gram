@@ -10,35 +10,63 @@ import (
 )
 
 type AiIntegrationConfig struct {
-	CreatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	OrganizationID         string
-	Provider               string
-	ProjectID              uuid.UUID
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: restricted
 	ExternalOrganizationID pgtype.Text
-	ApiKeyEncrypted        string
-	Enabled                bool
-	BillingMode            pgtype.Text
-	ID                     uuid.UUID
-	Deleted                bool
+	// @access: secret-restricted
+	ApiKeyEncrypted string
+	// @access: confidential
+	Enabled bool
+	// @access: confidential
+	BillingMode pgtype.Text
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	Deleted bool
 }
 
 type AiIntegrationSync struct {
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
 	AiIntegrationConfigID uuid.UUID
-	Schedule              string
-	Kind                  string
-	PollWatermarkAt       pgtype.Timestamptz
-	PollCheckpoint        pgtype.Text
-	LastCursorID          pgtype.Text
-	NextPollAfter         pgtype.Timestamptz
-	LastPollError         pgtype.Text
-	LastPollFailedAt      pgtype.Timestamptz
-	LastPollSuccessAt     pgtype.Timestamptz
-	ConsecutiveFailures   int32
-	AutoPausedAt          pgtype.Timestamptz
-	DisabledAt            pgtype.Timestamptz
-	ID                    uuid.UUID
+	// @access: confidential
+	Schedule string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	PollWatermarkAt pgtype.Timestamptz
+	// @access: opaque-restricted
+	PollCheckpoint pgtype.Text
+	// @access: confidential
+	LastCursorID pgtype.Text
+	// @access: confidential
+	NextPollAfter pgtype.Timestamptz
+	// @access: opaque-restricted
+	LastPollError pgtype.Text
+	// @access: confidential
+	LastPollFailedAt pgtype.Timestamptz
+	// @access: confidential
+	LastPollSuccessAt pgtype.Timestamptz
+	// @access: confidential
+	ConsecutiveFailures int32
+	// @access: confidential
+	AutoPausedAt pgtype.Timestamptz
+	// @access: confidential
+	DisabledAt pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
 }
