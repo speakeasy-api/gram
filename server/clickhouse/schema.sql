@@ -703,23 +703,23 @@ WITH
     -- OTEL stream above. Deliberately NOT claude-code:usage, which stays
     -- excluded as a duplicate of the OTEL api_request stream.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode, openclaw and Pi report per-turn tokens and cost on their
-    -- unified-ingest assistant.responded rows, under the canonical
-    -- gen_ai.usage.* keys that every fallback branch below already reads.
-    -- None of them has an OTEL stream and the unified ingest path stamps no
-    -- gram_urn, so provenance anchors on hook_source instead. The
-    -- AfterAgentResponse event guard scopes this to the turn-closing row: a
-    -- session's other rows (thoughts, usage.reported, tool calls, session
-    -- lifecycle) are excluded even if they carry gen_ai.usage.* fields, so
-    -- usage is counted once per turn. Cost is part of the guard so a cost-only
-    -- turn (no token fields) still counts. openclaw's turn close is agenthooks'
-    -- KindStop, with usage spliced from the cached llm_output frame; it has no
-    -- raw-vocabulary parser, so it resolves through the canonical event map to
-    -- the same AfterAgentResponse name. Pi reports usage on its message_end
-    -- event, decoded as the same stop kind and resolved through the same map.
+    -- Canonical hooks require ingest-stamped schema/event provenance and no
+    -- provider URN. AHP model-attempt usage.reported samples are authoritative,
+    -- independent of the harness name. AHP presentation messages/turn totals
+    -- are not billable again. Other hooks count assistant.responded usage.
+    -- Unstamped legacy opencode/openclaw/Pi turns retain their original source.
     (
-        toString(attributes.gram.hook.source) IN ('opencode', 'openclaw', 'pi')
-        AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
+        (((gram_urn = ''
+            AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
+            AND ((toString(attributes.gram.hook.transport) = 'ahp'
+            AND toString(attributes.gram.hook.canonical_event) = 'usage.reported'
+            AND toString(attributes.gram.hook.usage_authority) = 'model_attempt')
+            OR (toString(attributes.gram.hook.transport) != 'ahp'
+            AND toString(attributes.gram.hook.source) NOT IN ('claude', 'claude-code', 'cowork', 'codex', 'cursor', 'claude_chat', 'chatgpt', 'litellm')
+            AND toString(attributes.gram.hook.canonical_event) = 'assistant.responded')))
+            OR (toString(attributes.gram.hook.schema) != 'hook.ingest.v1'
+            AND toString(attributes.gram.hook.source) IN ('opencode', 'openclaw', 'pi')
+            AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'))
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_hook_turn_usage_row,
     -- LiteLLM usage is authoritative only on normalized client model spans.
@@ -743,10 +743,16 @@ WITH
     -- PreToolUse row with the same gram.tool.name. Provider names (the
     -- usage-metrics rows' tool.name) are excluded — they are not tool calls.
     (
-        toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
+        (((gram_urn = ''
+            AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
+            AND (toString(attributes.gram.hook.source) NOT IN ('claude', 'claude-code', 'cowork')
+            OR toString(attributes.gram.hook.transport) = 'ahp')
+            AND toString(attributes.gram.hook.canonical_event) IN ('tool.completed', 'tool.failed'))
+            OR (toString(attributes.gram.hook.schema) != 'hook.ingest.v1'
+            AND toString(attributes.gram.hook.source) IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
+            AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+            AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
         AND toString(attributes.gram.tool.name) != ''
-        AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
-        AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
     ) AS is_agent_tool_call,
     (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
     -- Dedup identity per tool call: Claude tool_result rows carry tool_use_id,
@@ -1106,14 +1112,20 @@ WITH
     -- chat_id guard below — listed here only to keep this predicate textually
     -- aligned with attribute_metrics_summaries_mv and the Go session path.
     (startsWith(gram_urn, 'codex:usage') OR startsWith(gram_urn, 'cursor:usage') OR startsWith(gram_urn, 'claude_chat:usage') OR startsWith(gram_urn, 'claude_chat:cost') OR startsWith(gram_urn, 'chatgpt:usage')) AS is_agent_usage_row,
-    -- opencode, openclaw and Pi usage rides on their unified-ingest
-    -- assistant.responded rows, anchored on hook_source because that path
-    -- stamps no gram_urn, and gated on the AfterAgentResponse event so
-    -- thoughts/usage.reported/tool-call rows are not double-counted as usage
-    -- turns; see attribute_metrics_summaries_mv above.
+    -- Same canonical/legacy usage authority as attribute_metrics_summaries_mv.
+    -- No historical backfill: these guards affect future inserts only.
     (
-        hook_source IN ('opencode', 'openclaw', 'pi')
-        AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'
+        (((gram_urn = ''
+            AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
+            AND ((toString(attributes.gram.hook.transport) = 'ahp'
+            AND toString(attributes.gram.hook.canonical_event) = 'usage.reported'
+            AND toString(attributes.gram.hook.usage_authority) = 'model_attempt')
+            OR (toString(attributes.gram.hook.transport) != 'ahp'
+            AND hook_source NOT IN ('claude', 'claude-code', 'cowork', 'codex', 'cursor', 'claude_chat', 'chatgpt', 'litellm')
+            AND toString(attributes.gram.hook.canonical_event) = 'assistant.responded')))
+            OR (toString(attributes.gram.hook.schema) != 'hook.ingest.v1'
+            AND hook_source IN ('opencode', 'openclaw', 'pi')
+            AND toString(attributes.gram.hook.event) = 'AfterAgentResponse'))
         AND (toString(attributes.gen_ai.usage.input_tokens) != '' OR toString(attributes.gen_ai.usage.output_tokens) != '' OR toString(attributes.gen_ai.usage.cost) != '')
     ) AS is_hook_turn_usage_row,
     (
@@ -1125,10 +1137,16 @@ WITH
         )
     ) AS is_litellm_usage_row,
     (
-        hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
+        (((gram_urn = ''
+            AND toString(attributes.gram.hook.schema) = 'hook.ingest.v1')
+            AND (hook_source NOT IN ('claude', 'claude-code', 'cowork')
+            OR toString(attributes.gram.hook.transport) = 'ahp')
+            AND toString(attributes.gram.hook.canonical_event) IN ('tool.completed', 'tool.failed'))
+            OR (toString(attributes.gram.hook.schema) != 'hook.ingest.v1'
+            AND hook_source IN ('codex', 'cursor', 'opencode', 'openclaw', 'pi')
+            AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
+            AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')))
         AND toString(attributes.gram.tool.name) != ''
-        AND toString(attributes.gram.tool.name) NOT IN ('claude-code', 'codex', 'cursor')
-        AND toString(attributes.gram.hook.event) IN ('PostToolUse', 'PostToolUseFailure')
     ) AS is_agent_tool_call,
     (is_claude_tool_result OR is_agent_tool_call) AS is_counted_tool_call,
     (is_claude_api_request OR is_codex_api_request OR is_agent_usage_row OR is_hook_turn_usage_row OR is_litellm_usage_row) AS is_usage_row,
@@ -1138,7 +1156,7 @@ WITH
     -- HTTP error status.
     (
         (is_claude_tool_result AND toString(attributes.success) = 'false')
-        OR (is_agent_tool_call AND (toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
+        OR (is_agent_tool_call AND (toString(attributes.gram.hook.canonical_event) = 'tool.failed' OR toString(attributes.gram.hook.event) = 'PostToolUseFailure' OR toInt32OrZero(toString(attributes.http.response.status_code)) >= 400))
     ) AS is_failed_tool_call,
     multiIf(
         toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id),
