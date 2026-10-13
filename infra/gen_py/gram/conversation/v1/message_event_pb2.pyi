@@ -35,7 +35,14 @@ class MessageEvent(_message.Message):
     ROLE_ASSISTANT: MessageEvent.Role
     ROLE_TOOL: MessageEvent.Role
     class IngestionContext(_message.Message):
-        __slots__ = ("source", "billing_user_id", "assistant_id", "observed_user_email", "provider", "hook_source", "hostname", "account_type", "billing_mode", "replayed")
+        __slots__ = ("source", "billing_user_id", "assistant_id", "observed_user_email", "provider", "hook_source", "hostname", "account_type", "billing_mode", "replayed", "attributes")
+        class AttributesEntry(_message.Message):
+            __slots__ = ("key", "value")
+            KEY_FIELD_NUMBER: _ClassVar[int]
+            VALUE_FIELD_NUMBER: _ClassVar[int]
+            key: str
+            value: str
+            def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
         SOURCE_FIELD_NUMBER: _ClassVar[int]
         BILLING_USER_ID_FIELD_NUMBER: _ClassVar[int]
         ASSISTANT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -46,6 +53,7 @@ class MessageEvent(_message.Message):
         ACCOUNT_TYPE_FIELD_NUMBER: _ClassVar[int]
         BILLING_MODE_FIELD_NUMBER: _ClassVar[int]
         REPLAYED_FIELD_NUMBER: _ClassVar[int]
+        ATTRIBUTES_FIELD_NUMBER: _ClassVar[int]
         source: str
         billing_user_id: str
         assistant_id: str
@@ -56,7 +64,8 @@ class MessageEvent(_message.Message):
         account_type: str
         billing_mode: str
         replayed: bool
-        def __init__(self, source: _Optional[str] = ..., billing_user_id: _Optional[str] = ..., assistant_id: _Optional[str] = ..., observed_user_email: _Optional[str] = ..., provider: _Optional[str] = ..., hook_source: _Optional[str] = ..., hostname: _Optional[str] = ..., account_type: _Optional[str] = ..., billing_mode: _Optional[str] = ..., replayed: _Optional[bool] = ...) -> None: ...
+        attributes: _containers.ScalarMap[str, str]
+        def __init__(self, source: _Optional[str] = ..., billing_user_id: _Optional[str] = ..., assistant_id: _Optional[str] = ..., observed_user_email: _Optional[str] = ..., provider: _Optional[str] = ..., hook_source: _Optional[str] = ..., hostname: _Optional[str] = ..., account_type: _Optional[str] = ..., billing_mode: _Optional[str] = ..., replayed: _Optional[bool] = ..., attributes: _Optional[_Mapping[str, str]] = ...) -> None: ...
     ID_FIELD_NUMBER: _ClassVar[int]
     TYPE_FIELD_NUMBER: _ClassVar[int]
     ORGANIZATION_ID_FIELD_NUMBER: _ClassVar[int]

@@ -3,6 +3,7 @@ package evaluation
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
@@ -123,6 +124,7 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 	r.SetProvider(result.Metadata.Provider)
 	r.SetModels(result.Models)
 	r.SetCompilerVersion("sigint-v1/" + result.Metadata.CompilerVersion)
+	r.SetAttributes(maps.Clone(event.Attributes))
 	if event.Actor != nil {
 		r.SetActor(proto.CloneOf(event.Actor))
 	}
