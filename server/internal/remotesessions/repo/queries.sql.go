@@ -2034,7 +2034,7 @@ type DeleteEMAProvidersParams struct {
 	VendorIssuer   string
 }
 
-// Retires the organization's EMA provider order for one vendor issuer.
+// Retires the organization's saved EMA provider for one vendor issuer.
 func (q *Queries) DeleteEMAProviders(ctx context.Context, arg DeleteEMAProvidersParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteEMAProviders, arg.OrganizationID, arg.VendorIssuer)
 	if err != nil {
@@ -6870,7 +6870,7 @@ type ListEMAProvidersRow struct {
 	ProviderDisabled        bool
 }
 
-// The organization's EMA provider order for one vendor issuer. A row whose
+// The organization's saved EMA provider for one vendor issuer. A row whose
 // provider was deleted or disabled is flagged, not dropped, so a policy left
 // with only those never reads as no policy.
 func (q *Queries) ListEMAProviders(ctx context.Context, arg ListEMAProvidersParams) ([]ListEMAProvidersRow, error) {
@@ -10045,7 +10045,7 @@ const lockEMAProviders = `-- name: LockEMAProviders :exec
 SELECT pg_advisory_xact_lock(hashtextextended('remote_session_ema_providers:' || $1::text, 0))
 `
 
-// Serializes EMA provider order replaces for one organization.
+// Serializes EMA provider changes for one organization.
 func (q *Queries) LockEMAProviders(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, lockEMAProviders, organizationID)
 	return err
@@ -10055,7 +10055,7 @@ const lockEMAProvidersShared = `-- name: LockEMAProvidersShared :exec
 SELECT pg_advisory_xact_lock_shared(hashtextextended('remote_session_ema_providers:' || $1::text, 0))
 `
 
-// Held while publishing a chained credential, so an order replace cannot
+// Held while publishing a chained credential, so a selection change cannot
 // commit between the eligibility check and the write.
 func (q *Queries) LockEMAProvidersShared(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, lockEMAProvidersShared, organizationID)
