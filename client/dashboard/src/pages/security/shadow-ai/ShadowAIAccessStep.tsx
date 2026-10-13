@@ -11,7 +11,6 @@ import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { TARGET_CATEGORIES } from "@/pages/device-agent/ai-scan-target-draft";
-import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import { CircleDashed } from "lucide-react";
 import { useState } from "react";
 import { SectionHeader } from "../policy-editor-shell";
@@ -117,13 +116,13 @@ function columns(
       ),
     },
     {
-      key: "reach",
-      header: "Users · devices",
+      key: "users",
+      header: "Users",
       width: "0.8fr",
       render: (row) =>
         row.detection ? (
           <Text small className="whitespace-nowrap tabular-nums">
-            {row.detection.userCount} · {row.detection.deviceCount}
+            {row.detection.userCount}
           </Text>
         ) : (
           <Text small muted className="whitespace-nowrap">
@@ -142,18 +141,16 @@ function columns(
       ),
     },
     {
-      key: "decision",
-      header: "Decision",
+      key: "action",
+      header: "Action",
       width: "1.4fr",
       render: (row) => (
-        <div onClick={(event) => event.stopPropagation()}>
-          <DecisionControl
-            row={row}
-            decision={effectiveDecision(row, draft)}
-            disabled={disabled}
-            onDecide={onDecide}
-          />
-        </div>
+        <DecisionControl
+          row={row}
+          decision={effectiveDecision(row, draft)}
+          disabled={disabled}
+          onDecide={onDecide}
+        />
       ),
     },
   ];
@@ -189,9 +186,10 @@ function PostureNote({
 
 /**
  * The Access step: the organization's whole scan target library, grouped by
- * kind, each target with the device agent's evidence and its decision. The
- * decisions live in the editor's draft until Create or Save; MCP servers are
- * decided on the Shadow MCP inventory, not here.
+ * kind, each target with the device agent's evidence and its decision. Rows
+ * are configuration only: the Approve | Deny control is the one thing to
+ * press. The decisions live in the editor's draft until Create or Save; MCP
+ * servers are decided on the Shadow MCP inventory, not here.
  */
 export function ShadowAIAccessStep({
   rows,
@@ -202,7 +200,6 @@ export function ShadowAIAccessStep({
   disabled = false,
   onDecide,
   disposition,
-  onOpenTool,
 }: {
   rows: AccessRow[];
   isPending: boolean;
@@ -215,7 +212,6 @@ export function ShadowAIAccessStep({
   disabled?: boolean;
   onDecide: (targetId: string, decision: AccessDecision) => void;
   disposition: ShadowMCPDisposition;
-  onOpenTool?: (detection: AIDetection) => void;
 }): JSX.Element {
   const [expanded, setExpanded] =
     useState<Record<string, boolean>>(DEFAULT_EXPANDED);
@@ -275,9 +271,6 @@ export function ShadowAIAccessStep({
                           columns={cols}
                           data={group}
                           rowKey={(row) => row.target.id}
-                          onRowClick={(row) => {
-                            if (row.detection) onOpenTool?.(row.detection);
-                          }}
                         />
                       )}
                     </div>

@@ -3,7 +3,6 @@ import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
-import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { invalidateAllAiDetectionUsers } from "@gram/client/react-query/aiDetectionUsers.js";
 import {
@@ -414,15 +413,6 @@ export function ShadowAIPolicyEditor({
     }
   };
 
-  const openTool = (detection: AIDetection) => {
-    const detail = {
-      harness: routes.shadowAI.harnesses.detail,
-      assistant: routes.shadowAI.assistants.detail,
-      local_model: routes.shadowAI.models.detail,
-    }[detection.category];
-    detail.goTo(encodeURIComponent(detection.targetId));
-  };
-
   const header = (
     <PolicyHeader
       kind="shadow_ai"
@@ -454,7 +444,6 @@ export function ShadowAIPolicyEditor({
           disabled={saving}
           onDecide={decide}
           disposition={disposition}
-          onOpenTool={openTool}
         />
       )}
       {step === 1 && (

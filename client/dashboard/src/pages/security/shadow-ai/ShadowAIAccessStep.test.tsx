@@ -40,7 +40,10 @@ describe("ShadowAIAccessStep", () => {
     renderStep();
 
     expect(screen.getByText("Cursor")).toBeTruthy();
-    expect(screen.getByText("4 · 6")).toBeTruthy();
+    expect(screen.getByText("4")).toBeTruthy();
+    expect(screen.queryByText("4 · 6")).toBeNull();
+    expect(screen.getAllByText("Action").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Decision")).toBeNull();
     expect(screen.getByText("Acme Tool")).toBeTruthy();
     expect(screen.getByText("Not seen yet")).toBeTruthy();
     expect(screen.queryByText("Built-in")).toBeNull();
