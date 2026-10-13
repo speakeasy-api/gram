@@ -24,8 +24,10 @@ const (
 
 	// A full batch means more may wait.
 	ssoSignInRevocationSweepBatchSize        = ssosignins.SweepBatchSize
-	ssoSignInRevocationSweepMaxBatchesPerRun = 10
-	ssoSignInRevocationSweepRunTimeout       = 4 * time.Minute
+	// Batches run one at a time without activity retries (the next run is the
+	// retry), so the run fits its timeout: 2 × 2m activity ≤ 4m30s < interval.
+	ssoSignInRevocationSweepMaxBatchesPerRun = 2
+	ssoSignInRevocationSweepRunTimeout       = 4*time.Minute + 30*time.Second
 )
 
 // SSOSignInRevocationSweepWorkflow retries SSO sign-in revocation deliveries
@@ -34,13 +36,13 @@ const (
 // tried once, and issuance and refresh already refuse revoked sign-ins.
 //
 // Temporal actions/month ≈ 8,640 starts + ~8,640 activities ≈ 17,300 per
-// namespace (more only while a backlog drains: one activity per batch).
+// namespace (up to one more activity per run while a backlog drains).
 // Fixed: one fleet-wide schedule, not per tenant.
 func SSOSignInRevocationSweepWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
+			MaximumAttempts:    1,
 			InitialInterval:    5 * time.Second,
 			BackoffCoefficient: 2,
 			MaximumInterval:    time.Minute,

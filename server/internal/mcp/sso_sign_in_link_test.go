@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	ssosigninsrepo "github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -590,4 +591,53 @@ func TestHandleIDPCallback_RevokedSignInForcesAFreshLogin(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, retried.FreshLoginForced, "a second revoked exchange is not sent back again")
 	require.Nil(t, retried.Subject)
+}
+
+func TestHandleIDPCallback_ARevokedSignInAfterTheFreshLoginEndsTheFlow(t *testing.T) {
+	t.Parallel()
+
+	gramUserID := "user-" + uuid.New().String()[:8]
+	workosSessionID := "session_" + uuid.NewString()
+	mock := &mockIdentityResolver{
+		exchangeResult: &identity.IDPUserInfo{
+			Sub:                  "workos-user-revoked-again",
+			Email:                "test@example.com",
+			Name:                 "Test User",
+			WorkOSSessionID:      workosSessionID,
+			AuthenticationMethod: ssosignins.MethodSSO,
+		},
+		upsertResult: gramUserID,
+		hasAccessOK:  true,
+	}
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	ssosignins.EnableForTests(ti.features, toolset.OrganizationID)
+	mock.exchangeResult.OrganizationID = workOSOrganizationID(t, ctx, ti, toolset.OrganizationID)
+	_, err := ssosignins.RevokeSession(ctx, ti.conn, []string{toolset.OrganizationID}, gramUserID, workosSessionID)
+	require.NoError(t, err)
+
+	challengeID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  challengeID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID},
+		ClientID:            "test-client",
+		RedirectURI:         "http://localhost:3000/callback",
+		State:               "client-state",
+		CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
+		FreshLoginForced:    true,
+		CreatedAt:           time.Now(),
+	}))
+	q := url.Values{"state": {challengeID}, "code": {"idp-auth-code-" + uuid.NewString()}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/idp_callback?"+q.Encode(), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	err = ti.service.HandleIDPCallback(httptest.NewRecorder(), req)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr, "the flow stops here rather than at invalid_grant")
+	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }

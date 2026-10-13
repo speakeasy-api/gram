@@ -449,7 +449,8 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 	q := repo.New(db)
 	// Lock every organization the user has signed in to, not only the ones
 	// being revoked, so recordings elsewhere wait for the check below that
-	// keeps their WorkOS sessions up.
+	// keeps their WorkOS sessions up. A first-ever recording in a new
+	// organization can still race it; the worst case ends that WorkOS session.
 	recorded, err := q.ListSSOSignInOrganizationsForUser(ctx, userID)
 	if err != nil {
 		return out, fmt.Errorf("list sso sign-in organizations: %w", err)

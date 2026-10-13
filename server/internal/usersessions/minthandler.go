@@ -178,7 +178,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		SsoSignInID:     ssoSignInID,
 		SsoSignInUserID: conv.ToPGText(authCtx.UserID),
 	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) && ssoSignInID.Valid {
+		if errors.Is(err, pgx.ErrNoRows) && s.signInRevoked(ctx, authCtx.ActiveOrganizationID, ssoSignInID) {
 			return nil, oops.E(oops.CodeUnauthorized, err, "sign-in was revoked, sign in again").LogError(ctx, s.logger)
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -419,6 +419,19 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 		resourceID: metaServer.ID.String(),
 		logAttr:    attr.SlogMetaMcpServerID(metaServer.ID.String()),
 	}, nil
+}
+
+// signInRevoked reports whether a refused mint was refused for its sign-in,
+// so an issuer miss is not reported as a revocation.
+func (s *Service) signInRevoked(ctx context.Context, organizationID string, signInID uuid.NullUUID) bool {
+	if !signInID.Valid {
+		return false
+	}
+	row, err := repo.New(s.db).LockSSOSignInForGrant(ctx, repo.LockSSOSignInForGrantParams{ID: signInID.UUID, OrganizationID: organizationID})
+	if err != nil {
+		return false
+	}
+	return row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(ssosignins.RevokeReasonSignOut))
 }
 
 // dashboardSSOSignIn is the caller's SSO sign-in in its active organization,

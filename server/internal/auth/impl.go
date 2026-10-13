@@ -446,7 +446,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	if recorded.Revoked && s.sessions.SSOSignInEnforced(ctx, recorded.OrganizationID) {
 		// No dashboard session from a revoked sign-in. Ending the WorkOS
 		// session makes the next login authenticate afresh.
-		s.endRevokedWorkOSSession(ctx, logger, recorded.OrganizationID, userID, idpUser.WorkOSSessionID)
+		s.endRevokedWorkOSSession(ctx, logger, idpUser.WorkOSSessionID)
 		return redirectWithError(authErrSignInRevoked, errors.New("identity provider session belongs to a revoked sign-in"))
 	}
 
@@ -1055,21 +1055,14 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 }
 
 // endRevokedWorkOSSession ends a WorkOS session whose sign-in was revoked,
-// unless it still backs a live sign-in in another organization.
-func (s *Service) endRevokedWorkOSSession(ctx context.Context, logger *slog.Logger, organizationID, userID, workosSessionID string) {
+// even when another organization still uses it: the user is blocked at this
+// login until it ends, and other organizations' grants don't depend on it.
+func (s *Service) endRevokedWorkOSSession(ctx context.Context, logger *slog.Logger, workosSessionID string) {
 	if workosSessionID == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), epochTimeout)
 	defer cancel()
-	used, err := ssosignins.WorkOSSessionUsedElsewhere(ctx, s.db, userID, workosSessionID, []string{organizationID})
-	if err != nil {
-		logger.WarnContext(ctx, "check revoked workos session use elsewhere", attr.SlogError(err))
-		return
-	}
-	if used {
-		return
-	}
 	if err := s.sessions.RevokeSession(ctx, workosSessionID); err != nil {
 		logger.WarnContext(ctx, "end revoked workos session", attr.SlogError(err))
 	}
