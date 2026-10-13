@@ -52,12 +52,9 @@ export function relayTarget(
     // The API already accepts this endpoint; binding would conflict or recurse.
     return null;
   }
+  if (!wildcard) return upstream;
   return {
-    host: wildcard
-      ? upstream.host === "::"
-        ? "::1"
-        : "127.0.0.1"
-      : upstream.host,
+    host: upstream.host === "::" ? "::1" : "127.0.0.1",
     port: upstream.port,
   };
 }
@@ -112,86 +109,84 @@ export function createRelay(upstream: Address) {
   };
 }
 
-async function main() {
+async function startRelay(): Promise<{
+  reason: string;
+  relay?: ReturnType<typeof createRelay>;
+}> {
   const upstream = parseAddress(process.env["usage_server_address"] ?? "");
   const port = callbackPort(
     process.env["usage_server_url"] ?? "",
     process.env["usage_runtime_server_url"],
   );
-  let relay: ReturnType<typeof createRelay> | undefined;
-  let reason = "explicit runtime callback URL";
-  if (port !== null) {
-    const localIPs = Object.values(networkInterfaces()).flatMap(
-      (addresses) => addresses?.map((address) => address.address) ?? [],
-    );
-    let host: string | undefined;
-    try {
-      const info = await $({
-        quiet: true,
-        timeout: 15_000,
-      })`docker info --format ${"{{json .}}"}`.json<{
-        OperatingSystem: string;
-      }>();
-      if (/docker desktop/i.test(info.OperatingSystem)) {
-        // Docker Desktop forwards host traffic without a host-local bridge;
-        // an explicit relay host must not enable a listener there either.
-        reason = "Docker Desktop host forwarding";
-      } else {
-        host =
-          process.env["usage_listen_host"] ||
-          bridgeGateway(
-            (
-              await $({
-                quiet: true,
-                timeout: 15_000,
-              })`docker network inspect bridge`.json()
-            )[0],
-          );
-      }
-    } catch (error) {
-      reason = "inactive: Docker gateway discovery failed";
-      console.warn(
-        `Assistant relay inactive: Docker gateway discovery failed: ${error instanceof Error ? error.message : String(error)}. ` +
-          "Restart assistant-relay after Docker is available, or configure a container-reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
+  if (port === null) return { reason: "explicit runtime callback URL" };
+
+  const hostOverride = process.env["usage_listen_host"];
+  let host: string;
+  try {
+    const info = await $`docker info --format ${"{{json .}}"}`
+      .quiet()
+      .timeout(15_000)
+      .json<{ OperatingSystem: string }>();
+    // Desktop forwards host traffic itself, even when an override is supplied.
+    if (/docker desktop/i.test(info.OperatingSystem)) {
+      return { reason: "Docker Desktop host forwarding" };
+    }
+    host =
+      hostOverride ||
+      bridgeGateway(
+        (
+          await $`docker network inspect bridge`.quiet().timeout(15_000).json()
+        )[0],
       );
-    }
-    if (host) {
-      if (
-        process.env["usage_listen_host"] &&
-        (!net.isIP(host) ||
-          !localIPs.includes(host) ||
-          host === "::1" ||
-          host.startsWith("127."))
-      ) {
-        throw new Error(
-          "Assistant relay requires a Docker gateway IP on a local non-loopback interface. " +
-            "Check GRAM_ASSISTANT_RELAY_HOST or use an explicit reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
-        );
-      }
-      if (!localIPs.includes(host)) {
-        // Some CI and remote Docker engines expose published ports without
-        // sharing their bridge interface with this process. Assistant callback
-        // forwarding is unavailable there, but the rest of the stack can run.
-        reason = "inactive: Docker bridge gateway is not a local interface";
-        console.warn(
-          "Assistant relay inactive: Docker bridge gateway is not a local interface. " +
-            "Local assistant callbacks require a container-reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL " +
-            "or a host-local gateway configured with GRAM_ASSISTANT_RELAY_HOST.",
-        );
-      } else {
-        const listen = { host, port };
-        const target = relayTarget(upstream, listen);
-        if (target) {
-          relay = createRelay(target);
-          relay.server.listen(listen);
-          await once(relay.server, "listening");
-          reason = `${host}:${port} -> ${upstream.host}:${upstream.port}`;
-        } else {
-          reason = "API already listens on the Docker callback endpoint";
-        }
-      }
-    }
+  } catch (error) {
+    console.warn(
+      `Assistant relay inactive: Docker gateway discovery failed: ${error instanceof Error ? error.message : String(error)}. ` +
+        "Restart assistant-relay after Docker is available, or configure a container-reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
+    );
+    return { reason: "inactive: Docker gateway discovery failed" };
   }
+
+  const localIPs = Object.values(networkInterfaces()).flatMap(
+    (addresses) => addresses?.map((address) => address.address) ?? [],
+  );
+  const isLocal = localIPs.includes(host);
+  if (
+    hostOverride &&
+    (!net.isIP(host) || !isLocal || host === "::1" || host.startsWith("127."))
+  ) {
+    throw new Error(
+      "Assistant relay requires a Docker gateway IP on a local non-loopback interface. " +
+        "Check GRAM_ASSISTANT_RELAY_HOST or use an explicit reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
+    );
+  }
+  if (!isLocal) {
+    // CI and remote Docker may publish ports without sharing their bridge.
+    console.warn(
+      "Assistant relay inactive: Docker bridge gateway is not a local interface. " +
+        "Local assistant callbacks require a container-reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL " +
+        "or a host-local gateway configured with GRAM_ASSISTANT_RELAY_HOST.",
+    );
+    return {
+      reason: "inactive: Docker bridge gateway is not a local interface",
+    };
+  }
+
+  const listen = { host, port };
+  const target = relayTarget(upstream, listen);
+  if (!target)
+    return { reason: "API already listens on the Docker callback endpoint" };
+
+  const relay = createRelay(target);
+  relay.server.listen(listen);
+  await once(relay.server, "listening");
+  return {
+    relay,
+    reason: `${host}:${port} -> ${upstream.host}:${upstream.port}`,
+  };
+}
+
+async function main() {
+  const { relay, reason } = await startRelay();
   // Keep the supervised daemon alive when forwarding is unnecessary too.
   // A restart re-evaluates configuration after bind or Docker context changes.
   const keepAlive = setInterval(() => {}, 60_000);
