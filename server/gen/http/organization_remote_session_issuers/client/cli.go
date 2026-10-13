@@ -13,7 +13,6 @@ import (
 	"strconv"
 
 	organizationremotesessionissuers "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
-	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -566,28 +565,20 @@ func BuildMigrateIssuerPayload(organizationRemoteSessionIssuersMigrateIssuerBody
 	return v, nil
 }
 
-// BuildSetEMAProvidersPayload builds the payload for the
-// organizationRemoteSessionIssuers setEMAProviders endpoint from CLI flags.
-func BuildSetEMAProvidersPayload(organizationRemoteSessionIssuersSetEMAProvidersBody string, organizationRemoteSessionIssuersSetEMAProvidersSessionToken string) (*organizationremotesessionissuers.SetEMAProvidersPayload, error) {
+// BuildSetEMAProviderPayload builds the payload for the
+// organizationRemoteSessionIssuers setEMAProvider endpoint from CLI flags.
+func BuildSetEMAProviderPayload(organizationRemoteSessionIssuersSetEMAProviderBody string, organizationRemoteSessionIssuersSetEMAProviderSessionToken string) (*organizationremotesessionissuers.SetEMAProviderPayload, error) {
 	var err error
-	var body SetEMAProvidersRequestBody
+	var body SetEMAProviderRequestBody
 	{
-		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersSetEMAProvidersBody), &body)
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersSetEMAProviderBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"providers\": [],\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		if body.Providers == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"provider\": {\n         \"kind\": \"speakeasy\",\n         \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n      },\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
-		if len(body.Providers) > 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.providers", body.Providers, len(body.Providers), 1, false))
-		}
-		for _, e := range body.Providers {
-			if e != nil {
-				if err2 := ValidateEMAProviderInputRequestBody(e); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
+		if body.Provider != nil {
+			if err2 := ValidateEMAProviderInputRequestBody(body.Provider); err2 != nil {
+				err = goa.MergeErrors(err, err2)
 			}
 		}
 		if err != nil {
@@ -596,24 +587,15 @@ func BuildSetEMAProvidersPayload(organizationRemoteSessionIssuersSetEMAProviders
 	}
 	var sessionToken *string
 	{
-		if organizationRemoteSessionIssuersSetEMAProvidersSessionToken != "" {
-			sessionToken = &organizationRemoteSessionIssuersSetEMAProvidersSessionToken
+		if organizationRemoteSessionIssuersSetEMAProviderSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersSetEMAProviderSessionToken
 		}
 	}
-	v := &organizationremotesessionissuers.SetEMAProvidersPayload{
+	v := &organizationremotesessionissuers.SetEMAProviderPayload{
 		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
 	}
-	if body.Providers != nil {
-		v.Providers = make([]*types.EMAProviderInput, len(body.Providers))
-		for i, val := range body.Providers {
-			if val == nil {
-				v.Providers[i] = nil
-				continue
-			}
-			v.Providers[i] = marshalEMAProviderInputRequestBodyToTypesEMAProviderInput(val)
-		}
-	} else {
-		v.Providers = []*types.EMAProviderInput{}
+	if body.Provider != nil {
+		v.Provider = marshalEMAProviderInputRequestBodyToTypesEMAProviderInput(body.Provider)
 	}
 	v.SessionToken = sessionToken
 

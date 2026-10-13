@@ -172,6 +172,8 @@ func classifyChainCheck(outcome identitychaining.Outcome, service string) consen
 		return rejected("A current identity provider sign-in for %s is required. Sign in again, or use a separate sign-in.")
 	case identitychaining.ReasonConfigurationRequired:
 		return rejected("%s isn't set up for identity provider sign-in yet. Ask your administrator, or use a separate sign-in.")
+	case identitychaining.ReasonIneligibleIdentity:
+		return rejected("Your organization can't vouch for your account to %s, for example because your email isn't on one of its verified domains. Ask your administrator, or use a separate sign-in.")
 	case identitychaining.ReasonNotApplicable, identitychaining.ReasonBindingNotReady, identitychaining.ReasonMalformedAssertion,
 		identitychaining.ReasonMalformedResponse, identitychaining.ReasonTransientFailure, identitychaining.ReasonUnknownRejection,
 		identitychaining.ReasonStaleConfiguration, identitychaining.ReasonProviderUnavailable:

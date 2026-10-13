@@ -182,7 +182,7 @@ const (
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
 
-	// FlagEMAProviders gates changing a vendor's EMA provider order while the
+	// FlagEMAProviders gates selecting a vendor's EMA provider while the
 	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.
 	FlagEMAProviders Flag = "ema-providers"
 )

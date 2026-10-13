@@ -45689,10 +45689,10 @@ paths:
             x-speakeasy-name-override: refreshMetadata
             x-speakeasy-react-hook:
                 name: RefreshOrganizationRemoteSessionIssuerMetadata
-    /rpc/organizationRemoteSessionIssuers.setEMAProviders:
+    /rpc/organizationRemoteSessionIssuers.setEMAProvider:
         post:
-            description: Select one EMA provider for the vendor authorization server this issuer names. An empty list restores the endpoint configured external issuer. Speakeasy must be selected explicitly; failures never fall back to another provider. The selection applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout.
-            operationId: setOrganizationRemoteSessionIssuerEMAProviders
+            description: Select the EMA provider for the vendor authorization server this issuer names, or omit provider to restore the endpoint's configured external issuer. Speakeasy is used only for vendors where it is selected explicitly, and a failing provider never falls back to another one. The selection applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the external issuer only needs org:admin. Not available from support or impersonated sessions.
+            operationId: setOrganizationRemoteSessionIssuerEMAProvider
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -45705,14 +45705,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetEMAProvidersRequestBody'
+                            $ref: '#/components/schemas/SetEMAProviderRequestBody'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/EMAProviderOrder'
+                                $ref: '#/components/schemas/EMAProviderSelection'
                     description: OK response.
                 "400":
                     content:
@@ -45770,12 +45770,12 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
-            summary: setEMAProviders organizationRemoteSessionIssuers
+            summary: setEMAProvider organizationRemoteSessionIssuers
             tags:
                 - organizationRemoteSessionIssuers
-            x-speakeasy-name-override: setEMAProviders
+            x-speakeasy-name-override: setEMAProvider
             x-speakeasy-react-hook:
-                name: SetOrganizationRemoteSessionIssuerEMAProviders
+                name: SetOrganizationRemoteSessionIssuerEMAProvider
     /rpc/organizationRemoteSessionIssuers.update:
         post:
             description: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.
@@ -95634,17 +95634,24 @@ components:
                         - speakeasy
                 remote_session_issuer_id:
                     type: string
-                    description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
+                    description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default selection with none.
                     format: uuid
                 unavailable_reason:
                     type: string
-                    description: Why the provider cannot serve now; omitted when it can. An unavailable selection does not fall back to another provider.
+                    description: Why the provider cannot serve now; omitted when it can. An unavailable selection never falls back to another provider. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
                     enum:
                         - deleted
                         - disabled
                         - not_trusted_by_endpoint
                         - signing_unavailable
-            description: One EMA provider in a vendor's order.
+                        - not_rolled_out
+                        - verified_domain_required
+                        - setup_required
+                        - keyless
+                        - signing_paused
+                        - sign_in_enforcement_required
+                        - readiness_unknown
+            description: The EMA provider serving a vendor.
             required:
                 - kind
         EMAProviderInput:
@@ -95660,28 +95667,25 @@ components:
                     type: string
                     description: 'Required for external, omitted for speakeasy: an organization-level issuer that an organization user session issuer trusts.'
                     format: uuid
-            description: One EMA provider allowed to issue ID-JAGs for a vendor.
+            description: The EMA provider selected to issue ID-JAGs for a vendor.
             required:
                 - kind
-        EMAProviderOrder:
+        EMAProviderSelection:
             type: object
             properties:
                 is_default:
                     type: boolean
                     description: No selection is saved, so the endpoint uses its configured external issuer.
-                providers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/EMAProvider'
-                    description: The explicitly selected provider, or the external default.
+                provider:
+                    $ref: '#/components/schemas/EMAProvider'
                 vendor_issuer:
                     type: string
                     description: The vendor authorization server issuer, canonicalized.
-            description: The selected EMA provider for one vendor authorization server. Automatic provider fallback is not supported.
+            description: The EMA provider for one vendor authorization server. There is no automatic fallback to another provider.
             required:
                 - vendor_issuer
                 - is_default
-                - providers
+                - provider
         EmployeeDataFlowEdge:
             type: object
             properties:
@@ -99254,8 +99258,8 @@ components:
                 client_id:
                     type: string
                     description: Exact selected remote_session_client row ID, when available.
-                ema_providers:
-                    $ref: '#/components/schemas/EMAProviderOrder'
+                ema_provider:
+                    $ref: '#/components/schemas/EMAProviderSelection'
                 external_client_id:
                     type: string
                     description: Public OAuth client identifier, never a secret.
@@ -108577,8 +108581,8 @@ components:
                 created_at:
                     type: string
                     format: date-time
-                ema_providers:
-                    $ref: '#/components/schemas/EMAProviderOrder'
+                ema_provider:
+                    $ref: '#/components/schemas/EMAProviderSelection'
                 grant_types_supported:
                     type: array
                     items:
@@ -112760,22 +112764,17 @@ components:
             required:
                 - source_kind
                 - role_urn
-        SetEMAProvidersRequestBody:
+        SetEMAProviderRequestBody:
             type: object
             properties:
-                providers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/EMAProviderInput'
-                    description: One selected provider; an empty list restores the external default.
-                    maxItems: 1
+                provider:
+                    $ref: '#/components/schemas/EMAProviderInput'
                 remote_session_issuer_id:
                     type: string
                     description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.
                     format: uuid
             required:
                 - remote_session_issuer_id
-                - providers
         SetEnabledRequestBody:
             type: object
             properties:

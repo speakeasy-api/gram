@@ -7,13 +7,13 @@
 
 package types
 
-// The selected EMA provider for one vendor authorization server. Automatic
-// provider fallback is not supported.
-type EMAProviderOrder struct {
+// The EMA provider for one vendor authorization server. There is no automatic
+// fallback to another provider.
+type EMAProviderSelection struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string
 	// No selection is saved, so the endpoint uses its configured external issuer.
 	IsDefault bool
 	// The explicitly selected provider, or the external default.
-	Providers []*EMAProvider
+	Provider *EMAProvider
 }

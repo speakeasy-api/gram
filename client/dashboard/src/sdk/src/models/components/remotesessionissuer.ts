@@ -8,9 +8,9 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  EMAProviderOrder,
-  EMAProviderOrder$inboundSchema,
-} from "./emaproviderorder.js";
+  EMAProviderSelection,
+  EMAProviderSelection$inboundSchema,
+} from "./emaproviderselection.js";
 
 /**
  * A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
@@ -50,9 +50,9 @@ export type RemoteSessionIssuer = {
   codeChallengeMethodsSupported?: Array<string> | null | undefined;
   createdAt: Date;
   /**
-   * The selected EMA provider for one vendor authorization server. Automatic provider fallback is not supported.
+   * The EMA provider for one vendor authorization server. There is no automatic fallback to another provider.
    */
-  emaProviders?: EMAProviderOrder | undefined;
+  emaProvider?: EMAProviderSelection | undefined;
   grantTypesSupported?: Array<string> | undefined;
   /**
    * The remote_session_issuer id.
@@ -184,7 +184,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    ema_providers: z.optional(EMAProviderOrder$inboundSchema),
+    ema_provider: z.optional(EMAProviderSelection$inboundSchema),
     grant_types_supported: z.optional(z.array(z.string())),
     id: z.string(),
     id_token_signing_alg_values_supported: z.optional(
@@ -242,7 +242,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "client_setup_documentation_url": "clientSetupDocumentationUrl",
       "code_challenge_methods_supported": "codeChallengeMethodsSupported",
       "created_at": "createdAt",
-      "ema_providers": "emaProviders",
+      "ema_provider": "emaProvider",
       "grant_types_supported": "grantTypesSupported",
       "id_token_signing_alg_values_supported":
         "idTokenSigningAlgValuesSupported",

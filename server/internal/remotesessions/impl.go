@@ -238,7 +238,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 // SetSpeakeasySigningAvailable configures the deployment capability used by
-// provider-order views. Organization lifecycle and entitlements remain live checks.
+// provider views. Organization lifecycle and eligibility remain live checks.
 func (s *Service) SetSpeakeasySigningAvailable(available bool) {
 	s.speakeasySigningAvailable = available
 }

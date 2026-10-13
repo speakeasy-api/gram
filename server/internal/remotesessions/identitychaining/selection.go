@@ -44,7 +44,7 @@ type selection struct {
 	// A token is released or published only while it can still serve.
 	provider remotesessions.EMAProvider
 
-	// Speakeasy provenance snapshots fence issuer and SSO changes during exchange.
+	// Speakeasy provenance snapshots fence issuer and sign-in changes during exchange.
 	internalIssuerVersion time.Time
 	internalKeyID         uuid.UUID
 	userSessionID         uuid.UUID
@@ -80,22 +80,24 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 	resource, err := g.ResolveResource(ctx, req)
 	if err != nil {
 		logger.WarnContext(ctx, "resolve identity chaining resource", attr.SlogError(err))
+		// Failed discovery is never read as "no metadata". It governs only an
+		// upstream with a bound resource on its origin, so endpoints without
+		// a binding keep their interactive behavior unchanged. Candidates are
+		// diagnostic ownership only; fresh, valid metadata is still required
+		// to select a resource or token.
+		resources, readErr := repo.New(g.db).ListEMAChainingResourceCandidates(ctx, repo.ListEMAChainingResourceCandidatesParams{
+			ProjectID: req.ProjectID, OrganizationID: req.OrganizationID, UserSessionIssuerID: req.UserSessionIssuerID,
+			RemoteSessionIssuerID: req.RemoteSessionIssuerID,
+		})
+		if readErr != nil {
+			// Unknown configuration keeps the upstream on the interactive path.
+			logger.ErrorContext(ctx, "list identity chaining diagnostic candidates", attr.SlogError(readErr))
+			return none, notApplicable
+		}
+		if !slices.ContainsFunc(resources, func(resource string) bool { return MatchesDiagnosticOrigin(req.UpstreamResource, resource) }) {
+			return none, notApplicable
+		}
 		if errors.Is(err, protectedresource.ErrEndpointResourceInvalid) {
-			// A failed alias must retain its configuration error when a resource
-			// on this origin is bound. This is diagnostic ownership only; fresh,
-			// valid metadata is still required to select a resource or token.
-			resources, readErr := repo.New(g.db).ListEMAChainingResourceCandidates(ctx, repo.ListEMAChainingResourceCandidatesParams{
-				ProjectID: req.ProjectID, OrganizationID: req.OrganizationID, UserSessionIssuerID: req.UserSessionIssuerID,
-				RemoteSessionIssuerID: req.RemoteSessionIssuerID,
-			})
-			if readErr != nil {
-				logger.WarnContext(ctx, "list identity chaining diagnostic candidates", attr.SlogError(readErr))
-				return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceUnknown, true)
-			}
-			bound := slices.ContainsFunc(resources, func(resource string) bool { return MatchesDiagnosticOrigin(req.UpstreamResource, resource) })
-			if !bound {
-				return none, notApplicable
-			}
 			return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
 		}
 		return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceUnknown, true)
@@ -140,7 +142,7 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 	case result.State != remotesessions.PreparationStateReady || result.BindingID != b.ID || result.ClientID == uuid.Nil || result.ExternalClientID == "":
 		return none, bindingNotReady
 	}
-	if resource.Discovered && !slices.Contains(resource.AuthorizationServers, result.Issuer) {
+	if resource.Discovered && !slices.ContainsFunc(resource.AuthorizationServers, func(server string) bool { return sameIssuer(server, result.Issuer) }) {
 		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
 	}
 	scopes := GrantScopes(result.Scopes)
@@ -163,6 +165,17 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		audience:              "",
 		internalIssuerVersion: time.Time{}, internalKeyID: uuid.Nil, userSessionID: uuid.Nil, signInID: uuid.Nil, email: "",
 	}, success
+}
+
+// sameIssuer compares issuer identifiers in canonical form, so a trailing
+// slash or host case difference between metadata and configuration matches.
+func sameIssuer(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ca, errA := remotesessions.NormalizeVendorIssuer(a)
+	cb, errB := remotesessions.NormalizeVendorIssuer(b)
+	return errA == nil && errB == nil && ca == cb
 }
 
 // MatchesDiagnosticOrigin does not establish authorization-resource identity.

@@ -10,17 +10,17 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { EMAProvider, EMAProvider$inboundSchema } from "./emaprovider.js";
 
 /**
- * The selected EMA provider for one vendor authorization server. Automatic provider fallback is not supported.
+ * The EMA provider for one vendor authorization server. There is no automatic fallback to another provider.
  */
-export type EMAProviderOrder = {
+export type EMAProviderSelection = {
   /**
    * No selection is saved, so the endpoint uses its configured external issuer.
    */
   isDefault: boolean;
   /**
-   * The explicitly selected provider, or the external default.
+   * The EMA provider serving a vendor.
    */
-  providers: Array<EMAProvider>;
+  provider: EMAProvider;
   /**
    * The vendor authorization server issuer, canonicalized.
    */
@@ -28,13 +28,13 @@ export type EMAProviderOrder = {
 };
 
 /** @internal */
-export const EMAProviderOrder$inboundSchema: z.ZodMiniType<
-  EMAProviderOrder,
+export const EMAProviderSelection$inboundSchema: z.ZodMiniType<
+  EMAProviderSelection,
   unknown
 > = z.pipe(
   z.object({
     is_default: z.boolean(),
-    providers: z.array(EMAProvider$inboundSchema),
+    provider: EMAProvider$inboundSchema,
     vendor_issuer: z.string(),
   }),
   z.transform((v) => {
@@ -45,12 +45,12 @@ export const EMAProviderOrder$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function emaProviderOrderFromJSON(
+export function emaProviderSelectionFromJSON(
   jsonString: string,
-): SafeParseResult<EMAProviderOrder, SDKValidationError> {
+): SafeParseResult<EMAProviderSelection, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => EMAProviderOrder$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'EMAProviderOrder' from JSON`,
+    (x) => EMAProviderSelection$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'EMAProviderSelection' from JSON`,
   );
 }

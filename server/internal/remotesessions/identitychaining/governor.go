@@ -68,20 +68,23 @@ func (g *Governor) ResolveResource(ctx context.Context, req Request) (protectedr
 }
 
 // Governs reports whether identity chaining owns the request's upstream: a
-// ready binding names it, even ambiguously. The runtime uses it to decide
-// whether chaining answers for the upstream instead of the strict gate.
+// ready binding names it, even ambiguously, or a bound resource on its origin
+// could not be confirmed just now. The runtime uses it to decide whether
+// chaining answers for the upstream instead of the strict gate, so a
+// temporary metadata failure reports as retryable instead of asking the
+// human to reconnect.
 func (g *Governor) Governs(ctx context.Context, req Request) bool {
 	if !req.complete() {
 		return false
 	}
 	_, outcome := g.selectBinding(ctx, g.logger, req)
-	return outcome.Applicable() && !outcome.Retryable
+	return outcome.Applicable()
 }
 
 // Serves reports the remote session issuer whose binding identity chaining
 // would use for req. Unlike Governs it requires exactly one ready binding, so
-// an ambiguous configuration is never presented as configured, and at least
-// one EMA provider for the vendor that can serve now.
+// an ambiguous configuration is never presented as configured, and a vendor
+// provider that can serve now.
 func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !req.complete() {
 		return uuid.Nil, false
@@ -90,17 +93,17 @@ func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !outcome.Succeeded() {
 		return uuid.Nil, false
 	}
-	if order, outcome := g.readyProviderOrder(ctx, req, sel); !outcome.Succeeded() || len(order.Available()) == 0 {
+	if selection, outcome := g.readyProviderSelection(ctx, req, sel); !outcome.Succeeded() || !selection.Provider.Available() {
 		return uuid.Nil, false
 	}
 	return sel.remoteIssuerID, true
 }
 
-// ProviderOrder is req's vendor EMA provider order for this endpoint,
-// including providers that cannot serve. False when no single ready binding
-// names the upstream or the order cannot be read.
-func (g *Governor) ProviderOrder(ctx context.Context, req Request) (remotesessions.EMAProviderOrder, bool) {
-	none := remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: nil}
+// ProviderSelection is req's vendor EMA provider for this endpoint, flagged
+// when it cannot serve. False when no single ready binding names the
+// upstream or the selection cannot be read.
+func (g *Governor) ProviderSelection(ctx context.Context, req Request) (remotesessions.EMAProviderSelection, bool) {
+	var none remotesessions.EMAProviderSelection
 	if !req.complete() {
 		return none, false
 	}
@@ -108,11 +111,11 @@ func (g *Governor) ProviderOrder(ctx context.Context, req Request) (remotesessio
 	if !outcome.Succeeded() {
 		return none, false
 	}
-	order, outcome := g.readyProviderOrder(ctx, req, sel)
+	selection, outcome := g.readyProviderSelection(ctx, req, sel)
 	if !outcome.Succeeded() {
 		return none, false
 	}
-	return order, true
+	return selection, true
 }
 
 // Configured reports whether any binding exists for the user session issuer
@@ -147,46 +150,39 @@ func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 	if !outcome.Succeeded() {
 		return false
 	}
-	providers, outcome := g.servingProviders(ctx, g.logger, req, sel)
+	p, outcome := g.servingProvider(ctx, g.logger, req, sel)
 	if !outcome.Succeeded() {
 		return false
 	}
-	for _, p := range providers {
-		current := sel
-		current.provider = p
-		if p.Kind == remotesessions.EMAProviderSpeakeasy {
-			source := g.source(p)
-			statusReq := req
-			if statusReq.UserSessionJTI == "" {
-				jti, err := repo.New(g.db).GetSpeakeasyEMAStoredGrant(ctx, repo.GetSpeakeasyEMAStoredGrantParams{
-					OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, UserSessionIssuerID: uuid.NullUUID{UUID: req.UserSessionIssuerID, Valid: true},
-					RemoteSessionIssuerID: uuid.NullUUID{UUID: current.remoteIssuerID, Valid: true}, RemoteSessionClientID: uuid.NullUUID{UUID: current.clientID, Valid: true},
-					Resource: current.resource, SubjectUrn: urn.NewUserSubject(req.UserID).String(),
-				})
-				if err != nil {
-					if !errors.Is(err, pgx.ErrNoRows) {
-						g.logger.WarnContext(ctx, "read retained Speakeasy EMA grant", attr.SlogError(err))
-					}
-					continue
-				}
-				statusReq.UserSessionJTI = jti
-			}
-			if !source.authorize(ctx, g.logger, statusReq, &current).Succeeded() {
-				continue
-			}
-			row, err := readCredential(ctx, repo.New(g.db), req, current, g.now())
-			if err != nil || !row.Usable || g.enc == nil {
-				continue
-			}
-			value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
-			if err == nil && value != "" {
-				return true
-			}
-		} else if g.hasExternalCredential(ctx, req, current) {
-			return true
-		}
+	current := sel
+	current.provider = p
+	if p.Kind != remotesessions.EMAProviderSpeakeasy {
+		return g.hasExternalCredential(ctx, req, current)
 	}
-	return false
+	statusReq := req
+	if statusReq.UserSessionJTI == "" {
+		jti, err := repo.New(g.db).GetSpeakeasyEMAStoredGrant(ctx, repo.GetSpeakeasyEMAStoredGrantParams{
+			OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, UserSessionIssuerID: uuid.NullUUID{UUID: req.UserSessionIssuerID, Valid: true},
+			RemoteSessionIssuerID: uuid.NullUUID{UUID: current.remoteIssuerID, Valid: true}, RemoteSessionClientID: uuid.NullUUID{UUID: current.clientID, Valid: true},
+			Resource: current.resource, SubjectUrn: urn.NewUserSubject(req.UserID).String(),
+		})
+		if err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				g.logger.WarnContext(ctx, "read retained Speakeasy EMA grant", attr.SlogError(err))
+			}
+			return false
+		}
+		statusReq.UserSessionJTI = jti
+	}
+	if !g.source(p).authorize(ctx, g.logger, statusReq, &current).Succeeded() {
+		return false
+	}
+	row, err := readCredential(ctx, repo.New(g.db), req, current, g.now())
+	if err != nil || !row.Usable || g.enc == nil {
+		return false
+	}
+	value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
+	return err == nil && value != ""
 }
 
 func (g *Governor) hasExternalCredential(ctx context.Context, req Request, sel selection) bool {

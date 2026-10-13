@@ -150,18 +150,18 @@ func TestXAAIdentityInspectorCallbackUsesRecordedOrigin(t *testing.T) {
 	require.Equal(t, "https://recorded.example.test"+remotesessions.FederatedIDPCallbackPath(f.trustedClient), *callback)
 }
 
-// orderedGovernor reports a fixed EMA provider order.
-type orderedGovernor struct {
+// selectedGovernor reports a fixed EMA provider selection.
+type selectedGovernor struct {
 	*recordingGovernor
-	order   remotesessions.EMAProviderOrder
-	ordered bool
+	selection remotesessions.EMAProviderSelection
+	selected  bool
 }
 
-func (g orderedGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool) {
-	return g.order, g.ordered
+func (g selectedGovernor) ProviderSelection(context.Context, identitychaining.Request) (remotesessions.EMAProviderSelection, bool) {
+	return g.selection, g.selected
 }
 
-func TestXAAIdentityInspectorReportsAvailableProviders(t *testing.T) {
+func TestXAAIdentityInspectorReportsTheProvider(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_inspector_providers")
@@ -170,26 +170,26 @@ func TestXAAIdentityInspectorReportsAvailableProviders(t *testing.T) {
 	bindXAAInspectorUpstream(t, ctx, conn, f, f.issuerA)
 	external := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.issuerA, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}
 	pending := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.New(), Unavailable: remotesessions.EMAProviderSigningUnavailable}
-	inspect := func(g orderedGovernor) XAAIdentityChaining {
+	inspect := func(g selectedGovernor) XAAIdentityChaining {
 		inspector := &postgresXAAIdentityInspector{db: conn, governor: g, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
 		chaining, _, err := inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
 		require.NoError(t, err)
 		return chaining
 	}
 
-	served := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: []remotesessions.EMAProvider{pending, external}}, ordered: true})
+	served := inspect(selectedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, selection: remotesessions.EMAProviderSelection{VendorIssuer: "", IsDefault: false, Provider: external}, selected: true})
 	require.True(t, served.Served)
 	require.Nil(t, served.NotServedReason)
-	require.Equal(t, []XAAEMAProvider{{Kind: "external", RemoteSessionIssuerID: new(f.issuerA.String())}}, served.Providers, "a provider that cannot serve is omitted")
+	require.Equal(t, &XAAEMAProvider{Kind: "external", RemoteSessionIssuerID: new(f.issuerA.String())}, served.Provider)
 
-	unavailable := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: []remotesessions.EMAProvider{pending}}, ordered: true})
+	unavailable := inspect(selectedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, selection: remotesessions.EMAProviderSelection{VendorIssuer: "", IsDefault: false, Provider: pending}, selected: true})
 	require.False(t, unavailable.Served)
 	require.Equal(t, "provider_unavailable", conv.PtrValOr(unavailable.NotServedReason, ""))
-	require.Empty(t, unavailable.Providers)
+	require.Equal(t, &XAAEMAProvider{Kind: "speakeasy", UnavailableReason: new("signing_unavailable")}, unavailable.Provider, "the selected provider and why it cannot serve are shown, with nothing in its place")
 
-	unbound := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: nil}, ordered: false})
+	unbound := inspect(selectedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, selection: remotesessions.EMAProviderSelection{}, selected: false})
 	require.Equal(t, "binding_not_ready", conv.PtrValOr(unbound.NotServedReason, ""))
-	require.Empty(t, unbound.Providers)
+	require.Nil(t, unbound.Provider)
 }
 
 type failedResourceGovernor struct {
@@ -202,7 +202,7 @@ func (g *failedResourceGovernor) ResolveResource(context.Context, identitychaini
 	g.calls++
 	return protectedresource.EndpointResource{}, g.err
 }
-func (*failedResourceGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool) {
+func (*failedResourceGovernor) ProviderSelection(context.Context, identitychaining.Request) (remotesessions.EMAProviderSelection, bool) {
 	panic("failed discovery must not be probed a second time")
 }
 

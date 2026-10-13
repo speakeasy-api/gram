@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -31,20 +32,31 @@ type issuerStatus interface {
 }
 
 // SetSpeakeasyIssuer enables the internal provider with the same lifecycle
-// gate used by management. Call it before serving requests; nil disables it.
-func (g *Governor) SetSpeakeasyIssuer(gate *internalsessionissuers.Gate, signer *internalsessionissuers.Signer) {
+// gate used by management. flags evaluates sign-in enforcement, which
+// Speakeasy signing requires. Call it before serving requests; a nil gate,
+// or a signer this deployment cannot use, leaves the provider unavailable.
+func (g *Governor) SetSpeakeasyIssuer(gate *internalsessionissuers.Gate, signer *internalsessionissuers.Signer, flags feature.Provider) {
 	if gate == nil || !signer.Available() {
 		return
 	}
 	g.sources[remotesessions.EMAProviderSpeakeasy] = func(p remotesessions.EMAProvider) tokenSource {
-		return speakeasySource{g: g, gate: gate, signer: signer, issuerID: p.InternalSessionIssuerID}
+		return speakeasySource{g: g, gate: gate, signer: signer, flags: flags, issuerID: p.InternalSessionIssuerID}
 	}
+}
+
+// SpeakeasyReadiness is the management API's readiness check for the
+// Speakeasy provider, with the same checks runtime minting applies.
+func SpeakeasyReadiness(logger *slog.Logger, gate *internalsessionissuers.Gate, signer *internalsessionissuers.Signer, flags feature.Provider) remotesessions.EMAProviderReadiness {
+	g := NewGovernor(logger, nil, nil, nil)
+	g.SetSpeakeasyIssuer(gate, signer, flags)
+	return g.speakeasyReadiness
 }
 
 type speakeasySource struct {
 	g        *Governor
 	gate     issuerStatus
 	signer   assertionSigner
+	flags    feature.Provider
 	issuerID uuid.UUID
 }
 
@@ -107,18 +119,29 @@ func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Log
 }
 
 // configuration checks live issuer readiness without requiring a user's grant
-// or signing an assertion. Provider discovery uses the same authority as minting.
+// or signing an assertion. Provider discovery uses the same authority as
+// minting. Speakeasy vouches for sign-ins only while the organization's
+// sign-in enforcement is on, so it fails closed without it.
 func (s speakeasySource) configuration(ctx context.Context, logger *slog.Logger, organizationID string) (internalsessionissuers.Status, Outcome) {
+	status := internalsessionissuers.Status{State: internalsessionissuers.StateUnavailable, Issuer: nil, RolledOut: false, HasVerifiedDomain: false, VerifiedDomains: nil, ActiveKey: nil, PauseReason: ""}
 	if !s.available() {
-		return internalsessionissuers.Status{State: internalsessionissuers.StateUnavailable, Issuer: nil, RolledOut: false, Entitled: false, ActiveKey: nil}, providerUnavailable
+		return status, unavailableBecause(remotesessions.EMAProviderSigningUnavailable)
+	}
+	if !signins.Enforced(ctx, s.flags, organizationID) {
+		logger.WarnContext(ctx, "Speakeasy EMA provider needs sign-in enforcement", attr.SlogIdentityChainingUnavailableReason(string(remotesessions.EMAProviderSignInEnforcement)))
+		return status, unavailableBecause(remotesessions.EMAProviderSignInEnforcement)
 	}
 	status, err := s.gate.Status(ctx, organizationID)
 	if err != nil {
 		logger.ErrorContext(ctx, "check EMA issuer", attr.SlogError(err))
 		return status, newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
 	}
-	if status.State != internalsessionissuers.StateEnabled || status.Issuer == nil || status.ActiveKey == nil || status.Issuer.ID != s.issuerID {
-		return status, providerUnavailable
+	if reason := issuerUnavailableReason(status, s.issuerID); reason != "" {
+		logger.WarnContext(ctx, "Speakeasy EMA provider cannot serve",
+			attr.SlogIdentityChainingUnavailableReason(string(reason)),
+			attr.SlogReason(string(status.PauseReason)),
+		)
+		return status, unavailableBecause(reason)
 	}
 	if err := s.signer.CheckAuthority(ctx, organizationID, status); err != nil {
 		logger.WarnContext(ctx, "check EMA deployment authority", attr.SlogError(err))
@@ -150,25 +173,78 @@ func (s speakeasySource) issue(ctx context.Context, logger *slog.Logger, req Req
 	if outcome := ready(); !outcome.Succeeded() {
 		return none, outcome
 	}
-	assertion, err := s.signer.Sign(ctx, req.OrganizationID, internalsessionissuers.Claims{
+	assertion, outcome := s.sign(ctx, logger, req.OrganizationID, internalsessionissuers.Claims{
 		Subject: req.UserID, Email: sel.email, Audience: sel.audience, ClientID: sel.externalClientID,
 		Resource: sel.resource, Scope: strings.Join(sel.scopes, " "), ID: uuid.NewString(),
 		Expiry: s.g.now().Add(time.Minute), Extra: nil,
 	})
-	if err != nil {
-		logger.WarnContext(ctx, "sign EMA assertion", attr.SlogError(err))
-		if _, ok := errors.AsType[*internalsessionissuers.SigningRefusedError](err); ok {
-			return none, providerUnavailable
-		}
-		if errors.Is(err, internalsessionissuers.ErrMisconfigured) {
-			return none, newOutcome(StageExchange, ReasonConfigurationRequired, ConfidenceVerified, false)
-		}
-		return none, newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
+	if !outcome.Succeeded() {
+		return none, outcome
 	}
 	if outcome := s.checkReuse(ctx, req, sel); !outcome.Succeeded() {
 		return none, outcome
 	}
 	return issuedGrant{value: assertion, trustedSessionID: uuid.Nil, trustedObtainedAt: time.Time{}}, success
+}
+
+// sign maps the signer's refusals to outcomes. Refusals that retrying cannot
+// change are never reported as transient.
+func (s speakeasySource) sign(ctx context.Context, logger *slog.Logger, organizationID string, claims internalsessionissuers.Claims) (string, Outcome) {
+	assertion, err := s.signer.Sign(ctx, organizationID, claims)
+	if err == nil {
+		return assertion, success
+	}
+	logger.WarnContext(ctx, "sign EMA assertion", attr.SlogError(err))
+	if refused, ok := errors.AsType[*internalsessionissuers.SigningRefusedError](err); ok {
+		return "", unavailableBecause(stateUnavailableReason(refused.State, true))
+	}
+	switch {
+	case errors.Is(err, internalsessionissuers.ErrInvalidClaims):
+		// Sign refuses an email outside the organization's verified
+		// domains; signing in again cannot fix it.
+		return "", newOutcome(StageExchange, ReasonIneligibleIdentity, ConfidenceVerified, false)
+	case errors.Is(err, internalsessionissuers.ErrMisconfigured):
+		return "", newOutcome(StageExchange, ReasonConfigurationRequired, ConfidenceVerified, false)
+	}
+	return "", newOutcome(StageExchange, ReasonTransientFailure, ConfidenceVerified, true)
+}
+
+// issuerUnavailableReason says why status cannot sign for issuerID; empty
+// when it can.
+func issuerUnavailableReason(status internalsessionissuers.Status, issuerID uuid.UUID) remotesessions.EMAProviderUnavailableReason {
+	if status.State == internalsessionissuers.StateEnabled && (status.Issuer == nil || status.ActiveKey == nil) {
+		return remotesessions.EMAProviderSigningUnavailable
+	}
+	if status.State == internalsessionissuers.StateEnabled && status.Issuer.ID != issuerID {
+		// The selection names an issuer the organization replaced.
+		return remotesessions.EMAProviderDeleted
+	}
+	return stateUnavailableReason(status.State, status.RolledOut)
+}
+
+// stateUnavailableReason maps an issuer state that cannot sign to the reason
+// status views show; empty for an enabled issuer.
+func stateUnavailableReason(state internalsessionissuers.State, rolledOut bool) remotesessions.EMAProviderUnavailableReason {
+	switch state {
+	case internalsessionissuers.StateEnabled:
+		return ""
+	case internalsessionissuers.StateUnavailable:
+		if !rolledOut {
+			return remotesessions.EMAProviderNotRolledOut
+		}
+		return remotesessions.EMAProviderSigningUnavailable
+	case internalsessionissuers.StateVerifiedDomainRequired:
+		return remotesessions.EMAProviderVerifiedDomain
+	case internalsessionissuers.StateSetupRequired:
+		return remotesessions.EMAProviderSetupRequired
+	case internalsessionissuers.StateDisabled:
+		return remotesessions.EMAProviderDisabled
+	case internalsessionissuers.StateSigningPaused:
+		return remotesessions.EMAProviderSigningPaused
+	case internalsessionissuers.StateKeyless:
+		return remotesessions.EMAProviderKeyless
+	}
+	return remotesessions.EMAProviderSigningUnavailable
 }
 
 // checkSpeakeasyPublish fences revocation against publication. The transaction

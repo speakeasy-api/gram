@@ -7,7 +7,7 @@
 
 package types
 
-// One EMA provider allowed to issue ID-JAGs for a vendor.
+// The EMA provider selected to issue ID-JAGs for a vendor.
 type EMAProviderInput struct {
 	// external is an organization-level remote session issuer that exchanges the
 	// user's identity for an ID-JAG, such as an Okta authorization server;

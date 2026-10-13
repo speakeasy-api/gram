@@ -2333,32 +2333,25 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 			res.ScopeOverride[i] = val
 		}
 	}
-	if v.EmaProviders != nil {
-		res.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v.EmaProviders)
+	if v.EmaProvider != nil {
+		res.EmaProvider = unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(v.EmaProvider)
 	}
 
 	return res
 }
 
-// unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder builds a value
-// of type *types.EMAProviderOrder from a value of type
-// *EMAProviderOrderResponseBody.
-func unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v *EMAProviderOrderResponseBody) *types.EMAProviderOrder {
+// unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection builds
+// a value of type *types.EMAProviderSelection from a value of type
+// *EMAProviderSelectionResponseBody.
+func unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(v *EMAProviderSelectionResponseBody) *types.EMAProviderSelection {
 	if v == nil {
 		return nil
 	}
-	res := &types.EMAProviderOrder{
+	res := &types.EMAProviderSelection{
 		VendorIssuer: *v.VendorIssuer,
 		IsDefault:    *v.IsDefault,
 	}
-	res.Providers = make([]*types.EMAProvider, len(v.Providers))
-	for i, val := range v.Providers {
-		if val == nil {
-			res.Providers[i] = nil
-			continue
-		}
-		res.Providers[i] = unmarshalEMAProviderResponseBodyToTypesEMAProvider(val)
-	}
+	res.Provider = unmarshalEMAProviderResponseBodyToTypesEMAProvider(v.Provider)
 
 	return res
 }

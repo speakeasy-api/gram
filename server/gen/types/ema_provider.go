@@ -7,16 +7,17 @@
 
 package types
 
-// One EMA provider in a vendor's order.
+// The EMA provider serving a vendor.
 type EMAProvider struct {
 	// external or speakeasy.
 	Kind string
 	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default order with none.
+	// for the endpoint's trusted issuer in a default selection with none.
 	RemoteSessionIssuerID *string
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string
 	// Why the provider cannot serve now; omitted when it can. An unavailable
-	// selection does not fall back to another provider.
+	// selection never falls back to another provider. readiness_unknown means the
+	// Speakeasy issuer's state could not be read just now; retry the read.
 	UnavailableReason *string
 }

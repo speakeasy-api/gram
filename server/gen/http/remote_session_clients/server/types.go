@@ -203,9 +203,9 @@ type PrepareEMAResponseBody struct {
 	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
-	// EMA providers identity chaining would try for this endpoint, in order.
-	// Returned by readEMA only.
-	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	// The EMA provider identity chaining uses for this endpoint. Returned by
+	// readEMA only.
+	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
 }
 
 // ReadEMAResponseBody is the type of the "remoteSessionClients" service
@@ -230,9 +230,9 @@ type ReadEMAResponseBody struct {
 	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
-	// EMA providers identity chaining would try for this endpoint, in order.
-	// Returned by readEMA only.
-	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	// The EMA provider identity chaining uses for this endpoint. Returned by
+	// readEMA only.
+	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
 }
 
 // UnlinkEMAResponseBody is the type of the "remoteSessionClients" service
@@ -257,9 +257,9 @@ type UnlinkEMAResponseBody struct {
 	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
-	// EMA providers identity chaining would try for this endpoint, in order.
-	// Returned by readEMA only.
-	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	// The EMA provider identity chaining uses for this endpoint. Returned by
+	// readEMA only.
+	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
 }
 
 // CreateRemoteSessionClientResponseBody is the type of the
@@ -3514,14 +3514,15 @@ type DeleteRemoteSessionClientGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// EMAProviderOrderResponseBody is used to define fields on response body types.
-type EMAProviderOrderResponseBody struct {
+// EMAProviderSelectionResponseBody is used to define fields on response body
+// types.
+type EMAProviderSelectionResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
 	// No selection is saved, so the endpoint uses its configured external issuer.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
 	// The explicitly selected provider, or the external default.
-	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+	Provider *EMAProviderResponseBody `form:"provider" json:"provider" xml:"provider"`
 }
 
 // EMAProviderResponseBody is used to define fields on response body types.
@@ -3529,12 +3530,13 @@ type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default order with none.
+	// for the endpoint's trusted issuer in a default selection with none.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
 	// Why the provider cannot serve now; omitted when it can. An unavailable
-	// selection does not fall back to another provider.
+	// selection never falls back to another provider. readiness_unknown means the
+	// Speakeasy issuer's state could not be read just now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
 
@@ -3639,8 +3641,8 @@ func NewPrepareEMAResponseBody(res *remotesessionclients.IdentityChainingPrepara
 	} else {
 		body.Scopes = []string{}
 	}
-	if res.EmaProviders != nil {
-		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
+	if res.EmaProvider != nil {
+		body.EmaProvider = marshalTypesEMAProviderSelectionToEMAProviderSelectionResponseBody(res.EmaProvider)
 	}
 	return body
 }
@@ -3675,8 +3677,8 @@ func NewReadEMAResponseBody(res *remotesessionclients.IdentityChainingPreparatio
 	} else {
 		body.Scopes = []string{}
 	}
-	if res.EmaProviders != nil {
-		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
+	if res.EmaProvider != nil {
+		body.EmaProvider = marshalTypesEMAProviderSelectionToEMAProviderSelectionResponseBody(res.EmaProvider)
 	}
 	return body
 }
@@ -3711,8 +3713,8 @@ func NewUnlinkEMAResponseBody(res *remotesessionclients.IdentityChainingPreparat
 	} else {
 		body.Scopes = []string{}
 	}
-	if res.EmaProviders != nil {
-		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
+	if res.EmaProvider != nil {
+		body.EmaProvider = marshalTypesEMAProviderSelectionToEMAProviderSelectionResponseBody(res.EmaProvider)
 	}
 	return body
 }

@@ -430,7 +430,7 @@ trackedFiles:
   src/funcs/organizationRemoteSessionIssuersMigrate.ts: {}
   src/funcs/organizationRemoteSessionIssuersMove.ts: {}
   src/funcs/organizationRemoteSessionIssuersRefreshMetadata.ts: {}
-  src/funcs/organizationRemoteSessionIssuersSetEMAProviders.ts: {}
+  src/funcs/organizationRemoteSessionIssuersSetEMAProvider.ts: {}
   src/funcs/organizationRemoteSessionIssuersUpdate.ts: {}
   src/funcs/organizationRemoteSessionsList.ts: {}
   src/funcs/organizationRemoteSessionsRefresh.ts: {}
@@ -1088,7 +1088,7 @@ trackedFiles:
   src/models/components/duplicatewidgetrequestbody.ts: {}
   src/models/components/emaprovider.ts: {}
   src/models/components/emaproviderinput.ts: {}
-  src/models/components/emaproviderorder.ts: {}
+  src/models/components/emaproviderselection.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
   src/models/components/enableopenrouterkeyrequestbody.ts: {}
@@ -1732,7 +1732,7 @@ trackedFiles:
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
   src/models/components/setdirectoryrolemappingform.ts: {}
-  src/models/components/setemaprovidersrequestbody.ts: {}
+  src/models/components/setemaproviderrequestbody.ts: {}
   src/models/components/setenabledrequestbody.ts: {}
   src/models/components/setidentityproviderconnectionsetupmethodrequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
@@ -2705,7 +2705,7 @@ trackedFiles:
   src/models/operations/setmcpservertoolmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
   src/models/operations/setmodelproviderkeyenabled.ts: {}
-  src/models/operations/setorganizationremotesessionissueremaproviders.ts: {}
+  src/models/operations/setorganizationremotesessionissueremaprovider.ts: {}
   src/models/operations/setorganizationwhitelist.ts: {}
   src/models/operations/setpluginassignments.ts: {}
   src/models/operations/setproductfeature.ts: {}
@@ -3741,7 +3741,7 @@ trackedFiles:
   src/react-query/setMcpServerToolMetadata.ts: {}
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
-  src/react-query/setOrganizationRemoteSessionIssuerEMAProviders.ts: {}
+  src/react-query/setOrganizationRemoteSessionIssuerEMAProvider.ts: {}
   src/react-query/setPluginAssignments.ts: {}
   src/react-query/setProjectLogo.ts: {}
   src/react-query/setRemoteMcpServerScopePin.ts: {}
@@ -12108,6 +12108,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setOrganizationRemoteSessionIssuerEMAProvider:
+    speakeasy-default-set-organization-remote-session-issuer-EMA-provider:
+      requestBody:
+        application/json: {"remote_session_issuer_id": "698138ff-c58c-43b4-97db-c5a76f5bd08d"}
+      responses:
+        "200":
+          application/json: {"is_default": false, "provider": {"kind": "external"}, "vendor_issuer": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   setOrganizationRemoteSessionIssuerEMAProviders:
     speakeasy-default-set-organization-remote-session-issuer-EMA-providers:
       requestBody:

@@ -22,21 +22,28 @@ export const EMAProviderKind = {
 export type EMAProviderKind = ClosedEnum<typeof EMAProviderKind>;
 
 /**
- * Why the provider cannot serve now; omitted when it can. An unavailable selection does not fall back to another provider.
+ * Why the provider cannot serve now; omitted when it can. An unavailable selection never falls back to another provider. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
  */
 export const UnavailableReason = {
   Deleted: "deleted",
   Disabled: "disabled",
   NotTrustedByEndpoint: "not_trusted_by_endpoint",
   SigningUnavailable: "signing_unavailable",
+  NotRolledOut: "not_rolled_out",
+  VerifiedDomainRequired: "verified_domain_required",
+  SetupRequired: "setup_required",
+  Keyless: "keyless",
+  SigningPaused: "signing_paused",
+  SignInEnforcementRequired: "sign_in_enforcement_required",
+  ReadinessUnknown: "readiness_unknown",
 } as const;
 /**
- * Why the provider cannot serve now; omitted when it can. An unavailable selection does not fall back to another provider.
+ * Why the provider cannot serve now; omitted when it can. An unavailable selection never falls back to another provider. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
  */
 export type UnavailableReason = ClosedEnum<typeof UnavailableReason>;
 
 /**
- * One EMA provider in a vendor's order.
+ * The EMA provider serving a vendor.
  */
 export type EMAProvider = {
   /**
@@ -48,11 +55,11 @@ export type EMAProvider = {
    */
   kind: EMAProviderKind;
   /**
-   * The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
+   * The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default selection with none.
    */
   remoteSessionIssuerId?: string | undefined;
   /**
-   * Why the provider cannot serve now; omitted when it can. An unavailable selection does not fall back to another provider.
+   * Why the provider cannot serve now; omitted when it can. An unavailable selection never falls back to another provider. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
    */
   unavailableReason?: UnavailableReason | undefined;
 };

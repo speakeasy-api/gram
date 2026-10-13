@@ -5688,7 +5688,7 @@ type GetSpeakeasyEMAGrantRow struct {
 	SignInID uuid.NullUUID
 }
 
-// Only the exact authenticated MCP grant may supply SSO provenance.
+// Only the exact authenticated MCP grant may supply sign-in provenance.
 func (q *Queries) GetSpeakeasyEMAGrant(ctx context.Context, arg GetSpeakeasyEMAGrantParams) (GetSpeakeasyEMAGrantRow, error) {
 	row := q.db.QueryRow(ctx, getSpeakeasyEMAGrant,
 		arg.ProjectID,
@@ -5751,7 +5751,7 @@ type GetSpeakeasyEMAStoredGrantParams struct {
 }
 
 // Status has no authenticated MCP JTI. Follow only this credential's retained grant;
-// GetSpeakeasyEMAGrant and the SSO judge still validate its live authority.
+// GetSpeakeasyEMAGrant and the sign-in judge still validate its live authority.
 func (q *Queries) GetSpeakeasyEMAStoredGrant(ctx context.Context, arg GetSpeakeasyEMAStoredGrantParams) (string, error) {
 	row := q.db.QueryRow(ctx, getSpeakeasyEMAStoredGrant,
 		arg.OrganizationID,
@@ -9818,6 +9818,35 @@ func (q *Queries) LockEMABinding(ctx context.Context, arg LockEMABindingParams) 
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const lockEMABindingForPublish = `-- name: LockEMABindingForPublish :one
+SELECT id FROM remote_session_ema_bindings
+WHERE id = $1 AND organization_id = $2 AND project_id = $3
+  AND generation = $4 AND state = 'ready'
+FOR SHARE
+`
+
+type LockEMABindingForPublishParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Generation     int64
+}
+
+// Holds the binding's ready generation through credential publication, so an
+// unlink or rebind holding the row commits first and fails this check, or
+// waits until the credential is published.
+func (q *Queries) LockEMABindingForPublish(ctx context.Context, arg LockEMABindingForPublishParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockEMABindingForPublish,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Generation,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockEMAClient = `-- name: LockEMAClient :one
@@ -15042,8 +15071,9 @@ type UpsertSpeakeasyEMACredentialParams struct {
 	DownstreamRefreshTokenObserved bool
 }
 
-// The caller locks and checks the exact SSO grant and issuer before this
-// statement. Binding/client changes during redemption still fence publication.
+// The caller locks the binding, sign-in and issuer and checks the exact
+// grant before this statement. Client changes during redemption still fence
+// publication.
 func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSpeakeasyEMACredentialParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertSpeakeasyEMACredential,
 		arg.OrganizationID,

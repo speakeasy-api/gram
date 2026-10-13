@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  EMAProviderOrder,
-  EMAProviderOrder$inboundSchema,
-} from "../models/components/emaproviderorder.js";
+  EMAProviderSelection,
+  EMAProviderSelection$inboundSchema,
+} from "../models/components/emaproviderselection.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
-  SetOrganizationRemoteSessionIssuerEMAProvidersRequest$outboundSchema,
-  SetOrganizationRemoteSessionIssuerEMAProvidersSecurity,
-} from "../models/operations/setorganizationremotesessionissueremaproviders.js";
+  SetOrganizationRemoteSessionIssuerEMAProviderRequest,
+  SetOrganizationRemoteSessionIssuerEMAProviderRequest$outboundSchema,
+  SetOrganizationRemoteSessionIssuerEMAProviderSecurity,
+} from "../models/operations/setorganizationremotesessionissueremaprovider.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * setEMAProviders organizationRemoteSessionIssuers
+ * setEMAProvider organizationRemoteSessionIssuers
  *
  * @remarks
- * Select one EMA provider for the vendor authorization server this issuer names. An empty list restores the endpoint configured external issuer. Speakeasy must be selected explicitly; failures never fall back to another provider. The selection applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout.
+ * Select the EMA provider for the vendor authorization server this issuer names, or omit provider to restore the endpoint's configured external issuer. Speakeasy is used only for vendors where it is selected explicitly, and a failing provider never falls back to another one. The selection applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the external issuer only needs org:admin. Not available from support or impersonated sessions.
  */
-export function organizationRemoteSessionIssuersSetEMAProviders(
+export function organizationRemoteSessionIssuersSetEMAProvider(
   client: GramCore,
-  request: SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
-  security?: SetOrganizationRemoteSessionIssuerEMAProvidersSecurity | undefined,
+  request: SetOrganizationRemoteSessionIssuerEMAProviderRequest,
+  security?: SetOrganizationRemoteSessionIssuerEMAProviderSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    EMAProviderOrder,
+    EMAProviderSelection,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function organizationRemoteSessionIssuersSetEMAProviders(
 
 async function $do(
   client: GramCore,
-  request: SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
-  security?: SetOrganizationRemoteSessionIssuerEMAProvidersSecurity | undefined,
+  request: SetOrganizationRemoteSessionIssuerEMAProviderRequest,
+  security?: SetOrganizationRemoteSessionIssuerEMAProviderSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      EMAProviderOrder,
+      EMAProviderSelection,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -97,7 +97,7 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        SetOrganizationRemoteSessionIssuerEMAProvidersRequest$outboundSchema,
+        SetOrganizationRemoteSessionIssuerEMAProviderRequest$outboundSchema,
         value,
       ),
     "Input validation failed",
@@ -106,12 +106,12 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SetEMAProvidersRequestBody, {
+  const body = encodeJSON("body", payload.SetEMAProviderRequestBody, {
     explode: true,
   });
 
   const path = pathToFunc(
-    "/rpc/organizationRemoteSessionIssuers.setEMAProviders",
+    "/rpc/organizationRemoteSessionIssuers.setEMAProvider",
   )();
 
   const headers = new Headers(compactMap({
@@ -136,7 +136,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "setOrganizationRemoteSessionIssuerEMAProviders",
+    operationID: "setOrganizationRemoteSessionIssuerEMAProvider",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -180,7 +180,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    EMAProviderOrder,
+    EMAProviderSelection,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -191,7 +191,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, EMAProviderOrder$inboundSchema),
+    M.json(200, EMAProviderSelection$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

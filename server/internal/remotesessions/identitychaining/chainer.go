@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
 
@@ -122,7 +123,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challeng
 func (c *Chainer) SetMeterProvider(meterProvider metric.MeterProvider) {
 	counter, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining").Int64Counter(
 		meterAttempts,
-		metric.WithDescription("Identity chaining attempts by EMA provider, reason and whether an earlier provider failed."),
+		metric.WithDescription("Identity chaining attempts by EMA provider, outcome and, when the provider could not serve, why."),
 		metric.WithUnit("{attempt}"),
 	)
 	if err != nil {
@@ -157,30 +158,32 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		attr.SlogRemoteSessionClientID(sel.clientID.String()),
 		attr.SlogOAuthResource(sel.resource),
 	)
-	providers, outcome := c.servingProviders(ctx, logger, req, sel)
+	p, outcome := c.servingProvider(ctx, logger, req, sel)
 	if !outcome.Succeeded() {
+		if outcome.Reason == ReasonProviderUnavailable {
+			outcome.Provider = p.Kind
+			c.recordAttempt(ctx, "acquire", outcome)
+		}
 		return none, outcome
 	}
-	// ResolveEMAProviders returns at most the selected provider. Its failure
-	// is returned without trying another signing authority.
+	// The selected provider's failure is returned as is: no other signing
+	// authority is ever tried.
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
-	var first Outcome
-	for i, p := range providers {
-		token, attempt := c.acquireFrom(ctx, logger.With(attr.SlogIdentityChainingProvider(string(p.Kind))), req, sel, p)
-		attempt.Provider = p.Kind
-		c.attempts.Add(ctx, 1, metric.WithAttributes(attr.IdentityChainingPath("acquire"), attr.IdentityChainingProvider(string(p.Kind)), attr.Outcome(attempt.Reason), attr.IdentityChainingFallback(i > 0)))
-		if attempt.Succeeded() {
-			if i > 0 {
-				logger.InfoContext(ctx, "identity chaining served by a fallback ema provider", attr.SlogIdentityChainingProvider(string(p.Kind)), attr.SlogIdentityChainingFallback(true))
-			}
-			return token, attempt
-		}
-		if first.Reason == "" {
-			first = attempt
-		}
+	token, attempt := c.acquireFrom(ctx, logger.With(attr.SlogIdentityChainingProvider(string(p.Kind))), req, sel, p)
+	attempt.Provider = p.Kind
+	c.recordAttempt(ctx, "acquire", attempt)
+	return token, attempt
+}
+
+// recordAttempt counts one attempt by provider, outcome and, when the
+// provider could not serve, why.
+func (c *Chainer) recordAttempt(ctx context.Context, path string, outcome Outcome) {
+	attrs := []attribute.KeyValue{attr.IdentityChainingPath(path), attr.IdentityChainingProvider(string(outcome.Provider)), attr.Outcome(outcome.Reason)}
+	if outcome.Unavailable != "" {
+		attrs = append(attrs, attr.IdentityChainingUnavailableReason(string(outcome.Unavailable)))
 	}
-	return none, first
+	c.attempts.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
 
 // acquireFrom obtains a token for sel from one source: a still-valid stored
@@ -190,7 +193,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	src := c.source(p)
 	sel.provider = p
 	// A token obtained after waiting is released only while its provider can
-	// still serve, so an order changed meanwhile never hands one out.
+	// still serve, so a selection changed meanwhile never hands one out.
 	release := func(token Token) (Token, Outcome) {
 		if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
 			return none, outcome

@@ -20,7 +20,7 @@ const (
 	ActionRemoteSessionIssuerDelete  Action = "remote-session-issuer:delete"
 	ActionRemoteSessionIssuerMigrate Action = "remote-session-issuer:migrate"
 
-	ActionRemoteSessionIssuerUpdateEMAProviders Action = "remote-session-issuer:update_ema_providers"
+	ActionRemoteSessionIssuerUpdateEMAProvider Action = "remote-session-issuer:update_ema_provider"
 )
 
 type LogRemoteSessionIssuerCreateEvent struct {
@@ -245,23 +245,24 @@ func (l *Logger) LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBT
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuerV1})
 }
 
-// RemoteSessionIssuerEMAProviders is a vendor's saved EMA provider order.
-type RemoteSessionIssuerEMAProviders struct {
-	VendorIssuer string                           `json:"vendor_issuer"`
-	Providers    []RemoteSessionIssuerEMAProvider `json:"providers"`
+// RemoteSessionIssuerEMAProviderSelection is a vendor's saved EMA provider;
+// a nil Provider means the endpoint's external issuer.
+type RemoteSessionIssuerEMAProviderSelection struct {
+	VendorIssuer string                          `json:"vendor_issuer"`
+	Provider     *RemoteSessionIssuerEMAProvider `json:"provider"`
 }
 
-// RemoteSessionIssuerEMAProvider is one provider in a saved order.
+// RemoteSessionIssuerEMAProvider is a selected EMA provider.
 type RemoteSessionIssuerEMAProvider struct {
 	Kind                    string `json:"kind"`
 	RemoteSessionIssuerID   string `json:"remote_session_issuer_id,omitempty"`
 	InternalSessionIssuerID string `json:"internal_session_issuer_id,omitempty"`
 }
 
-// LogRemoteSessionIssuerUpdateEMAProvidersEvent records a change to the EMA
-// provider order for the vendor the issuer names. The order is organization
+// LogRemoteSessionIssuerUpdateEMAProviderEvent records a change to the EMA
+// provider for the vendor the issuer names. The selection is organization
 // wide, so the event carries no project.
-type LogRemoteSessionIssuerUpdateEMAProvidersEvent struct {
+type LogRemoteSessionIssuerUpdateEMAProviderEvent struct {
 	OrganizationID string
 
 	Actor            urn.Principal
@@ -273,19 +274,19 @@ type LogRemoteSessionIssuerUpdateEMAProvidersEvent struct {
 	IssuerURL              string
 	Name                   *string
 
-	EMAProvidersBefore *RemoteSessionIssuerEMAProviders
-	EMAProvidersAfter  *RemoteSessionIssuerEMAProviders
+	EMAProviderBefore *RemoteSessionIssuerEMAProviderSelection
+	EMAProviderAfter  *RemoteSessionIssuerEMAProviderSelection
 }
 
-func (l *Logger) LogRemoteSessionIssuerUpdateEMAProviders(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerUpdateEMAProvidersEvent) error {
-	action := ActionRemoteSessionIssuerUpdateEMAProviders
+func (l *Logger) LogRemoteSessionIssuerUpdateEMAProvider(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionIssuerUpdateEMAProviderEvent) error {
+	action := ActionRemoteSessionIssuerUpdateEMAProvider
 
-	beforeSnapshot, err := marshalAuditPayload(event.EMAProvidersBefore)
+	beforeSnapshot, err := marshalAuditPayload(event.EMAProviderBefore)
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
 	}
 
-	afterSnapshot, err := marshalAuditPayload(event.EMAProvidersAfter)
+	afterSnapshot, err := marshalAuditPayload(event.EMAProviderAfter)
 	if err != nil {
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}

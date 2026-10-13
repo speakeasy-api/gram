@@ -24,7 +24,7 @@ func BuildRemoteSessionIssuerView(row repo.RemoteSessionIssuer) *types.RemoteSes
 		ProjectID:                           projectID,
 		OrganizationID:                      organizationID,
 		Slug:                                row.Slug,
-		EmaProviders:                        nil,
+		EmaProvider:                         nil,
 		Issuer:                              row.Issuer,
 		Name:                                conv.FromPGText[string](row.Name),
 		LogoAssetID:                         conv.FromNullableUUID(row.LogoAssetID),

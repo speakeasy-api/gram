@@ -58,9 +58,9 @@ type Client struct {
 	// migrateIssuer endpoint.
 	MigrateIssuerDoer goahttp.Doer
 
-	// SetEMAProviders Doer is the HTTP client used to make requests to the
-	// setEMAProviders endpoint.
-	SetEMAProvidersDoer goahttp.Doer
+	// SetEMAProvider Doer is the HTTP client used to make requests to the
+	// setEMAProvider endpoint.
+	SetEMAProviderDoer goahttp.Doer
 
 	// FetchIssuerMetadata Doer is the HTTP client used to make requests to the
 	// fetchIssuerMetadata endpoint.
@@ -101,7 +101,7 @@ func NewClient(
 		MoveIssuerDoer:                  doer,
 		GetIssuerMigratePreflightDoer:   doer,
 		MigrateIssuerDoer:               doer,
-		SetEMAProvidersDoer:             doer,
+		SetEMAProviderDoer:              doer,
 		FetchIssuerMetadataDoer:         doer,
 		RefreshIssuerMetadataDoer:       doer,
 		RestoreResponseBody:             restoreBody,
@@ -354,15 +354,15 @@ func (c *Client) MigrateIssuer() goa.Endpoint {
 	}
 }
 
-// SetEMAProviders returns an endpoint that makes HTTP requests to the
-// organizationRemoteSessionIssuers service setEMAProviders server.
-func (c *Client) SetEMAProviders() goa.Endpoint {
+// SetEMAProvider returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service setEMAProvider server.
+func (c *Client) SetEMAProvider() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeSetEMAProvidersRequest(c.encoder)
-		decodeResponse = DecodeSetEMAProvidersResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeSetEMAProviderRequest(c.encoder)
+		decodeResponse = DecodeSetEMAProviderResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildSetEMAProvidersRequest(ctx, v)
+		req, err := c.BuildSetEMAProviderRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -370,9 +370,9 @@ func (c *Client) SetEMAProviders() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.SetEMAProvidersDoer.Do(req)
+		resp, err := c.SetEMAProviderDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "setEMAProvider", err)
 		}
 		return decodeResponse(resp)
 	}

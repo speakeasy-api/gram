@@ -28,8 +28,6 @@ import (
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/signins"
@@ -50,15 +48,15 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	mp := testenv.NewMeterProvider(t)
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	features := productfeatures.NewClient(logger, tp, f.db, redisClient)
-	productfeaturestest.Enable(t, ctx, f.db, features, f.req.OrganizationID, productfeatures.FeatureSSO)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagInternalSessionIssuer, f.req.OrganizationID, true)
 	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, f.req.OrganizationID, false)
-	gate := internalsessionissuers.NewGate(f.db, features, flags, internalsessionissuers.GateConfig{Provisioning: true})
+	signins.EnableForTests(flags, f.req.OrganizationID)
+	gate := internalsessionissuers.NewGate(f.db, flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
+	require.NoError(t, orgrepo.New(f.db).SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: f.req.OrganizationID, VerifiedDomains: []string{"example.test"}}))
 	const origin = "https://issuer.example.test"
 	const ring = "projects/gram-stub/locations/global/keyRings/ema-test"
-	const resource = ring + "/cryptoKeys/test/cryptoKeyVersions/1"
+	const resource = ring + "/cryptoKeys/" + internalsessionissuers.KMSKeyPrefix + "-test/cryptoKeyVersions/1"
 	const account = "ema-signer@gram-stub.iam.gserviceaccount.com"
 	keys, err := gcpkms.NewLocalSigningClient(jose.RS256)
 	require.NoError(t, err)
@@ -92,8 +90,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.Equal(t, internalsessionissuers.StateEnabled, status.State)
 	var key jose.JSONWebKey
 	require.NoError(t, key.UnmarshalJSON(status.ActiveKey.PublicJwk))
-	require.NoError(t, orgrepo.New(f.db).SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: f.req.OrganizationID, VerifiedDomains: []string{"example.test"}}))
-	signIn, err := signins.Record(ctx, f.db, signins.RecordParams{OrganizationID: f.req.OrganizationID, UserID: f.req.UserID, WorkOSSessionID: uuid.NewString(), AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now().Add(-time.Minute)})
+	signIn, err := signins.Record(ctx, f.db, signins.RecordParams{OrganizationID: f.req.OrganizationID, UserID: f.req.UserID, WorkOSSessionID: uuid.NewString(), AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now().Add(-time.Minute), Evidence: signins.Evidence{VerifiedEmail: f.req.UserID + "@example.test", IDPAuthenticatedAt: time.Now().Add(-time.Minute)}})
 	require.NoError(t, err)
 	f.req.UserSessionJTI = uuid.NewString()
 
@@ -199,7 +196,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	sharedCache := cache.NewRedisCacheAdapter(redisClient)
 	challenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.chainer.enc, policy, nil, sharedCache, base)
 	chainer := New(logger, f.db, f.chainer.enc, challenges, nil, nil, sharedCache)
-	chainer.SetSpeakeasyIssuer(gate, signer)
+	chainer.SetSpeakeasyIssuer(gate, signer, flags)
 	chainer.SetResourceResolver(challenges.ResolveEMAResource)
 	// First consent can resolve a parent resource without a prior MCP request.
 	preGrant := f.req
@@ -207,7 +204,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.Equal(t, ReasonConsentRequired, chainer.CheckConsent(ctx, preGrant, signIn.ID.UUID).Reason)
 	require.EqualValues(t, 0, calls.Load(), "cold pre-grant eligibility never redeems a token")
 	governor := NewGovernor(logger, f.db, f.chainer.enc, nil)
-	governor.SetSpeakeasyIssuer(gate, signer)
+	governor.SetSpeakeasyIssuer(gate, signer, flags)
 	governor.SetResourceResolver(challenges.ResolveEMAResource)
 	served, ready := governor.Serves(ctx, f.req)
 	require.True(t, ready)
@@ -258,21 +255,20 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 		require.Equal(t, internalsessionissuers.StateUnavailable, unavailableStatus.State, "management readiness rejects copied issuer authority")
 		require.NotNil(t, unavailableStatus.Issuer, "issuer remains available for safe containment")
 		gate.SetSigningAuthority(signer.CheckAuthority)
-		chainer.SetSpeakeasyIssuer(gate, otherSigner)
+		chainer.SetSpeakeasyIssuer(gate, otherSigner, flags)
 		require.False(t, chainer.HasUsableCredential(ctx, f.req), "copied credentials never confer authority on another deployment")
 		_, outcome = chainer.Acquire(ctx, f.req)
 		require.Equal(t, ReasonConfigurationRequired, outcome.Reason)
-		governor.SetSpeakeasyIssuer(gate, otherSigner)
+		governor.SetSpeakeasyIssuer(gate, otherSigner, flags)
 		_, serves := governor.Serves(ctx, f.req)
 		require.False(t, serves, "foreign deployment must not advertise issuer readiness")
-		order, resolved := governor.ProviderOrder(ctx, f.req)
+		selection, resolved := governor.ProviderSelection(ctx, f.req)
 		require.True(t, resolved)
-		require.Empty(t, order.Available())
-		require.Equal(t, remotesessions.EMAProviderSigningUnavailable, order.Providers[0].Unavailable)
+		require.Equal(t, remotesessions.EMAProviderSigningUnavailable, selection.Provider.Unavailable)
 		require.EqualValues(t, 1, calls.Load())
 	}
-	chainer.SetSpeakeasyIssuer(gate, signer)
-	governor.SetSpeakeasyIssuer(gate, signer)
+	chainer.SetSpeakeasyIssuer(gate, signer, flags)
+	governor.SetSpeakeasyIssuer(gate, signer, flags)
 	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, f.req.OrganizationID, true)
 	_, serves := governor.Serves(ctx, f.req)
 	require.False(t, serves, "a paused issuer must not advertise readiness")
@@ -283,6 +279,15 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	flags.SetFlag(feature.FlagInternalSessionIssuer, f.req.OrganizationID, true)
 	_, serves = governor.Serves(ctx, f.req)
 	require.True(t, serves, "restored issuer readiness is read live")
+	flags.SetFlag(feature.FlagSignInEnforcement, f.req.OrganizationID, false)
+	_, serves = governor.Serves(ctx, f.req)
+	require.False(t, serves, "Speakeasy needs sign-in enforcement")
+	_, outcome = chainer.Acquire(ctx, f.req)
+	require.Equal(t, ReasonProviderUnavailable, outcome.Reason, "cached tokens are not released without sign-in enforcement")
+	require.Equal(t, remotesessions.EMAProviderSignInEnforcement, outcome.Unavailable)
+	signins.EnableForTests(flags, f.req.OrganizationID)
+	_, serves = governor.Serves(ctx, f.req)
+	require.True(t, serves)
 	var missingSigner *internalsessionissuers.Signer
 	gate.SetSigningAuthority(missingSigner.CheckAuthority)
 	missingStatus, err := gate.Status(ctx, f.req.OrganizationID)

@@ -26,7 +26,7 @@ type Endpoints struct {
 	MoveIssuer                  goa.Endpoint
 	GetIssuerMigratePreflight   goa.Endpoint
 	MigrateIssuer               goa.Endpoint
-	SetEMAProviders             goa.Endpoint
+	SetEMAProvider              goa.Endpoint
 	FetchIssuerMetadata         goa.Endpoint
 	RefreshIssuerMetadata       goa.Endpoint
 }
@@ -47,7 +47,7 @@ func NewEndpoints(s Service) *Endpoints {
 		MoveIssuer:                  NewMoveIssuerEndpoint(s, a.APIKeyAuth),
 		GetIssuerMigratePreflight:   NewGetIssuerMigratePreflightEndpoint(s, a.APIKeyAuth),
 		MigrateIssuer:               NewMigrateIssuerEndpoint(s, a.APIKeyAuth),
-		SetEMAProviders:             NewSetEMAProvidersEndpoint(s, a.APIKeyAuth),
+		SetEMAProvider:              NewSetEMAProviderEndpoint(s, a.APIKeyAuth),
 		FetchIssuerMetadata:         NewFetchIssuerMetadataEndpoint(s, a.APIKeyAuth),
 		RefreshIssuerMetadata:       NewRefreshIssuerMetadataEndpoint(s, a.APIKeyAuth),
 	}
@@ -66,7 +66,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.MoveIssuer = m(e.MoveIssuer)
 	e.GetIssuerMigratePreflight = m(e.GetIssuerMigratePreflight)
 	e.MigrateIssuer = m(e.MigrateIssuer)
-	e.SetEMAProviders = m(e.SetEMAProviders)
+	e.SetEMAProvider = m(e.SetEMAProvider)
 	e.FetchIssuerMetadata = m(e.FetchIssuerMetadata)
 	e.RefreshIssuerMetadata = m(e.RefreshIssuerMetadata)
 }
@@ -424,11 +424,11 @@ func NewMigrateIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 	}
 }
 
-// NewSetEMAProvidersEndpoint returns an endpoint function that calls the
-// method "setEMAProviders" of service "organizationRemoteSessionIssuers".
-func NewSetEMAProvidersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewSetEMAProviderEndpoint returns an endpoint function that calls the method
+// "setEMAProvider" of service "organizationRemoteSessionIssuers".
+func NewSetEMAProviderEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*SetEMAProvidersPayload)
+		p := req.(*SetEMAProviderPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -443,7 +443,7 @@ func NewSetEMAProvidersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		if err != nil {
 			return nil, err
 		}
-		return s.SetEMAProviders(ctx, p)
+		return s.SetEMAProvider(ctx, p)
 	}
 }
 

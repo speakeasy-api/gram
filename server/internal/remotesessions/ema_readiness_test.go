@@ -9,27 +9,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEMAProviderReadinessPreservesFallbackAndErrors(t *testing.T) {
+func TestEMAProviderReadinessKeepsReasonAndMarksUnknown(t *testing.T) {
 	t.Parallel()
 	issuerID := uuid.New()
-	order := EMAProviderOrder{Providers: []EMAProvider{
-		{Kind: EMAProviderExternal, RemoteSessionIssuerID: uuid.New()},
-		{Kind: EMAProviderSpeakeasy, InternalSessionIssuerID: issuerID},
-	}}
-	for _, ready := range []bool{false, true} {
-		got, err := ApplyEMAProviderReadiness(t.Context(), "org-test", order, func(_ context.Context, organizationID string, id uuid.UUID) (bool, error) {
+	selection := EMAProviderSelection{Provider: EMAProvider{Kind: EMAProviderSpeakeasy, InternalSessionIssuerID: issuerID}}
+	for _, reason := range []EMAProviderUnavailableReason{"", EMAProviderSigningPaused, EMAProviderSignInEnforcement} {
+		got, err := ApplyEMAProviderReadiness(t.Context(), "org-test", selection, func(_ context.Context, organizationID string, id uuid.UUID) (EMAProviderUnavailableReason, error) {
 			require.Equal(t, "org-test", organizationID)
 			require.Equal(t, issuerID, id)
-			return ready, nil
+			return reason, nil
 		})
 		require.NoError(t, err)
-		require.True(t, got.Providers[0].Available(), "external fallback stays eligible")
-		require.Equal(t, ready, got.Providers[1].Available())
-		require.True(t, order.Providers[1].Available(), "decorating a view must not mutate the saved order")
+		require.Equal(t, reason, got.Provider.Unavailable)
+		require.True(t, selection.Provider.Available(), "decorating a view must not mutate the stored selection")
 	}
 	lookupError := errors.New("temporary authority lookup failure")
-	_, err := ApplyEMAProviderReadiness(t.Context(), "org-test", order, func(context.Context, string, uuid.UUID) (bool, error) {
-		return false, lookupError
+	got, err := ApplyEMAProviderReadiness(t.Context(), "org-test", selection, func(context.Context, string, uuid.UUID) (EMAProviderUnavailableReason, error) {
+		return "", lookupError
 	})
-	require.ErrorIs(t, err, lookupError, "unknown readiness must not become a definitive refusal")
+	require.ErrorIs(t, err, lookupError)
+	require.Equal(t, EMAProviderReadinessUnknown, got.Provider.Unavailable, "unknown readiness is reported, never a definitive refusal")
+
+	external := EMAProviderSelection{Provider: EMAProvider{Kind: EMAProviderExternal, RemoteSessionIssuerID: uuid.New()}}
+	got, err = ApplyEMAProviderReadiness(t.Context(), "org-test", external, func(context.Context, string, uuid.UUID) (EMAProviderUnavailableReason, error) {
+		t.Fatal("external providers have no Speakeasy readiness")
+		return "", nil
+	})
+	require.NoError(t, err)
+	require.True(t, got.Provider.Available())
 }

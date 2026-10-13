@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -20,8 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-// policyRow is one provider in a saved order: an external remote session
-// issuer or the organization's internal session issuer.
+// policyRow is a saved provider: an external remote session issuer or the
+// organization's internal session issuer.
 type policyRow struct {
 	remoteIssuer   uuid.UUID
 	internalIssuer uuid.UUID
@@ -46,7 +47,8 @@ func seedSpeakeasyIssuer(t *testing.T, f devIDPFixture, organizationID string) u
 	return issuer
 }
 
-// setPolicy saves the organization's ordered providers for the fixture's vendor.
+// setPolicy saves rows for the fixture's vendor. Writes through the API save
+// at most one; more exercise the stored-state guard.
 func setPolicy(t *testing.T, f devIDPFixture, organizationID string, rows ...policyRow) {
 	t.Helper()
 	vendor, err := remotesessions.NormalizeVendorIssuer(f.vendorIssuer)
@@ -95,23 +97,15 @@ func (s *failingSource) issue(context.Context, *slog.Logger, Request, selection,
 	return issuedGrant{value: "", trustedSessionID: uuid.Nil, trustedObtainedAt: time.Time{}}, s.issueOutcome
 }
 
-func kinds(order remotesessions.EMAProviderOrder) []remotesessions.EMAProviderKind {
-	out := []remotesessions.EMAProviderKind{}
-	for _, p := range order.Available() {
-		out = append(out, p.Kind)
-	}
-	return out
-}
-
-func TestProviders_DefaultOrderIsTheEndpointsExternalIssuer(t *testing.T) {
+func TestProviders_DefaultIsTheEndpointsExternalIssuer(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
 	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
 
-	order, ok := f.chainer.ProviderOrder(t.Context(), f.req)
+	selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
 	require.True(t, ok)
-	require.True(t, order.IsDefault)
-	require.Equal(t, []remotesessions.EMAProvider{{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}}, order.Providers, "Speakeasy requires an explicit selection")
+	require.True(t, selection.IsDefault)
+	require.Equal(t, remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}, selection.Provider, "Speakeasy requires an explicit selection")
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.Equal(t, remotesessions.EMAProviderExternal, outcome.Provider)
@@ -123,9 +117,9 @@ func TestProviders_DefaultDoesNotSelectSpeakeasyWhenItCanSign(t *testing.T) {
 	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
 	useSpeakeasySource(f, &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0})
 
-	order, ok := f.chainer.ProviderOrder(t.Context(), f.req)
+	selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
 	require.True(t, ok)
-	require.Equal(t, []remotesessions.EMAProviderKind{remotesessions.EMAProviderExternal}, kinds(order))
+	require.Equal(t, remotesessions.EMAProviderExternal, selection.Provider.Kind)
 }
 
 func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {
@@ -137,7 +131,7 @@ func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {
 		{name: "default", setup: func(*testing.T, devIDPFixture) {}},
 		{name: "saved", setup: func(t *testing.T, f devIDPFixture) {
 			t.Helper()
-			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)), external(f.resourceIssuerID), external(f.trustedIssuerID))
+			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -145,11 +139,11 @@ func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {
 			f := newDevIDPFixture(t, devIDPOptions{})
 			tc.setup(t, f)
 
-			runtime, ok := f.chainer.ProviderOrder(t.Context(), f.req)
+			runtime, ok := f.chainer.ProviderSelection(t.Context(), f.req)
 			require.True(t, ok)
 			vendor, err := remotesessions.NormalizeVendorIssuer(f.vendorIssuer)
 			require.NoError(t, err)
-			read, err := remotesessions.EndpointEMAProviders(t.Context(), repo.New(f.db), f.req.OrganizationID, f.req.UserSessionIssuerID, vendor, f.chainer.sourceAvailable(remotesessions.EMAProviderSpeakeasy))
+			read, err := remotesessions.EndpointEMAProvider(t.Context(), repo.New(f.db), f.req.OrganizationID, f.req.UserSessionIssuerID, vendor, f.chainer.sourceAvailable(remotesessions.EMAProviderSpeakeasy))
 			require.NoError(t, err)
 			require.Equal(t, runtime, read)
 		})
@@ -161,15 +155,17 @@ func TestProviders_ExplicitSelectionNeverFallsThroughToExternal(t *testing.T) {
 	f := newDevIDPFixture(t, devIDPOptions{})
 	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageExchange, ReasonAccessDenied, ConfidenceInferred, false), issued: 0}
 	useSpeakeasySource(f, src)
-	setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)), external(f.trustedIssuerID))
+	setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
+	requests := f.idp.Requests()
 
-	order, ok := f.chainer.ProviderOrder(t.Context(), f.req)
+	selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
 	require.True(t, ok)
-	require.Equal(t, []remotesessions.EMAProviderKind{remotesessions.EMAProviderSpeakeasy}, kinds(order))
+	require.Equal(t, remotesessions.EMAProviderSpeakeasy, selection.Provider.Kind)
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.False(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.Equal(t, remotesessions.EMAProviderSpeakeasy, outcome.Provider)
 	require.Equal(t, 1, src.issued)
+	require.Equal(t, requests, f.idp.Requests(), "the external issuer is never contacted")
 }
 
 func TestProviders_ExplicitSelectionFailureNeverUsesAnotherProvider(t *testing.T) {
@@ -190,7 +186,7 @@ func TestProviders_ExplicitSelectionFailureNeverUsesAnotherProvider(t *testing.T
 			t.Parallel()
 			f := newDevIDPFixture(t, devIDPOptions{})
 			useSpeakeasySource(f, tc.source)
-			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)), external(f.trustedIssuerID))
+			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
 
 			token, outcome := f.chainer.Acquire(t.Context(), f.req)
 			require.False(t, outcome.Succeeded(), "outcome: %+v", outcome)
@@ -201,17 +197,36 @@ func TestProviders_ExplicitSelectionFailureNeverUsesAnotherProvider(t *testing.T
 	}
 }
 
-func TestProviders_FirstFailureIsReported(t *testing.T) {
+func TestProviders_SelectedExternalFailureIsReported(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{unassigned: true})
-	useSpeakeasySource(f, &failingSource{authorizeOutcome: newOutcome(StageAuthorization, ReasonConfigurationRequired, ConfidenceVerified, false), reuseOutcome: success, issueOutcome: success, issued: 0})
-	setPolicy(t, f, f.req.OrganizationID, external(f.trustedIssuerID), speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
+	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0}
+	useSpeakeasySource(f, src)
+	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
+	setPolicy(t, f, f.req.OrganizationID, external(f.trustedIssuerID))
 
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonAccessDenied, Confidence: ConfidenceInferred, Retryable: false, Cached: false, Provider: remotesessions.EMAProviderExternal}, outcome)
+	require.Zero(t, src.issued, "a Speakeasy issuer that can sign is not tried after the selected provider fails")
 }
 
-func TestProviders_OrderWithoutAvailableProviderIsNotServed(t *testing.T) {
+func TestProviders_SeveralSavedProvidersFailClosed(t *testing.T) {
+	t.Parallel()
+	f := newDevIDPFixture(t, devIDPOptions{})
+	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0}
+	useSpeakeasySource(f, src)
+	setPolicy(t, f, f.req.OrganizationID, external(f.trustedIssuerID), speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
+	requests := f.idp.Requests()
+
+	_, ok := f.chainer.ProviderSelection(t.Context(), f.req)
+	require.False(t, ok, "no provider is picked from several")
+	_, outcome := f.chainer.Acquire(t.Context(), f.req)
+	require.Equal(t, ReasonTransientFailure, outcome.Reason)
+	require.Zero(t, src.issued)
+	require.Equal(t, requests, f.idp.Requests(), "no provider is contacted")
+}
+
+func TestProviders_UnavailableSelectionIsNotServed(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
@@ -240,21 +255,21 @@ func TestProviders_OrderWithoutAvailableProviderIsNotServed(t *testing.T) {
 			tc.setup(t, f)
 			requests := f.idp.Requests()
 
-			order, ok := f.chainer.ProviderOrder(t.Context(), f.req)
+			selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
 			require.True(t, ok)
-			require.Len(t, order.Providers, 1)
-			require.Equal(t, tc.reason, order.Providers[0].Unavailable)
+			require.Equal(t, tc.reason, selection.Provider.Unavailable)
 			_, serves := f.chainer.Serves(t.Context(), f.req)
 			require.False(t, serves, "the interactive card renders instead")
 			_, outcome := f.chainer.Acquire(t.Context(), f.req)
 			require.Equal(t, ReasonProviderUnavailable, outcome.Reason)
+			require.Equal(t, tc.reason, outcome.Unavailable, "the specific reason is kept")
 			require.False(t, outcome.Applicable(), "the interactive path applies unchanged")
 			require.Equal(t, requests, f.idp.Requests(), "no provider is contacted")
 		})
 	}
 }
 
-func TestProviders_OrderStopsStoredCredentialReuse(t *testing.T) {
+func TestProviders_SelectionStopsStoredCredentialReuse(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
@@ -262,27 +277,27 @@ func TestProviders_OrderStopsStoredCredentialReuse(t *testing.T) {
 	require.True(t, f.chainer.HasUsableCredential(t.Context(), f.req))
 
 	setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
-	require.False(t, f.chainer.HasUsableCredential(t.Context(), f.req), "a credential from a provider the order removed is never usable")
+	require.False(t, f.chainer.HasUsableCredential(t.Context(), f.req), "a credential from a provider no longer selected is never usable")
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
 	require.Equal(t, ReasonProviderUnavailable, outcome.Reason)
 }
 
-func TestProviders_AnotherOrganizationsOrderDoesNotApply(t *testing.T) {
+func TestProviders_AnotherOrganizationsSelectionDoesNotApply(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
 	other := "org-" + uuid.NewString()
 	require.NoError(t, testrepo.New(f.db).SeedDelegationLoaderOrganizationFixture(t.Context(), testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: other, Name: "Other organization", Slug: "other-" + uuid.NewString()[:8]}))
 	setPolicy(t, f, other, speakeasy(seedSpeakeasyIssuer(t, f, other)))
 
-	order, ok := f.chainer.ProviderOrder(t.Context(), f.req)
+	selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
 	require.True(t, ok)
-	require.True(t, order.IsDefault)
+	require.True(t, selection.IsDefault)
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 }
 
 // interceptingSource runs afterIssue once its wrapped source has issued, so a
-// test can change the order while the attempt is between issue and publish.
+// test can change the selection while the attempt is between issue and publish.
 type interceptingSource struct {
 	tokenSource
 	afterIssue func()
@@ -294,7 +309,7 @@ func (s interceptingSource) issue(ctx context.Context, logger *slog.Logger, req 
 	return grant, outcome
 }
 
-func TestProviders_OrderChangedMidAttemptDiscardsTheToken(t *testing.T) {
+func TestProviders_SelectionChangedMidAttemptDiscardsTheToken(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
 	internalIssuer := seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
@@ -331,7 +346,7 @@ func TestCacheKey_ExternalKeepsTheLegacyFormat(t *testing.T) {
 	require.NotEqual(t, external, cacheKey("lock", req, sel))
 }
 
-func TestPublish_SerializesWithOrderReplaces(t *testing.T) {
+func TestPublish_SerializesWithSelectionChanges(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	ctx := t.Context()
@@ -343,7 +358,7 @@ func TestPublish_SerializesWithOrderReplaces(t *testing.T) {
 	vendor, err := remotesessions.NormalizeVendorIssuer(f.sel.issuer)
 	require.NoError(t, err)
 
-	// An order replace holds the lock, as setEMAProviders does.
+	// A selection change holds the lock, as setEMAProvider does.
 	tx := testenv.BeginTx(t, ctx, f.db)
 	q := repo.New(tx)
 	require.NoError(t, q.LockEMAProviders(ctx, f.req.OrganizationID))
@@ -355,7 +370,7 @@ func TestPublish_SerializesWithOrderReplaces(t *testing.T) {
 	require.Eventually(t, func() bool {
 		waiting, err := fixtures.CountWaitingAdvisoryLocksFixture(ctx)
 		return err == nil && waiting > 0
-	}, 5*time.Second, 20*time.Millisecond, "publish waits for the order replace")
+	}, 5*time.Second, 20*time.Millisecond, "publish waits for the selection change")
 
 	require.NoError(t, q.InsertEMAProvider(ctx, repo.InsertEMAProviderParams{
 		OrganizationID: f.req.OrganizationID, VendorIssuer: vendor,
@@ -365,7 +380,38 @@ func TestPublish_SerializesWithOrderReplaces(t *testing.T) {
 	}))
 	require.NoError(t, tx.Commit(ctx))
 
-	require.ErrorIs(t, <-published, errStale, "the write sees the committed order, which no longer allows the provider")
+	require.ErrorIs(t, <-published, errStale, "the write sees the committed selection, which no longer allows the provider")
 	_, err = repo.New(f.db).GetEMACredentialForUse(ctx, credentialForUseParams(f.req, f.sel, time.Now()))
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestPublish_SerializesWithUnlink(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	ctx := t.Context()
+
+	// An unlink holds the binding row, as preparation does.
+	tx := testenv.BeginTx(t, ctx, f.db)
+	q := repo.New(tx)
+	key := repo.GetEMABindingParams{ProjectID: f.req.ProjectID, OrganizationID: f.req.OrganizationID, UserSessionIssuerID: f.req.UserSessionIssuerID, RemoteSessionIssuerID: f.sel.remoteIssuerID, Resource: f.sel.resource}
+	current, err := q.LockEMABinding(ctx, repo.LockEMABindingParams(key))
+	require.NoError(t, err)
+
+	published := make(chan error, 1)
+	go func() {
+		published <- f.chainer.publish(ctx, f.chainer.logger, f.req, f.sel, f.credential("raced-token"))
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, f.db, testenv.BackendPID(tx), "%LockEMABindingForPublish :one%")
+
+	_, err = q.SetEMABinding(ctx, repo.SetEMABindingParams{
+		State: pgtype.Text{String: remotesessions.PreparationStateUnlinked, Valid: true}, RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Generation: current.Generation + 1, GrantSource: current.GrantSource, RequestedScopes: current.RequestedScopes,
+		ClaimID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ClaimedAt: pgtype.Timestamptz{},
+		ID: current.ID, ProjectID: f.req.ProjectID, OrganizationID: f.req.OrganizationID, ExpectedGeneration: current.Generation,
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	require.ErrorIs(t, <-published, errStale, "a publish that waited on an unlink sees the unlinked binding")
+	require.Empty(t, f.credentials(t), "no credential is stored for an unlinked binding")
 }

@@ -4,15 +4,16 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
-	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -93,7 +94,39 @@ func TestGovernor_InvalidMetadataRetainsOnlyBoundOrigin(t *testing.T) {
 	}
 }
 
-func TestGovernor_InvalidMetadataLookupFailureIsRetryable(t *testing.T) {
+func TestGovernor_DiscoveryFailureGovernsOnlyABoundOrigin(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, endpoint string
+		bound          bool
+	}{
+		{"bound origin", "https://bound.example.test/mcp", true},
+		{"unrelated origin", "https://unrelated.example.test/mcp", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newChainStoreFixture(t)
+			f.setBinding(t, remotesessions.PreparationStateUnlinked)
+			bindResource(t, f.db, f.req, f.sel.remoteIssuerID, f.sel.clientID, "https://bound.example.test", remotesessions.PreparationStateReady)
+			f.req.UpstreamResource = tc.endpoint
+			f.chainer.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
+				return protectedresource.EndpointResource{}, errors.New("metadata probe timed out")
+			})
+			_, outcome := f.chainer.selectBinding(t.Context(), f.chainer.logger, f.req)
+			if tc.bound {
+				require.Equal(t, ReasonTransientFailure, outcome.Reason, "a failed probe is never read as no metadata")
+				require.True(t, outcome.Retryable)
+			} else {
+				require.Equal(t, ReasonNotApplicable, outcome.Reason, "an endpoint without a binding keeps its interactive behavior")
+			}
+			require.Equal(t, tc.bound, f.chainer.Governs(t.Context(), f.req), "a bound origin reports retryable instead of asking to reconnect")
+			_, outcome = f.chainer.Acquire(t.Context(), f.req)
+			require.Equal(t, tc.bound, outcome.Applicable())
+		})
+	}
+}
+
+func TestGovernor_CandidateLookupFailureKeepsTheInteractivePath(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	f.chainer.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
@@ -101,7 +134,14 @@ func TestGovernor_InvalidMetadataLookupFailureIsRetryable(t *testing.T) {
 		return protectedresource.EndpointResource{}, protectedresource.ErrEndpointResourceInvalid
 	})
 	_, outcome := f.chainer.selectBinding(t.Context(), f.chainer.logger, f.req)
-	require.Equal(t, ReasonTransientFailure, outcome.Reason)
-	require.True(t, outcome.Retryable)
-	require.True(t, outcome.Applicable(), "a lookup fault must not be classified as an absent binding")
+	require.Equal(t, ReasonNotApplicable, outcome.Reason, "unknown configuration never fails an endpoint closed")
+}
+
+func TestSameIssuerComparesCanonicalForms(t *testing.T) {
+	t.Parallel()
+	require.True(t, sameIssuer("https://auth.vendor.example", "https://auth.vendor.example/"))
+	require.True(t, sameIssuer("https://AUTH.vendor.example:443", "https://auth.vendor.example"))
+	require.False(t, sameIssuer("https://auth.vendor.example/tenant-a", "https://auth.vendor.example/tenant-b"))
+	require.False(t, sameIssuer("https://auth.vendor.example", "https://other.vendor.example"))
+	require.False(t, sameIssuer("not an issuer", "https://auth.vendor.example"))
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"go.opentelemetry.io/otel/metric"
 )
 
 // CheckConsent preserves external providers' live exchange while checking a
@@ -23,38 +22,34 @@ func (c *Chainer) CheckConsent(ctx context.Context, req Request, signInID uuid.U
 		return outcome
 	}
 	logger = logger.With(attr.SlogRemoteSessionIssuerID(sel.remoteIssuerID.String()), attr.SlogRemoteSessionClientID(sel.clientID.String()), attr.SlogOAuthResource(sel.resource))
-	providers, outcome := c.servingProviders(ctx, logger, req, sel)
+	provider, outcome := c.servingProvider(ctx, logger, req, sel)
 	if !outcome.Succeeded() {
+		if outcome.Reason == ReasonProviderUnavailable {
+			outcome.Provider = provider.Kind
+			c.recordAttempt(ctx, "consent", outcome)
+		}
 		return outcome
 	}
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
-	var first Outcome
-	for _, provider := range providers {
-		var attempt Outcome
-		if provider.Kind == remotesessions.EMAProviderSpeakeasy {
-			source, ok := c.source(provider).(speakeasySource)
-			if !ok || !source.available() {
-				attempt = providerUnavailable
-			} else {
-				current := sel
-				current.provider = provider
-				attempt = source.checkConsent(ctx, logger.With(attr.SlogIdentityChainingProvider(string(provider.Kind))), req, current, signInID)
-				if attempt.Succeeded() {
-					attempt = newOutcome(StageAuthorization, ReasonConsentRequired, ConfidenceVerified, false)
-				}
-			}
+	logger = logger.With(attr.SlogIdentityChainingProvider(string(provider.Kind)))
+	var attempt Outcome
+	if provider.Kind == remotesessions.EMAProviderSpeakeasy {
+		source, ok := c.source(provider).(speakeasySource)
+		if !ok || !source.available() {
+			attempt = unavailableBecause(remotesessions.EMAProviderSigningUnavailable)
 		} else {
-			_, attempt = c.acquireFrom(ctx, logger.With(attr.SlogIdentityChainingProvider(string(provider.Kind))), req, sel, provider)
+			current := sel
+			current.provider = provider
+			attempt = source.checkConsent(ctx, logger, req, current, signInID)
+			if attempt.Succeeded() {
+				attempt = newOutcome(StageAuthorization, ReasonConsentRequired, ConfidenceVerified, false)
+			}
 		}
-		attempt.Provider = provider.Kind
-		c.attempts.Add(ctx, 1, metric.WithAttributes(attr.IdentityChainingPath("consent"), attr.IdentityChainingProvider(string(provider.Kind)), attr.Outcome(attempt.Reason), attr.IdentityChainingFallback(false)))
-		if attempt.Succeeded() || attempt.Reason == ReasonConsentRequired {
-			return attempt
-		}
-		if first.Reason == "" {
-			first = attempt
-		}
+	} else {
+		_, attempt = c.acquireFrom(ctx, logger, req, sel, provider)
 	}
-	return first
+	attempt.Provider = provider.Kind
+	c.recordAttempt(ctx, "consent", attempt)
+	return attempt
 }

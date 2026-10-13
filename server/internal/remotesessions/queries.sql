@@ -5267,7 +5267,7 @@ WHERE g.user_session_issuer_id = @user_session_issuer_id
 ORDER BY p.name, g.id;
 
 -- name: ListEMAProviders :many
--- The organization's EMA provider order for one vendor issuer. A row whose
+-- The organization's saved EMA provider for one vendor issuer. A row whose
 -- provider was deleted or disabled is flagged, not dropped, so a policy left
 -- with only those never reads as no policy.
 SELECT p.id, p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
@@ -5311,11 +5311,11 @@ FROM internal_session_issuers
 WHERE organization_id = @organization_id AND deleted IS FALSE;
 
 -- name: LockEMAProviders :exec
--- Serializes EMA provider order replaces for one organization.
+-- Serializes EMA provider changes for one organization.
 SELECT pg_advisory_xact_lock(hashtextextended('remote_session_ema_providers:' || @organization_id::text, 0));
 
 -- name: LockEMAProvidersShared :exec
--- Held while publishing a chained credential, so an order replace cannot
+-- Held while publishing a chained credential, so a selection change cannot
 -- commit between the eligibility check and the write.
 SELECT pg_advisory_xact_lock_shared(hashtextextended('remote_session_ema_providers:' || @organization_id::text, 0));
 
@@ -5324,7 +5324,7 @@ SELECT pg_advisory_xact_lock_shared(hashtextextended('remote_session_ema_provide
 SET LOCAL lock_timeout = '5s';
 
 -- name: DeleteEMAProviders :execrows
--- Retires the organization's EMA provider order for one vendor issuer.
+-- Retires the organization's saved EMA provider for one vendor issuer.
 UPDATE remote_session_ema_providers
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
@@ -5338,8 +5338,17 @@ INSERT INTO remote_session_ema_providers (
   @organization_id, @vendor_issuer, @remote_session_issuer_id, @internal_session_issuer_id, @position
 );
 
+-- name: LockEMABindingForPublish :one
+-- Holds the binding's ready generation through credential publication, so an
+-- unlink or rebind holding the row commits first and fails this check, or
+-- waits until the credential is published.
+SELECT id FROM remote_session_ema_bindings
+WHERE id = @id AND organization_id = @organization_id AND project_id = @project_id
+  AND generation = @generation AND state = 'ready'
+FOR SHARE;
+
 -- name: GetSpeakeasyEMAGrant :one
--- Only the exact authenticated MCP grant may supply SSO provenance.
+-- Only the exact authenticated MCP grant may supply sign-in provenance.
 SELECT s.id, s.sign_in_id
 FROM user_sessions AS s
 JOIN user_session_issuers AS i ON i.id = s.user_session_issuer_id
@@ -5406,8 +5415,9 @@ WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
   AND c.ema_provider = 'speakeasy';
 
 -- name: UpsertSpeakeasyEMACredential :one
--- The caller locks and checks the exact SSO grant and issuer before this
--- statement. Binding/client changes during redemption still fence publication.
+-- The caller locks the binding, sign-in and issuer and checks the exact
+-- grant before this statement. Client changes during redemption still fence
+-- publication.
 INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
@@ -5468,7 +5478,7 @@ WHERE i.id = @id AND i.organization_id = @organization_id
 
 -- name: GetSpeakeasyEMAStoredGrant :one
 -- Status has no authenticated MCP JTI. Follow only this credential's retained grant;
--- GetSpeakeasyEMAGrant and the SSO judge still validate its live authority.
+-- GetSpeakeasyEMAGrant and the sign-in judge still validate its live authority.
 SELECT s.jti FROM remote_session_ema_credentials c
 JOIN user_sessions s ON s.id = c.user_session_id AND s.organization_id = c.organization_id
 WHERE c.organization_id = @organization_id AND c.project_id = @project_id

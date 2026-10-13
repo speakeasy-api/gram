@@ -498,10 +498,9 @@ const (
 	IdentityChainingProviderKey = attribute.Key("gram.identity_chaining.provider")
 	// IdentityChainingPathKey distinguishes consent checks from token requests.
 	IdentityChainingPathKey = attribute.Key("gram.identity_chaining.path")
-	// IdentityChainingFallbackKey reports an attempt after an earlier provider failed.
-	IdentityChainingFallbackKey = attribute.Key("gram.identity_chaining.fallback")
-	// IdentityChainingSkippedProvidersKey counts providers an order could not use.
-	IdentityChainingSkippedProvidersKey = attribute.Key("gram.identity_chaining.skipped_providers")
+	// IdentityChainingUnavailableReasonKey says why the selected EMA provider
+	// could not serve.
+	IdentityChainingUnavailableReasonKey = attribute.Key("gram.identity_chaining.unavailable_reason")
 	OAuthRedirectURICountKey            = attribute.Key("gram.oauth.redirect_uri.count")
 	OAuthRedirectURIFullKey             = attribute.Key("gram.oauth.redirect_uri.full")
 	OAuthRegisteredAuthMethodKey        = attribute.Key("gram.oauth.registered_auth_method")
@@ -2038,12 +2037,11 @@ func SlogIdentityChainingProvider(v string) slog.Attr {
 }
 func IdentityChainingPath(v string) attribute.KeyValue { return IdentityChainingPathKey.String(v) }
 
-func IdentityChainingFallback(v bool) attribute.KeyValue { return IdentityChainingFallbackKey.Bool(v) }
-func SlogIdentityChainingFallback(v bool) slog.Attr {
-	return slog.Bool(string(IdentityChainingFallbackKey), v)
+func IdentityChainingUnavailableReason(v string) attribute.KeyValue {
+	return IdentityChainingUnavailableReasonKey.String(v)
 }
-func SlogIdentityChainingSkippedProviders(v int) slog.Attr {
-	return slog.Int(string(IdentityChainingSkippedProvidersKey), v)
+func SlogIdentityChainingUnavailableReason(v string) slog.Attr {
+	return slog.String(string(IdentityChainingUnavailableReasonKey), v)
 }
 
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }
