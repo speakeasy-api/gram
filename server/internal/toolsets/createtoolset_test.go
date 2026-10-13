@@ -576,7 +576,7 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testin
 	})
 	require.NoError(t, err)
 
-	_, err = ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+	first, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "First Toolset",
 		Description:            nil,
@@ -602,7 +602,7 @@ func TestToolsetsService_CreateToolset_SecondToolset_DoesNotAutoAttach(t *testin
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Len(t, servers, 1, "only the auto-enabled first toolset should be attached")
-	require.NotEqual(t, uuid.MustParse(second.ID), servers[0].ToolsetID.UUID)
+	require.Equal(t, uuid.MustParse(first.ID), servers[0].McpServerID.UUID)
 }
 
 // TestToolsetsService_CreateToolset_LegacyProject_TriggersInitialPublish

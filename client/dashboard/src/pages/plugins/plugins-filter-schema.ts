@@ -49,5 +49,8 @@ export function matchesPluginFilters(
 ): boolean {
   if (values.servers.length === 0) return true;
   const keys = new Set((plugin.servers ?? []).map(serverKey));
-  return values.servers.some((v) => keys.has(v));
+  // Links saved before hosted entries moved to the server key say `toolset:<id>`.
+  return values.servers.some((v) =>
+    keys.has(v.replace(/^toolset:/, "mcpServer:")),
+  );
 }

@@ -28,4 +28,15 @@ describe("pluginServerFilterOptions", () => {
       ).toBe(true);
     }
   });
+
+  it("matches a saved legacy toolset key", () => {
+    const plugin = {
+      id: "server-plugin",
+      servers: [{ mcpServerId: "toolset-1", displayName: "Billing" }],
+    } as unknown as Plugin;
+
+    expect(
+      matchesPluginFilters(plugin, { servers: ["toolset:toolset-1"] }),
+    ).toBe(true);
+  });
 });

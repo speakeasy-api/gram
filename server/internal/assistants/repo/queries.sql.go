@@ -2042,6 +2042,7 @@ WHERE ms.project_id = $1
   AND ms.id = ANY($2::UUID[])
   AND ms.toolset_id = ms.id
   AND ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
   AND t.mcp_enabled IS TRUE
   AND t.mcp_slug IS NOT NULL
   AND t.deleted IS FALSE
