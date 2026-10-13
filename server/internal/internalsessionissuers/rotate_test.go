@@ -107,8 +107,11 @@ func TestRotate_ContainmentIgnoresFailingProviders(t *testing.T) {
 	compromised := enable(t, ti, admin)
 	ti.providersFail.Store(true)
 
-	_, err := ti.service.Get(readCtx(t, ctx), &gen.GetPayload{SessionToken: nil})
-	requireOopsCode(t, err, oops.CodeUnavailable)
+	retained, err := ti.service.Get(readCtx(t, ctx), &gen.GetPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "signing_paused", retained.State)
+	require.False(t, retained.CanEnable)
+	require.Equal(t, wantIssuer(ti), *retained.Issuer)
 
 	view, err := ti.service.Rotate(admin, &gen.RotatePayload{ActiveKid: &compromised, Compromised: true, SessionToken: nil})
 	require.NoError(t, err)

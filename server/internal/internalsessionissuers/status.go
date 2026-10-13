@@ -39,11 +39,13 @@ type FeatureChecker interface {
 // Gate combines the rollout flag, the SSO entitlement, deployment readiness,
 // the kill switches and the organization's issuer row into one State.
 type Gate struct {
-	db           repo.DBTX
-	features     FeatureChecker
-	flags        feature.Provider
-	provisioning bool
-	paused       bool
+	db               repo.DBTX
+	features         FeatureChecker
+	flags            feature.Provider
+	provisioning     bool
+	paused           bool
+	signingAuthority func(context.Context, string, Status) error
+	enableAuthority  func(string, Status) error
 }
 
 // GateConfig is deployment configuration for a Gate.
@@ -56,7 +58,15 @@ type GateConfig struct {
 }
 
 func NewGate(db repo.DBTX, features FeatureChecker, flags feature.Provider, cfg GateConfig) *Gate {
-	return &Gate{db: db, features: features, flags: flags, provisioning: cfg.Provisioning, paused: cfg.SigningPaused}
+	return &Gate{db: db, features: features, flags: flags, provisioning: cfg.Provisioning, paused: cfg.SigningPaused, signingAuthority: nil, enableAuthority: nil}
+}
+
+// SetSigningAuthority installs the deployment's readiness check. Call before
+// serving status or mutations. The checker must not call Status; it receives
+// the already resolved lifecycle state and key. Lifecycle-only callers may
+// leave it unset, while runtime service gates always install their signer.
+func (g *Gate) SetSigningAuthority(check func(context.Context, string, Status) error) {
+	g.signingAuthority = check
 }
 
 // Provisioning reports whether this deployment can create issuer keys.
@@ -124,6 +134,14 @@ func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error
 			status.State = StateSigningPaused
 		}
 	}
+	if status.State == StateEnabled && g.signingAuthority != nil {
+		if err := g.signingAuthority(ctx, organizationID, status); err != nil {
+			status.State = StateUnavailable
+			if !errors.Is(err, ErrMisconfigured) {
+				return status, fmt.Errorf("check issuer signing authority: %w", err)
+			}
+		}
+	}
 	return status, nil
 }
 
@@ -167,4 +185,30 @@ func (g *Gate) groups(ctx context.Context, organizationID string) (map[string]st
 		return nil, fmt.Errorf("read organization: %w", err)
 	}
 	return feature.OrgProjectGroups(org.Slug, ""), nil
+}
+
+// Ready reports live signing readiness for the exact issuer referenced by a
+// provider order. Status includes deployment authority, rollout and entitlement.
+func (g *Gate) Ready(ctx context.Context, organizationID string, issuerID uuid.UUID) (bool, error) {
+	status, err := g.Status(ctx, organizationID)
+	if err != nil {
+		return false, err
+	}
+	return status.State == StateEnabled && status.Issuer != nil && status.ActiveKey != nil && status.Issuer.ID == issuerID, nil
+}
+
+// SetEnableAuthority installs the deployment check used before offering Enable.
+// Disabled issuers must retain their lifecycle state for containment even when
+// their saved origin belongs to another deployment.
+func (g *Gate) SetEnableAuthority(check func(string, Status) error) {
+	g.enableAuthority = check
+}
+
+// CanEnable separates activation eligibility from retained lifecycle state.
+func (g *Gate) CanEnable(organizationID string, status Status) bool {
+	if !status.RolledOut || !status.Entitled || !g.Provisioning() ||
+		(status.State != StateSetupRequired && status.State != StateDisabled) {
+		return false
+	}
+	return g.enableAuthority == nil || g.enableAuthority(organizationID, status) == nil
 }

@@ -90535,6 +90535,9 @@ components:
     InternalSessionIssuer:
       type: object
       properties:
+        can_enable:
+          type: boolean
+          description: Whether deployment readiness, rollout and SSO entitlement currently allow enabling this issuer. The caller still needs organization administrator access.
         issuer:
           type: string
           description: Issuer URI to register with supported services. It never changes.
@@ -90567,6 +90570,7 @@ components:
             - keyless
       required:
         - state
+        - can_enable
         - keys
         - kms_cleanup_pending
     InternalSessionIssuerKey:

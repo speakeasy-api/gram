@@ -197,6 +197,7 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 		switch {
 		case errors.Is(err, errDiscoveryBusy), errors.Is(err, context.DeadlineExceeded):
 			w.Header().Set("Retry-After", "1")
+			w.Header().Set("Cache-Control", "no-store")
 			return oops.E(oops.CodeUnavailable, err, "issuer discovery is busy, try again shortly")
 		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "load issuer document").LogError(ctx, h.logger)

@@ -27,6 +27,8 @@ func TestInternalSessionIssuerToolContract(t *testing.T) {
 	require.Equal(t, externalOnly, d.Meta.Audiences)
 	require.True(t, d.Annotations.ReadOnlyHint)
 	require.Empty(t, reg.For(AudienceAssistant))
+	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "Google Workspace connected through enterprise SAML or OIDC qualifies")
+	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "personal Google or other social sign-in alone is insufficient")
 }
 
 func TestInternalSessionIssuerToolStates(t *testing.T) {
@@ -73,7 +75,9 @@ func TestInternalSessionIssuerToolStates(t *testing.T) {
 	reader.WithInternalSessionIssuer(gate(false))
 	require.Equal(t, internalsessionissuers.StateUnavailable, read().State, "deployment can't provision")
 	reader.WithInternalSessionIssuer(gate(true))
-	require.Equal(t, internalsessionissuers.StateSetupRequired, read().State)
+	statusBeforeSetup := read()
+	require.Equal(t, internalsessionissuers.StateSetupRequired, statusBeforeSetup.State)
+	require.True(t, statusBeforeSetup.CanEnable)
 
 	credential := provisiontest.CreatePlatformSigningCredential(t, ctx, pool)
 	provisioner := provisiontest.NewProvisioner(t, pool, provisiontest.NewKMSClients(t).Factory, "https://issuer.example.com", credential, "")
@@ -92,6 +96,13 @@ func TestInternalSessionIssuerToolStates(t *testing.T) {
 	status = read()
 	require.Equal(t, internalsessionissuers.StateDisabled, status.State)
 	require.Equal(t, issuer, status.Issuer)
+	require.True(t, status.CanEnable)
+	require.NoError(t, features.SetFeatureEnabled(ctx, principal.OrganizationID, productfeatures.FeatureSSO, false))
+	status = read()
+	require.Equal(t, internalsessionissuers.StateDisabled, status.State)
+	require.False(t, status.CanEnable)
+	require.NotContains(t, status.NextStep, "An organization administrator can")
+	require.NoError(t, features.SetFeatureEnabled(ctx, principal.OrganizationID, productfeatures.FeatureSSO, true))
 
 	_, err = provisioner.EnsureEMAIssuer(ctx, principal.OrganizationID)
 	require.NoError(t, err)

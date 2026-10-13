@@ -488,3 +488,11 @@ FROM internal_session_issuers AS isi
 JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
 WHERE isi.organization_id = @organization_id
   AND isi.deleted IS FALSE;
+
+-- Cleanup must verify deployment ownership even after an issuer is tombstoned
+-- or its organization disabled. Such rows may still own KMS cleanup work.
+-- name: GetInternalSessionIssuerForOwnership :one
+SELECT issuer
+FROM internal_session_issuers
+WHERE organization_id = @organization_id
+  AND json_web_key_set_id = @json_web_key_set_id;

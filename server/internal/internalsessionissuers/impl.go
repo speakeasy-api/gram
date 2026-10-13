@@ -57,6 +57,7 @@ type Service struct {
 	gate        *Gate
 	lifecycle   *Lifecycle
 	manager     Manager
+	tokenPurger EMAIssuerTokenPurger
 	mintLimiter *ratelimit.Limiter
 }
 
@@ -70,15 +71,16 @@ var (
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger, gate *Gate, manager Manager, mintStore ratelimit.Store) *Service {
 	logger = logger.With(attr.SlogComponent("internalsessionissuers"))
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/internalsessionissuers"),
-		logger:    logger,
-		metrics:   newMetrics(logger, meterProvider),
-		db:        db,
-		auth:      auth.New(logger, db, sessions, authzEngine),
-		authz:     authzEngine,
-		gate:      gate,
-		lifecycle: NewLifecycle(db, auditLogger),
-		manager:   manager,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/internalsessionissuers"),
+		logger:      logger,
+		metrics:     newMetrics(logger, meterProvider),
+		db:          db,
+		auth:        auth.New(logger, db, sessions, authzEngine),
+		authz:       authzEngine,
+		gate:        gate,
+		lifecycle:   NewLifecycle(db, auditLogger),
+		manager:     manager,
+		tokenPurger: nil,
 		mintLimiter: ratelimit.New(mintStore, "internal-session-issuer-mint",
 			ratelimit.PerMinute(enableRatePerMin).WithBurst(enableRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
@@ -134,11 +136,13 @@ func (s *Service) access(ctx context.Context, scope authz.Scope, mutation bool) 
 }
 
 func (s *Service) Get(ctx context.Context, _ *gensvc.GetPayload) (*gensvc.InternalSessionIssuer, error) {
-	organizationID, logger, status, err := s.access(ctx, authz.ScopeOrgRead, false)
+	organizationID, logger, err := s.authorize(ctx, authz.ScopeOrgRead, false)
 	if err != nil {
 		return nil, err
 	}
-	s.sweep(ctx, logger, organizationID, status)
+	if status, err := s.gate.Status(ctx, organizationID); err == nil {
+		s.sweep(ctx, logger, organizationID, status)
+	}
 	return s.view(ctx, logger, organizationID)
 }
 
@@ -158,6 +162,9 @@ func (s *Service) SetEnabled(ctx context.Context, payload *gensvc.SetEnabledPayl
 		return nil, oops.E(oops.CodeForbidden, nil, "issuers are not available for this organization yet")
 	case !status.Entitled:
 		return nil, oops.E(oops.CodeForbidden, nil, "issuers require single sign-on for this organization")
+	}
+	if (status.State == StateSetupRequired || status.State == StateDisabled) && !s.gate.CanEnable(organizationID, status) {
+		return nil, oops.E(oops.CodeUnavailable, nil, "the issuer cannot be enabled on this deployment")
 	}
 	if status.Issuer == nil {
 		if err := s.allowMint(ctx, logger, organizationID); err != nil {
@@ -183,9 +190,7 @@ func (s *Service) disable(ctx context.Context) (*gensvc.InternalSessionIssuer, e
 	if err != nil {
 		return nil, s.operationError(ctx, logger, err, "could not disable the issuer")
 	}
-	if s.manager != nil {
-		s.manager.PurgeEMAIssuerTokens(ctx, organizationID)
-	}
+	s.purgeIssuerTokens(ctx, organizationID)
 	return s.view(ctx, logger, organizationID)
 }
 
@@ -237,11 +242,11 @@ func (s *Service) rotateCompromised(ctx context.Context, activeKid *string) (*ge
 	if len(containment.Revoked) > 0 {
 		logger.WarnContext(ctx, "revoked every internal session issuer key after a reported compromise", attr.SlogValueInt(len(containment.Revoked)))
 	}
+	s.purgeIssuerTokens(ctx, organizationID)
 	if s.manager == nil {
 		s.metrics.record(ctx, opRotateCompromised, errNoManager)
 		return s.view(ctx, logger, organizationID)
 	}
-	s.manager.PurgeEMAIssuerTokens(ctx, organizationID)
 	var errs []error
 	if _, _, err := s.manager.CleanupEMAIssuerKMS(ctx, organizationID); err != nil {
 		logger.ErrorContext(ctx, "revoked issuer keys still await kms cleanup; the sweep retries it", attr.SlogError(err))
@@ -330,7 +335,7 @@ func (s *Service) operationError(ctx context.Context, logger *slog.Logger, err e
 // material. It falls back to database-only state when the gate's providers
 // fail, so a containment response never depends on them.
 func (s *Service) view(ctx context.Context, logger *slog.Logger, organizationID string) (*gensvc.InternalSessionIssuer, error) {
-	view := &gensvc.InternalSessionIssuer{State: string(StateUnavailable), Issuer: nil, JwksURI: nil, Keys: []*gensvc.InternalSessionIssuerKey{}, RotationReadyAt: nil, KmsCleanupPending: 0}
+	view := &gensvc.InternalSessionIssuer{State: string(StateUnavailable), Issuer: nil, JwksURI: nil, Keys: []*gensvc.InternalSessionIssuerKey{}, RotationReadyAt: nil, KmsCleanupPending: 0, CanEnable: false}
 	q := repo.New(s.db)
 	row, err := q.GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	switch {
@@ -343,6 +348,7 @@ func (s *Service) view(ctx context.Context, logger *slog.Logger, organizationID 
 	switch {
 	case err == nil:
 		view.State = string(status.State)
+		view.CanEnable = s.gate.CanEnable(organizationID, status)
 	case row.ID == uuid.Nil:
 		return nil, oops.E(oops.CodeUnavailable, err, "issuer availability could not be determined").LogError(ctx, logger)
 	default:

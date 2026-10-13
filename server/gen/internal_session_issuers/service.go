@@ -80,6 +80,10 @@ type InternalSessionIssuer struct {
 	// enabled, but Speakeasy has paused all signing. keyless: every key was
 	// revoked after a compromise and no replacement is active yet.
 	State string
+	// Whether deployment readiness, rollout and SSO entitlement currently allow
+	// enabling this issuer. The caller still needs organization administrator
+	// access.
+	CanEnable bool
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string
 	// Public verification keys.
