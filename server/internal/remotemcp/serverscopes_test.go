@@ -314,14 +314,14 @@ func TestGetServerScopes_ReportsResourceAndPerClientResolution(t *testing.T) {
 
 	c := clientEntry(t, got, own)
 	require.Equal(t, "client_scope", c.ScopeSource)
-	require.Equal(t, []string{"own:read", "openid"}, c.RequestedScopes)
+	require.Equal(t, []string{"own:read"}, c.RequestedScopes)
 	require.Empty(t, c.UnadvertisedPinnedScopes)
 	require.False(t, c.PinWouldDecide, "the client's own scope outranks a pin")
 
 	// The challenge outranks the pin.
 	c = clientEntry(t, got, owner)
 	require.Equal(t, "challenge_scope", c.ScopeSource)
-	require.Equal(t, []string{"challenged", "openid"}, c.RequestedScopes)
+	require.Equal(t, []string{"challenged"}, c.RequestedScopes)
 	require.False(t, c.PinWouldDecide, "a challenge outranks a pin")
 
 	c = clientEntry(t, got, shared)
@@ -336,7 +336,7 @@ func TestGetServerScopes_ReportsResourceAndPerClientResolution(t *testing.T) {
 	require.Empty(t, got.ChallengeScopes)
 	c = clientEntry(t, got, owner)
 	require.Equal(t, "resource_pin", c.ScopeSource)
-	require.Equal(t, []string{"read", "admin", "openid"}, c.RequestedScopes)
+	require.Equal(t, []string{"read", "admin"}, c.RequestedScopes)
 	require.Equal(t, []string{"admin"}, c.UnadvertisedPinnedScopes)
 	require.True(t, c.PinWouldDecide)
 }

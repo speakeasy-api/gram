@@ -179,7 +179,7 @@ func TestRemoteLogin_ClientScopeBeatsPin(t *testing.T) {
 		withProtectedResource(protectedResourceSeed{pin: []string{"files:read"}, challengeScopes: []string{"files:write"}, fetchedAgo: 2 * time.Hour}),
 		withProber(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "channels:history openid offline_access", scopeOf(t, env.authURL))
+	require.Equal(t, "channels:history", scopeOf(t, env.authURL))
 	require.EqualValues(t, 0, hits.Load(), "the client's own scope decides, so the login does not wait on a probe")
 	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceClientScope, protectedresource.ProbeOutcomeSkippedClientScope)
 }
@@ -195,7 +195,7 @@ func TestRemoteLogin_ChallengeScopesBeatPin(t *testing.T) {
 		withProtectedResource(protectedResourceSeed{pin: []string{"files:read"}, challengeScopes: []string{"files:write"}, fetchedAgo: 10 * time.Minute}),
 		withProber(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:write openid", scopeOf(t, env.authURL))
+	require.Equal(t, "files:write", scopeOf(t, env.authURL))
 	require.EqualValues(t, 1, hits.Load(), "the row is refreshed even though the challenge decides")
 	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceChallengeScope, protectedresource.ProbeOutcomeFetched)
 }
@@ -213,7 +213,7 @@ func TestRemoteLogin_PinBeatsLiveList(t *testing.T) {
 		withProtectedResource(protectedResourceSeed{pin: []string{"files:read", "legacy:all"}, fetchedAgo: 2 * time.Hour}),
 		withProber(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:read legacy:all openid offline_access", scopeOf(t, env.authURL))
+	require.Equal(t, "files:read legacy:all", scopeOf(t, env.authURL))
 	require.EqualValues(t, 1, hits.Load())
 	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceResourcePin, protectedresource.ProbeOutcomeFetched)
 }
@@ -229,7 +229,7 @@ func TestRemoteLogin_ChallengeScopesBeatLiveList(t *testing.T) {
 		withProtectedResource(protectedResourceSeed{challengeScopes: []string{"files:read"}, fetchedAgo: 2 * time.Hour}),
 		withProber(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:read openid", scopeOf(t, env.authURL))
+	require.Equal(t, "files:read", scopeOf(t, env.authURL))
 	require.EqualValues(t, 1, hits.Load())
 	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceChallengeScope, protectedresource.ProbeOutcomeFetched)
 }
@@ -245,7 +245,7 @@ func TestRemoteLogin_LiveProbeFillsRowAndDecides(t *testing.T) {
 		withRemoteServer(resource.URL),
 		withProber(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:read files:write openid offline_access", scopeOf(t, env.authURL))
+	require.Equal(t, "files:read files:write", scopeOf(t, env.authURL))
 	require.EqualValues(t, 1, hits.Load())
 	row := loadResourceRow(t, ctx, env, resource.URL)
 	require.Equal(t, []string{"files:read", "files:write"}, row.ScopesSupported)
@@ -266,7 +266,7 @@ func TestRemoteLogin_RecentRowStillProbes(t *testing.T) {
 		withProtectedResource(protectedResourceSeed{scopesSupported: []string{"files:read"}, fetchedAgo: 10 * time.Minute}),
 		withProber(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:write openid", scopeOf(t, env.authURL))
+	require.Equal(t, "files:write", scopeOf(t, env.authURL))
 	require.EqualValues(t, 1, hits.Load())
 	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceLiveResource, protectedresource.ProbeOutcomeFetched)
 }
@@ -282,7 +282,7 @@ func TestRemoteLogin_ProbeFailureFallsBackToCachedRow(t *testing.T) {
 		withProtectedResource(protectedResourceSeed{scopesSupported: []string{"files:read"}, fetchedAgo: 2 * 24 * time.Hour}),
 		withProber(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:read openid", scopeOf(t, env.authURL))
+	require.Equal(t, "files:read", scopeOf(t, env.authURL))
 	require.EqualValues(t, 1, hits.Load())
 	row := loadResourceRow(t, ctx, env, resource.URL)
 	require.True(t, row.MetadataLastErrorAt.Valid, "the failed read is recorded")
@@ -301,7 +301,7 @@ func TestRemoteLogin_RecentFailureSkipsProbe(t *testing.T) {
 		withProtectedResource(protectedResourceSeed{scopesSupported: []string{"files:read"}, fetchedAgo: 2 * time.Hour, errorAgo: 5 * time.Minute}),
 		withProber(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:read openid", scopeOf(t, env.authURL))
+	require.Equal(t, "files:read", scopeOf(t, env.authURL))
 	require.EqualValues(t, 0, hits.Load())
 	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceCachedResource, protectedresource.ProbeOutcomeSkippedRecentError)
 }
@@ -335,8 +335,7 @@ func TestRemoteLogin_NoServerSkipsResourceSteps(t *testing.T) {
 }
 
 // AIM-288: an issuer with a large catalogue, a client with no scope, and a
-// resource advertising three scopes requests exactly those three plus the
-// standard scopes the issuer advertises.
+// resource advertising three scopes requests exactly those three.
 func TestRemoteLogin_ResourceListReplacesLargeIssuerCatalogue(t *testing.T) {
 	t.Parallel()
 
@@ -351,9 +350,9 @@ func TestRemoteLogin_ResourceListReplacesLargeIssuerCatalogue(t *testing.T) {
 		withRemoteServer(resource.URL),
 		withProber(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:read files:write projects:read openid email profile offline_access", scopeOf(t, env.authURL))
+	require.Equal(t, "files:read files:write projects:read", scopeOf(t, env.authURL))
 	require.EqualValues(t, 1, hits.Load())
-	require.Equal(t, []string{"files:read", "files:write", "projects:read", "openid", "email", "profile", "offline_access"}, env.session.Scopes)
+	require.Equal(t, []string{"files:read", "files:write", "projects:read"}, env.session.Scopes)
 }
 
 // The consent card reads the cached row through the client listing and never probes.
@@ -404,7 +403,7 @@ func TestListClients_ReadsCachedResourceRowWithoutProbing(t *testing.T) {
 	claimed, _, ok := env.mgr.CachedResourceScopesForServer(ctx, env.projectID, env.mcpServerID, true)
 	require.True(t, ok)
 	require.Equal(t, byServer, claimed, "the client's own claim does not change the row the card reads")
-	require.Equal(t, []string{"c", "openid"}, c.RequestedScopes(claimed).Scopes)
+	require.Equal(t, []string{"c"}, c.RequestedScopes(claimed).Scopes)
 	claimed.UseDiscovered = false
 	require.Equal(t, []string{"admin", "openid"}, c.RequestedScopes(claimed).Scopes)
 	require.EqualValues(t, 1, hits.Load(), "listing clients never probes")

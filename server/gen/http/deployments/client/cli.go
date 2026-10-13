@@ -439,3 +439,78 @@ func BuildGetDeploymentLogsPayload(deploymentsGetDeploymentLogsDeploymentID stri
 
 	return v, nil
 }
+
+// BuildEvaluateOpenAPIv3Payload builds the payload for the deployments
+// evaluateOpenAPIv3 endpoint from CLI flags.
+func BuildEvaluateOpenAPIv3Payload(deploymentsEvaluateOpenAPIv3Body string, deploymentsEvaluateOpenAPIv3ApikeyToken string, deploymentsEvaluateOpenAPIv3SessionToken string, deploymentsEvaluateOpenAPIv3ProjectSlugInput string) (*deployments.EvaluateOpenAPIv3Payload, error) {
+	var err error
+	var body EvaluateOpenAPIv3RequestBody
+	{
+		err = json.Unmarshal([]byte(deploymentsEvaluateOpenAPIv3Body), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if deploymentsEvaluateOpenAPIv3ApikeyToken != "" {
+			apikeyToken = &deploymentsEvaluateOpenAPIv3ApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if deploymentsEvaluateOpenAPIv3SessionToken != "" {
+			sessionToken = &deploymentsEvaluateOpenAPIv3SessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if deploymentsEvaluateOpenAPIv3ProjectSlugInput != "" {
+			projectSlugInput = &deploymentsEvaluateOpenAPIv3ProjectSlugInput
+		}
+	}
+	v := &deployments.EvaluateOpenAPIv3Payload{
+		AssetID: body.AssetID,
+		Slug:    body.Slug,
+		Name:    body.Name,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetDeploymentEvaluationPayload builds the payload for the deployments
+// getDeploymentEvaluation endpoint from CLI flags.
+func BuildGetDeploymentEvaluationPayload(deploymentsGetDeploymentEvaluationDeploymentID string, deploymentsGetDeploymentEvaluationApikeyToken string, deploymentsGetDeploymentEvaluationSessionToken string, deploymentsGetDeploymentEvaluationProjectSlugInput string) (*deployments.GetDeploymentEvaluationPayload, error) {
+	var deploymentID string
+	{
+		deploymentID = deploymentsGetDeploymentEvaluationDeploymentID
+	}
+	var apikeyToken *string
+	{
+		if deploymentsGetDeploymentEvaluationApikeyToken != "" {
+			apikeyToken = &deploymentsGetDeploymentEvaluationApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if deploymentsGetDeploymentEvaluationSessionToken != "" {
+			sessionToken = &deploymentsGetDeploymentEvaluationSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if deploymentsGetDeploymentEvaluationProjectSlugInput != "" {
+			projectSlugInput = &deploymentsGetDeploymentEvaluationProjectSlugInput
+		}
+	}
+	v := &deployments.GetDeploymentEvaluationPayload{}
+	v.DeploymentID = deploymentID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

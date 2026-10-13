@@ -498,7 +498,7 @@ func TestAttachmentRegistersDiscoveredScopesWithoutStoringThem(t *testing.T) {
 	reg := attachmentTestRegister(t, service, principal, project, usi, metadata, resource)
 	require.True(t, reg.Ready(), "manual=%v failure=%+v requested=%v", reg.ManualSetupRequired, reg.Failure, requested.Load())
 	require.Equal(t, remotesessions.RegistrationDCR, reg.Method)
-	require.Equal(t, "files:read openid", requested.Load(), "the resource's scopes plus the standard scopes the provider advertises, as the login requests")
+	require.Equal(t, "files:read", requested.Load(), "the resource's scopes as published, as the login requests")
 
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)

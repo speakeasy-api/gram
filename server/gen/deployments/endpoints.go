@@ -16,14 +16,16 @@ import (
 
 // Endpoints wraps the "deployments" service endpoints.
 type Endpoints struct {
-	GetDeployment       goa.Endpoint
-	GetLatestDeployment goa.Endpoint
-	GetActiveDeployment goa.Endpoint
-	CreateDeployment    goa.Endpoint
-	Evolve              goa.Endpoint
-	Redeploy            goa.Endpoint
-	ListDeployments     goa.Endpoint
-	GetDeploymentLogs   goa.Endpoint
+	GetDeployment           goa.Endpoint
+	GetLatestDeployment     goa.Endpoint
+	GetActiveDeployment     goa.Endpoint
+	CreateDeployment        goa.Endpoint
+	Evolve                  goa.Endpoint
+	Redeploy                goa.Endpoint
+	ListDeployments         goa.Endpoint
+	GetDeploymentLogs       goa.Endpoint
+	EvaluateOpenAPIv3       goa.Endpoint
+	GetDeploymentEvaluation goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "deployments" service with endpoints.
@@ -31,14 +33,16 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetDeployment:       NewGetDeploymentEndpoint(s, a.APIKeyAuth),
-		GetLatestDeployment: NewGetLatestDeploymentEndpoint(s, a.APIKeyAuth),
-		GetActiveDeployment: NewGetActiveDeploymentEndpoint(s, a.APIKeyAuth),
-		CreateDeployment:    NewCreateDeploymentEndpoint(s, a.APIKeyAuth),
-		Evolve:              NewEvolveEndpoint(s, a.APIKeyAuth),
-		Redeploy:            NewRedeployEndpoint(s, a.APIKeyAuth),
-		ListDeployments:     NewListDeploymentsEndpoint(s, a.APIKeyAuth),
-		GetDeploymentLogs:   NewGetDeploymentLogsEndpoint(s, a.APIKeyAuth),
+		GetDeployment:           NewGetDeploymentEndpoint(s, a.APIKeyAuth),
+		GetLatestDeployment:     NewGetLatestDeploymentEndpoint(s, a.APIKeyAuth),
+		GetActiveDeployment:     NewGetActiveDeploymentEndpoint(s, a.APIKeyAuth),
+		CreateDeployment:        NewCreateDeploymentEndpoint(s, a.APIKeyAuth),
+		Evolve:                  NewEvolveEndpoint(s, a.APIKeyAuth),
+		Redeploy:                NewRedeployEndpoint(s, a.APIKeyAuth),
+		ListDeployments:         NewListDeploymentsEndpoint(s, a.APIKeyAuth),
+		GetDeploymentLogs:       NewGetDeploymentLogsEndpoint(s, a.APIKeyAuth),
+		EvaluateOpenAPIv3:       NewEvaluateOpenAPIv3Endpoint(s, a.APIKeyAuth),
+		GetDeploymentEvaluation: NewGetDeploymentEvaluationEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -52,6 +56,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Redeploy = m(e.Redeploy)
 	e.ListDeployments = m(e.ListDeployments)
 	e.GetDeploymentLogs = m(e.GetDeploymentLogs)
+	e.EvaluateOpenAPIv3 = m(e.EvaluateOpenAPIv3)
+	e.GetDeploymentEvaluation = m(e.GetDeploymentEvaluation)
 }
 
 // NewGetDeploymentEndpoint returns an endpoint function that calls the method
@@ -523,5 +529,123 @@ func NewGetDeploymentLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.GetDeploymentLogs(ctx, p)
+	}
+}
+
+// NewEvaluateOpenAPIv3Endpoint returns an endpoint function that calls the
+// method "evaluateOpenAPIv3" of service "deployments".
+func NewEvaluateOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*EvaluateOpenAPIv3Payload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.EvaluateOpenAPIv3(ctx, p)
+	}
+}
+
+// NewGetDeploymentEvaluationEndpoint returns an endpoint function that calls
+// the method "getDeploymentEvaluation" of service "deployments".
+func NewGetDeploymentEvaluationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetDeploymentEvaluationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetDeploymentEvaluation(ctx, p)
 	}
 }

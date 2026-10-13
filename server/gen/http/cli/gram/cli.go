@@ -136,7 +136,7 @@ func UsageCommands() []string {
 		"cli-auth (authorize|redeem)",
 		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|duplicate-built-in-dashboard|delete-dashboard)",
 		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
-		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
+		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs|evaluate-open-ap-iv3|get-deployment-evaluation)",
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
 		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
@@ -1173,6 +1173,18 @@ func ParseEndpoint(
 		deploymentsGetDeploymentLogsApikeyTokenFlag      = deploymentsGetDeploymentLogsFlags.String("apikey-token", "", "")
 		deploymentsGetDeploymentLogsSessionTokenFlag     = deploymentsGetDeploymentLogsFlags.String("session-token", "", "")
 		deploymentsGetDeploymentLogsProjectSlugInputFlag = deploymentsGetDeploymentLogsFlags.String("project-slug-input", "", "")
+
+		deploymentsEvaluateOpenAPIv3Flags                = flag.NewFlagSet("evaluate-open-ap-iv3", flag.ExitOnError)
+		deploymentsEvaluateOpenAPIv3BodyFlag             = deploymentsEvaluateOpenAPIv3Flags.String("body", "REQUIRED", "")
+		deploymentsEvaluateOpenAPIv3ApikeyTokenFlag      = deploymentsEvaluateOpenAPIv3Flags.String("apikey-token", "", "")
+		deploymentsEvaluateOpenAPIv3SessionTokenFlag     = deploymentsEvaluateOpenAPIv3Flags.String("session-token", "", "")
+		deploymentsEvaluateOpenAPIv3ProjectSlugInputFlag = deploymentsEvaluateOpenAPIv3Flags.String("project-slug-input", "", "")
+
+		deploymentsGetDeploymentEvaluationFlags                = flag.NewFlagSet("get-deployment-evaluation", flag.ExitOnError)
+		deploymentsGetDeploymentEvaluationDeploymentIDFlag     = deploymentsGetDeploymentEvaluationFlags.String("deployment-id", "REQUIRED", "")
+		deploymentsGetDeploymentEvaluationApikeyTokenFlag      = deploymentsGetDeploymentEvaluationFlags.String("apikey-token", "", "")
+		deploymentsGetDeploymentEvaluationSessionTokenFlag     = deploymentsGetDeploymentEvaluationFlags.String("session-token", "", "")
+		deploymentsGetDeploymentEvaluationProjectSlugInputFlag = deploymentsGetDeploymentEvaluationFlags.String("project-slug-input", "", "")
 
 		deviceIntegrationsFlags = flag.NewFlagSet("device-integrations", flag.ContinueOnError)
 
@@ -5200,6 +5212,8 @@ func ParseEndpoint(
 	deploymentsRedeployFlags.Usage = deploymentsRedeployUsage
 	deploymentsListDeploymentsFlags.Usage = deploymentsListDeploymentsUsage
 	deploymentsGetDeploymentLogsFlags.Usage = deploymentsGetDeploymentLogsUsage
+	deploymentsEvaluateOpenAPIv3Flags.Usage = deploymentsEvaluateOpenAPIv3Usage
+	deploymentsGetDeploymentEvaluationFlags.Usage = deploymentsGetDeploymentEvaluationUsage
 
 	deviceIntegrationsFlags.Usage = deviceIntegrationsUsage
 	deviceIntegrationsListProvidersFlags.Usage = deviceIntegrationsListProvidersUsage
@@ -6856,6 +6870,12 @@ func ParseEndpoint(
 
 			case "get-deployment-logs":
 				epf = deploymentsGetDeploymentLogsFlags
+
+			case "evaluate-open-ap-iv3":
+				epf = deploymentsEvaluateOpenAPIv3Flags
+
+			case "get-deployment-evaluation":
+				epf = deploymentsGetDeploymentEvaluationFlags
 
 			}
 
@@ -9881,6 +9901,12 @@ func ParseEndpoint(
 			case "get-deployment-logs":
 				endpoint = c.GetDeploymentLogs()
 				data, err = deploymentsc.BuildGetDeploymentLogsPayload(*deploymentsGetDeploymentLogsDeploymentIDFlag, *deploymentsGetDeploymentLogsCursorFlag, *deploymentsGetDeploymentLogsApikeyTokenFlag, *deploymentsGetDeploymentLogsSessionTokenFlag, *deploymentsGetDeploymentLogsProjectSlugInputFlag)
+			case "evaluate-open-ap-iv3":
+				endpoint = c.EvaluateOpenAPIv3()
+				data, err = deploymentsc.BuildEvaluateOpenAPIv3Payload(*deploymentsEvaluateOpenAPIv3BodyFlag, *deploymentsEvaluateOpenAPIv3ApikeyTokenFlag, *deploymentsEvaluateOpenAPIv3SessionTokenFlag, *deploymentsEvaluateOpenAPIv3ProjectSlugInputFlag)
+			case "get-deployment-evaluation":
+				endpoint = c.GetDeploymentEvaluation()
+				data, err = deploymentsc.BuildGetDeploymentEvaluationPayload(*deploymentsGetDeploymentEvaluationDeploymentIDFlag, *deploymentsGetDeploymentEvaluationApikeyTokenFlag, *deploymentsGetDeploymentEvaluationSessionTokenFlag, *deploymentsGetDeploymentEvaluationProjectSlugInputFlag)
 			}
 		case "device-integrations":
 			c := deviceintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16310,6 +16336,8 @@ func deploymentsUsage() {
 	fmt.Fprintln(os.Stderr, `    redeploy: Redeploys an existing deployment.`)
 	fmt.Fprintln(os.Stderr, `    list-deployments: List all deployments in descending order of creation.`)
 	fmt.Fprintln(os.Stderr, `    get-deployment-logs: Get logs for a deployment.`)
+	fmt.Fprintln(os.Stderr, `    evaluate-open-ap-iv3: Compare an uploaded OpenAPI document with the version of the same source in the active deployment. Reports changes to tools, inputs and security without deploying anything.`)
+	fmt.Fprintln(os.Stderr, `    get-deployment-evaluation: Compare the OpenAPI documents in a deployment with the deployment it was created from.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s deployments COMMAND --help\n", os.Args[0])
@@ -16504,6 +16532,54 @@ func deploymentsGetDeploymentLogsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments get-deployment-logs --deployment-id \"abc123\" --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func deploymentsEvaluateOpenAPIv3Usage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] deployments evaluate-open-ap-iv3", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Compare an uploaded OpenAPI document with the version of the same source in the active deployment. Reports changes to tools, inputs and security without deploying anything.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evaluate-open-ap-iv3 --body '{\n      \"asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func deploymentsGetDeploymentEvaluationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] deployments get-deployment-evaluation", os.Args[0])
+	fmt.Fprint(os.Stderr, " -deployment-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Compare the OpenAPI documents in a deployment with the deployment it was created from.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -deployment-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments get-deployment-evaluation --deployment-id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // deviceIntegrationsUsage displays the usage of the device-integrations
