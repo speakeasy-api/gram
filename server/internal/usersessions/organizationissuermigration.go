@@ -625,13 +625,13 @@ func migrateHostedToolsetsToUserSessionIssuer(ctx context.Context, logger *slog.
 			drift = append(drift, "user_session_issuer")
 		}
 		if len(drift) > 0 {
-			logger.WarnContext(ctx, "hosted MCP server drifted from its toolset; issuer migration leaves it to the issuer-only update", attr.SlogToolsetID(toolset.ID.String()), attr.SlogReason(strings.Join(drift, ",")))
+			logger.WarnContext(ctx, "hosted MCP server drifted from its toolset; issuer migration skips its sync; the wrapper moves only if it is on the source issuer", attr.SlogToolsetID(toolset.ID.String()), attr.SlogReason(strings.Join(drift, ",")))
 			skipped[toolset.ID] = true
 		}
 	}
 	actor := hostedmcp.Actor{UserID: authCtx.UserID, Email: authCtx.Email, System: ""}
 	// One savepoint per attempt, not per toolset, keeps the subtransaction count bounded.
-	for attempt := 0; attempt < maxHostedSyncAttempts; attempt++ {
+	for range maxHostedSyncAttempts {
 		rejected, err := syncHostedToolsetsInSavepoint(ctx, tx, auditLogger, syncWrapper, actor, updated, skipped)
 		if err != nil {
 			return err
