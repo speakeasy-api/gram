@@ -168,7 +168,7 @@ what sign-ins request, e.g. "Not used for this connection. Sign-ins request
 read, set by the identity provider's override." The extra sentence drops while
 the pin has unsaved edits. Members with only `mcp:read` on the server see no
 picker; instead the same read-only summary lists what the connected client
-requests (`read`, with "Pinned for this MCP server's URL." with the flag on).
+requests (`read`, with "Pinned for this MCP server's URL.").
 Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
