@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
@@ -46,8 +47,16 @@ vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
 }));
 
 vi.mock("./payg-embedded-checkout-dialog", () => ({
-  PaygEmbeddedCheckoutDialog: ({ clientSecret }: { clientSecret: string }) => (
-    <div role="dialog">Checkout {clientSecret}</div>
+  PaygEmbeddedCheckoutDialog: ({
+    clientSecret,
+    publishableKey,
+  }: {
+    clientSecret: string;
+    publishableKey: string;
+  }) => (
+    <div role="dialog">
+      Checkout {clientSecret} {publishableKey}
+    </div>
   ),
 }));
 
@@ -64,7 +73,11 @@ type CheckoutSession = {
 
 /** The callbacks React Query drops when the calling mount goes away. */
 type MutateCallbacks = {
-  onSuccess: (session: CheckoutSession) => void;
+  onSuccess: (
+    session: CheckoutSession,
+    variables: unknown,
+    context: unknown,
+  ) => void;
   onError: (error: unknown) => void;
 };
 
@@ -131,7 +144,7 @@ function resolveWith(session: CheckoutSession) {
   mocks.mutate.mockImplementation(
     (_variables: unknown, callbacks: MutateCallbacks) => {
       const context = hookOptions()?.onMutate?.();
-      callbacks.onSuccess(session);
+      callbacks.onSuccess(session, {}, context);
       settle(context);
     },
   );
@@ -273,9 +286,11 @@ describe("StartPaygCheckoutCTA", () => {
     fireEvent.click(cta()!);
 
     expect(mocks.mutate).toHaveBeenCalledTimes(1);
-    expect((await screen.findByRole("dialog")).textContent).toContain(
-      CHECKOUT_SESSION.clientSecret,
-    );
+    await waitFor(() => {
+      const dialog = screen.getByRole("dialog");
+      expect(dialog.textContent).toContain(CHECKOUT_SESSION.clientSecret);
+      expect(dialog.textContent).toContain(CHECKOUT_SESSION.publishableKey);
+    });
     expect(alert()).toBeNull();
   });
 
@@ -392,6 +407,25 @@ describe("StartPaygCheckoutCTA", () => {
     expect(mocks.mutate).toHaveBeenCalledTimes(2);
   });
 
+  it("does not open the previous organization's checkout after a switch", () => {
+    let callbacks: MutateCallbacks | undefined;
+    mocks.mutate.mockImplementation((_variables, next: MutateCallbacks) => {
+      dispatchedContext = hookOptions()?.onMutate?.();
+      callbacks = next;
+    });
+    const { rerender } = render(<StartPaygCheckoutCTA />);
+
+    fireEvent.click(cta()!);
+    sessionFor(OTHER_ORGANIZATION_ID);
+    rerender(<StartPaygCheckoutCTA />);
+
+    act(() => {
+      callbacks?.onSuccess(CHECKOUT_SESSION, {}, dispatchedContext);
+    });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("disables the button while the mutation is pending", () => {
     mocks.isPending.mockReturnValue(true);
 
@@ -446,7 +480,11 @@ describe("StartPaygCheckoutCTA", () => {
     fireEvent.click(cta()!);
 
     expect(mocks.mutate).toHaveBeenCalledTimes(2);
-    expect(await screen.findByRole("dialog")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole("dialog").textContent).toContain(
+        CHECKOUT_SESSION.clientSecret,
+      );
+    });
     expect(alert()).toBeNull();
   });
 
@@ -488,7 +526,11 @@ describe("StartPaygCheckoutCTA", () => {
       );
 
       expect(mocks.mutate).toHaveBeenCalledTimes(1);
-      expect(await screen.findByRole("dialog")).toBeTruthy();
+      await waitFor(() => {
+        expect(screen.getByRole("dialog").textContent).toContain(
+          CHECKOUT_SESSION.publishableKey,
+        );
+      });
     });
 
     // The in-app surfaces stay trial-only: a walled-off organization has no

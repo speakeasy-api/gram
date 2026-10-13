@@ -237,8 +237,10 @@ function assertPortalConfiguration(configuration: StripePortalConfiguration) {
   );
 }
 
+// Current CLI builds print test_mode_publishable_key. Older builds print
+// test_mode_pub_key. Either name is the sandbox publishable key.
 const stripePublishableKeyPattern =
-  /test_mode_pub_key\s*=\s*['"]?(pk_test_[A-Za-z0-9_]+)/;
+  /(?:test_mode_publishable_key|test_mode_pub_key)\s*=\s*['"]?(pk_test_[A-Za-z0-9_]+)/;
 
 export function publishableKeyFromStripeCLI(configList: string): string {
   return configList.match(stripePublishableKeyPattern)?.[1] ?? "";
@@ -758,9 +760,9 @@ export async function setupStripe(deps: SetupDependencies) {
     STRIPE_PORTAL_CONFIGURATION_ID: portalConfiguration.id,
     STRIPE_WEBHOOK_SECRET: webhookSecret,
   };
-  if (publishableKey) {
-    settings.STRIPE_PUBLISHABLE_KEY = publishableKey;
-  }
+  // Always write the key this run resolved, including empty, so a publishable
+  // key from an earlier account cannot sit next to a different secret.
+  settings.STRIPE_PUBLISHABLE_KEY = publishableKey ?? "";
   await deps.persist(settings);
 }
 

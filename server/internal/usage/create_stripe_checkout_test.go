@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/url"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -138,7 +139,11 @@ func (c *checkoutStripeClient) CreateCheckoutSession(_ context.Context, input st
 	}
 	checkoutID := fmt.Sprintf("cs_%d", len(c.checkoutResults)+1)
 	checkoutURL := fmt.Sprintf("https://checkout.stripe.test/%d", len(c.checkoutResults)+1)
-	checkoutSecret := fmt.Sprintf("cs_test_secret_%d", len(c.checkoutResults)+1)
+	// Hosted sessions have no client secret. Only embedded sessions (ReturnURL set) do.
+	checkoutSecret := ""
+	if input.ReturnURL != "" {
+		checkoutSecret = fmt.Sprintf("cs_test_secret_%d", len(c.checkoutResults)+1)
+	}
 	c.checkoutResults[input.IdempotencyKey] = checkoutStripeResult{input: input, id: checkoutID, url: checkoutURL, secret: checkoutSecret}
 	if c.afterCheckoutCreate != nil {
 		c.afterCheckoutCreate()
@@ -506,6 +511,19 @@ func seedExpiredCheckoutSession(t *testing.T, ti *stripeCheckoutTestInstance, se
 
 func seedLegacyConvertedCheckout(t *testing.T, ti *stripeCheckoutTestInstance, preparedAt, trialEnd time.Time) (stripeclient.CreateCheckoutSessionInput, stripeCheckoutIntent) {
 	t.Helper()
+	return seedConvertedCheckout(t, ti, preparedAt, trialEnd, true)
+}
+
+// seedLegacyConvertedHostedCheckout stores a pre-deploy hosted receipt: the
+// idempotency key has no embedded marker, and the Stripe input uses success
+// and cancel URLs.
+func seedLegacyConvertedHostedCheckout(t *testing.T, ti *stripeCheckoutTestInstance, preparedAt, trialEnd time.Time) (stripeclient.CreateCheckoutSessionInput, stripeCheckoutIntent) {
+	t.Helper()
+	return seedConvertedCheckout(t, ti, preparedAt, trialEnd, false)
+}
+
+func seedConvertedCheckout(t *testing.T, ti *stripeCheckoutTestInstance, preparedAt, trialEnd time.Time, embedded bool) (stripeclient.CreateCheckoutSessionInput, stripeCheckoutIntent) {
+	t.Helper()
 	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
 		OrganizationID: ti.orgID,
 		Tier:           "enterprise",
@@ -514,6 +532,10 @@ func seedLegacyConvertedCheckout(t *testing.T, ti *stripeCheckoutTestInstance, p
 	trial, err := trialsrepo.New(ti.db).GetTrial(t.Context(), ti.orgID)
 	require.NoError(t, err)
 	intent := newStripeCheckoutIntentForTrial(ti.orgID, preparedAt, &trialEnd, newStripeCheckoutTrialFingerprint(trial))
+	if !embedded {
+		intent.idempotencyKey = strings.Replace(intent.idempotencyKey, ":"+stripeCheckoutEmbeddedMarker+":", ":", 1)
+		require.False(t, checkoutIntentEmbedded(intent.idempotencyKey))
+	}
 	prepared, err := ti.service.prepareStripeCheckoutIntent(
 		t.Context(),
 		ti.orgID,
@@ -1217,6 +1239,38 @@ func TestCreateStripeCheckoutReplaysLegacyConvertedTrialReceiptExactly(t *testin
 	require.NoError(t, err)
 	require.Equal(t, originalIntent.idempotencyKey, stored.StripeCheckoutIdempotencyKey.String)
 	require.Equal(t, "cs_1", stored.StripeCheckoutSessionID.String)
+}
+
+func TestCreateStripeCheckoutReplacesLiveHostedLegacySession(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	ti.service.now = func() time.Time { return now }
+	originalInput, originalIntent := seedLegacyConvertedHostedCheckout(t, ti, now, now.Add(7*24*time.Hour))
+	require.Empty(t, originalInput.ReturnURL)
+	require.NotEmpty(t, originalInput.SuccessURL)
+	require.NotEmpty(t, originalInput.CancelURL)
+
+	checkout, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	require.NotEmpty(t, checkout.ClientSecret)
+
+	require.Equal(t, []string{"cs_1"}, ti.stripe.expiredCheckoutIDs)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 2)
+	require.Equal(t, originalInput, checkouts[0])
+	require.NotEqual(t, originalIntent.idempotencyKey, checkouts[1].IdempotencyKey)
+	require.NotEmpty(t, checkouts[1].ReturnURL)
+	require.Empty(t, checkouts[1].SuccessURL)
+	require.Empty(t, checkouts[1].CancelURL)
+	require.Contains(t, checkouts[1].IdempotencyKey, ":embedded:")
+	require.Nil(t, checkouts[1].TrialEnd)
+
+	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, checkouts[1].IdempotencyKey, stored.StripeCheckoutIdempotencyKey.String)
+	require.NotEqual(t, "cs_1", stored.StripeCheckoutSessionID.String)
 }
 
 func TestCreateStripeCheckoutRejectsLegacyReplayAfterTrialLifecycleChange(t *testing.T) {

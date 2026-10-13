@@ -26,6 +26,11 @@ export default function TrialEnded(): JSX.Element {
   const { session } = useSessionData();
   const trialNow = useTrialNow(session?.trial);
 
+  if (session?.whitelisted) {
+    const slug = session.organization?.slug;
+    return <Navigate to={slug ? `/${slug}/billing` : "/"} replace />;
+  }
+
   if (getTrialLifecycleFromDates(session?.trial, trialNow) !== "expired") {
     return <Navigate to="/" replace />;
   }

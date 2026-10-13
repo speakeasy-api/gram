@@ -196,7 +196,10 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	if err != nil {
 		return nil, oops.E(oops.CodeUnavailable, err, "failed to recover the previous Stripe Checkout intent").LogWarn(ctx, s.logger)
 	}
-	if legacyReplay != nil {
+	// A live embedded receipt can be replayed. A hosted receipt cannot: Stripe
+	// returns no client secret for it, and this endpoint rejects that response.
+	// Leave the new embedded intent so the hosted session is expired and replaced.
+	if legacyReplay != nil && checkoutIntentEmbedded(legacyReplay.intent.idempotencyKey) {
 		proposedIntent = legacyReplay.intent
 	} else if proposedIntent.trialEnd != nil && proposedIntent.trialEnd.Sub(now) <= minimumStripeCheckoutTrialLead {
 		proposedIntent, _ = withStripeCheckoutReturnBase(

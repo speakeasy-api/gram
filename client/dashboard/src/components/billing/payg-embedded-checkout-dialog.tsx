@@ -1,11 +1,12 @@
 import { Dialog } from "@/components/ui/Dialog";
+import { useSession } from "@/contexts/Auth";
 import {
   EmbeddedCheckout,
   EmbeddedCheckoutProvider,
 } from "@stripe/react-stripe-js";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const stripePromises = new Map<string, Promise<Stripe | null>>();
 
@@ -33,11 +34,29 @@ export function PaygEmbeddedCheckoutDialog({
   onClose: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const { refetch } = useSession();
+  const refetchSession = useRef(refetch);
+  refetchSession.current = refetch;
   const [paid, setPaid] = useState(false);
   const fetchClientSecret = useCallback(
     async () => clientSecret,
     [clientSecret],
   );
+
+  // Conversion lands on a webhook, so one refetch at completion usually still
+  // sees the expired trial. A few more lets the trial-ended gate release
+  // without a reload.
+  useEffect(() => {
+    if (!paid) return;
+    const timers = [0, 1000, 2000, 4000].map((delay) =>
+      window.setTimeout(() => {
+        void refetchSession.current();
+      }, delay),
+    );
+    return () => {
+      for (const timer of timers) window.clearTimeout(timer);
+    };
+  }, [paid]);
 
   return (
     <Dialog
@@ -60,7 +79,7 @@ export function PaygEmbeddedCheckoutDialog({
         </Dialog.Header>
         {paid ? (
           <p className="text-sm">
-            Payment received. Your plan updates in a moment.
+            Payment method saved. Your plan updates in a moment.
           </p>
         ) : (
           <EmbeddedCheckoutProvider

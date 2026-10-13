@@ -15,6 +15,10 @@ export type PaygCheckoutSession = {
   publishableKey: string;
 };
 
+type StoredPaygCheckoutSession = PaygCheckoutSession & {
+  organizationId: string;
+};
+
 function usableCheckoutSession(
   session: PaygCheckoutSession | null | undefined,
 ): session is PaygCheckoutSession {
@@ -42,7 +46,15 @@ export function useStartPaygCheckout(activeOrganizationId: string): {
     },
   });
   const [error, setError] = useState<string | null>(null);
-  const [session, setSession] = useState<PaygCheckoutSession | null>(null);
+  const [storedSession, setStoredSession] =
+    useState<StoredPaygCheckoutSession | null>(null);
+  if (storedSession && storedSession.organizationId !== activeOrganizationId) {
+    setStoredSession(null);
+  }
+  const session =
+    storedSession?.organizationId === activeOrganizationId
+      ? storedSession
+      : null;
   const locked = usePaygCheckoutLocked(activeOrganizationId);
 
   const startCheckout = useCallback(() => {
@@ -53,15 +65,15 @@ export function useStartPaygCheckout(activeOrganizationId: string): {
     checkoutMutation.mutate(
       {},
       {
-        onSuccess: (created) => {
-          if (!usableCheckoutSession(created)) {
+        onSuccess: (created, _variables, context) => {
+          if (!usableCheckoutSession(created) || typeof context !== "string") {
             telemetry.capture("payg_checkout_error", {
               error: "unusable checkout session",
             });
             setError(PAYG_CHECKOUT_ERROR_MESSAGE);
             return;
           }
-          setSession(created);
+          setStoredSession({ ...created, organizationId: context });
         },
         onError: (checkoutError: unknown) => {
           telemetry.capture("payg_checkout_error", {
@@ -77,7 +89,7 @@ export function useStartPaygCheckout(activeOrganizationId: string): {
   }, [activeOrganizationId, checkoutMutation, telemetry]);
 
   const dismissCheckout = useCallback(() => {
-    setSession(null);
+    setStoredSession(null);
   }, []);
 
   return {
