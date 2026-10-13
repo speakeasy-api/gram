@@ -6217,8 +6217,6 @@ type SsoSignIn struct {
 	WorkosSessionID string
 	// @access: confidential
 	AuthenticationMethod string
-	// @access: confidential
-	MfaVerified bool
 	// @access: restricted
 	IdpHostedDomain pgtype.Text
 	// @access: opaque-confidential
