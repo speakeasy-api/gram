@@ -28,6 +28,9 @@ on:
       - compose.yml
       - mise.toml
       - .mise-tasks/zero/remap-ports.mts
+      - .mise-tasks/zero/tailscale*
+      - .mise-tasks/zero/tls*
+      - zero
       - .mise-tasks/git/workinit.sh
       - .mise-tasks/start/worker.sh
       - .mise-tasks/git/worksync.sh

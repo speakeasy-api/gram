@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
-# MISE description='Install SSL certs for local development.'
-# MISE hide=true
+#MISE description="Install SSL certs for local development."
+#MISE hide=true
+#USAGE flag "--extra-hosts <hosts>" env="GRAM_SSL_EXTRA_HOSTS" default="" help="Comma-separated additional certificate DNS names and IP addresses."
+
+set -euo pipefail
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 CERT_PATH=${CERT_PATH:-"$ROOT_DIR"/local/ssl/certs/local.pem}
@@ -189,14 +191,16 @@ cert_names() {
 
   # host.docker.internal lets local assistant runtime containers dial the
   # server over TLS through Docker's host gateway alias.
-  printf "%s\n" \
-    "$site_host" \
-    "$server_host" \
-    "localhost" \
-    "host.docker.internal" \
-    "127.0.0.1" \
-    "::1" \
-    | awk 'NF && !seen[$0]++'
+  {
+    printf "%s\n" \
+      "$site_host" \
+      "$server_host" \
+      "localhost" \
+      "host.docker.internal" \
+      "127.0.0.1" \
+      "::1"
+    printf "%s\n" "${usage_extra_hosts-${GRAM_SSL_EXTRA_HOSTS:-}}" | tr ',' '\n'
+  } | awk '{ gsub(/^[[:space:]]+|[[:space:]]+$/, "") } NF && !seen[$0]++'
 }
 
 gen_keypair() {

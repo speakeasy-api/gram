@@ -9,20 +9,26 @@ import { parseTOML } from "confbox";
 const config = parseTOML(
   readFileSync(new URL("../../mise.toml", import.meta.url), "utf8"),
 ) as { env: Record<string, string> };
-const bindings = [
-  ["GRAM_SERVER_ADDRESS", "GRAM_SERVER_PORT", ""],
-  ["GRAM_CONTROL_ADDRESS", "GRAM_CONTROL_PORT", ""],
-  ["GRAM_WORKER_CONTROL_ADDRESS", "GRAM_WORKER_CONTROL_PORT", ""],
-  ["GRAM_STREAMS_CONTROL_ADDRESS", "GRAM_STREAMS_CONTROL_PORT", ""],
-  ["GRAM_ADMIN_SERVER_ADDRESS", "GRAM_ADMIN_PORT", ""],
-  ["GRAM_ADMIN_CONTROL_ADDRESS", "GRAM_ADMIN_CONTROL_PORT", ""],
-  ["MOCK_OIDC_ADDRESS", "GRAM_ADMIN_OIDC_EMULATOR_PORT", ""],
-  ["GRAM_DEVIDP_ADDRESS", "GRAM_DEVIDP_PORT", "127.0.0.1"],
-  ["GRAM_DEVIDP_CONTROL_ADDRESS", "GRAM_DEVIDP_CONTROL_PORT", "127.0.0.1"],
+const publicBindings = [
+  ["GRAM_SERVER_ADDRESS", "GRAM_SERVER_PORT"],
+  ["GRAM_ADMIN_SERVER_ADDRESS", "GRAM_ADMIN_PORT"],
+  ["MOCK_OIDC_ADDRESS", "GRAM_ADMIN_OIDC_EMULATOR_PORT"],
+  ["GRAM_DEVIDP_ADDRESS", "GRAM_DEVIDP_PORT"],
+] as const;
+const controlBindings = [
+  ["GRAM_CONTROL_ADDRESS", "GRAM_CONTROL_PORT"],
+  ["GRAM_WORKER_CONTROL_ADDRESS", "GRAM_WORKER_CONTROL_PORT"],
+  ["GRAM_STREAMS_CONTROL_ADDRESS", "GRAM_STREAMS_CONTROL_PORT"],
+  ["GRAM_ADMIN_CONTROL_ADDRESS", "GRAM_ADMIN_CONTROL_PORT"],
+  ["GRAM_DEVIDP_CONTROL_ADDRESS", "GRAM_DEVIDP_CONTROL_PORT"],
 ] as const;
 const keys = new Set<string>([
   "GRAM_BIND_IP",
-  ...bindings.flatMap(([address, port]) => [address, port]),
+  "GRAM_PYSTREAMS_CONTROL_HOST",
+  ...[...publicBindings, ...controlBindings].flatMap(([address, port]) => [
+    address,
+    port,
+  ]),
 ]);
 
 for (const bindIP of ["", "100.64.0.1", "[::1]"]) {
@@ -52,11 +58,12 @@ for (const bindIP of ["", "100.64.0.1", "[::1]"]) {
     });
     assert.equal(result.status, 0, result.stderr);
     const env = JSON.parse(result.stdout) as Record<string, string>;
-    for (const [address, port, defaultHost] of bindings) {
-      assert.equal(
-        env[address],
-        `${bindIP || defaultHost}:${config.env[port]}`,
-      );
+    for (const [address, port] of publicBindings) {
+      assert.equal(env[address], `${bindIP}:${config.env[port]}`);
     }
+    for (const [address, port] of controlBindings) {
+      assert.equal(env[address], `127.0.0.1:${config.env[port]}`);
+    }
+    assert.equal(env.GRAM_PYSTREAMS_CONTROL_HOST, "127.0.0.1");
   });
 }

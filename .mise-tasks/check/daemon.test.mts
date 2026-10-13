@@ -9,7 +9,7 @@ const daemons = [
   ["admin", "GRAM_ADMIN_CONTROL_ADDRESS", "GRAM_ADMIN_CONTROL_PORT"],
   ["worker", "GRAM_WORKER_CONTROL_ADDRESS", "GRAM_WORKER_CONTROL_PORT"],
   ["streams", "GRAM_STREAMS_CONTROL_ADDRESS", "GRAM_STREAMS_CONTROL_PORT"],
-  ["dev-idp", "GRAM_DEVIDP_ADDRESS", "GRAM_DEVIDP_PORT"],
+  ["dev-idp", "GRAM_DEVIDP_CONTROL_ADDRESS", "GRAM_DEVIDP_CONTROL_PORT"],
   ["mock-oidc", "MOCK_OIDC_ADDRESS", "GRAM_ADMIN_OIDC_EMULATOR_PORT"],
 ] as const;
 
@@ -29,6 +29,8 @@ for (const [name, addressVar, portVar] of daemons) {
     test(`${name} probes ${String(address)} as ${expected}`, () => {
       const env = {
         ...process.env,
+        GRAM_DEVIDP_ADDRESS: "192.0.2.10:34567",
+        GRAM_DEVIDP_PORT: "34567",
         usage_name: name,
         [portVar]: "23456",
         [addressVar]: address,

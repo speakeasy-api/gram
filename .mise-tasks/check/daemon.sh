@@ -22,7 +22,7 @@ probe_address() {
 # is configured.
 case "$usage_name" in
   dev-idp)
-    mise run check:http --url "http://$(probe_address "${GRAM_DEVIDP_ADDRESS:-localhost:$GRAM_DEVIDP_PORT}")/healthz"
+    mise run check:http --url "http://$(probe_address "${GRAM_DEVIDP_CONTROL_ADDRESS:-localhost:$GRAM_DEVIDP_CONTROL_PORT}")/healthz"
     ;;
   dev-idp-dashboard)
     # The app 307-redirects / to /home, so probe /home directly (check:http only accepts 200).
