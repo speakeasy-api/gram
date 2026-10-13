@@ -13835,6 +13835,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_credentials_subject_key
 ON remote_session_ema_credentials (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn)
 WHERE deleted IS FALSE;
 
+-- Replace subject_key once no writer targets it: external credentials keep one
+-- live row per subject, Speakeasy credentials one per authenticated MCP grant.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_credentials_external_subject_key
+ON remote_session_ema_credentials (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn)
+WHERE deleted IS FALSE AND ema_provider = 'external';
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_credentials_speakeasy_subject_key
+ON remote_session_ema_credentials (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn, user_session_id)
+WHERE deleted IS FALSE AND ema_provider = 'speakeasy';
+
 -- Non-partial indexes support FK actions on live and soft-deleted rows alike.
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_project_id_idx
 ON remote_session_ema_credentials (project_id);
