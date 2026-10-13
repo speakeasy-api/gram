@@ -154,9 +154,10 @@ func TestJWTAuth_WithdrawnAssignmentRefusedOnNextCall(t *testing.T) {
 	requireCode(t, err, oops.CodeUnauthorized)
 }
 
-// A deleted project leaves its agent's devices refused, not answered with a
-// server error.
-func TestJWTAuth_AgentInDeletedProjectIsRefused(t *testing.T) {
+// Policy polling does not depend on a project: deleting the project its agent
+// belongs to, which a device's hooks are not bound to, leaves the device
+// polling.
+func TestJWTAuth_AgentInDeletedProjectStillPolls(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
 	device := newWorkloadDeviceInProject(t, ctx, ti, []authz.Grant{authz.NewGrant(authz.ScopeOrgDeviceAgentSync, ti.orgID)}, uuid.NullUUID{UUID: ti.projectID, Valid: true})
@@ -168,7 +169,7 @@ func TestJWTAuth_AgentInDeletedProjectIsRefused(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ti.service.JWTAuth(getPluginsContext(t), device.token, deviceAgentTokenScheme)
-	requireCode(t, err, oops.CodeUnauthorized)
+	require.NoError(t, err)
 }
 
 // A workload whose agent lacks the device-sync grant cannot poll, as an agent

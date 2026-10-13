@@ -22,7 +22,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/agents"
@@ -33,7 +32,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
@@ -108,22 +106,33 @@ func TokenURL(serverURL, organizationID string) string {
 	return strings.TrimSuffix(serverURL, "/") + TokenPath(organizationID)
 }
 
-// Ceiling is the immutable policy every device-agent token acts under in
-// organizationID: polling the device policy, sending hooks, and reading
-// projects. Admission intersects it with the assigned agent's live policy, so
-// it grants nothing the agent lacks.
-func Ceiling(organizationID string) []authz.Grant {
-	return []authz.Grant{
+// Ceiling is the immutable policy a device-agent token acts under in
+// organizationID: polling the device policy and reading projects, plus sending
+// hooks when its admission names a hooks project. Admission intersects it with
+// the assigned agent's live policy, so it grants nothing the agent lacks.
+//
+// The hooks grant is bounded to hooksProjectID. A workload has no Speakeasy
+// permission of its own to inherit a project from, so its admission names one,
+// and hooks ingest checks the requested project against this bound and against
+// the agent's live policy (authz.HooksIngestCheck). No hooks project, no hooks
+// grant.
+func Ceiling(organizationID string, hooksProjectID uuid.NullUUID) []authz.Grant {
+	grants := []authz.Grant{
 		authz.NewGrant(authz.ScopeOrgDeviceAgentSync, organizationID),
-		authz.NewGrant(authz.ScopeOrgHooksIngest, organizationID),
 		authz.NewGrant(authz.ScopeProjectRead, authz.WildcardResource),
 	}
+	if hooksProjectID.Valid {
+		selector := authz.NewSelector(authz.ScopeOrgHooksIngest, organizationID)
+		selector[authz.SelectorKeyProjectID] = hooksProjectID.UUID.String()
+		grants = append(grants, authz.NewGrantWithSelector(authz.ScopeOrgHooksIngest, selector))
+	}
+	return grants
 }
 
 // EncodeCeiling encodes Ceiling with the current delegated policy version.
-func EncodeCeiling(organizationID string) ([]byte, int32, error) {
+func EncodeCeiling(organizationID string, hooksProjectID uuid.NullUUID) ([]byte, int32, error) {
 	version := runtimepolicy.CurrentDelegatedPolicyVersion
-	policy, err := runtimepolicy.NewDelegatedPolicy(version, Ceiling(organizationID))
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, Ceiling(organizationID, hooksProjectID))
 	if err != nil {
 		return nil, 0, fmt.Errorf("build device-agent token policy: %w", err)
 	}
@@ -198,7 +207,18 @@ func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context,
 	if org.DisabledAt.Valid {
 		return ctx, fmt.Errorf("%w: organization is disabled", ErrInvalid)
 	}
-	ceiling, version, err := EncodeCeiling(c.OrganizationID)
+	// Read on every request, like the assignment, so binding the workload to
+	// another project, or to none, applies to tokens already issued.
+	workloadIssuerID, subject, _ := principal.Workload()
+	hooksProjectID, err := workloadidentity.ResolveHooksProject(ctx, i.db, workloadidentity.AssignmentParams{
+		OrganizationID:   c.OrganizationID,
+		WorkloadIssuerID: workloadIssuerID,
+		Subject:          subject,
+	})
+	if err != nil {
+		return ctx, fmt.Errorf("resolve device-agent token hooks project: %w", err)
+	}
+	ceiling, version, err := EncodeCeiling(c.OrganizationID, hooksProjectID)
 	if err != nil {
 		return ctx, err
 	}
@@ -222,12 +242,8 @@ type AssignedAgent struct {
 	// Principal is the agent's canonical principal.
 	Principal urn.Principal
 
-	// Agent is the agent row, for its name and project.
+	// Agent is the agent row, for its name.
 	Agent agentsrepo.Agent
-
-	// ProjectSlug is the slug of the agent's project, or empty when the agent
-	// is not bound to one.
-	ProjectSlug string
 }
 
 // ResolveAssignedAgent returns the agent the authenticated workload in ctx is
@@ -265,20 +281,7 @@ func (i *Issuer) ResolveAssignedAgent(ctx context.Context) (AssignedAgent, error
 		return AssignedAgent{}, fmt.Errorf("resolve assigned agent: %w", err)
 	}
 
-	assignedAgent := AssignedAgent{Principal: principal, Agent: agent, ProjectSlug: ""}
-	if agent.ProjectID.Valid {
-		project, err := projectsrepo.New(i.db).GetProjectByID(ctx, agent.ProjectID.UUID)
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			// A deleted project leaves its agent's devices nowhere to send
-			// to, which is a refusal, not a server failure.
-			return AssignedAgent{}, oops.C(oops.CodeUnauthorized)
-		case err != nil:
-			return AssignedAgent{}, fmt.Errorf("load assigned agent project: %w", err)
-		}
-		assignedAgent.ProjectSlug = project.Slug
-	}
-	return assignedAgent, nil
+	return AssignedAgent{Principal: principal, Agent: agent}, nil
 }
 
 // Admit authenticates raw, admits its workload through engine, and resolves

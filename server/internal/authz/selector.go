@@ -128,6 +128,15 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	},
 }
 
+// scopeAllowsSelectorKey extends allowedSelectorKeys for a single scope whose
+// checks carry a dimension the rest of its family does not. org:hooks_ingest
+// is checked per target project (HooksIngestCheck), so a grant may bound it to
+// one project; no other org scope is checked by project, and a project_id
+// there would read as a restriction nothing enforces.
+func scopeAllowsSelectorKey(scope Scope, key string) bool {
+	return scope == ScopeOrgHooksIngest && key == SelectorKeyProjectID
+}
+
 // ValidateSelector checks that a selector is well-formed for the given scope.
 // Rules:
 //   - resource_kind and resource_id must both be present
@@ -164,7 +173,7 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		if k == SelectorKeyResourceKind || k == SelectorKeyResourceID {
 			continue
 		}
-		if !allowed[k] {
+		if !allowed[k] && !scopeAllowsSelectorKey(scope, k) {
 			return fmt.Errorf("selector key %q is not allowed for scope %q", k, scope)
 		}
 		if k == SelectorKeyDisposition && !validDispositions[v] {

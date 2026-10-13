@@ -561,3 +561,35 @@ func TestCreateDeviceJoinToken_RequiresAPerson(t *testing.T) {
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+// An agent whose hooks grant names another project could enroll a device and
+// then have every hook refused, so the join token is refused up front.
+func TestCreateDeviceJoinToken_RefusesAnAgentWhoseHooksGrantNamesAnotherProject(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	agentID := newAgentWithoutDeviceGrants(t, ctx, ti, "other-project-hooks")
+	seedAgentGrant(t, ctx, ti, agentID, authz.ScopeOrgDeviceAgentSync)
+	selector := authz.NewSelector(authz.ScopeOrgHooksIngest, ti.orgID)
+	selector[authz.SelectorKeyProjectID] = uuid.NewString()
+	selectors, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: ti.orgID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
+		Scope:          string(authz.ScopeOrgHooksIngest),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateDeviceJoinToken(ctx, &gen.CreateDeviceJoinTokenPayload{
+		AgentID:          agentID.String(),
+		HooksProjectID:   ti.projectID.String(),
+		ExpiresInSeconds: 3600,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	require.ErrorContains(t, err, "org:hooks_ingest")
+}

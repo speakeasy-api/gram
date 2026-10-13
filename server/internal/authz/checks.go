@@ -43,6 +43,17 @@ func AssistantCheck(scope Scope, resourceID, projectID string) Check {
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
 }
 
+// HooksIngestCheck builds the org:hooks_ingest check for hooks sent to
+// projectID in organizationID. The project is always a dimension: a grant
+// bounded to one project ({"project_id":P}) admits hooks for P alone, while a
+// grant naming no project covers every project. Every hooks ingest check must
+// carry it, because a grant key the check omits is skipped when matching, so a
+// check without the project would let a project-bounded grant through for any
+// project.
+func HooksIngestCheck(organizationID, projectID string) Check {
+	return Check{Scope: ScopeOrgHooksIngest, ResourceKind: "", ResourceID: organizationID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
+}
+
 func expressionForCheck(check Check) GrantExpression {
 	exclusion, ok := ExclusionScopeFor(check.Scope)
 	if !ok {

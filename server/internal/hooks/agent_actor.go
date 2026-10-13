@@ -66,8 +66,10 @@ var spoofableAttributionKeys = []string{
 	string(attr.WorkloadSubjectKey),
 }
 
-// requireAgentHooksIngest admits an agent actor only when it holds
-// org:hooks_ingest on its organization. Other callers pass unchanged.
+// requireAgentHooksIngest admits an agent actor, or a workload acting for one,
+// only when it holds org:hooks_ingest for the project the request targets.
+// The project is part of the check, so a grant bounded to one project admits
+// hooks for that project alone. Other callers pass unchanged.
 func (s *Service) requireAgentHooksIngest(ctx context.Context) error {
 	if !isAgentActor(ctx) {
 		return nil
@@ -76,7 +78,12 @@ func (s *Service) requireAgentHooksIngest(ctx context.Context) error {
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgHooksIngest, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	// A request bound to no project has nothing to check the grant's project
+	// bound against, so it is refused rather than matched loosely.
+	if authCtx.ProjectID == nil {
+		return oops.E(oops.CodeForbidden, nil, "hooks must name the project they are sent to")
+	}
+	if err := s.authz.Require(ctx, authz.HooksIngestCheck(authCtx.ActiveOrganizationID, authCtx.ProjectID.String())); err != nil {
 		return fmt.Errorf("authorize agent hooks ingest: %w", err)
 	}
 	return nil

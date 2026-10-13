@@ -126,6 +126,7 @@ func (f deviceAgentGrantFixture) registerDevice(t *testing.T) registeredDevice {
 
 	join, err := policy.CreateDeviceJoinToken(f.ctx, &gen.CreateDeviceJoinTokenPayload{
 		AgentID:          f.agentID.String(),
+		HooksProjectID:   f.fx.target.ProjectID.String(),
 		ExpiresInSeconds: 600,
 		SessionToken:     nil,
 		ApikeyToken:      nil,

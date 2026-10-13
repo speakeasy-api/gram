@@ -66,15 +66,21 @@ var (
 var deviceAgentScopes = []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest}
 
 // requireDeviceAgentGrants refuses a join token for an agent whose live policy
-// lacks the device-agent scopes, naming each one missing.
-func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID string, agentID uuid.UUID) error {
+// lacks the device-agent scopes, naming each one missing. Hooks are checked for
+// hooksProjectID, the project the device will send them to, so an agent bound
+// to another project is refused here rather than on every send.
+func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID string, agentID uuid.UUID, hooksProjectID uuid.UUID) error {
 	grants, err := runtimepolicy.LoadAgentPolicy(ctx, s.db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading agent policy").LogError(ctx, s.logger)
 	}
 	var missing []string
 	for _, scope := range deviceAgentScopes {
-		if !authz.GrantsSatisfy(grants, authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}) {
+		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}
+		if scope == authz.ScopeOrgHooksIngest {
+			check = authz.HooksIngestCheck(organizationID, hooksProjectID.String())
+		}
+		if !authz.GrantsSatisfy(grants, check) {
 			missing = append(missing, string(scope))
 		}
 	}
@@ -151,12 +157,12 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		}
 	}
 
-	if err := s.requireDeviceAgentGrants(ctx, t.organizationID, agent.ID); err != nil {
+	hooksProject, err := s.resolveHooksProject(ctx, t.organizationID, payload.HooksProjectID)
+	if err != nil {
 		return nil, err
 	}
 
-	hooksProject, err := s.resolveHooksProject(ctx, t.organizationID, payload.HooksProjectID)
-	if err != nil {
+	if err := s.requireDeviceAgentGrants(ctx, t.organizationID, agent.ID, hooksProject.ID); err != nil {
 		return nil, err
 	}
 
@@ -276,7 +282,7 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	// Re-checked too: grants removed since the token was issued would enroll a
 	// device every request of which is refused. Failing here rolls back the
 	// redemption, so the token is not spent.
-	if err := s.requireDeviceAgentGrants(ctx, org, agent.ID); err != nil {
+	if err := s.requireDeviceAgentGrants(ctx, org, agent.ID, joinToken.HooksProjectID); err != nil {
 		return nil, err
 	}
 

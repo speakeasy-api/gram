@@ -382,22 +382,14 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 	return admitted, nil
 }
 
-// authorizeWorkloadProject resolves the project a workload's hooks belong to:
-// its assigned agent's project when the agent is bound to one, which the
-// request may name but not override, and otherwise the Gram-Project the
-// request sends. The workload stays the actor and acts for the agent, which
-// must hold the hooks grant like an agent key.
+// authorizeWorkloadProject binds a workload's hooks to the Gram-Project the
+// request names. Nothing is inferred: whether the workload may send hooks
+// there is decided by requireAgentHooksIngest, against the hooks grant its
+// admission bounds to one project and against its agent's live policy. The
+// workload stays the actor and acts for the agent.
 func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	agent, ok := deviceagenttoken.AssignedAgentFromContext(ctx)
-	if !ok {
+	if _, ok := deviceagenttoken.AssignedAgentFromContext(ctx); !ok {
 		return ctx, oops.C(oops.CodeUnauthorized)
-	}
-	if agent.ProjectSlug != "" {
-		if key != "" && key != agent.ProjectSlug {
-			err := oops.E(oops.CodeForbidden, nil, "the device's agent belongs to another project")
-			return deviceagenttoken.WithAuthFailure(ctx, err), err
-		}
-		key = agent.ProjectSlug
 	}
 
 	authorized, err := s.auth.Authorize(ctx, key, schema)

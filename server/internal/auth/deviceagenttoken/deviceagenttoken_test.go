@@ -53,18 +53,46 @@ func TestNew_NilSignerServesNothing(t *testing.T) {
 func TestEncodeCeiling_CarriesTheOrganizationsDeviceAgentGrants(t *testing.T) {
 	t.Parallel()
 
-	encoded, version, err := deviceagenttoken.EncodeCeiling("org-123")
+	hooksProject := uuid.New()
+	encoded, version, err := deviceagenttoken.EncodeCeiling("org-123", uuid.NullUUID{UUID: hooksProject, Valid: true})
 	require.NoError(t, err)
 	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(version), encoded)
 	require.NoError(t, err)
 
 	grants := policy.RuntimeGrants()
-	for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
-		require.True(t, authz.GrantsSatisfy(grants, authz.Check{Scope: scope, ResourceKind: "", ResourceID: "org-123", Dimensions: nil}), scope)
-		require.False(t, authz.GrantsSatisfy(grants, authz.Check{Scope: scope, ResourceKind: "", ResourceID: "org-other", Dimensions: nil}), "%s must be scoped to its organization", scope)
+	sync := authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: "org-123", Dimensions: nil}
+	require.True(t, authz.GrantsSatisfy(grants, sync))
+	require.False(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: "org-other", Dimensions: nil}), "device sync must be scoped to its organization")
+
+	// The hooks grant decodes with its project bound: hooks for that project
+	// pass, hooks for any other project or organization do not.
+	require.True(t, authz.GrantsSatisfy(grants, authz.HooksIngestCheck("org-123", hooksProject.String())))
+	require.False(t, authz.GrantsSatisfy(grants, authz.HooksIngestCheck("org-123", uuid.NewString())), "hooks must be bounded to the admission's project")
+	require.False(t, authz.GrantsSatisfy(grants, authz.HooksIngestCheck("org-other", hooksProject.String())), "hooks must be scoped to its organization")
+	var bounded bool
+	for _, grant := range grants {
+		if grant.Scope == authz.ScopeOrgHooksIngest {
+			require.Equal(t, hooksProject.String(), grant.Selector[authz.SelectorKeyProjectID])
+			bounded = true
+		}
 	}
+	require.True(t, bounded, "the ceiling must carry a project-bounded hooks grant")
+
 	require.True(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: uuid.NewString(), Dimensions: nil}))
 	require.False(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: uuid.NewString(), Dimensions: nil}), "the ceiling must not reach MCP")
+}
+
+func TestEncodeCeiling_WithoutAHooksProjectGrantsNoHooks(t *testing.T) {
+	t.Parallel()
+
+	encoded, version, err := deviceagenttoken.EncodeCeiling("org-123", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	require.NoError(t, err)
+	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(version), encoded)
+	require.NoError(t, err)
+
+	grants := policy.RuntimeGrants()
+	require.True(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: "org-123", Dimensions: nil}), "policy polling does not depend on a hooks project")
+	require.False(t, authz.GrantsSatisfy(grants, authz.HooksIngestCheck("org-123", uuid.NewString())))
 }
 
 func TestBearerChallenge_ChallengesARefusedDeviceAgentToken(t *testing.T) {
