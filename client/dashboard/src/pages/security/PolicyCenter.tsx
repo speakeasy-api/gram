@@ -109,7 +109,7 @@ import {
   type PolicyCenterTab,
 } from "./policy-center-tabs";
 import { ShadowAITargetsTab } from "./ShadowAITargetsTab";
-import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
+import { DETECTION_RULES_TAB_RULE_IDS } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
@@ -558,7 +558,7 @@ function truncateSessionID(sessionID: string): string {
  *  Rule-activity questions route through the finding-level tools. */
 const DETECTION_RULES_INSIGHTS_CONTEXT = [
   "Page: Guardrails, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
-  `Built-in rule ids: ${BUILTIN_RULE_ID_LIST.join(", ")}.`,
+  `Built-in rule ids: ${DETECTION_RULES_TAB_RULE_IDS.join(", ")}.`,
   "Custom rules are organization-defined CEL expressions with ids prefixed 'custom.'; list them with listCustomDetectionRules.",
   "For rule activity, query findings by rule_id via listRiskResultsForAgent (match content is redacted).",
   "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
