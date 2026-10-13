@@ -380,7 +380,10 @@ export default function DeployStep({
     return (
       <Stack direction="horizontal" gap={1} align="center">
         <Spinner />
-        <Text>Deploying your API. This may take a few seconds.</Text>
+        <Text>
+          Deploying a virtual MCP endpoint for your API. This may take a few
+          seconds.
+        </Text>
       </Stack>
     );
   }
