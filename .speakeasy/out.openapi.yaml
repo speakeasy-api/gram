@@ -111401,6 +111401,7 @@ components:
             - tags
             - computed_status
             - computed
+            - server_attachment
             - checklist_item
         value:
           type: string

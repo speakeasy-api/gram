@@ -86,6 +86,7 @@ setup:
           href: https://claude.ai/admin-settings/claude-tag/federated-cloud-access
           label: Open Claude Tag federated access settings
         - type: computed_status
+        - type: server_attachment
         - type: checklist_item
           label: Token endpoint
           value: token_endpoint

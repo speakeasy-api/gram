@@ -65,3 +65,11 @@ it("treats an unknown step id as absent", () => {
   expect(stepIndexById(definition, "nope")).toBe(-1);
   expect(stepIndexById(definition, null)).toBe(-1);
 });
+
+it("never holds a console step back on attaching a server", () => {
+  const console = definition.steps[stepIndexById(definition, "console")]!;
+  expect(
+    console.blocks.some((block) => block.type === "server_attachment"),
+  ).toBe(true);
+  expect(stepComplete(console, empty)).toBe(true);
+});

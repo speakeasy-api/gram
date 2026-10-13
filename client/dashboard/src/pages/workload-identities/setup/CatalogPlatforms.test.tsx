@@ -41,6 +41,11 @@ vi.mock("@/routes", () => ({
     },
   }),
 }));
+// Every step renders inside the sheet, so the console step's attachment block
+// would otherwise query MCP servers here; it has its own tests.
+vi.mock("./ServerAttachment", () => ({
+  ServerAttachment: () => null,
+}));
 vi.mock("../WorkloadIssuerDetail", () => ({
   CatalogEmptyState: ({
     catalog,
@@ -104,6 +109,15 @@ vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
     isError: false,
   }),
 }));
+vi.mock(
+  "@gram/client/react-query/createSharedOrganizationUserSessionIssuer.js",
+  () => ({
+    useCreateSharedOrganizationUserSessionIssuerMutation: () => ({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    }),
+  }),
+);
 vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
   useRegisterWorkloadIssuerMutation: () => ({ mutateAsync: vi.fn() }),
 }));

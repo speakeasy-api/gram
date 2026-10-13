@@ -21,6 +21,7 @@ export const WorkloadPlatformBlockType = {
   Tags: "tags",
   ComputedStatus: "computed_status",
   Computed: "computed",
+  ServerAttachment: "server_attachment",
   ChecklistItem: "checklist_item",
 } as const;
 /**

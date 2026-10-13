@@ -45,6 +45,9 @@ export function stepComplete(step: SetupStep, inputs: StepInputs): boolean {
       case "link":
       case "computed_status":
       case "computed":
+      // Attaching is optional here: the server may already be attached, or
+      // attached later from its own settings.
+      case "server_attachment":
       // Ticked as the operator follows along; never required to continue.
       case "checklist_item":
         return true;

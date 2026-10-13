@@ -1,3 +1,4 @@
+import { RequireScope } from "@/components/require-scope";
 import {
   ChecklistItem,
   type ChecklistItemDetail,
@@ -21,7 +22,7 @@ import { Text } from "@/components/ui/Text";
 import { type ReactNode, useState } from "react";
 import type { CatalogVariable, ChecklistItemBlock } from "./definition";
 import { tagsProblem } from "../tagLimits";
-import type { SetupValues } from "./setupValues";
+import type { IssuerCreation, SetupValues } from "./setupValues";
 import { variableProblem } from "./template";
 
 /**
@@ -309,9 +310,14 @@ export function ComputedStatus({
 }): JSX.Element {
   if (setupValues.unavailableReason !== null) {
     return (
-      <Alert variant="info" alignTop>
-        <div className="text-sm">{setupValues.unavailableReason}</div>
-      </Alert>
+      <Stack gap={2}>
+        <Alert variant="info" alignTop>
+          <div className="text-sm">{setupValues.unavailableReason}</div>
+        </Alert>
+        {setupValues.creation.offered && (
+          <CreateAuthorizationServer creation={setupValues.creation} />
+        )}
+      </Stack>
     );
   }
   return (
@@ -340,6 +346,50 @@ export function ComputedStatus({
       <Text muted small>
         Tokens are issued for the organization or project that owns this issuer.
       </Text>
+    </Stack>
+  );
+}
+
+/**
+ * Creates an organization-owned shared authorization server with the
+ * server's own defaults. Only an organization administrator may; anyone else
+ * sees why the button is disabled.
+ */
+function CreateAuthorizationServer({
+  creation,
+}: {
+  creation: IssuerCreation;
+}): JSX.Element {
+  return (
+    <Stack gap={2}>
+      <div>
+        <RequireScope
+          scope="org:admin"
+          level="component"
+          reason="Ask an organization administrator to create it."
+        >
+          {({ disabled }) => (
+            <Button
+              size="sm"
+              disabled={disabled || creation.creating}
+              onClick={() => void creation.create()}
+            >
+              <Button.Text>
+                {creation.creating
+                  ? "Creating…"
+                  : creation.error === null
+                    ? "Create authorization server"
+                    : "Try again"}
+              </Button.Text>
+            </Button>
+          )}
+        </RequireScope>
+      </div>
+      {creation.error !== null && (
+        <Text role="alert" small destructive>
+          {creation.error}
+        </Text>
+      )}
     </Stack>
   );
 }

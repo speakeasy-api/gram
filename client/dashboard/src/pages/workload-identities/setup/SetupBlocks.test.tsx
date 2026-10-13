@@ -21,7 +21,14 @@ const setupValues: SetupValues = {
   unavailableReason: null,
   endpointGroups: [],
   selectedEndpointId: "",
+  selectedEndpointProjectId: "",
   onEndpointChange: () => {},
+  creation: {
+    offered: false,
+    creating: false,
+    error: null,
+    create: async () => {},
+  },
 };
 
 it("shows the selected issuer for the token endpoint", () => {
