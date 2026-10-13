@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 
 import { OrgSidebar } from "./org-sidebar";
 import type { ReactNode } from "react";
@@ -118,15 +118,17 @@ vi.mock("@/components/require-scope", () => ({
 }));
 vi.mock("@/components/scope-gated-nav-group", () => ({
   ScopeGatedNavGroup: ({
+    label: groupLabel,
     items,
   }: {
+    label: string;
     items: {
       item: { title: string; href: () => string };
       label?: string;
       scope?: string | string[];
     }[];
   }) => (
-    <>
+    <nav aria-label={groupLabel}>
       {items.map(({ item, label, scope }) => (
         <a
           key={item.title}
@@ -137,7 +139,7 @@ vi.mock("@/components/scope-gated-nav-group", () => ({
           {label ?? item.title}
         </a>
       ))}
-    </>
+    </nav>
   ),
 }));
 vi.mock("./sidebar-user-menu", () => ({ SidebarUserMenu: () => null }));
@@ -191,7 +193,9 @@ it("lists Speakeasy authorization servers under Settings only once rolled out", 
 
   mocks.userSessionIssuersFlag = "enabled";
   render(<OrgSidebar />);
-  const link = screen.getByRole("link", { name: "userSessionIssuers" });
+  const link = within(
+    screen.getByRole("navigation", { name: "Settings" }),
+  ).getByRole("link", { name: "userSessionIssuers" });
   expect(link.textContent).toBe("Authorization Servers");
   expect(link.getAttribute("data-scope")).toBe("org:read org:admin");
 });

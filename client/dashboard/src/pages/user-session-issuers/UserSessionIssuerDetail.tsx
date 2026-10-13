@@ -51,8 +51,8 @@ function UserSessionIssuerDetailContent(): JSX.Element {
     retry: false,
   });
   const issuer = query.data;
-  // A failed refresh keeps the page it already has; only a missing one, or
-  // one that never loaded, replaces it.
+  // A removed authorization server replaces the page even after it loaded;
+  // any other failed refresh keeps the page it already has.
   const missing =
     query.error instanceof GramError && query.error.statusCode === 404;
 
@@ -62,22 +62,20 @@ function UserSessionIssuerDetailContent(): JSX.Element {
       layout="scroll"
       loading={query.isPending}
       notFound={
-        issuer
-          ? undefined
-          : missing
+        missing
+          ? {
+              title: "Authorization server not found",
+              description:
+                "It may have been consolidated into another one or removed.",
+              backTo: orgRoutes.userSessionIssuers.href(),
+            }
+          : query.isError && !issuer
             ? {
-                title: "Authorization server not found",
-                description:
-                  "It may have been consolidated into another one or removed.",
+                title: "Couldn't load this authorization server",
+                description: "Reload the page to try again.",
                 backTo: orgRoutes.userSessionIssuers.href(),
               }
-            : query.isError
-              ? {
-                  title: "Couldn't load this authorization server",
-                  description: "Reload the page to try again.",
-                  backTo: orgRoutes.userSessionIssuers.href(),
-                }
-              : undefined
+            : undefined
       }
       hero={issuer ? <IssuerHero issuer={issuer} /> : undefined}
       sections={
@@ -141,7 +139,7 @@ function SignInSection({ issuer }: { issuer: UserSessionIssuer }): JSX.Element {
           </InfoField>
           <InfoField label="Authentication host">
             <InfoText>
-              {issuer.useAuthenticationHost ? "Used" : "Not used"}
+              {issuer.useAuthenticationHost ? "Opted in" : "Not opted in"}
             </InfoText>
           </InfoField>
           {issuer.projectName ? (
@@ -383,6 +381,14 @@ function ConsolidateFromDetail({
         ...projectTier.items,
       ])}
       candidatesLoading={organizationTier.isLoading || projectTier.isLoading}
+      onRetryCandidates={
+        organizationTier.isError || projectTier.isError
+          ? () => {
+              organizationTier.retry();
+              projectTier.retry();
+            }
+          : undefined
+      }
       onClose={onClose}
       onConsolidated={onConsolidated}
     />

@@ -6,6 +6,7 @@ import {
   consolidationTargets,
   describeMismatch,
   settingValue,
+  unavailableReason,
 } from "./issuerDisplay";
 
 function issuer(id: string, projectId = ""): UserSessionIssuer {
@@ -71,6 +72,20 @@ describe("describeMismatch", () => {
     });
   });
 
+  it("says two different identity provider clients differ", () => {
+    expect(
+      describeMismatch({
+        field: "trusted_remote_session_client_id",
+        sourceValue: "a",
+        targetValue: "b",
+      }),
+    ).toEqual({
+      label: "Trusted identity provider client",
+      from: "One client",
+      to: "A different one",
+    });
+  });
+
   it("keeps two values that read the same as they are", () => {
     expect(
       describeMismatch({
@@ -110,6 +125,15 @@ describe("display helpers", () => {
     expect(
       authorizationServerModeLabel({ authorizationServerMode: "endpoint" }),
     ).toBe("One per MCP server");
+  });
+
+  it("words why a shared authorization server is unavailable", () => {
+    expect(
+      unavailableReason({
+        authorizationServerUnavailableReason: "host_not_served",
+      }),
+    ).toBe("This deployment doesn't serve its address");
+    expect(unavailableReason({})).toBe("It isn't available right now");
   });
 
   it("words a setting on its own", () => {

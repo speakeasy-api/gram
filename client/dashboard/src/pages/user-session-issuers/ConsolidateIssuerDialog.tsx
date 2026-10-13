@@ -32,6 +32,7 @@ export function ConsolidateIssuerDialog({
   source,
   candidates,
   candidatesLoading = false,
+  onRetryCandidates,
   onClose,
   onConsolidated,
 }: {
@@ -39,6 +40,11 @@ export function ConsolidateIssuerDialog({
   candidates: UserSessionIssuer[];
   /** Still loading candidates: say so rather than that there are none. */
   candidatesLoading?: boolean;
+  /**
+   * Set when candidates failed to load. The list may be partial, so nothing
+   * is offered until a retry loads it all.
+   */
+  onRetryCandidates?: () => void;
   onClose: () => void;
   /** Called with the surviving authorization server. */
   onConsolidated?: (target: UserSessionIssuer) => void;
@@ -98,6 +104,15 @@ export function ConsolidateIssuerDialog({
             <Text small muted>
               Loading authorization servers…
             </Text>
+          ) : onRetryCandidates ? (
+            <Stack direction="horizontal" align="center" gap={3}>
+              <Text small className="text-destructive">
+                Couldn't load every authorization server.
+              </Text>
+              <Button variant="secondary" size="sm" onClick={onRetryCandidates}>
+                <Button.Text>Retry</Button.Text>
+              </Button>
+            </Stack>
           ) : candidates.length === 0 ? (
             <Text small muted>
               No other authorization server can take this one's place. The
@@ -185,6 +200,29 @@ function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/** Everything consolidating moves; the rarer kinds only when there are any. */
+function moves(
+  preflight: OrganizationUserSessionIssuerMigratePreflight,
+): string {
+  const parts = [
+    plural(preflight.clientCount, "client", "clients"),
+    plural(preflight.sessionCount, "session", "sessions"),
+    preflight.consentCount > 0 &&
+      plural(preflight.consentCount, "sign-in approval", "sign-in approvals"),
+    preflight.cimdClientCount > 0 &&
+      plural(
+        preflight.cimdClientCount,
+        "allowed client document",
+        "allowed client documents",
+      ),
+    preflight.remoteSessionCount > 0 &&
+      plural(preflight.remoteSessionCount, "linked account", "linked accounts"),
+  ].filter((part): part is string => typeof part === "string");
+  return parts.length === 1
+    ? parts[0]!
+    : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+}
+
 /** What the server says consolidating moves, blocks, and changes. */
 function ConsolidateImpact({
   preflight,
@@ -233,9 +271,7 @@ function ConsolidateImpact({
   return (
     <Stack gap={3}>
       <Text small muted>
-        {plural(preflight.clientCount, "client", "clients")} and{" "}
-        {plural(preflight.sessionCount, "session", "sessions")} move to the
-        target.
+        {moves(preflight)} move to the target.
       </Text>
 
       {blockers.length > 0 && (

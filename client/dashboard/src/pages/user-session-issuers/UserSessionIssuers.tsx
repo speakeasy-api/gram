@@ -115,6 +115,14 @@ function UserSessionIssuersOverview(): JSX.Element {
           candidatesLoading={
             organizationTier.isLoading || projectTier.isLoading
           }
+          onRetryCandidates={
+            organizationTier.isError || projectTier.isError
+              ? () => {
+                  organizationTier.retry();
+                  projectTier.retry();
+                }
+              : undefined
+          }
           onClose={() => setConsolidateSource(null)}
         />
       )}

@@ -17,10 +17,14 @@ export function authorizationServerModeLabel(
 export function unavailableReason(
   issuer: Pick<UserSessionIssuer, "authorizationServerUnavailableReason">,
 ): string {
-  return issuer.authorizationServerUnavailableReason ===
-    "pinned_issuer_url_invalid"
-    ? "Its fixed issuer URL doesn't belong to it"
-    : "This deployment doesn't serve its address";
+  const reason = issuer.authorizationServerUnavailableReason;
+  if (reason === "pinned_issuer_url_invalid") {
+    return "Its fixed issuer URL doesn't belong to it";
+  }
+  if (reason === "host_not_served") {
+    return "This deployment doesn't serve its address";
+  }
+  return "It isn't available right now";
 }
 
 /**
@@ -105,11 +109,11 @@ const MISMATCH_FIELDS: Record<
   },
 };
 
-/** Settings worded only by whether they are configured. */
-const TRUSTED_PROVIDER_FIELDS = new Set([
-  "trusted_remote_session_issuer_id",
-  "trusted_remote_session_client_id",
-]);
+/** Settings worded only by whether they are configured, by what they name. */
+const CONFIGURED_ONLY_FIELDS: Record<string, string> = {
+  trusted_remote_session_issuer_id: "provider",
+  trusted_remote_session_client_id: "client",
+};
 
 /** How one of an authorization server's settings reads on the page. */
 export function settingValue(field: string, raw: string): string {
@@ -132,10 +136,11 @@ export function describeMismatch(mismatch: UserSessionIssuerFieldMismatch): {
   }
   let from = field.value(mismatch.sourceValue);
   let to = field.value(mismatch.targetValue);
-  // Two different identity providers read the same once reduced to whether
-  // one is configured; say they differ instead.
-  if (from === to && TRUSTED_PROVIDER_FIELDS.has(mismatch.field)) {
-    from = "One provider";
+  // Two different identity providers, or clients, read the same once reduced
+  // to whether one is configured; say they differ instead.
+  const noun = CONFIGURED_ONLY_FIELDS[mismatch.field];
+  if (from === to && noun) {
+    from = `One ${noun}`;
     to = "A different one";
   }
   return { label: field.label, from, to };

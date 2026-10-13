@@ -1,5 +1,6 @@
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useMoveOrganizationUserSessionIssuerMutation } from "@gram/client/react-query/moveOrganizationUserSessionIssuer.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -40,7 +41,9 @@ export function MakeOrganizationWideDialog({
       isPending={move.isPending}
       error={
         move.isError
-          ? "Couldn't make it organization-wide. Try again."
+          ? move.error instanceof GramError && move.error.statusCode === 409
+            ? "Speakeasy manages this authorization server, or it changed while saving, so it can't be made organization-wide. Reload the page to check it."
+            : "Couldn't make it organization-wide. Try again."
           : undefined
       }
       onConfirm={() =>

@@ -24,19 +24,17 @@ export function useIssuerTier(tier: "organization" | "project"): IssuerTier {
     undefined,
     { throwOnError: false },
   );
-  const {
-    hasNextPage,
-    isFetchingNextPage,
-    isFetchNextPageError,
-    fetchNextPage,
-  } = query;
+  const { hasNextPage, isFetchNextPageError, fetchNextPage } = query;
   // A failed page stops the walk: the last good page still reports a next
   // one, so retrying on every settle would loop without end.
   const draining = !!hasNextPage && !isFetchNextPageError;
 
+  // Wait out any fetch, not only a next page: paging during a refresh would
+  // interrupt it and leave stale pages behind.
+  const { isFetching } = query;
   useEffect(() => {
-    if (draining && !isFetchingNextPage) void fetchNextPage();
-  }, [draining, isFetchingNextPage, fetchNextPage]);
+    if (draining && !isFetching) void fetchNextPage();
+  }, [draining, isFetching, fetchNextPage]);
 
   const items = useMemo(
     () => query.data?.pages.flatMap((page) => page.result.items) ?? [],

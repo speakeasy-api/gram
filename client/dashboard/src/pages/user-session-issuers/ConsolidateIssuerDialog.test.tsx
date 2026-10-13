@@ -2,6 +2,7 @@ import type { OrganizationUserSessionIssuerMigratePreflight } from "@gram/client
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 
 const testState = vi.hoisted(() => ({
@@ -191,11 +192,69 @@ describe("ConsolidateIssuerDialog", () => {
 
   it("clears a refusal when another target is chosen", () => {
     testState.preflight = preflight({});
-    testState.migrateError = new Error("conflict");
+    testState.migrateError = new Error("failed");
+    testState.reset.mockImplementation(() => {
+      testState.migrateError = null;
+    });
+    render(
+      <ConsolidateIssuerDialog
+        source={issuer("source")}
+        candidates={[issuer("target"), issuer("other")]}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("Couldn't consolidate. Try again.")).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("Consolidate into"), {
+      target: { value: "other" },
+    });
+    expect(screen.queryByText("Couldn't consolidate. Try again.")).toBeNull();
+  });
+
+  it("says when the preview went stale", () => {
+    testState.preflight = preflight({});
+    testState.migrateError = Object.assign(
+      Object.create(GramError.prototype) as GramError,
+      { statusCode: 409, message: "conflict" },
+    );
     renderDialog();
 
-    expect(screen.getByText("Couldn't consolidate. Try again.")).toBeDefined();
-    expect(testState.reset).toHaveBeenCalled();
+    expect(
+      screen.getByText(/Something changed since this preview/),
+    ).toBeDefined();
+  });
+
+  it("names everything that moves", () => {
+    testState.preflight = preflight({
+      clientCount: 2,
+      sessionCount: 3,
+      remoteSessionCount: 1,
+    });
+    renderDialog();
+
+    expect(
+      screen.getByText(
+        "2 clients, 3 sessions and 1 linked account move to the target.",
+      ),
+    ).toBeDefined();
+  });
+
+  it("offers nothing until every candidate loads", () => {
+    const retry = vi.fn();
+    render(
+      <ConsolidateIssuerDialog
+        source={issuer("source")}
+        candidates={[issuer("target")]}
+        onRetryCandidates={() => {
+          retry();
+        }}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Consolidate into")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalled();
   });
 
   it("waits for candidates before saying there are none", () => {
