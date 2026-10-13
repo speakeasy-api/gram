@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
 	"github.com/google/uuid"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
 // ahpTestAuthorizer accepts the key "example" for the project slug "chosen".
@@ -138,6 +140,38 @@ func TestAHPToolBeforeAllow(t *testing.T) {
 	w := ahpRequest(t, h, "hooks/intercept", ahpToolEvent("tool.before"), []string{"deny"}, ahpAuthHeaders)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.NotContains(t, w.Body.String(), `"deny"`)
+}
+
+func TestAHPObservationPersistsWithoutEvaluation(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	auth := hookAuthContext(t, ctx)
+	ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+	scanner := &recordingRiskScanner{}
+	ti.service.riskScanner = scanner
+	h, err := ti.service.ahpHandler()
+	require.NoError(t, err)
+
+	start := time.Now().Add(-time.Minute)
+	event := ahpToolEvent("tool.before")
+	event["time"] = time.Now().UTC().Format(time.RFC3339)
+	w := ahpRequest(t, h, "hooks/observe", event, nil, ahpAuthHeaders)
+	require.Equal(t, http.StatusNoContent, w.Code, w.Body.String())
+	require.Zero(t, scanner.scans)
+
+	require.Eventually(t, func() bool {
+		logs, err := chClient.ListTelemetryLogs(ctx, telemetryrepo.ListTelemetryLogsParams{
+			GramProjectID: auth.ProjectID.String(),
+			TimeStart:     start.UnixNano(),
+			TimeEnd:       time.Now().Add(time.Minute).UnixNano(),
+			GramURNs:      nil,
+			SortOrder:     "desc",
+			Cursor:        "",
+			Limit:         10,
+		})
+		return err == nil && len(logs) == 1
+	}, 2*time.Second, 50*time.Millisecond, "expected the observed tool request row")
 }
 
 func TestAHPToolAfterPayload(t *testing.T) {

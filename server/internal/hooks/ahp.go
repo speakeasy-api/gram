@@ -39,8 +39,9 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 		Intercept: ahpserver.InterceptHandlers{ //nolint:exhaustruct // unhandled events are rejected as unsupported
 			ToolBefore: func(ctx context.Context, c ahpserver.InterceptContext[ahp.ToolBeforeEvent, ahp.ToolBeforeCapabilities]) (ahpserver.ToolBeforeReply, error) {
 				var reply ahpserver.ToolBeforeReply
-				reason, err := s.ingestAHP(ctx, ahpToolBeforePayload(c.Event))
-				if err != nil || reason == "" || !slices.Contains(c.Capabilities.Effects, ahp.ToolBeforeCapabilitiesEffectsValueItemDeny) {
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.ToolBeforeCapabilitiesEffectsValueItemDeny)
+				reason, err := s.ingestAHP(ctx, ahpToolBeforePayload(c.Event), !canDeny)
+				if err != nil || reason == "" {
 					return reply, err
 				}
 				reply.Effects = []*ahp.ToolBeforeEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
@@ -52,34 +53,46 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				if payload == nil {
 					return reply, nil
 				}
-				reason, err := s.ingestAHP(ctx, payload)
-				if err != nil || reason == "" || !slices.Contains(c.Capabilities.Effects, ahp.TurnStartCapabilitiesEffectsValueItemDeny) {
+				canDeny := slices.Contains(c.Capabilities.Effects, ahp.TurnStartCapabilitiesEffectsValueItemDeny)
+				reason, err := s.ingestAHP(ctx, payload, !canDeny)
+				if err != nil || reason == "" {
 					return reply, err
 				}
 				reply.Effects = []*ahp.TurnStartEffect{{DenyEffect: ahp.Some(ahpDeny(reason))}}
 				return reply, nil
 			},
 		},
-		// tool.before and turn.start are evaluated only when intercepted:
-		// canonical ingest records policy blocks, which an observation
-		// cannot enforce.
+		// Observations are recorded without policy evaluation: the harness
+		// has already acted, so a block could not be enforced.
 		Observe: ahpserver.ObserveHandlers{ //nolint:exhaustruct // unobserved events are acknowledged and dropped
+			ToolBefore: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ToolBeforeEvent]) error {
+				_, err := s.ingestAHP(ctx, ahpToolBeforePayload(c.Event), true)
+				return err
+			},
+			TurnStart: func(ctx context.Context, c ahpserver.ObserveContext[ahp.TurnStartEvent]) error {
+				payload := ahpTurnStartPayload(c.Event)
+				if payload == nil {
+					return nil
+				}
+				_, err := s.ingestAHP(ctx, payload, true)
+				return err
+			},
 			ToolAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ToolAfterEvent]) error {
 				payload := ahpToolAfterPayload(c.Event)
 				if payload == nil {
 					return nil
 				}
-				_, err := s.ingestAHP(ctx, payload)
+				_, err := s.ingestAHP(ctx, payload, true)
 				return err
 			},
 			SessionStart: func(ctx context.Context, c ahpserver.ObserveContext[ahp.SessionStartEvent]) error {
 				e := c.Event
-				_, err := s.ingestAHP(ctx, ahpPayload(e.Source, e.ID, string(e.Type), e.Time, "session.started", ahp.Some(e.Session), ""))
+				_, err := s.ingestAHP(ctx, ahpPayload(e.Source, e.ID, string(e.Type), e.Time, "session.started", ahp.Some(e.Session), ""), true)
 				return err
 			},
 			SessionEnd: func(ctx context.Context, c ahpserver.ObserveContext[ahp.SessionEndEvent]) error {
 				e := c.Event
-				_, err := s.ingestAHP(ctx, ahpPayload(e.Source, e.ID, string(e.Type), e.Time, "session.ended", ahp.Some(e.Session), ""))
+				_, err := s.ingestAHP(ctx, ahpPayload(e.Source, e.ID, string(e.Type), e.Time, "session.ended", ahp.Some(e.Session), ""), true)
 				return err
 			},
 			Any: nil,
@@ -119,15 +132,18 @@ func (s *Service) ahpAuthenticate(h http.Handler) http.Handler {
 }
 
 // ingestAHP runs a translated event through canonical ingest and returns the
-// deny reason, or "" when the event is allowed. Errors surface to the harness
-// as protocol errors, so its registered failure policy decides the outcome.
-func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload) (string, error) {
+// deny reason, or "" when the event is allowed. observeOnly records the event
+// without evaluating policy. Errors surface to the harness as protocol errors,
+// so its registered failure policy decides the outcome.
+func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload, observeOnly bool) (string, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return "", errors.New("AHP request is not authenticated")
 	}
 	payload.IdempotencyKey = new(fmt.Sprintf("ahp:%s:%s", authCtx.ProjectID, *payload.IdempotencyKey))
-	result, err := s.IngestAuthenticated(ctx, authCtx, payload)
+	options := defaultAuthenticatedIngestOptions()
+	options.ObserveOnly = observeOnly
+	result, err := s.IngestAuthenticatedWithOptions(ctx, authCtx, payload, options)
 	if err != nil {
 		return "", err
 	}
