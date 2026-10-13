@@ -356,8 +356,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 // JWTAuth authenticates a headless device's device-agent token on the
 // ingestion methods. The workload is admitted through its assigned agent's
-// live policy; the project step that follows binds the request to a project
-// and then has it act as the agent.
+// live policy; the project step that follows binds the request to a project.
+// The workload stays the actor throughout.
 //
 // A request with no device-agent token returns unchanged for the API key
 // requirement Goa tries next.
@@ -385,8 +385,8 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 // authorizeWorkloadProject resolves the project a workload's hooks belong to:
 // its assigned agent's project when the agent is bound to one, which the
 // request may name but not override, and otherwise the Gram-Project the
-// request sends. The request then acts as the agent, which must hold the hooks
-// grant like an agent key.
+// request sends. The workload stays the actor and acts for the agent, which
+// must hold the hooks grant like an agent key.
 func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	agent, ok := deviceagenttoken.AssignedAgentFromContext(ctx)
 	if !ok {
@@ -405,7 +405,8 @@ func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, sche
 		err = fmt.Errorf("authorize workload hooks project: %w", err)
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
-	authorized = deviceagenttoken.ActAsAgent(authorized, agent)
+	// The workload stays the actor; attribution, spend and session scoping read
+	// the agent it acts for through deviceagenttoken.EffectiveAgent.
 	if err := s.requireAgentHooksIngest(authorized); err != nil {
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}

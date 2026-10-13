@@ -11,6 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -34,12 +35,35 @@ func clearAgentAccountIdentity(meta *SessionMetadata) {
 	meta.ObservedUserEmail = ""
 }
 
-// isAgentActor reports whether an agent-principal credential authenticated the
-// request. The agent is then the actor: self-reported emails and cached session
-// identity never re-attribute its events to a human.
+// isAgentActor reports whether the request acts for an agent: an agent key, or
+// a headless device's workload acting for its assigned agent. Self-reported
+// emails and cached session identity then never re-attribute its events to a
+// human.
 func isAgentActor(ctx context.Context) bool {
-	actor, ok := contextvalues.AuthenticatedActor(ctx)
-	return ok && actor.Type == urn.PrincipalTypeAgent
+	_, ok := deviceagenttoken.EffectiveAgent(ctx)
+	return ok
+}
+
+// workloadDevice returns the workload issuer and subject of the device that
+// authenticated the request, when a workload did.
+func workloadDevice(ctx context.Context) (issuerID string, subject string, ok bool) {
+	actor, found := contextvalues.AuthenticatedActor(ctx)
+	if !found || actor.Type != urn.PrincipalTypeWorkload {
+		return "", "", false
+	}
+	issuer, sub, err := actor.Workload()
+	if err != nil {
+		return "", "", false
+	}
+	return issuer.String(), sub, true
+}
+
+// spoofableAttributionKeys are attribution keys only the server may set.
+var spoofableAttributionKeys = []string{
+	string(attr.AuthorizationActorTypeKey),
+	string(attr.AuthorizationActorIDKey),
+	string(attr.WorkloadIssuerIDKey),
+	string(attr.WorkloadSubjectKey),
 }
 
 // requireAgentHooksIngest admits an agent actor only when it holds
@@ -144,7 +168,9 @@ func mcpListOwnerCacheKey(projectID, sessionID string) string {
 
 func mcpListOwnerFromContext(ctx context.Context) mcpListOwner {
 	owner := mcpListOwner{Actor: ""}
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
+	if agent, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		owner.Actor = agent.String()
+	} else if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
 		owner.Actor = actor.String()
 	}
 	return owner
@@ -222,8 +248,8 @@ func agentSessionID(ctx context.Context, sessionID string) string {
 	if sessionID == "" {
 		return sessionID
 	}
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
-		return actor.String() + ":" + sessionID
+	if agent, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		return agent.String() + ":" + sessionID
 	}
 	if strings.HasPrefix(sessionID, string(urn.PrincipalTypeAgent)+":") {
 		return "user:" + sessionID
@@ -260,7 +286,7 @@ var otelSessionKeys = []string{"session.id", "conversation.id", string(attr.GenA
 // strippedTeeKey reports whether a raw OTLP attribute must be dropped from the
 // event-feed copy: spoofed actor keys always, identity keys for agents.
 func strippedTeeKey(key string, agent bool) bool {
-	if key == string(attr.AuthorizationActorTypeKey) || key == string(attr.AuthorizationActorIDKey) {
+	if slices.Contains(spoofableAttributionKeys, key) {
 		return true
 	}
 	return agent && slices.Contains(selfReportedIdentityKeys, attr.Key(key))
@@ -273,8 +299,8 @@ func sanitizeTeedLogsPayload(ctx context.Context, payload *gen.LogsPayload) {
 	if payload == nil {
 		return
 	}
-	actor, ok := contextvalues.AuthenticatedActor(ctx)
-	agent := ok && actor.Type == urn.PrincipalTypeAgent
+	_, agent := deviceagenttoken.EffectiveAgent(ctx)
+	attribution := attributionAttrs(ctx)
 	for _, resourceLog := range payload.ResourceLogs {
 		if resourceLog == nil {
 			continue
@@ -307,10 +333,11 @@ func sanitizeTeedLogsPayload(ctx context.Context, payload *gen.LogsPayload) {
 					}
 				}
 				if agent {
-					record.Attributes = append(record.Attributes,
-						&gen.OTELAttribute{Key: string(attr.AuthorizationActorTypeKey), Value: &gen.OTELAttributeValue{StringValue: new(string(actor.Type)), IntValue: nil, BoolValue: nil, DoubleValue: nil, ArrayValue: nil, KvlistValue: nil, BytesValue: nil}},
-						&gen.OTELAttribute{Key: string(attr.AuthorizationActorIDKey), Value: &gen.OTELAttributeValue{StringValue: new(actor.ID), IntValue: nil, BoolValue: nil, DoubleValue: nil, ArrayValue: nil, KvlistValue: nil, BytesValue: nil}},
-					)
+					for key, value := range attribution {
+						record.Attributes = append(record.Attributes,
+							&gen.OTELAttribute{Key: string(key), Value: &gen.OTELAttributeValue{StringValue: new(value), IntValue: nil, BoolValue: nil, DoubleValue: nil, ArrayValue: nil, KvlistValue: nil, BytesValue: nil}},
+						)
+					}
 				}
 			}
 		}
@@ -333,21 +360,42 @@ func stripAgentIdentity(ctx context.Context, attrs map[attr.Key]any) {
 // agent's self-reported identity. The trusted actor is stamped per record, so
 // it is not repeated here.
 func sanitizeResourceAttrs(ctx context.Context, attrs map[attr.Key]any) {
-	delete(attrs, attr.AuthorizationActorTypeKey)
-	delete(attrs, attr.AuthorizationActorIDKey)
+	for _, key := range spoofableAttributionKeys {
+		delete(attrs, attr.Key(key))
+	}
 	stripAgentIdentity(ctx, attrs)
 }
 
-// withAgentActor strips client-supplied actor attributes (and, for agents,
-// self-reported identity) from a telemetry row, then stamps the trusted agent
-// actor when one authenticated the request.
+// withAgentActor strips client-supplied attribution attributes (and, for
+// agents, self-reported identity) from a telemetry row, then stamps the trusted
+// attribution when the request acts for an agent.
 func withAgentActor(ctx context.Context, attrs map[attr.Key]any) map[attr.Key]any {
-	delete(attrs, attr.AuthorizationActorTypeKey)
-	delete(attrs, attr.AuthorizationActorIDKey)
+	for _, key := range spoofableAttributionKeys {
+		delete(attrs, attr.Key(key))
+	}
 	stripAgentIdentity(ctx, attrs)
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
-		attrs[attr.AuthorizationActorTypeKey] = string(actor.Type)
-		attrs[attr.AuthorizationActorIDKey] = actor.ID
+	for key, value := range attributionAttrs(ctx) {
+		attrs[key] = value
+	}
+	return attrs
+}
+
+// attributionAttrs are the trusted attribution attributes for a request that
+// acts for an agent. The actor attributes name the agent, which telemetry views
+// attribute agent activity by; a headless device adds its workload issuer and
+// subject, so its events also say which device sent them.
+func attributionAttrs(ctx context.Context) map[attr.Key]string {
+	agent, ok := deviceagenttoken.EffectiveAgent(ctx)
+	if !ok {
+		return nil
+	}
+	attrs := map[attr.Key]string{
+		attr.AuthorizationActorTypeKey: string(agent.Type),
+		attr.AuthorizationActorIDKey:   agent.ID,
+	}
+	if issuerID, subject, ok := workloadDevice(ctx); ok {
+		attrs[attr.WorkloadIssuerIDKey] = issuerID
+		attrs[attr.WorkloadSubjectKey] = subject
 	}
 	return attrs
 }

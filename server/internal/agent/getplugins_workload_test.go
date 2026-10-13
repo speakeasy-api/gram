@@ -119,7 +119,10 @@ func TestJWTAuth_WorkloadTokenPollsItsAgentsPlugins(t *testing.T) {
 
 	actor, ok := contextvalues.AuthenticatedActor(admitted)
 	require.True(t, ok)
-	require.Equal(t, device.actor.String(), actor.String(), "the request acts as the assigned agent")
+	require.Equal(t, urn.NewWorkloadPrincipal(device.issuerID, device.subject).String(), actor.String(), "the device stays the authenticated actor")
+	agent, ok := deviceagenttoken.EffectiveAgent(admitted)
+	require.True(t, ok)
+	require.Equal(t, device.actor.String(), agent.String(), "the request acts for the assigned agent")
 
 	res, err := ti.service.GetPlugins(admitted, &gen.GetPluginsPayload{})
 	require.NoError(t, err)

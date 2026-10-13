@@ -15,6 +15,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -147,8 +148,21 @@ func TestCursor_WorkloadTokenIngestsAsItsAgent(t *testing.T) {
 
 	actor, ok := contextvalues.AuthenticatedActor(admitted)
 	require.True(t, ok)
-	require.Equal(t, workload.actor.String(), actor.String(), "hooks are attributed to the assigned agent")
+	require.Equal(t, urn.NewWorkloadPrincipal(workload.issuerID, workload.subject).String(), actor.String(), "the device stays the authenticated actor")
 	require.True(t, isAgentActor(admitted))
+
+	// Events name the agent as their actor, which telemetry attributes agent
+	// activity by, and the device that sent them; client-supplied values for
+	// either are replaced.
+	attrs := withAgentActor(admitted, map[attr.Key]any{
+		attr.AuthorizationActorIDKey: "spoofed",
+		attr.WorkloadSubjectKey:      "spoofed",
+	})
+	require.Equal(t, string(urn.PrincipalTypeAgent), attrs[attr.AuthorizationActorTypeKey])
+	require.Equal(t, workload.actor.ID, attrs[attr.AuthorizationActorIDKey])
+	require.Equal(t, workload.issuerID.String(), attrs[attr.WorkloadIssuerIDKey])
+	require.Equal(t, workload.subject, attrs[attr.WorkloadSubjectKey])
+	require.Equal(t, workload.actor.String()+":session-1", agentSessionID(admitted, "session-1"), "sessions belong to the agent")
 	authCtx, ok := contextvalues.GetAuthContext(admitted)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectSlug)

@@ -172,7 +172,7 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 
-	admitted, agent, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
 	if err != nil {
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
@@ -184,7 +184,9 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 		err = fmt.Errorf("authorize workload device sync: %w", err)
 		return deviceagenttoken.WithAuthFailure(ctx, err), err
 	}
-	return deviceagenttoken.ActAsAgent(admitted, agent), nil
+	// The workload stays the actor; getPlugins reads the agent it acts for
+	// through deviceagenttoken.EffectiveAgent.
+	return admitted, nil
 }
 
 // GetPlugins returns every plugin assigned to the device user's resolved
@@ -219,10 +221,10 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// An agent-principal key is itself the identity; APIKeyAuth already
-	// required its device-sync grant.
-	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
-		return s.getAgentPlugins(ctx, authCtx, actor)
+	// An agent-principal key, or a workload acting for its assigned agent, polls
+	// as that agent; the auth step already required the device-sync grant.
+	if agent, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
+		return s.getAgentPlugins(ctx, authCtx, agent)
 	}
 
 	// Resolve the polling identity by credential type. An org install key carries

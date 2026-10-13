@@ -329,24 +329,25 @@ func AssignedAgentFromContext(ctx context.Context) (AssignedAgent, bool) {
 	return agent, ok
 }
 
-// ActAsAgent records the assigned agent as the request's actor, so plugin
-// selection, attribution, and spend treat the request as that agent's. The
-// admitted policy is unchanged: it is still the workload's ceiling
-// intersected with the agent's live policy.
-//
-// Call it only after every authentication step that runs admission, since a
-// later admission would treat the agent actor as an agent credential, which
-// requires an authorizing user that a workload never has.
-func ActAsAgent(ctx context.Context, agent AssignedAgent) context.Context {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return ctx
+// EffectiveAgent returns the agent a request acts for: the actor itself when an
+// agent key authenticated it, or the agent Admit resolved when a workload did.
+// The workload stays the authenticated actor, so audit and logs name the device;
+// the agent supplies policy, plugin selection, attribution and spend.
+func EffectiveAgent(ctx context.Context) (agent urn.Principal, ok bool) {
+	actor, found := contextvalues.AuthenticatedActor(ctx)
+	switch {
+	case !found:
+	case actor.Type == urn.PrincipalTypeAgent:
+		agent, ok = actor, true
+	case actor.Type == urn.PrincipalTypeWorkload:
+		if assigned, found := AssignedAgentFromContext(ctx); found {
+			agent, ok = assigned.Principal, true
+		}
 	}
-	return contextvalues.WithAuthenticatedActor(ctx, authCtx, agent.Principal)
+	return agent, ok
 }
 
-// IsWorkloadActor reports whether a workload authenticated the request and has
-// not yet been resolved to its agent.
+// IsWorkloadActor reports whether a workload authenticated the request.
 func IsWorkloadActor(ctx context.Context) bool {
 	actor, ok := contextvalues.AuthenticatedActor(ctx)
 	return ok && actor.Type == urn.PrincipalTypeWorkload
