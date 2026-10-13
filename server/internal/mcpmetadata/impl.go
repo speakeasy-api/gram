@@ -341,6 +341,11 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "convert metadata").LogError(ctx, logger)
 	}
+	wrapperID, err := backend.canonicalWrapperID(ctx, s.mcpServersRepo, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch canonical MCP server").LogError(ctx, logger)
+	}
+	backend.reportBackendIDs(metadata, wrapperID)
 
 	return &gen.GetMcpMetadataResult{
 		Metadata: metadata,
@@ -614,6 +619,11 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		}
 	}
 
+	wrapperID, err := backend.canonicalWrapperID(ctx, msr, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch canonical MCP server").LogError(ctx, logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save MCP server metadata").LogError(ctx, logger)
 	}
@@ -622,6 +632,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		s.publishPluginsForBackend(ctx, authCtx, backend)
 	}
 
+	backend.reportBackendIDs(metadata, wrapperID)
 	return metadata, nil
 }
 
@@ -861,6 +872,35 @@ func (b *resolvedMetadataBackend) backendID() uuid.UUID {
 		return b.toolset.ID
 	}
 	return b.mcpServer.ID
+}
+
+// canonicalWrapperID returns the live canonical wrapper of a hosted backend.
+func (b *resolvedMetadataBackend) canonicalWrapperID(ctx context.Context, msr *mcpservers_repo.Queries, projectID uuid.UUID) (uuid.NullUUID, error) {
+	server := b.mcpServer
+	if server == nil {
+		found, err := msr.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: b.toolset.ID, ProjectID: projectID})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+		case err != nil:
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("get canonical mcp server: %w", err)
+		}
+		server = &found
+	}
+	if !isCanonicalWrapper(server) {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	return uuid.NullUUID{UUID: server.ID, Valid: true}, nil
+}
+
+// reportBackendIDs gives a hosted backend's metadata both ids, whichever key its row uses.
+func (b *resolvedMetadataBackend) reportBackendIDs(metadata *types.McpMetadata, wrapperID uuid.NullUUID) {
+	if b.toolset != nil && metadata.ToolsetID == nil {
+		metadata.ToolsetID = new(b.toolset.ID.String())
+	}
+	if wrapperID.Valid {
+		metadata.ToolsetID, metadata.McpServerID = new(wrapperID.UUID.String()), new(wrapperID.UUID.String())
+	}
 }
 
 // writeKey keeps toolset_slug writes toolset-keyed so pods that read only toolset_id see them;
