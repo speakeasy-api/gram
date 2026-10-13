@@ -22,12 +22,16 @@ import (
 // expired issuer keys. It revokes retired keys past the overlap and retries
 // KMS cleanup of every revoked key until it succeeds. Each activity sweeps
 // for a fixed budget and returns a cursor; the workflow continues from it for
-// a bounded number of pages, and the next hourly run covers anything left.
-// Payloads carry an organization id cursor, never organization data.
+// a bounded number of pages and returns where it stopped. The next hourly run
+// resumes there through the schedule's last completion result, so slow or
+// failing organizations early in the order can't starve later ones; the
+// cursor wraps only after a full traversal. Payloads carry an organization id
+// cursor, never organization data.
 //
 // Temporal actions/month: ~2,200 per namespace (one schedule start and one
 // activity per hour); each extra page costs one activity, at most
 // internalSessionIssuerKeySweepMaxPages-1 more per hour (~4,400 worst case).
+// Carrying the cursor costs no actions. Fixed: it doesn't scale with orgs.
 const (
 	internalSessionIssuerKeySweepWorkflowID = "v1:internal-session-issuer-key-sweep" //nolint:gosec // A workflow ID, not a credential.
 	internalSessionIssuerKeySweepInterval   = time.Hour
@@ -51,7 +55,13 @@ func internalSessionIssuerKeySweepScheduleID(queue string) string {
 	return fmt.Sprintf("v1:internal-session-issuer-key-sweep:%s", queue)
 }
 
-func InternalSessionIssuerKeySweepWorkflow(ctx workflow.Context) error {
+// InternalSessionIssuerKeySweepResult is where the next run resumes; empty
+// starts a new traversal.
+type InternalSessionIssuerKeySweepResult struct {
+	ResumeAfter string
+}
+
+func InternalSessionIssuerKeySweepWorkflow(ctx workflow.Context) (InternalSessionIssuerKeySweepResult, error) {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -61,18 +71,25 @@ func InternalSessionIssuerKeySweepWorkflow(ctx workflow.Context) error {
 			MaximumInterval:    5 * time.Minute,
 		},
 	})
-	after := ""
+	var last InternalSessionIssuerKeySweepResult
+	if workflow.HasLastCompletionResult(ctx) {
+		if err := workflow.GetLastCompletionResult(ctx, &last); err != nil {
+			workflow.GetLogger(ctx).Warn("discarding unreadable issuer key sweep cursor", "error", err)
+			last = InternalSessionIssuerKeySweepResult{ResumeAfter: ""}
+		}
+	}
+	after := last.ResumeAfter
 	for range internalSessionIssuerKeySweepMaxPages {
 		var progress internalsessionissuers.SweepProgress
 		if err := workflow.ExecuteActivity(ctx, InternalSessionIssuerKeySweepActivityName, after).Get(ctx, &progress); err != nil {
-			return fmt.Errorf("sweep internal session issuer keys: %w", err)
+			return InternalSessionIssuerKeySweepResult{ResumeAfter: after}, fmt.Errorf("sweep internal session issuer keys: %w", err)
 		}
 		if progress.Done {
-			return nil
+			return InternalSessionIssuerKeySweepResult{ResumeAfter: ""}, nil
 		}
 		after = progress.Next
 	}
-	return nil
+	return InternalSessionIssuerKeySweepResult{ResumeAfter: after}, nil
 }
 
 // InternalSessionIssuerKeySweepActivities runs the sweep. A worker without a
