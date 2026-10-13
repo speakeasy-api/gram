@@ -295,10 +295,16 @@ func attachmentIdentityPlan(principal Principal, project ResolvedProject, regist
 		UserSessionIssuerID: userSessionIssuerID,
 		Provider:            provider,
 		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
-			// No copied scope: login discovers what to request live. The
-			// registration still names the resource's scopes.
-			Scope:                   nil,
-			RegistrationScope:       append([]string(nil), resourceMetadata.ScopesSupported...),
+			// No copied scope: login discovers what to request live, and the
+			// registration names what that login would request.
+			Scope: nil,
+			RegistrationResource: &remotesessions.ResourceScopes{
+				Pin:             nil,
+				ChallengeScopes: nil,
+				ScopesSupported: append([]string(nil), resourceMetadata.ScopesSupported...),
+				Live:            false,
+				UseDiscovered:   true,
+			},
 			Audience:                nil,
 			TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
 			RequireClientSecret:     true,

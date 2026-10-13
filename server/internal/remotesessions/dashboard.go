@@ -82,7 +82,7 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 		return nil, err
 	}
 
-	plan := req.plan(authCtx, target, s.discoveredRegistrationScope(ctx, logger, *authCtx.ProjectID, target.ID))
+	plan := req.plan(authCtx, target, s.registrationResource(ctx, logger, *authCtx.ProjectID, target.ID))
 	commit := s.identity.Prepare(plan)
 	if err := commit.Preflight(ctx); err != nil {
 		return nil, identityOopsError(err, "check identity configuration").LogError(ctx, logger)
@@ -206,10 +206,10 @@ func (s *Service) checkServerIdentityRequest(ctx context.Context, logger *slog.L
 	return nil
 }
 
-// discoveredRegistrationScope is what a login through a scopeless client of
-// the server would discover from its cached protected resource row, named at
-// registration only. A server with no row, or an unreadable one, names none.
-func (s *Service) discoveredRegistrationScope(ctx context.Context, logger *slog.Logger, projectID, mcpServerID uuid.UUID) []string {
+// registrationResource is the cached protected resource row a login through a
+// scopeless client of the server reads, for registration to name. A server
+// with no row, or an unreadable one, has none.
+func (s *Service) registrationResource(ctx context.Context, logger *slog.Logger, projectID, mcpServerID uuid.UUID) *ResourceScopes {
 	resourceURL, err := repo.New(s.db).GetRemoteURLForMcpServer(ctx, repo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID, ProjectID: projectID})
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -217,25 +217,21 @@ func (s *Service) discoveredRegistrationScope(ctx context.Context, logger *slog.
 		}
 		return nil
 	}
-	resource, _, err := CachedResourceScopes(ctx, s.db, projectID, resourceURL, true)
+	resource, found, err := CachedResourceScopes(ctx, s.db, projectID, resourceURL, true)
 	if err != nil {
 		logger.WarnContext(ctx, "get protected resource for registration scope", attr.SlogError(err))
 		return nil
 	}
-	switch {
-	case len(resource.ChallengeScopes) > 0:
-		return resource.ChallengeScopes
-	case len(resource.Pin) > 0:
-		return resource.Pin
-	default:
-		return resource.ScopesSupported
+	if !found {
+		return nil
 	}
+	return &resource
 }
 
 // plan describes the request as an identity plan: the server's current
-// clients are replaced by the requested one. registrationScope is named in a
-// dynamic registration request that carries no client scope.
-func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target mcpserversrepo.McpServer, registrationScope []string) IdentityPlan {
+// clients are replaced by the requested one. registrationResource is what a
+// registered client without scopes will discover at login.
+func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target mcpserversrepo.McpServer, registrationResource *ResourceScopes) IdentityPlan {
 	provider := UseProvider(r.providerID)
 	if r.createProvider != nil {
 		provider = CreateProvider(createServerIdentityProviderParams(*authCtx.ProjectID, authCtx.ActiveOrganizationID, r.createProvider, r.logoAssetID))
@@ -259,7 +255,7 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, target m
 	default:
 		client = RegisterClient(RegistrationPolicy{
 			Scope:                   r.clientConfiguration.Scope,
-			RegistrationScope:       registrationScope,
+			RegistrationResource:    registrationResource,
 			Audience:                r.clientConfiguration.Audience,
 			TokenEndpointAuthMethod: r.clientConfiguration.TokenEndpointAuthMethod,
 			RequireClientSecret:     false,

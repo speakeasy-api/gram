@@ -213,6 +213,46 @@ func TestCommitServerIdentityConfigurationNamesDiscoveredScopesAtRegistration(t 
 	require.Empty(t, stored.RemoteSessionClient.Scope, "the discovered scopes are not stored on the client")
 }
 
+// With no resource row the registration names what the login would then
+// request: the provider's scope override.
+func TestCommitServerIdentityConfigurationNamesProviderScopesWithoutResourceRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-override-target")
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "override-client",
+			"client_secret":              "override-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-override-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+	_, err := repo.New(ti.conn).UpdateRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionIssuerParams{
+		ScopeOverride: []string{"tickets:read"},
+		ID:            providerID,
+		ProjectID:     conv.ToNullUUID(projectIDFromContext(t, ctx)),
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "tickets:read", requestedScope.Load())
+}
+
 func TestCommitServerIdentityConfigurationReturnsDCRRefusalWithoutChangingState(t *testing.T) {
 	t.Parallel()
 
