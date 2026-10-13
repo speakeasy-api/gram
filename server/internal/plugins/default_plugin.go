@@ -292,9 +292,11 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 	// before the backend ones, so Postgres reports it first) and the failed
 	// statement aborts the caller's surrounding transaction either way.
 	_, err := q.GetPluginServerByBackend(ctx, repo.GetPluginServerByBackendParams{
-		PluginID:    plugin.ID,
-		ToolsetID:   params.ToolsetID,
-		McpServerID: params.McpServerID,
+		PluginID:       plugin.ID,
+		ProjectID:      plugin.ProjectID,
+		OrganizationID: plugin.OrganizationID,
+		ToolsetID:      params.ToolsetID,
+		McpServerID:    params.McpServerID,
 	})
 	switch {
 	case err == nil:
