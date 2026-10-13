@@ -93,12 +93,19 @@ type LogWorkloadDeviceJoinTokenRedeemEvent struct {
 	JoinTokenURN         urn.WorkloadDeviceJoinToken
 	JoinTokenDisplayName string
 
-	JoinTokenSnapshotAfter *WorkloadDeviceJoinTokenSnapshot
+	// Redeeming spends an existing token, so the trail records it unspent and
+	// spent: what was redeemed, and by which device.
+	JoinTokenSnapshotBefore *WorkloadDeviceJoinTokenSnapshot
+	JoinTokenSnapshotAfter  *WorkloadDeviceJoinTokenSnapshot
 }
 
 func (l *Logger) LogWorkloadDeviceJoinTokenRedeem(ctx context.Context, dbtx repo.DBTX, event LogWorkloadDeviceJoinTokenRedeemEvent) error {
 	action := ActionWorkloadDeviceJoinTokenRedeem
 
+	before, err := marshalAuditPayload(event.JoinTokenSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
 	after, err := marshalAuditPayload(event.JoinTokenSnapshotAfter)
 	if err != nil {
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
@@ -121,7 +128,7 @@ func (l *Logger) LogWorkloadDeviceJoinTokenRedeem(ctx context.Context, dbtx repo
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		Metadata:       nil,
-		BeforeSnapshot: nil,
+		BeforeSnapshot: before,
 		AfterSnapshot:  after,
 	}
 

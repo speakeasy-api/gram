@@ -76,9 +76,11 @@ type Service struct {
 	// servers on, which the token endpoints it lists are derived from.
 	sharedHosts authserver.Hosts
 
-	// registerLimiter bounds device enrollment, which needs no credential but
-	// a join token.
-	registerLimiter *ratelimit.Limiter
+	// registerLimiter bounds device enrollment across the fleet, which needs
+	// no credential but a join token; registerTokenLimiter bounds retries of
+	// one join token, so one organization's replays never spend another's.
+	registerLimiter      *ratelimit.Limiter
+	registerTokenLimiter *ratelimit.Limiter
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -107,7 +109,8 @@ func NewService(
 
 		sharedHosts: sharedHosts,
 
-		registerLimiter: ratelimit.New(limitStore, "workload-device-register", registerDeviceRate),
+		registerLimiter:      ratelimit.New(limitStore, "workload-device-register", registerDeviceRate),
+		registerTokenLimiter: ratelimit.New(limitStore, "workload-device-register-token", registerDeviceTokenRate),
 	}
 }
 

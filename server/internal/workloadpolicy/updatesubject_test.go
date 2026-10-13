@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -628,11 +630,13 @@ func TestAdmitAndUpdateSubject_BindTheHooksProject(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ti.projectID.String(), onlyAdmission(t, policy).HooksProjectID)
 
-	// Another organization's project, or none at all, is not found.
-	payload = updateSubjectPayload(original.ID)
-	payload.HooksProjectID = new(uuid.NewString())
-	_, err = ti.service.UpdateSubject(ctx, payload)
-	requireOopsCode(t, err, oops.CodeNotFound)
+	// Another organization's live project, or none at all, is not found.
+	for _, other := range []string{foreignProject(t, ctx, ti).String(), uuid.NewString()} {
+		payload = updateSubjectPayload(original.ID)
+		payload.HooksProjectID = new(other)
+		_, err = ti.service.UpdateSubject(ctx, payload)
+		requireOopsCode(t, err, oops.CodeNotFound)
+	}
 
 	// Blank clears it.
 	payload = updateSubjectPayload(original.ID)
@@ -719,4 +723,32 @@ func TestAdmitSubject_WithAHooksProject(t *testing.T) {
 	policy, err := ti.service.AdmitSubject(ctx, admitPayload(ti.projectID.String()))
 	require.NoError(t, err)
 	require.Equal(t, ti.projectID.String(), onlyAdmission(t, policy).HooksProjectID)
+}
+
+// foreignProject seeds a live project in a second organization, so a test can
+// show that another tenant's real project is refused, not only an unknown id.
+func foreignProject(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
+	t.Helper()
+	q := testrepo.New(ti.conn)
+	orgID := "org_foreign_" + uuid.NewString()[:8]
+	require.NoError(t, q.CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID:                 orgID,
+		Name:               orgID,
+		Slug:               orgID,
+		GramAccountType:    "free",
+		WorkosID:           pgtype.Text{String: "", Valid: false},
+		Whitelisted:        false,
+		FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+		FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		DisabledAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		CreatedAt:          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+	}))
+	projectID, err := q.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID:             uuid.New(),
+		Name:           "Foreign project",
+		Slug:           "foreign-" + uuid.NewString()[:8],
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	return projectID
 }

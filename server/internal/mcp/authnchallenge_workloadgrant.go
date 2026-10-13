@@ -131,7 +131,7 @@ func newWorkloadGrant(db *pgxpool.Pool, redisClient *redis.Client, policy *guard
 		issuers:    newWorkloadIssuerAdmission(workloadIssuerStoreLookup(db), newWorkloadIssuerLookupBudget(redisClient, meterProvider)),
 		identities: workloadIdentityStoreLookup(db),
 		verifier:   verifier,
-		deviceKeys: workloadDeviceKeyStoreLookup(db),
+		deviceKeys: budgetedDeviceKeyLookup(workloadDeviceKeyStoreLookup(db), newWorkloadDeviceKeyLookupBudget(redisClient, meterProvider)),
 	}
 }
 
@@ -342,6 +342,12 @@ func (grant *workloadGrant) assertionKeySource(ctx context.Context, tenancy work
 	switch {
 	case errors.Is(err, workloadidentity.ErrDeviceKeyNotFound):
 		return jwks.Source{}, refuseWorkloadGrant("device_key_not_registered", err)
+	case errors.Is(err, errWorkloadDeviceKeyLookupRateLimited):
+		refusal := &workloadGrantError{reason: "device_key_lookup_rate_limited", outcome: workloadGrantRateLimited, retryAfter: 0, err: err}
+		if limited, ok := errors.AsType[*workloadDeviceKeyRateLimitedError](err); ok {
+			refusal.retryAfter = limited.retryAfter
+		}
+		return jwks.Source{}, refusal
 	case err != nil:
 		return jwks.Source{}, workloadGrantStageUnavailable("device_key_unavailable", err)
 	}

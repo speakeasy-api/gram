@@ -464,8 +464,10 @@ func TestCreateDeviceJoinToken_RequiresAHooksProjectInTheOrganization(t *testing
 
 	// A project id from no organization, or another one, is not found rather
 	// than a permission error, so it reveals nothing about other tenants.
-	_, err = ti.service.CreateDeviceJoinToken(ctx, payload(uuid.NewString()))
-	requireOopsCode(t, err, oops.CodeNotFound)
+	for _, other := range []string{foreignProject(t, ctx, ti).String(), uuid.NewString()} {
+		_, err = ti.service.CreateDeviceJoinToken(ctx, payload(other))
+		requireOopsCode(t, err, oops.CodeNotFound)
+	}
 
 	// A project the caller cannot read is refused.
 	noProjectRead := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeWorkloadWrite, ti.orgID))
@@ -486,4 +488,49 @@ func TestRegisterDevice_SameKeyRetryReturnsTheHooksProject(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, first.HooksProjectID, again.HooksProjectID)
 	require.Equal(t, first.HooksProjectSlug, again.HooksProjectSlug)
+}
+
+func TestRegisterDevice_ThrottlesOneTokenWithoutThrottlingOthers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	key := publicJWK(t, newDeviceKey(t).Public())
+
+	// One token's replays exhaust only that token's bucket.
+	busy := "gram_dj_throttled-" + uuid.NewString()
+	var limited bool
+	for range 20 {
+		_, err := registerDevice(ctx, ti, busy, key)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		if oopsErr.Code == oops.CodeRateLimitExceeded {
+			limited = true
+			break
+		}
+		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+	}
+	require.True(t, limited, "repeated attempts with one token are throttled")
+
+	// Another token is still answered on its merits.
+	_, err := registerDevice(ctx, ti, "gram_dj_fresh-"+uuid.NewString(), key)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestCreateDeviceJoinToken_RequiresAPerson(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	agentID := newAgent(t, ctx, ti, "person-bound-agent")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	noPerson := *authCtx
+	noPerson.UserID = ""
+	_, err := ti.service.CreateDeviceJoinToken(contextvalues.SetAuthContext(ctx, &noPerson), &gen.CreateDeviceJoinTokenPayload{
+		AgentID:          agentID.String(),
+		HooksProjectID:   ti.projectID.String(),
+		ExpiresInSeconds: 3600,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

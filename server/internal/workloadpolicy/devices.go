@@ -58,9 +58,15 @@ const (
 	deviceSubjectPrefix = "device:"
 )
 
-// registerDeviceRate bounds enrollment across the fleet. Join tokens are 256-bit
-// random values, so this protects the database rather than the tokens.
-var registerDeviceRate = ratelimit.PerMinute(120).WithBurst(30)
+// registerDeviceRate is a fleet-wide ceiling that protects the database. Join
+// tokens are 256-bit random values, so no rate protects the tokens themselves;
+// the ceiling sits well above real enrollment so a probe flood is what it
+// stops, while registerDeviceTokenRate keeps one token's retries to its own
+// bucket.
+var (
+	registerDeviceRate      = ratelimit.PerMinute(600).WithBurst(120)
+	registerDeviceTokenRate = ratelimit.PerMinute(20).WithBurst(10)
+)
 
 // deviceAgentScopes are what an enrolled device needs from its agent's policy:
 // polling plugin policy and sending hooks. Without them the device enrolls and
@@ -139,7 +145,12 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 	if err != nil {
 		return nil, err
 	}
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	// The creator is recorded as the enrollment's actor, so a token needs a
+	// person behind it; a principal-backed key carries no user.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeForbidden, nil, "a device join token must be created by a person, not an agent credential")
+	}
 
 	agentID, err := uuid.Parse(payload.AgentID)
 	if err != nil {
@@ -232,8 +243,18 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 }
 
 func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevicePayload) (*gen.WorkloadDeviceRegistration, error) {
-	if s.registerLimiter != nil {
-		result, err := s.registerLimiter.Allow(ctx, "all")
+	// The per-token bucket is keyed on the token's hash, never the token.
+	for _, limit := range []struct {
+		limiter *ratelimit.Limiter
+		key     string
+	}{
+		{s.registerTokenLimiter, hashDeviceJoinToken(payload.JoinToken)},
+		{s.registerLimiter, "all"},
+	} {
+		if limit.limiter == nil {
+			continue
+		}
+		result, err := limit.limiter.Allow(ctx, limit.key)
 		switch {
 		case err != nil:
 			return nil, oops.E(oops.CodeUnavailable, err, "device enrollment is unavailable, try again shortly").LogError(ctx, s.logger)
@@ -364,6 +385,13 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 		ActorSlug:            nil,
 		JoinTokenURN:         urn.NewWorkloadDeviceJoinToken(joinToken.ID),
 		JoinTokenDisplayName: agent.Name,
+		JoinTokenSnapshotBefore: &audit.WorkloadDeviceJoinTokenSnapshot{
+			AgentID:        agent.ID.String(),
+			ExpiresAt:      joinToken.ExpiresAt.Time.UTC().Format(time.RFC3339),
+			HooksProjectID: hooksProject.ID.String(),
+			DeviceSubject:  "",
+			Hostname:       "",
+		},
 		JoinTokenSnapshotAfter: &audit.WorkloadDeviceJoinTokenSnapshot{
 			AgentID:        agent.ID.String(),
 			ExpiresAt:      joinToken.ExpiresAt.Time.UTC().Format(time.RFC3339),
