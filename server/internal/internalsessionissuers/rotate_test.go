@@ -11,8 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func enable(t *testing.T, ti *testInstance, admin context.Context) string {
@@ -68,12 +66,12 @@ func TestRotate_Routine(t *testing.T) {
 	}
 }
 
-func TestRotate_CompromisedWorksWithoutEntitlement(t *testing.T) {
+func TestRotate_CompromisedWorksWithoutVerifiedDomain(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t, true)
 	admin := adminCtx(t, ctx)
 	compromised := enable(t, ti, admin)
-	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureSSO)
+	setVerifiedDomains(t, ctx, ti)
 
 	view, err := ti.service.Rotate(admin, &gen.RotatePayload{ActiveKid: &compromised, Compromised: true, SessionToken: nil})
 	require.NoError(t, err)

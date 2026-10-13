@@ -12,8 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestGet_RequiresOrgRead(t *testing.T) {
@@ -43,9 +41,9 @@ func TestGet_ReportsState(t *testing.T) {
 	ti.flags.SetFlag(feature.FlagInternalSessionIssuer, ti.orgID, false)
 	require.Equal(t, "unavailable", get().State)
 	ti.flags.SetFlag(feature.FlagInternalSessionIssuer, ti.orgID, true)
-	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureSSO)
-	require.Equal(t, "entitlement_required", get().State)
-	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureSSO)
+	setVerifiedDomains(t, ctx, ti)
+	require.Equal(t, "verified_domain_required", get().State)
+	setVerifiedDomains(t, ctx, ti, "example.com")
 
 	_, err := ti.service.SetEnabled(adminCtx(t, ctx), &gen.SetEnabledPayload{Enabled: true, SessionToken: nil})
 	require.NoError(t, err)
@@ -95,13 +93,13 @@ func TestGet_DisabledEnableEligibility(t *testing.T) {
 	require.False(t, view.CanEnable)
 
 	ti.flags.SetFlag(feature.FlagInternalSessionIssuer, ti.orgID, true)
-	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureSSO)
+	setVerifiedDomains(t, ctx, ti)
 	view, err = ti.service.Get(readCtx(t, ctx), &gen.GetPayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "disabled", view.State)
 	require.False(t, view.CanEnable)
 
-	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureSSO)
+	setVerifiedDomains(t, ctx, ti, "example.com")
 	view, err = ti.service.Get(readCtx(t, ctx), &gen.GetPayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.True(t, view.CanEnable)

@@ -19,25 +19,25 @@ func (r *PostgresReader) WithInternalSessionIssuer(gate *internalsessionissuers.
 // InternalSessionIssuerStatus is public setup information, never signing material.
 type InternalSessionIssuerStatus struct {
 	OrganizationID string                       `json:"organization_id"`
-	State          internalsessionissuers.State `json:"state" jsonschema:"one of unavailable, entitlement_required, setup_required, enabled, disabled, signing_paused, keyless"`
+	State          internalsessionissuers.State `json:"state" jsonschema:"one of unavailable, verified_domain_required, setup_required, enabled, disabled, signing_paused, keyless"`
 	Issuer         string                       `json:"issuer,omitempty" jsonschema:"issuer URI to register with a supported service; it never changes"`
 	CanEnable      bool                         `json:"can_enable" jsonschema:"whether an organization administrator can enable the issuer in this deployment"`
 	NextStep       string                       `json:"next_step"`
 }
 
 var internalSessionIssuerNextSteps = map[internalsessionissuers.State]string{
-	internalsessionissuers.StateUnavailable:         "The issuer is not available to this organization yet.",
-	internalsessionissuers.StateEntitlementRequired: "Ask support to enable single sign-on for this organization.",
-	internalsessionissuers.StateSetupRequired:       "An organization administrator can enable Enterprise Managed Authorization on IDP and SSO, in the Speakeasy card on the Identity providers tab.",
-	internalsessionissuers.StateEnabled:             "Register this URI in each supported service's enterprise-managed authorization settings. Each user must sign in through the organization's enterprise SSO. Google Workspace connected through enterprise SAML or OIDC qualifies; personal Google or other social sign-in alone is insufficient. Configuration alone does not verify access.",
-	internalsessionissuers.StateDisabled:            "Signing is disabled. An organization administrator can re-enable Enterprise Managed Authorization on IDP and SSO, in the Speakeasy card on the Identity providers tab.",
-	internalsessionissuers.StateSigningPaused:       "Speakeasy has paused issuer signing. Contact your Speakeasy administrator to resume it.",
-	internalsessionissuers.StateKeyless:             "No signing key is active. Ask an organization administrator to contact Speakeasy support for the signing-key recovery procedure; recovery is unavailable through this read-only tool.",
+	internalsessionissuers.StateUnavailable:            "The issuer is not available to this organization yet.",
+	internalsessionissuers.StateVerifiedDomainRequired: "Verify at least one email domain for this organization on IDP and SSO first; Speakeasy only vouches for emails on verified domains.",
+	internalsessionissuers.StateSetupRequired:          "An organization administrator can enable Enterprise Managed Authorization on IDP and SSO, in the Speakeasy card on the Identity providers tab.",
+	internalsessionissuers.StateEnabled:                "Register this URI in each supported service's enterprise-managed authorization settings. Each user needs a company sign-in to Speakeasy (SSO, company-managed Google or Microsoft account, magic link, or password with MFA) with an email on a verified domain; personal accounts and passwords without MFA don't qualify. Configuration alone does not verify access.",
+	internalsessionissuers.StateDisabled:               "Signing is disabled. An organization administrator can re-enable Enterprise Managed Authorization on IDP and SSO, in the Speakeasy card on the Identity providers tab.",
+	internalsessionissuers.StateSigningPaused:          "Speakeasy has paused issuer signing. Contact your Speakeasy administrator to resume it.",
+	internalsessionissuers.StateKeyless:                "No signing key is active. Ask an organization administrator to contact Speakeasy support for the signing-key recovery procedure; recovery is unavailable through this read-only tool.",
 }
 
 func internalSessionIssuerNextStep(state internalsessionissuers.State, canEnable bool) string {
 	if !canEnable && (state == internalsessionissuers.StateSetupRequired || state == internalsessionissuers.StateDisabled) {
-		return "Signing is unavailable. Ask a Speakeasy administrator to check the organization's issuer entitlement and this deployment's signing configuration before enabling Enterprise Managed Authorization."
+		return "Signing is unavailable. Ask a Speakeasy administrator to check the organization's verified domains and this deployment's signing configuration before enabling Enterprise Managed Authorization."
 	}
 	return internalSessionIssuerNextSteps[state]
 }

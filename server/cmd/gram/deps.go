@@ -1788,8 +1788,8 @@ func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog
 
 // newInternalSessionIssuerGate reports what each organization may do with its
 // issuer, honoring the startup kill switch.
-func newInternalSessionIssuerGate(c *cli.Context, db *pgxpool.Pool, productFeatures *productfeatures.Client, featureFlags feature.Provider, provisioning bool) *internalsessionissuers.Gate {
-	return internalsessionissuers.NewGate(db, productFeatures, featureFlags, internalsessionissuers.GateConfig{
+func newInternalSessionIssuerGate(c *cli.Context, db *pgxpool.Pool, featureFlags feature.Provider, provisioning bool) *internalsessionissuers.Gate {
+	return internalsessionissuers.NewGate(db, featureFlags, internalsessionissuers.GateConfig{
 		Provisioning:  provisioning,
 		SigningPaused: c.Bool(internalSessionIssuerSigningPausedFlag),
 	})

@@ -12,8 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestInternalSessionIssuerToolContract(t *testing.T) {
@@ -27,8 +27,8 @@ func TestInternalSessionIssuerToolContract(t *testing.T) {
 	require.Equal(t, externalOnly, d.Meta.Audiences)
 	require.True(t, d.Annotations.ReadOnlyHint)
 	require.Empty(t, reg.For(AudienceAssistant))
-	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "Google Workspace connected through enterprise SAML or OIDC qualifies")
-	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "personal Google or other social sign-in alone is insufficient")
+	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "company-managed Google or Microsoft account, magic link, or password with MFA")
+	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "passwords without MFA don't qualify")
 }
 
 func TestInternalSessionIssuerToolStates(t *testing.T) {
@@ -37,13 +37,15 @@ func TestInternalSessionIssuerToolStates(t *testing.T) {
 	pool, err := platformMCPInfra.CloneTestDatabase(t, "internal_session_issuer_tool")
 	require.NoError(t, err)
 	principal, _ := seedRegistrationLifecycle(t, ctx, pool)
-	redis, err := platformMCPInfra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), pool, redis)
+	setDomains := func(domains ...string) {
+		t.Helper()
+		require.NoError(t, testrepo.New(pool).SetOrganizationVerifiedDomainsFixture(ctx, testrepo.SetOrganizationVerifiedDomainsFixtureParams{ID: principal.OrganizationID, VerifiedDomains: append([]string{}, domains...)}))
+	}
+	setDomains()
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, principal.OrganizationID, false)
 	gate := func(provisioning bool) *internalsessionissuers.Gate {
-		return internalsessionissuers.NewGate(pool, features, flags, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
+		return internalsessionissuers.NewGate(pool, flags, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
 	}
 	reader := NewPostgresReader(testenv.NewLogger(t), pool).WithInternalSessionIssuer(gate(true))
 	server := newTestMCPServer()
@@ -70,8 +72,8 @@ func TestInternalSessionIssuerToolStates(t *testing.T) {
 
 	require.Equal(t, internalsessionissuers.StateUnavailable, read().State, "rollout flag off")
 	flags.SetFlag(feature.FlagInternalSessionIssuer, principal.OrganizationID, true)
-	require.Equal(t, internalsessionissuers.StateEntitlementRequired, read().State)
-	require.NoError(t, features.SetFeatureEnabled(ctx, principal.OrganizationID, productfeatures.FeatureSSO, true))
+	require.Equal(t, internalsessionissuers.StateVerifiedDomainRequired, read().State)
+	setDomains("example.com")
 	reader.WithInternalSessionIssuer(gate(false))
 	require.Equal(t, internalsessionissuers.StateUnavailable, read().State, "deployment can't provision")
 	reader.WithInternalSessionIssuer(gate(true))
@@ -97,12 +99,12 @@ func TestInternalSessionIssuerToolStates(t *testing.T) {
 	require.Equal(t, internalsessionissuers.StateDisabled, status.State)
 	require.Equal(t, issuer, status.Issuer)
 	require.True(t, status.CanEnable)
-	require.NoError(t, features.SetFeatureEnabled(ctx, principal.OrganizationID, productfeatures.FeatureSSO, false))
+	setDomains()
 	status = read()
 	require.Equal(t, internalsessionissuers.StateDisabled, status.State)
 	require.False(t, status.CanEnable)
 	require.NotContains(t, status.NextStep, "An organization administrator can")
-	require.NoError(t, features.SetFeatureEnabled(ctx, principal.OrganizationID, productfeatures.FeatureSSO, true))
+	setDomains("example.com")
 
 	_, err = provisioner.EnsureEMAIssuer(ctx, principal.OrganizationID)
 	require.NoError(t, err)

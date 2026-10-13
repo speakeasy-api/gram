@@ -74,11 +74,11 @@ type GetPayload struct {
 // InternalSessionIssuer is the result type of the internalSessionIssuers
 // service get method.
 type InternalSessionIssuer struct {
-	// unavailable: not offered to this organization yet. entitlement_required:
-	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
-	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing. keyless: every key was
-	// revoked after a compromise and no replacement is active yet.
+	// unavailable: not offered to this organization yet. verified_domain_required:
+	// needs at least one verified email domain. setup_required: not enabled yet.
+	// enabled: Speakeasy signs with it. disabled: an admin turned signing off.
+	// signing_paused: enabled, but Speakeasy has paused all signing. keyless:
+	// every key was revoked after a compromise and no replacement is active yet.
 	State string
 	// Whether deployment readiness, rollout and SSO entitlement currently allow
 	// enabling this issuer. The caller still needs organization administrator

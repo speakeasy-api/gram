@@ -11,8 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestSetEnabled_RequiresOrgAdmin(t *testing.T) {
@@ -48,7 +46,7 @@ func TestMutations_RefuseSupportSessions(t *testing.T) {
 	require.NoError(t, err, "support can still read the issuer")
 }
 
-func TestSetEnabled_EnablingRequiresRolloutAndEntitlement(t *testing.T) {
+func TestSetEnabled_EnablingRequiresRolloutAndVerifiedDomain(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t, true)
 	admin := adminCtx(t, ctx)
@@ -58,7 +56,7 @@ func TestSetEnabled_EnablingRequiresRolloutAndEntitlement(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeForbidden)
 	ti.flags.SetFlag(feature.FlagInternalSessionIssuer, ti.orgID, true)
 
-	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureSSO)
+	setVerifiedDomains(t, ctx, ti)
 	_, err = ti.service.SetEnabled(admin, &gen.SetEnabledPayload{Enabled: true, SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
@@ -76,9 +74,9 @@ func TestSetEnabled_Lifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, enabled.Keys, again.Keys, "enabling is idempotent")
 
-	// Turning signing off never depends on the rollout or the entitlement.
+	// Turning signing off never depends on the rollout or verified domains.
 	ti.flags.SetFlag(feature.FlagInternalSessionIssuer, ti.orgID, false)
-	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureSSO)
+	setVerifiedDomains(t, ctx, ti)
 	disabled, err := ti.service.SetEnabled(admin, &gen.SetEnabledPayload{Enabled: false, SessionToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, "disabled", disabled.State)
@@ -86,7 +84,7 @@ func TestSetEnabled_Lifecycle(t *testing.T) {
 	require.Len(t, disabled.Keys, 1, "keys stay published while disabled")
 
 	ti.flags.SetFlag(feature.FlagInternalSessionIssuer, ti.orgID, true)
-	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureSSO)
+	setVerifiedDomains(t, ctx, ti, "example.com")
 	reenabled, err := ti.service.SetEnabled(admin, &gen.SetEnabledPayload{Enabled: true, SessionToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, enabled.Keys, reenabled.Keys, "re-enabling keeps the key")
@@ -116,4 +114,25 @@ func TestSetEnabled_UnavailableWithoutProvisioning(t *testing.T) {
 	ctx, ti := newTestService(t, false)
 	_, err := ti.service.SetEnabled(adminCtx(t, ctx), &gen.SetEnabledPayload{Enabled: true, SessionToken: nil})
 	requireOopsCode(t, err, oops.CodeUnavailable)
+}
+
+func TestSetEnabled_VerifiedDomainSufficesWithoutSSO(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t, true)
+	admin := adminCtx(t, ctx)
+
+	setVerifiedDomains(t, ctx, ti)
+	_, err := ti.service.SetEnabled(admin, &gen.SetEnabledPayload{Enabled: true, SessionToken: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	// The fixture never grants the SSO entitlement; a verified domain is enough.
+	setVerifiedDomains(t, ctx, ti, "example.com")
+	view, err := ti.service.SetEnabled(admin, &gen.SetEnabledPayload{Enabled: true, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "enabled", view.State)
+
+	setVerifiedDomains(t, ctx, ti)
+	disabled, err := ti.service.SetEnabled(admin, &gen.SetEnabledPayload{Enabled: false, SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "disabled", disabled.State, "an existing issuer stays disableable without a verified domain")
 }

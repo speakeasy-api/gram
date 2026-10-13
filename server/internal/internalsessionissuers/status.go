@@ -11,7 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // State is what an organization can do with its issuer. The management API,
@@ -19,28 +18,21 @@ import (
 type State string
 
 const (
-	StateUnavailable         State = "unavailable"
-	StateEntitlementRequired State = "entitlement_required"
-	StateSetupRequired       State = "setup_required"
-	StateEnabled             State = "enabled"
-	StateDisabled            State = "disabled"
-	StateSigningPaused       State = "signing_paused"
+	StateUnavailable            State = "unavailable"
+	StateVerifiedDomainRequired State = "verified_domain_required"
+	StateSetupRequired          State = "setup_required"
+	StateEnabled                State = "enabled"
+	StateDisabled               State = "disabled"
+	StateSigningPaused          State = "signing_paused"
 	// StateKeyless is an enabled issuer whose keys were all revoked after a
 	// compromise and whose replacement is not active yet. It cannot sign.
 	StateKeyless State = "keyless"
 )
 
-// FeatureChecker reports product entitlements, read live so a lapsed
-// entitlement stops signing at once.
-type FeatureChecker interface {
-	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
-}
-
-// Gate combines the rollout flag, the SSO entitlement, deployment readiness,
+// Gate combines the rollout flag, the organization's verified domains, deployment readiness,
 // the kill switches and the organization's issuer row into one State.
 type Gate struct {
 	db               repo.DBTX
-	features         FeatureChecker
 	flags            feature.Provider
 	provisioning     bool
 	paused           bool
@@ -57,8 +49,8 @@ type GateConfig struct {
 	SigningPaused bool
 }
 
-func NewGate(db repo.DBTX, features FeatureChecker, flags feature.Provider, cfg GateConfig) *Gate {
-	return &Gate{db: db, features: features, flags: flags, provisioning: cfg.Provisioning, paused: cfg.SigningPaused, signingAuthority: nil, enableAuthority: nil}
+func NewGate(db repo.DBTX, flags feature.Provider, cfg GateConfig) *Gate {
+	return &Gate{db: db, flags: flags, provisioning: cfg.Provisioning, paused: cfg.SigningPaused, signingAuthority: nil, enableAuthority: nil}
 }
 
 // SetSigningAuthority installs the deployment's readiness check. Call before
@@ -77,19 +69,20 @@ type Status struct {
 	State State
 	// Issuer is nil when the organization never enabled one.
 	Issuer *repo.InternalSessionIssuer
-	// RolledOut is the rollout flag; Entitled is the SSO entitlement.
-	RolledOut bool
-	Entitled  bool
+	// RolledOut is the rollout flag. HasVerifiedDomain: assertions vouch only for
+	// emails on the organization's verified domains, so one is required.
+	RolledOut         bool
+	HasVerifiedDomain bool
 	// ActiveKey is the signing key Status read; set only for an issuer that
 	// reached the key check.
 	ActiveKey *repo.JsonWebKey
 }
 
-// Status reads an organization's state. A flag or entitlement lookup failure
+// Status reads an organization's state. A flag or organization lookup failure
 // is an error, never a silent state. A keyless issuer is checked before the
 // pause switch: it cannot sign either way.
 func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error) {
-	status := Status{State: StateUnavailable, Issuer: nil, RolledOut: false, Entitled: false, ActiveKey: nil}
+	status := Status{State: StateUnavailable, Issuer: nil, RolledOut: false, HasVerifiedDomain: false, ActiveKey: nil}
 	row, err := repo.New(g.db).GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -98,25 +91,23 @@ func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error
 	default:
 		status.Issuer = &row
 	}
-	groups, err := g.groups(ctx, organizationID)
+	org, err := orgrepo.New(g.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
-		return status, err
+		return status, fmt.Errorf("read organization: %w", err)
 	}
+	groups := feature.OrgProjectGroups(org.Slug, "")
+	status.HasVerifiedDomain = len(org.VerifiedDomains) > 0
 	status.RolledOut, err = g.flagEnabled(ctx, feature.FlagInternalSessionIssuer, organizationID, groups)
 	if err != nil {
 		return status, fmt.Errorf("read issuer rollout: %w", err)
-	}
-	status.Entitled, err = g.features.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeatureSSO)
-	if err != nil {
-		return status, fmt.Errorf("read sso entitlement: %w", err)
 	}
 	switch {
 	case status.Issuer != nil && status.Issuer.DisabledAt.Valid:
 		status.State = StateDisabled
 	case !status.RolledOut:
 		status.State = StateUnavailable
-	case !status.Entitled:
-		status.State = StateEntitlementRequired
+	case !status.HasVerifiedDomain:
+		status.State = StateVerifiedDomainRequired
 	case status.Issuer == nil && !g.provisioning:
 		status.State = StateUnavailable
 	case status.Issuer == nil:
@@ -179,16 +170,8 @@ func (g *Gate) flagEnabled(ctx context.Context, flag feature.Flag, organizationI
 	return enabled, nil
 }
 
-func (g *Gate) groups(ctx context.Context, organizationID string) (map[string]string, error) {
-	org, err := orgrepo.New(g.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return nil, fmt.Errorf("read organization: %w", err)
-	}
-	return feature.OrgProjectGroups(org.Slug, ""), nil
-}
-
 // Ready reports live signing readiness for the exact issuer referenced by a
-// provider order. Status includes deployment authority, rollout and entitlement.
+// provider order. Status includes deployment authority, rollout and verified domains.
 func (g *Gate) Ready(ctx context.Context, organizationID string, issuerID uuid.UUID) (bool, error) {
 	status, err := g.Status(ctx, organizationID)
 	if err != nil {
@@ -206,7 +189,7 @@ func (g *Gate) SetEnableAuthority(check func(string, Status) error) {
 
 // CanEnable separates activation eligibility from retained lifecycle state.
 func (g *Gate) CanEnable(organizationID string, status Status) bool {
-	if !status.RolledOut || !status.Entitled || !g.Provisioning() ||
+	if !status.RolledOut || !status.HasVerifiedDomain || !g.Provisioning() ||
 		(status.State != StateSetupRequired && status.State != StateDisabled) {
 		return false
 	}

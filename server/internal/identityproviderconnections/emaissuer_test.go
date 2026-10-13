@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -44,18 +43,10 @@ func (p pauseFlagFails) EvaluateFlag(ctx context.Context, flag feature.Flag, dis
 	return p.InMemory.EvaluateFlag(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
 }
 
-// entitlements grants or withholds the SSO entitlement for every organization.
-type entitlements struct{ sso bool }
-
-func (e *entitlements) IsFeatureEnabledUncached(context.Context, string, productfeatures.Feature) (bool, error) {
-	return e.sso, nil
-}
-
 type issuerFixture struct {
 	ti           *testInstance
 	credentialID uuid.UUID
 	flags        *feature.InMemory
-	entitled     *entitlements
 }
 
 func newIssuerFixture(t *testing.T) (context.Context, issuerFixture) {
@@ -64,7 +55,15 @@ func newIssuerFixture(t *testing.T) (context.Context, issuerFixture) {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagInternalSessionIssuer, ti.orgID, true)
 	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, ti.orgID, false)
-	return ctx, issuerFixture{ti: ti, credentialID: provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn), flags: flags, entitled: &entitlements{sso: true}}
+	f := issuerFixture{ti: ti, credentialID: provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn), flags: flags}
+	f.setVerifiedDomains(t, ctx, "example.com")
+	return ctx, f
+}
+
+// setVerifiedDomains replaces the organization's verified domains.
+func (f issuerFixture) setVerifiedDomains(t *testing.T, ctx context.Context, domains ...string) {
+	t.Helper()
+	require.NoError(t, testrepo.New(f.ti.conn).SetOrganizationVerifiedDomainsFixture(ctx, testrepo.SetOrganizationVerifiedDomainsFixtureParams{ID: f.ti.orgID, VerifiedDomains: append([]string{}, domains...)}))
 }
 
 // provisioner returns a provisioner minting from its own in-process key, so
@@ -90,7 +89,7 @@ func (f issuerFixture) signerWithFlags(t *testing.T, kms *hookedKMSClients, paus
 	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		return kms.inner.Factory(ctx, ts)
 	}
-	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: paused})
+	gate := internalsessionissuers.NewGate(f.ti.conn, flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: paused})
 	return internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, issuerSignerConfig(t, testServerURL, provisiontest.KeyRing, provisiontest.SigningServiceAccount()))
 }
 
@@ -402,6 +401,7 @@ func TestEMAIssuer_CrossOrgIsolation(t *testing.T) {
 	kid := activeIssuerKid(t, ctx, f, f.ti.orgID)
 	other := createOrganization(t, ctx, f.ti.conn)
 	f.flags.SetFlag(feature.FlagInternalSessionIssuer, other, true)
+	require.NoError(t, testrepo.New(f.ti.conn).SetOrganizationVerifiedDomainsFixture(ctx, testrepo.SetOrganizationVerifiedDomainsFixtureParams{ID: other, VerifiedDomains: []string{"other.example"}}))
 
 	_, _, err = internalsessionissuers.PublicKeys(ctx, f.ti.conn, other)
 	require.ErrorIs(t, err, internalsessionissuers.ErrNotFound, "another organization resolves no issuer")
@@ -442,10 +442,10 @@ func TestEMAIssuer_SigningGates(t *testing.T) {
 	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
 	require.NoError(t, err, "only an authoritative off lets signing run")
 
-	f.entitled.sso = false
+	f.setVerifiedDomains(t, ctx)
 	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
-	requireRefused(t, err, internalsessionissuers.StateEntitlementRequired)
-	f.entitled.sso = true
+	requireRefused(t, err, internalsessionissuers.StateVerifiedDomainRequired)
+	f.setVerifiedDomains(t, ctx, "example.com")
 
 	f.flags.SetFlag(feature.FlagInternalSessionIssuer, f.ti.orgID, false)
 	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
@@ -455,7 +455,7 @@ func TestEMAIssuer_SigningGates(t *testing.T) {
 	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		return kms.inner.Factory(ctx, ts)
 	}
-	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
+	gate := internalsessionissuers.NewGate(f.ti.conn, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
 	for _, pin := range []string{"", "someone-else@example.iam.gserviceaccount.com"} {
 		unpinned := internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, issuerSignerConfig(t, testServerURL, provisiontest.KeyRing, pin))
 		_, err = unpinned.Sign(ctx, f.ti.orgID, claims())
@@ -762,7 +762,7 @@ func TestEMAIssuer_CopiedDeploymentCannotSignOrManageSourceKeys(t *testing.T) {
 	require.ErrorIs(t, err, internalsessionissuers.ErrMisconfigured)
 	require.ErrorIs(t, preview.RotateEMAIssuer(ctx, f.ti.orgID, kid), internalsessionissuers.ErrMisconfigured)
 	require.ErrorIs(t, preview.ProvisionEMAIssuerKey(ctx, f.ti.orgID), internalsessionissuers.ErrMisconfigured)
-	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
+	gate := internalsessionissuers.NewGate(f.ti.conn, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
 	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		return kms.inner.Factory(ctx, ts)
 	}
@@ -813,7 +813,7 @@ func TestEMAIssuer_KillSwitchDuringSigningWins(t *testing.T) {
 	owner, kms := f.provisioner(t)
 	_, err := owner.EnsureEMAIssuer(ctx, f.ti.orgID)
 	require.NoError(t, err)
-	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
+	gate := internalsessionissuers.NewGate(f.ti.conn, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
 	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		client, err := kms.inner.Factory(ctx, ts)
 		if err != nil {

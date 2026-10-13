@@ -30,10 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -56,13 +55,12 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	gate     *internalsessionissuers.Gate
-	service  *internalsessionissuers.Service
-	conn     *pgxpool.Pool
-	features *productfeatures.Client
-	flags    *feature.InMemory
-	orgID    string
-	// providersFail makes every flag and entitlement lookup error.
+	gate    *internalsessionissuers.Gate
+	service *internalsessionissuers.Service
+	conn    *pgxpool.Pool
+	flags   *feature.InMemory
+	orgID   string
+	// providersFail makes every flag lookup error.
 	providersFail *atomic.Bool
 }
 
@@ -85,22 +83,6 @@ func (f failingFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, disti
 		return feature.EvaluationIndeterminate, errProviderDown
 	}
 	return f.InMemory.EvaluateFlag(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
-}
-
-type failingFeatures struct {
-	*productfeatures.Client
-	fail *atomic.Bool
-}
-
-func (f failingFeatures) IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error) {
-	if f.fail.Load() {
-		return false, errProviderDown
-	}
-	enabled, err := f.Client.IsFeatureEnabledUncached(ctx, organizationID, feature)
-	if err != nil {
-		return false, fmt.Errorf("read entitlement: %w", err)
-	}
-	return enabled, nil
 }
 
 // newTestService builds the service for a fresh organization with the
@@ -134,8 +116,7 @@ func newTestServiceWithMintStore(t *testing.T, provisioning, mintStoreDown bool)
 	authCtx.ActiveOrganizationID = orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-	productfeaturestest.Enable(t, ctx, conn, features, orgID, productfeatures.FeatureSSO)
+	require.NoError(t, testrepo.New(conn).SetOrganizationVerifiedDomainsFixture(ctx, testrepo.SetOrganizationVerifiedDomainsFixtureParams{ID: orgID, VerifiedDomains: []string{"example.com"}}))
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagInternalSessionIssuer, orgID, true)
 	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, orgID, false)
@@ -146,7 +127,7 @@ func newTestServiceWithMintStore(t *testing.T, provisioning, mintStoreDown bool)
 		credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, conn)
 		manager = provisiontest.NewProvisioner(t, conn, freshKeys, issuerOrigin, credentialID, "")
 	}
-	gate := internalsessionissuers.NewGate(conn, failingFeatures{Client: features, fail: providersFail}, failingFlags{InMemory: flags, fail: providersFail}, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
+	gate := internalsessionissuers.NewGate(conn, failingFlags{InMemory: flags, fail: providersFail}, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	mintStore := ratelimit.NewRedisStore(redisClient)
 	if mintStoreDown {
@@ -156,7 +137,7 @@ func newTestServiceWithMintStore(t *testing.T, provisioning, mintStoreDown bool)
 		mintStore = ratelimit.NewRedisStore(down)
 	}
 	service := internalsessionissuers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, audit.NewLogger(), gate, manager, mintStore)
-	return ctx, &testInstance{gate: gate, service: service, conn: conn, features: features, flags: flags, orgID: orgID, providersFail: providersFail}
+	return ctx, &testInstance{gate: gate, service: service, conn: conn, flags: flags, orgID: orgID, providersFail: providersFail}
 }
 
 // provisionIssuer creates the organization's issuer outside the service, for
@@ -197,4 +178,10 @@ func readCtx(t *testing.T, ctx context.Context) context.Context {
 
 func wantIssuer(ti *testInstance) string {
 	return issuerOrigin + "/oauth/idp/org/" + ti.orgID
+}
+
+// setVerifiedDomains replaces the organization's verified domains.
+func setVerifiedDomains(t *testing.T, ctx context.Context, ti *testInstance, domains ...string) {
+	t.Helper()
+	require.NoError(t, testrepo.New(ti.conn).SetOrganizationVerifiedDomainsFixture(ctx, testrepo.SetOrganizationVerifiedDomainsFixtureParams{ID: ti.orgID, VerifiedDomains: append([]string{}, domains...)}))
 }

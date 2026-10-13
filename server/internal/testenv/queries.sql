@@ -1928,3 +1928,8 @@ SET omit_scope_fallback = @omit_scope_fallback
 WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;
+
+-- name: SetOrganizationVerifiedDomainsFixture :exec
+UPDATE organization_metadata
+SET verified_domains = @verified_domains::text[]
+WHERE id = @id;

@@ -20,8 +20,8 @@ func TestSignerAvailable(t *testing.T) {
 	require.NoError(t, err)
 	valid := Signer{db: new(pgxpool.Pool), gate: new(Gate), gcpIdentity: gcpauth.NewIdentity(gcpauth.NewStubResolver()), kmsClients: func(context.Context, oauth2.TokenSource) (gcpkms.SigningClient, error) { return nil, nil }, managedSigner: "signer@example.test", deployment: Deployment{ServerURL: origin, KeyRing: "projects/project/locations/global/keyRings/issuer"}}
 	require.True(t, valid.Available())
-	status := Status{State: StateDisabled, RolledOut: true, Entitled: true, Issuer: &repo.InternalSessionIssuer{OrganizationID: "org-test", Issuer: "https://issuer.example.test/oauth/idp/org/org-test"}}
-	gate := NewGate(nil, nil, nil, GateConfig{Provisioning: true})
+	status := Status{State: StateDisabled, RolledOut: true, HasVerifiedDomain: true, Issuer: &repo.InternalSessionIssuer{OrganizationID: "org-test", Issuer: "https://issuer.example.test/oauth/idp/org/org-test"}}
+	gate := NewGate(nil, nil, GateConfig{Provisioning: true})
 	gate.SetEnableAuthority(valid.CheckEnableAuthority)
 	require.True(t, gate.CanEnable("org-test", status), "matching disabled issuer may be enabled")
 	status.Issuer.Issuer = "https://other-deployment.example.test/oauth/idp/org/org-test"

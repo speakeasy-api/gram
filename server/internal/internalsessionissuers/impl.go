@@ -160,8 +160,8 @@ func (s *Service) SetEnabled(ctx context.Context, payload *gensvc.SetEnabledPayl
 	switch {
 	case !status.RolledOut:
 		return nil, oops.E(oops.CodeForbidden, nil, "issuers are not available for this organization yet")
-	case !status.Entitled:
-		return nil, oops.E(oops.CodeForbidden, nil, "issuers require single sign-on for this organization")
+	case !status.HasVerifiedDomain:
+		return nil, oops.E(oops.CodeForbidden, nil, "issuers require a verified domain for this organization")
 	}
 	if (status.State == StateSetupRequired || status.State == StateDisabled) && !s.gate.CanEnable(organizationID, status) {
 		return nil, oops.E(oops.CodeUnavailable, nil, "the issuer cannot be enabled on this deployment")

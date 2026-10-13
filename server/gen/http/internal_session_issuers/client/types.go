@@ -32,11 +32,11 @@ type RotateRequestBody struct {
 // GetResponseBody is the type of the "internalSessionIssuers" service "get"
 // endpoint HTTP response body.
 type GetResponseBody struct {
-	// unavailable: not offered to this organization yet. entitlement_required:
-	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
-	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing. keyless: every key was
-	// revoked after a compromise and no replacement is active yet.
+	// unavailable: not offered to this organization yet. verified_domain_required:
+	// needs at least one verified email domain. setup_required: not enabled yet.
+	// enabled: Speakeasy signs with it. disabled: an admin turned signing off.
+	// signing_paused: enabled, but Speakeasy has paused all signing. keyless:
+	// every key was revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// Whether deployment readiness, rollout and SSO entitlement currently allow
 	// enabling this issuer. The caller still needs organization administrator
@@ -58,11 +58,11 @@ type GetResponseBody struct {
 // SetEnabledResponseBody is the type of the "internalSessionIssuers" service
 // "setEnabled" endpoint HTTP response body.
 type SetEnabledResponseBody struct {
-	// unavailable: not offered to this organization yet. entitlement_required:
-	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
-	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing. keyless: every key was
-	// revoked after a compromise and no replacement is active yet.
+	// unavailable: not offered to this organization yet. verified_domain_required:
+	// needs at least one verified email domain. setup_required: not enabled yet.
+	// enabled: Speakeasy signs with it. disabled: an admin turned signing off.
+	// signing_paused: enabled, but Speakeasy has paused all signing. keyless:
+	// every key was revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// Whether deployment readiness, rollout and SSO entitlement currently allow
 	// enabling this issuer. The caller still needs organization administrator
@@ -84,11 +84,11 @@ type SetEnabledResponseBody struct {
 // RotateResponseBody is the type of the "internalSessionIssuers" service
 // "rotate" endpoint HTTP response body.
 type RotateResponseBody struct {
-	// unavailable: not offered to this organization yet. entitlement_required:
-	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
-	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing. keyless: every key was
-	// revoked after a compromise and no replacement is active yet.
+	// unavailable: not offered to this organization yet. verified_domain_required:
+	// needs at least one verified email domain. setup_required: not enabled yet.
+	// enabled: Speakeasy signs with it. disabled: an admin turned signing off.
+	// signing_paused: enabled, but Speakeasy has paused all signing. keyless:
+	// every key was revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// Whether deployment readiness, rollout and SSO entitlement currently allow
 	// enabling this issuer. The caller still needs organization administrator
@@ -1222,8 +1222,8 @@ func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("kms_cleanup_pending", "body"))
 	}
 	if body.State != nil {
-		if !(*body.State == "unavailable" || *body.State == "entitlement_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused" || *body.State == "keyless") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless"}))
+		if !(*body.State == "unavailable" || *body.State == "verified_domain_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused" || *body.State == "keyless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "verified_domain_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless"}))
 		}
 	}
 	for _, e := range body.Keys {
@@ -1255,8 +1255,8 @@ func ValidateSetEnabledResponseBody(body *SetEnabledResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("kms_cleanup_pending", "body"))
 	}
 	if body.State != nil {
-		if !(*body.State == "unavailable" || *body.State == "entitlement_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused" || *body.State == "keyless") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless"}))
+		if !(*body.State == "unavailable" || *body.State == "verified_domain_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused" || *body.State == "keyless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "verified_domain_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless"}))
 		}
 	}
 	for _, e := range body.Keys {
@@ -1287,8 +1287,8 @@ func ValidateRotateResponseBody(body *RotateResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("kms_cleanup_pending", "body"))
 	}
 	if body.State != nil {
-		if !(*body.State == "unavailable" || *body.State == "entitlement_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused" || *body.State == "keyless") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless"}))
+		if !(*body.State == "unavailable" || *body.State == "verified_domain_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused" || *body.State == "keyless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "verified_domain_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless"}))
 		}
 	}
 	for _, e := range body.Keys {
