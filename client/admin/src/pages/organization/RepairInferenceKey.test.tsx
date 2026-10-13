@@ -1,3 +1,4 @@
+import { repairInferenceKey } from "@/lib/gramAdminClient";
 import { ServiceError } from "@gram/admin-client/models/errors/serviceerror";
 import {
   act,
@@ -13,7 +14,10 @@ import {
   type RepairInferenceKeyProps,
 } from "./RepairInferenceKey";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 const phrase = "I know what I'm doing";
 const causes = [
   {
@@ -351,3 +355,40 @@ it("normalizes generated server errors instead of showing the handler verb", asy
     "gram admin 500 Internal Server Error",
   );
 });
+
+it.each([400, 403, 404, 409, 415, 422])(
+  "shows the actionable %i message from the real generated repair path",
+  async (status) => {
+    const message = "This lock changed. Reload diagnostics before retrying.";
+    const fetch = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          fault: false,
+          id: "placeholder",
+          message,
+          name: "bad_request",
+          temporary: false,
+          timeout: false,
+        }),
+        { status, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    setup({
+      onSubmit: (submission) =>
+        repairInferenceKey({
+          organizationId: "org_placeholder",
+          keyType: "chat",
+          ...submission,
+        }),
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Staff lock" }));
+    confirm();
+    fireEvent.click(submit());
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain(message),
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(submit().disabled).toBe(false);
+  },
+);

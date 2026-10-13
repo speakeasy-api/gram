@@ -1,5 +1,8 @@
 /// <reference types="node" />
 
+import { SDKValidationError } from "@gram/admin-client/models/errors/sdkvalidationerror";
+import { ResponseValidationError } from "@gram/admin-client/models/errors/responsevalidationerror";
+
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -914,7 +917,7 @@ describe("generated inference key operations", () => {
         reason: "BUG-123",
         ...invalid,
       } as never),
-    ).rejects.toThrow();
+    ).rejects.toThrow(SDKValidationError);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -934,7 +937,7 @@ describe("generated inference key operations", () => {
         confirmation: "I know what I'm doing",
         reason: "BUG-123",
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(ResponseValidationError);
   });
 });
 
@@ -1049,7 +1052,7 @@ describe("generated inference key reads", () => {
         throw new Error("Missing query function");
       await expect(
         query.queryFn?.({ signal: new AbortController().signal } as never),
-      ).rejects.toThrow();
+      ).rejects.toThrow(ResponseValidationError);
       expect(fetch).toHaveBeenCalledOnce();
     },
   );

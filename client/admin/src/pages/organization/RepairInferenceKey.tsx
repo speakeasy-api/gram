@@ -1,8 +1,8 @@
 import type { AdminInferenceKeyCause } from "@gram/admin-client/models/components/admininferencekeycause";
 import { errorMessage } from "@/lib/gramAdminApi";
-import {
-  RemoveCauses$outboundSchema,
-  type RepairInferenceKeyRequestBody,
+import type {
+  RemoveCauses,
+  RepairInferenceKeyRequestBody,
 } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import { useId, useRef, useState, type JSX } from "react";
 import { AlertTriangle, Info } from "lucide-react";
@@ -104,9 +104,7 @@ export function RepairInferenceKey({
     setError(null);
     try {
       await onSubmit({
-        removeCauses: removals.map((cause) =>
-          RemoveCauses$outboundSchema.parse(cause.cause),
-        ),
+        removeCauses: removals.map((cause) => cause.cause as RemoveCauses),
         reason: reason.trim(),
         confirmation: CONFIRMATION,
       });
