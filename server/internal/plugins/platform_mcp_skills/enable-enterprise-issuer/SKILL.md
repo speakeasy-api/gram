@@ -69,10 +69,9 @@ replace an existing trusted issuer automatically.
 If the user wants to configure an MCP connection too, use `list_projects`,
 `find_mcp`, and `get_mcp` to identify an exact project and MCP server. Follow its
 supported setup handoff and obtain separate authorization for any provider or
-binding changes. Provider selection is API-only in this release through
-`organizationRemoteSessionIssuers.setEMAProviders`, behind the `ema-providers`
-rollout. There is no Platform MCP or dashboard provider-selection control; hand
-off that API setup rather than implying this skill can select the provider.
+binding changes. Choosing Speakeasy as an MCP server's enterprise authorization
+provider isn't available through this workflow or the dashboard yet; say so
+rather than implying this skill can select the provider.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for
 enterprise authorization readiness. Do not substitute a Platform MCP registration
 ID or generic registration readiness for this check.

@@ -160,7 +160,8 @@ const PauseFlagMaxAge = 150 * time.Second
 
 // signingPaused fails closed: signing runs only when the kill switch is
 // authoritatively and recently off. A missing flag, an unavailable provider,
-// a lookup error or stale definitions all pause signing.
+// a lookup error, stale definitions or a provider that can't report their age
+// all pause signing.
 func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups map[string]string) bool {
 	if g.paused {
 		return true
@@ -169,11 +170,12 @@ func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups 
 	if err != nil || evaluation != feature.EvaluationDisabled {
 		return true
 	}
-	if freshness, ok := g.flags.(feature.DefinitionsFreshness); ok {
-		confirmedAt, known := freshness.FlagDefinitionsConfirmedAt()
-		return !known || time.Since(confirmedAt) > PauseFlagMaxAge
+	freshness, ok := g.flags.(feature.DefinitionsFreshness)
+	if !ok {
+		return true
 	}
-	return false
+	confirmedAt, known := freshness.FlagDefinitionsConfirmedAt()
+	return !known || time.Since(confirmedAt) > PauseFlagMaxAge
 }
 
 func (g *Gate) flagEnabled(ctx context.Context, flag feature.Flag, organizationID string, groups map[string]string) (bool, error) {

@@ -251,7 +251,13 @@ func (s *Service) rotateCompromised(ctx context.Context, activeKid *string) (*ge
 	}
 	// Containment never depends on these, but a replacement key is only worth
 	// minting for an issuer the organization can still use.
-	if status, err := s.gate.Status(ctx, organizationID); err != nil || !status.RolledOut || !status.HasVerifiedDomain {
+	status, err := s.gate.Status(ctx, organizationID)
+	if err != nil {
+		logger.ErrorContext(ctx, "could not check whether to replace the contained issuer key; it stays keyless", attr.SlogError(err))
+		s.metrics.record(ctx, opRotateCompromised, errors.Join(append(errs, err)...))
+		return s.view(ctx, logger, organizationID)
+	}
+	if !status.RolledOut || !status.HasVerifiedDomain {
 		s.metrics.record(ctx, opRotateCompromised, errors.Join(errs...))
 		return s.view(ctx, logger, organizationID)
 	}

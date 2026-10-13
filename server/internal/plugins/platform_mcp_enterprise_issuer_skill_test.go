@@ -1,7 +1,6 @@
 package plugins
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,6 +20,6 @@ func TestGeneratePlatformMCPEnterpriseIssuerWorkflow(t *testing.T) {
 	}
 	require.NotContains(t, string(source), "`get_enterprise_issuer`")
 	require.NotContains(t, string(source), "`enable_enterprise_issuer`")
-	require.NotContains(t, strings.ToLower(string(source)), "gram")
+	require.NotRegexp(t, `(?i)\bgram\b`, string(source))
 	require.NotContains(t, string(source), "speakeasy-skill-feedback")
 }

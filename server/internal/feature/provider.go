@@ -182,6 +182,11 @@ func EvaluateFlag(ctx context.Context, provider Provider, flag Flag, distinctID 
 	return EvaluationIndeterminate, nil
 }
 
+// FlagDefinitionsConfirmedAt reports the in-memory flags as always current.
+func (imp *InMemory) FlagDefinitionsConfirmedAt() (time.Time, bool) {
+	return time.Now(), true
+}
+
 func (imp *InMemory) EvaluateFlag(_ context.Context, flag Flag, distinctID string, _ map[string]string) (Evaluation, error) {
 	enabled, ok := imp.loadFlag(flag, distinctID)
 	if !ok {

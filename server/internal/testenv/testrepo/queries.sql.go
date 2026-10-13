@@ -5110,18 +5110,24 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 }
 
 const setGcpIamCredentialServiceAccountFixture = `-- name: SetGcpIamCredentialServiceAccountFixture :exec
-UPDATE gcp_iam_credentials SET impersonate_service_account = $1::text
-WHERE external_credential_id = $2
+UPDATE gcp_iam_credentials AS gic SET impersonate_service_account = $1::text
+FROM external_credentials AS ec
+WHERE gic.external_credential_id = $2
+  AND ec.id = gic.external_credential_id
+  AND ec.organization_id IS NOT DISTINCT FROM $3::text
+  AND ec.project_id IS NULL
 `
 
 type SetGcpIamCredentialServiceAccountFixtureParams struct {
 	ImpersonateServiceAccount pgtype.Text
 	ExternalCredentialID      uuid.UUID
+	OrganizationID            pgtype.Text
 }
 
-// Test-only re-point of a credential's impersonated account, tombstones included.
+// Test-only re-point of a credential's impersonated account in its tier,
+// tombstones included: a NULL organization_id names the platform tier.
 func (q *Queries) SetGcpIamCredentialServiceAccountFixture(ctx context.Context, arg SetGcpIamCredentialServiceAccountFixtureParams) error {
-	_, err := q.db.Exec(ctx, setGcpIamCredentialServiceAccountFixture, arg.ImpersonateServiceAccount, arg.ExternalCredentialID)
+	_, err := q.db.Exec(ctx, setGcpIamCredentialServiceAccountFixture, arg.ImpersonateServiceAccount, arg.ExternalCredentialID, arg.OrganizationID)
 	return err
 }
 

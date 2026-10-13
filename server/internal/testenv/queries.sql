@@ -1638,9 +1638,14 @@ WHERE id = @id
   AND project_id IS NULL;
 
 -- name: SetGcpIamCredentialServiceAccountFixture :exec
--- Test-only re-point of a credential's impersonated account, tombstones included.
-UPDATE gcp_iam_credentials SET impersonate_service_account = sqlc.narg(impersonate_service_account)::text
-WHERE external_credential_id = @external_credential_id;
+-- Test-only re-point of a credential's impersonated account in its tier,
+-- tombstones included: a NULL organization_id names the platform tier.
+UPDATE gcp_iam_credentials AS gic SET impersonate_service_account = sqlc.narg(impersonate_service_account)::text
+FROM external_credentials AS ec
+WHERE gic.external_credential_id = @external_credential_id
+  AND ec.id = gic.external_credential_id
+  AND ec.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND ec.project_id IS NULL;
 
 -- name: RevokeDelegationUserIssuersFixture :exec
 -- Test-only revocation of organization-scoped delegation authority.

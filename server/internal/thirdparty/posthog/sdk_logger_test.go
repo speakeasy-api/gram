@@ -147,8 +147,12 @@ func TestDefinitionsTransportRecordsSuccessfulDefinitionFetches(t *testing.T) {
 
 	status := atomic.Int32{}
 	status.Store(http.StatusOK)
+	body := atomic.Pointer[string]{}
+	definitions, maintenance := `{"flags":[]}`, `<html>maintenance</html>`
+	body.Store(&definitions)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(int(status.Load()))
+		_, _ = w.Write([]byte(*body.Load()))
 	}))
 	t.Cleanup(server.Close)
 
@@ -179,9 +183,16 @@ func TestDefinitionsTransportRecordsSuccessfulDefinitionFetches(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, first, after, "a failed poll never refreshes the confirmation")
 
+	status.Store(http.StatusOK)
+	body.Store(&maintenance)
+	fetch("/api/feature_flag/local_evaluation")
+	after, ok = provider.FlagDefinitionsConfirmedAt()
+	require.True(t, ok)
+	require.Equal(t, first, after, "a body the SDK can't load never refreshes the confirmation")
+
 	status.Store(http.StatusNotModified)
 	fetch("/api/feature_flag/local_evaluation")
 	refreshed, ok := provider.FlagDefinitionsConfirmedAt()
 	require.True(t, ok)
-	require.False(t, refreshed.Before(first), "an unchanged response confirms the cached definitions")
+	require.True(t, refreshed.After(first), "an unchanged response confirms the cached definitions")
 }

@@ -1,10 +1,12 @@
 package posthog
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -118,11 +120,29 @@ type definitionsTransport struct {
 
 func (t *definitionsTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	res, err := t.base.RoundTrip(req)
-	if err == nil && strings.HasSuffix(strings.TrimSuffix(req.URL.Path, "/"), "/feature_flag/local_evaluation") &&
-		(res.StatusCode == http.StatusOK || res.StatusCode == http.StatusNotModified) {
-		t.confirmedAt.Store(time.Now().UnixNano())
+	if err != nil || !strings.HasSuffix(strings.TrimSuffix(req.URL.Path, "/"), "/feature_flag/local_evaluation") {
+		return res, err //nolint:wrapcheck // A transport passes its base's errors through.
 	}
-	return res, err //nolint:wrapcheck // A transport passes its base's errors through.
+	switch res.StatusCode {
+	case http.StatusNotModified:
+		t.confirmedAt.Store(time.Now().UnixNano())
+	case http.StatusOK:
+		// Only definitions the SDK can load count, so a malformed body
+		// leaves the cached definitions aging.
+		body, readErr := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read feature flag definitions: %w", readErr)
+		}
+		res.Body = io.NopCloser(bytes.NewReader(body))
+		var definitions struct {
+			Flags []json.RawMessage `json:"flags"`
+		}
+		if json.Unmarshal(body, &definitions) == nil && definitions.Flags != nil {
+			t.confirmedAt.Store(time.Now().UnixNano())
+		}
+	}
+	return res, nil
 }
 
 // FlagDefinitionsConfirmedAt reports when the flag definitions behind

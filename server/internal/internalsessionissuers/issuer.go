@@ -190,8 +190,10 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 		return oops.E(oops.CodeNotFound, nil, "issuer not found")
 	}
 	cached, ok := h.cache.Get(key)
-	if !ok && h.missing.Contains(key) {
-		cached, ok = cachedDocument{body: nil, renderedAt: time.Time{}}, true
+	if !ok {
+		if _, missing := h.missing.Get(key); missing {
+			cached, ok = cachedDocument{body: nil, renderedAt: time.Time{}}, true
+		}
 	}
 	if !ok {
 		flight := fmt.Sprintf("%t/%s", key.keys, key.organizationID)
@@ -199,7 +201,7 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 			if cached, ok := h.cache.Get(key); ok {
 				return cached, nil
 			}
-			if h.missing.Contains(key) {
+			if _, missing := h.missing.Get(key); missing {
 				return cachedDocument{body: nil, renderedAt: time.Time{}}, nil
 			}
 			select {
