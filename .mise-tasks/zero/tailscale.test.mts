@@ -393,10 +393,11 @@ test("failed setup does not create a partial configuration when none existed", a
   unlinkSync(join(f.root, "mise.local.toml"));
   miseWrapper(
     f.root,
-    `if (args[0] === 'set') { fs.writeFileSync(file, '[env]\\nGRAM_HOST="partial"\\n'); process.exit(1); }`,
+    `if (args[0] === 'set') { fs.writeFileSync(file, '[env]\\nGRAM_HOST="partial"\\n'); process.stderr.write('simulated config write failure'); process.exit(1); }`,
   );
   await assert.rejects(
     setupTailscale({ root: f.root, env: f.env, prompt: async () => true }),
+    /simulated config write failure/,
   );
   assert.equal(existsSync(join(f.root, "mise.local.toml")), false);
   assert.deepEqual(
@@ -408,9 +409,9 @@ test("failed setup does not create a partial configuration when none existed", a
 test("atomic replacement preserves configuration permissions", async (t) => {
   const f = fixture(t);
   const path = join(f.root, "mise.local.toml");
-  chmodSync(path, 0o600);
+  chmodSync(path, 0o644);
   await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
-  assert.equal(statSync(path).mode & 0o777, 0o600);
+  assert.equal(statSync(path).mode & 0o777, 0o644);
   assert.equal(f.read().GRAM_HOST, hostname);
 });
 

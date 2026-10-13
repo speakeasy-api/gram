@@ -93,6 +93,8 @@ function saveSettings(
       ],
       { cwd: root, env },
     );
+    // Best-effort only: plain mise commands and editors share no writer lock.
+    // They can still change the file between this comparison and the rename.
     const current = localSnapshot(localPath);
     if (
       current?.contents !== original?.contents ||
