@@ -240,7 +240,8 @@ func (s *Service) metaValidationTarget(
 		// The dispatch selectors: a tunneled member takes only its own issuer's entry (tunneledIssuerToken).
 		routes := grantRoutesToUpstream(entry.Resource, row.UpstreamUrl, false)
 		if row.Tunneled {
-			routes = tunneledIssuerToken(tokens, conv.ToNullUUID(client.RemoteSessionIssuerID), row.UpstreamUrl) != ""
+			routed, err := tunneledIssuerToken(tokens, conv.ToNullUUID(client.RemoteSessionIssuerID), row.UpstreamUrl)
+			routes = err == nil && routed.Token != ""
 		}
 		if routes {
 			targetID = row.McpServerID
@@ -347,24 +348,25 @@ func (s *Service) standaloneValidationTarget(
 
 	selected := tokens[client.RemoteSessionIssuerID]
 	selectedTokens := map[uuid.UUID]remotesessions.UpstreamToken{client.RemoteSessionIssuerID: selected}
-	selectedToken, err := routeUpstreamToken(ctx, logger, selectedTokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, tunneledBackendIssuer(&server))
+	selectedToken, err := routeUpstreamToken(ctx, logger, selectedTokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID)
 	var routeErr *upstreamRoutingError
 	switch {
-	case errors.As(err, &routeErr), selectedToken == "":
+	case errors.As(err, &routeErr), selectedToken.Token == "":
 		return ctx, none, errRemoteSessionUnroutable
 	case err != nil:
 		return ctx, none, fmt.Errorf("route selected upstream token for validation: %w", err)
 	}
 
-	token, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, tunneledBackendIssuer(&server))
+	routed, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID)
 	switch {
-	case errors.As(err, &routeErr):
+	case errors.As(err, &routeErr), errors.Is(err, remotesessions.ErrNoValidToken):
 		return ctx, none, errRemoteSessionUnroutable
 	case err != nil:
 		return ctx, none, fmt.Errorf("route upstream token for validation: %w", err)
-	case token == "" || token != selectedToken:
+	case routed.Token == "" || routed.Token != selectedToken.Token:
 		return ctx, none, errRemoteSessionUnroutable
 	}
+	token := routed.Token
 
 	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, &server)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"net/url"
 
 	access "github.com/speakeasy-api/gram/server/gen/access"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -8034,20 +8035,20 @@ func unmarshalAIDetectionResponseBodyToAccessAIDetection(v *AIDetectionResponseB
 		res.Versions[i] = val
 	}
 	if v.Access != nil {
-		res.Access = unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(v.Access)
+		res.Access = unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v.Access)
 	}
 
 	return res
 }
 
-// unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary builds a
-// value of type *access.AIToolAccessSummary from a value of type
+// unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary builds a
+// value of type *types.AIToolAccessSummary from a value of type
 // *AIToolAccessSummaryResponseBody.
-func unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(v *AIToolAccessSummaryResponseBody) *access.AIToolAccessSummary {
+func unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v *AIToolAccessSummaryResponseBody) *types.AIToolAccessSummary {
 	if v == nil {
 		return nil
 	}
-	res := &access.AIToolAccessSummary{
+	res := &types.AIToolAccessSummary{
 		State:       *v.State,
 		Decision:    *v.Decision,
 		Enforceable: *v.Enforceable,
@@ -8074,6 +8075,23 @@ func unmarshalAIDetectionUserResponseBodyToAccessAIDetectionUser(v *AIDetectionU
 	res.Versions = make([]string, len(v.Versions))
 	for i, val := range v.Versions {
 		res.Versions[i] = val
+	}
+
+	return res
+}
+
+// unmarshalResourceAudienceRolePluginResponseBodyToAccessResourceAudienceRolePlugin
+// builds a value of type *access.ResourceAudienceRolePlugin from a value of
+// type *ResourceAudienceRolePluginResponseBody.
+func unmarshalResourceAudienceRolePluginResponseBodyToAccessResourceAudienceRolePlugin(v *ResourceAudienceRolePluginResponseBody) *access.ResourceAudienceRolePlugin {
+	if v == nil {
+		return nil
+	}
+	res := &access.ResourceAudienceRolePlugin{
+		PrincipalUrn: *v.PrincipalUrn,
+		PluginID:     *v.PluginID,
+		Name:         *v.Name,
+		Slug:         *v.Slug,
 	}
 
 	return res

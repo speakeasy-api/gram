@@ -16,6 +16,9 @@ func (s *RefreshService) WaitIdentityRestatements() { s.restatements.Wait() }
 
 func (m *ChallengeManager) WaitIdentityRestatements() { m.refresher.WaitIdentityRestatements() }
 
+// SetCreateDiscoveryBudget shortens create-time discovery for timing tests.
+func (s *Service) SetCreateDiscoveryBudget(d time.Duration) { s.createDiscoveryBudget = d }
+
 // MaxEnrichmentBytes exposes the enrichment cap to e2e tests.
 const MaxEnrichmentBytes = maxEnrichmentBytes
 

@@ -223,7 +223,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	completions := openrouter.NewUnifiedClient(logger, guardianPolicy, openRouter, modelkeys.NewResolver(db, enc, openRouter), chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), &background.TemporalChatTitleGenerator{TemporalEnv: r.Temporal}, telemLogger)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, publishers, shadowMCPClient, toolIOLogsEnabled,
+		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
 	)
 	if err != nil {
 		return nil, err
@@ -267,7 +267,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 	assistantsCore.SetFeatureProvider(featureFlags)
 	assistantsCore.SetOutboundCallbackOrigin(callbackOrigins.Outbound)
-	triggerApp.RegisterDispatcher(assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: r.Temporal}, ratelimit.NewRedisStore(redisClient), featureFlags))
+	triggerApp.RegisterDispatcher(assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: r.Temporal}, ratelimit.NewRedisStore(redisClient)))
 	platformExtras := append([]platformtools.ExternalTool{}, platformruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))...)
 	gcpIdentity := newGCPIdentity(ctx, logger, c)
@@ -304,6 +304,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
+	// The private ingress serves no authentication host routes, but must know
+	// the host to derive the shared authorization servers issuers pin there.
+	mcp.RecordAuthenticationHost(authenticationHost, mcpService)
 	r.cleanup = append(r.cleanup, func(ctx context.Context) error {
 		drainCtx, cancel := context.WithTimeout(ctx, probeDrainTimeout)
 		defer cancel()

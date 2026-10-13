@@ -183,7 +183,7 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, resolve
 	}
 	doc := discovered.doc
 
-	if err := vetRefreshedDocument(doc, issuer); err != nil {
+	if err := vetDiscoveredDocument(doc, issuer.Issuer); err != nil {
 		return zero, nil, err
 	}
 
@@ -267,7 +267,7 @@ func (e *keySetRefreshError) Error() string {
 }
 func (e *keySetRefreshError) Unwrap() error { return e.cause }
 
-// vetRefreshedDocument is the distrust gate a fetched document must pass
+// vetDiscoveredDocument is the distrust gate a fetched document must pass
 // before it may overwrite an issuer's stored metadata. Speakeasy distrusts the
 // whole document rather than salvaging parts of it: a refresh overwrites
 // metadata that currently works, so a document that deviates on anything
@@ -288,23 +288,23 @@ func (e *keySetRefreshError) Unwrap() error { return e.cause }
 // better one, which on create leaves the operator to fill the endpoints in by
 // hand. Persisting it over an issuer that currently has working endpoints
 // would break every session it mints.
-func vetRefreshedDocument(doc rfc8414Document, issuer repo.RemoteSessionIssuer) error {
+func vetDiscoveredDocument(doc rfc8414Document, issuerURL string) error {
 	switch {
 	case doc.Issuer == "":
 		return &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuer.Issuer),
+			reason: fmt.Sprintf("metadata document at %s advertises no issuer", issuerURL),
 		}
-	case doc.Issuer != issuer.Issuer:
+	case doc.Issuer != issuerURL:
 		return &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuer.Issuer),
+			reason: fmt.Sprintf("metadata document advertises issuer %q, but this identity provider is configured as %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuerURL),
 		}
 	case doc.AuthorizationEndpoint == "":
 		return &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no authorization_endpoint", issuer.Issuer),
+			reason: fmt.Sprintf("metadata document at %s advertises no authorization_endpoint", issuerURL),
 		}
 	case doc.TokenEndpoint == "":
 		return &untrustedDocumentError{
-			reason: fmt.Sprintf("metadata document at %s advertises no token_endpoint", issuer.Issuer),
+			reason: fmt.Sprintf("metadata document at %s advertises no token_endpoint", issuerURL),
 		}
 	default:
 		return nil
@@ -323,7 +323,7 @@ func discoveredMetadataParams(doc rfc8414Document, unreadable string, unreadable
 		// history rather than on what the issuer advertises right now.
 		AuthorizationEndpoint: doc.AuthorizationEndpoint,
 		TokenEndpoint:         doc.TokenEndpoint,
-		// Deliberately absent from vetRefreshedDocument: an issuer that
+		// Deliberately absent from vetDiscoveredDocument: an issuer that
 		// advertises no revocation endpoint is the common case, not a signal
 		// that the document is untrustworthy. It clears to NULL like any other
 		// endpoint the issuer has stopped advertising, and revoking a session

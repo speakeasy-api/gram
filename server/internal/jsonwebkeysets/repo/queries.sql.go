@@ -22,7 +22,7 @@ WHERE id = $1
   AND organization_id = $2
   AND state IN ('pending', 'retired')
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 `
 
 type ActivateJsonWebKeyParams struct {
@@ -46,6 +46,7 @@ func (q *Queries) ActivateJsonWebKey(ctx context.Context, arg ActivateJsonWebKey
 		&i.ActivatedAt,
 		&i.RetiredAt,
 		&i.RevokedAt,
+		&i.KmsDisabledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -61,7 +62,7 @@ SET deleted_at = clock_timestamp(),
 WHERE json_web_key_set_id = $1
   AND organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CascadeSoftDeleteJsonWebKeysParams struct {
@@ -96,6 +97,7 @@ func (q *Queries) CascadeSoftDeleteJsonWebKeys(ctx context.Context, arg CascadeS
 			&i.ActivatedAt,
 			&i.RetiredAt,
 			&i.RevokedAt,
+			&i.KmsDisabledAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -160,7 +162,7 @@ INSERT INTO json_web_keys (
   $6,
   CASE WHEN $4::text = 'active' THEN clock_timestamp() END
 )
-RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateJsonWebKeyParams struct {
@@ -195,6 +197,7 @@ func (q *Queries) CreateJsonWebKey(ctx context.Context, arg CreateJsonWebKeyPara
 		&i.ActivatedAt,
 		&i.RetiredAt,
 		&i.RevokedAt,
+		&i.KmsDisabledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -240,7 +243,7 @@ func (q *Queries) CreateJsonWebKeySet(ctx context.Context, arg CreateJsonWebKeyS
 }
 
 const getActiveJsonWebKey = `-- name: GetActiveJsonWebKey :one
-SELECT id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 FROM json_web_keys
 WHERE json_web_key_set_id = $1
   AND organization_id = $2
@@ -269,6 +272,7 @@ func (q *Queries) GetActiveJsonWebKey(ctx context.Context, arg GetActiveJsonWebK
 		&i.ActivatedAt,
 		&i.RetiredAt,
 		&i.RevokedAt,
+		&i.KmsDisabledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -366,7 +370,7 @@ func (q *Queries) GetExternalKeyForMint(ctx context.Context, arg GetExternalKeyF
 }
 
 const getJsonWebKey = `-- name: GetJsonWebKey :one
-SELECT id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 FROM json_web_keys
 WHERE id = $1
   AND organization_id = $2
@@ -394,6 +398,7 @@ func (q *Queries) GetJsonWebKey(ctx context.Context, arg GetJsonWebKeyParams) (J
 		&i.ActivatedAt,
 		&i.RetiredAt,
 		&i.RevokedAt,
+		&i.KmsDisabledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -514,7 +519,7 @@ func (q *Queries) ListJsonWebKeySets(ctx context.Context, organizationID string)
 }
 
 const listJsonWebKeys = `-- name: ListJsonWebKeys :many
-SELECT k.id, k.organization_id, k.project_id, k.json_web_key_set_id, k.external_key_id, k.external_key_version, k.state, k.kid, k.public_jwk, k.activated_at, k.retired_at, k.revoked_at, k.created_at, k.updated_at, k.deleted_at, k.deleted
+SELECT k.id, k.organization_id, k.project_id, k.json_web_key_set_id, k.external_key_id, k.external_key_version, k.state, k.kid, k.public_jwk, k.activated_at, k.retired_at, k.revoked_at, k.kms_disabled_at, k.created_at, k.updated_at, k.deleted_at, k.deleted
 FROM json_web_keys AS k
 JOIN json_web_key_sets AS s
   ON s.organization_id = k.organization_id
@@ -561,6 +566,7 @@ func (q *Queries) ListJsonWebKeys(ctx context.Context, arg ListJsonWebKeysParams
 			&i.ActivatedAt,
 			&i.RetiredAt,
 			&i.RevokedAt,
+			&i.KmsDisabledAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -673,7 +679,7 @@ WHERE json_web_key_set_id = $1
   AND state = 'active'
   AND deleted IS FALSE
   AND id <> $3
-RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RetireActiveJsonWebKeyParams struct {
@@ -704,6 +710,7 @@ func (q *Queries) RetireActiveJsonWebKey(ctx context.Context, arg RetireActiveJs
 		&i.ActivatedAt,
 		&i.RetiredAt,
 		&i.RevokedAt,
+		&i.KmsDisabledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -721,7 +728,7 @@ WHERE id = $1
   AND organization_id = $2
   AND state = 'active'
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RetireJsonWebKeyParams struct {
@@ -745,6 +752,7 @@ func (q *Queries) RetireJsonWebKey(ctx context.Context, arg RetireJsonWebKeyPara
 		&i.ActivatedAt,
 		&i.RetiredAt,
 		&i.RevokedAt,
+		&i.KmsDisabledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -762,7 +770,7 @@ SET state = 'revoked',
 WHERE id = $1
   AND organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RevokeJsonWebKeyParams struct {
@@ -790,6 +798,7 @@ func (q *Queries) RevokeJsonWebKey(ctx context.Context, arg RevokeJsonWebKeyPara
 		&i.ActivatedAt,
 		&i.RetiredAt,
 		&i.RevokedAt,
+		&i.KmsDisabledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

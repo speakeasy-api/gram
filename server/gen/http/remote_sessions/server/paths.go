@@ -27,6 +27,11 @@ func CommitServerIdentityConfigurationRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.commitServerIdentityConfiguration"
 }
 
+// GetServerIdentityImpactRemoteSessionsPath returns the URL path to the remoteSessions service getServerIdentityImpact HTTP endpoint.
+func GetServerIdentityImpactRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.getServerIdentityImpact"
+}
+
 // ListRemoteSessionsRemoteSessionsPath returns the URL path to the remoteSessions service listRemoteSessions HTTP endpoint.
 func ListRemoteSessionsRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.list"

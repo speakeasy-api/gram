@@ -3206,7 +3206,13 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 		}
 		// Public non-OAuth servers may need user-provided env vars.
 		for _, ec := range s.EnvConfigs {
+			title := strings.TrimSpace(ec.DisplayName)
+			if title == "" {
+				title = ec.VariableName
+			}
 			userConfig[ec.VariableName] = userConfigEntry{
+				Type:        "string",
+				Title:       title,
 				Description: ec.DisplayName,
 				Sensitive:   true,
 			}
@@ -3215,6 +3221,8 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 	if needsGramKeyPrompt {
 		userConfig["SPEAKEASY_AI_API_KEY"] = userConfigEntry{
+			Type:        "string",
+			Title:       "Speakeasy API key",
 			Description: "Your Speakeasy API key for authenticating MCP server connections",
 			Sensitive:   true,
 		}
@@ -3544,6 +3552,8 @@ type claudePluginMeta struct {
 }
 
 type userConfigEntry struct {
+	Type        string `json:"type"`
+	Title       string `json:"title"`
 	Description string `json:"description"`
 	Sensitive   bool   `json:"sensitive"`
 }

@@ -31,17 +31,16 @@ import { useWithdrawWorkloadSubjectMutation } from "@gram/client/react-query/wit
 import { WithdrawIssuerDialog } from "./WithdrawIssuerDialog";
 import { RemoveSubjectDialog } from "./RemoveSubjectDialog";
 import { Pencil, Plus } from "lucide-react";
-import {
-  RegisterIssuerSheet,
-  type RegisterIssuerValues,
-} from "./RegisterIssuerSheet";
+import { AccessRuleSheet } from "./custom/AccessRuleSheet";
+import { useCustomFlows } from "./custom/flows";
+import { PlatformFormSheet } from "./custom/PlatformFormSheet";
+import type {
+  AdmitSubjectInitialValues,
+  AdmitSubjectValues,
+  RegisterIssuerValues,
+} from "./formValues";
 import { changedIssuerFields } from "./issuerEdit";
 import { changedAdmissionFields } from "./admissionEdit";
-import {
-  AdmitSubjectSheet,
-  type AdmitSubjectInitialValues,
-  type AdmitSubjectValues,
-} from "./AdmitSubjectSheet";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
@@ -204,6 +203,8 @@ export function IssuerDetail({
   // management rollout is off, and the global query policy suppresses only 401
   // and 403 — left to throw it takes this page down with it.
   const agentsQuery = useAgents({}, undefined, { throwOnError: false });
+  // Fetched with the page so the edit and access sheets open on their forms.
+  useCustomFlows();
 
   const issuer = useMemo(
     () => data?.issuers?.find((candidate) => candidate.id === issuerId),
@@ -670,7 +671,7 @@ export function IssuerDetail({
       />
 
       {editValues && (
-        <RegisterIssuerSheet
+        <PlatformFormSheet
           open={editOpen}
           onOpenChange={setEditOpen}
           onSubmit={handleEdit}
@@ -680,7 +681,7 @@ export function IssuerDetail({
       )}
 
       {issuer && (
-        <AdmitSubjectSheet
+        <AccessRuleSheet
           open={admitOpen}
           onOpenChange={setAdmitOpen}
           onSubmit={handleAllow}
@@ -691,7 +692,7 @@ export function IssuerDetail({
       )}
 
       {issuer && editingAdmission && (
-        <AdmitSubjectSheet
+        <AccessRuleSheet
           open={editAdmissionOpen}
           onOpenChange={setEditAdmissionOpen}
           onSubmit={handleEditAdmission}

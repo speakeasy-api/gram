@@ -96,6 +96,9 @@ type Service interface {
 	// narrows to the caller's list filters, so the strip does not move when an
 	// operator filters.
 	GetOrganizationStats(context.Context, *GetOrganizationStatsPayload) (res *AdminOrganizationStats, err error)
+	// Removes explicitly selected known disable causes without changing tier,
+	// credits, or runtime. Staff confirmation and reason required.
+	RepairInferenceKey(context.Context, *RepairInferenceKeyPayload) (res *AdminInferenceKeyRepairResult, err error)
 	// Returns the configured state of every materialized platform-managed
 	// OpenRouter key for an organization.
 	GetInferenceKeys(context.Context, *GetInferenceKeysPayload) (res []*AdminInferenceKey, err error)
@@ -318,7 +321,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [84]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
+var MethodNames = [85]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -408,10 +411,18 @@ type AdminInferenceKey struct {
 	MonthlyCredits int64
 	Disabled       bool
 	// Active internal disable causes. Omitted for legacy unclassified rows.
-	DisableCauses []string
+	DisableCauses    []string
+	CauseDiagnostics []*AdminInferenceKeyCause
 	// Whether disable_causes is classified, including an explicitly empty cause
 	// set.
 	DisableCausesClassified bool
+}
+
+type AdminInferenceKeyCause struct {
+	Cause         string
+	Description   string
+	Removable     bool
+	BlockedReason *string
 }
 
 // AdminInferenceKeyLimit is the result type of the admin service
@@ -419,6 +430,23 @@ type AdminInferenceKey struct {
 type AdminInferenceKeyLimit struct {
 	KeyType        string
 	MonthlyCredits int64
+}
+
+// AdminInferenceKeyRepairResult is the result type of the admin service
+// repairInferenceKey method.
+type AdminInferenceKeyRepairResult struct {
+	Key                   *AdminInferenceKeyRepairState
+	ReconciliationPending bool
+}
+
+// Committed local key policy, without provider usage or credentials.
+type AdminInferenceKeyRepairState struct {
+	KeyType                 string
+	MonthlyCredits          int64
+	Disabled                bool
+	DisableCauses           []string
+	DisableCausesClassified bool
+	CauseDiagnostics        []*AdminInferenceKeyCause
 }
 
 type AdminInferenceSpendMonth struct {
@@ -1950,10 +1978,11 @@ type ListOrganizationsPayload struct {
 	Cursor *string
 	// Page size (default 50, max 100).
 	Limit *int
-	// Column to sort by: name, slug, account_type, member_count, created_at,
-	// disabled_at or trial_ends_at. Omitted or unknown values use created_at
-	// descending. Ties always sort by id ascending. Supplying it selects offset
-	// paging.
+	// Column to sort by: name, slug, account_type, account_tier, member_count,
+	// created_at, disabled_at or trial_ends_at. account_tier ranks enterprise
+	// first, then pro and payg, then free, then any other account type; desc
+	// reverses that order. Omitted or unknown values use created_at descending.
+	// Ties always sort by id ascending. Supplying it selects offset paging.
 	Sort *string
 	// Sort direction, asc or desc, applied to the column named by sort. Any other
 	// value sorts ascending. Ignored when sort is omitted or unknown, preserving
@@ -2145,6 +2174,8 @@ type ProductFeatures struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled bool
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -2166,6 +2197,20 @@ type RefreshGlobalIssuerMetadataPayload struct {
 	// The remote_session_issuer id.
 	ID                string
 	AdminSessionToken *string
+}
+
+// RepairInferenceKeyPayload is the payload type of the admin service
+// repairInferenceKey method.
+type RepairInferenceKeyPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	KeyType           string
+	// Unique known disable causes to remove.
+	RemoveCauses []string
+	// Exact staff confirmation: I know what I'm doing
+	Confirmation string
+	// Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+	Reason string
 }
 
 // ResumeStripeSubscriptionPayload is the payload type of the admin service
@@ -2681,6 +2726,9 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	if vres.NetworkIngressEnabled != nil {
 		res.NetworkIngressEnabled = *vres.NetworkIngressEnabled
 	}
+	if vres.SignalsIntelligenceEnabled != nil {
+		res.SignalsIntelligenceEnabled = *vres.SignalsIntelligenceEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -2710,6 +2758,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -28,11 +29,12 @@ import (
 
 // tokenRequestCapture records the last token request a fake endpoint received.
 type tokenRequestCapture struct {
-	mu       sync.Mutex
-	form     url.Values
-	user     string
-	password string
-	basic    bool
+	mu        sync.Mutex
+	form      url.Values
+	user      string
+	password  string
+	basic     bool
+	userAgent string
 }
 
 func (c *tokenRequestCapture) snapshot() (url.Values, string, string, bool) {
@@ -43,7 +45,7 @@ func (c *tokenRequestCapture) snapshot() (url.Values, string, string, bool) {
 
 func newFakeTokenEndpoint(t *testing.T, status int, body map[string]any) (*httptest.Server, *tokenRequestCapture) {
 	t.Helper()
-	capture := &tokenRequestCapture{mu: sync.Mutex{}, form: nil, user: "", password: "", basic: false}
+	capture := &tokenRequestCapture{mu: sync.Mutex{}, form: nil, user: "", password: "", basic: false, userAgent: ""}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad form", http.StatusBadRequest)
@@ -51,7 +53,7 @@ func newFakeTokenEndpoint(t *testing.T, status int, body map[string]any) (*httpt
 		}
 		user, password, basic := r.BasicAuth()
 		capture.mu.Lock()
-		capture.form, capture.user, capture.password, capture.basic = r.PostForm, user, password, basic
+		capture.form, capture.user, capture.password, capture.basic, capture.userAgent = r.PostForm, user, password, basic, r.UserAgent()
 		capture.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
@@ -96,9 +98,48 @@ func TestTokenEndpointPost_ReducesRejectionToCode(t *testing.T) {
 	_, err := basicTokenEndpoint(srv).Post(t.Context(), url.Values{})
 	var failure *TokenEndpointError
 	require.ErrorAs(t, err, &failure)
-	require.Equal(t, TokenEndpointError{StatusCode: http.StatusBadRequest, Code: "invalid_grant", Transport: false, Signing: false}, *failure)
+	require.Equal(t, TokenEndpointError{StatusCode: http.StatusBadRequest, Code: "invalid_grant", Description: "secret-provider-detail", Transport: false, Signing: false}, *failure)
 	require.NotContains(t, err.Error(), "secret-provider-detail", "provider bodies never reach errors")
 	require.NotContains(t, err.Error(), "idp-secret")
+}
+
+func TestTokenEndpointPost_KeepsOnlySanitizedErrorDescription(t *testing.T) {
+	t.Parallel()
+	srv, _ := newFakeTokenEndpoint(t, http.StatusBadRequest, map[string]any{
+		"error":             "invalid_grant",
+		"error_description": "No seat was found\r\n\u001b[2Jfor this user." + strings.Repeat(" padding", 60),
+		"assertion":         "echoed-assertion",
+	})
+	_, err := basicTokenEndpoint(srv).Post(t.Context(), url.Values{})
+	var failure *TokenEndpointError
+	require.ErrorAs(t, err, &failure)
+	require.True(t, strings.HasPrefix(failure.Description, "No seat was found [2Jfor this user. padding"), failure.Description)
+	require.Len(t, []rune(failure.Description), maxProviderErrorDescriptionRunes+1)
+	require.NotContains(t, failure.Description, "echoed-assertion")
+
+	vendor, _ := newFakeTokenEndpoint(t, http.StatusBadRequest, map[string]any{"error": map[string]any{"code": "invalid_grant", "message": "vendor-detail"}})
+	_, err = basicTokenEndpoint(vendor).Post(t.Context(), url.Values{})
+	require.ErrorAs(t, err, &failure)
+	require.Empty(t, failure.Description, "only the RFC 6749 error_description member is kept")
+}
+
+func TestProviderErrorDescription(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "line one line two", ProviderErrorDescription("line one\r\n\tline two"))
+	require.Equal(t, "beep", ProviderErrorDescription("\x1b\x07be\u200bep\x00"))
+	require.Empty(t, ProviderErrorDescription(" \n "))
+	long := ProviderErrorDescription(strings.Repeat("é", 500))
+	require.Equal(t, strings.Repeat("é", maxProviderErrorDescriptionRunes)+"…", long)
+}
+
+func TestTokenEndpointPost_SendsSpeakeasyUserAgent(t *testing.T) {
+	t.Parallel()
+	srv, capture := newFakeTokenEndpoint(t, http.StatusOK, map[string]any{"access_token": "at", "token_type": "Bearer"})
+	_, err := basicTokenEndpoint(srv).Post(t.Context(), url.Values{})
+	require.NoError(t, err)
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	require.Equal(t, constants.UserAgent, capture.userAgent)
 }
 
 func TestTokenEndpointPost_SuccessBodyWithoutTokenIsRejection(t *testing.T) {

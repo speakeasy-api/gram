@@ -48,6 +48,11 @@ type Service interface {
 	// save, each copy is validated, so a dashboard with a broken widget cannot be
 	// duplicated until the widget is fixed.
 	DuplicateDashboard(context.Context, *DuplicateDashboardPayload) (res *Dashboard, err error)
+	// Copy a Speakeasy-built dashboard into a new one the caller owns, named
+	// "<name> (copy)", with a new saved widget per card, named the same way. The
+	// copy is a project dashboard like any other and can be changed; the built-in
+	// stays as it is.
+	DuplicateBuiltInDashboard(context.Context, *DuplicateBuiltInDashboardPayload) (res *Dashboard, err error)
 	// Delete a dashboard and its cards. Its widgets stay saved. Its creator can;
 	// deleting someone else's needs project write access.
 	DeleteDashboard(context.Context, *DeleteDashboardPayload) (err error)
@@ -73,7 +78,7 @@ const ServiceName = "dashboards"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"listDashboards", "getDashboard", "createDashboard", "updateDashboard", "saveDashboardLayout", "addDashboardWidget", "removeDashboardWidget", "saveDashboardFilters", "duplicateDashboard", "deleteDashboard"}
+var MethodNames = [11]string{"listDashboards", "getDashboard", "createDashboard", "updateDashboard", "saveDashboardLayout", "addDashboardWidget", "removeDashboardWidget", "saveDashboardFilters", "duplicateDashboard", "duplicateBuiltInDashboard", "deleteDashboard"}
 
 // AddDashboardWidgetPayload is the payload type of the dashboards service
 // addDashboardWidget method.
@@ -84,6 +89,45 @@ type AddDashboardWidgetPayload struct {
 	WidgetID         string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// One card of a Speakeasy-built dashboard: a widget's question and drawing, as
+// a saved widget stores them, with where it sits on the 12-column grid. It is
+// not a saved widget; duplicating the dashboard makes one of it.
+type BuiltInCard struct {
+	// What the card is called
+	Name string
+	// What the card shows, when there is more to say
+	Description *string
+	// The catalog dataset the card asks
+	Dataset string
+	// The question: window, grain, dimensions, measures, filters, order and limit,
+	// in the shape a saved widget stores.
+	Query map[string]any
+	// How the question is drawn: a chart type and its options.
+	Visualization map[string]any
+	// Column the card starts at, from 0
+	X int
+	// Row the card starts at, from 0
+	Y int
+	// Width in columns
+	W int
+	// Height in rows
+	H int
+}
+
+// A dashboard Speakeasy ships with the product: its cards are laid out in code
+// and are the same in every project. It is read only; duplicating it makes a
+// project dashboard, with a saved widget per card, that can be changed.
+type BuiltInDashboard struct {
+	// Names the dashboard in links and when duplicating it
+	Slug string
+	// Display name
+	Name string
+	// What the dashboard is for
+	Description string
+	// Its cards, in no particular order; the grid places them by position
+	Cards []*BuiltInCard
 }
 
 // CreateDashboardPayload is the payload type of the dashboards service
@@ -164,6 +208,15 @@ type DeleteDashboardPayload struct {
 	ProjectSlugInput *string
 }
 
+// DuplicateBuiltInDashboardPayload is the payload type of the dashboards
+// service duplicateBuiltInDashboard method.
+type DuplicateBuiltInDashboardPayload struct {
+	// The built-in dashboard to copy
+	Slug             string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // DuplicateDashboardPayload is the payload type of the dashboards service
 // duplicateDashboard method.
 type DuplicateDashboardPayload struct {
@@ -194,6 +247,8 @@ type ListDashboardsPayload struct {
 type ListDashboardsResult struct {
 	// Dashboards in the project, most recently updated first
 	Dashboards []*Dashboard
+	// The dashboards Speakeasy ships, the same in every project
+	BuiltIn []*BuiltInDashboard
 }
 
 // Where a card sits in a layout being saved. It names an existing placement,

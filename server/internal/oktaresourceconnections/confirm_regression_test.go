@@ -136,3 +136,19 @@ func TestReset_RequiresRolloutEnabled(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
+
+func TestConfirm_RequiresDiscoveredAdvertisement(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	recordAgent(t, ctx, si, "wlp1")
+	f := capableServer(t, ctx, si, "Declared")
+	n, err := si.q.ClearIssuerDiscoveryFixture(ctx, repo.ClearIssuerDiscoveryFixtureParams{ID: f.issuerID, OrganizationID: conv.ToPGText(si.orgID)})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+
+	_, err = confirm(t, ctx, si, audience, nil, f.serverID)
+	requireOopsCode(t, err, oops.CodeNotFound)
+	rows, err := si.q.ListResourceConnections(ctx, repo.ListResourceConnectionsParams{OrganizationID: si.orgID, IdentityProviderConnectionID: si.connectionID})
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}

@@ -9,7 +9,6 @@ import {
 } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskPoliciesDeleteMutation } from "@gram/client/react-query/riskPoliciesDelete.js";
 import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
-import { invalidateAllRiskPoliciesStatus } from "@gram/client/react-query/riskPoliciesStatus.js";
 import {
   ShieldCheck,
   ShieldOff,
@@ -307,7 +306,6 @@ export function ConfigurePoliciesStep({
 
   const invalidatePolicies = () => {
     void invalidateAllRiskListPolicies(queryClient);
-    void invalidateAllRiskPoliciesStatus(queryClient);
   };
 
   const createPolicyMutation = useRiskCreatePolicyMutation({

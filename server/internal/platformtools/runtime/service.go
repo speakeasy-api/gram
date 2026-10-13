@@ -199,7 +199,6 @@ func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService, redactionKey st
 		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewGetRiskPolicyStatusTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewGetRiskRuleBreakdownTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc, redactionKey), RequiredFeature: ""},
 		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc, redactionKey), RequiredFeature: ""},

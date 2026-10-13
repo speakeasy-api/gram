@@ -35,8 +35,9 @@ import { HostedServerRef } from "./MCPOverviewTab";
 import { Spinner } from "@/components/ui/Spinner";
 
 function serverMatchesRef(server: PluginServer, ref: HostedServerRef): boolean {
+  // A hosted entry may be keyed by its canonical mcp_server, which shares the toolset id.
   return ref.kind === "toolset"
-    ? server.toolsetId === ref.id
+    ? server.toolsetId === ref.id || server.mcpServerId === ref.id
     : server.mcpServerId === ref.id;
 }
 

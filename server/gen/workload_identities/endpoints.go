@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	List               goa.Endpoint
 	ListPlatforms      goa.Endpoint
+	GetCustomFlows     goa.Endpoint
 	ListTokenEndpoints goa.Endpoint
 	RegisterIssuer     goa.Endpoint
 	UpdateIssuer       goa.Endpoint
@@ -35,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		List:               NewListEndpoint(s, a.APIKeyAuth),
 		ListPlatforms:      NewListPlatformsEndpoint(s, a.APIKeyAuth),
+		GetCustomFlows:     NewGetCustomFlowsEndpoint(s, a.APIKeyAuth),
 		ListTokenEndpoints: NewListTokenEndpointsEndpoint(s, a.APIKeyAuth),
 		RegisterIssuer:     NewRegisterIssuerEndpoint(s, a.APIKeyAuth),
 		UpdateIssuer:       NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
@@ -50,6 +52,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.List = m(e.List)
 	e.ListPlatforms = m(e.ListPlatforms)
+	e.GetCustomFlows = m(e.GetCustomFlows)
 	e.ListTokenEndpoints = m(e.ListTokenEndpoints)
 	e.RegisterIssuer = m(e.RegisterIssuer)
 	e.UpdateIssuer = m(e.UpdateIssuer)
@@ -150,6 +153,53 @@ func NewListPlatformsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			return nil, err
 		}
 		return s.ListPlatforms(ctx, p)
+	}
+}
+
+// NewGetCustomFlowsEndpoint returns an endpoint function that calls the method
+// "getCustomFlows" of service "workloadIdentities".
+func NewGetCustomFlowsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetCustomFlowsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetCustomFlows(ctx, p)
 	}
 }
 

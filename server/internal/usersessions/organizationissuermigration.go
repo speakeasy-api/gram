@@ -508,11 +508,12 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		name string
 		fn   func() (int64, error)
 	}{
-		{name: "MCP servers", fn: func() (int64, error) {
-			return q.UpdateMCPServersToUserSessionIssuer(ctx, repo.UpdateMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
-		}},
+		// Toolsets before mcp_servers: hosted wrappers mirror their toolset under that lock order.
 		{name: "toolsets", fn: func() (int64, error) {
 			return q.UpdateToolsetsToUserSessionIssuer(ctx, repo.UpdateToolsetsToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
+		}},
+		{name: "MCP servers", fn: func() (int64, error) {
+			return q.UpdateMCPServersToUserSessionIssuer(ctx, repo.UpdateMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
 		}},
 		{name: "meta MCP servers", fn: func() (int64, error) {
 			return q.UpdateMetaMCPServersToUserSessionIssuer(ctx, repo.UpdateMetaMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})

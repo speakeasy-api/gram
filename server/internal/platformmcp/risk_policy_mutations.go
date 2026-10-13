@@ -54,7 +54,8 @@ type createRiskPolicyInput struct {
 	ProjectSlug            string               `json:"project_slug"`
 	PolicyType             string               `json:"policy_type"`
 	Name                   string               `json:"name"`
-	Enabled                bool                 `json:"enabled"`
+	Enabled                *bool                `json:"enabled,omitempty"`
+	Preset                 string               `json:"preset,omitempty"`
 	Action                 string               `json:"action,omitempty"`
 	Score                  *float64             `json:"score,omitempty"`
 	UserMessage            *string              `json:"user_message,omitempty"`
@@ -66,7 +67,22 @@ type createRiskPolicyInput struct {
 	ApprovedEmailDomains   []string             `json:"approved_email_domains,omitempty"`
 	DetectionScopes        []riskDetectionScope `json:"detection_scopes,omitempty"`
 	Prompt                 string               `json:"prompt,omitempty"`
+	MCPScope               *riskPolicyMCPScope  `json:"mcp_scope,omitempty"`
 	IdempotencyKey         string               `json:"idempotency_key"`
+}
+
+// riskPolicyMCPScope limits a new policy to MCP tool calls through chosen
+// servers, checked at the gateway before the tool runs. It mirrors the
+// management API's scope so both surfaces store the same shape.
+type riskPolicyMCPScope struct {
+	AllServers      bool                       `json:"all_servers,omitempty"`
+	ToolAnnotations []string                   `json:"tool_annotations,omitempty"`
+	Servers         []riskPolicyMCPServerScope `json:"servers,omitempty"`
+}
+
+type riskPolicyMCPServerScope struct {
+	MCPServerID string   `json:"mcp_server_id"`
+	Tools       []string `json:"tools,omitempty"`
 }
 
 type updateRiskPolicyInput struct {
@@ -98,6 +114,7 @@ type normalizedCreateRiskPolicy struct {
 	ApprovedEmailDomains   []string             `json:"approved_email_domains"`
 	DetectionScopes        []riskDetectionScope `json:"detection_scopes"`
 	PromptDigest           string               `json:"prompt_digest,omitempty"`
+	MCPScope               *policycore.MCPScope `json:"mcp_scope,omitempty"`
 }
 
 type preparedRiskPolicyCreate struct {
@@ -161,6 +178,10 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 	if err := decodeRiskMutationInput(raw, &input); err != nil {
 		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
 	}
+	input, err = applyRiskPolicyPreset(input)
+	if err != nil {
+		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
+	}
 	project, err := s.controls.Admit(ctx, principal, strings.TrimSpace(input.ProjectSlug))
 	if err != nil {
 		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
@@ -173,7 +194,7 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 	var committed *policycore.MutationResult
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operationCreateRiskPolicy, IdempotencyKey: input.IdempotencyKey, Input: prepared.normalized,
-	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
 			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy create: %w", err)
 		}
@@ -280,7 +301,7 @@ func (s *riskPolicyMutationService) mutatePolicyTool(ctx context.Context, raw ma
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operation, IdempotencyKey: input.IdempotencyKey,
 		Input: map[string]any{"project_slug": project.Slug, "policy_id": policyID.String(), "expected_version": input.ExpectedVersion, "patch": normalizedPatch},
-	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		if err := shadowadmission.LockProject(ctx, tx, project.ID); err != nil {
 			return nil, fmt.Errorf("lock shadow mcp admission project for risk policy update: %w", err)
 		}
@@ -454,6 +475,10 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	if input.ProjectSlug != project.Slug || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 || policycore.ValidateName(input.Name) != nil || !slices.Contains(s.catalog.PolicyTypes, input.PolicyType) {
 		return preparedRiskPolicyCreate{}, invalidRiskPolicyRequest()
 	}
+	enabled := true
+	if input.Enabled != nil {
+		enabled = *input.Enabled
+	}
 	action := input.Action
 	if action == "" {
 		action = defaultRiskPolicyAction
@@ -470,15 +495,15 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	}
 
 	normalized := normalizedCreateRiskPolicy{
-		ProjectSlug: project.Slug, PolicyType: input.PolicyType, Name: input.Name, Enabled: input.Enabled,
+		ProjectSlug: project.Slug, PolicyType: input.PolicyType, Name: input.Name, Enabled: enabled,
 		Action: action, Score: score, UserMessage: input.UserMessage,
-		Sources: []string{}, PresidioEntities: []string{}, PresidioScoreThreshold: nil, PromptInjectionRules: []string{}, DisabledRules: []string{}, ApprovedEmailDomains: []string{}, DetectionScopes: []riskDetectionScope{}, PromptDigest: "",
+		Sources: []string{}, PresidioEntities: []string{}, PresidioScoreThreshold: nil, PromptInjectionRules: []string{}, DisabledRules: []string{}, ApprovedEmailDomains: []string{}, DetectionScopes: []riskDetectionScope{}, PromptDigest: "", MCPScope: nil,
 	}
 	params := riskrepo.CreateRiskPolicyParams{
 		ID: uuid.Nil, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: input.Name,
 		PolicyType: input.PolicyType, Sources: []string{}, PresidioEntities: []string{}, AnalyzerConfig: nil, McpScope: nil,
 		PromptInjectionRules: []string{}, DisabledRules: []string{}, CustomRuleIds: []string{},
-		Enabled: input.Enabled, Action: action,
+		Enabled: enabled, Action: action,
 		AudienceType: riskPolicyAudienceEveryone, ShadowMcpDisposition: pgtype.Text{String: "", Valid: false}, AutoName: false,
 		UserMessage: conv.PtrToPGTextEmpty(input.UserMessage), Prompt: pgtype.Text{String: "", Valid: false}, ModelConfig: nil,
 		Score: pgtype.Float8{Float64: score, Valid: true},
@@ -540,12 +565,62 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	default:
 		return preparedRiskPolicyCreate{}, invalidRiskPolicyRequest()
 	}
+	mcpScope, rawMCPScope, err := s.prepareMCPScope(ctx, project, input.MCPScope, params.Sources, action)
+	if err != nil {
+		return preparedRiskPolicyCreate{}, err
+	}
+	normalized.MCPScope, params.McpScope = mcpScope, rawMCPScope
 	id, err := uuid.NewV7()
 	if err != nil {
 		return preparedRiskPolicyCreate{}, riskMutationUnavailableWithCause(err)
 	}
 	params.ID = id
 	return preparedRiskPolicyCreate{normalized: normalized, params: params}, nil
+}
+
+// prepareMCPScope canonicalizes a requested scope and applies the same rules
+// as the management API: every server belongs to the project, the sources can
+// be evaluated per MCP call, and the action is one the gateway can enforce.
+// Platform toolsets are not selectable here; the dashboard remains the place
+// to scope a policy to them.
+func (s *riskPolicyMutationService) prepareMCPScope(ctx context.Context, project ResolvedProject, input *riskPolicyMCPScope, sources []string, action string) (*policycore.MCPScope, []byte, error) {
+	if input == nil {
+		return nil, nil, nil
+	}
+	coreInput := &policycore.MCPScopeInput{
+		AllServers:      input.AllServers,
+		ToolAnnotations: input.ToolAnnotations,
+		Servers:         make([]*policycore.MCPServerScopeInput, 0, len(input.Servers)),
+	}
+	for _, server := range input.Servers {
+		coreInput.Servers = append(coreInput.Servers, &policycore.MCPServerScopeInput{MCPServerID: server.MCPServerID, Tools: server.Tools})
+	}
+	scope, err := policycore.NormalizeMCPScope(coreInput)
+	if err != nil {
+		return nil, nil, invalidRiskPolicyMCPScope(err)
+	}
+	if scope == nil {
+		return nil, nil, nil
+	}
+	serverIDs := make([]uuid.UUID, 0, len(scope.Servers))
+	for _, server := range scope.Servers {
+		serverIDs = append(serverIDs, server.MCPServerID)
+	}
+	owned, err := riskrepo.New(s.db).ListRiskPolicyMCPScopeServerIDs(ctx, riskrepo.ListRiskPolicyMCPScopeServerIDsParams{ProjectID: project.ID, McpServerIds: serverIDs})
+	if err != nil {
+		return nil, nil, riskMutationUnavailableWithCause(err)
+	}
+	if err := policycore.ValidateMCPScopeOwnership(scope, owned, nil); err != nil {
+		return nil, nil, invalidRiskPolicyMCPScope(err)
+	}
+	if err := policycore.ValidateMCPScope(scope, sources, action); err != nil {
+		return nil, nil, invalidRiskPolicyMCPScope(err)
+	}
+	raw, err := json.Marshal(scope)
+	if err != nil {
+		return nil, nil, riskMutationUnavailableWithCause(err)
+	}
+	return scope, raw, nil
 }
 
 func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal Principal, project ResolvedProject, current riskrepo.RiskPolicy, input updateRiskPolicyInput) (policycore.UpdateMutation, map[string]any, error) {
@@ -748,16 +823,23 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 			return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
 		}
 	}
-	currentPolicy := policycore.Project(current, nil, nil)
+	currentPolicy := policycore.Project(current, nil)
 	if err := policycore.ValidateMCPScope(currentPolicy.MCPScope, params.Sources, params.Action); err != nil {
 		return policycore.UpdateMutation{}, nil, &RiskMutationError{Code: "invalid_request", Message: err.Error(), Cause: ErrRiskMutationInvalid}
 	}
-	effectiveDisposition := valueOrEmpty(currentPolicy.ShadowMCPDisposition)
-	if effectiveDisposition != "" && shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, params.Sources, params.Action) == "" {
-		// A Platform patch cannot author or remove Shadow MCP URL decisions. Do
-		// not silently drop an effective blocking posture and orphan its URL grants,
-		// including legacy block_all policies with no stored disposition value.
-		return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
+	currentDisposition := shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, current.Sources, current.Action)
+	effectiveDisposition := shadowmcp.EffectiveDisposition(current.ShadowMcpDisposition, params.Sources, params.Action)
+	retiresBlockingPosture := currentDisposition != "" && effectiveDisposition == ""
+	// An allow_all policy is its blocked-server list, which enforces nothing
+	// outside the blocking posture; block_all only gives up its exceptions.
+	if retiresBlockingPosture && currentDisposition == shadowmcp.DispositionAllowAll {
+		return policycore.UpdateMutation{}, nil, &RiskMutationError{Code: "invalid_request", Message: risk.ShadowMCPRetiredAllowAllMessage(current.Sources, current.Action, params.Sources, params.Action), Cause: ErrRiskMutationInvalid}
+	}
+	// Retiring block_all retires its allowed-server grants with it. The empty
+	// slice is load-bearing: a nil desired set means "preserve" to the reconciler.
+	var allowedURLs []string
+	if retiresBlockingPosture {
+		allowedURLs = []string{}
 	}
 	if current.PolicyType == "standard" {
 		hasPresidio := slices.Contains(params.Sources, policycatalog.PresidioSource)
@@ -775,7 +857,7 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 	}
 	return policycore.UpdateMutation{
 		Current: current, Params: params, AudiencePrincipals: audiencePrincipals, AudienceChanged: audienceChanged, AudienceDelta: nil,
-		AllowedURLs: nil, AllowedURLsSet: false, BlockedURLs: nil, BlockedURLsSet: false,
+		AllowedURLs: allowedURLs, AllowedURLsSet: retiresBlockingPosture, BlockedURLs: nil, BlockedURLsSet: false,
 		EffectiveDisposition: effectiveDisposition,
 		SupersedeDecisions:   false,
 		ValidateLocked:       nil,
@@ -817,7 +899,7 @@ func (s *riskPolicyMutationService) buildDetectionScopes(input []riskDetectionSc
 }
 
 func (s *riskPolicyMutationService) validatePreservedDetectionScopes(current riskrepo.RiskPolicy, sources, entities []string) error {
-	policy := policycore.Project(current, nil, nil)
+	policy := policycore.Project(current, nil)
 	for _, scope := range policy.DetectionScopes {
 		include := valueOrEmpty(scope.ScopeInclude)
 		exempt := valueOrEmpty(scope.ScopeExempt)
@@ -903,7 +985,7 @@ func canonicalJSONEqual(a, b []byte) bool {
 }
 
 func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string, matched bool) (CreateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience))
 	if err != nil {
 		return CreateRiskPolicyReceiptResult{}, err
 	}
@@ -919,7 +1001,7 @@ func (s *riskPolicyMutationService) createReceiptResult(ctx context.Context, db 
 }
 
 func (s *riskPolicyMutationService) updateReceiptResult(ctx context.Context, db riskrepo.DBTX, project ResolvedProject, row riskrepo.RiskPolicy, audience []string) (UpdateRiskPolicyReceiptResult, error) {
-	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience, nil))
+	state, err := riskPolicyVersionState(ctx, db, policycore.Project(row, audience))
 	if err != nil {
 		return UpdateRiskPolicyReceiptResult{}, err
 	}
@@ -978,6 +1060,13 @@ func mapRiskPolicyMutationError(err error) error {
 
 func invalidRiskPolicyRequest() error {
 	return &RiskMutationError{Code: "invalid_request", Message: "The risk policy mutation request is invalid.", Cause: ErrRiskMutationInvalid}
+}
+
+// invalidRiskPolicyMCPScope keeps the validation reason: it names only values
+// the caller sent, and "use flag or block" is what lets an agent correct the
+// request instead of abandoning the scope.
+func invalidRiskPolicyMCPScope(cause error) error {
+	return &RiskMutationError{Code: "invalid_request", Message: "The MCP scope is invalid: " + cause.Error() + ".", Cause: ErrRiskMutationInvalid}
 }
 func riskPolicyNotFound() error {
 	return &RiskMutationError{Code: "not_found", Message: "The requested risk policy is not available in this project.", Cause: ErrRiskMutationNotFound}

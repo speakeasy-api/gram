@@ -364,7 +364,7 @@ const CATEGORIES: RiskCategoryDefinition[] = [
   category("secrets", "Secrets", {
     recommendedScopeInclude: 'kind == "tool_response"',
   }),
-  category("shadow_mcp", "Shadow MCP"),
+  category("shadow_mcp", "Shadow AI"),
   category("custom", "Custom rules"),
   category("account_identity", "Account identity", {
     recommendedScopeApplicable: false,
@@ -381,13 +381,11 @@ function policy(overrides: Partial<RiskPolicy> = {}): RiskPolicy {
     createdAt: new Date("2026-01-01T10:00:00Z"),
     enabled: true,
     id: "policy-1",
-    pendingMessages: 0,
     policyType: "standard",
     projectId: "project-1",
     score: 5,
     sources: ["gitleaks", "shadow_mcp"],
     customRuleIds: ["rule-1"],
-    totalMessages: 0,
     updatedAt: new Date("2026-01-01T10:00:00Z"),
     version: 1,
     ...overrides,
@@ -545,7 +543,7 @@ describe("StandardPolicyEditor scope rows", () => {
     renderEditor(policy());
 
     expect(screen.getByText("Secrets")).toBeTruthy();
-    expect(screen.getByText("Shadow MCP")).toBeTruthy();
+    expect(screen.getByText("Shadow AI")).toBeTruthy();
     expect(screen.getByText("Custom rules")).toBeTruthy();
     expect(screen.getAllByText("Tool", { selector: "span" })).toHaveLength(2);
     expect(screen.getByText("Response", { selector: "span" })).toBeTruthy();

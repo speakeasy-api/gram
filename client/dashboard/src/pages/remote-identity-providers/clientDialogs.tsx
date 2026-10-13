@@ -8,7 +8,7 @@ import { useRotateOrganizationRemoteSessionClientMutation } from "@gram/client/r
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 // DeleteClientDialog confirms deletion of a remote session client, surfacing the
 // server-side pre-flight (active session count + affected MCP server names).

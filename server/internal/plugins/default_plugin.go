@@ -292,9 +292,11 @@ func attachToPlugin(ctx context.Context, q *repo.Queries, plugin repo.Plugin, pl
 	// before the backend ones, so Postgres reports it first) and the failed
 	// statement aborts the caller's surrounding transaction either way.
 	_, err := q.GetPluginServerByBackend(ctx, repo.GetPluginServerByBackendParams{
-		PluginID:    plugin.ID,
-		ToolsetID:   params.ToolsetID,
-		McpServerID: params.McpServerID,
+		PluginID:       plugin.ID,
+		ProjectID:      plugin.ProjectID,
+		OrganizationID: plugin.OrganizationID,
+		ToolsetID:      params.ToolsetID,
+		McpServerID:    params.McpServerID,
 	})
 	switch {
 	case err == nil:
@@ -419,6 +421,13 @@ func AttachToDefaultAndRolePluginsAudited(ctx context.Context, dbtx pgx.Tx, audi
 func AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx context.Context, dbtx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, params AttachToDefaultPluginParams, guard *admission.Guard) (DefaultPluginAttachOutcome, error) {
 	if err := admission.LockProject(ctx, dbtx, params.ProjectID); err != nil {
 		return DefaultPluginAttachOutcome{}, fmt.Errorf("lock eligible server admission: %w", err)
+	}
+	containsPlatform, err := roledelivery.ContainsPlatformTools(ctx, dbtx, params.OrganizationID, params.ProjectID, params.ToolsetID, params.McpServerID)
+	if err != nil {
+		return DefaultPluginAttachOutcome{}, fmt.Errorf("classify automatic plugin attachment: %w", err)
+	}
+	if containsPlatform {
+		return DefaultPluginAttachOutcome{Attached: false, PluginCreated: false}, nil
 	}
 	outcome, err := AttachToDefaultPluginAuditedWithOutcome(ctx, dbtx, auditLogger, authCtx, params)
 	if err != nil {

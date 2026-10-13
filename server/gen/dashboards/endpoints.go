@@ -16,16 +16,17 @@ import (
 
 // Endpoints wraps the "dashboards" service endpoints.
 type Endpoints struct {
-	ListDashboards        goa.Endpoint
-	GetDashboard          goa.Endpoint
-	CreateDashboard       goa.Endpoint
-	UpdateDashboard       goa.Endpoint
-	SaveDashboardLayout   goa.Endpoint
-	AddDashboardWidget    goa.Endpoint
-	RemoveDashboardWidget goa.Endpoint
-	SaveDashboardFilters  goa.Endpoint
-	DuplicateDashboard    goa.Endpoint
-	DeleteDashboard       goa.Endpoint
+	ListDashboards            goa.Endpoint
+	GetDashboard              goa.Endpoint
+	CreateDashboard           goa.Endpoint
+	UpdateDashboard           goa.Endpoint
+	SaveDashboardLayout       goa.Endpoint
+	AddDashboardWidget        goa.Endpoint
+	RemoveDashboardWidget     goa.Endpoint
+	SaveDashboardFilters      goa.Endpoint
+	DuplicateDashboard        goa.Endpoint
+	DuplicateBuiltInDashboard goa.Endpoint
+	DeleteDashboard           goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "dashboards" service with endpoints.
@@ -33,16 +34,17 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListDashboards:        NewListDashboardsEndpoint(s, a.APIKeyAuth),
-		GetDashboard:          NewGetDashboardEndpoint(s, a.APIKeyAuth),
-		CreateDashboard:       NewCreateDashboardEndpoint(s, a.APIKeyAuth),
-		UpdateDashboard:       NewUpdateDashboardEndpoint(s, a.APIKeyAuth),
-		SaveDashboardLayout:   NewSaveDashboardLayoutEndpoint(s, a.APIKeyAuth),
-		AddDashboardWidget:    NewAddDashboardWidgetEndpoint(s, a.APIKeyAuth),
-		RemoveDashboardWidget: NewRemoveDashboardWidgetEndpoint(s, a.APIKeyAuth),
-		SaveDashboardFilters:  NewSaveDashboardFiltersEndpoint(s, a.APIKeyAuth),
-		DuplicateDashboard:    NewDuplicateDashboardEndpoint(s, a.APIKeyAuth),
-		DeleteDashboard:       NewDeleteDashboardEndpoint(s, a.APIKeyAuth),
+		ListDashboards:            NewListDashboardsEndpoint(s, a.APIKeyAuth),
+		GetDashboard:              NewGetDashboardEndpoint(s, a.APIKeyAuth),
+		CreateDashboard:           NewCreateDashboardEndpoint(s, a.APIKeyAuth),
+		UpdateDashboard:           NewUpdateDashboardEndpoint(s, a.APIKeyAuth),
+		SaveDashboardLayout:       NewSaveDashboardLayoutEndpoint(s, a.APIKeyAuth),
+		AddDashboardWidget:        NewAddDashboardWidgetEndpoint(s, a.APIKeyAuth),
+		RemoveDashboardWidget:     NewRemoveDashboardWidgetEndpoint(s, a.APIKeyAuth),
+		SaveDashboardFilters:      NewSaveDashboardFiltersEndpoint(s, a.APIKeyAuth),
+		DuplicateDashboard:        NewDuplicateDashboardEndpoint(s, a.APIKeyAuth),
+		DuplicateBuiltInDashboard: NewDuplicateBuiltInDashboardEndpoint(s, a.APIKeyAuth),
+		DeleteDashboard:           NewDeleteDashboardEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -57,6 +59,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RemoveDashboardWidget = m(e.RemoveDashboardWidget)
 	e.SaveDashboardFilters = m(e.SaveDashboardFilters)
 	e.DuplicateDashboard = m(e.DuplicateDashboard)
+	e.DuplicateBuiltInDashboard = m(e.DuplicateBuiltInDashboard)
 	e.DeleteDashboard = m(e.DeleteDashboard)
 }
 
@@ -372,6 +375,41 @@ func NewDuplicateDashboardEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.DuplicateDashboard(ctx, p)
+	}
+}
+
+// NewDuplicateBuiltInDashboardEndpoint returns an endpoint function that calls
+// the method "duplicateBuiltInDashboard" of service "dashboards".
+func NewDuplicateBuiltInDashboardEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DuplicateBuiltInDashboardPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.DuplicateBuiltInDashboard(ctx, p)
 	}
 }
 

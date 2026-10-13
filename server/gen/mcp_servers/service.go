@@ -20,7 +20,9 @@ import (
 type Service interface {
 	// Create a new MCP server
 	CreateMcpServer(context.Context, *CreateMcpServerPayload) (res *types.McpServer, err error)
-	// Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
+	// Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector
+	// must be provided. Toolset lookup prefers enabled servers, then the canonical
+	// wrapper, then the oldest server.
 	GetMcpServer(context.Context, *GetMcpServerPayload) (res *types.McpServer, err error)
 	// List MCP servers for a project. Accepts optional remote_mcp_server_id,
 	// tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to
@@ -166,7 +168,10 @@ type GetMcpServerPayload struct {
 	// The ID of the MCP server. Mutually exclusive with slug.
 	ID *string
 	// The slug of the MCP server. Mutually exclusive with id.
-	Slug             *string
+	Slug *string
+	// Resolve the preferred MCP server for this toolset. Mutually exclusive with
+	// id and slug.
+	ToolsetID        *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

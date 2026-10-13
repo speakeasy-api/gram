@@ -515,3 +515,59 @@ func TestUpsertAiScanTargetClearsTheDecisionWhenEnforceabilityIsLost(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, "unreviewed", statusOf(), "re-adding a matcher must not silently reactivate the old block")
 }
+
+// TestListAiScanTargetsCarriesEachTargetsAccessDecision: the list reports the
+// same verdict the detections carry, for every target in the library whether
+// or not the device agent has seen it: a recorded decision on a built-in with
+// a gateway matcher is in force, an untouched built-in is unreviewed, and a
+// target without a matcher is never enforceable.
+func TestListAiScanTargetsCarriesEachTargetsAccessDecision(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	var decided, untouched, inert *aitargets.Target
+	for _, target := range aitargets.Defaults() {
+		switch {
+		case aitargets.Enforceable(target) && decided == nil:
+			decided = &target
+		case aitargets.Enforceable(target) && untouched == nil:
+			untouched = &target
+		case !aitargets.Enforceable(target) && inert == nil:
+			inert = &target
+		}
+	}
+	require.NotNil(t, decided, "the catalog ships a built-in with a gateway matcher")
+	require.NotNil(t, untouched, "the catalog ships a second built-in with a gateway matcher")
+	require.NotNil(t, inert, "the catalog ships a built-in without a gateway matcher")
+
+	// Block one the way the decision endpoint does.
+	_, err := repo.New(ti.conn).SetAIScanTargetStatus(ctx, repo.SetAIScanTargetStatusParams{
+		OrganizationID: ti.orgID,
+		ID:             decided.ID,
+		Status:         "blocked",
+		Rationale:      conv.ToPGTextEmpty("not approved"),
+	})
+	require.NoError(t, err)
+
+	listed, err := ti.service.ListAiScanTargets(ctx, &gen.ListAiScanTargetsPayload{SessionToken: nil})
+	require.NoError(t, err)
+	byID := make(map[string]*gen.AiScanTarget, len(listed.Targets))
+	for _, target := range listed.Targets {
+		require.NotNil(t, target.Access, "every target carries its access summary: %s", target.ID)
+		byID[target.ID] = target
+	}
+
+	require.Equal(t, "blocked", byID[decided.ID].Access.State)
+	require.Equal(t, "blocked", byID[decided.ID].Access.Decision)
+	require.True(t, byID[decided.ID].Access.Enforceable)
+	require.Equal(t, "not approved", conv.PtrValOr(byID[decided.ID].Access.Rationale, ""))
+
+	require.Equal(t, "unreviewed", byID[untouched.ID].Access.State)
+	require.Equal(t, "unreviewed", byID[untouched.ID].Access.Decision)
+	require.True(t, byID[untouched.ID].Access.Enforceable, "a built-in with a matcher can be decided about")
+	require.Nil(t, byID[untouched.ID].Access.Rationale)
+
+	require.Equal(t, "unreviewed", byID[inert.ID].Access.State)
+	require.False(t, byID[inert.ID].Access.Enforceable, "no matcher, nothing to enforce")
+}

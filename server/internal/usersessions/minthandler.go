@@ -222,8 +222,7 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server for toolset").LogError(ctx, s.logger)
 	case wrapper.Visibility == visibility.Disabled:
-		// The runtime refuses disabled wrappers and serves the legacy route,
-		// so a wrapper-bound token would be rejected everywhere.
+		// Every server for the toolset is disabled; a wrapper-bound token would be rejected.
 	case !wrapper.UserSessionIssuerID.Valid:
 		// A wrapper without an issuer cannot be a mint target; the toolset's
 		// own issuer gate below still applies.

@@ -3,14 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AssistantDraftPanel } from "./AssistantDraftPanel";
 
-const state = vi.hoisted(() => ({ flag: "enabled", tab: "overview" }));
+const state = vi.hoisted(() => ({ tab: "overview" }));
 beforeEach(() => {
-  state.flag = "enabled";
   state.tab = "overview";
 });
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: state.flag }),
-}));
 
 vi.mock("nuqs", async () => {
   const React = await import("react");
@@ -75,18 +71,4 @@ it("keeps identity settings out of Overview and places them in Identity", () => 
     ctrlKey: false,
   });
   expect(screen.getByText("Identity settings content")).toBeTruthy();
-});
-
-it("falls back to Overview when an Identity deep link is unavailable", () => {
-  state.flag = "disabled";
-  state.tab = "identity";
-  render(
-    <QueryClientProvider client={new QueryClient()}>
-      <AssistantDraftPanel />
-    </QueryClientProvider>,
-  );
-  expect(
-    screen.getByRole("tab", { name: "Overview" }).getAttribute("aria-selected"),
-  ).toBe("true");
-  expect(screen.queryByRole("tab", { name: "Identity" })).toBeNull();
 });

@@ -39,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -323,7 +322,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, publishers, shadowMCPClient, toolIOLogsEnabled,
+		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
 	)
 	if err != nil {
 		return err
@@ -390,12 +389,6 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil {
 			return oops.C(oops.CodeNotFound)
-		}
-		for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
-			evaluation, err := feature.EvaluateFlag(ctx, featureFlags, flag, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
-			if err != nil || evaluation != feature.EvaluationEnabled {
-				return oops.C(oops.CodeNotFound)
-			}
 		}
 		_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
 		if err != nil {
