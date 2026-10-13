@@ -1162,7 +1162,7 @@ jobs:
 
   # Builds and uploads the server binary on its own so docker-build-server,
   # and the preview environments waiting on its image, do not wait minutes for
-  # lint and codegen checks. ci-gate still requires server-build-lint.
+  # lint and codegen checks. ci-gate still requires server-checks.
   server-build:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
@@ -1212,7 +1212,7 @@ jobs:
           path: server/bin
           retention-days: 2
 
-  server-build-lint:
+  server-checks:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
@@ -1247,26 +1247,6 @@ jobs:
 
       - name: Restore Go module cache
         uses: ./.github/workflows/composite/go-mod-cache
-
-      - name: Compute runtime image content hash
-        id: assistant-runtime-hash
-        shell: bash
-        run: |
-          set -euo pipefail
-          hash=$(mise run hash:assistant-runtime-image)
-          if [ -z "$hash" ]; then
-            echo "runtime image hash is empty" >&2
-            exit 1
-          fi
-          echo "hash=$hash" >> "$GITHUB_OUTPUT"
-
-      - name: Build
-        env:
-          GRAM_ASSISTANT_RUNTIME_IMAGE_HASH: ${{ steps.assistant-runtime-hash.outputs.hash }}
-        run: mise run build:server --readonly
-
-      - name: Build tunnel gateway
-        run: mise run build:tunnel-gateway --readonly
 
       - name: Test CI tooling
         run: mise run test:ci
@@ -2456,7 +2436,7 @@ jobs:
       - changes
       - format-check
       - server-build
-      - server-build-lint
+      - server-checks
       - server-test
       - demo-seed-safety
       - docker-build-server
@@ -2509,7 +2489,7 @@ jobs:
   svix-sync-webhooks:
     name: Sync webhook event types to Svix
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [server-build-lint]
+    needs: [server-checks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       SVIX_OPENAPI_FILE: server/internal/outbox/events/catalog_gen.yaml
