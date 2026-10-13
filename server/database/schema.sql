@@ -13695,6 +13695,10 @@ CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote
 -- with the recorded generation. Changed selection or requested scopes invalidate reuse.
 -- Writers must erase access_token_encrypted when soft-deleting. FK actions and
 -- deleted_at alone do not erase ciphertext; AIM-62 owns erasure and bounded cleanup.
+-- Tenant-qualified keys used by retained credential provenance references.
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_organization_id_id_key ON json_web_keys (organization_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_organization_id_id_key ON user_sessions (organization_id, id);
+
 CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT,
@@ -13710,7 +13714,25 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   client_selection TEXT NOT NULL,
   remote_session_ema_binding_id uuid,
   ema_binding_generation bigint,
+  -- External ID-JAG delegation; NULL for Speakeasy-issued assertions.
   trusted_issuer_session_id uuid,
+  -- ID-JAG source: 'external' or 'speakeasy', selected by the application.
+  -- The default preserves existing external-provider writers.
+  -- Unknown values do not qualify for cached token reuse.
+  ema_provider TEXT NOT NULL DEFAULT 'external',
+  -- Speakeasy issuer that authorized this cached vendor access token.
+  -- External credentials leave the Speakeasy-specific references below NULL.
+  internal_session_issuer_id uuid,
+  -- Issuer updated_at snapshot at acquisition; a changed value prevents reuse.
+  internal_session_issuer_updated_at timestamptz,
+  -- Key that signed the ID-JAG; a different active key prevents token reuse.
+  internal_session_issuer_key_id uuid,
+  -- Verified enterprise SSO sign-in that authorized the exact MCP grant.
+  -- Reuse requires this sign-in to remain eligible and match the current grant.
+  sso_sign_in_id uuid,
+  -- Exact authenticated MCP grant used to obtain the vendor access token.
+  -- A different grant cannot reuse this token, even for the same human.
+  user_session_id uuid,
   requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   access_token_encrypted TEXT,
@@ -13730,6 +13752,13 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   CONSTRAINT remote_session_ema_credentials_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_binding_id_fkey FOREIGN KEY (remote_session_ema_binding_id) REFERENCES remote_session_ema_bindings (id) ON DELETE SET NULL,
+  -- Atlas currently drops the column list from SET NULL when generating SQL.
+  -- Preserve these lists in migrations: clearing organization_id would violate
+  -- project_ref_check and make a parent deletion fail. Postgres 15+ supports it.
+  CONSTRAINT remote_session_ema_credentials_internal_session_issuer_id_fkey FOREIGN KEY (organization_id, internal_session_issuer_id) REFERENCES internal_session_issuers (organization_id, id) ON DELETE SET NULL (internal_session_issuer_id),
+  CONSTRAINT remote_session_ema_credentials_internal_session_issuer_key_id_fkey FOREIGN KEY (organization_id, internal_session_issuer_key_id) REFERENCES json_web_keys (organization_id, id) ON DELETE SET NULL (internal_session_issuer_key_id),
+  CONSTRAINT remote_session_ema_credentials_sso_sign_in_id_fkey FOREIGN KEY (organization_id, sso_sign_in_id) REFERENCES sso_sign_ins (organization_id, id) ON DELETE SET NULL (sso_sign_in_id),
+  CONSTRAINT remote_session_ema_credentials_user_session_id_fkey FOREIGN KEY (organization_id, user_session_id) REFERENCES user_sessions (organization_id, id) ON DELETE SET NULL (user_session_id),
   CONSTRAINT remote_session_ema_credentials_trusted_issuer_session_id_fkey FOREIGN KEY (trusted_issuer_session_id) REFERENCES trusted_issuer_sessions (id) ON DELETE SET NULL
 );
 
@@ -13745,6 +13774,12 @@ COMMENT ON COLUMN remote_session_ema_credentials.client_selection IS '@access: c
 COMMENT ON COLUMN remote_session_ema_credentials.remote_session_ema_binding_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.ema_binding_generation IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.trusted_issuer_session_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_credentials.ema_provider IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_credentials.internal_session_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_credentials.internal_session_issuer_updated_at IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_credentials.internal_session_issuer_key_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_credentials.sso_sign_in_id IS '@access: confidential';
+COMMENT ON COLUMN remote_session_ema_credentials.user_session_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_ema_credentials.requested_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.granted_scopes IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_ema_credentials.access_token_encrypted IS '@access: secret-restricted';
@@ -13772,6 +13807,12 @@ CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_binding_id_idx
 ON remote_session_ema_credentials (remote_session_ema_binding_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_trusted_issuer_session_id_idx
 ON remote_session_ema_credentials (trusted_issuer_session_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_org_provider_idx ON remote_session_ema_credentials (organization_id, ema_provider);
+
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_internal_session_issuer_id_idx ON remote_session_ema_credentials (organization_id, internal_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_internal_session_issuer_key_id_idx ON remote_session_ema_credentials (organization_id, internal_session_issuer_key_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_sso_sign_in_id_idx ON remote_session_ema_credentials (organization_id, sso_sign_in_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_user_session_id_idx ON remote_session_ema_credentials (organization_id, user_session_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_access_expires_at_idx
 ON remote_session_ema_credentials (access_expires_at, id);
 

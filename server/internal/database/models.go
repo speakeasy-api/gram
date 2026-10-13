@@ -5017,6 +5017,18 @@ type RemoteSessionEmaCredential struct {
 	EmaBindingGeneration pgtype.Int8
 	// @access: confidential
 	TrustedIssuerSessionID uuid.NullUUID
+	// @access: confidential
+	EmaProvider string
+	// @access: confidential
+	InternalSessionIssuerID uuid.NullUUID
+	// @access: confidential
+	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	InternalSessionIssuerKeyID uuid.NullUUID
+	// @access: confidential
+	SsoSignInID uuid.NullUUID
+	// @access: confidential
+	UserSessionID uuid.NullUUID
 	// @access: opaque-restricted
 	RequestedScopes []string
 	// @access: opaque-restricted
