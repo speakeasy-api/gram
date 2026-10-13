@@ -331,10 +331,10 @@ DO UPDATE SET deleted_at = NULL, updated_at = clock_timestamp()
 // chats (owned by the fictional teammates) would otherwise be invisible:
 // without it chatVisibilityScope falls back to own-sessions-only.
 const localSessionVisibilitySQL = `
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, 'user:' || $2, 'chat:read', NULL,
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, 'user:' || $2, 'chat:read',
         jsonb_build_object('resource_kind', 'chat', 'resource_id', '*'))
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
 `
 
 // platform_mcp is the default-on organization entitlement locally; the shared
