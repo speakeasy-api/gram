@@ -4,6 +4,18 @@ Run `./zero` until it succeeds. This script is what you will use to run the dash
 
 The main dependencies for this project are Mise and Docker. The `./zero` script will guide you to install these if they are not found.
 
+### Development over Tailscale
+
+With the Tailscale CLI installed, logged in, and a Tailnet DNS name assigned to this machine, `./zero` offers to configure remote development before generating TLS certificates. Accepting saves the DNS name as `GRAM_HOST` and refreshes its dependent settings in `mise.local.toml` without changing assigned ports or listener bindings. The machine's DNS name and IPs are also included in the mkcert certificate. Other devices must trust the local mkcert CA.
+
+Public services use `GRAM_BIND_IP` (wildcard by default); health/control listeners stay on `127.0.0.1` independently of the public bind address.
+
+Declining adds `zero:tailscale` to the comma-separated `GRAM_ZERO_SKIP` setting. That task also honors `*`. Completed setup does not prompt again unless forced or the machine's hostname, IPs, or dependent templates change. To retry setup, run `mise run zero:tailscale --force`, then `mise run zero:tls`. Agent-mode setup skips the interactive Tailscale step.
+
+`GRAM_SSL_EXTRA_HOSTS` accepts comma-separated DNS names or bare IP addresses, not URLs or hostnames with ports. Invalid entries are rejected before TLS configuration or CA trust changes.
+
+When you accept Tailscale configuration, setup stages the edits and applies them with an atomic replacement after successful writes. Concurrent-edit detection is best-effort, not a shared writer lock: avoid editing `mise.local.toml` or running other configuration-writing mise commands while setup saves it.
+
 ### Seeding the database
 
 Once `./zero` succeeds and all services are running, seed the local database with sample data:
