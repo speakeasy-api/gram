@@ -116,10 +116,7 @@ type registeredDevice struct {
 func (f deviceAgentGrantFixture) registerDevice(t *testing.T) registeredDevice {
 	t.Helper()
 
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	policy := workloadpolicy.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
-		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient))
+	policy := f.workloadPolicy(t)
 
 	// A join token is refused for an agent that could not poll or send hooks.
 	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String())
@@ -155,6 +152,17 @@ func (f deviceAgentGrantFixture) registerDevice(t *testing.T) registeredDevice {
 	})
 	require.NoError(t, err)
 	return registeredDevice{registration: registration, key: key, kid: base64.RawURLEncoding.EncodeToString(sum)}
+}
+
+// workloadPolicy is the workload identity service the dashboard calls, on the
+// fixture's database and server URL.
+func (f deviceAgentGrantFixture) workloadPolicy(t *testing.T) *workloadpolicy.Service {
+	t.Helper()
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	return workloadpolicy.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
+		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient))
 }
 
 // assertion signs an assertion as the device, addressed to aud.
@@ -280,6 +288,46 @@ func TestDeviceAgentToken_WithdrawnAssignmentRefused(t *testing.T) {
 
 	unassignWorkloadAgent(t, t.Context(), f.ti, f.assignmentID)
 	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL)))
+}
+
+// Revoking a device refuses a token it was already issued on that token's next
+// request, not only its next exchange: revocation withdraws the admission,
+// assignment and key together, and every request re-reads the assignment.
+func TestDeviceAgentToken_IssuedTokenRefusedAfterDeviceRevoked(t *testing.T) {
+	t.Parallel()
+
+	f := newDeviceAgentGrantFixture(t)
+	device := f.registerDevice(t)
+	w := f.exchangeDeviceAgent(t, device.assertion(t, f.tokenURL))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	token, ok := resp["access_token"].(string)
+	require.True(t, ok)
+
+	callerIssuer, err := sharedCallerIssuer()
+	require.NoError(t, err)
+	tokens := deviceagenttoken.New(callerIssuer, f.ti.conn)
+	_, agent, err := tokens.Admit(t.Context(), token, f.ti.authzEngine)
+	require.NoError(t, err, "the token is admitted before revocation")
+	require.Equal(t, f.agentID.String(), agent.Principal.ID)
+
+	policy := f.workloadPolicy(t)
+	listed, err := policy.List(f.ctx, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	var admissionID string
+	for _, admission := range listed.Admissions {
+		if admission.Subject == device.registration.DeviceSubject {
+			admissionID = admission.ID
+		}
+	}
+	require.NotEmpty(t, admissionID)
+	_, err = policy.WithdrawSubject(f.ctx, &gen.WithdrawSubjectPayload{ID: admissionID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+
+	_, _, err = tokens.Admit(t.Context(), token, f.ti.authzEngine)
+	require.Error(t, err, "the already-issued token is refused on its next request")
+	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, device.assertion(t, f.tokenURL)))
 }
 
 // A workload whose agent is suspended is refused.
