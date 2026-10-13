@@ -355,7 +355,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("deleteMcpServer", func() {
-		Description("Delete an MCP server. A hosted (toolset-backed) server is disabled instead, as turning MCP off on its toolset does, and stays listed with visibility disabled.")
+		Description("Delete an MCP server. A toolset's own hosted server (its id equals the toolset id) is disabled instead, as turning MCP off on the toolset does, and stays listed with visibility disabled. Other servers, including other toolset-backed ones, are deleted.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the MCP server to delete", func() {
