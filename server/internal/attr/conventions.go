@@ -1553,6 +1553,9 @@ func SlogSignInRecordOutcome(v string) slog.Attr {
 }
 func SignInRevokeReason(v string) attribute.KeyValue { return SignInRevokeReasonKey.String(v) }
 func SignInDeliveryKind(v string) attribute.KeyValue { return SignInDeliveryKindKey.String(v) }
+func SlogSignInDeliveryKind(v string) slog.Attr {
+	return slog.String(string(SignInDeliveryKindKey), v)
+}
 func SlogAuthWorkOSSessionFingerprint(v string) slog.Attr {
 	return slog.String(string(AuthWorkOSSessionFingerprintKey), v)
 }

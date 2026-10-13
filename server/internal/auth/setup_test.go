@@ -136,6 +136,8 @@ type MockIDPSessions struct {
 	mu      sync.Mutex
 	Listed  []string
 	revoked []string
+	// ListFails makes the list endpoint answer 503.
+	ListFails bool
 }
 
 func (m *MockIDPSessions) Revoked() []string {
@@ -203,8 +205,13 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 		var listed []string
 		if userInfo.IDPSessions != nil && r.PathValue("id") == userInfo.UserID {
 			userInfo.IDPSessions.mu.Lock()
+			fails := userInfo.IDPSessions.ListFails
 			listed = append(listed, userInfo.IDPSessions.Listed...)
 			userInfo.IDPSessions.mu.Unlock()
+			if fails {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
 		}
 		start := 0
 		if after := r.URL.Query().Get("after"); after != "" {

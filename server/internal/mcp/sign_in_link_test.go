@@ -641,3 +641,26 @@ func TestHandleIDPCallback_ARevokedSignInAfterTheFreshLoginEndsTheFlow(t *testin
 	require.ErrorAs(t, err, &oopsErr, "the flow stops here rather than at invalid_grant")
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 }
+
+func TestHandleToken_HumanRefreshReplayRefusesARevokedSignIn(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	signins.EnableForTests(ti.features, toolset.OrganizationID)
+	userID := "replay-user-" + uuid.NewString()
+	signIn, err := signins.Record(ctx, ti.conn, signins.RecordParams{OrganizationID: toolset.OrganizationID, UserID: userID, WorkOSSessionID: "session_" + uuid.NewString(), AuthenticationMethod: signins.MethodSSO, Evidence: signins.Evidence{HostedDomain: "", TenantID: "", VerifiedEmail: "", IDPAuthenticatedAt: time.Time{}}, AuthenticatedAt: time.Now()})
+	require.NoError(t, err)
+	tokens := exchangeLinkedCode(t, ctx, ti, toolset, client, userID, &signIn.ID.UUID)
+
+	winner := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, tokens.RefreshToken)
+	require.NoError(t, winner.err)
+	require.Equal(t, http.StatusOK, winner.code, winner.body)
+	_, err = signins.RevokeUser(ctx, ti.conn, []string{toolset.OrganizationID}, userID, signins.RevokeReasonAdmin)
+	require.NoError(t, err)
+
+	replay := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, tokens.RefreshToken)
+	require.NoError(t, replay.err)
+	require.Equal(t, http.StatusBadRequest, replay.code, "a cached rotation is not served after the revocation: %s", replay.body)
+	require.Contains(t, replay.body, "invalid_grant")
+}

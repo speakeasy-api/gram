@@ -23,7 +23,9 @@ WHERE id IN (
     WHERE d.delivered_at IS NULL
       AND (d.claimed_until IS NULL OR d.claimed_until < clock_timestamp())
       AND (d.next_attempt_at IS NULL OR d.next_attempt_at <= clock_timestamp())
-    ORDER BY d.next_attempt_at NULLS FIRST, d.created_at
+    -- Cache-backed kinds first: they keep revoked tokens and dashboard
+    -- sessions out, and a WorkOS outage backlog must not starve them.
+    ORDER BY (d.kind = 'workos_session'), d.next_attempt_at NULLS FIRST, d.created_at
     LIMIT $2
     FOR UPDATE SKIP LOCKED
 )
@@ -176,6 +178,7 @@ VALUES ($1, 'user_epoch', $2, $3)
 ON CONFLICT (organization_id, kind, target) WHERE delivered_at IS NULL
 DO UPDATE SET effective_at = GREATEST(sign_in_revocation_deliveries.effective_at, EXCLUDED.effective_at),
     next_attempt_at = NULL,
+    claimed_until = NULL,
     updated_at = clock_timestamp()
 RETURNING id
 `
@@ -529,7 +532,7 @@ func (q *Queries) LockUserSignIns(ctx context.Context, arg LockUserSignInsParams
 	return items, nil
 }
 
-const markRevocationDelivered = `-- name: MarkRevocationDelivered :exec
+const markRevocationDelivered = `-- name: MarkRevocationDelivered :execrows
 UPDATE sign_in_revocation_deliveries
 SET delivered_at = clock_timestamp(),
     attempts = attempts + 1,
@@ -548,12 +551,15 @@ type MarkRevocationDeliveredParams struct {
 }
 
 // Leaves the delivery pending if its effective time moved during the push.
-func (q *Queries) MarkRevocationDelivered(ctx context.Context, arg MarkRevocationDeliveredParams) error {
-	_, err := q.db.Exec(ctx, markRevocationDelivered, arg.ID, arg.OrganizationID, arg.EffectiveAt)
-	return err
+func (q *Queries) MarkRevocationDelivered(ctx context.Context, arg MarkRevocationDeliveredParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markRevocationDelivered, arg.ID, arg.OrganizationID, arg.EffectiveAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-const markRevocationDeliveryFailed = `-- name: MarkRevocationDeliveryFailed :exec
+const markRevocationDeliveryFailed = `-- name: MarkRevocationDeliveryFailed :execrows
 UPDATE sign_in_revocation_deliveries
 SET attempts = attempts + 1,
     last_error = $1,
@@ -562,24 +568,38 @@ SET attempts = attempts + 1,
     updated_at = clock_timestamp()
 WHERE id = $2
   AND organization_id = $3
+  AND effective_at = $4
 `
 
 type MarkRevocationDeliveryFailedParams struct {
 	LastError      pgtype.Text
 	ID             uuid.UUID
 	OrganizationID string
+	EffectiveAt    pgtype.Timestamptz
 }
 
-// Backs off exponentially from one minute, capped at six hours.
-func (q *Queries) MarkRevocationDeliveryFailed(ctx context.Context, arg MarkRevocationDeliveryFailedParams) error {
-	_, err := q.db.Exec(ctx, markRevocationDeliveryFailed, arg.LastError, arg.ID, arg.OrganizationID)
-	return err
+// Backs off exponentially from one minute, capped at six hours. A delivery
+// whose effective time moved during the push is newer work and is left alone.
+func (q *Queries) MarkRevocationDeliveryFailed(ctx context.Context, arg MarkRevocationDeliveryFailedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markRevocationDeliveryFailed,
+		arg.LastError,
+		arg.ID,
+		arg.OrganizationID,
+		arg.EffectiveAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markWorkOSSessionSignedOut = `-- name: MarkWorkOSSessionSignedOut :exec
-INSERT INTO sign_ins (organization_id, user_id, workos_session_id, authentication_method, authenticated_at, revoked_at, revoke_reason)
-VALUES ($1, $2, $3, '', clock_timestamp(), clock_timestamp(), 'sign_out')
-ON CONFLICT (organization_id, workos_session_id) DO NOTHING
+INSERT INTO sign_ins (organization_id, user_id, workos_session_id, authentication_method, authenticated_at, revoked_at, revoke_reason, session_signed_out_at)
+VALUES ($1, $2, $3, '', clock_timestamp(), clock_timestamp(), 'sign_out', clock_timestamp())
+ON CONFLICT (organization_id, workos_session_id) DO UPDATE
+SET session_signed_out_at = COALESCE(sign_ins.session_signed_out_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE sign_ins.user_id = EXCLUDED.user_id
 `
 
 type MarkWorkOSSessionSignedOutParams struct {
@@ -642,13 +662,14 @@ func (q *Queries) OtherOrganizationsUsingWorkOSSession(ctx context.Context, arg 
 	return items, nil
 }
 
-const raiseRevocationCutoffs = `-- name: RaiseRevocationCutoffs :exec
+const raiseRevocationCutoffs = `-- name: RaiseRevocationCutoffs :many
 INSERT INTO sign_in_revocation_cutoffs (organization_id, user_id, cutoff_at)
 SELECT org_id, $1, clock_timestamp()
 FROM unnest($2::text[]) AS org_id
 ON CONFLICT (organization_id, user_id) DO UPDATE
 SET cutoff_at = GREATEST(sign_in_revocation_cutoffs.cutoff_at, EXCLUDED.cutoff_at),
     updated_at = clock_timestamp()
+RETURNING cutoff_at
 `
 
 type RaiseRevocationCutoffsParams struct {
@@ -658,8 +679,44 @@ type RaiseRevocationCutoffsParams struct {
 
 // Fences out every sign-in authenticated up to now, including ones a WorkOS
 // exchange already in flight records later. The cutoff only moves forward.
-func (q *Queries) RaiseRevocationCutoffs(ctx context.Context, arg RaiseRevocationCutoffsParams) error {
-	_, err := q.db.Exec(ctx, raiseRevocationCutoffs, arg.UserID, arg.OrganizationIds)
+// Returns the cutoffs so callers can align other revocation boundaries.
+func (q *Queries) RaiseRevocationCutoffs(ctx context.Context, arg RaiseRevocationCutoffsParams) ([]pgtype.Timestamptz, error) {
+	rows, err := q.db.Query(ctx, raiseRevocationCutoffs, arg.UserID, arg.OrganizationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Timestamptz
+	for rows.Next() {
+		var cutoff_at pgtype.Timestamptz
+		if err := rows.Scan(&cutoff_at); err != nil {
+			return nil, err
+		}
+		items = append(items, cutoff_at)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const releaseRevocationDelivery = `-- name: ReleaseRevocationDelivery :exec
+UPDATE sign_in_revocation_deliveries
+SET claimed_until = NULL,
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND delivered_at IS NULL
+`
+
+type ReleaseRevocationDeliveryParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Drops a superseded attempt's lease so the newer work is claimable at once.
+func (q *Queries) ReleaseRevocationDelivery(ctx context.Context, arg ReleaseRevocationDeliveryParams) error {
+	_, err := q.db.Exec(ctx, releaseRevocationDelivery, arg.ID, arg.OrganizationID)
 	return err
 }
 
@@ -687,15 +744,23 @@ func (q *Queries) RevocationDeliveryBacklog(ctx context.Context, stuckAttempts i
 }
 
 const revokeSignInsBySession = `-- name: RevokeSignInsBySession :many
+WITH target AS (
+    SELECT si.id, si.revoked_at IS NULL AS was_live
+    FROM sign_ins AS si
+    WHERE si.organization_id = ANY($2::text[])
+      AND si.user_id = $3
+      AND si.workos_session_id = $4
+)
 UPDATE sign_ins
-SET revoked_at = clock_timestamp(),
-    revoke_reason = $1,
+SET revoked_at = COALESCE(sign_ins.revoked_at, clock_timestamp()),
+    revoke_reason = CASE WHEN sign_ins.revoked_at IS NULL THEN $1 ELSE sign_ins.revoke_reason END,
+    session_signed_out_at = COALESCE(sign_ins.session_signed_out_at, clock_timestamp()),
     updated_at = clock_timestamp()
-WHERE organization_id = ANY($2::text[])
-  AND user_id = $3
-  AND workos_session_id = $4
-  AND revoked_at IS NULL
-RETURNING id, organization_id
+FROM target
+WHERE sign_ins.id = target.id
+  AND sign_ins.organization_id = ANY($2::text[])
+  AND (sign_ins.revoked_at IS NULL OR sign_ins.session_signed_out_at IS NULL)
+RETURNING sign_ins.id, sign_ins.organization_id, target.was_live::boolean AS was_live
 `
 
 type RevokeSignInsBySessionParams struct {
@@ -708,9 +773,13 @@ type RevokeSignInsBySessionParams struct {
 type RevokeSignInsBySessionRow struct {
 	ID             uuid.UUID
 	OrganizationID string
+	WasLive        bool
 }
 
-// A single sign-out revokes only the signed-out WorkOS session's rows.
+// A single sign-out revokes only the signed-out WorkOS session's rows and
+// marks the session signed out on every one of them, already revoked or not,
+// so the mark survives an organization-scoped revocation. was_live tells
+// which rows this sign-out actually revoked.
 func (q *Queries) RevokeSignInsBySession(ctx context.Context, arg RevokeSignInsBySessionParams) ([]RevokeSignInsBySessionRow, error) {
 	rows, err := q.db.Query(ctx, revokeSignInsBySession,
 		arg.RevokeReason,
@@ -725,7 +794,59 @@ func (q *Queries) RevokeSignInsBySession(ctx context.Context, arg RevokeSignInsB
 	var items []RevokeSignInsBySessionRow
 	for rows.Next() {
 		var i RevokeSignInsBySessionRow
-		if err := rows.Scan(&i.ID, &i.OrganizationID); err != nil {
+		if err := rows.Scan(&i.ID, &i.OrganizationID, &i.WasLive); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeUnlinkedUserSessions = `-- name: RevokeUnlinkedUserSessions :many
+UPDATE user_sessions AS s
+SET deleted_at = clock_timestamp()
+WHERE s.organization_id = ANY($1::text[])
+  AND s.deleted IS FALSE
+  AND s.sign_in_id IS NULL
+  AND s.subject_urn = $2
+RETURNING s.id, s.organization_id, s.project_id, s.subject_urn, s.jti
+`
+
+type RevokeUnlinkedUserSessionsParams struct {
+	OrganizationIds []string
+	SubjectUrn      urn.SessionSubject
+}
+
+type RevokeUnlinkedUserSessionsRow struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	SubjectUrn     urn.SessionSubject
+	Jti            string
+}
+
+// Soft-deletes the user's live grants in these organizations that no
+// recorded sign-in backs (minted before linking, or while it was off), so a
+// broad revocation reaches them too.
+func (q *Queries) RevokeUnlinkedUserSessions(ctx context.Context, arg RevokeUnlinkedUserSessionsParams) ([]RevokeUnlinkedUserSessionsRow, error) {
+	rows, err := q.db.Query(ctx, revokeUnlinkedUserSessions, arg.OrganizationIds, arg.SubjectUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeUnlinkedUserSessionsRow
+	for rows.Next() {
+		var i RevokeUnlinkedUserSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.SubjectUrn,
+			&i.Jti,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -840,99 +961,119 @@ func (q *Queries) RevokeUserSignIns(ctx context.Context, arg RevokeUserSignInsPa
 
 const upsertSignIn = `-- name: UpsertSignIn :one
 WITH prior AS (
-    SELECT p.authenticated_at, p.idp_authenticated_at, p.revoked_at, p.revoke_reason
+    SELECT p.authenticated_at, p.idp_authenticated_at, p.revoked_at, p.revoke_reason, p.session_signed_out_at
     FROM sign_ins AS p
     WHERE p.organization_id = ANY(ARRAY(
             SELECT r.organization_id
             FROM organization_user_relationships AS r
-            WHERE r.user_id = $2
+            WHERE r.user_id = $1::text
             UNION
             SELECT own.organization_id
             FROM sign_ins AS own
-            WHERE own.user_id = $2
+            WHERE own.user_id = $1
             UNION
-            SELECT $1::text
+            SELECT $2::text
         ))
-      AND p.user_id = $2
+      AND p.user_id = $1
       AND p.workos_session_id = $3
 ),
 auth AS (
     SELECT
-        LEAST($8::timestamptz, (SELECT min(prior.authenticated_at) FROM prior)) AS at,
-        LEAST($9::timestamptz, (SELECT min(prior.idp_authenticated_at) FROM prior)) AS idp_at
+        LEAST($4::timestamptz, (SELECT min(prior.authenticated_at) FROM prior)) AS at,
+        LEAST($5::timestamptz, (SELECT min(prior.idp_authenticated_at) FROM prior)) AS idp_at,
+        (SELECT min(prior.session_signed_out_at) FROM prior) AS signed_out_at
 ),
 inherited AS (
-    SELECT prior.revoke_reason
-    FROM prior
-    WHERE prior.revoked_at IS NOT NULL
-      AND prior.revoke_reason IN ('sign_out', 'sign_out_everywhere')
-    ORDER BY (prior.revoke_reason = 'sign_out'), prior.revoked_at
-    LIMIT 1
+    SELECT CASE
+        WHEN EXISTS (SELECT 1 FROM prior WHERE prior.revoked_at IS NOT NULL AND prior.revoke_reason = 'sign_out_everywhere') THEN 'sign_out_everywhere'
+        WHEN (SELECT auth.signed_out_at FROM auth) IS NOT NULL THEN 'sign_out'
+    END AS reason
 ),
 fence AS (
     SELECT EXISTS (
         SELECT 1
         FROM sign_in_revocation_cutoffs AS c, auth
-        WHERE c.organization_id = $1
-          AND c.user_id = $2
+        WHERE c.organization_id = $2
+          AND c.user_id = $1
           AND c.cutoff_at >= LEAST(auth.at, COALESCE(auth.idp_at, auth.at))
     ) AS fenced
+),
+upsert AS (
+    INSERT INTO sign_ins (
+        organization_id,
+        user_id,
+        workos_session_id,
+        authentication_method,
+        idp_hosted_domain,
+        idp_tenant_id,
+        verified_email,
+        idp_authenticated_at,
+        authenticated_at,
+        revoked_at,
+        revoke_reason,
+        session_signed_out_at
+    )
+    SELECT
+        $2,
+        $1,
+        $3,
+        $6,
+        $7::text,
+        $8::text,
+        $9::text,
+        auth.idp_at,
+        auth.at,
+        CASE WHEN fence.fenced OR inherited.reason IS NOT NULL THEN clock_timestamp() END,
+        CASE WHEN fence.fenced THEN 'cutoff' ELSE inherited.reason END,
+        auth.signed_out_at
+    FROM auth, fence, inherited
+    ON CONFLICT (organization_id, workos_session_id) DO UPDATE
+    SET idp_hosted_domain = COALESCE(
+            sign_ins.idp_hosted_domain,
+            CASE WHEN sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_hosted_domain END
+        ),
+        idp_tenant_id = COALESCE(
+            sign_ins.idp_tenant_id,
+            CASE WHEN sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_tenant_id END
+        ),
+        verified_email = COALESCE(sign_ins.verified_email, EXCLUDED.verified_email),
+        idp_authenticated_at = LEAST(sign_ins.idp_authenticated_at, EXCLUDED.idp_authenticated_at),
+        revoked_at = COALESCE(sign_ins.revoked_at, EXCLUDED.revoked_at),
+        revoke_reason = CASE WHEN sign_ins.revoked_at IS NULL THEN EXCLUDED.revoke_reason ELSE sign_ins.revoke_reason END,
+        session_signed_out_at = COALESCE(sign_ins.session_signed_out_at, EXCLUDED.session_signed_out_at),
+        updated_at = clock_timestamp()
+    WHERE sign_ins.user_id = EXCLUDED.user_id
+      AND (
+          (sign_ins.idp_hosted_domain IS NULL AND sign_ins.authentication_method = EXCLUDED.authentication_method AND EXCLUDED.idp_hosted_domain IS NOT NULL)
+          OR (sign_ins.idp_tenant_id IS NULL AND sign_ins.authentication_method = EXCLUDED.authentication_method AND EXCLUDED.idp_tenant_id IS NOT NULL)
+          OR (sign_ins.verified_email IS NULL AND EXCLUDED.verified_email IS NOT NULL)
+          OR (EXCLUDED.idp_authenticated_at IS NOT NULL AND (sign_ins.idp_authenticated_at IS NULL OR EXCLUDED.idp_authenticated_at < sign_ins.idp_authenticated_at))
+          OR (sign_ins.revoked_at IS NULL AND EXCLUDED.revoked_at IS NOT NULL)
+          OR (sign_ins.session_signed_out_at IS NULL AND EXCLUDED.session_signed_out_at IS NOT NULL)
+      )
+    RETURNING sign_ins.id, sign_ins.revoked_at
 )
-INSERT INTO sign_ins (
-    organization_id,
-    user_id,
-    workos_session_id,
-    authentication_method,
-    idp_hosted_domain,
-    idp_tenant_id,
-    verified_email,
-    idp_authenticated_at,
-    authenticated_at,
-    revoked_at,
-    revoke_reason
-)
-SELECT
-    $1,
-    $2,
-    $3,
-    $4,
-    $5::text,
-    $6::text,
-    $7::text,
-    auth.idp_at,
-    auth.at,
-    CASE WHEN fence.fenced OR EXISTS (SELECT 1 FROM inherited) THEN clock_timestamp() END,
-    CASE
-        WHEN fence.fenced THEN 'cutoff'
-        ELSE (SELECT inherited.revoke_reason FROM inherited)
-    END
-FROM auth, fence
-ON CONFLICT (organization_id, workos_session_id) DO UPDATE
-SET idp_hosted_domain = COALESCE(
-        sign_ins.idp_hosted_domain,
-        CASE WHEN sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_hosted_domain END
-    ),
-    idp_tenant_id = COALESCE(
-        sign_ins.idp_tenant_id,
-        CASE WHEN sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_tenant_id END
-    ),
-    verified_email = COALESCE(sign_ins.verified_email, EXCLUDED.verified_email),
-    idp_authenticated_at = LEAST(sign_ins.idp_authenticated_at, EXCLUDED.idp_authenticated_at),
-    updated_at = clock_timestamp()
-WHERE sign_ins.user_id = EXCLUDED.user_id
-RETURNING id, revoked_at
+SELECT upsert.id, upsert.revoked_at
+FROM upsert
+UNION ALL
+SELECT own.id, own.revoked_at
+FROM sign_ins AS own
+WHERE own.organization_id = $2
+  AND own.workos_session_id = $3
+  AND own.user_id = $1
+  AND NOT EXISTS (SELECT 1 FROM upsert)
 `
 
 type UpsertSignInParams struct {
-	OrganizationID       string
 	UserID               string
+	OrganizationID       string
 	WorkosSessionID      string
+	AuthenticatedAt      pgtype.Timestamptz
+	IdpAuthenticatedAt   pgtype.Timestamptz
 	AuthenticationMethod string
 	IdpHostedDomain      pgtype.Text
 	IdpTenantID          pgtype.Text
 	VerifiedEmail        pgtype.Text
-	AuthenticatedAt      pgtype.Timestamptz
-	IdpAuthenticatedAt   pgtype.Timestamptz
 }
 
 type UpsertSignInRow struct {
@@ -943,25 +1084,51 @@ type UpsertSignInRow struct {
 // Never reassigns a row to another user, clears a revocation or moves the
 // recorded times later. A WorkOS session already seen in another of the
 // user's organizations keeps its earliest times, so recording it elsewhere
-// cannot restart the age window, and inherits a sign-out of that session,
-// so a signed-out session can't come back through a new organization;
-// organization-scoped revocations (admin, deprovisioning) stay where they
-// were made. A sign-in whose real authentication or exchange started at or
-// before a revocation cutoff is recorded revoked. Evidence missing from an earlier exchange of the same
-// method is filled in.
+// cannot restart the age window, and inherits a sign-out of that session
+// (signed_out_at survives organization-scoped revocations) or a sign out
+// everywhere; admin and deprovisioning revocations stay where they were made.
+// A sign-in whose real authentication or exchange started at or before a
+// revocation cutoff is recorded revoked, including when a later exchange
+// reveals an earlier authentication time. Evidence missing from an earlier
+// exchange of the same method is filled in. An exchange that changes nothing
+// writes nothing.
 func (q *Queries) UpsertSignIn(ctx context.Context, arg UpsertSignInParams) (UpsertSignInRow, error) {
 	row := q.db.QueryRow(ctx, upsertSignIn,
-		arg.OrganizationID,
 		arg.UserID,
+		arg.OrganizationID,
 		arg.WorkosSessionID,
+		arg.AuthenticatedAt,
+		arg.IdpAuthenticatedAt,
 		arg.AuthenticationMethod,
 		arg.IdpHostedDomain,
 		arg.IdpTenantID,
 		arg.VerifiedEmail,
-		arg.AuthenticatedAt,
-		arg.IdpAuthenticatedAt,
 	)
 	var i UpsertSignInRow
 	err := row.Scan(&i.ID, &i.RevokedAt)
 	return i, err
+}
+
+const workOSSessionLiveOutsideOrganization = `-- name: WorkOSSessionLiveOutsideOrganization :one
+SELECT EXISTS (
+    SELECT 1
+    FROM sign_ins AS si
+    WHERE si.workos_session_id = $1
+      AND si.organization_id <> $2
+      AND si.revoked_at IS NULL
+)::boolean AS live
+`
+
+type WorkOSSessionLiveOutsideOrganizationParams struct {
+	WorkosSessionID string
+	OrganizationID  string
+}
+
+// Fleet-wide by design: whether a WorkOS session (unique to one user) still
+// backs a live sign-in outside the organization that queued ending it.
+func (q *Queries) WorkOSSessionLiveOutsideOrganization(ctx context.Context, arg WorkOSSessionLiveOutsideOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, workOSSessionLiveOutsideOrganization, arg.WorkosSessionID, arg.OrganizationID)
+	var live bool
+	err := row.Scan(&live)
+	return live, err
 }

@@ -377,6 +377,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	if exchange != nil {
 		recorded := signins.RecordExchange(ctx, logger, s.db, *exchange)
 		signInID = recorded.ID
+		if recorded.Failed && enforced {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			return oops.E(oops.CodeUnavailable, nil, "sign-in could not be recorded; try again").LogError(ctx, logger)
+		}
 		if recorded.Revoked && enforced {
 			if challengeState.FreshLoginForced {
 				s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)

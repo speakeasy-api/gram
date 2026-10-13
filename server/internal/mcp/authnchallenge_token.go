@@ -1420,6 +1420,14 @@ func (s *Service) writeRefreshTokenReplay(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_payload_invalid")
 		return oops.E(oops.CodeUnexpected, nil, "refresh token replay response is missing subject").LogError(ctx, logger)
 	}
+	if payload.Subject.Kind == urn.SessionSubjectKindUser {
+		// A replay must not hand back a successor that a revocation has
+		// since soft-deleted or whose sign-in it revoked.
+		if reason, ok := s.humanReplayRevoked(ctx, endpoint, payload.JTI); !ok {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refreshed session is no longer active; sign in again")
+		}
+	}
 	if payload.Subject.Kind == urn.SessionSubjectKindAgent {
 		replaySession, err := usersessions_repo.New(s.db).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
@@ -2016,6 +2024,28 @@ func signInUserID(issuance sessionIssuance) pgtype.Text {
 		return pgtype.Text{String: "", Valid: false}
 	}
 	return conv.ToPGText(issuance.Subject.ID)
+}
+
+// humanReplayRevoked reports whether a human refresh replay may be served:
+// its successor session is still live and its sign-in not revoked other than
+// by a single sign-out. A lookup failure refuses the replay.
+func (s *Service) humanReplayRevoked(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool) {
+	q := usersessions_repo.New(s.db)
+	session, err := q.GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{UserSessionIssuerID: endpoint.UserSessionIssuerID, Jti: jti})
+	if err != nil {
+		return "refresh_token_revoked", false
+	}
+	if !session.SignInID.Valid {
+		return "", true
+	}
+	row, err := q.LockSignInForGrant(ctx, usersessions_repo.LockSignInForGrantParams{ID: session.SignInID.UUID, OrganizationID: endpoint.OrganizationID})
+	if err != nil {
+		return "sign_in_lookup_failed", false
+	}
+	if row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(signins.RevokeReasonSignOut)) {
+		return "sign_in_revoked", false
+	}
+	return "", true
 }
 
 // signInRevokedForGrant reports whether the sign-in a refused issuance linked

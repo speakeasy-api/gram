@@ -111,6 +111,11 @@ type Recorded struct {
 	ID             uuid.NullUUID
 	OrganizationID string
 	Revoked        bool
+	// Failed is set when recording was attempted and failed, so a caller
+	// enforcing linkage can refuse to continue unlinked.
+	Failed bool
+	// DeliveryIDs end the WorkOS session of a sign-in recorded revoked.
+	DeliveryIDs []uuid.UUID
 }
 
 var errSignInOwnedByAnotherUser = errors.New("sign-in session belongs to another user")
@@ -125,7 +130,7 @@ type Beginner interface {
 // per-organization lock, so it serializes with revocation. It records nothing
 // when the exchange carries no session, organization or user.
 func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) {
-	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: "", Revoked: false}
+	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: "", Revoked: false, Failed: false, DeliveryIDs: nil}
 	if p.OrganizationID == "" || p.UserID == "" || p.WorkOSSessionID == "" {
 		return none, nil
 	}
@@ -162,15 +167,16 @@ func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) 
 	// A sign-in recorded already revoked (fenced or signed out) must not
 	// leave its WorkOS session usable, unless another organization still
 	// relies on it.
+	var deliveryIDs []uuid.UUID
 	if row.RevokedAt.Valid {
-		if _, err := enqueueEndingWorkOSSessions(ctx, q, p.OrganizationID, userIDSessions{userID: p.UserID, organizationIDs: []string{p.OrganizationID}}, []string{p.WorkOSSessionID}); err != nil {
+		if deliveryIDs, err = enqueueEndingWorkOSSessions(ctx, q, p.OrganizationID, userIDSessions{userID: p.UserID, organizationIDs: []string{p.OrganizationID}}, []string{p.WorkOSSessionID}); err != nil {
 			return none, err
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return none, fmt.Errorf("commit: %w", err)
 	}
-	return Recorded{ID: uuid.NullUUID{UUID: row.ID, Valid: true}, OrganizationID: p.OrganizationID, Revoked: row.RevokedAt.Valid}, nil
+	return Recorded{ID: uuid.NullUUID{UUID: row.ID, Valid: true}, OrganizationID: p.OrganizationID, Revoked: row.RevokedAt.Valid, Failed: false, DeliveryIDs: deliveryIDs}, nil
 }
 
 // LiveSignInForSession returns the unrevoked sign-in recorded for a WorkOS
@@ -319,7 +325,10 @@ func emailOnDomain(email string, verified []string) bool {
 
 // SignedOut is what RevokeSession revoked.
 type SignedOut struct {
-	// Organizations hold a sign-in this sign-out revoked.
+	// SignIns counts the sign-ins this sign-out actually revoked; a marker
+	// for a session with nothing recorded counts zero.
+	SignIns int
+	// Organizations hold the durable deliveries it enqueued.
 	Organizations []string
 	// DeliveryIDs are the durable deliveries it enqueued.
 	DeliveryIDs []uuid.UUID
@@ -329,13 +338,27 @@ type SignedOut struct {
 // session and enqueues ending that WorkOS session. Grants made from them keep
 // working but stop qualifying for vouching. Locks are taken in id order, like
 // every other revocation. When nothing was recorded yet, the first
-// organization keeps a revoked marker that a later recording inherits.
+// organization keeps a revoked marker that a later recording inherits. The
+// user's sign-in organizations are re-listed under the user lock, so a
+// recording that committed just before is revoked too.
 func RevokeSession(ctx context.Context, db repo.DBTX, organizationIDs []string, userID, workosSessionID string) (SignedOut, error) {
 	var out SignedOut
 	if len(organizationIDs) == 0 || userID == "" || workosSessionID == "" {
 		return out, nil
 	}
 	q := repo.New(db)
+	if err := q.LockAllSignInsForUser(ctx, userID); err != nil {
+		return out, fmt.Errorf("lock user sign-ins: %w", err)
+	}
+	recorded, err := q.ListSignInOrganizationsForUser(ctx, userID)
+	if err != nil {
+		return out, fmt.Errorf("list sign-in organizations: %w", err)
+	}
+	for _, id := range recorded {
+		if !slices.Contains(organizationIDs, id) {
+			organizationIDs = append(slices.Clone(organizationIDs), id)
+		}
+	}
 	if err := lockUser(ctx, q, organizationIDs, userID); err != nil {
 		return out, err
 	}
@@ -365,6 +388,9 @@ func RevokeSession(ctx context.Context, db repo.DBTX, organizationIDs []string, 
 	}
 	seen := make(map[string]struct{}, len(rows))
 	for _, r := range rows {
+		if r.WasLive {
+			out.SignIns++
+		}
 		if _, ok := seen[r.OrganizationID]; ok {
 			continue
 		}
@@ -400,8 +426,12 @@ type Revoked struct {
 	// WorkOSSessionIDs are the WorkOS sessions of those sign-ins, including
 	// ones left up because another organization still uses them.
 	WorkOSSessionIDs []string
-	// Sessions are the soft-deleted grants.
+	// Sessions are the soft-deleted grants, linked to a revoked sign-in or
+	// unlinked.
 	Sessions []RevokedSession
+	// CutoffAt is the revocation boundary: sign-ins and dashboard sessions
+	// from up to then are revoked.
+	CutoffAt time.Time
 	// DeliveryIDs are the durable deliveries enqueued for the JTIs and WorkOS
 	// sessions.
 	DeliveryIDs []uuid.UUID
@@ -442,7 +472,7 @@ type RevokedSession struct {
 // JTI and WorkOS session deliveries. It locks the sign-ins first, in id order,
 // matching grant issuance.
 func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, userID string, reason RevokeReason) (Revoked, error) {
-	out := Revoked{SignInsByOrganization: map[string]int{}, WorkOSSessionIDs: nil, Sessions: nil, DeliveryIDs: nil}
+	out := Revoked{SignInsByOrganization: map[string]int{}, WorkOSSessionIDs: nil, Sessions: nil, CutoffAt: time.Time{}, DeliveryIDs: nil}
 	if len(organizationIDs) == 0 || userID == "" {
 		return out, nil
 	}
@@ -464,8 +494,14 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 	if _, err := q.LockUserSignIns(ctx, repo.LockUserSignInsParams{OrganizationIds: organizationIDs, UserID: userID}); err != nil {
 		return out, fmt.Errorf("lock user sign-ins: %w", err)
 	}
-	if err := q.RaiseRevocationCutoffs(ctx, repo.RaiseRevocationCutoffsParams{UserID: userID, OrganizationIds: organizationIDs}); err != nil {
+	cutoffs, err := q.RaiseRevocationCutoffs(ctx, repo.RaiseRevocationCutoffsParams{UserID: userID, OrganizationIds: organizationIDs})
+	if err != nil {
 		return out, fmt.Errorf("raise sign-in revocation cutoffs: %w", err)
+	}
+	for _, c := range cutoffs {
+		if c.Valid && c.Time.After(out.CutoffAt) {
+			out.CutoffAt = c.Time
+		}
 	}
 	signIns, err := q.RevokeUserSignIns(ctx, repo.RevokeUserSignInsParams{
 		RevokeReason:    conv.ToPGText(string(reason)),
@@ -491,6 +527,16 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 	})
 	if err != nil {
 		return out, fmt.Errorf("revoke grants for user sign-ins: %w", err)
+	}
+	unlinked, err := q.RevokeUnlinkedUserSessions(ctx, repo.RevokeUnlinkedUserSessionsParams{
+		OrganizationIds: organizationIDs,
+		SubjectUrn:      urn.NewUserSubject(userID),
+	})
+	if err != nil {
+		return out, fmt.Errorf("revoke unlinked grants: %w", err)
+	}
+	for _, s := range unlinked {
+		sessions = append(sessions, repo.RevokeUserSessionsForUserSignInsRow(s))
 	}
 	jtisByOrg := map[string][]string{}
 	for _, s := range sessions {
@@ -569,13 +615,6 @@ func workOSSessionUsedElsewhere(ctx context.Context, q *repo.Queries, userID, wo
 		return false, fmt.Errorf("check workos session use elsewhere: %w", err)
 	}
 	return len(others) > 0, nil
-}
-
-// WorkOSSessionUsedElsewhere reports whether a WorkOS session still backs a
-// live sign-in of the user outside organizationIDs, so ending it would sign
-// the user out there.
-func WorkOSSessionUsedElsewhere(ctx context.Context, db repo.DBTX, userID, workosSessionID string, organizationIDs []string) (bool, error) {
-	return workOSSessionUsedElsewhere(ctx, repo.New(db), userID, workosSessionID, organizationIDs)
 }
 
 // LockUser takes the user-wide sign-in lock, so no sign-in of the user is

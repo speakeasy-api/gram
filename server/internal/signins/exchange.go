@@ -22,8 +22,9 @@ const (
 	FlowMCPAuthorize = "mcp_authorize"
 )
 
-// recordTimeout bounds the best-effort recording so it never slows sign-in.
-const recordTimeout = time.Second
+// recordTimeout bounds recording, including waiting behind a revocation that
+// holds the user's lock.
+const recordTimeout = 5 * time.Second
 
 // ExchangeParams describes a completed WorkOS code exchange.
 type ExchangeParams struct {
@@ -48,7 +49,7 @@ type ExchangeParams struct {
 // ExpectedOrganizationID when set); anything else leaves the grant unlinked.
 // It is best effort: failures are logged and counted, never returned.
 func RecordExchange(ctx context.Context, logger *slog.Logger, db Beginner, p ExchangeParams) Recorded {
-	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: "", Revoked: false}
+	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, OrganizationID: "", Revoked: false, Failed: false, DeliveryIDs: nil}
 	logger = logger.With(
 		attr.SlogAuthSignInFlow(p.Flow),
 		attr.SlogAuthAuthenticationMethod(p.AuthenticationMethod),
@@ -56,9 +57,13 @@ func RecordExchange(ctx context.Context, logger *slog.Logger, db Beginner, p Exc
 	)
 	logger.InfoContext(ctx, "workos code exchange completed")
 
+	var organizationID string
 	outcome := func(o string) Recorded {
 		recordOutcome(ctx, p.Flow, o)
-		return none
+		failed := none
+		failed.Failed = o == OutcomeError
+		failed.OrganizationID = organizationID
+		return failed
 	}
 	switch {
 	case p.Impersonated:
@@ -72,16 +77,17 @@ func RecordExchange(ctx context.Context, logger *slog.Logger, db Beginner, p Exc
 	ctx, cancel := context.WithTimeout(ctx, recordTimeout)
 	defer cancel()
 
-	organizationID, err := repo.New(db).GetOrganizationIDByWorkOSID(ctx, conv.ToPGText(p.WorkOSOrganizationID))
+	resolved, err := repo.New(db).GetOrganizationIDByWorkOSID(ctx, conv.ToPGText(p.WorkOSOrganizationID))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return outcome(OutcomeUnknownOrganization)
 	case err != nil:
 		logger.ErrorContext(ctx, "resolve organization for sign-in", attr.SlogError(err))
 		return outcome(OutcomeError)
-	case p.ExpectedOrganizationID != "" && organizationID != p.ExpectedOrganizationID:
+	case p.ExpectedOrganizationID != "" && resolved != p.ExpectedOrganizationID:
 		return outcome(OutcomeOrganizationMismatch)
 	}
+	organizationID = resolved
 
 	recorded, err := Record(ctx, db, RecordParams{
 		OrganizationID:       organizationID,

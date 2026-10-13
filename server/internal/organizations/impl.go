@@ -747,6 +747,16 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 		return oops.E(oops.CodeUnexpected, err, "latch agents after owner membership loss").LogError(ctx, logger)
 	}
 
+	// Removal revokes the member's sign-ins and grants here, as
+	// revokeMemberSignIns does, wherever enforcement is on.
+	var revoked signins.Revoked
+	removalRevokes := s.sessions.SignInEnforced(ctx, ac.ActiveOrganizationID)
+	if removalRevokes {
+		if revoked, err = s.revokeMember(ctx, tx, ac, payload.UserID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "revoke removed member's sign-ins").LogError(ctx, logger)
+		}
+	}
+
 	if rel.WorkosMembershipID.Valid && rel.WorkosMembershipID.String != "" {
 		if err := s.orgs.DeleteOrganizationMembership(ctx, rel.WorkosMembershipID.String); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "remove user").LogError(ctx, logger)
@@ -761,6 +771,9 @@ func (s *Service) RemoveUser(ctx context.Context, payload *gen.RemoveUserPayload
 
 	if err := tx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+	if removalRevokes {
+		s.afterMemberRevoked(ctx, ac.ActiveOrganizationID, revoked)
 	}
 
 	return nil

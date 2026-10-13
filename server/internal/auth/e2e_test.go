@@ -1542,7 +1542,7 @@ func TestE2E_LoginRecordsSignInAndLogoutRevokesIt(t *testing.T) {
 	require.False(t, revoked.Valid, "signing out revokes that session's sign-in")
 	audited, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionAccessMemberSignInsRevoke)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), audited, "the sign-out revocation is audited")
+	require.Zero(t, audited, "a user's own sign-out is not a member-access change")
 }
 
 func enableSignInEnforcement(inst *e2eInstance, organizationID string) {
@@ -2024,4 +2024,85 @@ func TestE2E_LogoutEverywhereIsRefusedFromASupportSession(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	_, err = inst.sessionManager.Authenticate(t.Context(), first.SessionToken)
 	require.NoError(t, err, "nothing was signed out")
+}
+
+func TestE2E_LogoutEverywhereStillRevokesWhenWorkOSCannotListSessions(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID    = "user_01LISTFAILS"
+		workosOrgID     = "org_01LISTFAILS"
+		workosSessionID = "session_01LISTFAILS"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {{ID: "om_LISTFAILS", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "List Fails Corp", RoleSlugs: []string{"admin"}}},
+		},
+		orgs: map[string]*workos.Organization{workosOrgID: {ID: workosOrgID, Name: "List Fails Corp"}},
+	}
+	idpSessions := &MockIDPSessions{Listed: []string{workosSessionID, "session_02UNRECORDED"}, ListFails: true}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "list-fails@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      workosSessionID,
+		AuthenticationMethod: signins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+		IDPSessions:          idpSessions,
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	first, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	ctx, err = inst.sessionManager.Authenticate(ctx, first.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	enableSignInEnforcement(inst, authCtx.ActiveOrganizationID)
+
+	result, err := inst.service.LogoutEverywhere(ctx, &gen.LogoutEverywherePayload{SessionToken: nil})
+	require.NoError(t, err, "a WorkOS listing failure must not stop the local revocation")
+	require.Equal(t, 1, result.RevokedSignIns)
+	inst.service.WaitForDeliveries()
+	_, err = inst.sessionManager.Authenticate(t.Context(), first.SessionToken)
+	require.Error(t, err, "the dashboard session is ended")
+	require.Contains(t, idpSessions.Revoked(), workosSessionID, "the recorded WorkOS session is still ended")
+}
+
+func TestE2E_LogoutFromASupportSessionRevokesNoSignIn(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID    = "user_01SUPPORTLOGOUT"
+		workosOrgID     = "org_01SUPPORTLOGOUT"
+		workosSessionID = "session_01SUPPORTLOGOUT"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {{ID: "om_SUPPORTLOGOUT", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Support Logout Corp", RoleSlugs: []string{"admin"}}},
+		},
+		orgs: map[string]*workos.Organization{workosOrgID: {ID: workosOrgID, Name: "Support Logout Corp"}},
+	}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "support-logout@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      workosSessionID,
+		AuthenticationMethod: signins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	first, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	ctx, err = inst.sessionManager.Authenticate(ctx, first.SessionToken)
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	support := *authCtx
+	support.SupportOrganizationID = authCtx.ActiveOrganizationID
+	_, err = inst.service.Logout(contextvalues.SetAuthContext(ctx, &support), &gen.LogoutPayload{})
+	require.NoError(t, err)
+	live, err := signins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
+	require.NoError(t, err)
+	require.True(t, live.Valid, "a support or impersonated sign-out revokes nothing on the customer's behalf")
 }

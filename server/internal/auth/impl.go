@@ -443,6 +443,14 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		Impersonated:    idpUser.ImpersonatorEmail() != "",
 		AuthenticatedAt: authenticatedAt,
 	})
+	if recorded.Failed && recorded.OrganizationID != "" && s.sessions.SignInEnforced(ctx, recorded.OrganizationID) {
+		// Enforcement needs every new session linked; an unlinked one could
+		// never be reached by a later revocation.
+		return redirectWithError(authErrInit, errors.New("sign-in could not be recorded"))
+	}
+	if recorded.Revoked {
+		s.deliverer.DeliverNow(ctx, []string{recorded.OrganizationID}, recorded.DeliveryIDs)
+	}
 	if recorded.Revoked && s.sessions.SignInEnforced(ctx, recorded.OrganizationID) {
 		// No dashboard session from a revoked sign-in. Ending the WorkOS
 		// session makes the next login authenticate afresh.

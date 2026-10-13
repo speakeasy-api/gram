@@ -15,6 +15,9 @@ import (
 const (
 	meterRecorded = "sign_in.recorded"
 	meterRevoked  = "sign_in.revoked"
+	// meterListingFailed counts sign outs everywhere that ended only the
+	// WorkOS sessions already known.
+	meterListingFailed = "sign_in.session_listing_failed"
 )
 
 // Record outcomes.
@@ -31,8 +34,9 @@ const (
 )
 
 type instruments struct {
-	recorded metric.Int64Counter
-	revoked  metric.Int64Counter
+	recorded      metric.Int64Counter
+	revoked       metric.Int64Counter
+	listingFailed metric.Int64Counter
 }
 
 var (
@@ -46,6 +50,9 @@ func loadInstruments() instruments {
 		if c, err := meter.Int64Counter(meterRecorded, metric.WithDescription("WorkOS code exchanges by flow and how they resolved to a sign-in."), metric.WithUnit("{exchange}")); err == nil {
 			meters.recorded = c
 		}
+		if c, err := meter.Int64Counter(meterListingFailed, metric.WithDescription("Sign outs everywhere that could not list the user's WorkOS sessions."), metric.WithUnit("{sign_out}")); err == nil {
+			meters.listingFailed = c
+		}
 		if c, err := meter.Int64Counter(meterRevoked, metric.WithDescription("Sign-ins revoked, by reason."), metric.WithUnit("{sign_in}")); err == nil {
 			meters.revoked = c
 		}
@@ -56,6 +63,14 @@ func loadInstruments() instruments {
 func recordOutcome(ctx context.Context, flow, outcome string) {
 	if c := loadInstruments().recorded; c != nil {
 		c.Add(ctx, 1, metric.WithAttributes(attr.AuthSignInFlow(flow), attr.SignInRecordOutcome(outcome)))
+	}
+}
+
+// RecordSessionListingFailed counts sign outs everywhere that could not list
+// the user's WorkOS sessions and ended only the known ones.
+func RecordSessionListingFailed(ctx context.Context) {
+	if c := loadInstruments().listingFailed; c != nil {
+		c.Add(ctx, 1)
 	}
 }
 
@@ -103,13 +118,9 @@ func newDeliveryMetrics(logger *slog.Logger, meterProvider metric.MeterProvider)
 	return m
 }
 
-func (m deliveryMetrics) recordAttempt(ctx context.Context, kind string, ok bool) {
+func (m deliveryMetrics) recordAttempt(ctx context.Context, kind, outcome string) {
 	if m.attempts == nil {
 		return
-	}
-	outcome := "ok"
-	if !ok {
-		outcome = "failed"
 	}
 	m.attempts.Add(ctx, 1, metric.WithAttributes(attr.SignInDeliveryKind(kind), attr.Outcome(outcome)))
 }

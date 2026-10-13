@@ -35,6 +35,9 @@ func (s *Service) SetTokenRevoker(tokens signins.TokenRevoker, meterProvider met
 	s.deliverer = signins.NewDeliverer(s.logger, meterProvider, s.db, tokens, s.sessions, s.sessions)
 }
 
+// DrainDeliveries waits, bounded by ctx, for revocation pushes in flight.
+func (s *Service) DrainDeliveries(ctx context.Context) { s.deliverer.Drain(ctx) }
+
 // LogoutEverywhere ends every dashboard and identity provider session the
 // caller holds, revokes their sign-ins in every organization they ever
 // signed in to, and revokes every MCP grant made from them. The revocation,
@@ -59,9 +62,14 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations for sign-out").LogError(ctx, logger)
 	}
+	// A listing failure must not stop the local revocation: the WorkOS
+	// sessions behind recorded sign-ins are still ended, only unrecorded
+	// ones are missed.
 	idpSessions, err := s.sessions.ListUserIDPSessionIDs(ctx, authCtx.UserID)
 	if err != nil {
-		return nil, oops.E(oops.CodeGatewayError, err, "list identity provider sessions").LogError(ctx, logger)
+		logger.ErrorContext(ctx, "list identity provider sessions for sign out everywhere; ending known sessions only", attr.SlogError(err))
+		signins.RecordSessionListingFailed(ctx)
+		idpSessions = nil
 	}
 	if current, err := s.sessions.GetSession(ctx, *authCtx.SessionID); err == nil && current.WorkOSSessionID != "" && !slices.Contains(idpSessions, current.WorkOSSessionID) {
 		idpSessions = append(idpSessions, current.WorkOSSessionID)
@@ -103,6 +111,12 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 	revoked, err := signins.RevokeUser(ctx, dbtx, organizationIDs, authCtx.UserID, signins.RevokeReasonSignOutEverywhere)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke sign-ins").LogError(ctx, logger)
+	}
+	// The epoch is the revocation's own boundary, taken under the user lock,
+	// so a login that recorded before it is ended with the sign-ins it
+	// revoked and one that records after it is fenced.
+	if !revoked.CutoffAt.IsZero() {
+		epochAt = revoked.CutoffAt
 	}
 	deliveryIDs := revoked.DeliveryIDs
 	if deliveryOrg != "" {
@@ -195,14 +209,19 @@ const signOutAttempts = 3
 // revokeSignedOutSignIn durably revokes the sign-ins recorded for the
 // WorkOS session behind a dashboard session being signed out and enqueues
 // ending that WorkOS session. Grants made from them keep working but stop
-// qualifying for vouching.
+// qualifying for vouching. It is the user's own sign-out, so it is not
+// audited as a member-access change, and impersonated or support sessions
+// revoke nothing (their WorkOS session is ended by clearing the session).
 func (s *Service) revokeSignedOutSignIn(ctx context.Context, sessionID string, authCtx *contextvalues.AuthContext) (signins.SignedOut, error) {
 	var none signins.SignedOut
+	if contextvalues.IsLegacyImpersonatedSession(ctx) || contextvalues.IsSupportSession(ctx) || authCtx.SupportOrganizationID != "" {
+		return none, nil
+	}
 	session, err := s.sessions.GetSession(ctx, sessionID)
 	if err != nil {
 		return none, fmt.Errorf("load session: %w", err)
 	}
-	if session.WorkOSSessionID == "" || session.UserID != authCtx.UserID {
+	if session.WorkOSSessionID == "" || session.UserID != authCtx.UserID || session.ImpersonatorEmail != "" || session.SupportOrganizationID != "" {
 		return none, nil
 	}
 	organizationIDs, err := s.userSignInOrganizations(ctx, s.db, authCtx.UserID)
@@ -234,18 +253,10 @@ func (s *Service) revokeSignedOutOnce(ctx context.Context, organizationIDs []str
 	if err != nil {
 		return none, fmt.Errorf("revoke: %w", err)
 	}
-	revoked := signins.Revoked{SignInsByOrganization: map[string]int{}, WorkOSSessionIDs: nil, Sessions: nil, DeliveryIDs: nil}
-	for _, id := range out.Organizations {
-		revoked.SignInsByOrganization[id]++
-	}
-	actor := signins.Actor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), DisplayName: authCtx.Email}
-	if err := signins.AuditRevocation(ctx, dbtx, s.auditLogger, actor, authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), signins.RevokeReasonSignOut, out.Organizations, revoked); err != nil {
-		return none, fmt.Errorf("audit: %w", err)
-	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return none, fmt.Errorf("commit: %w", err)
 	}
-	signins.RecordRevoked(ctx, signins.RevokeReasonSignOut, revoked.SignIns())
+	signins.RecordRevoked(ctx, signins.RevokeReasonSignOut, out.SignIns)
 	return out, nil
 }
 

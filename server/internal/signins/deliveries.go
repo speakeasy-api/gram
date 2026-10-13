@@ -103,6 +103,23 @@ func (d *Deliverer) DeliverNow(ctx context.Context, organizationIDs []string, id
 	})
 }
 
+// Drain waits for background deliveries started by DeliverNow, until ctx
+// ends; whatever is cut off stays pending for the sweep.
+func (d *Deliverer) Drain(ctx context.Context) {
+	if d == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		d.pending.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
 // Wait blocks until background deliveries started by DeliverNow finish.
 func (d *Deliverer) Wait() {
 	if d != nil {
@@ -131,24 +148,45 @@ func (d *Deliverer) Sweep(ctx context.Context) (int, error) {
 	return len(rows), nil
 }
 
+// Push outcomes.
+const (
+	pushDelivered = "ok"
+	pushFailed    = "failed"
+	// pushSkipped is a WorkOS session another organization still uses.
+	pushSkipped = "skipped"
+	// pushRejected is a WorkOS session WorkOS refuses to end for good.
+	pushRejected = "rejected"
+)
+
 // deliver pushes each claimed delivery outside any transaction and
-// acknowledges it on its own.
+// acknowledges it on its own. An acknowledgement that finds the delivery
+// superseded (its effective time moved) only drops this attempt's lease.
 func (d *Deliverer) deliver(ctx context.Context, rows []repo.ClaimPendingRevocationDeliveriesRow) {
 	q := repo.New(d.db)
 	failed := 0
 	for _, row := range rows {
-		pushErr := d.push(ctx, row)
-		d.metrics.recordAttempt(ctx, row.Kind, pushErr == nil)
+		outcome, pushErr := d.push(ctx, row)
+		d.metrics.recordAttempt(ctx, row.Kind, outcome)
+		var acked int64
 		var err error
 		if pushErr != nil {
 			failed++
-			err = q.MarkRevocationDeliveryFailed(ctx, repo.MarkRevocationDeliveryFailedParams{
+			d.logger.WarnContext(ctx, "sign-in revocation delivery failed",
+				attr.SlogSignInDeliveryKind(row.Kind),
+				attr.SlogValueInt(int(row.Attempts)+1),
+				attr.SlogHTTPResponseStatusCode(statusCode(pushErr)),
+			)
+			acked, err = q.MarkRevocationDeliveryFailed(ctx, repo.MarkRevocationDeliveryFailedParams{
 				LastError:      conv.ToPGText(pushErr.Error()),
 				ID:             row.ID,
 				OrganizationID: row.OrganizationID,
+				EffectiveAt:    row.EffectiveAt,
 			})
 		} else {
-			err = q.MarkRevocationDelivered(ctx, repo.MarkRevocationDeliveredParams{ID: row.ID, OrganizationID: row.OrganizationID, EffectiveAt: row.EffectiveAt})
+			acked, err = q.MarkRevocationDelivered(ctx, repo.MarkRevocationDeliveredParams{ID: row.ID, OrganizationID: row.OrganizationID, EffectiveAt: row.EffectiveAt})
+		}
+		if err == nil && acked == 0 {
+			err = q.ReleaseRevocationDelivery(ctx, repo.ReleaseRevocationDeliveryParams{ID: row.ID, OrganizationID: row.OrganizationID})
 		}
 		if err != nil {
 			// The lease expires and the sweep retries the idempotent push.
@@ -160,40 +198,74 @@ func (d *Deliverer) deliver(ctx context.Context, rows []repo.ClaimPendingRevocat
 	}
 }
 
-func (d *Deliverer) push(ctx context.Context, row repo.ClaimPendingRevocationDeliveriesRow) error {
+func (d *Deliverer) push(ctx context.Context, row repo.ClaimPendingRevocationDeliveriesRow) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pushTimeout)
 	defer cancel()
 	switch DeliveryKind(row.Kind) {
 	case DeliveryJTI:
 		if d.tokens == nil {
-			return fmt.Errorf("no token revoker")
+			return pushFailed, fmt.Errorf("no token revoker")
 		}
 		if err := d.tokens.RevokeToken(ctx, row.Target); err != nil {
-			return fmt.Errorf("push revoked jti: %w", err)
+			return pushFailed, fmt.Errorf("push revoked jti: %w", err)
 		}
-		return nil
+		return pushDelivered, nil
 	case DeliveryWorkOSSession:
 		if d.idp == nil {
-			return fmt.Errorf("no identity provider revoker")
+			return pushFailed, fmt.Errorf("no identity provider revoker")
 		}
-		if err := d.idp.RevokeSession(ctx, row.Target); err != nil && !workosSessionGone(err) {
-			return fmt.Errorf("revoke workos session: %w", err)
+		// Rechecked at delivery: the session may have been recorded in
+		// another organization since this was queued, and organization-scoped
+		// revocations must not end it there.
+		live, err := repo.New(d.db).WorkOSSessionLiveOutsideOrganization(ctx, repo.WorkOSSessionLiveOutsideOrganizationParams{WorkosSessionID: row.Target, OrganizationID: row.OrganizationID})
+		if err != nil {
+			return pushFailed, fmt.Errorf("check workos session use elsewhere: %w", err)
 		}
-		return nil
+		if live {
+			return pushSkipped, nil
+		}
+		err = d.idp.RevokeSession(ctx, row.Target)
+		switch {
+		case err == nil, workosSessionGone(err):
+			return pushDelivered, nil
+		case workosSessionRejected(err):
+			return pushRejected, nil
+		default:
+			return pushFailed, fmt.Errorf("revoke workos session: %w", err)
+		}
 	case DeliveryUserEpoch:
 		if d.epochs == nil {
-			return fmt.Errorf("no epoch raiser")
+			return pushFailed, fmt.Errorf("no epoch raiser")
 		}
 		if !row.EffectiveAt.Valid {
-			return fmt.Errorf("user epoch delivery has no effective time")
+			return pushFailed, fmt.Errorf("user epoch delivery has no effective time")
 		}
 		if err := d.epochs.RaiseUserEpoch(ctx, row.Target, row.EffectiveAt.Time); err != nil {
-			return fmt.Errorf("raise user epoch: %w", err)
+			return pushFailed, fmt.Errorf("raise user epoch: %w", err)
 		}
-		return nil
+		return pushDelivered, nil
 	default:
-		return fmt.Errorf("unknown revocation delivery kind %q", row.Kind)
+		return pushFailed, fmt.Errorf("unknown revocation delivery kind %q", row.Kind)
 	}
+}
+
+// statusCode is the HTTP status behind a WorkOS error, or 0.
+func statusCode(err error) int {
+	var apiErr *workos.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode
+	}
+	if httpErr, ok := errors.AsType[workos_errors.HTTPError](err); ok {
+		return httpErr.Code
+	}
+	return 0
+}
+
+// workosSessionRejected reports WorkOS refusing the session id itself
+// (malformed or foreign), which no retry fixes.
+func workosSessionRejected(err error) bool {
+	code := statusCode(err)
+	return code == http.StatusBadRequest || code == http.StatusUnprocessableEntity
 }
 
 // workosSessionGone reports a WorkOS session that no longer exists, which is

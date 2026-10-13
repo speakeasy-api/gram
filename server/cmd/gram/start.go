@@ -1556,6 +1556,13 @@ func newStartCommand() *cli.Command {
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, siteURL.String(), orgHosts, auditLogger, svixClient)
 			organizationsService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			organizations.Attach(mux, organizationsService)
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				// Revocation pushes started just before shutdown finish or are
+				// left to the sweep.
+				authService.DrainDeliveries(ctx)
+				organizationsService.DrainDeliveries(ctx)
+				return nil
+			})
 			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
 				Client:         ghClient,
 				Org:            c.String("plugins-github-org"),

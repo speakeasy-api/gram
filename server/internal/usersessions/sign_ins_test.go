@@ -592,7 +592,9 @@ func TestDeliveries_ALeaseKeepsOtherWorkersOff(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, second, "a leased delivery is not claimed twice")
 
-	require.NoError(t, q.MarkRevocationDelivered(ctx, signinsrepo.MarkRevocationDeliveredParams{ID: first[0].ID, OrganizationID: f.orgID, EffectiveAt: first[0].EffectiveAt}))
+	acked, err := q.MarkRevocationDelivered(ctx, signinsrepo.MarkRevocationDeliveredParams{ID: first[0].ID, OrganizationID: f.orgID, EffectiveAt: first[0].EffectiveAt})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), acked)
 	require.Equal(t, 1, pendingDeliveries(t, ctx, f), "each delivery is acknowledged on its own")
 }
 
@@ -1078,4 +1080,179 @@ func TestDeliveries_AWorkOSSessionThatIsGoneCountsAsDelivered(t *testing.T) {
 	deliverer.Wait()
 	require.Len(t, gone.calls, 1)
 	require.Equal(t, 0, pendingDeliveries(t, ctx, f))
+}
+
+func TestRevokeUser_ReturnsTheRevocationBoundary(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSignInFixture(t)
+	before := time.Now().Add(-time.Second)
+	revoked, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
+	require.NoError(t, err)
+	require.True(t, revoked.CutoffAt.After(before) && revoked.CutoffAt.Before(time.Now().Add(time.Second)), "the cutoff taken under the user lock is the epoch boundary")
+}
+
+func TestRevokeUser_RevokesGrantsNoSignInBacks(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSignInFixture(t)
+	unlinked := f.seedSession(t, ctx, urn.NewUserSubject(f.userID), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	other := f.seedSession(t, ctx, urn.NewUserSubject("someone-else-"+uuid.NewString()), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+
+	revoked, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonAdmin)
+	require.NoError(t, err)
+	require.Len(t, revoked.Sessions, 1)
+	requireSessionGone(t, ctx, f, unlinked.ID)
+	requireSessionLive(t, ctx, f, other.ID)
+}
+
+func TestRecord_ALaterExchangeRevealingAnEarlierAuthenticationFencesTheRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSignInFixture(t)
+	_, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
+	require.NoError(t, err)
+
+	workosSessionID := "session_" + uuid.NewString()
+	unknown := f.signInParams(workosSessionID, time.Now())
+	unknown.Evidence.IDPAuthenticatedAt = time.Time{}
+	first, err := signins.Record(ctx, f.ti.conn, unknown)
+	require.NoError(t, err)
+	require.False(t, first.Revoked, "without the real authentication time the exchange alone is after the cutoff")
+
+	revealed := f.signInParams(workosSessionID, time.Now())
+	revealed.Evidence.IDPAuthenticatedAt = time.Now().Add(-time.Hour)
+	again, err := signins.Record(ctx, f.ti.conn, revealed)
+	require.NoError(t, err)
+	require.Equal(t, first.ID, again.ID)
+	require.True(t, again.Revoked, "the earlier authentication predates the cutoff, and the row says so")
+	require.NotEmpty(t, again.DeliveryIDs, "and ending its WorkOS session is queued")
+}
+
+func TestRecord_ASignOutSurvivesAnAdminRevocationForOtherOrganizations(t *testing.T) {
+	t.Parallel()
+
+	for _, order := range []string{"sign-out then admin", "admin then sign-out"} {
+		t.Run(order, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, f := newSignInFixture(t)
+			workosSessionID := "session_" + uuid.NewString()
+			_, err := signins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
+			require.NoError(t, err)
+			signOut := func() {
+				_, err := signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, workosSessionID)
+				require.NoError(t, err)
+			}
+			admin := func() {
+				_, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonAdmin)
+				require.NoError(t, err)
+			}
+			if order == "sign-out then admin" {
+				signOut()
+				admin()
+			} else {
+				admin()
+				signOut()
+			}
+
+			otherOrg := seedOtherOrganization(t, ctx, f.ti.conn)
+			elsewhere := f.signInParams(workosSessionID, time.Now())
+			elsewhere.OrganizationID = otherOrg
+			recorded, err := signins.Record(ctx, f.ti.conn, elsewhere)
+			require.NoError(t, err)
+			require.True(t, recorded.Revoked, "the session was signed out, whatever the organization's own revocation says")
+		})
+	}
+}
+
+func TestRevokeSession_CountsOnlyWhatItRevokedAndCoversEveryRecordedOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSignInFixture(t)
+	marker, err := signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, "session_"+uuid.NewString())
+	require.NoError(t, err)
+	require.Zero(t, marker.SignIns, "a marker for a session never recorded counts nothing")
+
+	workosSessionID := "session_" + uuid.NewString()
+	_, err = signins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
+	require.NoError(t, err)
+	otherOrg := seedOtherOrganization(t, ctx, f.ti.conn)
+	elsewhere := f.signInParams(workosSessionID, time.Now())
+	elsewhere.OrganizationID = otherOrg
+	_, err = signins.Record(ctx, f.ti.conn, elsewhere)
+	require.NoError(t, err)
+
+	out, err := signins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, workosSessionID)
+	require.NoError(t, err)
+	require.Equal(t, 2, out.SignIns, "organizations recorded since the caller listed them are revoked too")
+	live, err := signins.LiveSignInForSession(ctx, f.ti.conn, otherOrg, f.userID, workosSessionID)
+	require.NoError(t, err)
+	require.False(t, live.Valid)
+}
+
+func TestDeliveries_ASupersededAttemptNeitherAcknowledgesNorDelaysTheNewerEpoch(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSignInFixture(t)
+	first := time.Now().Add(-time.Minute).Truncate(time.Microsecond)
+	id, err := signins.EnqueueUserEpoch(ctx, f.ti.conn, f.orgID, f.userID, first)
+	require.NoError(t, err)
+	q := signinsrepo.New(f.ti.conn)
+	claimed, err := q.ClaimRevocationDeliveries(ctx, signinsrepo.ClaimRevocationDeliveriesParams{LeaseSeconds: 60, OrganizationIds: []string{f.orgID}, Ids: []uuid.UUID{id}})
+	require.NoError(t, err)
+	require.Len(t, claimed, 1)
+
+	_, err = signins.EnqueueUserEpoch(ctx, f.ti.conn, f.orgID, f.userID, first.Add(30*time.Second))
+	require.NoError(t, err)
+	again, err := q.ClaimRevocationDeliveries(ctx, signinsrepo.ClaimRevocationDeliveriesParams{LeaseSeconds: 60, OrganizationIds: []string{f.orgID}, Ids: []uuid.UUID{id}})
+	require.NoError(t, err)
+	require.Len(t, again, 1, "a newer epoch is claimable at once, not after the old lease")
+
+	failed, err := q.MarkRevocationDeliveryFailed(ctx, signinsrepo.MarkRevocationDeliveryFailedParams{LastError: conv.ToPGText("redis down"), ID: id, OrganizationID: f.orgID, EffectiveAt: claimed[0].EffectiveAt})
+	require.NoError(t, err)
+	require.Zero(t, failed, "the stale attempt's failure does not back off the newer epoch")
+	for _, d := range deliveries(t, ctx, f) {
+		require.False(t, d.NextAttemptAt.Valid)
+	}
+}
+
+func TestDeliveries_AWorkOSSessionAnotherOrganizationNowUsesIsNotEnded(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSignInFixture(t)
+	workosSessionID := "session_" + uuid.NewString()
+	_, err := signins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
+	require.NoError(t, err)
+	revoked, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonAdmin)
+	require.NoError(t, err)
+
+	// Recorded elsewhere after the admin revocation queued ending it.
+	otherOrg := seedOtherOrganization(t, ctx, f.ti.conn)
+	elsewhere := f.signInParams(workosSessionID, time.Now())
+	elsewhere.OrganizationID = otherOrg
+	recorded, err := signins.Record(ctx, f.ti.conn, elsewhere)
+	require.NoError(t, err)
+	require.False(t, recorded.Revoked)
+
+	idp := &recordingRevoker{mu: sync.Mutex{}, calls: nil, fail: false, ctxErrs: nil}
+	deliverer := newDeliverer(t, f, idp, nil)
+	deliverer.DeliverNow(ctx, []string{f.orgID}, revoked.DeliveryIDs)
+	deliverer.Wait()
+	require.NotContains(t, idp.calls, workosSessionID, "the other organization's WorkOS session stays up")
+	require.Equal(t, 0, pendingDeliveries(t, ctx, f), "and the delivery is settled")
+}
+
+func TestCheckConsentIdentity_JudgesTheCapturedSignIn(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSignInFixture(t)
+	signIn := f.recordSignIn(t, ctx, signins.MethodSSO, time.Now())
+	result, err := signins.CheckConsentIdentity(ctx, f.ti.conn, f.orgID, f.userID, signIn, time.Now())
+	require.NoError(t, err)
+	require.True(t, result.Eligible(), result.Reason)
+
+	other, err := signins.CheckConsentIdentity(ctx, f.ti.conn, f.orgID, "someone-else", signIn, time.Now())
+	require.NoError(t, err)
+	require.False(t, other.Eligible(), "another user's consent never uses this sign-in")
 }

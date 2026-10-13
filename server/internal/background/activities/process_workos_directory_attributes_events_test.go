@@ -2,7 +2,6 @@ package activities_test
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -449,19 +448,21 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationRevokesSignIns(t *testing.T) {
 	t.Parallel()
 
-	for _, enforced := range []bool{true, false} {
-		t.Run(fmt.Sprintf("enforced=%t", enforced), func(t *testing.T) {
+	for _, flag := range []string{"on", "off", "undecided"} {
+		t.Run("flag "+flag, func(t *testing.T) {
 			t.Parallel()
-			deactivateDirectoryUserWithSignIn(t, enforced)
+			deactivateDirectoryUserWithSignIn(t, flag)
 		})
 	}
 }
 
-func deactivateDirectoryUserWithSignIn(t *testing.T, enforced bool) {
+// flag "undecided" leaves the flag unset, as during a flag-service outage:
+// deprovisioning must still revoke.
+func deactivateDirectoryUserWithSignIn(t *testing.T, flag string) {
 	t.Helper()
 
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, fmt.Sprintf("workos_directory_user_deactivate_sign_ins_%t", enforced))
+	conn := newOrgEventsTestConn(t, "workos_directory_user_deactivate_sign_ins_"+flag)
 	logger := testenv.NewLogger(t)
 
 	const (
@@ -497,8 +498,11 @@ func deactivateDirectoryUserWithSignIn(t *testing.T, enforced bool) {
 	signals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, newCaptureCache(), signals)
 	flags := &feature.InMemory{}
-	if enforced {
+	switch flag {
+	case "on":
 		signins.EnableForTests(flags, organizationID)
+	case "off":
+		flags.SetFlag(feature.FlagSignInEnforcement, organizationID, false)
 	}
 	activity.SetSignInEnforcement(flags, testenv.NewMeterProvider(t), nil)
 
@@ -506,7 +510,7 @@ func deactivateDirectoryUserWithSignIn(t *testing.T, enforced bool) {
 	require.NoError(t, err)
 	activity.WaitForDeliveries()
 
-	if !enforced {
+	if flag == "off" {
 		live, err := signins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
 		require.NoError(t, err)
 		require.True(t, live.Valid, "deprovisioning leaves sign-ins alone while enforcement is off")

@@ -185,7 +185,10 @@ const (
 	// FlagSignInEnforcement turns on, per organization (keyed by its id),
 	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
 	// everywhere, member sign-in revocation and revocation on deprovisioning.
-	// Enable it only once every pod runs the code that honours it.
+	// Enable it only once every pod runs the code that honours it. It is
+	// evaluated with the organization id as the distinct id and no groups, so
+	// the PostHog flag must be person-aggregated and match distinct_id in a
+	// list of organization ids; a group-aggregated flag never matches.
 	FlagSignInEnforcement Flag = "sign-in-enforcement"
 )
 

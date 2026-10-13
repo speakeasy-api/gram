@@ -109,6 +109,27 @@ func (p *ProcessWorkOSOrganizationEvents) SetSignInEnforcement(flags feature.Pro
 	p.deliverer = signins.NewDeliverer(p.logger, meterProvider, p.db, p.revokedTokens, p.workosClient, epochs)
 }
 
+// deprovisionRevokes decides whether deprovisioning revokes the member's
+// sign-ins. Only an explicit "off" skips it: an unavailable flag decision
+// fails closed, because the event cursor advances and the skip would be
+// permanent.
+func (p *ProcessWorkOSOrganizationEvents) deprovisionRevokes(ctx context.Context, logger *slog.Logger, organizationID string) bool {
+	if p.flags == nil {
+		return false
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, p.flags, feature.FlagSignInEnforcement, organizationID, nil)
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "sign-in enforcement flag unavailable; revoking on deprovisioning", attr.SlogError(err))
+		return true
+	case evaluation == feature.EvaluationIndeterminate:
+		logger.WarnContext(ctx, "sign-in enforcement flag undecided; revoking on deprovisioning")
+		return true
+	default:
+		return evaluation == feature.EvaluationEnabled
+	}
+}
+
 // SetNewOrganizationDefaultHost sets the default host recorded on
 // organizations created from WorkOS events. Unset records none.
 func (p *ProcessWorkOSOrganizationEvents) SetNewOrganizationDefaultHost(host pgtype.Text) {
@@ -311,7 +332,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	if err != nil {
 		return "", err
 	}
-	if r := effects.revokeSignIns; r != nil && signins.Enforced(ctx, p.flags, r.organizationID) {
+	if r := effects.revokeSignIns; r != nil && p.deprovisionRevokes(ctx, logger, r.organizationID) {
 		if err := revokeDeprovisionedSignIns(ctx, dbtx, *r, &effects); err != nil {
 			return "", err
 		}
