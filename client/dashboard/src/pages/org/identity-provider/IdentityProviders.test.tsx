@@ -40,10 +40,19 @@ vi.mock("@/components/api-error-alert", () => ({
     error ? <div role="alert">{error.message}</div> : null,
 }));
 
-vi.mock("./SpeakeasyProviderCard", () => ({
-  SpeakeasyProviderCard: () => (
-    <article aria-label="Speakeasy identity provider" />
-  ),
+vi.mock("./useEnterpriseIssuer", () => ({
+  useEnterpriseIssuer: () => ({
+    data: {
+      keys: [],
+      kmsCleanupPending: 0,
+      state: "setup_required",
+      canEnable: true,
+    },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
 }));
 vi.mock("./SpeakeasyWorkspace", () => ({
   SpeakeasyWorkspace: () => <div>Speakeasy page</div>,
@@ -185,7 +194,8 @@ describe("provider cards", () => {
   });
 
   it("opens the Speakeasy page from its provider link", () => {
-    show("&provider=speakeasy", { showExternal: false, showSpeakeasy: true });
+    show("", { showExternal: false, showSpeakeasy: true });
+    fireEvent.click(screen.getByRole("link", { name: "Set up Speakeasy" }));
     expect(screen.getByText("Speakeasy page")).toBeTruthy();
     expect(
       screen.queryByRole("heading", { name: "Identity providers" }),

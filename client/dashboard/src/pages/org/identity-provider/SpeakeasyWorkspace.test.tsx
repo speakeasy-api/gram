@@ -383,15 +383,93 @@ describe("Speakeasy identity provider page", () => {
     ).toBeNull();
   });
 
-  it.each([undefined, new Date("2030-01-01"), new Date("2020-01-01")])(
-    "leaves routine rotation out of the page (%s)",
-    (rotationReadyAt) => {
-      mocks.issuer = { ...enabledIssuer, rotationReadyAt };
+  it.each([
+    ["an enabled issuer with an active key", enabledIssuer, true],
+    [
+      "a keyless issuer",
+      { ...enabledIssuer, keys: [], state: "keyless" },
+      false,
+    ],
+    ["a disabled issuer", { ...enabledIssuer, state: "disabled" }, false],
+    ["a paused issuer", { ...enabledIssuer, state: "signing_paused" }, false],
+  ] satisfies [string, InternalSessionIssuer, boolean][])(
+    "offers routine rotation only for %s",
+    (_, issuer, shown) => {
+      mocks.issuer = issuer;
       show();
-      expect(screen.queryByRole("button", { name: /rotat/i })).toBeNull();
-      expect(screen.queryByText(/complete rotation/i)).toBeNull();
+      expect(!!screen.queryByRole("button", { name: "Rotate key" })).toBe(
+        shown,
+      );
     },
   );
+
+  it.each(["reader", "support", "demo"])(
+    "hides routine rotation from a %s session",
+    (role) => {
+      mocks.admin = role !== "reader";
+      mocks.support = role === "support";
+      if (role === "demo") mocks.organizationSlug = "acme-demo";
+      mocks.issuer = enabledIssuer;
+      show();
+      expect(screen.queryByRole("button", { name: "Rotate key" })).toBeNull();
+    },
+  );
+
+  it("rotates routinely only after confirmation", () => {
+    mocks.issuer = enabledIssuer;
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "Rotate key" }));
+    expect(mocks.rotate).not.toHaveBeenCalled();
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByText(/publishes a new key now/)).toBeTruthy();
+    fireEvent.click(dialog.getByRole("button", { name: "Rotate key" }));
+    expect(mocks.rotate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        rotateRequestBody: { activeKid: "example-key", compromised: false },
+      },
+    });
+  });
+
+  it("shows a publishing key and blocks repeat rotation until it is ready", () => {
+    mocks.issuer = {
+      ...enabledIssuer,
+      keys: [
+        { kid: "example-key", state: "active" },
+        { kid: "next-key", state: "pending" },
+      ],
+      rotationReadyAt: new Date(Date.now() + 60_000),
+    };
+    show();
+    expect(screen.getByText(/New key publishing, active after/)).toBeTruthy();
+    const button = screen.getByRole("button", { name: "Rotate key" });
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Replace compromised key" }),
+    ).toBeTruthy();
+  });
+
+  it("activates a published key once it is ready, without a second confirmation", () => {
+    mocks.issuer = {
+      ...enabledIssuer,
+      keys: [
+        { kid: "example-key", state: "active" },
+        { kid: "next-key", state: "pending" },
+      ],
+      rotationReadyAt: new Date(Date.now() - 1_000),
+    };
+    show();
+    expect(screen.queryByText(/New key publishing/)).toBeNull();
+    expect(screen.getByText(/The new key is published/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Activate new key" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.rotate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        rotateRequestBody: { activeKid: "example-key", compromised: false },
+      },
+    });
+  });
 
   it.each([
     ["enabled", "Enabled", /vouches for your team/],

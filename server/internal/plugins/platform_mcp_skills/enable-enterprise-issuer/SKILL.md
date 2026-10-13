@@ -40,8 +40,8 @@ false or missing, report `next_step` and stop; do not direct the administrator
 to enable an unavailable issuer. When eligible, explain that enabling provisions or resumes
 the organization's public issuer; it does not establish vendor trust or grant
 user access. Ask the organization administrator to open **IDP and SSO → Identity
-providers → Speakeasy** and choose **Enable** under **Status** for the confirmed
-organization. There is no issuer mutation
+providers → Speakeasy** and, under **Status** for the confirmed organization,
+choose the button whose label begins **Enable Enterprise Managed**. There is no issuer mutation
 tool in this workflow. Do not substitute raw API requests, database writes,
 credentials, or an invented tool.
 
@@ -55,7 +55,9 @@ signing key exists, so nothing is signed, and ask an organization administrator
 to open **IDP and SSO → Identity providers → Speakeasy** and, under **Signing
 keys**, choose **Finish setting up a new key**. The
 issuer URI stays the same. If the administrator suspects a key is compromised,
-point them to **Replace compromised key** on the same page. There is no key
+point them to **Replace compromised key** on the same page. For a routine key
+change, **Rotate key** there publishes a new key, and **Activate new key**
+switches to it after a short wait. There is no key
 mutation tool in this workflow: do not attempt rotation or revocation yourself,
 or imply that support staff may mutate the organization's issuer.
 

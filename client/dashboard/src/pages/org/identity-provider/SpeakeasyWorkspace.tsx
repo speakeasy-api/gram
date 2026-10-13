@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -28,7 +28,7 @@ import {
   useEnterpriseIssuer,
 } from "./useEnterpriseIssuer";
 
-type Action = "disable" | "replace" | null;
+type Action = "disable" | "replace" | "rotate" | null;
 
 /** Settings for Speakeasy's own issuer, one section per concern. */
 export function SpeakeasyWorkspace(): JSX.Element {
@@ -72,6 +72,11 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
   const activeKid = issuer?.keys.find((key) => key.state === "active")?.kid;
   const canReplace = canManage && !!activeKid;
   const canFinish = canManage && issuer?.state === "keyless";
+  const canRotate = canManage && issuer?.state === "enabled" && !!activeKid;
+  const hasPendingKey = !!issuer?.keys.some((key) => key.state === "pending");
+  const readyAt = issuer?.rotationReadyAt;
+  const rotationWaiting = useIsFuture(readyAt);
+  const rotationReady = hasPendingKey && !rotationWaiting;
   const chooseAction = (nextAction: Action) => {
     enable.reset();
     rotate.reset();
@@ -84,6 +89,13 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
     rotate.mutate({
       security: { sessionHeaderGramSession: "" },
       request: { rotateRequestBody: { activeKid: kid, compromised: true } },
+    });
+  // A routine rotation publishes a pending key; once verifiers have had time
+  // to fetch it, the same call activates it. An early repeat changes nothing.
+  const rotateKey = () =>
+    rotate.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: { rotateRequestBody: { activeKid, compromised: false } },
     });
   const setEnabled = (enabled: boolean) =>
     enable.mutate({
@@ -257,13 +269,27 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                   {replacementError && issuer.state === "keyless" && (
                     <Alert variant="error">{replacementError}</Alert>
                   )}
+                  {issuer.state === "enabled" && rotationWaiting && (
+                    <Text small muted role="status">
+                      New key publishing, active after {formatReadyAt(readyAt!)}
+                      . Speakeasy keeps signing with the current key until then.
+                    </Text>
+                  )}
+                  {canRotate && rotationReady && (
+                    <Text small muted role="status">
+                      The new key is published. Activate it to start signing
+                      with it; the old key stays published for a short overlap.
+                    </Text>
+                  )}
                   {rotate.isError && action === null && (
                     <Alert variant="error">
-                      Couldn't finish setting up a new key. Try again.
+                      {issuer.state === "keyless"
+                        ? "Couldn't finish setting up a new key. Try again."
+                        : "Couldn't rotate the key. Try again."}
                     </Alert>
                   )}
                 </SettingsSection.Body>
-                {(canFinish || canReplace) && (
+                {(canFinish || canReplace || canRotate) && (
                   <SettingsSection.Footer>
                     <SettingsSection.FooterHint>
                       {canFinish
@@ -284,6 +310,27 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                           {rotate.isPending
                             ? "Setting up…"
                             : "Finish setting up a new key"}
+                        </Button>
+                      )}
+                      {canRotate && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={pending || rotationWaiting}
+                          onClick={() => {
+                            if (rotationReady) {
+                              chooseAction(null);
+                              rotateKey();
+                            } else {
+                              chooseAction("rotate");
+                            }
+                          }}
+                        >
+                          {rotationReady
+                            ? rotate.isPending
+                              ? "Activating…"
+                              : "Activate new key"
+                            : "Rotate key"}
                         </Button>
                       )}
                       {canReplace && (
@@ -361,6 +408,29 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
         onConfirm={() => replaceKey(activeKid)}
       />
       <ConfirmDialog
+        open={action === "rotate"}
+        onOpenChange={(open) => {
+          if (!open) chooseAction(null);
+        }}
+        title="Rotate the signing key?"
+        confirmLabel="Rotate key"
+        pendingLabel="Rotating…"
+        confirmVariant="primary"
+        description={
+          <>
+            Speakeasy publishes a new key now and keeps signing with the current
+            one. After a couple of minutes, activate the new key here; the old
+            key stays published for a short overlap, so services keep working
+            throughout.
+          </>
+        }
+        isPending={rotate.isPending}
+        error={
+          rotate.isError ? "Couldn't rotate the key. Try again." : undefined
+        }
+        onConfirm={rotateKey}
+      />
+      <ConfirmDialog
         open={action === "disable"}
         onOpenChange={(open) => {
           if (!open) chooseAction(null);
@@ -389,6 +459,27 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
       />
     </section>
   );
+}
+
+/** Whether a time is still ahead, re-rendering once when it passes. */
+function useIsFuture(at: Date | undefined): boolean {
+  const target = at?.getTime();
+  const [, setPassed] = useState<number>();
+  useEffect(() => {
+    if (target === undefined) return;
+    const wait = target - Date.now();
+    if (wait <= 0) return;
+    const timer = setTimeout(() => setPassed(target), wait + 250);
+    return () => clearTimeout(timer);
+  }, [target]);
+  return target !== undefined && target > Date.now();
+}
+
+function formatReadyAt(readyAt: Date): string {
+  return readyAt.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function IssuerStatus({
