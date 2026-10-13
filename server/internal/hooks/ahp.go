@@ -18,8 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// ahpAdapter is the canonical hook source recorded for Agent Hooks Protocol
-// events. Harness identity in AHP is self-reported correlation metadata.
+// ahpAdapter is the canonical hook source for AHP events. The self-reported
+// harness name is appended to it so it cannot collide with adapters that have
+// provider-specific ingest behavior.
 const ahpAdapter = "ahp"
 
 // AttachAHP mounts the Agent Hooks Protocol endpoint. AHP events are
@@ -87,12 +88,12 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 			},
 			SessionStart: func(ctx context.Context, c ahpserver.ObserveContext[ahp.SessionStartEvent]) error {
 				e := c.Event
-				_, err := s.ingestAHP(ctx, ahpPayload(e.Source, e.ID, string(e.Type), e.Time, "session.started", ahp.Some(e.Session), ""), true)
+				_, err := s.ingestAHP(ctx, ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "session.started", ahp.Some(e.Session), ""), true)
 				return err
 			},
 			SessionEnd: func(ctx context.Context, c ahpserver.ObserveContext[ahp.SessionEndEvent]) error {
 				e := c.Event
-				_, err := s.ingestAHP(ctx, ahpPayload(e.Source, e.ID, string(e.Type), e.Time, "session.ended", ahp.Some(e.Session), ""), true)
+				_, err := s.ingestAHP(ctx, ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "session.ended", ahp.Some(e.Session), ""), true)
 				return err
 			},
 			Any: nil,
@@ -157,7 +158,7 @@ func ahpDeny(reason string) *ahp.DenyEffect {
 	return &ahp.DenyEffect{Type: ahp.DenyEffectTypeDeny, Reason: reason, Code: ahp.Optional[string]{Value: "", Present: false}, Extensions: ahp.Optional[*ahp.Extensions]{Value: nil, Present: false}, AdditionalProperties: nil}
 }
 
-func ahpPayload(source, id, rawType, occurredAt, eventType string, session ahp.Optional[*ahp.Session], turnID string) *gen.IngestPayload {
+func ahpPayload(source string, harness *ahp.Harness, id, rawType, occurredAt, eventType string, session ahp.Optional[*ahp.Session], turnID string) *gen.IngestPayload {
 	payload := &gen.IngestPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -170,6 +171,10 @@ func ahpPayload(source, id, rawType, occurredAt, eventType string, session ahp.O
 		Data:             &gen.HookIngestData{Prompt: nil, ToolCall: nil, Mcp: nil, McpInventory: nil, McpInventoryCollected: nil, Usage: nil, Message: nil, Skill: nil, Notification: nil, McpAttribution: nil, PromptAttachments: nil},
 		Raw:              nil,
 	}
+	if harness != nil && strings.TrimSpace(harness.Name) != "" {
+		payload.Source.Adapter = ahpAdapter + ":" + strings.TrimSpace(harness.Name)
+		payload.Source.AdapterVersion = conv.PtrEmpty(strings.TrimSpace(harness.Version))
+	}
 	if session.Present && session.Value != nil {
 		s := session.Value
 		payload.Session = &gen.HookIngestSession{ID: &s.ID, TurnID: conv.PtrEmpty(turnID), Cwd: conv.PtrEmpty(s.CWD.Value), Model: conv.PtrEmpty(s.Model.Value)}
@@ -178,7 +183,7 @@ func ahpPayload(source, id, rawType, occurredAt, eventType string, session ahp.O
 }
 
 func ahpToolBeforePayload(e *ahp.ToolBeforeEvent) *gen.IngestPayload {
-	payload := ahpPayload(e.Source, e.ID, string(e.Type), e.Time, "tool.requested", e.Session, e.Turn.Value.ID)
+	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "tool.requested", e.Session, e.Turn.Value.ID)
 	payload.Data.ToolCall = ahpToolCall(e.Call.ID, e.Tool)
 	payload.Data.Mcp = ahpMCP(e.Tool)
 	return payload
@@ -194,7 +199,7 @@ func ahpToolAfterPayload(e *ahp.ToolAfterEvent) *gen.IngestPayload {
 	if e.Outcome == ahp.ToolAfterEventOutcomeOk {
 		eventType = "tool.completed"
 	}
-	payload := ahpPayload(e.Source, e.ID, string(e.Type), e.Time, eventType, e.Session, e.Turn.Value.ID)
+	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, eventType, e.Session, e.Turn.Value.ID)
 	call := ahpToolCall(e.Call.ID, e.Tool)
 	call.Status = new(string(e.Outcome))
 	if e.Error.Present && e.Error.Value != nil {
@@ -219,7 +224,7 @@ func ahpTurnStartPayload(e *ahp.TurnStartEvent) *gen.IngestPayload {
 	if e.Trigger != ahp.TurnStartEventTriggerUser {
 		return nil
 	}
-	payload := ahpPayload(e.Source, e.ID, string(e.Type), e.Time, "prompt.submitted", e.Session, e.Turn.ID)
+	payload := ahpPayload(e.Source, e.Harness, e.ID, string(e.Type), e.Time, "prompt.submitted", e.Session, e.Turn.ID)
 	payload.Data.Prompt = &gen.HookPromptData{Text: new(ahpText(e.Items))}
 	return payload
 }

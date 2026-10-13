@@ -66,6 +66,7 @@ func ahpToolEvent(eventType string) map[string]any {
 		"source":  "https://harness.example/runtime",
 		"type":    eventType,
 		"time":    "2026-10-13T08:51:14Z",
+		"harness": map[string]any{"name": "example-harness", "version": "1.2.3"},
 		"session": map[string]any{"id": uuid.NewString()},
 		"tool":    map[string]any{"name": "read_file", "kind": "file_read", "input": map[string]any{"path": "example.txt"}, "origin": "native"},
 		"call":    map[string]any{"id": "call-1"},
@@ -201,6 +202,8 @@ func TestAHPToolAfterPayload(t *testing.T) {
 		}
 		require.NotNil(t, payload, name)
 		require.Equal(t, tc.eventType, payload.Event.Type, name)
+		require.Equal(t, "ahp:example-harness", payload.Source.Adapter)
+		require.Equal(t, "1.2.3", *payload.Source.AdapterVersion)
 		require.Equal(t, "read_file", *payload.Data.ToolCall.Name)
 		require.Equal(t, map[string]any{"path": "example.txt"}, payload.Data.ToolCall.Input)
 	}
@@ -217,6 +220,7 @@ func TestAHPTurnStartPayload(t *testing.T) {
 	} {
 		raw := map[string]any{
 			"id": uuid.NewString(), "source": "https://harness.example/runtime", "type": "turn.start", "time": "2026-10-13T08:51:14Z",
+			"harness": map[string]any{"name": "example-harness", "version": "1.2.3"},
 			"trigger": tc.trigger, "turn": map[string]any{"id": "turn-1"},
 			"items": []any{map[string]any{"id": "m1", "role": "user", "parts": []any{
 				map[string]any{"id": "p1", "kind": "text", "selection": "body", "mediaType": "text/plain", "text": "hello"},
