@@ -34,8 +34,15 @@ import (
 
 const (
 	// spoolEntryVersion versions the on-disk entry schema; drain skips
-	// versions it doesn't understand rather than guessing.
-	spoolEntryVersion = 1
+	// versions it doesn't understand rather than guessing. Version 2 added
+	// token_project: a drain that predates it would replay a token box's
+	// event without the admission-project check, so it must skip v2.
+	spoolEntryVersion = 2
+
+	// spoolEntryVersionV1 is the pre-token_project schema, still drained:
+	// its entries carry no project binding, so token credentials never
+	// replay them.
+	spoolEntryVersionV1 = 1
 
 	// spoolMaxAge expires entries that were never drained (a laptop shelved
 	// mid-outage). Mirrors the org-settings cache's 14d ceiling: events

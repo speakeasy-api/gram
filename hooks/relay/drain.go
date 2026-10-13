@@ -130,7 +130,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			s.Skipped++
 			continue
 		}
-		if entry.V != spoolEntryVersion {
+		if entry.V != spoolEntryVersion && entry.V != spoolEntryVersionV1 {
 			// A newer binary wrote it — not this one's to interpret or delete.
 			s.Skipped++
 			continue
@@ -146,9 +146,10 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			cl = newReplayClient(entry.ServerURL)
 			clients[entry.ServerURL] = cl
 		}
-		if a.c.Source == credToken && entry.TokenProject != "" && entry.TokenProject != a.c.Project {
-			// The device's admission now names another project: this event was
-			// captured for the old one and must not land in the new one.
+		if a.c.Source == credToken && entry.TokenProject != a.c.Project {
+			// A token box replays only events bound to its current admission
+			// project: one captured for another project, or a pre-binding (v1)
+			// entry with no project at all, must not land in this one.
 			if removeSpoolEntry(path) {
 				s.Dropped++
 			} else {

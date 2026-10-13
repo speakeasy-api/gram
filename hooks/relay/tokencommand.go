@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 )
@@ -104,18 +105,32 @@ func markTokenRejected() error {
 	if markerErr == nil {
 		markerErr = f.Close()
 	}
-	st, _ := readTokenBox()
-	st.Rejected = true
-	boxErr := writeTokenBox(st)
+	var boxErr error
+	updateTokenBox(func(st *tokenBoxState) { st.Rejected = true }, &boxErr)
 	if markerErr != nil && boxErr != nil {
 		return fmt.Errorf("record token refusal: %w; %w", markerErr, boxErr)
 	}
 	return nil
 }
 
+// updateTokenBox applies fn to the token-box record under a cross-process
+// lock, so a concurrent live send and spool drain cannot overwrite each
+// other's update (a lost Rejected flag would reopen fail-open). The write
+// error, if any, is stored in errOut.
+func updateTokenBox(fn func(*tokenBoxState), errOut *error) {
+	withFileLock(tokenBoxPath(), func() {
+		st, _ := readTokenBox()
+		fn(&st)
+		*errOut = writeTokenBox(st)
+	})
+}
+
 // tokenRejected reports whether this box must fail closed. Anything other than
 // a clean "no marker, record says not rejected" counts as rejected.
 func tokenRejected() bool {
+	if tokenPersistFailed.Load() {
+		return true
+	}
 	if _, err := os.Stat(tokenRejectedPath()); !errors.Is(err, os.ErrNotExist) {
 		return true
 	}
@@ -124,12 +139,22 @@ func tokenRejected() bool {
 }
 
 func clearTokenRejected() {
-	_ = os.Remove(tokenRejectedPath())
-	if st, ok := readTokenBox(); ok && st.Rejected {
-		st.Rejected = false
-		_ = writeTokenBox(st)
+	if _, ok := readTokenBox(); ok {
+		var err error
+		updateTokenBox(func(st *tokenBoxState) { st.Rejected = false }, &err)
+		if err != nil {
+			// Keep the marker: the record still says rejected.
+			return
+		}
 	}
+	_ = os.Remove(tokenRejectedPath())
 }
+
+// tokenPersistFailed is set when a fresh token could not be persisted with
+// its token-box record. The token is then not used, and this process treats
+// the box as refused (fail closed, nothing spooled) until a token persists:
+// without the record, a later failed identity lookup could fall back to a key.
+var tokenPersistFailed atomic.Bool
 
 // nowFunc is the relay's clock for token expiry; a var so tests can move it.
 var nowFunc = time.Now
@@ -205,10 +230,14 @@ func resolveTokenAuth(cfg Config, argv []string, refresh bool) (creds, bool) {
 		ExpiresAt: bearer.ExpiresAt,
 	}
 	if err := writeTokenAuth(c, argv); err != nil {
-		// The token still authenticates this event; the next one re-runs the
-		// command.
-		debugTokenCommand(cfg, "token cache write failed: %v", err)
+		// Persisting the token-box record is a precondition for using the
+		// token: without it a later failed identity lookup could fall back to
+		// a key. Fail closed instead.
+		tokenPersistFailed.Store(true)
+		debugTokenCommand(cfg, "token cache write failed, token not used: %v", err)
+		return creds{}, false
 	}
+	tokenPersistFailed.Store(false)
 	return c, true
 }
 
@@ -275,10 +304,13 @@ func writeTokenAuth(c creds, argv []string) error {
 			return errors.New("credential value contains a line break")
 		}
 	}
-	st, _ := readTokenBox()
-	st.Argv, st.Project = argv, c.Project
-	if err := writeTokenBox(st); err != nil {
-		return err
+	var boxErr error
+	updateTokenBox(func(st *tokenBoxState) {
+		// Never clear a refusal here: only an accepted token does that.
+		st.Argv, st.Project = argv, c.Project
+	}, &boxErr)
+	if boxErr != nil {
+		return boxErr
 	}
 	body := fmt.Sprintf("kind=%s\nserver_url=%s\nbearer=%s\nproject=%s\norg=%s\nexpires_at=%s\n",
 		tokenCacheKind, c.ServerURL, c.Bearer, c.Project, c.Org, c.ExpiresAt.UTC().Format(time.RFC3339Nano))
