@@ -459,6 +459,13 @@ const (
 	// OAuthTokenAudienceKey records the aud values an upstream JWT access token carried.
 	OAuthTokenAudienceKey = attribute.Key("gram.oauth.token_audience")
 
+	// IssuedAssertionIDKey is the jti of an assertion Speakeasy's own issuer signed.
+	IssuedAssertionIDKey = attribute.Key("gram.issued_assertion.jti")
+	// IssuedAssertionAudienceKey is the aud of an assertion Speakeasy's own issuer signed.
+	IssuedAssertionAudienceKey = attribute.Key("gram.issued_assertion.audience")
+	// IssuedAssertionKeyIDKey is the kid that signed an assertion from Speakeasy's own issuer.
+	IssuedAssertionKeyIDKey = attribute.Key("gram.issued_assertion.kid")
+
 	// OAuthRefreshTokenRotatedKey records whether an upstream refresh grant returned a new refresh token.
 	OAuthRefreshTokenRotatedKey = attribute.Key("gram.oauth.refresh_token_rotated")
 
@@ -2009,6 +2016,14 @@ func SlogOAuthAssertionAudience(v string) slog.Attr {
 
 func SlogOAuthExpectedAudience(v string) slog.Attr {
 	return slog.String(string(OAuthExpectedAudienceKey), v)
+}
+
+func SlogIssuedAssertionID(v string) slog.Attr { return slog.String(string(IssuedAssertionIDKey), v) }
+func SlogIssuedAssertionAudience(v string) slog.Attr {
+	return slog.String(string(IssuedAssertionAudienceKey), v)
+}
+func SlogIssuedAssertionKeyID(v string) slog.Attr {
+	return slog.String(string(IssuedAssertionKeyIDKey), v)
 }
 
 func SlogOAuthTokenAudience(v []string) slog.Attr {

@@ -21,7 +21,6 @@ const (
 	opDisable           = "disable"
 	opRotate            = "rotate"
 	opRotateCompromised = "rotate_compromised"
-	opSweep             = "sweep"
 )
 
 type metrics struct {

@@ -120,9 +120,9 @@ SELECT updated_at <= clock_timestamp() - make_interval(secs => @cache_seconds::i
 FROM json_web_keys
 WHERE id = @id AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
 
--- Include tombstones and every organization: resource names are random and
--- global, so a reference anywhere means the key must never be disabled.
--- Whether the organization has an external key row for this KMS resource.
+-- Whether the organization has an external key row for this KMS resource,
+-- tombstones included: a reference the organization still holds means the
+-- key must never be disabled. References from other organizations don't count.
 -- name: ManagedKeyResourceExists :one
 SELECT EXISTS (
  SELECT 1

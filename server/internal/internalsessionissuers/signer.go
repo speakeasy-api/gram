@@ -32,15 +32,20 @@ const AssertionType = "oauth-id-jag+jwt"
 var ErrInvalidClaims = errors.New("internalsessionissuers: invalid assertion claims")
 
 // SigningRefusedError means the organization's issuer state doesn't allow
-// signing: disabled, paused, not entitled or not rolled out.
+// signing: disabled, paused, no verified domain or not rolled out.
 type SigningRefusedError struct{ State State }
 
 func (e *SigningRefusedError) Error() string {
 	return "internalsessionissuers: signing refused, issuer is " + string(e.State)
 }
 
-// reservedClaims are set by Sign or by typed Claims fields, never by Extra.
-var reservedClaims = map[string]bool{"iss": true, "iat": true, "nbf": true, "exp": true, "sub": true, "aud": true, "jti": true, "email": true, "client_id": true, "resource": true, "scope": true}
+// reservedClaims are set by Sign or by typed Claims fields, or carry identity
+// or delegation meaning a vendor may trust, so Extra can never set them.
+var reservedClaims = map[string]bool{
+	"iss": true, "iat": true, "nbf": true, "exp": true, "sub": true, "aud": true, "jti": true, "email": true, "client_id": true, "resource": true, "scope": true,
+	"email_verified": true, "act": true, "may_act": true, "azp": true, "auth_time": true, "amr": true, "acr": true, "cnf": true, "nonce": true,
+	"tenant": true, "tid": true, "org_id": true, "sub_id": true, "upn": true, "preferred_username": true, "name": true, "groups": true, "roles": true,
+}
 
 // Claims are the caller-owned claims of one ID-JAG. iss and iat are always
 // set by Sign.
@@ -61,6 +66,8 @@ func (c Claims) validate(now time.Time) error {
 	switch {
 	case strings.TrimSpace(c.Subject) == "":
 		return fmt.Errorf("%w: sub is required", ErrInvalidClaims)
+	case strings.TrimSpace(c.Email) == "":
+		return fmt.Errorf("%w: email is required", ErrInvalidClaims)
 	case strings.TrimSpace(c.Audience) == "":
 		return fmt.Errorf("%w: aud is required", ErrInvalidClaims)
 	case strings.TrimSpace(c.ClientID) == "":
@@ -78,6 +85,17 @@ func (c Claims) validate(now time.Time) error {
 		}
 	}
 	return nil
+}
+
+// emailOnVerifiedDomain reports whether email's domain is exactly one of the
+// organization's verified domains. Vendors match users on email alone.
+func emailOnVerifiedDomain(email string, verifiedDomains []string) bool {
+	at := strings.LastIndex(email, "@")
+	if at <= 0 || at == len(email)-1 {
+		return false
+	}
+	domain := strings.ToLower(strings.TrimSpace(email[at+1:]))
+	return slices.ContainsFunc(verifiedDomains, func(d string) bool { return strings.ToLower(strings.TrimSpace(d)) == domain })
 }
 
 func (c Claims) body(issuer string, now time.Time) map[string]any {
@@ -231,6 +249,9 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 	if err != nil {
 		return "", err
 	}
+	if !emailOnVerifiedDomain(claims.Email, status.VerifiedDomains) {
+		return "", fmt.Errorf("%w: email is not on a verified domain of the organization", ErrInvalidClaims)
+	}
 	issuer, key := *status.Issuer, *status.ActiveKey
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
 	q := repo.New(s.db)
@@ -259,13 +280,16 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 	if err != nil {
 		return "", err
 	}
-	// Re-read every signing gate after KMS, including kill switches and entitlement.
+	// Re-read every signing gate after KMS, including kill switches and verified domains.
 	currentStatus, err := s.gate.Status(ctx, organizationID)
 	if err != nil {
 		return "", fmt.Errorf("recheck signing gate: %w", err)
 	}
 	if currentStatus.State != StateEnabled {
 		return "", &SigningRefusedError{State: currentStatus.State}
+	}
+	if !emailOnVerifiedDomain(claims.Email, currentStatus.VerifiedDomains) {
+		return "", fmt.Errorf("%w: email is not on a verified domain of the organization", ErrInvalidClaims)
 	}
 	// A disable or revocation that committed while KMS was signing wins.
 	current, err := q.GetOrganizationInternalSessionIssuer(ctx, organizationID)
@@ -282,6 +306,8 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 	if !slices.ContainsFunc(live, func(k repo.JsonWebKey) bool { return k.ID == key.ID }) {
 		return "", &SigningRefusedError{State: StateKeyless}
 	}
+	logger.InfoContext(ctx, "issued internal session issuer assertion",
+		attr.SlogIssuedAssertionID(claims.ID), attr.SlogIssuedAssertionAudience(claims.Audience), attr.SlogOAuthClientID(claims.ClientID), attr.SlogIssuedAssertionKeyID(key.Kid))
 	return assertion, nil
 }
 

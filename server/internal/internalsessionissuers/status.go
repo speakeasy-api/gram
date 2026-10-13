@@ -73,6 +73,9 @@ type Status struct {
 	// emails on the organization's verified domains, so one is required.
 	RolledOut         bool
 	HasVerifiedDomain bool
+	// VerifiedDomains are the organization's verified domains, read with the
+	// state so Sign checks the asserted email against the same snapshot.
+	VerifiedDomains []string
 	// ActiveKey is the signing key Status read; set only for an issuer that
 	// reached the key check.
 	ActiveKey *repo.JsonWebKey
@@ -82,7 +85,7 @@ type Status struct {
 // is an error, never a silent state. A keyless issuer is checked before the
 // pause switch: it cannot sign either way.
 func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error) {
-	status := Status{State: StateUnavailable, Issuer: nil, RolledOut: false, HasVerifiedDomain: false, ActiveKey: nil}
+	status := Status{State: StateUnavailable, Issuer: nil, RolledOut: false, HasVerifiedDomain: false, VerifiedDomains: nil, ActiveKey: nil}
 	row, err := repo.New(g.db).GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -96,6 +99,7 @@ func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error
 		return status, fmt.Errorf("read organization: %w", err)
 	}
 	groups := feature.OrgProjectGroups(org.Slug, "")
+	status.VerifiedDomains = org.VerifiedDomains
 	status.HasVerifiedDomain = len(org.VerifiedDomains) > 0
 	status.RolledOut, err = g.flagEnabled(ctx, feature.FlagInternalSessionIssuer, organizationID, groups)
 	if err != nil {

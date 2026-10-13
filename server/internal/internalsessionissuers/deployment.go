@@ -30,12 +30,17 @@ func (d Deployment) CheckIssuer(organizationID, issuer string) error {
 	return nil
 }
 
-// CheckKey rejects KMS versions outside the explicitly configured ring.
+// KMSKeyPrefix starts the id of every issuer KMS key, separating them from
+// other keys on the shared identity provider ring.
+const KMSKeyPrefix = "emaissuer"
+
+// CheckKey rejects KMS versions outside the configured ring or without the
+// issuer key prefix.
 func (d Deployment) CheckKey(resource string) error {
 	if err := gcpkms.ValidateKeyRingName(d.KeyRing); err != nil {
 		return fmt.Errorf("%w: deployment key ring is unavailable", ErrMisconfigured)
 	}
-	if err := gcpkms.ValidateKeyVersionName(resource); err != nil || !strings.HasPrefix(resource, d.KeyRing+"/cryptoKeys/") {
+	if err := gcpkms.ValidateKeyVersionName(resource); err != nil || !strings.HasPrefix(resource, d.KeyRing+"/cryptoKeys/"+KMSKeyPrefix+"-") {
 		return fmt.Errorf("%w: issuer key does not belong to this deployment", ErrMisconfigured)
 	}
 	return nil

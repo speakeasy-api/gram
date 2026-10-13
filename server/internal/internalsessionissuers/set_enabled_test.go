@@ -46,6 +46,27 @@ func TestMutations_RefuseSupportSessions(t *testing.T) {
 	require.NoError(t, err, "support can still read the issuer")
 }
 
+func TestMutations_RefuseLegacyImpersonatedSessions(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t, true)
+	admin := adminCtx(t, ctx)
+	kid := enable(t, ti, admin)
+	authCtx, ok := contextvalues.GetAuthContext(admin)
+	require.True(t, ok)
+	impersonated := contextvalues.WithValidatedGramSession(admin, authCtx, true)
+
+	for _, enabled := range []bool{true, false} {
+		_, err := ti.service.SetEnabled(impersonated, &gen.SetEnabledPayload{Enabled: enabled, SessionToken: nil})
+		requireOopsCode(t, err, oops.CodeForbidden)
+	}
+	for _, compromised := range []bool{true, false} {
+		_, err := ti.service.Rotate(impersonated, &gen.RotatePayload{ActiveKid: &kid, Compromised: compromised, SessionToken: nil})
+		requireOopsCode(t, err, oops.CodeForbidden)
+	}
+	_, err := ti.service.Get(impersonated, &gen.GetPayload{SessionToken: nil})
+	require.NoError(t, err, "an impersonated session can still read the issuer")
+}
+
 func TestSetEnabled_EnablingRequiresRolloutAndVerifiedDomain(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t, true)

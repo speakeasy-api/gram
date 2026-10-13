@@ -27,7 +27,7 @@ import (
 const emaIssuerKeyName = "Speakeasy issuer"
 
 // emaIssuerKMSPrefix names the issuer's KMS keys.
-const emaIssuerKMSPrefix = "emaissuer"
+const emaIssuerKMSPrefix = internalsessionissuers.KMSKeyPrefix
 
 // sweepOrganizationPage is how many organizations one sweep query returns.
 const sweepOrganizationPage = 500
@@ -49,7 +49,8 @@ func (p *Provisioner) SetEMAIssuerTokenPurger(purger EMAIssuerTokenPurger) {
 // PurgeEMAIssuerTokens drops cached vendor tokens for the organization.
 func (p *Provisioner) PurgeEMAIssuerTokens(ctx context.Context, organizationID string) {
 	if p.emaTokenPurger == nil {
-		p.logger.ErrorContext(ctx, "issuer vendor-token purger is not configured", attr.SlogOrganizationID(organizationID))
+		// TODO(AIM-523): wire the purger with the vendor-token cache.
+		p.logger.DebugContext(ctx, "issuer vendor-token purger is not configured", attr.SlogOrganizationID(organizationID))
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerTokenPurgeTimeout)

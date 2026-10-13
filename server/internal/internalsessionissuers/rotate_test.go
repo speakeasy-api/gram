@@ -66,7 +66,7 @@ func TestRotate_Routine(t *testing.T) {
 	}
 }
 
-func TestRotate_CompromisedWorksWithoutVerifiedDomain(t *testing.T) {
+func TestRotate_CompromisedContainsWithoutVerifiedDomain(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t, true)
 	admin := adminCtx(t, ctx)
@@ -75,9 +75,7 @@ func TestRotate_CompromisedWorksWithoutVerifiedDomain(t *testing.T) {
 
 	view, err := ti.service.Rotate(admin, &gen.RotatePayload{ActiveKid: &compromised, Compromised: true, SessionToken: nil})
 	require.NoError(t, err)
-	require.Len(t, view.Keys, 1)
-	require.NotEqual(t, compromised, view.Keys[0].Kid, "every compromised key is withdrawn")
-	require.Equal(t, "active", view.Keys[0].State)
+	require.Empty(t, view.Keys, "every compromised key is withdrawn, and no replacement is minted for an issuer the organization can't use")
 	require.Zero(t, view.KmsCleanupPending, "the compromised versions are disabled")
 	require.Equal(t, wantIssuer(ti), *view.Issuer, "the issuer URI never changes")
 }
@@ -113,9 +111,8 @@ func TestRotate_ContainmentIgnoresFailingProviders(t *testing.T) {
 
 	view, err := ti.service.Rotate(admin, &gen.RotatePayload{ActiveKid: &compromised, Compromised: true, SessionToken: nil})
 	require.NoError(t, err)
-	require.Len(t, view.Keys, 1)
-	require.NotEqual(t, compromised, view.Keys[0].Kid)
-	require.Equal(t, "signing_paused", view.State, "with providers down the signer refuses, and the view says so")
+	require.Empty(t, view.Keys, "containment withdraws every key; with providers down no replacement is minted")
+	require.Equal(t, "keyless", view.State, "with providers down the database state shows the issuer can't sign")
 
 	disabled, err := ti.service.SetEnabled(admin, &gen.SetEnabledPayload{Enabled: false, SessionToken: nil})
 	require.NoError(t, err)

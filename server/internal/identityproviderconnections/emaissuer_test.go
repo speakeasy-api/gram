@@ -474,12 +474,22 @@ func TestEMAIssuer_SignEnforcesClaimInvariants(t *testing.T) {
 	signer := f.signer(t, kms, false)
 
 	for name, mutate := range map[string]func(*internalsessionissuers.Claims){
-		"no subject":  func(c *internalsessionissuers.Claims) { c.Subject = "" },
-		"no audience": func(c *internalsessionissuers.Claims) { c.Audience = "" },
-		"no client":   func(c *internalsessionissuers.Claims) { c.ClientID = "" },
-		"no jti":      func(c *internalsessionissuers.Claims) { c.ID = "" },
-		"no expiry":   func(c *internalsessionissuers.Claims) { c.Expiry = time.Time{} },
-		"expired":     func(c *internalsessionissuers.Claims) { c.Expiry = time.Now().Add(-time.Second) },
+		"no subject": func(c *internalsessionissuers.Claims) { c.Subject = "" },
+		"no email":   func(c *internalsessionissuers.Claims) { c.Email = "" },
+		"foreign email domain": func(c *internalsessionissuers.Claims) {
+			c.Email = "user-1@attacker.example"
+		},
+		"subdomain of verified domain": func(c *internalsessionissuers.Claims) {
+			c.Email = "user-1@mail.example.com"
+		},
+		"reserved tenant":         func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"tenant": "tenant-1"} },
+		"reserved email_verified": func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"email_verified": true} },
+		"reserved act":            func(c *internalsessionissuers.Claims) { c.Extra = map[string]any{"act": map[string]any{"sub": "x"}} },
+		"no audience":             func(c *internalsessionissuers.Claims) { c.Audience = "" },
+		"no client":               func(c *internalsessionissuers.Claims) { c.ClientID = "" },
+		"no jti":                  func(c *internalsessionissuers.Claims) { c.ID = "" },
+		"no expiry":               func(c *internalsessionissuers.Claims) { c.Expiry = time.Time{} },
+		"expired":                 func(c *internalsessionissuers.Claims) { c.Expiry = time.Now().Add(-time.Second) },
 		"outlives overlap": func(c *internalsessionissuers.Claims) {
 			c.Expiry = time.Now().Add(internalsessionissuers.MaxAssertionLifetime + time.Minute)
 		},
@@ -497,12 +507,13 @@ func TestEMAIssuer_SignEnforcesClaimInvariants(t *testing.T) {
 	}
 
 	c := claims()
-	c.Extra = map[string]any{"tenant": "tenant-1"}
+	c.Email = "User-1@Example.COM"
+	c.Extra = map[string]any{"vendor_hint": "hint-1"}
 	issuedAt := time.Now().Add(-time.Second)
 	assertion, err := signer.Sign(ctx, f.ti.orgID, c)
 	require.NoError(t, err)
 	body := verifyAssertion(t, ctx, f, f.ti.orgID, assertion)
-	require.Equal(t, "tenant-1", body["tenant"])
+	require.Equal(t, "hint-1", body["vendor_hint"])
 	require.Equal(t, c.Email, body["email"])
 	require.Equal(t, c.ClientID, body["client_id"])
 	require.GreaterOrEqual(t, body["iat"], float64(issuedAt.Unix()), "the signer sets iat")
@@ -825,4 +836,21 @@ func TestEMAIssuer_KillSwitchDuringSigningWins(t *testing.T) {
 	assertion, err := signer.Sign(ctx, f.ti.orgID, claims())
 	requireRefused(t, err, internalsessionissuers.StateSigningPaused)
 	require.Empty(t, assertion)
+}
+
+func TestEMAIssuer_SignRefusesEmailsOffTheCurrentVerifiedDomains(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, kms := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	signer := f.signer(t, kms, false)
+
+	f.setVerifiedDomains(t, ctx, "example.com", "example.org")
+	_, err = signer.Sign(ctx, f.ti.orgID, claims())
+	require.NoError(t, err)
+
+	f.setVerifiedDomains(t, ctx, "example.org")
+	_, err = signer.Sign(ctx, f.ti.orgID, claims())
+	require.ErrorIs(t, err, internalsessionissuers.ErrInvalidClaims, "a removed domain stops signing even while another remains")
 }

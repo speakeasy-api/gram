@@ -35,5 +35,6 @@ func (s *Service) purgeIssuerTokens(ctx context.Context, organizationID string) 
 		s.manager.PurgeEMAIssuerTokens(ctx, organizationID)
 		return
 	}
-	s.logger.ErrorContext(ctx, "issuer vendor credential cleanup is not configured", attr.SlogOrganizationID(organizationID))
+	// TODO(AIM-523): wire the purger with the vendor-token cache.
+	s.logger.DebugContext(ctx, "issuer vendor credential cleanup is not configured", attr.SlogOrganizationID(organizationID))
 }

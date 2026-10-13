@@ -1150,9 +1150,9 @@ type ManagedKeyResourceExistsParams struct {
 	OrganizationID string
 }
 
-// Include tombstones and every organization: resource names are random and
-// global, so a reference anywhere means the key must never be disabled.
-// Whether the organization has an external key row for this KMS resource.
+// Whether the organization has an external key row for this KMS resource,
+// tombstones included: a reference the organization still holds means the
+// key must never be disabled. References from other organizations don't count.
 func (q *Queries) ManagedKeyResourceExists(ctx context.Context, arg ManagedKeyResourceExistsParams) (bool, error) {
 	row := q.db.QueryRow(ctx, managedKeyResourceExists, arg.ResourceName, arg.OrganizationID)
 	var exists bool

@@ -43,7 +43,6 @@ type Manager interface {
 	RotateEMAIssuer(ctx context.Context, organizationID, activeKid string) error
 	ProvisionEMAIssuerKey(ctx context.Context, organizationID string) error
 	CleanupEMAIssuerKMS(ctx context.Context, organizationID string) (cleaned, pending int, err error)
-	SweepEMAIssuerKeys(ctx context.Context, organizationID string) (int, error)
 	PurgeEMAIssuerTokens(ctx context.Context, organizationID string)
 }
 
@@ -99,8 +98,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 // authorize checks RBAC on the active organization; a mutation additionally
-// refuses support sessions and non-principal API keys. It reads no flags or
-// entitlements, so containment works whatever their providers do.
+// refuses support and impersonated sessions and non-principal API keys. It
+// reads no flags or domains, so containment works whatever their providers do.
 func (s *Service) authorize(ctx context.Context, scope authz.Scope, mutation bool) (string, *slog.Logger, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -115,8 +114,8 @@ func (s *Service) authorize(ctx context.Context, scope authz.Scope, mutation boo
 		if mode, byKey := contextvalues.APIKeyAuthorization(ctx); byKey && mode != contextvalues.APIKeyAuthorizationModePrincipal {
 			return "", logger, oops.E(oops.CodeForbidden, nil, "the issuer cannot be changed with an API key").LogError(ctx, logger)
 		}
-		if contextvalues.IsSupportSession(ctx) {
-			return "", logger, oops.E(oops.CodeForbidden, nil, "the issuer cannot be changed from a support session").LogError(ctx, logger)
+		if contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {
+			return "", logger, oops.E(oops.CodeForbidden, nil, "the issuer cannot be changed from a support or impersonated session").LogError(ctx, logger)
 		}
 	}
 	return organizationID, logger, nil
@@ -139,9 +138,6 @@ func (s *Service) Get(ctx context.Context, _ *gensvc.GetPayload) (*gensvc.Intern
 	organizationID, logger, err := s.authorize(ctx, authz.ScopeOrgRead, false)
 	if err != nil {
 		return nil, err
-	}
-	if status, err := s.gate.Status(ctx, organizationID); err == nil {
-		s.sweep(ctx, logger, organizationID, status)
 	}
 	return s.view(ctx, logger, organizationID)
 }
@@ -253,6 +249,12 @@ func (s *Service) rotateCompromised(ctx context.Context, activeKid *string) (*ge
 		logger.ErrorContext(ctx, "revoked issuer keys still await kms cleanup; the sweep retries it", attr.SlogError(err))
 		errs = append(errs, err)
 	}
+	// Containment never depends on these, but a replacement key is only worth
+	// minting for an issuer the organization can still use.
+	if status, err := s.gate.Status(ctx, organizationID); err != nil || !status.RolledOut || !status.HasVerifiedDomain {
+		s.metrics.record(ctx, opRotateCompromised, errors.Join(errs...))
+		return s.view(ctx, logger, organizationID)
+	}
 	if err := s.replace(ctx, logger, organizationID); err != nil {
 		errs = append(errs, err)
 	}
@@ -299,19 +301,6 @@ func (s *Service) allowMint(ctx context.Context, logger *slog.Logger, organizati
 		return oops.E(oops.CodeRateLimitExceeded, nil, "issuer key rate limit exceeded, try again shortly")
 	}
 	return nil
-}
-
-// sweep retires expired keys and retries KMS cleanup opportunistically; the
-// scheduled sweep is the backstop.
-func (s *Service) sweep(ctx context.Context, logger *slog.Logger, organizationID string, status Status) {
-	if s.manager == nil || status.Issuer == nil {
-		return
-	}
-	_, err := s.manager.SweepEMAIssuerKeys(ctx, organizationID)
-	s.metrics.record(ctx, opSweep, err)
-	if err != nil {
-		logger.WarnContext(ctx, "failed to sweep expired issuer keys", attr.SlogError(err))
-	}
 }
 
 func (s *Service) operationError(ctx context.Context, logger *slog.Logger, err error, msg string) error {

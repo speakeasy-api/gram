@@ -23,7 +23,7 @@ var ErrActiveKidRequired = errors.New("internalsessionissuers: name the active k
 
 // Lifecycle holds the issuer changes that need only the database: turning
 // signing off and on, and containing a compromise. None of them depend on the
-// rollout flag, the entitlement or KMS, so they always work.
+// rollout flag, the verified domains or KMS, so they always work.
 type Lifecycle struct {
 	db    *pgxpool.Pool
 	audit *audit.Logger
