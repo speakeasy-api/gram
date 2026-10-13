@@ -1827,6 +1827,12 @@ RETURNING *;
 -- Transactions that lock other rows before minting take
 -- LockLiveUserSessionIssuerForChildWrite first so this wait never sits behind
 -- a lock the migration is queued on.
+--
+-- The SSO sign-in link is kept only for a sign-in of the same organization
+-- and user, read FOR SHARE so a concurrent revocation waits for this insert
+-- and then soft-deletes it. A sign-in revoked other than by a single
+-- sign-out, or fenced by a revocation cutoff, yields no rows: the grant must
+-- not be minted.
 WITH issuer AS (
     SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id
     FROM user_session_issuers AS issuer
@@ -1834,6 +1840,24 @@ WITH issuer AS (
     WHERE issuer.id = @user_session_issuer_id
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
+),
+sign_in AS (
+    SELECT
+        si.id,
+        si.revoked_at,
+        si.revoke_reason,
+        EXISTS (
+            SELECT 1
+            FROM sso_sign_in_revocation_cutoffs AS c
+            WHERE c.organization_id = si.organization_id
+              AND c.user_id = si.user_id
+              AND c.cutoff_at >= si.authenticated_at
+        ) AS fenced
+    FROM sso_sign_ins AS si
+    JOIN issuer ON si.organization_id = issuer.organization_id
+    WHERE si.id = sqlc.narg('sso_sign_in_id')
+      AND si.user_id = sqlc.narg('sso_sign_in_user_id')
+    FOR SHARE OF si
 )
 INSERT INTO user_sessions (
     project_id,
@@ -1849,7 +1873,8 @@ INSERT INTO user_sessions (
     refresh_expires_at,
     expires_at,
     tool_selection,
-    resource
+    resource,
+    sso_sign_in_id
 )
 SELECT
     issuer.project_id,
@@ -1865,8 +1890,15 @@ SELECT
     @refresh_expires_at,
     @expires_at,
     @tool_selection,
-    sqlc.narg('resource')
+    sqlc.narg('resource'),
+    (SELECT sign_in.id FROM sign_in)
 FROM issuer
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM sign_in
+    WHERE sign_in.fenced
+       OR (sign_in.revoked_at IS NOT NULL AND sign_in.revoke_reason IS DISTINCT FROM 'sign_out')
+)
 RETURNING *;
 
 -- name: CreateUserSessionConsent :one
@@ -2155,3 +2187,22 @@ WHERE wia.organization_id = @organization_id::text
   AND (wia.project_id = @project_id::uuid OR wia.project_id IS NULL)
   AND wia.deleted IS FALSE
 ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC;
+
+-- name: LockSSOSignInForGrant :one
+-- Taken before a refresh claims its session row, so grant rotation locks
+-- sign-ins before sessions in the same order revocation does.
+SELECT
+    si.id,
+    si.revoked_at,
+    si.revoke_reason,
+    EXISTS (
+        SELECT 1
+        FROM sso_sign_in_revocation_cutoffs AS c
+        WHERE c.organization_id = si.organization_id
+          AND c.user_id = si.user_id
+          AND c.cutoff_at >= si.authenticated_at
+    ) AS fenced
+FROM sso_sign_ins AS si
+WHERE si.id = @id
+  AND si.organization_id = @organization_id
+FOR SHARE OF si;

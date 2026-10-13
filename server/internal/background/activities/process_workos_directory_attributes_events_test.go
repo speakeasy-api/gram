@@ -11,12 +11,15 @@ import (
 	"github.com/workos/workos-go/v6/pkg/events"
 
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
@@ -439,6 +442,58 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 	for _, key := range deletedKeys {
 		require.Contains(t, key, sessions.UserInfoCacheKey(userID))
 	}
+}
+
+func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationRevokesSSOSignIns(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_directory_user_deactivate_sign_ins")
+	logger := testenv.NewLogger(t)
+
+	const (
+		organizationID  = "gram_org_dsync_sign_ins"
+		workosOrgID     = "org_01HZDSYNCSIGNINS"
+		userID          = "user_dsync_sign_ins"
+		workosUserID    = "user_01HZDSYNCSIGNINS"
+		membershipID    = "mem_01HZDSYNCSIGNINS"
+		directoryUserID = "directory_user_sign_ins"
+		workosSessionID = "session_dsync_sign_ins"
+	)
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	signIn, err := ssosignins.Record(ctx, conn, ssosignins.RecordParams{
+		OrganizationID: organizationID, UserID: userID, WorkOSSessionID: workosSessionID,
+		AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+	require.True(t, signIn.ID.Valid)
+
+	email := userID + "@example.com"
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		newWorkOSMembershipEvent(t, "organization_membership.created", "event_0001", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC), "member"),
+		{ID: "event_0002", Event: "dsync.user.created", CreatedAt: time.Date(2026, 5, 12, 12, 30, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "active", "2026-05-12T12:30:00Z")},
+		{ID: "event_0003", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 13, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "inactive", "2026-05-12T13:00:00Z")},
+	}})
+	signals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, newCaptureCache(), signals)
+
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	live, err := ssosignins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
+	require.NoError(t, err)
+	require.False(t, live.Valid, "deprovisioning revokes the user's sign-ins")
+	require.Equal(t, []string{workosSessionID}, workosClient.RevokedSessions(), "the revoked sign-in's WorkOS session is ended")
+	audited, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessMemberSignInsRevoke)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), audited, "deprovisioning audits the revocation as the system")
 }
 
 func TestProcessWorkOSOrganizationEvents_DirectoryUserReactivationRestoresDirectoryUser(t *testing.T) {

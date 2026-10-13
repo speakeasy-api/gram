@@ -297,6 +297,7 @@ func (f healthFixture) seedUserSession(t *testing.T, userIssuerID uuid.UUID, sub
 		ExpiresAt:              conv.ToPGTimestamptz(refreshExpiresAt),
 		ToolSelection:          nil,
 		UserSessionIssuerID:    userIssuerID,
+		SsoSignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 	return session.ID

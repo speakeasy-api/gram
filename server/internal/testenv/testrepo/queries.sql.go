@@ -368,6 +368,20 @@ func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType s
 	return count, err
 }
 
+const countPendingSSOSignInRevocationDeliveries = `-- name: CountPendingSSOSignInRevocationDeliveries :one
+SELECT count(*)
+FROM sso_sign_in_revocation_deliveries
+WHERE organization_id = $1
+  AND delivered_at IS NULL
+`
+
+func (q *Queries) CountPendingSSOSignInRevocationDeliveries(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingSSOSignInRevocationDeliveries, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPlatformMCPSetupMilestoneFixture = `-- name: CountPlatformMCPSetupMilestoneFixture :one
 SELECT count(*)
 FROM platform_mcp_onboarding_milestones

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -287,6 +288,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 
 	var federatedIdentity *remotesessions.FederatedIdentity
 	var gramUserID string
+	var exchange *ssosignins.ExchangeParams
 	impersonated := false
 	if federation := challengeState.Federation; federation != nil {
 		verified := federation.ValidatedIdentity
@@ -315,6 +317,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// Hold only in this stack frame until organization authorization below.
 	} else {
 		// Preserve WorkOS bootstrap and membership synchronization unchanged.
+		authenticatedAt := time.Now()
 		idpUser, err := s.identityResolver.ExchangeCodeForTokens(ctx, code)
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
@@ -327,6 +330,16 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		}
 		gramUserID = login.UserID
 		impersonated = idpUser.ImpersonatorEmail() != ""
+		exchange = &ssosignins.ExchangeParams{
+			Flow:                   ssosignins.FlowMCPAuthorize,
+			WorkOSOrganizationID:   idpUser.OrganizationID,
+			ExpectedOrganizationID: endpoint.OrganizationID,
+			UserID:                 gramUserID,
+			WorkOSSessionID:        idpUser.WorkOSSessionID,
+			AuthenticationMethod:   idpUser.AuthenticationMethod,
+			Impersonated:           impersonated,
+			AuthenticatedAt:        authenticatedAt,
+		}
 	}
 
 	// Validate the user belongs to the endpoint's organization before
@@ -349,6 +362,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeForbidden, nil, "user is not a member of this MCP server's organization").LogError(ctx, logger)
+	}
+	// Recorded only for members, and only in the endpoint's organization.
+	ssoSignInID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if exchange != nil {
+		ssoSignInID = ssosignins.RecordExchange(ctx, logger, s.db, *exchange).ID
 	}
 
 	if federation := challengeState.Federation; federation != nil {
@@ -427,6 +445,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.ID = uuid.NewString()
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
+	challengeState.SSOSignInID = nil
+	if ssoSignInID.Valid && ssosignins.Enforced(ctx, s.features) {
+		challengeState.SSOSignInID = &ssoSignInID.UUID
+	}
 	if federation := challengeState.Federation; federation != nil {
 		challengeState.FederatedBinding = &FederatedConsentBinding{IssuerID: federation.IssuerID, ClientID: federation.ClientID, Issuer: federatedIdentity.Issuer, Subject: federatedIdentity.Subject}
 	}

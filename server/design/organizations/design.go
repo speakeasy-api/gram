@@ -159,6 +159,28 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveOrganizationUser"}`)
 	})
 
+	Method("revokeMemberSignIns", func() {
+		Description("Revoke a member's SSO sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.")
+
+		Payload(func() {
+			Attribute("user_id", String, "Speakeasy user ID of the member.")
+			Required("user_id")
+			security.SessionPayload()
+		})
+
+		Result(shared.RevokeSignInsResult)
+
+		HTTP(func() {
+			POST("/rpc/organizations.revokeMemberSignIns")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeOrganizationMemberSignIns")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeMemberSignIns")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeOrganizationMemberSignIns"}`)
+	})
+
 	Method("enableWebhooks", func() {
 		Description("Enable  webhooks for the active organization.")
 

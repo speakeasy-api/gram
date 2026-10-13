@@ -27,6 +27,10 @@ type Service interface {
 	EnterDemo(context.Context, *EnterDemoPayload) (res *EnterDemoResult, err error)
 	// Logs out the current user by clearing their session.
 	Logout(context.Context, *LogoutPayload) (res *LogoutResult, err error)
+	// Signs the caller out everywhere: ends every dashboard and identity provider
+	// session, revokes their SSO sign-ins in every organization, and revokes every
+	// MCP grant made from them.
+	LogoutEverywhere(context.Context, *LogoutEverywherePayload) (res *LogoutEverywhereResult, err error)
 	// Register a new org for a user with their session information.
 	Register(context.Context, *RegisterPayload) (err error)
 	// Provides information about the current authentication status.
@@ -75,7 +79,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"callback", "login", "switchScopes", "enterDemo", "logout", "register", "info", "transferOut", "transferIn"}
+var MethodNames = [10]string{"callback", "login", "switchScopes", "enterDemo", "logout", "logoutEverywhere", "register", "info", "transferOut", "transferIn"}
 
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
@@ -164,6 +168,23 @@ type LoginPayload struct {
 type LoginResult struct {
 	// The URL to redirect to after authentication
 	Location string
+}
+
+// LogoutEverywherePayload is the payload type of the auth service
+// logoutEverywhere method.
+type LogoutEverywherePayload struct {
+	SessionToken *string
+}
+
+// LogoutEverywhereResult is the result type of the auth service
+// logoutEverywhere method.
+type LogoutEverywhereResult struct {
+	// Empty string to clear the session
+	SessionCookie string
+	// Number of SSO sign-ins revoked.
+	RevokedSignIns int
+	// Number of MCP grants revoked.
+	RevokedSessions int
 }
 
 // LogoutPayload is the payload type of the auth service logout method.

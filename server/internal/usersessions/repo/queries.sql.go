@@ -631,6 +631,24 @@ WITH issuer AS (
     WHERE issuer.id = $12
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
+),
+sign_in AS (
+    SELECT
+        si.id,
+        si.revoked_at,
+        si.revoke_reason,
+        EXISTS (
+            SELECT 1
+            FROM sso_sign_in_revocation_cutoffs AS c
+            WHERE c.organization_id = si.organization_id
+              AND c.user_id = si.user_id
+              AND c.cutoff_at >= si.authenticated_at
+        ) AS fenced
+    FROM sso_sign_ins AS si
+    JOIN issuer ON si.organization_id = issuer.organization_id
+    WHERE si.id = $13
+      AND si.user_id = $14
+    FOR SHARE OF si
 )
 INSERT INTO user_sessions (
     project_id,
@@ -646,7 +664,8 @@ INSERT INTO user_sessions (
     refresh_expires_at,
     expires_at,
     tool_selection,
-    resource
+    resource,
+    sso_sign_in_id
 )
 SELECT
     issuer.project_id,
@@ -662,8 +681,15 @@ SELECT
     $8,
     $9,
     $10,
-    $11
+    $11,
+    (SELECT sign_in.id FROM sign_in)
 FROM issuer
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM sign_in
+    WHERE sign_in.fenced
+       OR (sign_in.revoked_at IS NOT NULL AND sign_in.revoke_reason IS DISTINCT FROM 'sign_out')
+)
 RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sso_sign_in_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -680,6 +706,8 @@ type CreateUserSessionParams struct {
 	ToolSelection          []byte
 	Resource               pgtype.Text
 	UserSessionIssuerID    uuid.UUID
+	SsoSignInID            uuid.NullUUID
+	SsoSignInUserID        pgtype.Text
 }
 
 // user_session_client_id binds the session to the DCR client that minted it.
@@ -693,6 +721,12 @@ type CreateUserSessionParams struct {
 // Transactions that lock other rows before minting take
 // LockLiveUserSessionIssuerForChildWrite first so this wait never sits behind
 // a lock the migration is queued on.
+//
+// The SSO sign-in link is kept only for a sign-in of the same organization
+// and user, read FOR SHARE so a concurrent revocation waits for this insert
+// and then soft-deletes it. A sign-in revoked other than by a single
+// sign-out, or fenced by a revocation cutoff, yields no rows: the grant must
+// not be minted.
 func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionParams) (UserSession, error) {
 	row := q.db.QueryRow(ctx, createUserSession,
 		arg.UserSessionClientID,
@@ -707,6 +741,8 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.ToolSelection,
 		arg.Resource,
 		arg.UserSessionIssuerID,
+		arg.SsoSignInID,
+		arg.SsoSignInUserID,
 	)
 	var i UserSession
 	err := row.Scan(
@@ -3568,6 +3604,50 @@ func (q *Queries) LockOrganizationUserSessionIssuer(ctx context.Context, arg Loc
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockSSOSignInForGrant = `-- name: LockSSOSignInForGrant :one
+SELECT
+    si.id,
+    si.revoked_at,
+    si.revoke_reason,
+    EXISTS (
+        SELECT 1
+        FROM sso_sign_in_revocation_cutoffs AS c
+        WHERE c.organization_id = si.organization_id
+          AND c.user_id = si.user_id
+          AND c.cutoff_at >= si.authenticated_at
+    ) AS fenced
+FROM sso_sign_ins AS si
+WHERE si.id = $1
+  AND si.organization_id = $2
+FOR SHARE OF si
+`
+
+type LockSSOSignInForGrantParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type LockSSOSignInForGrantRow struct {
+	ID           uuid.UUID
+	RevokedAt    pgtype.Timestamptz
+	RevokeReason pgtype.Text
+	Fenced       bool
+}
+
+// Taken before a refresh claims its session row, so grant rotation locks
+// sign-ins before sessions in the same order revocation does.
+func (q *Queries) LockSSOSignInForGrant(ctx context.Context, arg LockSSOSignInForGrantParams) (LockSSOSignInForGrantRow, error) {
+	row := q.db.QueryRow(ctx, lockSSOSignInForGrant, arg.ID, arg.OrganizationID)
+	var i LockSSOSignInForGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.RevokedAt,
+		&i.RevokeReason,
+		&i.Fenced,
 	)
 	return i, err
 }

@@ -203,6 +203,11 @@ const (
 	// FlagEMAProviders gates changing a vendor's EMA provider order while the
 	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.
 	FlagEMAProviders Flag = "ema-providers"
+	// FlagSSOSignInEnforcement turns on SSO sign-in linking of MCP grants,
+	// the dashboard session epoch, sign out everywhere and member sign-in
+	// revocation. Enable it only once every pod runs the code that honours
+	// it; off keeps today's behaviour. Evaluated fleet-wide.
+	FlagSSOSignInEnforcement Flag = "sso-sign-in-enforcement"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

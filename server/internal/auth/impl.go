@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -149,6 +150,8 @@ type Service struct {
 	auditLogger          *audit.Logger
 	trialNotifier        trialemails.Notifier
 	transferManager      *authsessions.TransferManager
+	tokens               ssosignins.TokenRevoker
+	deliverer            *ssosignins.Deliverer
 
 	// siteOrigin is the dashboard's "scheme://host", derived from
 	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
@@ -208,6 +211,8 @@ func NewService(
 		auditLogger:          auditLogger,
 		trialNotifier:        trialNotifier,
 		transferManager:      authsessions.NewTransferManager(nonceStore),
+		tokens:               nil,
+		deliverer:            ssosignins.NewDeliverer(logger, db, nil, sessions),
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
@@ -373,6 +378,8 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		return redirectWithError(authErrInit, errors.New("support login intent is missing an organization"))
 	}
 
+	// Taken before the exchange so a revocation that lands meanwhile wins.
+	authenticatedAt := time.Now()
 	idpUser, err := s.identity.ExchangeCodeForTokens(ctx, payload.Code)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
@@ -416,6 +423,16 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
 	}
+	ssosignins.RecordExchange(ctx, logger, s.db, ssosignins.ExchangeParams{
+		Flow:                   ssosignins.FlowDashboard,
+		WorkOSOrganizationID:   idpUser.OrganizationID,
+		ExpectedOrganizationID: "",
+		UserID:                 userID,
+		WorkOSSessionID:        idpUser.WorkOSSessionID,
+		AuthenticationMethod:   idpUser.AuthenticationMethod,
+		Impersonated:           idpUser.ImpersonatorEmail() != "",
+		AuthenticatedAt:        authenticatedAt,
+	})
 
 	if supportOrgID != "" {
 		isAdmin, err := s.sessions.IsPlatformAdmin(ctx, userID)
@@ -435,7 +452,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		session.ActiveOrganizationID = supportOrgID
 		session.SupportOrganizationID = supportOrgID
 		session.SupportExpiresAt = time.Now().Add(supportSessionTTL)
-		if err := s.sessions.StoreSession(ctx, session); err != nil {
+		if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
 		return &gen.CallbackResult{
@@ -462,7 +479,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			}
 
 			session.ActiveOrganizationID = org.ID
-			if err := s.sessions.StoreSession(ctx, session); err != nil {
+			if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
 				return s.redirectSignupError(ctx, payload, err)
 			}
 
@@ -491,7 +508,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			}, nil
 		}
 
-		if err := s.sessions.StoreSession(ctx, session); err != nil {
+		if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
 			return redirectWithError(authErrInit, err)
 		}
 
@@ -535,7 +552,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	session.ActiveOrganizationID = activeOrgID
-	if err := s.sessions.StoreSession(ctx, session); err != nil {
+	if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
 		return redirectWithError(authErrInit, err)
 	}
 	if inviteeEmail := conv.NormalizeEmail(userInfo.Email); inviteeEmail != "" {
@@ -998,6 +1015,14 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").LogError(ctx, s.logger)
 	}
 
+	signedOut, err := s.revokeSignedOutSSOSignIn(ctx, *authCtx.SessionID, authCtx)
+	if err != nil {
+		if s.sessions.SSOSignInEnforced(ctx) {
+			return nil, oops.E(oops.CodeUnexpected, err, "error revoking sso sign-in").LogError(ctx, s.logger)
+		}
+		s.logger.WarnContext(ctx, "revoke sso sign-in on sign-out", attr.SlogError(err))
+	}
+
 	if err := s.sessions.ClearSession(ctx, authsessions.Session{
 		SessionID:             *authCtx.SessionID,
 		ActiveOrganizationID:  authCtx.ActiveOrganizationID,
@@ -1009,6 +1034,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error clearing session").LogError(ctx, s.logger)
 	}
+	s.deliverer.DeliverNow(ctx, signedOut.Organizations, signedOut.DeliveryIDs)
 	return &gen.LogoutResult{SessionCookie: ""}, nil
 }
 

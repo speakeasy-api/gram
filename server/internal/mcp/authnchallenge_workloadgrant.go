@@ -484,6 +484,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		AuthorizationExpiresAt: nil,
 		DesiredSessionDuration: &lifetime,
 		Replayable:             false,
+		SSOSignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}
 }
 

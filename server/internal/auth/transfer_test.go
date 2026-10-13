@@ -30,10 +30,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -569,6 +571,8 @@ func TestService_TransferOut_StoresOnlyTheNonceHash(t *testing.T) {
 
 	var record map[string]any
 	require.NoError(t, f.instance.nonceStore.Get(ctx, "session_transfer:"+nonceHash(code), &record))
+	require.NotZero(t, record["SourceIssuedAt"], "the source session's issuance travels, never its id")
+	delete(record, "SourceIssuedAt")
 	require.Equal(t, map[string]any{
 		"UserID":               f.source.UserID,
 		"ActiveOrganizationID": f.source.ActiveOrganizationID,
@@ -577,6 +581,36 @@ func TestService_TransferOut_StoresOnlyTheNonceHash(t *testing.T) {
 		"TargetHost":           testExtraPlatformHost,
 		"NonceHash":            nonceHash(nonce),
 	}, record)
+}
+
+func TestService_TransferIn_RefusesASessionFromBeforeSignOutEverywhere(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	flags := &feature.InMemory{}
+	ssosignins.EnableForTests(flags)
+	f.instance.sessionManager.SetFlags(flags)
+	code, _, b := f.begin(ctx, t)
+
+	require.NoError(t, f.instance.sessionManager.RaiseUserEpoch(ctx, f.source.UserID, time.Now()))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b), errAccessChanged)
+}
+
+func TestService_Transfer_KeepsTheSourceIssuance(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	sourceIssued, known, err := f.instance.sessionManager.IssuedAt(ctx, f.source.SessionID)
+	require.NoError(t, err)
+	require.True(t, known)
+	code, _, b := f.begin(ctx, t)
+
+	result := f.in(ctx, t, testTargetBaseURL, code, b)
+	f.requireAccepted(ctx, t, result)
+	issued, known, err := f.instance.sessionManager.IssuedAt(ctx, *result.SessionCookie)
+	require.NoError(t, err)
+	require.True(t, known)
+	require.Equal(t, sourceIssued.UnixMicro(), issued.UnixMicro(), "a transfer never resets issuance past the epoch")
 }
 
 func TestService_Transfer_RoundTrip(t *testing.T) {
@@ -735,7 +769,7 @@ func TestService_TransferIn_NonMemberDoesNotConsume(t *testing.T) {
 	// if the membership was removed after transferOut issued it.
 	ctx, f := newTransfer(t, transferOptions{member: false, defaultHost: new(testTargetBaseURL), impersonator: "", supportOrgID: ""})
 	nonce := "browser-nonce"
-	code, err := sessions.NewTransferManager(f.instance.nonceStore).Create(ctx, f.source, nonce, testServerURL.Host, testExtraPlatformHost)
+	code, err := sessions.NewTransferManager(f.instance.nonceStore).Create(ctx, f.source, time.Time{}, nonce, testServerURL.Host, testExtraPlatformHost)
 	require.NoError(t, err)
 	b := newBrowser()
 	b.Set(constants.TransferInNonceCookiePrefix+nonceHash(nonce)[:16], nonce)

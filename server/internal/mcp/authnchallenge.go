@@ -158,6 +158,8 @@ type AuthnChallengeState struct {
 	// IDP callback. Impersonated humans may authorize themselves but must never
 	// authorize an agent.
 	AuthorizerImpersonated *bool `json:"authorizer_impersonated,omitempty"`
+	// SSOSignInID is the authorizing user's recorded SSO sign-in; nil leaves the grant unlinked.
+	SSOSignInID *uuid.UUID `json:"sso_sign_in_id,omitempty"`
 	// AgentAuthorizationTarget fixes the only policy an agent selection may
 	// authorize. Older in-flight states omit it and remain self-only.
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
@@ -262,7 +264,9 @@ type UserSessionGrant struct {
 	// validated against the endpoint's live tool inventory and resource-bound.
 	// Nil means all tools.
 	ToolSelection *toolfilter.SessionSelection `json:"tool_selection,omitempty"`
-	CreatedAt     time.Time                    `json:"created_at"`
+	// SSOSignInID carries the authorizing user's SSO sign-in to the session row.
+	SSOSignInID *uuid.UUID `json:"sso_sign_in_id,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)

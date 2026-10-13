@@ -25,6 +25,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -150,6 +151,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	now := time.Now()
+	ssoSignInID := s.dashboardSSOSignIn(ctx, authCtx)
 	if _, err := repo.New(s.db).CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
 		// No registration row. The refresh-token sentinel is what the session
@@ -169,8 +171,13 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
 		ToolSelection:    nil,
 		// Dashboard sessions are issuer-scoped, never bound to one resource.
-		Resource: pgtype.Text{String: "", Valid: false},
+		Resource:        pgtype.Text{String: "", Valid: false},
+		SsoSignInID:     ssoSignInID,
+		SsoSignInUserID: conv.ToPGText(authCtx.UserID),
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) && ssoSignInID.Valid {
+			return nil, oops.E(oops.CodeUnauthorized, err, "sign-in was revoked, sign in again").LogError(ctx, s.logger)
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
 		}
@@ -409,4 +416,28 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 		resourceID: metaServer.ID.String(),
 		logAttr:    attr.SlogMetaMcpServerID(metaServer.ID.String()),
 	}, nil
+}
+
+// dashboardSSOSignIn is the caller's SSO sign-in in its active organization,
+// revoked or not, so the guarded insert refuses a revoked one; lookup failures
+// leave the mint unlinked.
+func (s *Service) dashboardSSOSignIn(ctx context.Context, authCtx *contextvalues.AuthContext) uuid.NullUUID {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" || !s.sessions.SSOSignInEnforced(ctx) {
+		return none
+	}
+	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "load dashboard session for sso sign-in link", attr.SlogError(err))
+		return none
+	}
+	if session.UserID != authCtx.UserID || session.ImpersonatorEmail != "" || session.SupportOrganizationID != "" {
+		return none
+	}
+	id, err := ssosignins.SignInForSession(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.UserID, session.WorkOSSessionID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "look up sso sign-in for dashboard mint", attr.SlogError(err))
+		return none
+	}
+	return id
 }

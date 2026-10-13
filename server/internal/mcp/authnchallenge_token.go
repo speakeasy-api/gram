@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
@@ -118,8 +119,10 @@ type mintSessionParams struct {
 	DesiredSessionDuration *time.Duration
 	Replayable             bool
 	Policy                 sessionIssuancePolicy
-	Subject                urn.SessionSubject
-	ToolSelection          []byte
+	// SSOSignInID links the session to the SSO sign-in that authorized it.
+	SSOSignInID   uuid.NullUUID
+	Subject       urn.SessionSubject
+	ToolSelection []byte
 }
 
 type mintedSession struct {
@@ -556,6 +559,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		DesiredSessionDuration: nil,
 		Replayable:             false,
 		Policy:                 sessionIssuancePolicyResourceScoped,
+		SSOSignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                result.Subject,
 		ToolSelection:          nil,
 	}, logger)
@@ -828,6 +832,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		DesiredSessionDuration: desiredSessionDuration,
 		Replayable:             false,
 		Policy:                 policy,
+		SSOSignInID:            grantSSOSignInID(grant),
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 	}, logger)
@@ -842,6 +847,9 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		// Conservatively bucketing this rare case as failed (not completed)
 		// keeps completed meaning "a token the client could actually use."
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		if errors.Is(err, errSSOSignInRevoked) {
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "the sign-in that authorized this grant was revoked; sign in again")
+		}
 		return err
 	}
 	if admissionTx != nil {
@@ -1101,6 +1109,25 @@ func (s *Service) rotateRefreshToken(
 		}
 		return true, oops.E(oops.CodeUnexpected, err, "lock user session issuer for refresh token rotation").LogError(ctx, logger)
 	}
+	// Sign-in before session row, the order revocation locks in, so a
+	// revocation either waits for this rotation and then soft-deletes the
+	// successor, or commits first and this rotation refuses.
+	if lookupErr == nil && refreshSession.SsoSignInID.Valid {
+		signIn, err := txRepo.LockSSOSignInForGrant(ctx, usersessions_repo.LockSSOSignInForGrantParams{
+			ID: refreshSession.SsoSignInID.UUID, OrganizationID: endpoint.OrganizationID,
+		})
+		var pgErr *pgconn.PgError
+		switch {
+		case errors.As(err, &pgErr) && pgErr.Code == pgerrcode.SerializationFailure:
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request deferred", clientRow.ClientID, presentedAuthMethod, "refresh_token", "sign_in_changed_during_rotation")
+			return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "the sign-in changed during rotation; retry")
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return true, oops.E(oops.CodeUnexpected, err, "lock sso sign-in for refresh token rotation").LogError(ctx, logger)
+		case err == nil && (signIn.Fenced || (signIn.RevokedAt.Valid && signIn.RevokeReason.String != string(ssosignins.RevokeReasonSignOut))):
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "sign_in_revoked")
+			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "the sign-in that authorized this grant was revoked; sign in again")
+		}
+	}
 	oldSession, err := txRepo.RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		RefreshTokenHash:    refreshTokenHash,
@@ -1259,6 +1286,7 @@ func (s *Service) rotateRefreshToken(
 		DesiredSessionDuration: nil,
 		Replayable:             true,
 		Policy:                 policy,
+		SSOSignInID:            oldSession.SsoSignInID,
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 	}, logger)
@@ -1682,6 +1710,7 @@ func (s *Service) mintSession(
 		DelegatedGrants:        params.DelegatedGrants,
 		DelegatedGrantsVersion: params.DelegatedGrantsVersion,
 		ToolSelection:          params.ToolSelection,
+		SSOSignInID:            params.SSOSignInID,
 		AuthorizationExpiresAt: params.AuthorizationExpiresAt,
 		DesiredSessionDuration: params.DesiredSessionDuration,
 		Replayable:             params.Replayable,
@@ -1735,6 +1764,9 @@ type sessionIssuance struct {
 
 	// ToolSelection is the consent-screen policy, persisted verbatim.
 	ToolSelection []byte
+
+	// SSOSignInID links the session to the SSO sign-in that authorized it.
+	SSOSignInID uuid.NullUUID
 
 	// AuthorizationExpiresAt carries a rotated authorization's deadline
 	// forward. Nil starts a new authorization.
@@ -1855,9 +1887,14 @@ func (s *Service) issueSession(
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: *issuance.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
 		ToolSelection:          issuance.ToolSelection,
 		Resource:               conv.ToPGTextEmpty(issuance.Resource),
+		SsoSignInID:            issuance.SSOSignInID,
+		SsoSignInUserID:        ssoSignInUserID(issuance),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if revoked, rerr := signInRevokedForGrant(ctx, queries, issuance); rerr == nil && revoked {
+				return nil, oops.E(oops.CodeUnauthorized, errSSOSignInRevoked, "the sign-in that authorized this grant was revoked; sign in again")
+			}
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, logger)
@@ -1958,4 +1995,39 @@ func (s *Service) authorizationCodeIssuancePolicy(endpoint *ResolvedMcpEndpoint)
 		return sessionIssuancePolicyIssuerScoped, "", nil
 	}
 	return sessionIssuancePolicyResourceBound, resource, nil
+}
+
+// grantSSOSignInID is the sign-in an authorization code links its session to.
+func grantSSOSignInID(grant UserSessionGrant) uuid.NullUUID {
+	if grant.SSOSignInID == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: *grant.SSOSignInID, Valid: true}
+}
+
+var errSSOSignInRevoked = errors.New("sso sign-in revoked")
+
+// ssoSignInUserID is the user a linked sign-in must belong to: the session's
+// own human subject. Other subjects never keep a link.
+func ssoSignInUserID(issuance sessionIssuance) pgtype.Text {
+	if !issuance.SSOSignInID.Valid || issuance.Subject.Kind != urn.SessionSubjectKindUser {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return conv.ToPGText(issuance.Subject.ID)
+}
+
+// signInRevokedForGrant reports whether the sign-in a refused issuance linked
+// to was revoked other than by a single sign-out.
+func signInRevokedForGrant(ctx context.Context, queries *usersessions_repo.Queries, issuance sessionIssuance) (bool, error) {
+	if !issuance.SSOSignInID.Valid {
+		return false, nil
+	}
+	row, err := queries.LockSSOSignInForGrant(ctx, usersessions_repo.LockSSOSignInForGrantParams{
+		ID:             issuance.SSOSignInID.UUID,
+		OrganizationID: issuance.OrganizationID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("read sso sign-in: %w", err)
+	}
+	return row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(ssosignins.RevokeReasonSignOut)), nil
 }

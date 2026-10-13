@@ -13,6 +13,7 @@ import { organizationsListSetupTasks } from "../funcs/organizationsListSetupTask
 import { organizationsListUsers } from "../funcs/organizationsListUsers.js";
 import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
+import { organizationsRevokeMemberSignIns } from "../funcs/organizationsRevokeMemberSignIns.js";
 import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
 import { organizationsSubmitOnboardingSurvey } from "../funcs/organizationsSubmitOnboardingSurvey.js";
@@ -28,6 +29,7 @@ import { ListUsersResult } from "../models/components/listusersresult.js";
 import { OnboardingStatusResult } from "../models/components/onboardingstatusresult.js";
 import { Organization } from "../models/components/organization.js";
 import { OrganizationInvitation } from "../models/components/organizationinvitation.js";
+import { RevokeSignInsResult } from "../models/components/revokesigninsresult.js";
 import { SendEnterpriseAdminOnboardingEmailResult } from "../models/components/sendenterpriseadminonboardingemailresult.js";
 import { SetupTask } from "../models/components/setuptask.js";
 import { VerifyOnboardingHooksSetupResult } from "../models/components/verifyonboardinghookssetupresult.js";
@@ -75,6 +77,10 @@ import {
   RevokeInviteRequest,
   RevokeInviteSecurity,
 } from "../models/operations/revokeinvite.js";
+import {
+  RevokeOrganizationMemberSignInsRequest,
+  RevokeOrganizationMemberSignInsSecurity,
+} from "../models/operations/revokeorganizationmembersignins.js";
 import {
   SendEnterpriseAdminOnboardingEmailRequest,
   SendEnterpriseAdminOnboardingEmailSecurity,
@@ -304,6 +310,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(organizationsRevokeInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * revokeMemberSignIns organizations
+   *
+   * @remarks
+   * Revoke a member's SSO sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
+   */
+  async revokeMemberSignIns(
+    request: RevokeOrganizationMemberSignInsRequest,
+    security?: RevokeOrganizationMemberSignInsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RevokeSignInsResult> {
+    return unwrapAsync(organizationsRevokeMemberSignIns(
       this,
       request,
       security,

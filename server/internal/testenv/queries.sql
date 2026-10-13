@@ -1962,3 +1962,8 @@ WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
 SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
 WHERE locktype = 'advisory' AND NOT granted
   AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database());
+-- name: CountPendingSSOSignInRevocationDeliveries :one
+SELECT count(*)
+FROM sso_sign_in_revocation_deliveries
+WHERE organization_id = @organization_id
+  AND delivered_at IS NULL;
