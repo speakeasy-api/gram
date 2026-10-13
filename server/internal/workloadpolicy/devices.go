@@ -243,13 +243,14 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 }
 
 func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevicePayload) (*gen.WorkloadDeviceRegistration, error) {
-	// The per-token bucket is keyed on the token's hash, never the token.
+	// The fleet ceiling is checked first, so traffic past it creates no
+	// per-token bucket. The per-token bucket is keyed on the token's hash.
 	for _, limit := range []struct {
 		limiter *ratelimit.Limiter
 		key     string
 	}{
-		{s.registerTokenLimiter, hashDeviceJoinToken(payload.JoinToken)},
 		{s.registerLimiter, "all"},
+		{s.registerTokenLimiter, hashDeviceJoinToken(payload.JoinToken)},
 	} {
 		if limit.limiter == nil {
 			continue

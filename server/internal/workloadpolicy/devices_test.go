@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy"
@@ -513,6 +514,32 @@ func TestRegisterDevice_ThrottlesOneTokenWithoutThrottlingOthers(t *testing.T) {
 	// Another token is still answered on its merits.
 	_, err := registerDevice(ctx, ti, "gram_dj_fresh-"+uuid.NewString(), key)
 	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestRegisterDevice_FleetCeilingIsCheckedBeforeThePerTokenBucket(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	key := publicJWK(t, newDeviceKey(t).Public())
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	store := ratelimit.NewRedisStore(redisClient)
+	fleet := ratelimit.New(store, "test-fleet-"+uuid.NewString(), ratelimit.PerMinute(1))
+	perToken := ratelimit.New(store, "test-token-"+uuid.NewString(), ratelimit.PerMinute(5))
+	workloadpolicy.SetRegisterLimitersForTest(ti.service, fleet, perToken)
+
+	// The first request spends the whole fleet ceiling.
+	_, err = registerDevice(ctx, ti, "gram_dj_first-"+uuid.NewString(), key)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+
+	// A request past the ceiling is refused without touching its own bucket.
+	second := "gram_dj_second-" + uuid.NewString()
+	_, err = registerDevice(ctx, ti, second, key)
+	requireOopsCode(t, err, oops.CodeRateLimitExceeded)
+
+	res, err := perToken.Allow(ctx, workloadpolicy.HashDeviceJoinTokenForTest(second))
+	require.NoError(t, err)
+	require.Equal(t, 4, res.Remaining, "the refused request must not have consumed its per-token bucket")
 }
 
 func TestCreateDeviceJoinToken_RequiresAPerson(t *testing.T) {
