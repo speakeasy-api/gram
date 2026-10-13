@@ -10,21 +10,38 @@ import (
 )
 
 type ApiKey struct {
-	ID                     uuid.UUID
-	OrganizationID         string
-	ProjectID              uuid.NullUUID
-	CreatedByUserID        string
-	Name                   string
-	KeyPrefix              string
-	KeyHash                string
-	Scopes                 []string
-	SubjectUrn             pgtype.Text
-	DelegatedGrants        []byte
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	Name string
+	// @access: secret-restricted
+	KeyPrefix string
+	// @access: secret-restricted
+	KeyHash string
+	// @access: confidential
+	Scopes []string
+	// @access: confidential
+	SubjectUrn pgtype.Text
+	// @access: opaque-restricted
+	DelegatedGrants []byte
+	// @access: confidential
 	DelegatedGrantsVersion pgtype.Int4
-	ExpiresAt              pgtype.Timestamptz
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
-	DeletedAt              pgtype.Timestamptz
-	Deleted                bool
-	LastAccessedAt         pgtype.Timestamptz
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+	// @access: confidential
+	LastAccessedAt pgtype.Timestamptz
 }

@@ -501,19 +501,6 @@ UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
 WHERE id = @id;
 
--- name: InsertLegacyDenyPrincipalGrantFixture :exec
--- Test-only fixture for exercising allow-only writes against legacy rows.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id, @principal_urn, @scope, 'deny', @selectors);
-
--- name: GetPrincipalGrantEffectFixture :one
-SELECT effect
-FROM principal_grants
-WHERE organization_id = @organization_id
-  AND principal_urn = @principal_urn
-  AND scope = @scope
-  AND selectors = @selectors;
-
 -- name: InsertChatContentPartFixture :one
 -- Test-only fixture: seeds a minimal chat content part so tests can anchor a
 -- risk_results row to it.
@@ -738,7 +725,6 @@ WITH deleted AS (
 INSERT INTO trials (organization_id, tier, created_at, ends_at)
 SELECT deleted.organization_id, @tier, @created_at, @ends_at
 FROM deleted;
-
 
 -- name: TryAcquireOpenRouterKeyBillingLockFixture :one
 -- Test-only non-blocking probe of the production OpenRouter billing lock key.
@@ -1153,7 +1139,6 @@ UPDATE workload_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id;
-
 
 -- Shared attachment fixtures exercise authorization boundaries in remote-session,
 -- issuer-gate, and user-session projection tests.
@@ -1859,7 +1844,6 @@ SELECT id FROM external_oauth_server_metadata WHERE id = @id AND project_id = @p
 -- name: AcquireTestLockFixture :exec
 -- Transaction-scoped advisory locks for testing the synchronization helpers themselves.
 SELECT pg_advisory_xact_lock(@key::bigint);
-
 
 -- name: LockPublishOutboxRowFixture :one
 SELECT id FROM publish_outbox WHERE id = @id AND organization_id = @organization_id FOR UPDATE;
