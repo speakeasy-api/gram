@@ -17,7 +17,7 @@ COMMENT ON COLUMN "sign_in_revocation_deliveries"."claimed_until" IS '@access: c
 -- Set comment to column: "next_attempt_at" on table: "sign_in_revocation_deliveries"
 COMMENT ON COLUMN "sign_in_revocation_deliveries"."next_attempt_at" IS '@access: confidential';
 -- Modify "sign_ins" table
-ALTER TABLE "sign_ins" ADD COLUMN "idp_hosted_domain" text NULL, ADD COLUMN "idp_tenant_id" text NULL, ADD COLUMN "verified_email" text NULL, ADD COLUMN "idp_authenticated_at" timestamptz NULL;
+ALTER TABLE "sign_ins" ADD COLUMN "idp_hosted_domain" text NULL, ADD COLUMN "idp_tenant_id" text NULL, ADD COLUMN "verified_email" text NULL, ADD COLUMN "idp_authenticated_at" timestamptz NULL, ADD COLUMN "session_signed_out_at" timestamptz NULL;
 -- Set comment to column: "idp_hosted_domain" on table: "sign_ins"
 COMMENT ON COLUMN "sign_ins"."idp_hosted_domain" IS '@access: restricted';
 -- Set comment to column: "idp_tenant_id" on table: "sign_ins"
@@ -26,3 +26,5 @@ COMMENT ON COLUMN "sign_ins"."idp_tenant_id" IS '@access: opaque-confidential';
 COMMENT ON COLUMN "sign_ins"."verified_email" IS '@access: confidential-pii';
 -- Set comment to column: "idp_authenticated_at" on table: "sign_ins"
 COMMENT ON COLUMN "sign_ins"."idp_authenticated_at" IS '@access: confidential';
+-- Set comment to column: "session_signed_out_at" on table: "sign_ins"
+COMMENT ON COLUMN "sign_ins"."session_signed_out_at" IS '@access: confidential';

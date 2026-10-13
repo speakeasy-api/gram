@@ -4316,6 +4316,10 @@ CREATE TABLE IF NOT EXISTS sign_ins (
   -- sign_out, sign_out_everywhere, admin or deprovisioned; validated in
   -- application code.
   revoke_reason TEXT,
+  -- When the WorkOS session was signed out. Session-wide, so it survives a
+  -- later organization-scoped revocation and is inherited by any organization
+  -- that records the same session afterwards.
+  session_signed_out_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT sign_ins_pkey PRIMARY KEY (id),
@@ -4334,6 +4338,7 @@ COMMENT ON COLUMN sign_ins.verified_email IS '@access: confidential-pii';
 COMMENT ON COLUMN sign_ins.idp_authenticated_at IS '@access: confidential';
 COMMENT ON COLUMN sign_ins.revoked_at IS '@access: confidential';
 COMMENT ON COLUMN sign_ins.revoke_reason IS '@access: confidential';
+COMMENT ON COLUMN sign_ins.session_signed_out_at IS '@access: confidential';
 COMMENT ON COLUMN sign_ins.created_at IS '@access: confidential';
 COMMENT ON COLUMN sign_ins.updated_at IS '@access: confidential';
 
@@ -4477,7 +4482,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   CONSTRAINT user_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL,
-  CONSTRAINT user_sessions_sign_in_tenant_fkey FOREIGN KEY (organization_id, sign_in_id) REFERENCES sign_ins (organization_id, id)
+  CONSTRAINT user_sessions_sign_in_tenant_fkey FOREIGN KEY (organization_id, sign_in_id) REFERENCES sign_ins (organization_id, id) ON DELETE SET NULL (sign_in_id)
 );
 
 COMMENT ON COLUMN user_sessions.id IS '@access: confidential';

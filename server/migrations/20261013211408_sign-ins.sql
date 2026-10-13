@@ -105,7 +105,7 @@ COMMENT ON COLUMN "sign_ins"."created_at" IS '@access: confidential';
 -- Set comment to column: "updated_at" on table: "sign_ins"
 COMMENT ON COLUMN "sign_ins"."updated_at" IS '@access: confidential';
 -- Modify "user_sessions" table
-ALTER TABLE "user_sessions" ADD COLUMN "sign_in_id" uuid NULL, ADD CONSTRAINT "user_sessions_sign_in_tenant_fkey" FOREIGN KEY ("organization_id", "sign_in_id") REFERENCES "sign_ins" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE NO ACTION NOT VALID;
+ALTER TABLE "user_sessions" ADD COLUMN "sign_in_id" uuid NULL, ADD CONSTRAINT "user_sessions_sign_in_tenant_fkey" FOREIGN KEY ("organization_id", "sign_in_id") REFERENCES "sign_ins" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE SET NULL ("sign_in_id") NOT VALID;
 ALTER TABLE "user_sessions" VALIDATE CONSTRAINT "user_sessions_sign_in_tenant_fkey";
 -- Create index "user_sessions_sign_in_id_idx" to table: "user_sessions"
 CREATE INDEX CONCURRENTLY "user_sessions_sign_in_id_idx" ON "user_sessions" ("organization_id", "sign_in_id") WHERE (sign_in_id IS NOT NULL);
