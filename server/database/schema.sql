@@ -4411,6 +4411,10 @@ COMMENT ON COLUMN sso_sign_in_revocation_deliveries.next_attempt_at IS '@access:
 COMMENT ON COLUMN sso_sign_in_revocation_deliveries.created_at IS '@access: confidential';
 COMMENT ON COLUMN sso_sign_in_revocation_deliveries.updated_at IS '@access: confidential';
 
+-- Lets an organization's deletion cascade without scanning the table.
+CREATE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_organization_id_idx
+ON sso_sign_in_revocation_deliveries (organization_id);
+
 -- One pending delivery per target.
 CREATE UNIQUE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_pending_key
 ON sso_sign_in_revocation_deliveries (organization_id, kind, target)
