@@ -713,6 +713,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	// Consent cannot be embedded, even by the same origin. Do not restrict
+	// form-action: consent submissions redirect to clients on other origins,
+	// including loopback addresses and custom URI schemes.
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	w.Header().Set("X-Frame-Options", "DENY")
 	if err := consentTemplate.Execute(w, data); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "render consent template").LogError(ctx, logger)
 	}
