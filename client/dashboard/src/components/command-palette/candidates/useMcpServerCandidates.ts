@@ -40,8 +40,9 @@ function verbsFor(server: McpServer, canWrite: boolean): Verb[] {
  * Toolset-backed mcp_servers rows are not listed on their own so hosted
  * servers aren't doubled (see the TODO(AGE-1902) note in the MCP page), but
  * they are the rows that carry a hosted server's visibility: each toolset
- * candidate reads its linked row's state and flips that row on
- * enable/disable. A toolset with no linked row is open-only.
+ * candidate reads its linked row's state and flips that row on disable, and
+ * on enable unless it is a hosted wrapper, whose enable opens the toolset
+ * page. A toolset with no linked row is open-only.
  *
  * Verbs are gated per server (`hasScope("mcp:write", <grant resource>)`),
  * the same check the server's own pages apply, so a grant scoped to some
