@@ -293,10 +293,10 @@ describe("McpServerHealth", () => {
 
   it("copies the Admin MCP prompt", async () => {
     await open();
+    const copy = await screen.findByRole("button", { name: "Copy prompt" });
     expect(
       screen.getByText("Investigate with the Speakeasy Admin MCP server"),
     ).toBeTruthy();
-    const copy = await screen.findByRole("button", { name: "Copy prompt" });
     await act(async () => {
       fireEvent.click(copy);
       await Promise.resolve();
