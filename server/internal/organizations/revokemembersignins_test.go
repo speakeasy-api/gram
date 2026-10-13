@@ -44,11 +44,11 @@ func TestService_RevokeMemberSignIns_RevokesOnlyTheActiveOrganization(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	flags := &feature.InMemory{}
-	ssosignins.EnableForTests(flags)
-	ti.sessionManager.SetFlags(flags)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	flags := &feature.InMemory{}
+	ssosignins.EnableForTests(flags, authCtx.ActiveOrganizationID)
+	ti.sessionManager.SetFlags(flags)
 	here := "session_" + uuid.NewString()
 	_, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: testOtherUserID, WorkOSSessionID: here, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
 	require.NoError(t, err)

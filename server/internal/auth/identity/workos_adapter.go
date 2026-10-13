@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 )
@@ -13,6 +14,7 @@ import (
 type WorkOSAdapter struct {
 	client            *usermanagement.Client
 	googleUserInfoURL string
+	evidence          evidenceCollector
 }
 
 // NewWorkOSAdapter creates an adapter from a WorkOS SDK client.
@@ -21,7 +23,16 @@ func NewWorkOSAdapter(client *usermanagement.Client) *WorkOSAdapter {
 	if client == nil {
 		return nil
 	}
-	return &WorkOSAdapter{client: client, googleUserInfoURL: DefaultGoogleUserInfoURL}
+	return &WorkOSAdapter{client: client, googleUserInfoURL: DefaultGoogleUserInfoURL, evidence: newEvidenceCollector(EvidenceConfig{Logger: nil, MeterProvider: nil, Enabled: nil, MFAEnforced: false})}
+}
+
+// WithEvidence enables sign-in evidence collection. Without it only the
+// verified email is recorded and no sign-in qualifies for vouching.
+func (a *WorkOSAdapter) WithEvidence(cfg EvidenceConfig) *WorkOSAdapter {
+	if a != nil {
+		a.evidence = newEvidenceCollector(cfg)
+	}
+	return a
 }
 
 // WithGoogleUserInfoURL points Google hosted-domain lookups elsewhere, e.g. at
@@ -100,7 +111,9 @@ func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID,
 		AccessToken:          resp.AccessToken,
 		OrganizationID:       resp.OrganizationID,
 		AuthenticationMethod: string(resp.AuthenticationMethod),
-		Evidence:             SignInEvidence{MFAVerified: false, HostedDomain: "", TenantID: ""},
+		// The server redeems this code itself, so nothing here was proven by
+		// the user and the sign-in never qualifies.
+		Evidence: SignInEvidence{MFAVerified: false, HostedDomain: "", TenantID: "", VerifiedEmail: "", AuthenticatedAt: time.Time{}},
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,

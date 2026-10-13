@@ -460,7 +460,9 @@ func (s *Service) transferInCallback(ctx context.Context, logger *slog.Logger, c
 		return nil, failTransfer(signinTransferAccessChanged, "signed_out_everywhere", nil)
 	}
 	if !known {
-		issuedAt = time.Now()
+		// Unknown issuance stays before any epoch, so a sign-out everywhere
+		// racing this transfer still ends the new session.
+		issuedAt = authsessions.EpochZero
 	}
 
 	// Consume only after every check passes, so a transient failure above

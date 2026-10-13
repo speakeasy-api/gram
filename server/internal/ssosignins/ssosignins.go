@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -53,6 +54,10 @@ const (
 	ReasonNotMember            Reason = "not_member"
 	ReasonDeprovisioned        Reason = "deprovisioned"
 	ReasonEmailDomain          Reason = "email_domain_not_verified"
+	ReasonEmailNotVerified     Reason = "email_not_verified"
+	ReasonEmailChanged         Reason = "email_changed"
+	ReasonAuthTimeUnknown      Reason = "authentication_time_unknown"
+	ReasonTenantNotAllowed     Reason = "microsoft_tenant_not_allowed"
 )
 
 // Identity is the verified identity of an eligible grant.
@@ -94,6 +99,12 @@ type Evidence struct {
 	HostedDomain string
 	// TenantID is a Microsoft account's Entra tenant.
 	TenantID string
+	// VerifiedEmail is the email the identity provider verified, empty when
+	// it did not. Only this email is ever vouched for.
+	VerifiedEmail string
+	// IDPAuthenticatedAt is when the user actually authenticated at the
+	// identity provider, zero when unknown. A reused session keeps its time.
+	IDPAuthenticatedAt time.Time
 }
 
 // Recorded is the sign-in a code exchange resolved to. A revoked row is still
@@ -106,14 +117,34 @@ type Recorded struct {
 
 var errSignInOwnedByAnotherUser = errors.New("sso sign-in session belongs to another user")
 
-// Record upserts the sign-in for a WorkOS session. It records nothing when the
-// exchange carries no session, organization or user.
-func Record(ctx context.Context, db repo.DBTX, p RecordParams) (Recorded, error) {
+// Beginner is a pool or transaction that Record runs its own transaction on.
+type Beginner interface {
+	repo.DBTX
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// Record upserts the sign-in for a WorkOS session under the user's
+// per-organization lock, so it serializes with revocation. It records nothing
+// when the exchange carries no session, organization or user.
+func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) {
 	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Revoked: false}
 	if p.OrganizationID == "" || p.UserID == "" || p.WorkOSSessionID == "" {
 		return none, nil
 	}
-	row, err := repo.New(db).UpsertSSOSignIn(ctx, repo.UpsertSSOSignInParams{
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return none, fmt.Errorf("begin: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	q := repo.New(tx)
+	if err := q.LockSignInsForUser(ctx, repo.LockSignInsForUserParams{OrganizationID: p.OrganizationID, UserID: p.UserID}); err != nil {
+		return none, fmt.Errorf("lock sso sign-ins: %w", err)
+	}
+	var idpAuthenticatedAt pgtype.Timestamptz
+	if !p.Evidence.IDPAuthenticatedAt.IsZero() {
+		idpAuthenticatedAt = pgtype.Timestamptz{Time: p.Evidence.IDPAuthenticatedAt, InfinityModifier: pgtype.Finite, Valid: true}
+	}
+	row, err := q.UpsertSSOSignIn(ctx, repo.UpsertSSOSignInParams{
 		OrganizationID:       p.OrganizationID,
 		UserID:               p.UserID,
 		WorkosSessionID:      p.WorkOSSessionID,
@@ -121,13 +152,18 @@ func Record(ctx context.Context, db repo.DBTX, p RecordParams) (Recorded, error)
 		MfaVerified:          p.Evidence.MFAVerified,
 		IdpHostedDomain:      conv.ToPGTextEmpty(p.Evidence.HostedDomain),
 		IdpTenantID:          conv.ToPGTextEmpty(p.Evidence.TenantID),
+		VerifiedEmail:        conv.ToPGTextEmpty(conv.NormalizeEmail(p.Evidence.VerifiedEmail)),
 		AuthenticatedAt:      pgtype.Timestamptz{Time: p.AuthenticatedAt, InfinityModifier: pgtype.Finite, Valid: true},
+		IdpAuthenticatedAt:   idpAuthenticatedAt,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, errSignInOwnedByAnotherUser
 	case err != nil:
 		return none, fmt.Errorf("upsert sso sign-in: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return none, fmt.Errorf("commit: %w", err)
 	}
 	return Recorded{ID: uuid.NullUUID{UUID: row.ID, Valid: true}, Revoked: row.RevokedAt.Valid}, nil
 }
@@ -228,7 +264,7 @@ func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration
 	if row.SubjectUrn != urn.NewUserSubject(userID).String() {
 		return reject(ReasonNotUserSubject)
 	}
-	if row.RevokedAt.Valid {
+	if row.RevokedAt.Valid || row.Fenced {
 		return reject(ReasonSignInRevoked)
 	}
 	tier, reason := classify(row)
@@ -242,7 +278,9 @@ func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration
 		maxAge = limit
 	}
 	switch {
-	case !row.AuthenticatedAt.Valid || now.Sub(row.AuthenticatedAt.Time) > maxAge:
+	case !row.IdpAuthenticatedAt.Valid:
+		return reject(ReasonAuthTimeUnknown)
+	case now.Sub(row.IdpAuthenticatedAt.Time) > maxAge:
 		return reject(ReasonExpired)
 	case row.OrganizationDisabledAt.Valid:
 		return reject(ReasonOrganizationDisabled)
@@ -250,8 +288,15 @@ func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration
 		return reject(ReasonNotMember)
 	case row.IsDeprovisioned:
 		return reject(ReasonDeprovisioned)
+	case !row.VerifiedEmail.Valid || row.VerifiedEmail.String == "":
+		return reject(ReasonEmailNotVerified)
 	}
-	email := conv.NormalizeEmail(row.UserEmail.String)
+	// Vouch only for the email verified at this sign-in; a later profile
+	// change waits for a fresh sign-in.
+	email := conv.NormalizeEmail(row.VerifiedEmail.String)
+	if conv.NormalizeEmail(row.UserEmail.String) != email {
+		return reject(ReasonEmailChanged)
+	}
 	if !emailOnDomain(email, row.VerifiedDomains) {
 		return reject(ReasonEmailDomain)
 	}
@@ -278,13 +323,17 @@ type SignedOut struct {
 // RevokeSession revokes the sign-ins recorded for one signed-out WorkOS
 // session and enqueues ending that WorkOS session. Grants made from them keep
 // working but stop qualifying for vouching. Locks are taken in id order, like
-// every other revocation.
+// every other revocation. When nothing was recorded yet, the first
+// organization keeps a revoked marker that a later recording inherits.
 func RevokeSession(ctx context.Context, db repo.DBTX, organizationIDs []string, userID, workosSessionID string) (SignedOut, error) {
 	var out SignedOut
 	if len(organizationIDs) == 0 || userID == "" || workosSessionID == "" {
 		return out, nil
 	}
 	q := repo.New(db)
+	if err := lockUser(ctx, q, organizationIDs, userID); err != nil {
+		return out, err
+	}
 	if _, err := q.LockSSOSignInsBySession(ctx, repo.LockSSOSignInsBySessionParams{OrganizationIds: organizationIDs, UserID: userID, WorkosSessionID: workosSessionID}); err != nil {
 		return out, fmt.Errorf("lock sso sign-ins for session: %w", err)
 	}
@@ -296,6 +345,11 @@ func RevokeSession(ctx context.Context, db repo.DBTX, organizationIDs []string, 
 	})
 	if err != nil {
 		return out, fmt.Errorf("revoke sso sign-ins for session: %w", err)
+	}
+	if len(rows) == 0 {
+		if err := q.MarkWorkOSSessionSignedOut(ctx, repo.MarkWorkOSSessionSignedOutParams{OrganizationID: organizationIDs[0], UserID: userID, WorkosSessionID: workosSessionID}); err != nil {
+			return out, fmt.Errorf("mark workos session signed out: %w", err)
+		}
 	}
 	seen := make(map[string]struct{}, len(rows))
 	for _, r := range rows {
@@ -331,7 +385,8 @@ type Revoked struct {
 	// SignInsByOrganization counts newly revoked or upgraded sign-ins per
 	// organization.
 	SignInsByOrganization map[string]int
-	// WorkOSSessionIDs are the WorkOS sessions of those sign-ins.
+	// WorkOSSessionIDs are the WorkOS sessions of those sign-ins, including
+	// ones left up because another organization still uses them.
 	WorkOSSessionIDs []string
 	// Sessions are the soft-deleted grants.
 	Sessions []RevokedSession
@@ -380,6 +435,9 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 		return out, nil
 	}
 	q := repo.New(db)
+	if err := lockUser(ctx, q, organizationIDs, userID); err != nil {
+		return out, err
+	}
 	if _, err := q.LockUserSSOSignIns(ctx, repo.LockUserSSOSignInsParams{OrganizationIds: organizationIDs, UserID: userID}); err != nil {
 		return out, fmt.Errorf("lock user sso sign-ins: %w", err)
 	}
@@ -432,13 +490,54 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 		out.DeliveryIDs = append(out.DeliveryIDs, ids...)
 	}
 	for organizationID, workosSessions := range workosByOrg {
-		ids, err := enqueue(ctx, q, organizationID, DeliveryWorkOSSession, workosSessions)
+		// A WorkOS session that still backs a live sign-in in another
+		// organization stays up; only this revocation's rows are revoked.
+		ended := make([]string, 0, len(workosSessions))
+		for _, workosSessionID := range workosSessions {
+			others, err := q.OtherOrganizationsUsingWorkOSSession(ctx, repo.OtherOrganizationsUsingWorkOSSessionParams{
+				UserID:          userID,
+				WorkosSessionID: workosSessionID,
+				OrganizationIds: organizationIDs,
+			})
+			if err != nil {
+				return out, fmt.Errorf("check workos session use elsewhere: %w", err)
+			}
+			if len(others) == 0 {
+				ended = append(ended, workosSessionID)
+			}
+		}
+		ids, err := enqueue(ctx, q, organizationID, DeliveryWorkOSSession, ended)
 		if err != nil {
 			return out, err
 		}
 		out.DeliveryIDs = append(out.DeliveryIDs, ids...)
 	}
 	return out, nil
+}
+
+// EnqueueUserEpoch durably enqueues ending the user's dashboard sessions
+// issued at or before at; a pending one only moves forward.
+func EnqueueUserEpoch(ctx context.Context, db repo.DBTX, organizationID, userID string, at time.Time) (uuid.UUID, error) {
+	id, err := repo.New(db).EnqueueUserEpochDelivery(ctx, repo.EnqueueUserEpochDeliveryParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+		EffectiveAt:    pgtype.Timestamptz{Time: at, InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("enqueue user epoch delivery: %w", err)
+	}
+	return id, nil
+}
+
+// lockUser takes the user's per-organization sign-in locks in sorted order,
+// before any row lock, the order Record uses.
+func lockUser(ctx context.Context, q *repo.Queries, organizationIDs []string, userID string) error {
+	for _, organizationID := range slices.Compact(slices.Sorted(slices.Values(organizationIDs))) {
+		if err := q.LockSignInsForUser(ctx, repo.LockSignInsForUserParams{OrganizationID: organizationID, UserID: userID}); err != nil {
+			return fmt.Errorf("lock sso sign-ins: %w", err)
+		}
+	}
+	return nil
 }
 
 // EnqueueWorkOSSessionRevocations durably enqueues ending WorkOS sessions not

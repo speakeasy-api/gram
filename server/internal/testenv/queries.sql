@@ -1938,5 +1938,19 @@ WITH credential AS (
     SELECT @organization_id, key.id, @name FROM key
     RETURNING id
 )
-INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id, allowed_sign_in_methods)
-SELECT @organization_id, @issuer, key_set.id, @allowed_sign_in_methods::text[] FROM key_set;
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id, allowed_sign_in_methods, allowed_microsoft_tenant_ids)
+SELECT @organization_id, @issuer, key_set.id, sqlc.narg(allowed_sign_in_methods)::text[], sqlc.narg(allowed_microsoft_tenant_ids)::text[] FROM key_set;
+
+-- name: MakeSSOSignInRevocationDeliveriesDueFixture :exec
+-- Skips the backoff so a test can retry failed deliveries at once.
+UPDATE sso_sign_in_revocation_deliveries
+SET next_attempt_at = NULL,
+    claimed_until = NULL
+WHERE organization_id = @organization_id
+  AND delivered_at IS NULL;
+
+-- name: ListSSOSignInRevocationDeliveriesFixture :many
+SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until, delivered_at
+FROM sso_sign_in_revocation_deliveries
+WHERE organization_id = @organization_id
+ORDER BY created_at, id;

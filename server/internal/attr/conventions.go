@@ -190,6 +190,8 @@ const (
 	SSOSignInRecordOutcomeKey = attribute.Key("gram.sso_sign_in.record_outcome")
 	// SSOSignInRevokeReasonKey is why SSO sign-ins were revoked.
 	SSOSignInRevokeReasonKey = attribute.Key("gram.sso_sign_in.revoke_reason")
+	// SSOSignInDeliveryKindKey is what a revocation delivery pushes.
+	SSOSignInDeliveryKindKey = attribute.Key("gram.sso_sign_in.delivery_kind")
 
 	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
@@ -1535,6 +1537,9 @@ func SlogAuthScheme(v string) slog.Attr      { return slog.String(string(AuthSch
 func AuthUserEmail(v string) attribute.KeyValue { return AuthUserEmailKey.String(v) }
 func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(AuthUserEmailKey), v) }
 
+func AuthAuthenticationMethod(v string) attribute.KeyValue {
+	return AuthAuthenticationMethodKey.String(v)
+}
 func SlogAuthAuthenticationMethod(v string) slog.Attr {
 	return slog.String(string(AuthAuthenticationMethodKey), v)
 }
@@ -1547,6 +1552,7 @@ func SlogSSOSignInRecordOutcome(v string) slog.Attr {
 	return slog.String(string(SSOSignInRecordOutcomeKey), v)
 }
 func SSOSignInRevokeReason(v string) attribute.KeyValue { return SSOSignInRevokeReasonKey.String(v) }
+func SSOSignInDeliveryKind(v string) attribute.KeyValue { return SSOSignInDeliveryKindKey.String(v) }
 func SlogAuthWorkOSSessionFingerprint(v string) slog.Attr {
 	return slog.String(string(AuthWorkOSSessionFingerprintKey), v)
 }

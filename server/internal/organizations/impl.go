@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/workos_errors"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -167,7 +168,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		orgHosts:          orgHosts,
 		audit:             auditLogger,
 		svix:              svix,
-		deliverer:         ssosignins.NewDeliverer(logger, db, nil, sessionMgr),
+		deliverer:         ssosignins.NewDeliverer(logger, noop.NewMeterProvider(), db, nil, sessionMgr, sessionMgr),
 	}
 }
 

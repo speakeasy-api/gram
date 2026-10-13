@@ -7,7 +7,9 @@
 package mcp
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -337,9 +339,15 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			UserID:                 gramUserID,
 			WorkOSSessionID:        idpUser.WorkOSSessionID,
 			AuthenticationMethod:   idpUser.AuthenticationMethod,
-			Evidence:               ssosignins.Evidence{MFAVerified: idpUser.Evidence.MFAVerified, HostedDomain: idpUser.Evidence.HostedDomain, TenantID: idpUser.Evidence.TenantID},
-			Impersonated:           impersonated,
-			AuthenticatedAt:        authenticatedAt,
+			Evidence: ssosignins.Evidence{
+				MFAVerified:        idpUser.Evidence.MFAVerified,
+				HostedDomain:       idpUser.Evidence.HostedDomain,
+				TenantID:           idpUser.Evidence.TenantID,
+				VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
+				IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+			},
+			Impersonated:    impersonated,
+			AuthenticatedAt: authenticatedAt,
 		}
 	}
 
@@ -366,8 +374,13 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 	// Recorded only for members, and only in the endpoint's organization.
 	ssoSignInID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	enforced := ssosignins.Enforced(ctx, s.features, endpoint.OrganizationID, "")
 	if exchange != nil {
-		ssoSignInID = ssosignins.RecordExchange(ctx, logger, s.db, *exchange).ID
+		recorded := ssosignins.RecordExchange(ctx, logger, s.db, *exchange)
+		ssoSignInID = recorded.ID
+		if recorded.Revoked && enforced && !challengeState.FreshLoginForced {
+			return s.restartRevokedSignIn(w, r, logger, endpoint, challengeState, exchange.WorkOSSessionID)
+		}
 	}
 
 	if federation := challengeState.Federation; federation != nil {
@@ -447,7 +460,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
 	challengeState.SSOSignInID = nil
-	if ssoSignInID.Valid && ssosignins.Enforced(ctx, s.features) {
+	if ssoSignInID.Valid && enforced {
 		challengeState.SSOSignInID = &ssoSignInID.UUID
 	}
 	if federation := challengeState.Federation; federation != nil {
@@ -471,6 +484,49 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
 }
+
+// restartRevokedSignIn ends a WorkOS session whose sign-in was revoked, then
+// sends the browser back to authenticate again, once, so the client is not
+// left retrying a grant that can never be vouched for.
+func (s *Service) restartRevokedSignIn(w http.ResponseWriter, r *http.Request, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, workosSessionID string) error {
+	ctx := r.Context()
+	issuerID, mcpSlug := challengeState.UserSessionIssuerID.String(), endpoint.Slug
+	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revokedSignInRevokeTimeout)
+	if err := s.sessions.RevokeSession(revokeCtx, workosSessionID); err != nil {
+		logger.WarnContext(ctx, "end revoked workos session before fresh login", attr.SlogError(err))
+	}
+	cancel()
+	challengeState.ID = uuid.NewString()
+	challengeState.FreshLoginForced = true
+	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
+	}
+	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
+	}
+	idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
+		CallbackURL:     callbackURL,
+		Scope:           "",
+		State:           challengeState.ID,
+		ScopesSupported: nil,
+		LoginHint:       "",
+		ScreenHint:      "",
+		Prompt:          "login",
+	})
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
+	}
+	logger.InfoContext(ctx, "sign-in was revoked; requiring a fresh login")
+	http.Redirect(w, r, idpURL.String(), http.StatusFound)
+	return nil
+}
+
+// revokedSignInRevokeTimeout bounds ending a revoked WorkOS session inline.
+const revokedSignInRevokeTimeout = 5 * time.Second
 
 // federatedCallbackRejectReason names why a federated callback cannot complete, or "" when it can.
 func (s *Service) federatedCallbackRejectReason(r *http.Request, state *AuthnChallengeState, routeClientID, organizationID string, trustedIssuerID, trustedClientID uuid.UUID, configuration string) string {

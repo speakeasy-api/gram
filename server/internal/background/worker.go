@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	activitiespkg "github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
@@ -62,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -527,6 +529,7 @@ func NewTemporalWorker(
 		remoteSessionEnricher,
 		opts.RemoteSessionAssertionSigner,
 		opts.StartupSeeds,
+		ssoSignInEpochs(opts.RedisClient),
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -1086,4 +1089,12 @@ func (w *Workers) Stop() {
 		wg.Go(stop)
 	}
 	wg.Wait()
+}
+
+// ssoSignInEpochs lets the revocation sweep retry sign-out-everywhere epochs.
+func ssoSignInEpochs(redisClient *redis.Client) ssosignins.EpochRaiser {
+	if redisClient == nil {
+		return nil
+	}
+	return sessions.NewEpochStore(redisClient)
 }

@@ -2,12 +2,14 @@ package ssosignins
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
 )
 
 const (
@@ -64,5 +66,62 @@ func RecordRevoked(ctx context.Context, reason RevokeReason, n int) {
 	}
 	if c := loadInstruments().revoked; c != nil {
 		c.Add(ctx, int64(n), metric.WithAttributes(attr.SSOSignInRevokeReason(string(reason))))
+	}
+}
+
+const (
+	meterDeliveryAttempts = "sso_sign_in.revocation_delivery.attempts"
+	meterDeliveryPending  = "sso_sign_in.revocation_delivery.pending"
+	meterDeliveryStuck    = "sso_sign_in.revocation_delivery.stuck"
+	meterDeliveryOldest   = "sso_sign_in.revocation_delivery.oldest_age"
+)
+
+type deliveryMetrics struct {
+	attempts metric.Int64Counter
+	pending  metric.Int64Gauge
+	stuck    metric.Int64Gauge
+	oldest   metric.Int64Gauge
+}
+
+func newDeliveryMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) deliveryMetrics {
+	ctx := context.Background()
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/ssosignins")
+	var m deliveryMetrics
+	var err error
+	if m.attempts, err = meter.Int64Counter(meterDeliveryAttempts, metric.WithDescription("SSO sign-in revocation delivery attempts by kind and outcome."), metric.WithUnit("{attempt}")); err != nil {
+		logger.ErrorContext(ctx, "create revocation delivery attempts counter", attr.SlogError(err))
+	}
+	if m.pending, err = meter.Int64Gauge(meterDeliveryPending, metric.WithDescription("Undelivered SSO sign-in revocation deliveries."), metric.WithUnit("{delivery}")); err != nil {
+		logger.ErrorContext(ctx, "create revocation delivery pending gauge", attr.SlogError(err))
+	}
+	if m.stuck, err = meter.Int64Gauge(meterDeliveryStuck, metric.WithDescription("Undelivered SSO sign-in revocation deliveries that failed repeatedly."), metric.WithUnit("{delivery}")); err != nil {
+		logger.ErrorContext(ctx, "create revocation delivery stuck gauge", attr.SlogError(err))
+	}
+	if m.oldest, err = meter.Int64Gauge(meterDeliveryOldest, metric.WithDescription("Age of the oldest undelivered SSO sign-in revocation delivery."), metric.WithUnit("s")); err != nil {
+		logger.ErrorContext(ctx, "create revocation delivery age gauge", attr.SlogError(err))
+	}
+	return m
+}
+
+func (m deliveryMetrics) recordAttempt(ctx context.Context, kind string, ok bool) {
+	if m.attempts == nil {
+		return
+	}
+	outcome := "ok"
+	if !ok {
+		outcome = "failed"
+	}
+	m.attempts.Add(ctx, 1, metric.WithAttributes(attr.SSOSignInDeliveryKind(kind), attr.Outcome(outcome)))
+}
+
+func (m deliveryMetrics) recordBacklog(ctx context.Context, b repo.RevocationDeliveryBacklogRow) {
+	if m.pending != nil {
+		m.pending.Record(ctx, b.Pending)
+	}
+	if m.stuck != nil {
+		m.stuck.Record(ctx, b.Stuck)
+	}
+	if m.oldest != nil {
+		m.oldest.Record(ctx, b.OldestSeconds)
 	}
 }

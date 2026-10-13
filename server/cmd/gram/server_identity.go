@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -25,6 +26,7 @@ import (
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -82,7 +84,12 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	if umClient == nil {
 		return nil, fmt.Errorf("failed to create IDP user management client: idp-client-secret is required")
 	}
-	idpClient := identity.NewWorkOSAdapter(umClient).WithGoogleUserInfoURL(c.String("google-userinfo-url"))
+	idpClient := identity.NewWorkOSAdapter(umClient).WithGoogleUserInfoURL(c.String("google-userinfo-url")).WithEvidence(identity.EvidenceConfig{
+		Logger:        logger,
+		MeterProvider: otel.GetMeterProvider(),
+		Enabled:       ssosignins.EvidenceGate(db, featureFlags),
+		MFAEnforced:   c.Bool("workos-mfa-enforced"),
+	})
 	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 
 	growth := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)

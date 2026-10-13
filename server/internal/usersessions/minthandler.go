@@ -151,7 +151,10 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	now := time.Now()
-	ssoSignInID := s.dashboardSSOSignIn(ctx, authCtx)
+	ssoSignInID, err := s.dashboardSSOSignIn(ctx, authCtx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "link sso sign-in").LogError(ctx, s.logger)
+	}
 	if _, err := repo.New(s.db).CreateUserSession(ctx, repo.CreateUserSessionParams{
 		UserSessionIssuerID: target.issuerID,
 		// No registration row. The refresh-token sentinel is what the session
@@ -419,25 +422,24 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 }
 
 // dashboardSSOSignIn is the caller's SSO sign-in in its active organization,
-// revoked or not, so the guarded insert refuses a revoked one; lookup failures
-// leave the mint unlinked.
-func (s *Service) dashboardSSOSignIn(ctx context.Context, authCtx *contextvalues.AuthContext) uuid.NullUUID {
+// revoked or not, so the guarded insert refuses a revoked one. While
+// enforcement is on a failed lookup fails the mint rather than leave it
+// unlinked.
+func (s *Service) dashboardSSOSignIn(ctx context.Context, authCtx *contextvalues.AuthContext) (uuid.NullUUID, error) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" || !s.sessions.SSOSignInEnforced(ctx) {
-		return none
+	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" || !s.sessions.SSOSignInEnforced(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
+		return none, nil
 	}
 	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "load dashboard session for sso sign-in link", attr.SlogError(err))
-		return none
+		return none, fmt.Errorf("load dashboard session: %w", err)
 	}
 	if session.UserID != authCtx.UserID || session.ImpersonatorEmail != "" || session.SupportOrganizationID != "" {
-		return none
+		return none, nil
 	}
 	id, err := ssosignins.SignInForSession(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.UserID, session.WorkOSSessionID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "look up sso sign-in for dashboard mint", attr.SlogError(err))
-		return none
+		return none, fmt.Errorf("look up sso sign-in: %w", err)
 	}
-	return id
+	return id, nil
 }

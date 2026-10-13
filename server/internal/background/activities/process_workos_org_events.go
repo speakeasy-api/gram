@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/workos/workos-go/v6/pkg/events"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -24,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
@@ -76,6 +79,7 @@ type ProcessWorkOSOrganizationEvents struct {
 	// revokedTokens is the access-token revocation cache.
 	revokedTokens ssosignins.TokenRevoker
 	deliverer     *ssosignins.Deliverer
+	flags         feature.Provider
 
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations created from WorkOS events.
@@ -91,10 +95,18 @@ func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, w
 		identityMap:   identityMap,
 		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cacheAdapter, cache.SuffixNone),
 		revokedTokens: revokedTokens,
-		deliverer:     ssosignins.NewDeliverer(logger, db, revokedTokens, workosClient),
+		deliverer:     ssosignins.NewDeliverer(logger, noop.NewMeterProvider(), db, revokedTokens, workosClient, nil),
+		flags:         nil,
 
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 	}
+}
+
+// SetSSOSignInEnforcement wires the flags gating sign-in revocation on
+// deprovisioning, and the meter provider and epoch store for deliveries.
+func (p *ProcessWorkOSOrganizationEvents) SetSSOSignInEnforcement(flags feature.Provider, meterProvider metric.MeterProvider, epochs ssosignins.EpochRaiser) {
+	p.flags = flags
+	p.deliverer = ssosignins.NewDeliverer(p.logger, meterProvider, p.db, p.revokedTokens, p.workosClient, epochs)
 }
 
 // SetNewOrganizationDefaultHost sets the default host recorded on
@@ -208,16 +220,20 @@ type postCommitEffects struct {
 	// deprovisioning enqueued; the sweep retries whatever this push misses.
 	revocationOrganizationID string
 	revocationDeliveries     []uuid.UUID
-	revokedGrants            []ssosignins.RevokedSession
 	revokedSignIns           int
+	// revokeSignIns asks the activity to revoke a deprovisioned user's
+	// sign-ins inside the event's transaction, when enforcement is on.
+	revokeSignIns *signInRevocation
+}
+
+type signInRevocation struct {
+	organizationID string
+	userID         string
 }
 
 func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
 	if len(effects.revocationDeliveries) > 0 {
 		p.deliverer.DeliverNow(ctx, []string{effects.revocationOrganizationID}, effects.revocationDeliveries)
-	}
-	if len(effects.revokedGrants) > 0 {
-		ssosignins.AuditRevokedGrants(ctx, logger, p.db, audit.NewLogger(), deprovisionActor, effects.revokedGrants)
 	}
 	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonDeprovisioned, effects.revokedSignIns)
 
@@ -294,6 +310,11 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	effects, err := handleOrganizationEvent(ctx, logger, dbtx, workosOrgID, event, p.newOrganizationDefaultHost)
 	if err != nil {
 		return "", err
+	}
+	if r := effects.revokeSignIns; r != nil && ssosignins.Enforced(ctx, p.flags, r.organizationID, "") {
+		if err := revokeDeprovisionedSignIns(ctx, dbtx, *r, &effects); err != nil {
+			return "", err
+		}
 	}
 
 	if _, err := workosrepo.New(dbtx).SetOrganizationSyncLastEventID(ctx, workosrepo.SetOrganizationSyncLastEventIDParams{

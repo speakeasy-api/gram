@@ -1,6 +1,7 @@
 package usersessions_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -13,9 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 )
 
-func enforceSSOSignIns(ti *testInstance) {
+func enforceSSOSignIns(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
 	flags := &feature.InMemory{}
-	ssosignins.EnableForTests(flags)
+	ssosignins.EnableForTests(flags, authCtx.ActiveOrganizationID)
 	ti.sessionManager.SetFlags(flags)
 }
 
@@ -26,7 +30,7 @@ func TestSessionEpoch_PreDeploySessionKeepsWorking(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enforceSSOSignIns(ti)
+	enforceSSOSignIns(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	sessionID := *authCtx.SessionID
@@ -52,7 +56,7 @@ func TestSessionEpoch_OnlyMovesForwardAndRestoringKeepsIssuance(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	enforceSSOSignIns(ti)
+	enforceSSOSignIns(t, ctx, ti)
 	userID := "epoch-user-" + uuid.NewString()
 
 	issued := time.Now().Add(-time.Minute)
@@ -79,15 +83,52 @@ func TestSessionEpoch_OnlyMovesForwardAndRestoringKeepsIssuance(t *testing.T) {
 	require.True(t, predates, "storing a session again keeps its original issuance")
 }
 
-func TestSessionEpoch_IgnoredWhileEnforcementIsOff(t *testing.T) {
+func TestSessionEpoch_EnforcedWhateverTheFlagSays(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	userID := "epoch-user-" + uuid.NewString()
-	sessionID := "epoch-session-" + uuid.NewString()
-
+	session := sessions.Session{
+		SessionID:             "epoch-session-" + uuid.NewString(),
+		UserID:                userID,
+		ActiveOrganizationID:  "",
+		WorkOSSessionID:       "",
+		ImpersonatorEmail:     "",
+		SupportOrganizationID: "",
+		SupportExpiresAt:      time.Time{},
+	}
+	require.NoError(t, ti.sessionManager.StoreSessionIssuedAt(ctx, session, time.Now().Add(-time.Minute)))
 	require.NoError(t, ti.sessionManager.RaiseUserEpoch(ctx, userID, time.Now()))
-	predates, err := ti.sessionManager.SessionPredatesEpoch(ctx, userID, sessionID)
+	predates, err := ti.sessionManager.SessionPredatesEpoch(ctx, userID, session.SessionID)
 	require.NoError(t, err)
-	require.False(t, predates)
+	require.True(t, predates, "an existing epoch is enforced even with the flag off")
+
+	unknown := "epoch-session-" + uuid.NewString()
+	predates, err = ti.sessionManager.SessionPredatesEpoch(ctx, userID, unknown)
+	require.NoError(t, err)
+	require.True(t, predates, "an unknown issuance predates any epoch")
+
+	predates, err = ti.sessionManager.SessionPredatesEpoch(ctx, "no-epoch-"+uuid.NewString(), unknown)
+	require.NoError(t, err)
+	require.False(t, predates, "without an epoch nothing is rejected")
+}
+
+func TestSessionEpoch_ClearingASessionDropsItsIssuance(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	session := sessions.Session{
+		SessionID:             "epoch-session-" + uuid.NewString(),
+		UserID:                "epoch-user-" + uuid.NewString(),
+		ActiveOrganizationID:  "",
+		WorkOSSessionID:       "",
+		ImpersonatorEmail:     "",
+		SupportOrganizationID: "",
+		SupportExpiresAt:      time.Time{},
+	}
+	require.NoError(t, ti.sessionManager.StoreSession(ctx, session))
+	require.NoError(t, ti.sessionManager.ClearSession(ctx, session))
+	_, known, err := ti.sessionManager.IssuedAt(ctx, session.SessionID)
+	require.NoError(t, err)
+	require.False(t, known)
 }

@@ -19,6 +19,24 @@ import (
 
 var deprovisionActor = ssosignins.Actor{Principal: urn.NewSystemPrincipal("workos-deprovision"), DisplayName: nil}
 
+// revokeDeprovisionedSignIns revokes the deprovisioned user's sign-ins and
+// grants in the event's transaction when enforcement is on. Lock order: the
+// membership rows above, then the user's sign-in locks, as in RevokeUser.
+func revokeDeprovisionedSignIns(ctx context.Context, dbtx pgx.Tx, r signInRevocation, effects *postCommitEffects) error {
+	organizationIDs := []string{r.organizationID}
+	revoked, err := ssosignins.RevokeUser(ctx, dbtx, organizationIDs, r.userID, ssosignins.RevokeReasonDeprovisioned)
+	if err != nil {
+		return fmt.Errorf("revoke sso sign-ins for user %q: %w", r.userID, err)
+	}
+	if err := ssosignins.AuditRevocation(ctx, dbtx, audit.NewLogger(), deprovisionActor, r.userID, "", ssosignins.RevokeReasonDeprovisioned, organizationIDs, revoked); err != nil {
+		return fmt.Errorf("audit sso sign-in revocation for user %q: %w", r.userID, err)
+	}
+	effects.revokedSignIns = revoked.SignIns()
+	effects.revocationOrganizationID = r.organizationID
+	effects.revocationDeliveries = revoked.DeliveryIDs
+	return nil
+}
+
 // deprovisionOrganizationAccessParams identifies whose organization access to
 // revoke and the WorkOS event driving the change. Callers own the
 // ShouldProcessEvent guard; this routine only applies the teardown.
@@ -101,18 +119,7 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx pgx.Tx, p deprovisi
 	}
 
 	if p.gramUserID != "" {
-		organizationIDs := []string{p.organizationID}
-		revoked, err := ssosignins.RevokeUser(ctx, dbtx, organizationIDs, p.gramUserID, ssosignins.RevokeReasonDeprovisioned)
-		if err != nil {
-			return effects, fmt.Errorf("revoke sso sign-ins for user %q: %w", p.gramUserID, err)
-		}
-		if err := ssosignins.AuditRevocation(ctx, dbtx, audit.NewLogger(), deprovisionActor, p.gramUserID, "", ssosignins.RevokeReasonDeprovisioned, organizationIDs, revoked); err != nil {
-			return effects, fmt.Errorf("audit sso sign-in revocation for user %q: %w", p.gramUserID, err)
-		}
-		effects.revokedSignIns = revoked.SignIns()
-		effects.revocationOrganizationID = p.organizationID
-		effects.revocationDeliveries = revoked.DeliveryIDs
-		effects.revokedGrants = revoked.Sessions
+		effects.revokeSignIns = &signInRevocation{organizationID: p.organizationID, userID: p.gramUserID}
 	}
 
 	effects.invalidateUserInfoCacheUserID = p.gramUserID

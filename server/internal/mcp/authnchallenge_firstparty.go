@@ -75,6 +75,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		AuthorizerUserID:         "",
 		AuthorizerImpersonated:   nil,
 		SSOSignInID:              nil,
+		FreshLoginForced:         false,
 		AgentAuthorizationTarget: nil,
 		Endpoint:                 endpointRef,
 		ClientID:                 "",
@@ -121,6 +122,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		ScopesSupported: nil,
 		LoginHint:       "",
 		ScreenHint:      "",
+		Prompt:          "",
 	})
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)

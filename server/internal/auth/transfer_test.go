@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -30,12 +31,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -153,6 +152,9 @@ func newTransfer(t *testing.T, opts transferOptions) (context.Context, *transfer
 	t.Helper()
 
 	userInfo := defaultMockUserInfo()
+	// Sign-out-everywhere epochs are per user in shared Redis, so each
+	// fixture gets its own user.
+	userInfo.UserID = "test-user-" + uuid.NewString()[:8]
 	ctx, instance := newTestAuthService(t, userInfo)
 	require.NoError(t, instance.createTestUser(ctx, userInfo))
 	org := userInfo.Organizations[0]
@@ -587,13 +589,25 @@ func TestService_TransferIn_RefusesASessionFromBeforeSignOutEverywhere(t *testin
 	t.Parallel()
 
 	ctx, f := newTransfer(t, defaultTransferOptions())
-	flags := &feature.InMemory{}
-	ssosignins.EnableForTests(flags)
-	f.instance.sessionManager.SetFlags(flags)
 	code, _, b := f.begin(ctx, t)
 
 	require.NoError(t, f.instance.sessionManager.RaiseUserEpoch(ctx, f.source.UserID, time.Now()))
 	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b), errAccessChanged)
+}
+
+func TestService_Transfer_UnknownSourceIssuanceNeverOutlivesSignOutEverywhere(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	require.NoError(t, f.instance.nonceStore.Delete(ctx, "sessions:issued_at:"+f.source.SessionID))
+	code, _, b := f.begin(ctx, t)
+
+	result := f.in(ctx, t, testTargetBaseURL, code, b)
+	f.requireAccepted(ctx, t, result)
+	require.NoError(t, f.instance.sessionManager.RaiseUserEpoch(ctx, f.source.UserID, time.Now().Add(-time.Hour)))
+	predates, err := f.instance.sessionManager.SessionPredatesEpoch(ctx, f.source.UserID, *result.SessionCookie)
+	require.NoError(t, err)
+	require.True(t, predates, "a session transferred from an unknown issuance predates any epoch")
 }
 
 func TestService_Transfer_KeepsTheSourceIssuance(t *testing.T) {

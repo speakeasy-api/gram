@@ -2,7 +2,10 @@ package ssosignins
 
 import (
 	"slices"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -59,8 +62,11 @@ func classify(row repo.GetSignInEligibilityRow) (string, Reason) {
 		return TierGoogle, ReasonEligible
 	case MethodMicrosoftOAuth:
 		tenant := row.IdpTenantID.String
-		if tenant == "" || tenant == MicrosoftConsumerTenantID || !onVerifiedDomain(row.IdpHostedDomain.String, row.VerifiedDomains) {
+		if tenant == "" || strings.EqualFold(tenant, MicrosoftConsumerTenantID) || !onVerifiedDomain(row.IdpHostedDomain.String, row.VerifiedDomains) {
 			return "", ReasonUnmanagedAccount
+		}
+		if !tenantAllowed(tenant, row.AllowedMicrosoftTenantIds) {
+			return "", ReasonTenantNotAllowed
 		}
 		return TierMicrosoft, ReasonEligible
 	case MethodMagicAuth:
@@ -75,11 +81,25 @@ func classify(row repo.GetSignInEligibilityRow) (string, Reason) {
 	}
 }
 
+// tierAllowed ignores stored values that name no known tier.
 func tierAllowed(tier string, row repo.GetSignInEligibilityRow) bool {
 	if row.AllSignInMethodsAllowed {
 		return true
 	}
-	return slices.Contains(row.AllowedSignInMethods, tier)
+	return ValidTier(tier) && slices.Contains(row.AllowedSignInMethods, tier)
+}
+
+// tenantAllowed requires the organization to have pinned the Entra tenant;
+// stored values that are not tenant ids never match.
+func tenantAllowed(tenant string, allowed []string) bool {
+	id, err := uuid.Parse(tenant)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(allowed, func(a string) bool {
+		pinned, err := uuid.Parse(a)
+		return err == nil && pinned == id && !strings.EqualFold(a, MicrosoftConsumerTenantID)
+	})
 }
 
 func onVerifiedDomain(domain string, verified []string) bool {

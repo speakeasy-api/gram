@@ -160,6 +160,9 @@ type AuthnChallengeState struct {
 	AuthorizerImpersonated *bool `json:"authorizer_impersonated,omitempty"`
 	// SSOSignInID is the authorizing user's recorded SSO sign-in; nil leaves the grant unlinked.
 	SSOSignInID *uuid.UUID `json:"sso_sign_in_id,omitempty"`
+	// FreshLoginForced marks a flow already sent back to the identity
+	// provider because its sign-in was revoked, so it never loops.
+	FreshLoginForced bool `json:"fresh_login_forced,omitempty"`
 	// AgentAuthorizationTarget fixes the only policy an agent selection may
 	// authorize. Older in-flight states omit it and remain self-only.
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`

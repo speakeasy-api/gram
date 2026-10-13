@@ -3,16 +3,9 @@ package ssosignins
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"slices"
-	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -32,9 +25,9 @@ type Actor struct {
 	DisplayName *string
 }
 
-// AuditRevocation writes one summary entry per organization that lost
-// sign-ins or grants, inside the caller's transaction. Per-grant entries are
-// written after commit by AuditRevokedGrants.
+// AuditRevocation writes, inside the caller's transaction, one summary entry
+// per organization that lost sign-ins or grants and one entry per
+// soft-deleted grant, so the audit log commits with the revocation.
 func AuditRevocation(ctx context.Context, dbtx auditrepo.DBTX, logger *audit.Logger, actor Actor, userID, userEmail string, reason RevokeReason, organizationIDs []string, revoked Revoked) error {
 	for _, organizationID := range organizationIDs {
 		signIns := revoked.SignInsByOrganization[organizationID]
@@ -55,33 +48,8 @@ func AuditRevocation(ctx context.Context, dbtx auditrepo.DBTX, logger *audit.Log
 			return fmt.Errorf("log sign-in revocation: %w", err)
 		}
 	}
-	return nil
-}
-
-// auditBatchSize bounds the per-grant audit entries written per transaction.
-const auditBatchSize = 100
-
-// AuditRevokedGrants writes one entry per soft-deleted grant after the
-// revocation committed, in bounded transactions so no lock is held across
-// them. Failures are logged; the summary entry already records the counts.
-func AuditRevokedGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, actor Actor, sessions []RevokedSession) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), postCommitTimeout)
-	defer cancel()
-	for batch := range slices.Chunk(sessions, auditBatchSize) {
-		if err := auditGrantBatch(ctx, db, auditLogger, actor, batch); err != nil {
-			logger.ErrorContext(ctx, "audit revoked grants", attr.SlogValueInt(len(batch)), attr.SlogError(err))
-		}
-	}
-}
-
-func auditGrantBatch(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Logger, actor Actor, batch []RevokedSession) error {
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	for _, session := range batch {
-		if err := auditLogger.LogUserSessionRevoke(ctx, tx, audit.LogUserSessionRevokeEvent{
+	for _, session := range revoked.Sessions {
+		if err := logger.LogUserSessionRevoke(ctx, dbtx, audit.LogUserSessionRevokeEvent{
 			OrganizationID:   session.OrganizationID,
 			ProjectID:        session.ProjectID,
 			Actor:            actor.Principal,
@@ -94,12 +62,5 @@ func auditGrantBatch(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.L
 			return fmt.Errorf("log user session revocation: %w", err)
 		}
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit: %w", err)
-	}
 	return nil
 }
-
-// postCommitTimeout bounds post-commit work, detached from the caller's
-// cancellation so a dropped request cannot strand it.
-const postCommitTimeout = 15 * time.Second

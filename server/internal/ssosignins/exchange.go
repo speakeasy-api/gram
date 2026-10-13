@@ -47,7 +47,7 @@ type ExchangeParams struct {
 // only when the WorkOS-selected organization resolves locally (and matches
 // ExpectedOrganizationID when set); anything else leaves the grant unlinked.
 // It is best effort: failures are logged and counted, never returned.
-func RecordExchange(ctx context.Context, logger *slog.Logger, db repo.DBTX, p ExchangeParams) Recorded {
+func RecordExchange(ctx context.Context, logger *slog.Logger, db Beginner, p ExchangeParams) Recorded {
 	none := Recorded{ID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Revoked: false}
 	logger = logger.With(
 		attr.SlogAuthSignInFlow(p.Flow),

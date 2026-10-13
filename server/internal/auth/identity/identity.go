@@ -59,6 +59,10 @@ type AuthorizationURLParams struct {
 	// ScreenHint selects which AuthKit screen to land on. Only "sign-up" is
 	// used, and only while provider is "authkit". Omitted when empty.
 	ScreenHint string
+
+	// Prompt "login" forces the user to authenticate again rather than
+	// reuse an existing session. Omitted when empty.
+	Prompt string
 }
 
 // AuthenticateResult holds the fields Speakeasy uses from the IDP code exchange.
@@ -819,6 +823,9 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	}
 	if params.ScreenHint != "" {
 		q.Set("screen_hint", params.ScreenHint)
+	}
+	if params.Prompt != "" {
+		q.Set("prompt", params.Prompt)
 	}
 
 	authorizeBase := workosAuthorizeEndpoint

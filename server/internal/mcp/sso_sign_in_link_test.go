@@ -47,8 +47,8 @@ func TestHandleIDPCallback_RecordsSSOSignInOnChallenge(t *testing.T) {
 		hasAccessOK:  true,
 	}
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
-	ssosignins.EnableForTests(ti.features)
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	ssosignins.EnableForTests(ti.features, toolset.OrganizationID)
 	mock.exchangeResult.OrganizationID = workOSOrganizationID(t, ctx, ti, toolset.OrganizationID)
 
 	rotated := runSSOLinkIDPCallback(t, ctx, ti, toolset)
@@ -108,6 +108,7 @@ func TestHandleToken_LinksSessionToSSOSignInAndRefreshCarriesIt(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	ssosignins.EnableForTests(ti.features, toolset.OrganizationID)
 	userID := "linked-user-" + uuid.NewString()
 	signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{
 		OrganizationID:       toolset.OrganizationID,
@@ -427,6 +428,7 @@ func TestHandleToken_RefusesCodeFromSignInRevokedAfterConsent(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	ssosignins.EnableForTests(ti.features, toolset.OrganizationID)
 	userID := "revoked-user-" + uuid.NewString()
 	signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: toolset.OrganizationID, UserID: userID, WorkOSSessionID: "session_" + uuid.NewString(), AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
 	require.NoError(t, err)
@@ -445,6 +447,7 @@ func TestHandleToken_RefusesCodeAfterSignOutThenBroadRevocation(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	ssosignins.EnableForTests(ti.features, toolset.OrganizationID)
 	userID := "upgrade-user-" + uuid.NewString()
 	workosSessionID := "session_" + uuid.NewString()
 	signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: toolset.OrganizationID, UserID: userID, WorkOSSessionID: workosSessionID, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
@@ -466,6 +469,7 @@ func TestHandleToken_RefreshRefusesARevokedSignIn(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	ssosignins.EnableForTests(ti.features, toolset.OrganizationID)
 	userID := "refresh-user-" + uuid.NewString()
 	signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: toolset.OrganizationID, UserID: userID, WorkOSSessionID: "session_" + uuid.NewString(), AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
 	require.NoError(t, err)
@@ -491,6 +495,7 @@ func TestHandleToken_RefreshAfterSingleSignOutKeepsWorking(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	ssosignins.EnableForTests(ti.features, toolset.OrganizationID)
 	userID := "signout-user-" + uuid.NewString()
 	workosSessionID := "session_" + uuid.NewString()
 	signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: toolset.OrganizationID, UserID: userID, WorkOSSessionID: workosSessionID, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
@@ -510,4 +515,82 @@ func TestHandleToken_RefreshAfterSingleSignOutKeepsWorking(t *testing.T) {
 	result, err := ssosignins.CheckSignInIdentity(ctx, ti.conn, toolset.OrganizationID, session.ID, time.Now(), 0)
 	require.NoError(t, err)
 	require.Equal(t, ssosignins.ReasonSignInRevoked, result.Reason, "the grant works but is never vouched for")
+}
+
+func TestHandleToken_EnforcementOffLeavesGrantsUnlinkedAndRefreshable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	userID := "flag-off-user-" + uuid.NewString()
+	signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: toolset.OrganizationID, UserID: userID, WorkOSSessionID: "session_" + uuid.NewString(), AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
+	require.NoError(t, err)
+
+	tokens := exchangeLinkedCode(t, ctx, ti, toolset, client, userID, &signIn.ID.UUID)
+	session := sessionForAccessToken(t, ctx, ti, toolset, tokens.AccessToken)
+	require.False(t, session.SsoSignInID.Valid, "the kill switch links nothing at mint")
+
+	_, err = ssosigninsrepo.New(ti.conn).RevokeUserSSOSignIns(ctx, ssosigninsrepo.RevokeUserSSOSignInsParams{
+		RevokeReason:    conv.ToPGText(string(ssosignins.RevokeReasonAdmin)),
+		OrganizationIds: []string{toolset.OrganizationID},
+		UserID:          userID,
+	})
+	require.NoError(t, err)
+	refreshed := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, tokens.RefreshToken)
+	require.NoError(t, refreshed.err)
+	require.Equal(t, http.StatusOK, refreshed.code, "and refuses nothing at refresh: %s", refreshed.body)
+}
+
+func TestHandleIDPCallback_RevokedSignInForcesAFreshLogin(t *testing.T) {
+	t.Parallel()
+
+	gramUserID := "user-" + uuid.New().String()[:8]
+	workosSessionID := "session_" + uuid.NewString()
+	mock := &mockIdentityResolver{
+		exchangeResult: &identity.IDPUserInfo{
+			Sub:                  "workos-user-revoked",
+			Email:                "test@example.com",
+			Name:                 "Test User",
+			WorkOSSessionID:      workosSessionID,
+			AuthenticationMethod: ssosignins.MethodSSO,
+		},
+		upsertResult:       gramUserID,
+		hasAccessOK:        true,
+		buildAuthURLResult: &url.URL{Scheme: "https", Host: "idp.example.com", Path: "/authorize"},
+	}
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	ssosignins.EnableForTests(ti.features, toolset.OrganizationID)
+	mock.exchangeResult.OrganizationID = workOSOrganizationID(t, ctx, ti, toolset.OrganizationID)
+	_, err := ssosignins.RevokeSession(ctx, ti.conn, []string{toolset.OrganizationID}, gramUserID, workosSessionID)
+	require.NoError(t, err)
+
+	challengeID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  challengeID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint:            mcp.EndpointRef{McpSlug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID},
+		ClientID:            "test-client",
+		RedirectURI:         "http://localhost:3000/callback",
+		State:               "client-state",
+		CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
+		CreatedAt:           time.Now(),
+	}))
+	q := url.Values{"state": {challengeID}, "code": {"idp-auth-code-" + uuid.NewString()}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/idp_callback?"+q.Encode(), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleIDPCallback(w, req))
+
+	require.Equal(t, http.StatusFound, w.Code)
+	require.Equal(t, "https://idp.example.com/authorize", w.Header().Get("Location"), "back to the identity provider, not to consent")
+	require.Equal(t, "login", mock.buildAuthURLParams.Prompt)
+	retried, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+mock.buildAuthURLParams.State)
+	require.NoError(t, err)
+	require.True(t, retried.FreshLoginForced, "a second revoked exchange is not sent back again")
+	require.Nil(t, retried.Subject)
 }

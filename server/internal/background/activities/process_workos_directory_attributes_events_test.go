@@ -2,6 +2,7 @@ package activities_test
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -447,8 +449,19 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAc
 func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationRevokesSSOSignIns(t *testing.T) {
 	t.Parallel()
 
+	for _, enforced := range []bool{true, false} {
+		t.Run(fmt.Sprintf("enforced=%t", enforced), func(t *testing.T) {
+			t.Parallel()
+			deactivateDirectoryUserWithSignIn(t, enforced)
+		})
+	}
+}
+
+func deactivateDirectoryUserWithSignIn(t *testing.T, enforced bool) {
+	t.Helper()
+
 	ctx := context.Background()
-	conn := newOrgEventsTestConn(t, "workos_directory_user_deactivate_sign_ins")
+	conn := newOrgEventsTestConn(t, fmt.Sprintf("workos_directory_user_deactivate_sign_ins_%t", enforced))
 	logger := testenv.NewLogger(t)
 
 	const (
@@ -483,10 +496,23 @@ func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationRevokesSSOSign
 	}})
 	signals := &recordingIdentityMapSignaler{mu: sync.Mutex{}, count: 0}
 	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, newCaptureCache(), signals)
+	flags := &feature.InMemory{}
+	if enforced {
+		ssosignins.EnableForTests(flags, organizationID)
+	}
+	activity.SetSSOSignInEnforcement(flags, testenv.NewMeterProvider(t), nil)
 
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
+	activity.WaitForDeliveries()
 
+	if !enforced {
+		live, err := ssosignins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
+		require.NoError(t, err)
+		require.True(t, live.Valid, "deprovisioning leaves sign-ins alone while enforcement is off")
+		require.Empty(t, workosClient.RevokedSessions())
+		return
+	}
 	live, err := ssosignins.LiveSignInForSession(ctx, conn, organizationID, userID, workosSessionID)
 	require.NoError(t, err)
 	require.False(t, live.Valid, "deprovisioning revokes the user's sign-ins")

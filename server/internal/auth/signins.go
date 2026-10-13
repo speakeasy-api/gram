@@ -7,9 +7,11 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"go.opentelemetry.io/otel/metric"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -27,20 +29,22 @@ const epochTimeout = 5 * time.Second
 
 // SetTokenRevoker wires the access-token revocation cache used when signing
 // out, and the deliverer that pushes revocations durably.
-func (s *Service) SetTokenRevoker(tokens ssosignins.TokenRevoker) {
+func (s *Service) SetTokenRevoker(tokens ssosignins.TokenRevoker, meterProvider metric.MeterProvider) {
 	s.tokens = tokens
-	s.deliverer = ssosignins.NewDeliverer(s.logger, s.db, tokens, s.sessions)
+	s.deliverer = ssosignins.NewDeliverer(s.logger, meterProvider, s.db, tokens, s.sessions, s.sessions)
 }
 
 // LogoutEverywhere ends every dashboard and identity provider session the
 // caller holds, revokes their SSO sign-ins in every organization they ever
-// signed in to, and revokes every MCP grant made from them.
+// signed in to, and revokes every MCP grant made from them. The revocation,
+// including the dashboard epoch, commits durably first; the epoch is then
+// raised right away and retried from the delivery table if that fails.
 func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywherePayload) (*gen.LogoutEverywhereResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil || authCtx.UserID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if !s.sessions.SSOSignInEnforced(ctx) {
+	if !s.sessions.SSOSignInEnforced(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
 		return nil, oops.E(oops.CodeForbidden, nil, "sign out everywhere is not available")
 	}
 	logger := s.logger.With(attr.SlogUserID(authCtx.UserID))
@@ -48,8 +52,6 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations for sign-out").LogError(ctx, logger)
 	}
-	// Listed before the epoch moves, so a failure leaves the caller signed in
-	// to retry.
 	idpSessions, err := s.sessions.ListUserIDPSessionIDs(ctx, authCtx.UserID)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "list identity provider sessions").LogError(ctx, logger)
@@ -57,12 +59,17 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 	if current, err := s.sessions.GetSession(ctx, *authCtx.SessionID); err == nil && current.WorkOSSessionID != "" && !slices.Contains(idpSessions, current.WorkOSSessionID) {
 		idpSessions = append(idpSessions, current.WorkOSSessionID)
 	}
-
-	epochCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), epochTimeout)
-	err = s.sessions.RaiseUserEpoch(epochCtx, authCtx.UserID, time.Now())
-	cancel()
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "end dashboard sessions").LogError(ctx, logger)
+	deliveryOrg := authCtx.ActiveOrganizationID
+	if deliveryOrg == "" && len(organizationIDs) > 0 {
+		deliveryOrg = organizationIDs[0]
+	}
+	epochAt := time.Now()
+	if deliveryOrg == "" {
+		// Nothing to anchor a durable delivery to: raise the epoch first so
+		// a failure leaves the caller signed in to retry.
+		if err := s.raiseEpoch(ctx, authCtx.UserID, epochAt); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "end dashboard sessions").LogError(ctx, logger)
+		}
 	}
 
 	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{}) //nolint:exhaustruct // default transaction options
@@ -75,15 +82,18 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke sso sign-ins").LogError(ctx, logger)
 	}
-	deliveryOrg := authCtx.ActiveOrganizationID
-	if deliveryOrg == "" && len(organizationIDs) > 0 {
-		deliveryOrg = organizationIDs[0]
+	deliveryIDs := revoked.DeliveryIDs
+	if deliveryOrg != "" {
+		listed, err := ssosignins.EnqueueWorkOSSessionRevocations(ctx, dbtx, deliveryOrg, idpSessions)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enqueue identity provider sign-out").LogError(ctx, logger)
+		}
+		epoch, err := ssosignins.EnqueueUserEpoch(ctx, dbtx, deliveryOrg, authCtx.UserID, epochAt)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enqueue dashboard sign-out").LogError(ctx, logger)
+		}
+		deliveryIDs = slices.Concat(deliveryIDs, listed, []uuid.UUID{epoch})
 	}
-	listed, err := ssosignins.EnqueueWorkOSSessionRevocations(ctx, dbtx, deliveryOrg, idpSessions)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "enqueue identity provider sign-out").LogError(ctx, logger)
-	}
-	deliveryIDs := slices.Concat(revoked.DeliveryIDs, listed)
 	actor := ssosignins.Actor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), DisplayName: authCtx.Email}
 	if err := ssosignins.AuditRevocation(ctx, dbtx, s.auditLogger, actor, authCtx.UserID, conv.PtrValOr(authCtx.Email, ""), ssosignins.RevokeReasonSignOutEverywhere, organizationIDs, revoked); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sign-in revocation").LogError(ctx, logger)
@@ -93,12 +103,16 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 	}
 	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonSignOutEverywhere, revoked.SignIns())
 
-	deliveryOrgs := organizationIDs
-	if deliveryOrg != "" && !slices.Contains(deliveryOrgs, deliveryOrg) {
-		deliveryOrgs = append(slices.Clone(deliveryOrgs), deliveryOrg)
-	}
-	s.deliverer.DeliverNow(ctx, deliveryOrgs, deliveryIDs)
-	if deliveryOrg == "" {
+	if deliveryOrg != "" {
+		if err := s.raiseEpoch(ctx, authCtx.UserID, epochAt); err != nil {
+			logger.WarnContext(ctx, "raise session epoch after sign-out everywhere; left for retry", attr.SlogError(err))
+		}
+		deliveryOrgs := organizationIDs
+		if !slices.Contains(deliveryOrgs, deliveryOrg) {
+			deliveryOrgs = append(slices.Clone(deliveryOrgs), deliveryOrg)
+		}
+		s.deliverer.DeliverNow(ctx, deliveryOrgs, deliveryIDs)
+	} else {
 		// No organization to anchor a durable delivery; end them directly.
 		for _, id := range idpSessions {
 			if err := s.sessions.RevokeSession(ctx, id); err != nil {
@@ -106,7 +120,6 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 			}
 		}
 	}
-	ssosignins.AuditRevokedGrants(ctx, logger, s.db, s.auditLogger, actor, revoked.Sessions)
 	if err := s.sessions.InvalidateUserInfoCache(ctx, authCtx.UserID); err != nil {
 		logger.WarnContext(ctx, "invalidate user info after sign-out everywhere", attr.SlogError(err))
 	}
@@ -117,6 +130,17 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 		RevokedSignIns:  revoked.SignIns(),
 		RevokedSessions: len(revoked.Sessions),
 	}, nil
+}
+
+// raiseEpoch raises the user's dashboard epoch detached from the caller's
+// cancellation, bounded by epochTimeout.
+func (s *Service) raiseEpoch(ctx context.Context, userID string, at time.Time) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), epochTimeout)
+	defer cancel()
+	if err := s.sessions.RaiseUserEpoch(ctx, userID, at); err != nil {
+		return fmt.Errorf("raise user epoch: %w", err)
+	}
+	return nil
 }
 
 // userSignInOrganizations is every organization the user belongs to or has a
@@ -162,6 +186,11 @@ func (s *Service) revokeSignedOutSSOSignIn(ctx context.Context, sessionID string
 	organizationIDs, err := s.userSignInOrganizations(ctx, authCtx.UserID)
 	if err != nil {
 		return none, fmt.Errorf("list organizations: %w", err)
+	}
+	// The first organization holds the signed-out marker when nothing was
+	// recorded yet.
+	if i := slices.Index(organizationIDs, authCtx.ActiveOrganizationID); i > 0 {
+		organizationIDs[0], organizationIDs[i] = organizationIDs[i], organizationIDs[0]
 	}
 	for attempt := 1; ; attempt++ {
 		out, err := s.revokeSignedOutOnce(ctx, organizationIDs, session.WorkOSSessionID, authCtx)

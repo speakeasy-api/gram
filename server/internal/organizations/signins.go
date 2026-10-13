@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/metric"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -17,8 +18,8 @@ import (
 
 // SetTokenRevoker wires the access-token revocation cache used when revoking
 // a member's sign-ins.
-func (s *Service) SetTokenRevoker(tokens ssosignins.TokenRevoker) {
-	s.deliverer = ssosignins.NewDeliverer(s.logger, s.db, tokens, s.sessions)
+func (s *Service) SetTokenRevoker(tokens ssosignins.TokenRevoker, meterProvider metric.MeterProvider) {
+	s.deliverer = ssosignins.NewDeliverer(s.logger, meterProvider, s.db, tokens, s.sessions, s.sessions)
 }
 
 // RevokeMemberSignIns revokes a member's SSO sign-ins in the active
@@ -35,7 +36,7 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	if !s.sessions.SSOSignInEnforced(ctx) {
+	if !s.sessions.SSOSignInEnforced(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug) {
 		return nil, oops.E(oops.CodeForbidden, nil, "sign-in revocation is not available")
 	}
 	if payload.UserID == "" {
@@ -68,7 +69,6 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	}
 	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonAdmin, revoked.SignIns())
 	s.deliverer.DeliverNow(ctx, organizationIDs, revoked.DeliveryIDs)
-	ssosignins.AuditRevokedGrants(ctx, logger, s.db, s.audit, actor, revoked.Sessions)
 
 	logger.InfoContext(ctx, "revoked member sso sign-ins", attr.SlogValueInt(revoked.SignIns()))
 	return &types.RevokeSignInsResult{RevokedSignIns: revoked.SignIns(), RevokedSessions: len(revoked.Sessions)}, nil

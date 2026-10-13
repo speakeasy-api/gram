@@ -1,6 +1,7 @@
 package ssosignins
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -12,28 +13,33 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const workTenant = "00000000-0000-4000-8000-0000000000aa"
+
 func eligibleRow(now time.Time) repo.GetSignInEligibilityRow {
 	signIn := uuid.New()
 	return repo.GetSignInEligibilityRow{
-		UserSessionID:           uuid.New(),
-		SubjectUrn:              urn.NewUserSubject("user-1").String(),
-		SsoSignInID:             uuid.NullUUID{UUID: signIn, Valid: true},
-		SessionLive:             true,
-		SignInID:                uuid.NullUUID{UUID: signIn, Valid: true},
-		SignInUserID:            pgtype.Text{String: "user-1", Valid: true},
-		AuthenticationMethod:    pgtype.Text{String: MethodSSO, Valid: true},
-		MfaVerified:             pgtype.Bool{Bool: false, Valid: true},
-		IdpHostedDomain:         pgtype.Text{String: "", Valid: false},
-		IdpTenantID:             pgtype.Text{String: "", Valid: false},
-		AuthenticatedAt:         pgtype.Timestamptz{Time: now.Add(-time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
-		RevokedAt:               pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		UserEmail:               pgtype.Text{String: "Jane@Example.com", Valid: true},
-		VerifiedDomains:         []string{"example.com"},
-		OrganizationDisabledAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
-		IsMember:                true,
-		IsDeprovisioned:         false,
-		AllSignInMethodsAllowed: true,
-		AllowedSignInMethods:    []string{},
+		UserSessionID:             uuid.New(),
+		SubjectUrn:                urn.NewUserSubject("user-1").String(),
+		SsoSignInID:               uuid.NullUUID{UUID: signIn, Valid: true},
+		SessionLive:               true,
+		SignInID:                  uuid.NullUUID{UUID: signIn, Valid: true},
+		SignInUserID:              pgtype.Text{String: "user-1", Valid: true},
+		AuthenticationMethod:      pgtype.Text{String: MethodSSO, Valid: true},
+		MfaVerified:               pgtype.Bool{Bool: false, Valid: true},
+		IdpHostedDomain:           pgtype.Text{String: "", Valid: false},
+		IdpTenantID:               pgtype.Text{String: "", Valid: false},
+		VerifiedEmail:             pgtype.Text{String: "jane@example.com", Valid: true},
+		IdpAuthenticatedAt:        pgtype.Timestamptz{Time: now.Add(-time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		RevokedAt:                 pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		Fenced:                    false,
+		UserEmail:                 pgtype.Text{String: "Jane@Example.com", Valid: true},
+		VerifiedDomains:           []string{"example.com"},
+		OrganizationDisabledAt:    pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		IsMember:                  true,
+		IsDeprovisioned:           false,
+		AllSignInMethodsAllowed:   true,
+		AllowedSignInMethods:      []string{},
+		AllowedMicrosoftTenantIds: []string{workTenant},
 	}
 }
 
@@ -64,24 +70,40 @@ func TestJudge(t *testing.T) {
 		{name: "agent subject", mutate: func(r *repo.GetSignInEligibilityRow) { r.SubjectUrn = urn.NewAgentSubject(uuid.New()).String() }, want: ReasonNotUserSubject},
 		{name: "another user", mutate: func(r *repo.GetSignInEligibilityRow) { r.SubjectUrn = urn.NewUserSubject("user-2").String() }, want: ReasonNotUserSubject},
 		{name: "revoked", mutate: func(r *repo.GetSignInEligibilityRow) { r.RevokedAt.Valid = true }, want: ReasonSignInRevoked},
+		{name: "fenced by a later revocation cutoff", mutate: func(r *repo.GetSignInEligibilityRow) { r.Fenced = true }, want: ReasonSignInRevoked},
+		{name: "unknown authentication time", mutate: func(r *repo.GetSignInEligibilityRow) { r.IdpAuthenticatedAt.Valid = false }, want: ReasonAuthTimeUnknown},
+		{name: "email not verified at sign-in", mutate: func(r *repo.GetSignInEligibilityRow) { r.VerifiedEmail.Valid = false }, want: ReasonEmailNotVerified},
+		{name: "profile email changed since sign-in", mutate: func(r *repo.GetSignInEligibilityRow) { r.UserEmail.String = "jane.doe@example.com" }, want: ReasonEmailChanged},
 		{name: "impersonation", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = "Impersonation" }, want: ReasonMethodNotEligible},
 		{name: "github", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = "GitHubOAuth" }, want: ReasonMethodNotEligible},
-		{name: "sso too old", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticatedAt.Time = now.Add(-MaxAge - time.Minute) }, want: ReasonExpired},
+		{name: "sso too old", mutate: func(r *repo.GetSignInEligibilityRow) { r.IdpAuthenticatedAt.Time = now.Add(-MaxAge - time.Minute) }, want: ReasonExpired},
 		{name: "google workspace account", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "Example.com") }, want: ReasonEligible},
 		{name: "personal google account on the company email", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "") }, want: ReasonUnmanagedAccount},
 		{name: "google workspace of another domain", mutate: func(r *repo.GetSignInEligibilityRow) { google(r, "other.test") }, want: ReasonUnmanagedAccount},
 		{name: "google older than a day", mutate: func(r *repo.GetSignInEligibilityRow) {
 			google(r, "example.com")
-			r.AuthenticatedAt.Time = now.Add(-25 * time.Hour)
+			r.IdpAuthenticatedAt.Time = now.Add(-25 * time.Hour)
 		}, want: ReasonExpired},
-		{name: "microsoft work account", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, "tenant-1", "example.com") }, want: ReasonEligible},
+		{name: "microsoft work account", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, workTenant, "example.com") }, want: ReasonEligible},
+		{name: "microsoft tenant in another case", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, strings.ToUpper(workTenant), "example.com") }, want: ReasonEligible},
+		{name: "microsoft tenant the organization did not pin", mutate: func(r *repo.GetSignInEligibilityRow) {
+			microsoft(r, "00000000-0000-4000-8000-0000000000bb", "example.com")
+		}, want: ReasonTenantNotAllowed},
+		{name: "microsoft with no pinned tenants", mutate: func(r *repo.GetSignInEligibilityRow) {
+			microsoft(r, workTenant, "example.com")
+			r.AllowedMicrosoftTenantIds = nil
+		}, want: ReasonTenantNotAllowed},
+		{name: "microsoft pin that is not a tenant id", mutate: func(r *repo.GetSignInEligibilityRow) {
+			microsoft(r, "tenant-1", "example.com")
+			r.AllowedMicrosoftTenantIds = []string{"tenant-1"}
+		}, want: ReasonTenantNotAllowed},
 		{name: "personal microsoft account", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, MicrosoftConsumerTenantID, "example.com") }, want: ReasonUnmanagedAccount},
 		{name: "microsoft without a tenant", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, "", "example.com") }, want: ReasonUnmanagedAccount},
-		{name: "microsoft account of another domain", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, "tenant-1", "other.test") }, want: ReasonUnmanagedAccount},
+		{name: "microsoft account of another domain", mutate: func(r *repo.GetSignInEligibilityRow) { microsoft(r, workTenant, "other.test") }, want: ReasonUnmanagedAccount},
 		{name: "magic link", mutate: func(r *repo.GetSignInEligibilityRow) { r.AuthenticationMethod.String = MethodMagicAuth }, want: ReasonEligible},
 		{name: "magic link older than four hours", mutate: func(r *repo.GetSignInEligibilityRow) {
 			r.AuthenticationMethod.String = MethodMagicAuth
-			r.AuthenticatedAt.Time = now.Add(-5 * time.Hour)
+			r.IdpAuthenticatedAt.Time = now.Add(-5 * time.Hour)
 		}, want: ReasonExpired},
 		{name: "password with mfa", mutate: func(r *repo.GetSignInEligibilityRow) {
 			r.AuthenticationMethod.String = MethodPassword
@@ -97,6 +119,10 @@ func TestJudge(t *testing.T) {
 			r.AllSignInMethodsAllowed = false
 			r.AllowedSignInMethods = []string{TierSSO}
 		}, want: ReasonMethodNotAllowed},
+		{name: "stored tier that names no tier", mutate: func(r *repo.GetSignInEligibilityRow) {
+			r.AllSignInMethodsAllowed = false
+			r.AllowedSignInMethods = []string{"SSO"}
+		}, want: ReasonMethodNotAllowed},
 		{name: "every tier turned off", mutate: func(r *repo.GetSignInEligibilityRow) {
 			r.AllSignInMethodsAllowed = false
 			r.AllowedSignInMethods = []string{}
@@ -110,7 +136,10 @@ func TestJudge(t *testing.T) {
 		{name: "deleted user", mutate: func(r *repo.GetSignInEligibilityRow) { r.UserEmail.Valid = false }, want: ReasonNotMember},
 		{name: "deprovisioned", mutate: func(r *repo.GetSignInEligibilityRow) { r.IsDeprovisioned = true }, want: ReasonDeprovisioned},
 		{name: "unverified domain", mutate: func(r *repo.GetSignInEligibilityRow) { r.VerifiedDomains = []string{"other.test"} }, want: ReasonEmailDomain},
-		{name: "subdomain of a verified domain", mutate: func(r *repo.GetSignInEligibilityRow) { r.UserEmail.String = "jane@eu.example.com" }, want: ReasonEmailDomain},
+		{name: "subdomain of a verified domain", mutate: func(r *repo.GetSignInEligibilityRow) {
+			r.UserEmail.String = "jane@eu.example.com"
+			r.VerifiedEmail.String = "jane@eu.example.com"
+		}, want: ReasonEmailDomain},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -135,13 +164,13 @@ func TestJudge_MaxAgeCapsTheTier(t *testing.T) {
 
 	now := time.Now()
 	row := eligibleRow(now)
-	row.AuthenticatedAt.Time = now.Add(-2 * time.Hour)
+	row.IdpAuthenticatedAt.Time = now.Add(-2 * time.Hour)
 	require.True(t, judge(row, now, MaxAge).Eligible(), "MaxAge leaves the SSO tier's bound")
 	require.True(t, judge(row, now, 0).Eligible(), "zero uses the tier's bound")
 	require.Equal(t, ReasonExpired, judge(row, now, time.Hour).Reason, "a shorter cap wins")
 
 	row.AuthenticationMethod.String = MethodMagicAuth
-	row.AuthenticatedAt.Time = now.Add(-5 * time.Hour)
+	row.IdpAuthenticatedAt.Time = now.Add(-5 * time.Hour)
 	require.Equal(t, ReasonExpired, judge(row, now, MaxAge).Reason, "a longer cap never extends the tier")
 }
 

@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -1543,9 +1544,9 @@ func TestE2E_LoginRecordsSSOSignInAndLogoutRevokesIt(t *testing.T) {
 	require.Equal(t, int64(1), audited, "the sign-out revocation is audited")
 }
 
-func enableSSOSignInEnforcement(inst *e2eInstance) {
+func enableSSOSignInEnforcement(inst *e2eInstance, organizationID string) {
 	flags := &feature.InMemory{}
-	ssosignins.EnableForTests(flags)
+	ssosignins.EnableForTests(flags, organizationID)
 	inst.sessionManager.SetFlags(flags)
 }
 
@@ -1579,7 +1580,6 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 		IDPSessions:          idpSessions,
 	}
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
-	enableSSOSignInEnforcement(inst)
 
 	first, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
@@ -1589,11 +1589,16 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 	require.NoError(t, err)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	enableSSOSignInEnforcement(inst, authCtx.ActiveOrganizationID)
 
 	result, err := inst.service.LogoutEverywhere(ctx, &gen.LogoutEverywherePayload{SessionToken: nil})
 	require.NoError(t, err)
 	require.Empty(t, result.SessionCookie)
 	require.Equal(t, 1, result.RevokedSignIns)
+	inst.service.WaitForDeliveries()
+	pending, err := testrepo.New(inst.conn).CountPendingSSOSignInRevocationDeliveries(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Zero(t, pending, "the epoch and every WorkOS session were delivered durably")
 
 	for _, token := range []string{first.SessionToken, second.SessionToken} {
 		_, err := inst.sessionManager.Authenticate(t.Context(), token)

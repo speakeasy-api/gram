@@ -1,33 +1,46 @@
+-- name: LockSignInsForUser :exec
+-- Serializes recording a sign-in with revoking the user's sign-ins in the
+-- organization, including when no sign-in row exists yet. Every writer takes
+-- these locks first, in organization order.
+SELECT pg_advisory_xact_lock(hashtextextended('sso_sign_in:' || @organization_id::text || ':' || @user_id::text, 0));
+
 -- name: UpsertSSOSignIn :one
--- Never reassigns a row to another user, clears a revocation or moves
--- authenticated_at. A new row for a WorkOS session already seen in another of
--- the user's organizations keeps that session's earliest sign-in time, so
--- recording it in a second organization cannot restart the age window. A
--- sign-in authenticated at or before a revocation cutoff is recorded revoked.
-WITH auth AS (
-    SELECT LEAST(
-        @authenticated_at::timestamptz,
-        COALESCE(
-            (
-                SELECT min(prior.authenticated_at)
-                FROM sso_sign_ins AS prior
-                WHERE prior.organization_id = ANY(ARRAY(
-                        SELECT r.organization_id
-                        FROM organization_user_relationships AS r
-                        WHERE r.user_id = @user_id
-                        UNION
-                        SELECT own.organization_id
-                        FROM sso_sign_ins AS own
-                        WHERE own.user_id = @user_id
-                        UNION
-                        SELECT @organization_id::text
-                    ))
-                  AND prior.user_id = @user_id
-                  AND prior.workos_session_id = @workos_session_id
-            ),
-            @authenticated_at::timestamptz
-        )
-    ) AS at
+-- Never reassigns a row to another user, clears a revocation or moves the
+-- recorded times later. A WorkOS session already seen in another of the
+-- user's organizations keeps its earliest times, so recording it elsewhere
+-- cannot restart the age window, and inherits any revocation of that
+-- session, so a signed-out session can't come back through a new
+-- organization. A sign-in that started at or before a revocation cutoff is
+-- recorded revoked. Evidence missing from an earlier exchange of the same
+-- method is filled in.
+WITH prior AS (
+    SELECT p.authenticated_at, p.idp_authenticated_at, p.revoked_at, p.revoke_reason
+    FROM sso_sign_ins AS p
+    WHERE p.organization_id = ANY(ARRAY(
+            SELECT r.organization_id
+            FROM organization_user_relationships AS r
+            WHERE r.user_id = @user_id
+            UNION
+            SELECT own.organization_id
+            FROM sso_sign_ins AS own
+            WHERE own.user_id = @user_id
+            UNION
+            SELECT @organization_id::text
+        ))
+      AND p.user_id = @user_id
+      AND p.workos_session_id = @workos_session_id
+),
+auth AS (
+    SELECT
+        LEAST(@authenticated_at::timestamptz, (SELECT min(prior.authenticated_at) FROM prior)) AS at,
+        LEAST(sqlc.narg('idp_authenticated_at')::timestamptz, (SELECT min(prior.idp_authenticated_at) FROM prior)) AS idp_at
+),
+inherited AS (
+    SELECT prior.revoke_reason
+    FROM prior
+    WHERE prior.revoked_at IS NOT NULL
+    ORDER BY (prior.revoke_reason = 'sign_out'), prior.revoked_at
+    LIMIT 1
 ),
 fence AS (
     SELECT EXISTS (
@@ -46,6 +59,8 @@ INSERT INTO sso_sign_ins (
     mfa_verified,
     idp_hosted_domain,
     idp_tenant_id,
+    verified_email,
+    idp_authenticated_at,
     authenticated_at,
     revoked_at,
     revoke_reason
@@ -58,12 +73,29 @@ SELECT
     @mfa_verified::boolean,
     sqlc.narg('idp_hosted_domain')::text,
     sqlc.narg('idp_tenant_id')::text,
+    sqlc.narg('verified_email')::text,
+    auth.idp_at,
     auth.at,
-    CASE WHEN fence.fenced THEN clock_timestamp() END,
-    CASE WHEN fence.fenced THEN 'cutoff' END
+    CASE WHEN fence.fenced OR EXISTS (SELECT 1 FROM inherited) THEN clock_timestamp() END,
+    CASE
+        WHEN fence.fenced THEN 'cutoff'
+        ELSE (SELECT inherited.revoke_reason FROM inherited)
+    END
 FROM auth, fence
 ON CONFLICT (organization_id, workos_session_id) DO UPDATE
-SET updated_at = clock_timestamp()
+SET mfa_verified = sso_sign_ins.mfa_verified
+        OR (EXCLUDED.mfa_verified AND sso_sign_ins.authentication_method = EXCLUDED.authentication_method),
+    idp_hosted_domain = COALESCE(
+        sso_sign_ins.idp_hosted_domain,
+        CASE WHEN sso_sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_hosted_domain END
+    ),
+    idp_tenant_id = COALESCE(
+        sso_sign_ins.idp_tenant_id,
+        CASE WHEN sso_sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_tenant_id END
+    ),
+    verified_email = COALESCE(sso_sign_ins.verified_email, EXCLUDED.verified_email),
+    idp_authenticated_at = LEAST(sso_sign_ins.idp_authenticated_at, EXCLUDED.idp_authenticated_at),
+    updated_at = clock_timestamp()
 WHERE sso_sign_ins.user_id = EXCLUDED.user_id
 RETURNING id, revoked_at;
 
@@ -112,12 +144,21 @@ SELECT
     si.mfa_verified,
     si.idp_hosted_domain,
     si.idp_tenant_id,
-    si.authenticated_at,
+    si.verified_email,
+    si.idp_authenticated_at,
     si.revoked_at,
+    EXISTS (
+        SELECT 1
+        FROM sso_sign_in_revocation_cutoffs AS c
+        WHERE c.organization_id = @organization_id
+          AND c.user_id = si.user_id
+          AND c.cutoff_at >= si.authenticated_at
+    )::boolean AS fenced,
     u.email AS user_email,
     om.verified_domains,
     (isi.allowed_sign_in_methods IS NULL)::boolean AS all_sign_in_methods_allowed,
     COALESCE(isi.allowed_sign_in_methods, '{}'::text[])::text[] AS allowed_sign_in_methods,
+    COALESCE(isi.allowed_microsoft_tenant_ids, '{}'::text[])::text[] AS allowed_microsoft_tenant_ids,
     om.disabled_at AS organization_disabled_at,
     EXISTS (
         SELECT 1
@@ -236,19 +277,6 @@ WHERE s.organization_id = ANY(@organization_ids::text[])
   )
 RETURNING s.id, s.organization_id, s.project_id, s.subject_urn, s.jti;
 
--- name: ListRecentlyRevokedSessionJTIs :many
--- Grants of the user's sign-ins soft-deleted recently, so a retried
--- revocation re-pushes JTIs a failed earlier push may have missed.
-SELECT s.jti
-FROM user_sessions AS s
-JOIN sso_sign_ins AS si
-    ON si.id = s.sso_sign_in_id
-   AND si.organization_id = s.organization_id
-WHERE s.organization_id = ANY(@organization_ids::text[])
-  AND si.user_id = @user_id
-  AND s.deleted IS TRUE
-  AND s.deleted_at > @since;
-
 -- name: EnqueueRevocationDeliveries :many
 -- One pending delivery per target; an already pending one is returned as is.
 INSERT INTO sso_sign_in_revocation_deliveries (organization_id, kind, target)
@@ -259,42 +287,116 @@ DO UPDATE SET updated_at = clock_timestamp()
 RETURNING id;
 
 -- name: ClaimRevocationDeliveries :many
-SELECT id, organization_id, kind, target, effective_at
-FROM sso_sign_in_revocation_deliveries
-WHERE organization_id = ANY(@organization_ids::text[])
-  AND id = ANY(@ids::uuid[])
-  AND delivered_at IS NULL
-ORDER BY id
-FOR UPDATE SKIP LOCKED;
+-- Leases the given pending deliveries to one worker. The lease commits on
+-- its own, so pushes happen outside any transaction.
+UPDATE sso_sign_in_revocation_deliveries
+SET claimed_until = clock_timestamp() + make_interval(secs => @lease_seconds::double precision),
+    updated_at = clock_timestamp()
+WHERE id IN (
+    SELECT d.id
+    FROM sso_sign_in_revocation_deliveries AS d
+    WHERE d.organization_id = ANY(@organization_ids::text[])
+      AND d.id = ANY(@ids::uuid[])
+      AND d.delivered_at IS NULL
+      AND (d.claimed_until IS NULL OR d.claimed_until < clock_timestamp())
+    ORDER BY d.id
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, organization_id, kind, target, effective_at, attempts;
 
 -- name: ClaimPendingRevocationDeliveries :many
--- The retry sweep spans every organization by design.
-SELECT id, organization_id, kind, target, effective_at
-FROM sso_sign_in_revocation_deliveries
-WHERE delivered_at IS NULL
-  AND attempts < @max_attempts
-ORDER BY created_at
-LIMIT @batch_size
-FOR UPDATE SKIP LOCKED;
+-- The retry sweep spans every organization by design. Leases due deliveries,
+-- oldest first; nothing is ever given up on.
+UPDATE sso_sign_in_revocation_deliveries
+SET claimed_until = clock_timestamp() + make_interval(secs => @lease_seconds::double precision),
+    updated_at = clock_timestamp()
+WHERE id IN (
+    SELECT d.id
+    FROM sso_sign_in_revocation_deliveries AS d
+    WHERE d.delivered_at IS NULL
+      AND (d.claimed_until IS NULL OR d.claimed_until < clock_timestamp())
+      AND (d.next_attempt_at IS NULL OR d.next_attempt_at <= clock_timestamp())
+    ORDER BY d.next_attempt_at NULLS FIRST, d.created_at
+    LIMIT @batch_size
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, organization_id, kind, target, effective_at, attempts;
+
+-- name: EnqueueUserEpochDelivery :one
+-- A pending epoch moves forward rather than duplicating.
+INSERT INTO sso_sign_in_revocation_deliveries (organization_id, kind, target, effective_at)
+VALUES (@organization_id, 'user_epoch', @user_id, @effective_at)
+ON CONFLICT (organization_id, kind, target) WHERE delivered_at IS NULL
+DO UPDATE SET effective_at = GREATEST(sso_sign_in_revocation_deliveries.effective_at, EXCLUDED.effective_at),
+    next_attempt_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id;
 
 -- name: MarkRevocationDelivered :exec
+-- Leaves the delivery pending if its effective time moved during the push.
 UPDATE sso_sign_in_revocation_deliveries
 SET delivered_at = clock_timestamp(),
     attempts = attempts + 1,
     last_error = NULL,
+    claimed_until = NULL,
     updated_at = clock_timestamp()
 WHERE id = @id
-  AND organization_id = @organization_id;
+  AND organization_id = @organization_id
+  AND effective_at = @effective_at;
 
 -- name: MarkRevocationDeliveryFailed :exec
+-- Backs off exponentially from one minute, capped at six hours.
 UPDATE sso_sign_in_revocation_deliveries
 SET attempts = attempts + 1,
     last_error = @last_error,
+    claimed_until = NULL,
+    next_attempt_at = clock_timestamp() + LEAST(interval '6 hours', interval '1 minute' * power(2, LEAST(attempts, 20))),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id;
 
+-- name: RevocationDeliveryBacklog :one
+-- Fleet-wide pending-delivery gauges for the sweep.
+SELECT
+    count(*)::bigint AS pending,
+    count(*) FILTER (WHERE attempts >= @stuck_attempts::integer)::bigint AS stuck,
+    COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - min(created_at)), 0)::bigint AS oldest_seconds
+FROM sso_sign_in_revocation_deliveries
+WHERE delivered_at IS NULL;
+
+-- name: MarkWorkOSSessionSignedOut :exec
+-- Leaves a revoked marker for a signed-out WorkOS session with no sign-in yet
+-- in the organization, so an exchange still in flight records revoked here or,
+-- by inheritance, in any other organization.
+INSERT INTO sso_sign_ins (organization_id, user_id, workos_session_id, authentication_method, authenticated_at, revoked_at, revoke_reason)
+VALUES (@organization_id, @user_id, @workos_session_id, '', clock_timestamp(), clock_timestamp(), 'sign_out')
+ON CONFLICT (organization_id, workos_session_id) DO NOTHING;
+
+-- name: OtherOrganizationsUsingWorkOSSession :many
+-- Organizations other than these where the WorkOS session still backs an
+-- unrevoked sign-in; ending the WorkOS session would sign the user out there.
+SELECT DISTINCT si.organization_id
+FROM sso_sign_ins AS si
+WHERE si.organization_id = ANY(ARRAY(
+        SELECT r.organization_id
+        FROM organization_user_relationships AS r
+        WHERE r.user_id = @user_id::text
+        UNION
+        SELECT own.organization_id
+        FROM sso_sign_ins AS own
+        WHERE own.user_id = @user_id
+    ))
+  AND si.user_id = @user_id
+  AND si.workos_session_id = @workos_session_id
+  AND si.revoked_at IS NULL
+  AND NOT (si.organization_id = ANY(@organization_ids::text[]));
+
 -- name: GetOrganizationIDByWorkOSID :one
 SELECT id
+FROM organization_metadata
+WHERE workos_id = @workos_id;
+
+-- name: GetOrganizationSlugByWorkOSID :one
+SELECT id, slug
 FROM organization_metadata
 WHERE workos_id = @workos_id;

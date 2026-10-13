@@ -14,18 +14,25 @@ import (
 )
 
 const claimPendingRevocationDeliveries = `-- name: ClaimPendingRevocationDeliveries :many
-SELECT id, organization_id, kind, target, effective_at
-FROM sso_sign_in_revocation_deliveries
-WHERE delivered_at IS NULL
-  AND attempts < $1
-ORDER BY created_at
-LIMIT $2
-FOR UPDATE SKIP LOCKED
+UPDATE sso_sign_in_revocation_deliveries
+SET claimed_until = clock_timestamp() + make_interval(secs => $1::double precision),
+    updated_at = clock_timestamp()
+WHERE id IN (
+    SELECT d.id
+    FROM sso_sign_in_revocation_deliveries AS d
+    WHERE d.delivered_at IS NULL
+      AND (d.claimed_until IS NULL OR d.claimed_until < clock_timestamp())
+      AND (d.next_attempt_at IS NULL OR d.next_attempt_at <= clock_timestamp())
+    ORDER BY d.next_attempt_at NULLS FIRST, d.created_at
+    LIMIT $2
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, organization_id, kind, target, effective_at, attempts
 `
 
 type ClaimPendingRevocationDeliveriesParams struct {
-	MaxAttempts int32
-	BatchSize   int32
+	LeaseSeconds float64
+	BatchSize    int32
 }
 
 type ClaimPendingRevocationDeliveriesRow struct {
@@ -34,11 +41,13 @@ type ClaimPendingRevocationDeliveriesRow struct {
 	Kind           string
 	Target         string
 	EffectiveAt    pgtype.Timestamptz
+	Attempts       int32
 }
 
-// The retry sweep spans every organization by design.
+// The retry sweep spans every organization by design. Leases due deliveries,
+// oldest first; nothing is ever given up on.
 func (q *Queries) ClaimPendingRevocationDeliveries(ctx context.Context, arg ClaimPendingRevocationDeliveriesParams) ([]ClaimPendingRevocationDeliveriesRow, error) {
-	rows, err := q.db.Query(ctx, claimPendingRevocationDeliveries, arg.MaxAttempts, arg.BatchSize)
+	rows, err := q.db.Query(ctx, claimPendingRevocationDeliveries, arg.LeaseSeconds, arg.BatchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +61,7 @@ func (q *Queries) ClaimPendingRevocationDeliveries(ctx context.Context, arg Clai
 			&i.Kind,
 			&i.Target,
 			&i.EffectiveAt,
+			&i.Attempts,
 		); err != nil {
 			return nil, err
 		}
@@ -64,16 +74,24 @@ func (q *Queries) ClaimPendingRevocationDeliveries(ctx context.Context, arg Clai
 }
 
 const claimRevocationDeliveries = `-- name: ClaimRevocationDeliveries :many
-SELECT id, organization_id, kind, target, effective_at
-FROM sso_sign_in_revocation_deliveries
-WHERE organization_id = ANY($1::text[])
-  AND id = ANY($2::uuid[])
-  AND delivered_at IS NULL
-ORDER BY id
-FOR UPDATE SKIP LOCKED
+UPDATE sso_sign_in_revocation_deliveries
+SET claimed_until = clock_timestamp() + make_interval(secs => $1::double precision),
+    updated_at = clock_timestamp()
+WHERE id IN (
+    SELECT d.id
+    FROM sso_sign_in_revocation_deliveries AS d
+    WHERE d.organization_id = ANY($2::text[])
+      AND d.id = ANY($3::uuid[])
+      AND d.delivered_at IS NULL
+      AND (d.claimed_until IS NULL OR d.claimed_until < clock_timestamp())
+    ORDER BY d.id
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, organization_id, kind, target, effective_at, attempts
 `
 
 type ClaimRevocationDeliveriesParams struct {
+	LeaseSeconds    float64
 	OrganizationIds []string
 	Ids             []uuid.UUID
 }
@@ -84,10 +102,13 @@ type ClaimRevocationDeliveriesRow struct {
 	Kind           string
 	Target         string
 	EffectiveAt    pgtype.Timestamptz
+	Attempts       int32
 }
 
+// Leases the given pending deliveries to one worker. The lease commits on
+// its own, so pushes happen outside any transaction.
 func (q *Queries) ClaimRevocationDeliveries(ctx context.Context, arg ClaimRevocationDeliveriesParams) ([]ClaimRevocationDeliveriesRow, error) {
-	rows, err := q.db.Query(ctx, claimRevocationDeliveries, arg.OrganizationIds, arg.Ids)
+	rows, err := q.db.Query(ctx, claimRevocationDeliveries, arg.LeaseSeconds, arg.OrganizationIds, arg.Ids)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +122,7 @@ func (q *Queries) ClaimRevocationDeliveries(ctx context.Context, arg ClaimRevoca
 			&i.Kind,
 			&i.Target,
 			&i.EffectiveAt,
+			&i.Attempts,
 		); err != nil {
 			return nil, err
 		}
@@ -148,6 +170,30 @@ func (q *Queries) EnqueueRevocationDeliveries(ctx context.Context, arg EnqueueRe
 	return items, nil
 }
 
+const enqueueUserEpochDelivery = `-- name: EnqueueUserEpochDelivery :one
+INSERT INTO sso_sign_in_revocation_deliveries (organization_id, kind, target, effective_at)
+VALUES ($1, 'user_epoch', $2, $3)
+ON CONFLICT (organization_id, kind, target) WHERE delivered_at IS NULL
+DO UPDATE SET effective_at = GREATEST(sso_sign_in_revocation_deliveries.effective_at, EXCLUDED.effective_at),
+    next_attempt_at = NULL,
+    updated_at = clock_timestamp()
+RETURNING id
+`
+
+type EnqueueUserEpochDeliveryParams struct {
+	OrganizationID string
+	UserID         string
+	EffectiveAt    pgtype.Timestamptz
+}
+
+// A pending epoch moves forward rather than duplicating.
+func (q *Queries) EnqueueUserEpochDelivery(ctx context.Context, arg EnqueueUserEpochDeliveryParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, enqueueUserEpochDelivery, arg.OrganizationID, arg.UserID, arg.EffectiveAt)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getLiveSSOSignInBySession = `-- name: GetLiveSSOSignInBySession :one
 SELECT id
 FROM sso_sign_ins
@@ -181,6 +227,24 @@ func (q *Queries) GetOrganizationIDByWorkOSID(ctx context.Context, workosID pgty
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getOrganizationSlugByWorkOSID = `-- name: GetOrganizationSlugByWorkOSID :one
+SELECT id, slug
+FROM organization_metadata
+WHERE workos_id = $1
+`
+
+type GetOrganizationSlugByWorkOSIDRow struct {
+	ID   string
+	Slug string
+}
+
+func (q *Queries) GetOrganizationSlugByWorkOSID(ctx context.Context, workosID pgtype.Text) (GetOrganizationSlugByWorkOSIDRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationSlugByWorkOSID, workosID)
+	var i GetOrganizationSlugByWorkOSIDRow
+	err := row.Scan(&i.ID, &i.Slug)
+	return i, err
 }
 
 const getSSOSignInBySession = `-- name: GetSSOSignInBySession :one
@@ -232,12 +296,21 @@ SELECT
     si.mfa_verified,
     si.idp_hosted_domain,
     si.idp_tenant_id,
-    si.authenticated_at,
+    si.verified_email,
+    si.idp_authenticated_at,
     si.revoked_at,
+    EXISTS (
+        SELECT 1
+        FROM sso_sign_in_revocation_cutoffs AS c
+        WHERE c.organization_id = $1
+          AND c.user_id = si.user_id
+          AND c.cutoff_at >= si.authenticated_at
+    )::boolean AS fenced,
     u.email AS user_email,
     om.verified_domains,
     (isi.allowed_sign_in_methods IS NULL)::boolean AS all_sign_in_methods_allowed,
     COALESCE(isi.allowed_sign_in_methods, '{}'::text[])::text[] AS allowed_sign_in_methods,
+    COALESCE(isi.allowed_microsoft_tenant_ids, '{}'::text[])::text[] AS allowed_microsoft_tenant_ids,
     om.disabled_at AS organization_disabled_at,
     EXISTS (
         SELECT 1
@@ -284,25 +357,28 @@ type GetSignInEligibilityParams struct {
 }
 
 type GetSignInEligibilityRow struct {
-	UserSessionID           uuid.UUID
-	SubjectUrn              string
-	SsoSignInID             uuid.NullUUID
-	SessionLive             bool
-	SignInID                uuid.NullUUID
-	SignInUserID            pgtype.Text
-	AuthenticationMethod    pgtype.Text
-	MfaVerified             pgtype.Bool
-	IdpHostedDomain         pgtype.Text
-	IdpTenantID             pgtype.Text
-	AuthenticatedAt         pgtype.Timestamptz
-	RevokedAt               pgtype.Timestamptz
-	UserEmail               pgtype.Text
-	VerifiedDomains         []string
-	AllSignInMethodsAllowed bool
-	AllowedSignInMethods    []string
-	OrganizationDisabledAt  pgtype.Timestamptz
-	IsMember                bool
-	IsDeprovisioned         bool
+	UserSessionID             uuid.UUID
+	SubjectUrn                string
+	SsoSignInID               uuid.NullUUID
+	SessionLive               bool
+	SignInID                  uuid.NullUUID
+	SignInUserID              pgtype.Text
+	AuthenticationMethod      pgtype.Text
+	MfaVerified               pgtype.Bool
+	IdpHostedDomain           pgtype.Text
+	IdpTenantID               pgtype.Text
+	VerifiedEmail             pgtype.Text
+	IdpAuthenticatedAt        pgtype.Timestamptz
+	RevokedAt                 pgtype.Timestamptz
+	Fenced                    bool
+	UserEmail                 pgtype.Text
+	VerifiedDomains           []string
+	AllSignInMethodsAllowed   bool
+	AllowedSignInMethods      []string
+	AllowedMicrosoftTenantIds []string
+	OrganizationDisabledAt    pgtype.Timestamptz
+	IsMember                  bool
+	IsDeprovisioned           bool
 }
 
 // Both runtime grants and pre-grant consent use one set of identity checks.
@@ -326,57 +402,20 @@ func (q *Queries) GetSignInEligibility(ctx context.Context, arg GetSignInEligibi
 		&i.MfaVerified,
 		&i.IdpHostedDomain,
 		&i.IdpTenantID,
-		&i.AuthenticatedAt,
+		&i.VerifiedEmail,
+		&i.IdpAuthenticatedAt,
 		&i.RevokedAt,
+		&i.Fenced,
 		&i.UserEmail,
 		&i.VerifiedDomains,
 		&i.AllSignInMethodsAllowed,
 		&i.AllowedSignInMethods,
+		&i.AllowedMicrosoftTenantIds,
 		&i.OrganizationDisabledAt,
 		&i.IsMember,
 		&i.IsDeprovisioned,
 	)
 	return i, err
-}
-
-const listRecentlyRevokedSessionJTIs = `-- name: ListRecentlyRevokedSessionJTIs :many
-SELECT s.jti
-FROM user_sessions AS s
-JOIN sso_sign_ins AS si
-    ON si.id = s.sso_sign_in_id
-   AND si.organization_id = s.organization_id
-WHERE s.organization_id = ANY($1::text[])
-  AND si.user_id = $2
-  AND s.deleted IS TRUE
-  AND s.deleted_at > $3
-`
-
-type ListRecentlyRevokedSessionJTIsParams struct {
-	OrganizationIds []string
-	UserID          string
-	Since           pgtype.Timestamptz
-}
-
-// Grants of the user's sign-ins soft-deleted recently, so a retried
-// revocation re-pushes JTIs a failed earlier push may have missed.
-func (q *Queries) ListRecentlyRevokedSessionJTIs(ctx context.Context, arg ListRecentlyRevokedSessionJTIsParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listRecentlyRevokedSessionJTIs, arg.OrganizationIds, arg.UserID, arg.Since)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var jti string
-		if err := rows.Scan(&jti); err != nil {
-			return nil, err
-		}
-		items = append(items, jti)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listSSOSignInOrganizationsForUser = `-- name: ListSSOSignInOrganizationsForUser :many
@@ -445,6 +484,23 @@ func (q *Queries) LockSSOSignInsBySession(ctx context.Context, arg LockSSOSignIn
 	return items, nil
 }
 
+const lockSignInsForUser = `-- name: LockSignInsForUser :exec
+SELECT pg_advisory_xact_lock(hashtextextended('sso_sign_in:' || $1::text || ':' || $2::text, 0))
+`
+
+type LockSignInsForUserParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+// Serializes recording a sign-in with revoking the user's sign-ins in the
+// organization, including when no sign-in row exists yet. Every writer takes
+// these locks first, in organization order.
+func (q *Queries) LockSignInsForUser(ctx context.Context, arg LockSignInsForUserParams) error {
+	_, err := q.db.Exec(ctx, lockSignInsForUser, arg.OrganizationID, arg.UserID)
+	return err
+}
+
 const lockUserSSOSignIns = `-- name: LockUserSSOSignIns :many
 SELECT id
 FROM sso_sign_ins
@@ -487,18 +543,22 @@ UPDATE sso_sign_in_revocation_deliveries
 SET delivered_at = clock_timestamp(),
     attempts = attempts + 1,
     last_error = NULL,
+    claimed_until = NULL,
     updated_at = clock_timestamp()
 WHERE id = $1
   AND organization_id = $2
+  AND effective_at = $3
 `
 
 type MarkRevocationDeliveredParams struct {
 	ID             uuid.UUID
 	OrganizationID string
+	EffectiveAt    pgtype.Timestamptz
 }
 
+// Leaves the delivery pending if its effective time moved during the push.
 func (q *Queries) MarkRevocationDelivered(ctx context.Context, arg MarkRevocationDeliveredParams) error {
-	_, err := q.db.Exec(ctx, markRevocationDelivered, arg.ID, arg.OrganizationID)
+	_, err := q.db.Exec(ctx, markRevocationDelivered, arg.ID, arg.OrganizationID, arg.EffectiveAt)
 	return err
 }
 
@@ -506,6 +566,8 @@ const markRevocationDeliveryFailed = `-- name: MarkRevocationDeliveryFailed :exe
 UPDATE sso_sign_in_revocation_deliveries
 SET attempts = attempts + 1,
     last_error = $1,
+    claimed_until = NULL,
+    next_attempt_at = clock_timestamp() + LEAST(interval '6 hours', interval '1 minute' * power(2, LEAST(attempts, 20))),
     updated_at = clock_timestamp()
 WHERE id = $2
   AND organization_id = $3
@@ -517,9 +579,76 @@ type MarkRevocationDeliveryFailedParams struct {
 	OrganizationID string
 }
 
+// Backs off exponentially from one minute, capped at six hours.
 func (q *Queries) MarkRevocationDeliveryFailed(ctx context.Context, arg MarkRevocationDeliveryFailedParams) error {
 	_, err := q.db.Exec(ctx, markRevocationDeliveryFailed, arg.LastError, arg.ID, arg.OrganizationID)
 	return err
+}
+
+const markWorkOSSessionSignedOut = `-- name: MarkWorkOSSessionSignedOut :exec
+INSERT INTO sso_sign_ins (organization_id, user_id, workos_session_id, authentication_method, authenticated_at, revoked_at, revoke_reason)
+VALUES ($1, $2, $3, '', clock_timestamp(), clock_timestamp(), 'sign_out')
+ON CONFLICT (organization_id, workos_session_id) DO NOTHING
+`
+
+type MarkWorkOSSessionSignedOutParams struct {
+	OrganizationID  string
+	UserID          string
+	WorkosSessionID string
+}
+
+// Leaves a revoked marker for a signed-out WorkOS session with no sign-in yet
+// in the organization, so an exchange still in flight records revoked here or,
+// by inheritance, in any other organization.
+func (q *Queries) MarkWorkOSSessionSignedOut(ctx context.Context, arg MarkWorkOSSessionSignedOutParams) error {
+	_, err := q.db.Exec(ctx, markWorkOSSessionSignedOut, arg.OrganizationID, arg.UserID, arg.WorkosSessionID)
+	return err
+}
+
+const otherOrganizationsUsingWorkOSSession = `-- name: OtherOrganizationsUsingWorkOSSession :many
+SELECT DISTINCT si.organization_id
+FROM sso_sign_ins AS si
+WHERE si.organization_id = ANY(ARRAY(
+        SELECT r.organization_id
+        FROM organization_user_relationships AS r
+        WHERE r.user_id = $1::text
+        UNION
+        SELECT own.organization_id
+        FROM sso_sign_ins AS own
+        WHERE own.user_id = $1
+    ))
+  AND si.user_id = $1
+  AND si.workos_session_id = $2
+  AND si.revoked_at IS NULL
+  AND NOT (si.organization_id = ANY($3::text[]))
+`
+
+type OtherOrganizationsUsingWorkOSSessionParams struct {
+	UserID          string
+	WorkosSessionID string
+	OrganizationIds []string
+}
+
+// Organizations other than these where the WorkOS session still backs an
+// unrevoked sign-in; ending the WorkOS session would sign the user out there.
+func (q *Queries) OtherOrganizationsUsingWorkOSSession(ctx context.Context, arg OtherOrganizationsUsingWorkOSSessionParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, otherOrganizationsUsingWorkOSSession, arg.UserID, arg.WorkosSessionID, arg.OrganizationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const raiseRevocationCutoffs = `-- name: RaiseRevocationCutoffs :exec
@@ -541,6 +670,29 @@ type RaiseRevocationCutoffsParams struct {
 func (q *Queries) RaiseRevocationCutoffs(ctx context.Context, arg RaiseRevocationCutoffsParams) error {
 	_, err := q.db.Exec(ctx, raiseRevocationCutoffs, arg.UserID, arg.OrganizationIds)
 	return err
+}
+
+const revocationDeliveryBacklog = `-- name: RevocationDeliveryBacklog :one
+SELECT
+    count(*)::bigint AS pending,
+    count(*) FILTER (WHERE attempts >= $1::integer)::bigint AS stuck,
+    COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - min(created_at)), 0)::bigint AS oldest_seconds
+FROM sso_sign_in_revocation_deliveries
+WHERE delivered_at IS NULL
+`
+
+type RevocationDeliveryBacklogRow struct {
+	Pending       int64
+	Stuck         int64
+	OldestSeconds int64
+}
+
+// Fleet-wide pending-delivery gauges for the sweep.
+func (q *Queries) RevocationDeliveryBacklog(ctx context.Context, stuckAttempts int32) (RevocationDeliveryBacklogRow, error) {
+	row := q.db.QueryRow(ctx, revocationDeliveryBacklog, stuckAttempts)
+	var i RevocationDeliveryBacklogRow
+	err := row.Scan(&i.Pending, &i.Stuck, &i.OldestSeconds)
+	return i, err
 }
 
 const revokeSSOSignInsBySession = `-- name: RevokeSSOSignInsBySession :many
@@ -696,30 +848,34 @@ func (q *Queries) RevokeUserSessionsForUserSignIns(ctx context.Context, arg Revo
 }
 
 const upsertSSOSignIn = `-- name: UpsertSSOSignIn :one
-WITH auth AS (
-    SELECT LEAST(
-        $8::timestamptz,
-        COALESCE(
-            (
-                SELECT min(prior.authenticated_at)
-                FROM sso_sign_ins AS prior
-                WHERE prior.organization_id = ANY(ARRAY(
-                        SELECT r.organization_id
-                        FROM organization_user_relationships AS r
-                        WHERE r.user_id = $2
-                        UNION
-                        SELECT own.organization_id
-                        FROM sso_sign_ins AS own
-                        WHERE own.user_id = $2
-                        UNION
-                        SELECT $1::text
-                    ))
-                  AND prior.user_id = $2
-                  AND prior.workos_session_id = $3
-            ),
-            $8::timestamptz
-        )
-    ) AS at
+WITH prior AS (
+    SELECT p.authenticated_at, p.idp_authenticated_at, p.revoked_at, p.revoke_reason
+    FROM sso_sign_ins AS p
+    WHERE p.organization_id = ANY(ARRAY(
+            SELECT r.organization_id
+            FROM organization_user_relationships AS r
+            WHERE r.user_id = $2
+            UNION
+            SELECT own.organization_id
+            FROM sso_sign_ins AS own
+            WHERE own.user_id = $2
+            UNION
+            SELECT $1::text
+        ))
+      AND p.user_id = $2
+      AND p.workos_session_id = $3
+),
+auth AS (
+    SELECT
+        LEAST($9::timestamptz, (SELECT min(prior.authenticated_at) FROM prior)) AS at,
+        LEAST($10::timestamptz, (SELECT min(prior.idp_authenticated_at) FROM prior)) AS idp_at
+),
+inherited AS (
+    SELECT prior.revoke_reason
+    FROM prior
+    WHERE prior.revoked_at IS NOT NULL
+    ORDER BY (prior.revoke_reason = 'sign_out'), prior.revoked_at
+    LIMIT 1
 ),
 fence AS (
     SELECT EXISTS (
@@ -738,6 +894,8 @@ INSERT INTO sso_sign_ins (
     mfa_verified,
     idp_hosted_domain,
     idp_tenant_id,
+    verified_email,
+    idp_authenticated_at,
     authenticated_at,
     revoked_at,
     revoke_reason
@@ -750,12 +908,29 @@ SELECT
     $5::boolean,
     $6::text,
     $7::text,
+    $8::text,
+    auth.idp_at,
     auth.at,
-    CASE WHEN fence.fenced THEN clock_timestamp() END,
-    CASE WHEN fence.fenced THEN 'cutoff' END
+    CASE WHEN fence.fenced OR EXISTS (SELECT 1 FROM inherited) THEN clock_timestamp() END,
+    CASE
+        WHEN fence.fenced THEN 'cutoff'
+        ELSE (SELECT inherited.revoke_reason FROM inherited)
+    END
 FROM auth, fence
 ON CONFLICT (organization_id, workos_session_id) DO UPDATE
-SET updated_at = clock_timestamp()
+SET mfa_verified = sso_sign_ins.mfa_verified
+        OR (EXCLUDED.mfa_verified AND sso_sign_ins.authentication_method = EXCLUDED.authentication_method),
+    idp_hosted_domain = COALESCE(
+        sso_sign_ins.idp_hosted_domain,
+        CASE WHEN sso_sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_hosted_domain END
+    ),
+    idp_tenant_id = COALESCE(
+        sso_sign_ins.idp_tenant_id,
+        CASE WHEN sso_sign_ins.authentication_method = EXCLUDED.authentication_method THEN EXCLUDED.idp_tenant_id END
+    ),
+    verified_email = COALESCE(sso_sign_ins.verified_email, EXCLUDED.verified_email),
+    idp_authenticated_at = LEAST(sso_sign_ins.idp_authenticated_at, EXCLUDED.idp_authenticated_at),
+    updated_at = clock_timestamp()
 WHERE sso_sign_ins.user_id = EXCLUDED.user_id
 RETURNING id, revoked_at
 `
@@ -768,7 +943,9 @@ type UpsertSSOSignInParams struct {
 	MfaVerified          bool
 	IdpHostedDomain      pgtype.Text
 	IdpTenantID          pgtype.Text
+	VerifiedEmail        pgtype.Text
 	AuthenticatedAt      pgtype.Timestamptz
+	IdpAuthenticatedAt   pgtype.Timestamptz
 }
 
 type UpsertSSOSignInRow struct {
@@ -776,11 +953,14 @@ type UpsertSSOSignInRow struct {
 	RevokedAt pgtype.Timestamptz
 }
 
-// Never reassigns a row to another user, clears a revocation or moves
-// authenticated_at. A new row for a WorkOS session already seen in another of
-// the user's organizations keeps that session's earliest sign-in time, so
-// recording it in a second organization cannot restart the age window. A
-// sign-in authenticated at or before a revocation cutoff is recorded revoked.
+// Never reassigns a row to another user, clears a revocation or moves the
+// recorded times later. A WorkOS session already seen in another of the
+// user's organizations keeps its earliest times, so recording it elsewhere
+// cannot restart the age window, and inherits any revocation of that
+// session, so a signed-out session can't come back through a new
+// organization. A sign-in that started at or before a revocation cutoff is
+// recorded revoked. Evidence missing from an earlier exchange of the same
+// method is filled in.
 func (q *Queries) UpsertSSOSignIn(ctx context.Context, arg UpsertSSOSignInParams) (UpsertSSOSignInRow, error) {
 	row := q.db.QueryRow(ctx, upsertSSOSignIn,
 		arg.OrganizationID,
@@ -790,7 +970,9 @@ func (q *Queries) UpsertSSOSignIn(ctx context.Context, arg UpsertSSOSignInParams
 		arg.MfaVerified,
 		arg.IdpHostedDomain,
 		arg.IdpTenantID,
+		arg.VerifiedEmail,
 		arg.AuthenticatedAt,
+		arg.IdpAuthenticatedAt,
 	)
 	var i UpsertSSOSignInRow
 	err := row.Scan(&i.ID, &i.RevokedAt)

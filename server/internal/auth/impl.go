@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -212,7 +213,7 @@ func NewService(
 		trialNotifier:        trialNotifier,
 		transferManager:      authsessions.NewTransferManager(nonceStore),
 		tokens:               nil,
-		deliverer:            ssosignins.NewDeliverer(logger, db, nil, sessions),
+		deliverer:            ssosignins.NewDeliverer(logger, noop.NewMeterProvider(), db, nil, sessions, sessions),
 		siteOrigin:           parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
@@ -430,9 +431,15 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		UserID:                 userID,
 		WorkOSSessionID:        idpUser.WorkOSSessionID,
 		AuthenticationMethod:   idpUser.AuthenticationMethod,
-		Evidence:               ssosignins.Evidence{MFAVerified: idpUser.Evidence.MFAVerified, HostedDomain: idpUser.Evidence.HostedDomain, TenantID: idpUser.Evidence.TenantID},
-		Impersonated:           idpUser.ImpersonatorEmail() != "",
-		AuthenticatedAt:        authenticatedAt,
+		Evidence: ssosignins.Evidence{
+			MFAVerified:        idpUser.Evidence.MFAVerified,
+			HostedDomain:       idpUser.Evidence.HostedDomain,
+			TenantID:           idpUser.Evidence.TenantID,
+			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
+			IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+		},
+		Impersonated:    idpUser.ImpersonatorEmail() != "",
+		AuthenticatedAt: authenticatedAt,
 	})
 
 	if supportOrgID != "" {
@@ -832,6 +839,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		ScopesSupported: nil,
 		LoginHint:       email,
 		ScreenHint:      screenHint,
+		Prompt:          "",
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error building authorization URL").LogError(ctx, s.logger)
@@ -1018,7 +1026,7 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 
 	signedOut, err := s.revokeSignedOutSSOSignIn(ctx, *authCtx.SessionID, authCtx)
 	if err != nil {
-		if s.sessions.SSOSignInEnforced(ctx) {
+		if s.sessions.SSOSignInEnforced(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
 			return nil, oops.E(oops.CodeUnexpected, err, "error revoking sso sign-in").LogError(ctx, s.logger)
 		}
 		s.logger.WarnContext(ctx, "revoke sso sign-in on sign-out", attr.SlogError(err))

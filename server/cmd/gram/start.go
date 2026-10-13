@@ -337,6 +337,12 @@ func mcpRuntimeFlags() []cli.Flag {
 			Usage:   "Google OpenID Connect userinfo endpoint used to confirm a Google sign-in's Workspace domain. Leave unset in production.",
 			EnvVars: []string{"GRAM_GOOGLE_USERINFO_URL"},
 		},
+		&cli.BoolFlag{
+			Name:    "workos-mfa-enforced",
+			Usage:   "Set only when the WorkOS environment requires MFA on every password sign-in. Only then can a password sign-in with an enrolled TOTP factor back a signed assertion.",
+			EnvVars: []string{"GRAM_WORKOS_MFA_ENFORCED"},
+			Value:   false,
+		},
 		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
@@ -1542,7 +1548,7 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				trialEmailNotifier,
 			)
-			authService.SetTokenRevoker(chatSessionsManager)
+			authService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			auth.Attach(mux, authService)
 			// The support matrix is seeded here as well as in the admin server, since
 			// the step mirror needs its integration methods and either process may
@@ -1554,7 +1560,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
 			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, siteURL.String(), orgHosts, auditLogger, svixClient)
-			organizationsService.SetTokenRevoker(chatSessionsManager)
+			organizationsService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			organizations.Attach(mux, organizationsService)
 			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
 				Client:         ghClient,
