@@ -268,6 +268,9 @@ export function ShadowAIAccessStep({
                         </div>
                       ) : (
                         <Table
+                          // About ten rows, then the group scrolls inside
+                          // itself so a long kind never grows the page.
+                          className="max-h-[28rem] overflow-y-auto"
                           columns={cols}
                           data={group}
                           rowKey={(row) => row.target.id}
