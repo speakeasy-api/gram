@@ -21,6 +21,8 @@ function admission(overrides: Partial<WorkloadAdmission>): WorkloadAdmission {
     name: "",
     organizationId: "org",
     projectId: "",
+    hooksProjectId: "",
+    hooksProjectSlug: "",
     subject: "wimse://example/org-1/*",
     tags: [],
     updatedAt: new Date(0),
