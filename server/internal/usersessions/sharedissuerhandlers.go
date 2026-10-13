@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -42,8 +43,9 @@ const (
 	// a list, short enough to read.
 	sharedIssuerSlugIDDigits = 8
 
-	// maxIdempotencyKeyLength bounds the caller-chosen idempotency key. It
-	// is hashed into the issuer id, so its length only bounds the request.
+	// maxIdempotencyKeyLength bounds the caller-chosen idempotency key in
+	// characters, matching the API form's limit. It is hashed into the issuer
+	// id, so its length only bounds the request.
 	maxIdempotencyKeyLength = 200
 )
 
@@ -74,7 +76,7 @@ func (s *Service) CreateSharedIssuer(ctx context.Context, payload *orggen.Create
 	if strings.TrimSpace(payload.IdempotencyKey) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "idempotency_key is required").LogWarn(ctx, logger)
 	}
-	if len(payload.IdempotencyKey) > maxIdempotencyKeyLength {
+	if utf8.RuneCountInString(payload.IdempotencyKey) > maxIdempotencyKeyLength {
 		return nil, oops.E(oops.CodeBadRequest, nil, "idempotency_key must be at most %d characters", maxIdempotencyKeyLength).LogWarn(ctx, logger)
 	}
 

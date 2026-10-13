@@ -248,3 +248,15 @@ func TestCreateSharedIssuer_RefusesWhenDeploymentServesNoSharedAuthorizationServ
 	require.NoError(t, err)
 	require.Empty(t, listed.Items, "nothing is written when no pin can be derived")
 }
+
+func TestCreateSharedIssuer_KeyLengthCountsCharactersNotBytes(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	// 200 two-byte characters are within the character limit even though they
+	// exceed it in bytes.
+	created, err := ti.service.CreateSharedIssuer(ctx, &orggen.CreateSharedIssuerPayload{SessionToken: nil, IdempotencyKey: strings.Repeat("é", 200)})
+	require.NoError(t, err)
+	require.NotEmpty(t, created.ID)
+}
