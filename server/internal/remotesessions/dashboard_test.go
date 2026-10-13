@@ -168,6 +168,51 @@ func TestCommitServerIdentityConfigurationAutoRegistersOnceWithDCR(t *testing.T)
 	require.NotEqual(t, "registered-secret", stored.RemoteSessionClient.ClientSecretEncrypted.String)
 }
 
+// An automatically registered client stores no scope, but its registration
+// still names what logins discover for the server's protected resource.
+func TestCommitServerIdentityConfigurationNamesDiscoveredScopesAtRegistration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	targetID, _ := createServerIdentityTarget(t, ctx, ti, "dcr-discovered-target")
+	seedProtectedResource(t, ctx, ti.conn, projectIDFromContext(t, ctx), activeOrganizationID(t, ctx), "https://mcp.example.com/dcr-discovered-target", protectedResourceSeed{scopesSupported: []string{"files:read", "files:write"}})
+	var requestedScope atomic.Value
+	registrationServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		requestedScope.Store(body.Scope)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"client_id":                  "discovered-client",
+			"client_secret":              "discovered-secret",
+			"token_endpoint_auth_method": "client_secret_basic",
+		})
+	}))
+	t.Cleanup(registrationServer.Close)
+	providerID := createServerIdentityProvider(t, ctx, ti, "dcr-discovered-provider", registrationServer.URL, false, []string{"client_secret_basic"})
+
+	result, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(targetID, providerID))
+	require.NoError(t, err)
+	require.Equal(t, "registered", *result.Status)
+	require.Equal(t, "files:read files:write", requestedScope.Load())
+
+	clientID, err := uuid.Parse(result.Client.ID)
+	require.NoError(t, err)
+	stored, err := repo.New(ti.conn).GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ProjectID:      projectIDFromContext(t, ctx),
+		OrganizationID: activeOrganizationID(t, ctx),
+		ID:             clientID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, stored.RemoteSessionClient.Scope, "the discovered scopes are not stored on the client")
+}
+
 func TestCommitServerIdentityConfigurationReturnsDCRRefusalWithoutChangingState(t *testing.T) {
 	t.Parallel()
 

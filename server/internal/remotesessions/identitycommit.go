@@ -251,6 +251,11 @@ type RegistrationPolicy struct {
 	// Scope is requested at registration and authorization time.
 	Scope []string
 
+	// RegistrationScope is named in a dynamic registration request when Scope
+	// is empty, so a provider that limits a client to its registered scopes
+	// allows what logins discover. It is never stored on the client.
+	RegistrationScope []string
+
 	// Audience is sent as the resource/audience parameter, if set.
 	Audience *string
 
@@ -602,7 +607,7 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(c.newClientBaseURL()), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(c.provider.TunneledMcpServerID)),
-		Scope:                   conv.PtrEmpty(strings.Join(policy.Scope, " ")),
+		Scope:                   conv.PtrEmpty(strings.Join(conv.Ternary(len(policy.Scope) > 0, policy.Scope, policy.RegistrationScope), " ")),
 		TokenEndpointAuthMethod: policy.TokenEndpointAuthMethod,
 	}, c.committer.telemetry)
 	if err != nil {
