@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -864,6 +865,10 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("build identity provider provisioner: %w", err)
 			}
+			issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, issuerProvisioner != nil)
+			issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
+			issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
+			enableIssuerKeyAutoActivation(issuerProvisioner, issuerSigner)
 
 			var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
 			if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {

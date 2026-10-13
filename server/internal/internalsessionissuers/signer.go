@@ -205,6 +205,26 @@ func (s *Signer) CheckAuthority(ctx context.Context, organizationID string, stat
 	return err
 }
 
+// CheckActivation approves activating a ready pending key without an admin:
+// the issuer must be enabled (rolled out, on a verified domain, not disabled,
+// not paused), and both the current and the pending key must pass the checks
+// a signing key passes.
+func (s *Signer) CheckActivation(ctx context.Context, organizationID string, pending repo.JsonWebKey) error {
+	status, err := s.gate.Status(ctx, organizationID)
+	if err != nil {
+		return err
+	}
+	if _, err := s.authority(ctx, organizationID, status); err != nil {
+		return err
+	}
+	if pending.State != "pending" {
+		return &SigningRefusedError{State: status.State, Reason: status.PauseReason}
+	}
+	status.ActiveKey = &pending
+	_, err = s.authority(ctx, organizationID, status)
+	return err
+}
+
 func (s *Signer) authority(ctx context.Context, organizationID string, status Status) (repo.GetExternalKeyForMintRow, error) {
 	var none repo.GetExternalKeyForMintRow
 	if !s.Available() {
