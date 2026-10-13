@@ -84,7 +84,6 @@ import {
   type PolicyAction,
 } from "./policy-data";
 import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
-import { ShadowAIDecisionsBanner } from "./shadow-ai/ShadowAIDecisionsBanner";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
@@ -1008,28 +1007,22 @@ function PolicyCenterContent() {
       )
     : "";
 
-  const shadowAIBanner = (
-    <ShadowAIDecisionsBanner policies={data?.policies ?? []} />
-  );
   let policiesBody = (
-    <>
-      {shadowAIBanner}
-      <Table
-        columns={policyColumns}
-        data={policyRows}
-        rowKey={(row) => row.policy.id}
-        onRowClick={(row) =>
-          // Both prompt and standard policies open their dedicated detail page
-          // (eval workbench for prompt, on-page editor for standard).
-          routes.policyCenter.detail.goTo(row.policy.id)
-        }
-        renderRow={(row, rowElement) => (
-          <TableRowContextMenu key={row.policy.id} actions={policyActions(row)}>
-            {rowElement}
-          </TableRowContextMenu>
-        )}
-      />
-    </>
+    <Table
+      columns={policyColumns}
+      data={policyRows}
+      rowKey={(row) => row.policy.id}
+      onRowClick={(row) =>
+        // Both prompt and standard policies open their dedicated detail page
+        // (eval workbench for prompt, on-page editor for standard).
+        routes.policyCenter.detail.goTo(row.policy.id)
+      }
+      renderRow={(row, rowElement) => (
+        <TableRowContextMenu key={row.policy.id} actions={policyActions(row)}>
+          {rowElement}
+        </TableRowContextMenu>
+      )}
+    />
   );
   if (isLoading) {
     policiesBody = (
@@ -1038,14 +1031,7 @@ function PolicyCenterContent() {
       </div>
     );
   } else if (policyRows.length === 0) {
-    // The banner's "Set up Shadow AI" matters most here, where no policy
-    // exists yet.
-    policiesBody = (
-      <>
-        {shadowAIBanner}
-        {policiesEmptyState}
-      </>
-    );
+    policiesBody = policiesEmptyState;
   }
 
   const activeQuarantines = quarantinesData?.quarantines ?? [];
