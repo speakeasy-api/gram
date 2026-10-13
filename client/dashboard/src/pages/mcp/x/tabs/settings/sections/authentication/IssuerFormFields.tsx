@@ -18,6 +18,7 @@ import {
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
+import { IssuerScopeFallback } from "@/pages/remote-identity-providers/IssuerScopeFallback";
 import {
   CLIENT_TYPE_LABELS,
   clientTypeHelp,
@@ -522,11 +523,13 @@ export function OverridesFields({
   audienceOverride,
   onScopeOverrideChange,
   onAudienceOverrideChange,
+  issuerScopeOverride,
 }: {
   scopeOverride: string;
   audienceOverride: string;
   onScopeOverrideChange: (value: string) => void;
   onAudienceOverrideChange: (value: string) => void;
+  issuerScopeOverride?: string[] | null;
 }): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
@@ -540,10 +543,11 @@ export function OverridesFields({
           placeholder="read, write, openid"
         />
         <Text muted small>
-          Comma-separated. When provided, every sign-in requests these scopes.
-          Otherwise sign-ins request what the MCP server asks for, falling back
-          to the issuer's scopes_supported.
+          Comma-separated. With MCP scope discovery, this client selection takes
+          precedence. Leave empty to use the MCP server's scopes, then the
+          identity provider's scope fallback or advertised scopes.
         </Text>
+        <IssuerScopeFallback scopes={issuerScopeOverride} />
       </Stack>
 
       <Stack gap={2}>

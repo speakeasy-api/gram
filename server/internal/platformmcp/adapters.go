@@ -355,6 +355,7 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 type PostgresReader struct {
 	xaaReadiness              *xaaReadinessService
 	issuerGate                *internalsessionissuers.Gate
+	mcpScopes                 *MCPScopesService
 	logger                    *slog.Logger
 	db                        *pgxpool.Pool
 	reader                    *readmodel.Reader
@@ -411,6 +412,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		networkIngress:            nil,
 		xaaReadiness:              nil,
 		issuerGate:                nil,
+		mcpScopes:                 nil,
 		authz:                     nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,

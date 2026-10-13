@@ -120,7 +120,7 @@ func (g *Governor) source(p remotesessions.EMAProvider) tokenSource {
 	if build, ok := g.sources[p.Kind]; ok {
 		return build(p)
 	}
-	return speakeasySource{}
+	return new(speakeasySource)
 }
 
 // sourceAvailable reports whether kind's source can serve on this deployment.
@@ -162,26 +162,4 @@ func (s externalSource) checkReuse(ctx context.Context, req Request, sel selecti
 
 func (s externalSource) issue(ctx context.Context, logger *slog.Logger, req Request, sel selection, ready func() Outcome) (issuedGrant, Outcome) {
 	return s.c.exchangeGrant(ctx, logger, req, sel, ready)
-}
-
-// speakeasySource will sign ID-JAGs with the organization's internal session
-// issuer (AIM-523). Until then it is unavailable and never presented as serving.
-type speakeasySource struct{}
-
-func (speakeasySource) kind() remotesessions.EMAProviderKind {
-	return remotesessions.EMAProviderSpeakeasy
-}
-
-func (speakeasySource) available() bool { return remotesessions.SpeakeasyEMASigning }
-
-func (speakeasySource) authorize(context.Context, *slog.Logger, Request, *selection) Outcome {
-	return providerUnavailable
-}
-
-func (speakeasySource) checkReuse(context.Context, Request, selection) Outcome {
-	return providerUnavailable
-}
-
-func (speakeasySource) issue(context.Context, *slog.Logger, Request, selection, func() Outcome) (issuedGrant, Outcome) {
-	return issuedGrant{value: "", trustedSessionID: uuid.Nil, trustedObtainedAt: time.Time{}}, providerUnavailable
 }

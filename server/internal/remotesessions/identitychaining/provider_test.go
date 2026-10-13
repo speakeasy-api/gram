@@ -150,7 +150,7 @@ func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {
 			require.True(t, ok)
 			vendor, err := remotesessions.NormalizeVendorIssuer(f.vendorIssuer)
 			require.NoError(t, err)
-			read, err := remotesessions.EndpointEMAProviders(t.Context(), repo.New(f.db), f.req.OrganizationID, f.req.UserSessionIssuerID, vendor, remotesessions.SpeakeasyEMASigning)
+			read, err := remotesessions.EndpointEMAProviders(t.Context(), repo.New(f.db), f.req.OrganizationID, f.req.UserSessionIssuerID, vendor, f.chainer.sourceAvailable(remotesessions.EMAProviderSpeakeasy))
 			require.NoError(t, err)
 			require.Equal(t, runtime, read)
 		})

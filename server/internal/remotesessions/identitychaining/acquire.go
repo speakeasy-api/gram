@@ -60,6 +60,12 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 		logger.ErrorContext(ctx, "publish identity chaining credential", attr.SlogError(err))
 		return none, newOutcome(StagePersistence, ReasonTransientFailure, ConfidenceVerified, true), true
 	}
+	if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
+		return none, outcome, true
+	}
+	if outcome := c.stillServes(ctx, logger, req, sel); !outcome.Succeeded() {
+		return none, outcome, true
+	}
 	return Token{value: cred.accessToken, expiresAt: cred.expiresAt.Add(-accessExpirySkew)}, success, true
 }
 

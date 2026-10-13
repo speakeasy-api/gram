@@ -31,6 +31,7 @@ const issuerGateReasonIdentityChainingReauthentication = "identity_chaining_reau
 // has no usable interactive token for an upstream.
 type identityChainer interface {
 	Acquire(ctx context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome)
+	CheckConsent(ctx context.Context, req identitychaining.Request, signInID uuid.UUID) identitychaining.Outcome
 	Governs(ctx context.Context, req identitychaining.Request) bool
 	Serves(ctx context.Context, req identitychaining.Request) (uuid.UUID, bool)
 	Configured(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID) bool
@@ -67,7 +68,9 @@ func (s *Service) identityChainingRequest(ctx context.Context, organizationID st
 	if !ok || authCtx == nil || authCtx.UserID != identity.UserID() || authCtx.ActiveOrganizationID != organizationID {
 		return none, false
 	}
-	return identitychaining.NewRequest(organizationID, projectID, userSessionIssuerID, identity.UserID(), upstreamResource, tunneled, backendIssuerID)
+	req, ok := identitychaining.NewRequest(organizationID, projectID, userSessionIssuerID, identity.UserID(), upstreamResource, tunneled, backendIssuerID)
+	req.UserSessionJTI = identity.SessionJTI()
+	return req, ok
 }
 
 // resolveDirectUpstreamToken resolves the credential a direct remote or

@@ -592,6 +592,7 @@ function ModifyRemoteIdentityProviderSheetBody({
         )}
 
         <OverridesFields
+          issuerScopeOverride={issuer.scopeOverride}
           scopeOverride={scopeOverride}
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}

@@ -664,6 +664,7 @@ export function CreateRemoteSessionClientSheet({
             )}
 
             <OverridesFields
+              issuerScopeOverride={issuer.scopeOverride}
               scopeOverride={scopeOverride}
               audienceOverride={audienceOverride}
               onScopeOverrideChange={setScopeOverride}

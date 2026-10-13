@@ -267,6 +267,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	}
 	registerXAAReadinessTool(reg, xaaReadiness)
 	registerInternalSessionIssuerTool(reg, reader)
+	var scopesService *MCPScopesService
+	if postgres, ok := reader.(*PostgresReader); ok {
+		scopesService = postgres.mcpScopes
+	}
+	registerMCPScopesTools(reg, scopesService)
 	var connectionMutationService *MCPConnectionMutationService
 	if len(connectionMutations) > 0 {
 		connectionMutationService = connectionMutations[0]

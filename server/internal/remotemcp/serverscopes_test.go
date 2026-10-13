@@ -137,6 +137,73 @@ func setPin(ctx context.Context, ti *testInstance, mcpServerID string, scopes ..
 	return ti.service.SetServerScopePin(ctx, &gen.SetServerScopePinPayload{McpServerID: mcpServerID, Scopes: scopes, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}) //nolint:wrapcheck // returned for oops code assertions
 }
 
+func TestSetServerScopePin_RequiresRuntimeDiscovery(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	server := seedScopeServer(t, ctx, ti, "https://scope-capability.example.com/mcp")
+	_, err := setPin(ctx, ti, server.mcpServerID, "files:read")
+	require.NoError(t, err)
+	ti.service.SetResourceScopeDiscoveryEnabled(nil)
+
+	_, err = setPin(ctx, ti, server.mcpServerID, "files:write")
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
+	require.Equal(t, []string{"files:read"}, storedPin(t, ctx, ti, server.url), "a refused write must preserve the existing pin")
+
+	view, err := getScopes(ctx, ti, server.mcpServerID)
+	require.NoError(t, err)
+	require.False(t, view.DiscoveryEnabled)
+	require.False(t, view.CanPin)
+
+	_, err = setPin(ctx, ti, server.mcpServerID)
+	require.NoError(t, err, "an administrator may still clear an unenforced pin")
+	require.Empty(t, storedPin(t, ctx, ti, server.url))
+}
+
+func TestSetServerScopePin_RejectsStaleConfirmation(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	server := seedScopeServer(t, ctx, ti, "https://scope-confirmation.example.com/mcp")
+	_, err := setPin(ctx, ti, server.mcpServerID, "files:read")
+	require.NoError(t, err)
+	payload := &gen.SetServerScopePinPayload{McpServerID: server.mcpServerID, Scopes: []string{"files:write"}, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}
+	_, version, err := ti.service.GetServerScopesForConfirmation(ctx, &gen.GetServerScopesPayload{McpServerID: server.mcpServerID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	_, err = ti.service.SetServerScopePinWithExpectedScopes(ctx, payload, []string{}, version)
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Equal(t, []string{"files:read"}, storedPin(t, ctx, ti, server.url))
+	_, err = ti.service.SetServerScopePinWithExpectedScopes(ctx, payload, []string{"files:read"}, version)
+	require.NoError(t, err)
+	_, err = ti.service.SetServerScopePinWithExpectedScopes(ctx, payload, []string{"files:read"}, version)
+	require.NoError(t, err, "retrying an already applied exact pin is idempotent")
+}
+
+func TestSetServerScopePin_RejectsChangedConfirmationImpact(t *testing.T) {
+	t.Parallel()
+	for _, change := range []string{"resource", "sharing"} {
+		t.Run(change, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			server := seedScopeServer(t, ctx, ti, "https://scope-impact.example.com/mcp")
+			_, version, err := ti.service.GetServerScopesForConfirmation(ctx, &gen.GetServerScopesPayload{McpServerID: server.mcpServerID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+			require.NoError(t, err)
+			if change == "sharing" {
+				seedSiblingServer(t, ctx, ti, server)
+			} else {
+				authCtx, _ := contextvalues.GetAuthContext(ctx)
+				q := repo.New(ti.conn)
+				remote, readErr := q.GetServerByID(ctx, repo.GetServerByIDParams{ID: server.remoteServerID, ProjectID: *authCtx.ProjectID})
+				require.NoError(t, readErr)
+				_, updateErr := q.UpdateServer(ctx, repo.UpdateServerParams{Name: remote.Name, Slug: remote.Slug, TransportType: remote.TransportType, Url: "https://scope-moved.example.com/mcp", ID: remote.ID, ProjectID: remote.ProjectID})
+				require.NoError(t, updateErr)
+			}
+			payload := &gen.SetServerScopePinPayload{McpServerID: server.mcpServerID, Scopes: []string{"files:read"}, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}
+			_, err = ti.service.SetServerScopePinWithExpectedScopes(ctx, payload, []string{}, version)
+			requireOopsCode(t, err, oops.CodeConflict)
+			require.Zero(t, auditCount(t, ctx, ti), "a changed confirmation must not write")
+		})
+	}
+}
+
 func getScopes(ctx context.Context, ti *testInstance, mcpServerID string) (*gen.RemoteMcpServerScopes, error) {
 	return ti.service.GetServerScopes(ctx, &gen.GetServerScopesPayload{McpServerID: mcpServerID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil}) //nolint:wrapcheck // returned for oops code assertions
 }

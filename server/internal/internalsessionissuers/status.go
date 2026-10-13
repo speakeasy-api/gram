@@ -39,11 +39,12 @@ type FeatureChecker interface {
 // Gate combines the rollout flag, the SSO entitlement, deployment readiness,
 // the kill switches and the organization's issuer row into one State.
 type Gate struct {
-	db           repo.DBTX
-	features     FeatureChecker
-	flags        feature.Provider
-	provisioning bool
-	paused       bool
+	db               repo.DBTX
+	features         FeatureChecker
+	flags            feature.Provider
+	provisioning     bool
+	paused           bool
+	signingAuthority func(context.Context, string, Status) error
 }
 
 // GateConfig is deployment configuration for a Gate.
@@ -56,7 +57,15 @@ type GateConfig struct {
 }
 
 func NewGate(db repo.DBTX, features FeatureChecker, flags feature.Provider, cfg GateConfig) *Gate {
-	return &Gate{db: db, features: features, flags: flags, provisioning: cfg.Provisioning, paused: cfg.SigningPaused}
+	return &Gate{db: db, features: features, flags: flags, provisioning: cfg.Provisioning, paused: cfg.SigningPaused, signingAuthority: nil}
+}
+
+// SetSigningAuthority installs the deployment's readiness check. Call before
+// serving status or mutations. The checker must not call Status; it receives
+// the already resolved lifecycle state and key. Lifecycle-only callers may
+// leave it unset, while runtime service gates always install their signer.
+func (g *Gate) SetSigningAuthority(check func(context.Context, string, Status) error) {
+	g.signingAuthority = check
 }
 
 // Provisioning reports whether this deployment can create issuer keys.
@@ -122,6 +131,14 @@ func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error
 			status.State = StateKeyless
 		case g.signingPaused(ctx, organizationID, groups):
 			status.State = StateSigningPaused
+		}
+	}
+	if status.State == StateEnabled && g.signingAuthority != nil {
+		if err := g.signingAuthority(ctx, organizationID, status); err != nil {
+			status.State = StateUnavailable
+			if !errors.Is(err, ErrMisconfigured) {
+				return status, fmt.Errorf("check issuer signing authority: %w", err)
+			}
 		}
 	}
 	return status, nil

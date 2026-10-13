@@ -4993,7 +4993,8 @@ SELECT EXISTS (
 -- NULL provenance left by a parent delete reads as unusable, never as NULL.
 SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
-    c.remote_session_issuer_id = @remote_session_issuer_id::uuid
+    COALESCE(c.ema_provider, 'external') = 'external'
+    AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
     AND c.client_selection = 'binding'
     AND c.remote_session_ema_binding_id = @binding_id::uuid
     AND c.ema_binding_generation = @binding_generation::bigint
@@ -5025,7 +5026,8 @@ FROM remote_session_ema_credentials AS c
 WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
   AND c.user_session_issuer_id = @user_session_issuer_id
   AND c.remote_session_client_id = @remote_session_client_id AND c.resource = @resource
-  AND c.subject_urn = @subject_urn AND c.deleted IS FALSE;
+  AND c.subject_urn = @subject_urn AND c.deleted IS FALSE
+  AND COALESCE(c.ema_provider, 'external') = 'external';
 
 -- name: UpsertEMACredential :one
 -- Publishes a chained credential only while the binding generation, the
@@ -5095,6 +5097,12 @@ WHERE EXISTS (
   )
 ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
 DO UPDATE SET
+  ema_provider = NULL,
+  internal_session_issuer_id = NULL,
+  internal_session_issuer_updated_at = NULL,
+  internal_session_issuer_key_id = NULL,
+  sso_sign_in_id = NULL,
+  user_session_id = NULL,
   organization_id = EXCLUDED.organization_id,
   remote_session_issuer_id = EXCLUDED.remote_session_issuer_id,
   client_selection = EXCLUDED.client_selection,
@@ -5296,3 +5304,120 @@ INSERT INTO remote_session_ema_providers (
 ) VALUES (
   @organization_id, @vendor_issuer, @remote_session_issuer_id, @internal_session_issuer_id, @position
 );
+
+-- name: GetSpeakeasyEMAGrant :one
+-- Only the exact authenticated MCP grant may supply SSO provenance.
+SELECT s.id, s.sso_sign_in_id
+FROM user_sessions AS s
+JOIN user_session_issuers AS i ON i.id = s.user_session_issuer_id
+JOIN projects AS p ON p.id = @project_id::uuid AND p.organization_id = s.organization_id AND p.deleted IS FALSE
+WHERE s.jti = @jti AND s.organization_id = @organization_id
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND (s.project_id IS NULL OR s.project_id = p.id)
+  AND s.subject_urn = @subject_urn AND s.deleted IS FALSE
+  AND s.refresh_expires_at > clock_timestamp()
+  AND i.organization_id = s.organization_id AND i.project_id IS NULL AND i.deleted IS FALSE;
+
+-- name: LockSpeakeasyEMASignIn :one
+-- Matches the sign-in-first lock order of revocation and grant creation.
+SELECT id FROM sso_sign_ins
+WHERE id = @id AND organization_id = @organization_id
+FOR SHARE;
+
+-- name: LockSpeakeasyEMAIssuer :one
+SELECT id FROM internal_session_issuers
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
+FOR SHARE;
+
+-- name: GetSpeakeasyEMACredentialForUse :one
+SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+  COALESCE(
+    c.ema_provider = 'speakeasy'
+    AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
+    AND c.client_selection = 'binding'
+    AND c.remote_session_ema_binding_id = @binding_id::uuid
+    AND c.ema_binding_generation = @binding_generation::bigint
+    AND c.requested_scopes = @requested_scopes::text[]
+    AND c.internal_session_issuer_id = @internal_session_issuer_id::uuid
+    AND c.internal_session_issuer_updated_at = @internal_session_issuer_updated_at::timestamptz
+    AND c.internal_session_issuer_key_id = @internal_session_issuer_key_id::uuid
+    AND c.sso_sign_in_id = @sso_sign_in_id::uuid
+    AND c.user_session_id = @user_session_id::uuid
+    AND c.access_token_encrypted IS NOT NULL
+    AND c.access_expires_at > @usable_after::timestamptz
+    AND EXISTS (
+      SELECT 1 FROM remote_session_ema_bindings b
+      WHERE b.id = c.remote_session_ema_binding_id AND b.generation = c.ema_binding_generation
+        AND b.project_id = c.project_id AND b.organization_id = c.organization_id
+        AND b.user_session_issuer_id = c.user_session_issuer_id
+        AND b.remote_session_issuer_id = c.remote_session_issuer_id
+        AND b.remote_session_client_id = c.remote_session_client_id
+        AND b.resource = c.resource AND b.state = 'ready'
+    ), FALSE)::boolean AS usable
+FROM remote_session_ema_credentials c
+WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
+  AND c.user_session_issuer_id = @user_session_issuer_id
+  AND c.remote_session_client_id = @remote_session_client_id AND c.resource = @resource
+  AND c.subject_urn = @subject_urn AND c.deleted IS FALSE
+  AND c.ema_provider = 'speakeasy';
+
+-- name: UpsertSpeakeasyEMACredential :one
+-- The caller locks and checks the exact SSO grant and issuer before this
+-- statement. Binding/client changes during redemption still fence publication.
+INSERT INTO remote_session_ema_credentials AS c (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
+  resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
+  ema_provider, internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id,
+  sso_sign_in_id, user_session_id, requested_scopes, granted_scopes, access_token_encrypted,
+  access_expires_at, downstream_refresh_token_observed, last_used_at
+)
+SELECT @organization_id::text, @project_id::uuid, @user_session_issuer_id::uuid, @remote_session_issuer_id::uuid, @remote_session_client_id::uuid,
+  @resource::text, @subject_urn::text, 'binding', @binding_id::uuid, @binding_generation::bigint,
+  'speakeasy', @internal_session_issuer_id::uuid, @internal_session_issuer_updated_at::timestamptz, @internal_session_issuer_key_id::uuid,
+  @sso_sign_in_id::uuid, @user_session_id::uuid, @requested_scopes::text[], @granted_scopes::text[], @access_token_encrypted::text,
+  @access_expires_at::timestamptz, @downstream_refresh_token_observed::boolean, clock_timestamp()
+WHERE EXISTS (
+  SELECT 1 FROM remote_session_ema_bindings b
+  JOIN remote_session_clients rc ON rc.id = b.remote_session_client_id AND rc.deleted IS FALSE
+  JOIN remote_session_issuers ri ON ri.id = rc.remote_session_issuer_id AND ri.deleted IS FALSE
+  WHERE b.id = @binding_id::uuid AND b.generation = @binding_generation::bigint
+    AND b.organization_id = @organization_id::text AND b.project_id = @project_id::uuid
+    AND b.user_session_issuer_id = @user_session_issuer_id::uuid
+    AND b.remote_session_issuer_id = @remote_session_issuer_id::uuid
+    AND b.remote_session_client_id = @remote_session_client_id::uuid
+    AND b.resource = @resource::text AND b.state = 'ready'
+    AND (rc.project_id = b.project_id OR (rc.project_id IS NULL AND rc.organization_id = b.organization_id))
+    AND (ri.project_id = b.project_id OR (ri.project_id IS NULL AND (ri.organization_id = b.organization_id OR ri.organization_id IS NULL)))
+)
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+  organization_id = EXCLUDED.organization_id,
+  remote_session_issuer_id = EXCLUDED.remote_session_issuer_id,
+  client_selection = EXCLUDED.client_selection,
+  remote_session_ema_binding_id = EXCLUDED.remote_session_ema_binding_id,
+  ema_binding_generation = EXCLUDED.ema_binding_generation,
+  trusted_issuer_session_id = NULL,
+  ema_provider = EXCLUDED.ema_provider,
+  internal_session_issuer_id = EXCLUDED.internal_session_issuer_id,
+  internal_session_issuer_updated_at = EXCLUDED.internal_session_issuer_updated_at,
+  internal_session_issuer_key_id = EXCLUDED.internal_session_issuer_key_id,
+  sso_sign_in_id = EXCLUDED.sso_sign_in_id,
+  user_session_id = EXCLUDED.user_session_id,
+  requested_scopes = EXCLUDED.requested_scopes,
+  granted_scopes = EXCLUDED.granted_scopes,
+  access_token_encrypted = EXCLUDED.access_token_encrypted,
+  access_expires_at = EXCLUDED.access_expires_at,
+  downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
+  last_used_at = EXCLUDED.last_used_at,
+  updated_at = clock_timestamp()
+RETURNING id;
+
+-- name: GetSpeakeasyEMAIssuerVersion :one
+-- Used through the publishing transaction, never via a second pool connection.
+SELECT i.updated_at, k.id AS key_id
+FROM internal_session_issuers i
+JOIN json_web_keys k ON k.json_web_key_set_id = i.json_web_key_set_id
+  AND k.organization_id = i.organization_id AND k.state = 'active' AND k.deleted IS FALSE
+JOIN organization_metadata o ON o.id = i.organization_id AND o.disabled_at IS NULL
+WHERE i.id = @id AND i.organization_id = @organization_id
+  AND i.deleted IS FALSE AND i.disabled_at IS NULL;

@@ -110,10 +110,20 @@ type Signer struct {
 	kmsClients  gcpkms.SigningClientFactory
 	// managedSigner pins the service account the key's credential may impersonate.
 	managedSigner string
+	deployment    Deployment
 	now           func() time.Time
 }
 
-func NewSigner(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, gate *Gate, gcpIdentity *gcpauth.Identity, kmsClients gcpkms.SigningClientFactory, managedSigner string) *Signer {
+// SignerConfig identifies this deployment's authority and signing identity.
+type SignerConfig struct {
+	// Deployment pins the permitted issuer origin and key ring.
+	Deployment Deployment
+
+	// ManagedSigner is the only service account a key credential may impersonate.
+	ManagedSigner string
+}
+
+func NewSigner(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, gate *Gate, gcpIdentity *gcpauth.Identity, kmsClients gcpkms.SigningClientFactory, cfg SignerConfig) *Signer {
 	logger = logger.With(attr.SlogComponent("internalsessionissuers"))
 	return &Signer{
 		logger:        logger,
@@ -123,9 +133,64 @@ func NewSigner(logger *slog.Logger, tracerProvider trace.TracerProvider, meterPr
 		gate:          gate,
 		gcpIdentity:   gcpIdentity,
 		kmsClients:    kmsClients,
-		managedSigner: strings.TrimSpace(managedSigner),
+		managedSigner: strings.TrimSpace(cfg.ManagedSigner),
+		deployment:    cfg.Deployment,
 		now:           time.Now,
 	}
+}
+
+// Available reports whether this deployment has the configuration required to
+// sign. The per-organization lifecycle gate and stored credential are checked
+// again for each assertion; configuration alone never authorizes a signature.
+func (s *Signer) Available() bool {
+	if s == nil || s.gate == nil || s.db == nil || s.gcpIdentity == nil || s.kmsClients == nil || s.managedSigner == "" {
+		return false
+	}
+	if _, err := URL(s.deployment.ServerURL, "configuration-check", s.deployment.AllowLoopbackIssuer); err != nil {
+		return false
+	}
+	return gcpkms.ValidateKeyRingName(s.deployment.KeyRing) == nil
+}
+
+// CheckAuthority requires the selected issuer and active key to belong to this
+// deployment. Cache readers use the same check as fresh signing, so copying a
+// database cannot grant authority to release credentials from another issuer.
+func (s *Signer) CheckAuthority(ctx context.Context, organizationID string, status Status) error {
+	_, err := s.authority(ctx, organizationID, status)
+	return err
+}
+
+func (s *Signer) authority(ctx context.Context, organizationID string, status Status) (repo.GetExternalKeyForMintRow, error) {
+	var none repo.GetExternalKeyForMintRow
+	if !s.Available() {
+		return none, fmt.Errorf("%w: signing configuration unavailable", ErrMisconfigured)
+	}
+	if status.State != StateEnabled || status.Issuer == nil || status.ActiveKey == nil {
+		return none, &SigningRefusedError{State: status.State}
+	}
+	if status.Issuer.OrganizationID != organizationID || status.ActiveKey.OrganizationID != organizationID || status.ActiveKey.JsonWebKeySetID != status.Issuer.JsonWebKeySetID {
+		return none, fmt.Errorf("%w: issuer organization mismatch", ErrMisconfigured)
+	}
+	if err := s.deployment.CheckIssuer(organizationID, status.Issuer.Issuer); err != nil {
+		return none, err
+	}
+	backing, err := repo.New(s.db).GetExternalKeyForMint(ctx, repo.GetExternalKeyForMintParams{ID: status.ActiveKey.ExternalKeyID, OrganizationID: conv.ToPGText(organizationID)})
+	if err != nil {
+		return none, fmt.Errorf("load issuer backing key: %w", err)
+	}
+	if !backing.EmaIssuerManaged || !backing.ResourceName.Valid || backing.ResourceName.String == "" {
+		return none, fmt.Errorf("%w: active key is not a managed issuer key", ErrMisconfigured)
+	}
+	if err := s.deployment.CheckKey(backing.ResourceName.String); err != nil {
+		return none, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(backing.ImpersonateServiceAccount.String), s.managedSigner) {
+		return none, fmt.Errorf("%w: issuer credential signing identity mismatch", ErrMisconfigured)
+	}
+	if !backing.CredentialID.Valid {
+		return none, fmt.Errorf("%w: issuer credential unavailable", ErrMisconfigured)
+	}
+	return backing, nil
 }
 
 // Sign serializes claims as an ID-JAG signed by the organization's active
@@ -143,35 +208,20 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 	if err := claims.validate(now); err != nil {
 		return "", err
 	}
-	if s.gcpIdentity == nil || s.kmsClients == nil {
-		return "", fmt.Errorf("%w: no signing credentials on this deployment", ErrMisconfigured)
+	if !s.Available() {
+		return "", fmt.Errorf("%w: signing configuration unavailable", ErrMisconfigured)
 	}
 	status, err := s.gate.Status(ctx, organizationID)
 	if err != nil {
 		return "", fmt.Errorf("read issuer status: %w", err)
 	}
-	if status.State != StateEnabled || status.Issuer == nil || status.ActiveKey == nil {
-		return "", &SigningRefusedError{State: status.State}
+	backing, err := s.authority(ctx, organizationID, status)
+	if err != nil {
+		return "", err
 	}
-	issuer := *status.Issuer
-	key := *status.ActiveKey
+	issuer, key := *status.Issuer, *status.ActiveKey
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
 	q := repo.New(s.db)
-	backing, err := q.GetExternalKeyForMint(ctx, repo.GetExternalKeyForMintParams{ID: key.ExternalKeyID, OrganizationID: conv.ToPGText(organizationID)})
-	if err != nil {
-		return "", fmt.Errorf("load issuer backing key: %w", err)
-	}
-	// Only a key that backs this organization's issuer may sign as it.
-	if !backing.EmaIssuerManaged || !backing.ResourceName.Valid || backing.ResourceName.String == "" {
-		return "", fmt.Errorf("%w: active key is not a managed issuer key", ErrMisconfigured)
-	}
-	// The key's credential must impersonate exactly the configured signer.
-	if s.managedSigner == "" {
-		return "", fmt.Errorf("%w: no platform signing service account is configured", ErrMisconfigured)
-	}
-	if got := strings.TrimSpace(backing.ImpersonateServiceAccount.String); !strings.EqualFold(got, s.managedSigner) {
-		return "", fmt.Errorf("%w: key credential impersonates %q, configured signer is %s", ErrMisconfigured, got, s.managedSigner)
-	}
 	credential, problem, detail, err := s.gcpIdentity.ScreenStoredCredential(ctx, logger, gcpauth.StoredCredential{
 		Present:                   backing.CredentialID.Valid,
 		ImpersonateServiceAccount: backing.ImpersonateServiceAccount.String,
@@ -196,6 +246,14 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 	assertion, err = sign(ctx, kmsClient, backing.ResourceName.String, key.Kid, key.PublicJwk, claims.body(issuer.Issuer, now))
 	if err != nil {
 		return "", err
+	}
+	// Re-read every signing gate after KMS, including kill switches and entitlement.
+	currentStatus, err := s.gate.Status(ctx, organizationID)
+	if err != nil {
+		return "", fmt.Errorf("recheck signing gate: %w", err)
+	}
+	if currentStatus.State != StateEnabled {
+		return "", &SigningRefusedError{State: currentStatus.State}
 	}
 	// A disable or revocation that committed while KMS was signing wins.
 	current, err := q.GetOrganizationInternalSessionIssuer(ctx, organizationID)
@@ -235,6 +293,13 @@ func sign(ctx context.Context, client gcpkms.SigningClient, resourceName, kid st
 	assertion, err := jwt.Signed(signer).Claims(body).Serialize()
 	if err != nil {
 		return "", fmt.Errorf("sign assertion: %w", err)
+	}
+	parsed, err := jose.ParseSigned(assertion, []jose.SignatureAlgorithm{alg})
+	if err != nil {
+		return "", fmt.Errorf("parse signed assertion: %w", err)
+	}
+	if _, err := parsed.Verify(publicJWK.Key); err != nil {
+		return "", fmt.Errorf("verify assertion against published key: %w", err)
 	}
 	return assertion, nil
 }

@@ -311,6 +311,33 @@ describe("client overview identity provider card", () => {
 });
 
 describe("client overview scope picker", () => {
+  it("shows the issuer fallback without treating it as a client selection", () => {
+    renderTab({ issuer: issuer({ scopeOverride: ["read", "write"] }) });
+    expect(screen.getByText("MCP scopes or issuer fallback")).toBeTruthy();
+    expect(
+      screen.getByText(/provider's scope fallback is read, write/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Without MCP scope discovery, the provider's fallback takes precedence/,
+      ),
+    ).toBeTruthy();
+    save();
+    expect(lastSaved().scope).toBeUndefined();
+  });
+
+  it("keeps a selected client scope visible while disclosing the issuer fallback", () => {
+    renderTab({
+      client: client(undefined, { scope: ["read"] }),
+      issuer: issuer({ scopeOverride: ["admin"] }),
+    });
+    expect(scopesField().parentElement!.textContent).toContain("read");
+    expect(screen.getByText(/provider's scope fallback is admin/)).toBeTruthy();
+    expect(
+      screen.getByText(/a client selection takes precedence/),
+    ).toBeTruthy();
+  });
+
   it("offers the issuer's scopes and saves the selection as an array", () => {
     renderTab();
 

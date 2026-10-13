@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -38,6 +39,13 @@ type selection struct {
 	// provider is the EMA provider serving this attempt; set by acquireFrom.
 	// A token is released or published only while it can still serve.
 	provider remotesessions.EMAProvider
+
+	// Speakeasy provenance snapshots fence issuer and SSO changes during exchange.
+	internalIssuerVersion time.Time
+	internalKeyID         uuid.UUID
+	userSessionID         uuid.UUID
+	signInID              uuid.UUID
+	email                 string
 
 	// audience is the ID-JAG audience: an administrator-confirmed Okta
 	// resource app audience when one exists, else the resource authorization
@@ -108,18 +116,19 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		logger.DebugContext(ctx, "identity chaining dropped every configured scope as OIDC reserved", attr.SlogOAuthScope(strings.Join(result.Scopes, " ")))
 	}
 	return selection{
-		bindingID:        result.BindingID,
-		generation:       result.Generation,
-		remoteIssuerID:   b.RemoteSessionIssuerID,
-		clientID:         result.ClientID,
-		externalClientID: result.ExternalClientID,
-		issuer:           result.Issuer,
-		resource:         result.Resource,
-		scopes:           scopes,
-		configuredScopes: result.Scopes,
-		trustedIssuerID:  uuid.Nil,
-		trustedClientID:  uuid.Nil,
-		provider:         remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
-		audience:         "",
+		bindingID:             result.BindingID,
+		generation:            result.Generation,
+		remoteIssuerID:        b.RemoteSessionIssuerID,
+		clientID:              result.ClientID,
+		externalClientID:      result.ExternalClientID,
+		issuer:                result.Issuer,
+		resource:              result.Resource,
+		scopes:                scopes,
+		configuredScopes:      result.Scopes,
+		trustedIssuerID:       uuid.Nil,
+		trustedClientID:       uuid.Nil,
+		provider:              remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
+		audience:              "",
+		internalIssuerVersion: time.Time{}, internalKeyID: uuid.Nil, userSessionID: uuid.Nil, signInID: uuid.Nil, email: "",
 	}, success
 }

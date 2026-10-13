@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -80,6 +81,8 @@ type platformMCPConfig struct {
 	JWTSigningKey          string
 	ProductFeatures        *productfeatures.Client
 	IssuerGate             *internalsessionissuers.Gate
+	IssuerSigner           *internalsessionissuers.Signer
+	RemoteMCPScopes        *remotemcp.Service
 	FeatureFlags           feature.Provider
 	DistributionAdmission  *admission.Guard
 	Authz                  *authz.Engine
@@ -484,6 +487,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
+		WithMCPScopes(config.RemoteMCPScopes).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
@@ -862,7 +866,9 @@ func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityC
 	if config.RemoteChallengeManager == nil {
 		return nil
 	}
-	return identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
+	g := identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
+	g.SetSpeakeasyIssuer(config.IssuerGate, config.IssuerSigner)
+	return g
 }
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
@@ -1082,6 +1088,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
+		WithMCPScopes(config.RemoteMCPScopes).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).

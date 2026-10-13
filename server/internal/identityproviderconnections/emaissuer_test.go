@@ -3,6 +3,7 @@ package identityproviderconnections_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -90,7 +91,12 @@ func (f issuerFixture) signerWithFlags(t *testing.T, kms *hookedKMSClients, paus
 		return kms.inner.Factory(ctx, ts)
 	}
 	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: paused})
-	return internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, provisiontest.SigningServiceAccount())
+	return internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, issuerSignerConfig(t, testServerURL, provisiontest.KeyRing, provisiontest.SigningServiceAccount()))
+}
+
+func issuerSignerConfig(t *testing.T, origin, ring, signer string) internalsessionissuers.SignerConfig {
+	t.Helper()
+	return internalsessionissuers.SignerConfig{Deployment: internalsessionissuers.Deployment{ServerURL: mustURL(t, origin), AllowLoopbackIssuer: false, KeyRing: ring}, ManagedSigner: signer}
 }
 
 func claims() internalsessionissuers.Claims {
@@ -372,9 +378,12 @@ func TestEMAIssuer_DisableStopsSigningAndReenableResumes(t *testing.T) {
 	require.NoError(t, f.lifecycle().SetDisabled(ctx, f.ti.orgID, true), "disabling twice is a no-op")
 	require.Equal(t, int64(1), auditCount(t, ctx, f, audit.ActionInternalSessionIssuerDisable))
 
-	// A deployment whose origin moved re-enables the same pinned issuer.
+	// A copied database cannot re-enable an issuer owned by the source deployment.
 	moved := provisiontest.NewProvisioner(t, f.ti.conn, kms.Factory, "https://moved.example.com", f.credentialID, "")
 	second, err := moved.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.ErrorIs(t, err, internalsessionissuers.ErrMisconfigured)
+	require.Equal(t, uuid.Nil, second)
+	second, err = provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, first, second, "re-enabling keeps the issuer")
 	require.Len(t, kms.Created(), 1, "re-enabling creates no key")
@@ -448,7 +457,7 @@ func TestEMAIssuer_SigningGates(t *testing.T) {
 	}
 	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
 	for _, pin := range []string{"", "someone-else@example.iam.gserviceaccount.com"} {
-		unpinned := internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, pin)
+		unpinned := internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, issuerSignerConfig(t, testServerURL, provisiontest.KeyRing, pin))
 		_, err = unpinned.Sign(ctx, f.ti.orgID, claims())
 		require.ErrorIs(t, err, internalsessionissuers.ErrMisconfigured, "signing needs the key's credential to match the configured signer %q", pin)
 	}
@@ -739,4 +748,81 @@ func TestEMAIssuer_CleanupWithoutTheKeyCredentialRevokesTheConfiguredSignerOrSta
 	require.Zero(t, pending)
 	require.Len(t, kms.RevokedGrants(), 1)
 	require.Contains(t, kms.RevokedGrants()[0], provisiontest.SigningServiceAccount(), "the configured signer's grant is removed")
+}
+
+func TestEMAIssuer_CopiedDeploymentCannotSignOrManageSourceKeys(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	owner, kms := f.provisioner(t)
+	_, err := owner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	kid := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	preview := provisiontest.NewProvisioner(t, f.ti.conn, kms.Factory, "https://preview.example.com", f.credentialID, "")
+	_, err = preview.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.ErrorIs(t, err, internalsessionissuers.ErrMisconfigured)
+	require.ErrorIs(t, preview.RotateEMAIssuer(ctx, f.ti.orgID, kid), internalsessionissuers.ErrMisconfigured)
+	require.ErrorIs(t, preview.ProvisionEMAIssuerKey(ctx, f.ti.orgID), internalsessionissuers.ErrMisconfigured)
+	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
+	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
+		return kms.inner.Factory(ctx, ts)
+	}
+	for _, cfg := range []internalsessionissuers.SignerConfig{
+		issuerSignerConfig(t, "https://preview.example.com", provisiontest.KeyRing, provisiontest.SigningServiceAccount()),
+		issuerSignerConfig(t, testServerURL, "projects/preview/locations/global/keyRings/issuer", provisiontest.SigningServiceAccount()),
+		{},
+	} {
+		signer := internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, cfg)
+		assertion, err := signer.Sign(ctx, f.ti.orgID, claims())
+		require.ErrorIs(t, err, internalsessionissuers.ErrMisconfigured)
+		require.Empty(t, assertion)
+	}
+	// Containment remains database-only on any deployment, but a copied
+	// deployment must leave the source deployment's KMS material untouched.
+	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, &kid)
+	require.NoError(t, err)
+	cleaned, pending, err := preview.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
+	require.ErrorIs(t, err, internalsessionissuers.ErrMisconfigured)
+	require.Zero(t, cleaned)
+	require.Equal(t, 1, pending)
+	_, err = preview.SweepEMAIssuerKeys(ctx, f.ti.orgID)
+	require.ErrorIs(t, err, internalsessionissuers.ErrMisconfigured)
+	require.Empty(t, kms.Disabled())
+	require.Empty(t, publishedIssuerKids(t, ctx, f, f.ti.orgID))
+	require.NoError(t, f.lifecycle().SetDisabled(ctx, f.ti.orgID, true))
+	require.Len(t, kms.Created(), 1)
+}
+
+// afterSigning runs a state change after the KMS response, before Sign returns.
+type afterSigning struct {
+	gcpkms.SigningClient
+	after func()
+}
+
+func (s afterSigning) AsymmetricSign(ctx context.Context, resource string, alg jose.SignatureAlgorithm, digest []byte) ([]byte, error) {
+	result, err := s.SigningClient.AsymmetricSign(ctx, resource, alg, digest)
+	if err != nil {
+		return nil, fmt.Errorf("sign before state change: %w", err)
+	}
+	s.after()
+	return result, nil
+}
+
+func TestEMAIssuer_KillSwitchDuringSigningWins(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	owner, kms := f.provisioner(t)
+	_, err := owner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: false})
+	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
+		client, err := kms.inner.Factory(ctx, ts)
+		if err != nil {
+			return nil, fmt.Errorf("create test signing client: %w", err)
+		}
+		return afterSigning{SigningClient: client, after: func() { f.flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, f.ti.orgID, true) }}, nil
+	}
+	signer := internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, issuerSignerConfig(t, testServerURL, provisiontest.KeyRing, provisiontest.SigningServiceAccount()))
+	assertion, err := signer.Sign(ctx, f.ti.orgID, claims())
+	requireRefused(t, err, internalsessionissuers.StateSigningPaused)
+	require.Empty(t, assertion)
 }

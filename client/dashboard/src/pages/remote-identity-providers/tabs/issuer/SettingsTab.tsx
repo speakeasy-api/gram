@@ -371,7 +371,7 @@ export function SettingsTab({
 
       <SettingsSection
         title="Scopes"
-        description="Requested exactly as chosen when neither the client nor the MCP server names scopes, in place of this provider's supported scopes."
+        description="With MCP scope discovery, this override is used when neither the client nor the MCP server names scopes. Without MCP scope discovery, a nonempty override takes precedence over the client. In both cases it replaces this provider's supported scopes."
       >
         <div className="flex flex-col gap-1.5">
           <Label id="scope-override-label" htmlFor="scope-override">

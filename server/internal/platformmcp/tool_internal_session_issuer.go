@@ -27,11 +27,11 @@ type InternalSessionIssuerStatus struct {
 var internalSessionIssuerNextSteps = map[internalsessionissuers.State]string{
 	internalsessionissuers.StateUnavailable:         "The issuer is not available to this organization yet.",
 	internalsessionissuers.StateEntitlementRequired: "Ask support to enable single sign-on for this organization.",
-	internalsessionissuers.StateSetupRequired:       "An administrator can enable the issuer with the internalSessionIssuers.setEnabled management API.",
-	internalsessionissuers.StateEnabled:             "Register this URI in each supported service's enterprise-managed authorization settings. Configuration alone does not verify access.",
-	internalsessionissuers.StateDisabled:            "Signing is disabled. An administrator can re-enable it with the internalSessionIssuers.setEnabled management API.",
-	internalsessionissuers.StateSigningPaused:       "Speakeasy has paused issuer signing. Connections use other identity providers until it resumes.",
-	internalsessionissuers.StateKeyless:             "Every key was revoked after a compromise and a replacement is not active yet. An administrator can retry with internalSessionIssuers.rotate and compromised set.",
+	internalsessionissuers.StateSetupRequired:       "An organization administrator can enable enterprise authorization on IDP and SSO, in the Single sign-on tab.",
+	internalsessionissuers.StateEnabled:             "Register this URI in each supported service's enterprise-managed authorization settings. Each user must sign in through the organization's enterprise SSO; Google or social sign-in alone is insufficient. Configuration alone does not verify access.",
+	internalsessionissuers.StateDisabled:            "Signing is disabled. An organization administrator can re-enable enterprise authorization on IDP and SSO, in the Single sign-on tab.",
+	internalsessionissuers.StateSigningPaused:       "Speakeasy has paused issuer signing. Contact your Speakeasy administrator to resume it.",
+	internalsessionissuers.StateKeyless:             "No signing key is active. Ask an organization administrator to contact Speakeasy support for the signing-key recovery procedure; recovery is unavailable through this read-only tool.",
 }
 
 func registerInternalSessionIssuerTool(reg *Registrar, reader Reader) {

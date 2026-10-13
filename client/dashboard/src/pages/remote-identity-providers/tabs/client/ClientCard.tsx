@@ -37,6 +37,7 @@ import {
 import { InfoField, InfoText } from "../../detailFields";
 import { formatTimestamp } from "./formatTimestamp";
 import { KeySetField } from "./KeySetField";
+import { IssuerScopeFallback } from "../../IssuerScopeFallback";
 
 export function ClientCard({
   client,
@@ -201,14 +202,19 @@ export function ClientCard({
                 options={issuer?.scopesSupported ?? []}
                 value={shownScope}
                 onValueChange={setScope}
-                placeholder="Discovered at sign-in"
+                placeholder={
+                  issuer?.scopeOverride?.length
+                    ? "MCP scopes or issuer fallback"
+                    : "Discovered at sign-in"
+                }
                 disabled={!canEdit}
               />
               <Text small muted>
-                Leave empty to request what the MCP server asks for at each
-                sign-in. Choose from the scopes this identity provider
-                advertises, or type one to add it.
+                Leave empty to use the MCP server's scopes, then the identity
+                provider's fallback. Choose from the scopes this identity
+                provider advertises, or type one to add it.
               </Text>
+              <IssuerScopeFallback scopes={issuer?.scopeOverride} />
             </div>
             <TokenEndpointAuthMethodField
               value={shownAuthMethod}

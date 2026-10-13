@@ -211,7 +211,7 @@ func resolveEMAProviderIDs(ctx context.Context, logger *slog.Logger, q *repo.Que
 // emaProvidersView is the organization-wide order for vendor, the same one
 // runtime selection resolves.
 func (s *Service) emaProvidersView(ctx context.Context, logger *slog.Logger, q *repo.Queries, organizationID, vendor string) (*types.EMAProviderOrder, error) {
-	order, err := ResolveEMAProviders(ctx, q, organizationID, vendor, EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: SpeakeasyEMASigning})
+	order, err := ResolveEMAProviders(ctx, q, organizationID, vendor, EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: s.speakeasySigningAvailable})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
 	}

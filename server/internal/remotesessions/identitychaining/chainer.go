@@ -192,6 +192,9 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	// A token obtained after waiting is released only while its provider can
 	// still serve, so an order changed meanwhile never hands one out.
 	release := func(token Token) (Token, Outcome) {
+		if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
+			return none, outcome
+		}
 		if outcome := c.stillServes(ctx, logger, req, sel); !outcome.Succeeded() {
 			return none, outcome
 		}
@@ -200,18 +203,17 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	if outcome := src.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
 		return none, outcome
 	}
-	if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
-		return none, outcome
+	// The local source's authorization already checks every reuse predicate.
+	// Other sources retain their independent delegation/reuse gate.
+	if _, local := src.(speakeasySource); !local {
+		if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
+			return none, outcome
+		}
 	}
 
-	// Stored credentials come only from the external provider until AIM-523
-	// records provenance, so no other provider may reuse one. p is in the
-	// order this request just resolved.
-	reuse := p.Kind == remotesessions.EMAProviderExternal
-	if reuse {
-		if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-			return token, success
-		}
+	// Stored credentials are checked against their provider and exact provenance.
+	if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
+		return release(token)
 	}
 	failureKey := cacheKey("identityChainingFailure", req, sel)
 	var cached Outcome
@@ -228,7 +230,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		// statement still rejects stale provenance.
 		logger.WarnContext(ctx, "identity chaining lock unavailable; exchanging without single flight", attr.SlogCacheKey(lockKey), attr.SlogError(err))
 	case !held:
-		token, outcome := c.awaitConcurrentAcquisition(ctx, logger, req, sel, reuse)
+		token, outcome := c.awaitConcurrentAcquisition(ctx, logger, req, sel)
 		if !outcome.Succeeded() {
 			return none, outcome
 		}
@@ -246,10 +248,8 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		})
 		// A holder that finished while this request waited for the lock
 		// already published its credential.
-		if reuse {
-			if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-				return release(token)
-			}
+		if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
+			return release(token)
 		}
 	}
 
@@ -291,7 +291,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 // awaitConcurrentAcquisition adopts a concurrent holder's credential, or its
 // failure, instead of spending another assertion on the same identity. A
 // holder that finishes neither within the wait budget is reported transient.
-func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.Logger, req Request, sel selection, reuse bool) (Token, Outcome) {
+func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, Outcome) {
 	var none Token
 	timedOut := newOutcome(StagePersistence, ReasonTransientFailure, ConfidenceVerified, true)
 	attemptKey := cacheKey("identityChainingAttempt", req, sel)
@@ -307,10 +307,8 @@ func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.L
 		case <-deadline.C:
 			return none, timedOut
 		case <-tick.C:
-			if reuse {
-				if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-					return token, success
-				}
+			if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
+				return token, success
 			}
 			var result attemptResult
 			if err := c.locks.Get(ctx, attemptKey, &result); err == nil && result.Outcome.Reason != "" && !result.FinishedAt.Before(startedAt) {
@@ -330,7 +328,7 @@ func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.L
 func cacheKey(prefix string, req Request, sel selection) string {
 	parts := []string{req.OrganizationID, req.ProjectID.String(), req.UserSessionIssuerID.String(), req.UserID}
 	if sel.provider.Kind != remotesessions.EMAProviderExternal {
-		parts = append(parts, string(sel.provider.Kind))
+		parts = append(parts, string(sel.provider.Kind), req.UserSessionJTI, sel.signInID.String(), sel.provider.InternalSessionIssuerID.String(), sel.internalKeyID.String(), sel.internalIssuerVersion.UTC().Format(time.RFC3339Nano))
 	}
 	parts = append(parts,
 		sel.bindingID.String(), strconv.FormatInt(sel.generation, 10),

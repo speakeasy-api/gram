@@ -3419,7 +3419,8 @@ func (q *Queries) GetEMAChainingUserIssuer(ctx context.Context, arg GetEMAChaini
 const getEMACredentialForUse = `-- name: GetEMACredentialForUse :one
 SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
   COALESCE(
-    c.remote_session_issuer_id = $1::uuid
+    COALESCE(c.ema_provider, 'external') = 'external'
+    AND c.remote_session_issuer_id = $1::uuid
     AND c.client_selection = 'binding'
     AND c.remote_session_ema_binding_id = $2::uuid
     AND c.ema_binding_generation = $3::bigint
@@ -3452,6 +3453,7 @@ WHERE c.organization_id = $7::text AND c.project_id = $8
   AND c.user_session_issuer_id = $9
   AND c.remote_session_client_id = $10 AND c.resource = $11
   AND c.subject_urn = $12 AND c.deleted IS FALSE
+  AND COALESCE(c.ema_provider, 'external') = 'external'
 `
 
 type GetEMACredentialForUseParams struct {
@@ -5530,6 +5532,166 @@ func (q *Queries) GetRemoteURLForMcpServer(ctx context.Context, arg GetRemoteURL
 	var url string
 	err := row.Scan(&url)
 	return url, err
+}
+
+const getSpeakeasyEMACredentialForUse = `-- name: GetSpeakeasyEMACredentialForUse :one
+SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,
+  COALESCE(
+    c.ema_provider = 'speakeasy'
+    AND c.remote_session_issuer_id = $1::uuid
+    AND c.client_selection = 'binding'
+    AND c.remote_session_ema_binding_id = $2::uuid
+    AND c.ema_binding_generation = $3::bigint
+    AND c.requested_scopes = $4::text[]
+    AND c.internal_session_issuer_id = $5::uuid
+    AND c.internal_session_issuer_updated_at = $6::timestamptz
+    AND c.internal_session_issuer_key_id = $7::uuid
+    AND c.sso_sign_in_id = $8::uuid
+    AND c.user_session_id = $9::uuid
+    AND c.access_token_encrypted IS NOT NULL
+    AND c.access_expires_at > $10::timestamptz
+    AND EXISTS (
+      SELECT 1 FROM remote_session_ema_bindings b
+      WHERE b.id = c.remote_session_ema_binding_id AND b.generation = c.ema_binding_generation
+        AND b.project_id = c.project_id AND b.organization_id = c.organization_id
+        AND b.user_session_issuer_id = c.user_session_issuer_id
+        AND b.remote_session_issuer_id = c.remote_session_issuer_id
+        AND b.remote_session_client_id = c.remote_session_client_id
+        AND b.resource = c.resource AND b.state = 'ready'
+    ), FALSE)::boolean AS usable
+FROM remote_session_ema_credentials c
+WHERE c.organization_id = $11::text AND c.project_id = $12
+  AND c.user_session_issuer_id = $13
+  AND c.remote_session_client_id = $14 AND c.resource = $15
+  AND c.subject_urn = $16 AND c.deleted IS FALSE
+  AND c.ema_provider = 'speakeasy'
+`
+
+type GetSpeakeasyEMACredentialForUseParams struct {
+	RemoteSessionIssuerID          uuid.UUID
+	BindingID                      uuid.UUID
+	BindingGeneration              int64
+	RequestedScopes                []string
+	InternalSessionIssuerID        uuid.UUID
+	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
+	InternalSessionIssuerKeyID     uuid.UUID
+	SsoSignInID                    uuid.UUID
+	UserSessionID                  uuid.UUID
+	UsableAfter                    pgtype.Timestamptz
+	OrganizationID                 string
+	ProjectID                      uuid.NullUUID
+	UserSessionIssuerID            uuid.NullUUID
+	RemoteSessionClientID          uuid.NullUUID
+	Resource                       string
+	SubjectUrn                     string
+}
+
+type GetSpeakeasyEMACredentialForUseRow struct {
+	ID                   uuid.UUID
+	UpdatedAt            pgtype.Timestamptz
+	AccessTokenEncrypted pgtype.Text
+	AccessExpiresAt      pgtype.Timestamptz
+	GrantedScopes        []string
+	Usable               bool
+}
+
+func (q *Queries) GetSpeakeasyEMACredentialForUse(ctx context.Context, arg GetSpeakeasyEMACredentialForUseParams) (GetSpeakeasyEMACredentialForUseRow, error) {
+	row := q.db.QueryRow(ctx, getSpeakeasyEMACredentialForUse,
+		arg.RemoteSessionIssuerID,
+		arg.BindingID,
+		arg.BindingGeneration,
+		arg.RequestedScopes,
+		arg.InternalSessionIssuerID,
+		arg.InternalSessionIssuerUpdatedAt,
+		arg.InternalSessionIssuerKeyID,
+		arg.SsoSignInID,
+		arg.UserSessionID,
+		arg.UsableAfter,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+	)
+	var i GetSpeakeasyEMACredentialForUseRow
+	err := row.Scan(
+		&i.ID,
+		&i.UpdatedAt,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.GrantedScopes,
+		&i.Usable,
+	)
+	return i, err
+}
+
+const getSpeakeasyEMAGrant = `-- name: GetSpeakeasyEMAGrant :one
+SELECT s.id, s.sso_sign_in_id
+FROM user_sessions AS s
+JOIN user_session_issuers AS i ON i.id = s.user_session_issuer_id
+JOIN projects AS p ON p.id = $1::uuid AND p.organization_id = s.organization_id AND p.deleted IS FALSE
+WHERE s.jti = $2 AND s.organization_id = $3
+  AND s.user_session_issuer_id = $4
+  AND (s.project_id IS NULL OR s.project_id = p.id)
+  AND s.subject_urn = $5 AND s.deleted IS FALSE
+  AND s.refresh_expires_at > clock_timestamp()
+  AND i.organization_id = s.organization_id AND i.project_id IS NULL AND i.deleted IS FALSE
+`
+
+type GetSpeakeasyEMAGrantParams struct {
+	ProjectID           uuid.UUID
+	Jti                 string
+	OrganizationID      pgtype.Text
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          urn.SessionSubject
+}
+
+type GetSpeakeasyEMAGrantRow struct {
+	ID          uuid.UUID
+	SsoSignInID uuid.NullUUID
+}
+
+// Only the exact authenticated MCP grant may supply SSO provenance.
+func (q *Queries) GetSpeakeasyEMAGrant(ctx context.Context, arg GetSpeakeasyEMAGrantParams) (GetSpeakeasyEMAGrantRow, error) {
+	row := q.db.QueryRow(ctx, getSpeakeasyEMAGrant,
+		arg.ProjectID,
+		arg.Jti,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.SubjectUrn,
+	)
+	var i GetSpeakeasyEMAGrantRow
+	err := row.Scan(&i.ID, &i.SsoSignInID)
+	return i, err
+}
+
+const getSpeakeasyEMAIssuerVersion = `-- name: GetSpeakeasyEMAIssuerVersion :one
+SELECT i.updated_at, k.id AS key_id
+FROM internal_session_issuers i
+JOIN json_web_keys k ON k.json_web_key_set_id = i.json_web_key_set_id
+  AND k.organization_id = i.organization_id AND k.state = 'active' AND k.deleted IS FALSE
+JOIN organization_metadata o ON o.id = i.organization_id AND o.disabled_at IS NULL
+WHERE i.id = $1 AND i.organization_id = $2
+  AND i.deleted IS FALSE AND i.disabled_at IS NULL
+`
+
+type GetSpeakeasyEMAIssuerVersionParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetSpeakeasyEMAIssuerVersionRow struct {
+	UpdatedAt pgtype.Timestamptz
+	KeyID     uuid.UUID
+}
+
+// Used through the publishing transaction, never via a second pool connection.
+func (q *Queries) GetSpeakeasyEMAIssuerVersion(ctx context.Context, arg GetSpeakeasyEMAIssuerVersionParams) (GetSpeakeasyEMAIssuerVersionRow, error) {
+	row := q.db.QueryRow(ctx, getSpeakeasyEMAIssuerVersion, arg.ID, arg.OrganizationID)
+	var i GetSpeakeasyEMAIssuerVersionRow
+	err := row.Scan(&i.UpdatedAt, &i.KeyID)
+	return i, err
 }
 
 const getTenantRemoteSessionIssuerByID = `-- name: GetTenantRemoteSessionIssuerByID :one
@@ -10274,6 +10436,43 @@ func (q *Queries) LockRotationIssuerSnapshot(ctx context.Context, arg LockRotati
 	return id, err
 }
 
+const lockSpeakeasyEMAIssuer = `-- name: LockSpeakeasyEMAIssuer :one
+SELECT id FROM internal_session_issuers
+WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE
+FOR SHARE
+`
+
+type LockSpeakeasyEMAIssuerParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockSpeakeasyEMAIssuer(ctx context.Context, arg LockSpeakeasyEMAIssuerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockSpeakeasyEMAIssuer, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockSpeakeasyEMASignIn = `-- name: LockSpeakeasyEMASignIn :one
+SELECT id FROM sso_sign_ins
+WHERE id = $1 AND organization_id = $2
+FOR SHARE
+`
+
+type LockSpeakeasyEMASignInParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Matches the sign-in-first lock order of revocation and grant creation.
+func (q *Queries) LockSpeakeasyEMASignIn(ctx context.Context, arg LockSpeakeasyEMASignInParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockSpeakeasyEMASignIn, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockTrustedRemoteSessionClientForOrganization = `-- name: LockTrustedRemoteSessionClientForOrganization :one
 SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.created_at, c.updated_at, c.deleted_at, c.deleted, i.id, i.project_id, i.organization_id, i.attachment_scope, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.revocation_endpoint, i.registration_endpoint, i.jwks_uri, i.jwks, i.jwks_fetched_at, i.jwks_last_error, i.jwks_last_error_at, i.jwks_cache_expires_at, i.jwks_etag, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.authorization_grant_profiles_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.code_challenge_methods_supported, i.client_id_metadata_document_supported, i.userinfo_endpoint, i.introspection_endpoint, i.introspection_endpoint_auth_methods_supported, i.id_token_signing_alg_values_supported, i.claims_supported, i.backchannel_logout_supported, i.authorization_response_iss_parameter_supported, i.scope_override, i.omit_scope_fallback, i.resource_indicator_supported, i.oidc, i.passthrough, i.tunneled_mcp_server_id, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.metadata, i.metadata_fetched_at, i.metadata_last_error, i.metadata_last_error_at, i.metadata_last_error_url, i.created_at, i.updated_at, i.deleted_at, i.deleted
 FROM remote_session_clients AS c
@@ -14370,6 +14569,12 @@ WHERE EXISTS (
   )
 ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
 DO UPDATE SET
+  ema_provider = NULL,
+  internal_session_issuer_id = NULL,
+  internal_session_issuer_updated_at = NULL,
+  internal_session_issuer_key_id = NULL,
+  sso_sign_in_id = NULL,
+  user_session_id = NULL,
   organization_id = EXCLUDED.organization_id,
   remote_session_issuer_id = EXCLUDED.remote_session_issuer_id,
   client_selection = EXCLUDED.client_selection,
@@ -14572,6 +14777,107 @@ func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessi
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const upsertSpeakeasyEMACredential = `-- name: UpsertSpeakeasyEMACredential :one
+INSERT INTO remote_session_ema_credentials AS c (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
+  resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
+  ema_provider, internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id,
+  sso_sign_in_id, user_session_id, requested_scopes, granted_scopes, access_token_encrypted,
+  access_expires_at, downstream_refresh_token_observed, last_used_at
+)
+SELECT $1::text, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
+  $6::text, $7::text, 'binding', $8::uuid, $9::bigint,
+  'speakeasy', $10::uuid, $11::timestamptz, $12::uuid,
+  $13::uuid, $14::uuid, $15::text[], $16::text[], $17::text,
+  $18::timestamptz, $19::boolean, clock_timestamp()
+WHERE EXISTS (
+  SELECT 1 FROM remote_session_ema_bindings b
+  JOIN remote_session_clients rc ON rc.id = b.remote_session_client_id AND rc.deleted IS FALSE
+  JOIN remote_session_issuers ri ON ri.id = rc.remote_session_issuer_id AND ri.deleted IS FALSE
+  WHERE b.id = $8::uuid AND b.generation = $9::bigint
+    AND b.organization_id = $1::text AND b.project_id = $2::uuid
+    AND b.user_session_issuer_id = $3::uuid
+    AND b.remote_session_issuer_id = $4::uuid
+    AND b.remote_session_client_id = $5::uuid
+    AND b.resource = $6::text AND b.state = 'ready'
+    AND (rc.project_id = b.project_id OR (rc.project_id IS NULL AND rc.organization_id = b.organization_id))
+    AND (ri.project_id = b.project_id OR (ri.project_id IS NULL AND (ri.organization_id = b.organization_id OR ri.organization_id IS NULL)))
+)
+ON CONFLICT (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn) WHERE deleted IS FALSE
+DO UPDATE SET
+  organization_id = EXCLUDED.organization_id,
+  remote_session_issuer_id = EXCLUDED.remote_session_issuer_id,
+  client_selection = EXCLUDED.client_selection,
+  remote_session_ema_binding_id = EXCLUDED.remote_session_ema_binding_id,
+  ema_binding_generation = EXCLUDED.ema_binding_generation,
+  trusted_issuer_session_id = NULL,
+  ema_provider = EXCLUDED.ema_provider,
+  internal_session_issuer_id = EXCLUDED.internal_session_issuer_id,
+  internal_session_issuer_updated_at = EXCLUDED.internal_session_issuer_updated_at,
+  internal_session_issuer_key_id = EXCLUDED.internal_session_issuer_key_id,
+  sso_sign_in_id = EXCLUDED.sso_sign_in_id,
+  user_session_id = EXCLUDED.user_session_id,
+  requested_scopes = EXCLUDED.requested_scopes,
+  granted_scopes = EXCLUDED.granted_scopes,
+  access_token_encrypted = EXCLUDED.access_token_encrypted,
+  access_expires_at = EXCLUDED.access_expires_at,
+  downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
+  last_used_at = EXCLUDED.last_used_at,
+  updated_at = clock_timestamp()
+RETURNING id
+`
+
+type UpsertSpeakeasyEMACredentialParams struct {
+	OrganizationID                 string
+	ProjectID                      uuid.UUID
+	UserSessionIssuerID            uuid.UUID
+	RemoteSessionIssuerID          uuid.UUID
+	RemoteSessionClientID          uuid.UUID
+	Resource                       string
+	SubjectUrn                     string
+	BindingID                      uuid.UUID
+	BindingGeneration              int64
+	InternalSessionIssuerID        uuid.UUID
+	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
+	InternalSessionIssuerKeyID     uuid.UUID
+	SsoSignInID                    uuid.UUID
+	UserSessionID                  uuid.UUID
+	RequestedScopes                []string
+	GrantedScopes                  []string
+	AccessTokenEncrypted           string
+	AccessExpiresAt                pgtype.Timestamptz
+	DownstreamRefreshTokenObserved bool
+}
+
+// The caller locks and checks the exact SSO grant and issuer before this
+// statement. Binding/client changes during redemption still fence publication.
+func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSpeakeasyEMACredentialParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertSpeakeasyEMACredential,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+		arg.BindingID,
+		arg.BindingGeneration,
+		arg.InternalSessionIssuerID,
+		arg.InternalSessionIssuerUpdatedAt,
+		arg.InternalSessionIssuerKeyID,
+		arg.SsoSignInID,
+		arg.UserSessionID,
+		arg.RequestedScopes,
+		arg.GrantedScopes,
+		arg.AccessTokenEncrypted,
+		arg.AccessExpiresAt,
+		arg.DownstreamRefreshTokenObserved,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertTrustedDelegationCredential = `-- name: UpsertTrustedDelegationCredential :one

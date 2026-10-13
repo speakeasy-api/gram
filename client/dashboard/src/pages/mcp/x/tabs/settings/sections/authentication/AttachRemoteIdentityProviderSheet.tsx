@@ -743,6 +743,7 @@ export function AttachRemoteIdentityProviderSheet({
           </Text>
         )}
         <OverridesFields
+          issuerScopeOverride={selectedIssuer?.scopeOverride}
           scopeOverride={scopeOverride}
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,7 +42,7 @@ func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, 
 			remotesessions.EMAProviderExternal: func(p remotesessions.EMAProvider) tokenSource {
 				return externalSource{c: nil, issuer: p.RemoteSessionIssuerID}
 			},
-			remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return speakeasySource{} },
+			remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return new(speakeasySource) },
 		},
 	}
 }
@@ -128,13 +127,34 @@ func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 	if !outcome.Succeeded() {
 		return false
 	}
-	// Stored credentials come from the endpoint's trusted issuer, so one is
-	// usable only while an available external provider names it.
-	// TODO(AIM-523): record provider provenance on the credential instead.
 	providers, outcome := g.servingProviders(ctx, g.logger, req, sel)
-	if !outcome.Succeeded() || !slices.ContainsFunc(providers, func(p remotesessions.EMAProvider) bool { return p.Kind == remotesessions.EMAProviderExternal }) {
+	if !outcome.Succeeded() {
 		return false
 	}
+	for _, p := range providers {
+		current := sel
+		current.provider = p
+		if p.Kind == remotesessions.EMAProviderSpeakeasy {
+			source := g.source(p)
+			if !source.authorize(ctx, g.logger, req, &current).Succeeded() {
+				continue
+			}
+			row, err := readCredential(ctx, repo.New(g.db), req, current, g.now())
+			if err != nil || !row.Usable || g.enc == nil {
+				continue
+			}
+			value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
+			if err == nil && value != "" {
+				return true
+			}
+		} else if g.hasExternalCredential(ctx, req, current) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *Governor) hasExternalCredential(ctx context.Context, req Request, sel selection) bool {
 	q := repo.New(g.db)
 	issuer, err := q.GetEMAChainingUserIssuer(ctx, repo.GetEMAChainingUserIssuerParams{ID: req.UserSessionIssuerID, OrganizationID: conv.ToPGText(req.OrganizationID)})
 	switch {

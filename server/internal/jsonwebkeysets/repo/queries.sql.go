@@ -421,6 +421,27 @@ func (q *Queries) GetExternalKeyForMint(ctx context.Context, arg GetExternalKeyF
 	return i, err
 }
 
+const getInternalSessionIssuerForOwnership = `-- name: GetInternalSessionIssuerForOwnership :one
+SELECT issuer
+FROM internal_session_issuers
+WHERE organization_id = $1
+  AND json_web_key_set_id = $2
+`
+
+type GetInternalSessionIssuerForOwnershipParams struct {
+	OrganizationID  string
+	JsonWebKeySetID uuid.UUID
+}
+
+// Cleanup must verify deployment ownership even after an issuer is tombstoned
+// or its organization disabled. Such rows may still own KMS cleanup work.
+func (q *Queries) GetInternalSessionIssuerForOwnership(ctx context.Context, arg GetInternalSessionIssuerForOwnershipParams) (string, error) {
+	row := q.db.QueryRow(ctx, getInternalSessionIssuerForOwnership, arg.OrganizationID, arg.JsonWebKeySetID)
+	var issuer string
+	err := row.Scan(&issuer)
+	return issuer, err
+}
+
 const getJsonWebKey = `-- name: GetJsonWebKey :one
 SELECT id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 FROM json_web_keys

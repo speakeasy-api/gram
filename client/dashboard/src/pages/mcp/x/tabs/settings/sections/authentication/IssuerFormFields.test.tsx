@@ -2,7 +2,7 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } fr
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ClientCredentialsFields } from "./IssuerFormFields";
+import { ClientCredentialsFields, OverridesFields } from "./IssuerFormFields";
 
 vi.mock(
   "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js",
@@ -16,6 +16,26 @@ vi.mock(
 );
 
 afterEach(cleanup);
+
+describe("OverridesFields", () => {
+  it("discloses inherited scopes and where they can be changed", () => {
+    render(
+      <OverridesFields
+        scopeOverride=""
+        audienceOverride=""
+        issuerScopeOverride={["admin", "offline_access"]}
+        onScopeOverrideChange={vi.fn()}
+        onAudienceOverrideChange={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText(/provider's scope fallback is admin, offline_access/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Change it in the identity provider's Settings/),
+    ).toBeTruthy();
+  });
+});
 
 function renderFields(method: AuthMethod, callbackURL?: string): void {
   render(

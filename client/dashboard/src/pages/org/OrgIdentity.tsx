@@ -24,6 +24,7 @@ import { toast } from "sonner";
 
 import { DirectoryRoleMappings } from "./identity-provider/DirectoryRoleMappings";
 import { IdentityProviders } from "./identity-provider/IdentityProviders";
+import { EnterpriseIssuerSection } from "./identity-provider/EnterpriseIssuerSection";
 import {
   identityProvidersHref,
   IDENTITY_TABS,
@@ -460,6 +461,8 @@ function SingleSignOnTab(): JSX.Element {
           />
         }
       />
+
+      <EnterpriseIssuerSection ssoFeatureEnabled={ssoFeatureEnabled} />
 
       <IdentitySection
         sectionId="directory_sync"
