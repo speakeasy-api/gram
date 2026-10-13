@@ -154,6 +154,8 @@ type InfoResult struct {
 type LoginPayload struct {
 	// Optional URL to redirect to after successful authentication
 	Redirect *string
+	// Optional partner signup code.
+	PartnerCode *string
 	// Optional organization name. When set, the organization is created for a new
 	// user during the auth callback.
 	OrgName *string
@@ -225,6 +227,8 @@ type RegisterPayload struct {
 	SessionToken *string
 	// The name of the org to register
 	OrgName string
+	// Optional partner signup code.
+	PartnerCode *string
 }
 
 // SwitchScopesPayload is the payload type of the auth service switchScopes

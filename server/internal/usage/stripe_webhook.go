@@ -19,7 +19,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -688,6 +690,79 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 			return stripeWebhookResult{}, fmt.Errorf("restore demoted trial runtime features: %w", err)
 		}
 		newlyEnabled = append(newlyEnabled, productfeatures.TrialRuntimeFeatures...)
+	}
+
+	// Partner access is granted only after Stripe confirms PAYG activation,
+	// never just for entering a signup code. Preserve explicit staff disables.
+	organization, err := orgrepo.New(tx).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("load partner signup attribution: %w", err)
+	}
+	application, err := orgrepo.New(tx).GetOrganizationPromotionApplication(ctx, organizationID)
+	partnerSignup := err == nil
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return stripeWebhookResult{}, fmt.Errorf("read promotion application: %w", err)
+	}
+	if partnerSignup {
+		switch {
+		case application.RedeemedAt.Valid:
+			if application.StripeSubscriptionID.String != event.SubscriptionID {
+				return stripeWebhookResult{}, errors.New("organization promotion was already redeemed by another subscription")
+			}
+		default:
+			// Fail closed until our application-created checkout is persisted. A
+			// webhook arriving before finalization can retry without consuming the intent.
+			if !state.StripeCheckoutSessionID.Valid || state.StripeCheckoutSessionID.String != checkout.ID ||
+				!state.StripeCheckoutIdempotencyKey.Valid || state.StripeCheckoutIdempotencyKey.String == "" {
+				return stripeWebhookResult{}, errors.New("partner checkout does not match a persisted checkout intent; retry after checkout finalization")
+			}
+			rows, err := q.RecordOrganizationPromotionRedemption(ctx, repo.RecordOrganizationPromotionRedemptionParams{
+				OrganizationID: pgtype.Text{String: organizationID, Valid: true}, StripePromotionCodeID: application.StripePromotionCodeID, StripeSubscriptionID: pgtype.Text{String: event.SubscriptionID, Valid: true},
+			})
+			if err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("record promotion redemption: %w", err)
+			}
+			if rows != 1 {
+				return stripeWebhookResult{}, errors.New("promotion redemption changed during activation")
+			}
+			if s.auditLogger == nil {
+				return stripeWebhookResult{}, errors.New("audit logger is unavailable")
+			}
+			if err := s.auditLogger.LogOrganizationPromotionRedeemed(ctx, tx, audit.LogOrganizationPromotionRedeemedEvent{
+				OrganizationID: organizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, "system"), ActorDisplayName: nil,
+				OrganizationName: organization.Name, OrganizationSlug: organization.Slug,
+				Redemption: audit.OrganizationPromotionRedemptionSnapshot{StripePromotionCodeID: application.StripePromotionCodeID, StripeSubscriptionID: event.SubscriptionID},
+			}); err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("audit promotion redemption: %w", err)
+			}
+		}
+	}
+	if partnerSignup {
+		inserted, err := featurerepo.New(tx).EnableFeatureIfNeverConfigured(ctx, featurerepo.EnableFeatureIfNeverConfiguredParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(productfeatures.FeatureNetworkIngress),
+		})
+		if err != nil {
+			return stripeWebhookResult{}, fmt.Errorf("enable partner private networking: %w", err)
+		}
+		if inserted > 0 {
+			if s.auditLogger == nil {
+				return stripeWebhookResult{}, errors.New("audit logger is unavailable")
+			}
+			if err := s.auditLogger.LogOrganizationProductFeatureToggled(ctx, tx, audit.LogOrganizationProductFeatureToggledEvent{
+				OrganizationID:   organizationID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+				ActorDisplayName: nil,
+				ActorSlug:        nil,
+				OrganizationName: organization.Name,
+				OrganizationSlug: organization.Slug,
+				FeatureName:      string(productfeatures.FeatureNetworkIngress),
+				FeatureEnabled:   true,
+			}); err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("audit partner private networking: %w", err)
+			}
+			newlyEnabled = append(newlyEnabled, productfeatures.FeatureNetworkIngress)
+		}
 	}
 
 	reconcileKeyTypes := []openrouter.KeyType(nil)

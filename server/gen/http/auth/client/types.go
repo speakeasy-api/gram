@@ -19,6 +19,8 @@ import (
 type RegisterRequestBody struct {
 	// The name of the org to register
 	OrgName string `form:"org_name" json:"org_name" xml:"org_name"`
+	// Optional partner signup code.
+	PartnerCode *string `form:"partner_code,omitempty" json:"partner_code,omitempty" xml:"partner_code,omitempty"`
 }
 
 // LogoutEverywhereResponseBody is the type of the "auth" service
@@ -1899,7 +1901,8 @@ type ProjectEntryResponseBody struct {
 // "register" endpoint of the "auth" service.
 func NewRegisterRequestBody(p *auth.RegisterPayload) *RegisterRequestBody {
 	body := &RegisterRequestBody{
-		OrgName: p.OrgName,
+		OrgName:     p.OrgName,
+		PartnerCode: p.PartnerCode,
 	}
 	return body
 }

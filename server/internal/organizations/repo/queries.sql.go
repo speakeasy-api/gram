@@ -141,6 +141,30 @@ func (q *Queries) AttachWorkOSUserToOrg(ctx context.Context, arg AttachWorkOSUse
 	return err
 }
 
+const attributePartnerSignup = `-- name: AttributePartnerSignup :execrows
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
+SELECT $1, $2
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_promotion_applications WHERE organization_id = $1
+)
+ON CONFLICT DO NOTHING
+`
+
+type AttributePartnerSignupParams struct {
+	OrganizationID        pgtype.Text
+	StripePromotionCodeID string
+}
+
+// Signup attribution is immutable even after redemption. Future offer selection
+// must not reuse this signup-only operation to adopt an existing organization.
+func (q *Queries) AttributePartnerSignup(ctx context.Context, arg AttributePartnerSignupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attributePartnerSignup, arg.OrganizationID, arg.StripePromotionCodeID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearOnboardingDefaultPlaybook = `-- name: ClearOnboardingDefaultPlaybook :exec
 UPDATE onboarding_playbooks
 SET is_default = false, updated_at = clock_timestamp()
@@ -706,6 +730,20 @@ func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg Filte
 	return items, nil
 }
 
+const getEnabledSignupOffer = `-- name: GetEnabledSignupOffer :one
+SELECT id FROM signup_offers
+WHERE stripe_promotion_code_id = $1
+  AND signup_flow = 'tailscale_partner_gateway' AND enabled
+FOR SHARE
+`
+
+func (q *Queries) GetEnabledSignupOffer(ctx context.Context, stripePromotionCodeID string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getEnabledSignupOffer, stripePromotionCodeID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getInvitationByID = `-- name: GetInvitationByID :one
 SELECT id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 FROM organization_invitations
@@ -1080,6 +1118,28 @@ func (q *Queries) GetOrganizationOnboardingStack(ctx context.Context, organizati
 		&i.Slug,
 		&i.MdmVendor,
 		&i.MdmVendorName,
+	)
+	return i, err
+}
+
+const getOrganizationPromotionApplication = `-- name: GetOrganizationPromotionApplication :one
+SELECT redeemed_at, created_at, updated_at, organization_id, stripe_promotion_code_id, stripe_subscription_id, id FROM organization_promotion_applications
+WHERE organization_id = $1::text
+ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetOrganizationPromotionApplication(ctx context.Context, organizationID string) (OrganizationPromotionApplication, error) {
+	row := q.db.QueryRow(ctx, getOrganizationPromotionApplication, organizationID)
+	var i OrganizationPromotionApplication
+	err := row.Scan(
+		&i.RedeemedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OrganizationID,
+		&i.StripePromotionCodeID,
+		&i.StripeSubscriptionID,
+		&i.ID,
 	)
 	return i, err
 }

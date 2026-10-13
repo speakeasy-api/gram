@@ -1412,3 +1412,25 @@ JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL
 JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND m.deleted_at IS NULL
 WHERE s.slug = ANY(@step_slugs::text[])
 ORDER BY s.slug, m.sort_order, m.slug;
+
+-- Signup attribution is immutable even after redemption. Future offer selection
+-- must not reuse this signup-only operation to adopt an existing organization.
+-- name: AttributePartnerSignup :execrows
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
+SELECT sqlc.narg(organization_id), @stripe_promotion_code_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization_promotion_applications WHERE organization_id = sqlc.narg(organization_id)
+)
+ON CONFLICT DO NOTHING;
+
+-- name: GetOrganizationPromotionApplication :one
+SELECT * FROM organization_promotion_applications
+WHERE organization_id = @organization_id::text
+ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+LIMIT 1;
+
+-- name: GetEnabledSignupOffer :one
+SELECT id FROM signup_offers
+WHERE stripe_promotion_code_id = @stripe_promotion_code_id
+  AND signup_flow = 'tailscale_partner_gateway' AND enabled
+FOR SHARE;

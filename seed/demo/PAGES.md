@@ -298,3 +298,14 @@ The Default project contains its Everyone Default plugin and a role-only plugin 
 ### [~] Assistants: workload identity bindings
 
 AIM-409 assistant fixtures use one ordinary project-pinned trust registration (nonempty illustrative platform issuer/JWKS URLs, no wildcard admission), exact root admission/assignment, and complete generation-1 binding mirror tuples. The fifth managed agent belongs only to the bound assistant and has no grants or upstream credentials. Dashboard roots are durable, not per-wake. The demo trust URLs are inert display fixtures; runtime creation instead uses the deployment's configured Speakeasy issuer and existing JWKS. Browser verification pending.
+
+### Optional private-network onboarding
+
+The `private-network` setup task is catalog-backed and hidden by default, including
+in the demo's existing security selection. No representative ingress or new task
+row is needed: ordinary onboarding must not gain this step. Staff can select
+`platform-mcp` and `private-network` in a gateway-only playbook. The card reads the
+existing product-feature entitlement and links to organization Network Access
+settings; without entitlement it offers support rather than collecting credentials.
+The demo deliberately remains unentitled: no `network_ingress` grant, Tailscale
+credentials, partner identities, or billing configuration are seeded.

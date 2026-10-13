@@ -12,6 +12,7 @@ import { adminCreateOnboardingPlaybook } from "../funcs/adminCreateOnboardingPla
 import { adminCreateOnboardingUseCase } from "../funcs/adminCreateOnboardingUseCase.js";
 import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
+import { adminCreateSignupOffer } from "../funcs/adminCreateSignupOffer.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
@@ -58,6 +59,7 @@ import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
 import { adminListRegistryOktaUnmapped } from "../funcs/adminListRegistryOktaUnmapped.js";
+import { adminListSignupOffers } from "../funcs/adminListSignupOffers.js";
 import { adminListUserOrganizations } from "../funcs/adminListUserOrganizations.js";
 import { adminListUsers } from "../funcs/adminListUsers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
@@ -82,6 +84,7 @@ import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
 import { adminUpdateOnboardingPlaybook } from "../funcs/adminUpdateOnboardingPlaybook.js";
 import { adminUpdateOnboardingUseCase } from "../funcs/adminUpdateOnboardingUseCase.js";
 import { adminUpdateOrganization } from "../funcs/adminUpdateOrganization.js";
+import { adminUpdateSignupOffer } from "../funcs/adminUpdateSignupOffer.js";
 import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -118,6 +121,7 @@ import { AdminRegistryOktaCandidates } from "../models/components/adminregistryo
 import { AdminRegistryOktaUnmapped } from "../models/components/adminregistryoktaunmapped.js";
 import { AdminRegistryPage } from "../models/components/adminregistrypage.js";
 import { AdminSession } from "../models/components/adminsession.js";
+import { AdminSignupOffer } from "../models/components/adminsignupoffer.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
@@ -132,6 +136,7 @@ import { CreateOnboardingUseCaseRequestBody } from "../models/components/createo
 import { CreateOrganizationRequestBody } from "../models/components/createorganizationrequestbody.js";
 import { CreateRegistryEntryRequestBody } from "../models/components/createregistryentryrequestbody.js";
 import { CreateRemoteSessionIssuerForm } from "../models/components/createremotesessionissuerform.js";
+import { CreateSignupOfferRequestBody } from "../models/components/createsignupofferrequestbody.js";
 import { DeleteOnboardingPlaybookRequestBody } from "../models/components/deleteonboardingplaybookrequestbody.js";
 import { DeleteOnboardingUseCaseRequestBody } from "../models/components/deleteonboardingusecaserequestbody.js";
 import { DisableOrganizationRequestBody } from "../models/components/disableorganizationrequestbody.js";
@@ -140,6 +145,7 @@ import { ExtendTrialRequestBody } from "../models/components/extendtrialrequestb
 import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuermetadatarequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
+import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
 import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
@@ -169,6 +175,7 @@ import { UpdateOnboardingPlaybookRequestBody } from "../models/components/update
 import { UpdateOnboardingUseCaseRequestBody } from "../models/components/updateonboardingusecaserequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
+import { UpdateSignupOfferRequestBody } from "../models/components/updatesignupofferrequestbody.js";
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
 import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
@@ -1422,6 +1429,55 @@ export class Admin extends ClientSDK {
   ): Promise<AdminSession> {
     return unwrapAsync(adminGetSession(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * listSignupOffers admin
+   *
+   * @remarks
+   * List staff-managed signup offers. Stripe owns all promotion terms.
+   */
+  async listSignupOffers(
+    options?: RequestOptions,
+  ): Promise<ListSignupOffersResponseBody> {
+    return unwrapAsync(adminListSignupOffers(
+      this,
+      options,
+    ));
+  }
+
+  /**
+   * createSignupOffer admin
+   *
+   * @remarks
+   * Create a disabled signup offer mapped to an exact Stripe promotion code ID.
+   */
+  async createSignupOffer(
+    request: CreateSignupOfferRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminSignupOffer> {
+    return unwrapAsync(adminCreateSignupOffer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * updateSignupOffer admin
+   *
+   * @remarks
+   * Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.
+   */
+  async updateSignupOffer(
+    request: UpdateSignupOfferRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminSignupOffer> {
+    return unwrapAsync(adminUpdateSignupOffer(
+      this,
+      request,
       options,
     ));
   }

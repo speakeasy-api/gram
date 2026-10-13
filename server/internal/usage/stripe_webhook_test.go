@@ -150,6 +150,10 @@ func (f *fakeStripeWebhookClient) VerifyWebhook(payload []byte, signature string
 	return f.verify(payload, signature)
 }
 
+func (c *fakeStripeWebhookClient) ResolveGatewayPromotionCode(context.Context, string) (string, error) {
+	return "", errors.New("promotion resolution is not used by billing")
+}
+
 func (f *fakeStripeWebhookClient) Catalog() stripeclient.Catalog {
 	return stripeclient.Catalog{PriceIDMCPEgress: "", PriceIDRiskScans: "", PriceIDTUM: "", PortalConfigurationID: ""}
 }

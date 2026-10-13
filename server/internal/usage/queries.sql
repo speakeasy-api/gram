@@ -356,6 +356,8 @@ SELECT
     billing_metadata.id AS billing_metadata_id
   , billing_metadata.stripe_customer_id
   , billing_metadata.stripe_subscription_id
+  , billing_metadata.stripe_checkout_session_id
+  , billing_metadata.stripe_checkout_idempotency_key
   , billing_metadata.stripe_billing_cycle_anchor
   , billing_metadata.billing_cycle_anchor_day
   , organization_metadata.name AS organization_name
@@ -609,3 +611,27 @@ WHERE organization_id = @organization_id
 UPDATE openrouter_api_keys
 SET created_at = @created_at
 WHERE organization_id = @organization_id;
+
+-- name: HasRedeemedSelectedPromotion :one
+SELECT COALESCE((
+  SELECT redeemed_at IS NOT NULL FROM organization_promotion_applications
+  WHERE organization_id = @organization_id::text
+  ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+  LIMIT 1
+), false)::boolean AS redeemed;
+
+-- name: RecordOrganizationPromotionRedemption :execrows
+UPDATE organization_promotion_applications
+SET redeemed_at = clock_timestamp(), stripe_subscription_id = sqlc.narg(stripe_subscription_id), updated_at = clock_timestamp()
+WHERE organization_id = sqlc.narg(organization_id)
+  AND stripe_promotion_code_id = @stripe_promotion_code_id
+  AND redeemed_at IS NULL;
+
+-- name: ListOrganizationPromotionRedemptions :many
+SELECT * FROM organization_promotion_applications WHERE organization_id = sqlc.narg(organization_id)
+  AND redeemed_at IS NOT NULL
+ORDER BY redeemed_at, id;
+
+-- name: InsertOrganizationPromotionApplicationFixture :exec
+INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id, stripe_subscription_id, redeemed_at)
+VALUES (sqlc.narg(organization_id), @stripe_promotion_code_id, sqlc.narg(stripe_subscription_id), sqlc.narg(redeemed_at));

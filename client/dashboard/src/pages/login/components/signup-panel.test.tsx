@@ -16,10 +16,14 @@ afterEach(() => {
   telemetryCapture.mockReset();
 });
 
-function renderPanel(initialEntry = "/sign-up", redirectTo?: string | null) {
+function renderPanel(
+  initialEntry = "/sign-up",
+  redirectTo?: string | null,
+  partnerCode?: string,
+) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <SignUpPanel redirectTo={redirectTo} />
+      <SignUpPanel redirectTo={redirectTo} partnerCode={partnerCode} />
     </MemoryRouter>,
   );
 }
@@ -323,4 +327,105 @@ describe("SignUpPanel", () => {
       expect.objectContaining({ action: "signup_started" }),
     );
   });
+});
+
+it("preserves a prefilled partner code through retry, edits, login link and signup", async () => {
+  const assign = vi
+    .spyOn(window.location, "assign")
+    .mockImplementation(() => {});
+  const user = userEvent.setup();
+  renderPanel(
+    "/sign-up?signin_error=init_error&partner_code=partner",
+    "/welcome",
+    "partner",
+  );
+  await user.click(screen.getByRole("checkbox"));
+  const field = screen.getByLabelText("Partner code (optional)");
+  expect(field.getAttribute("value")).toBe("partner");
+  expect(screen.queryByText(/14-day trial/)).toBeNull();
+  expect(screen.getByText(/valid partner code/)).toBeTruthy();
+  expect(
+    screen.getByText(/\$100 off gateway egress per month for one year/),
+  ).toBeTruthy();
+  await user.clear(field);
+  await user.type(field, "partner-updated");
+  const login = new URL(
+    screen.getByRole("link", { name: "Log in" }).getAttribute("href")!,
+    window.location.origin,
+  );
+  expect(login.searchParams.get("partner_code")).toBe("partner-updated");
+  await user.type(screen.getByLabelText("Work email"), "user@example.com");
+  await user.type(screen.getByLabelText("Company name"), "Acme");
+  await user.click(screen.getByRole("button", { name: /create account/i }));
+  expect(
+    new URL(assign.mock.calls[0]![0].toString()).searchParams.get(
+      "partner_code",
+    ),
+  ).toBe("partner-updated");
+  assign.mockRestore();
+});
+
+it("restores ordinary trial copy when the optional code is cleared", async () => {
+  const user = userEvent.setup();
+  renderPanel("/sign-up", undefined, "partner");
+  await user.clear(screen.getByLabelText("Partner code (optional)"));
+  expect(screen.getByText(/14-day trial/)).toBeTruthy();
+  expect(screen.queryByText(/valid partner code:/)).toBeNull();
+  expect(
+    screen.getByRole("link", { name: "Log in" }).getAttribute("href"),
+  ).toBe("/login");
+});
+
+it("rejects an oversized pasted partner code without truncating or signing up", async () => {
+  const assign = vi
+    .spyOn(window.location, "assign")
+    .mockImplementation(() => {});
+  try {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("checkbox"));
+    await user.type(screen.getByLabelText("Work email"), "user@example.com");
+    await user.type(screen.getByLabelText("Company name"), "Acme");
+    const field = screen.getByLabelText("Partner code (optional)");
+    await user.click(field);
+    await user.paste("x".repeat(81));
+
+    expect(field).toHaveProperty("value", "x".repeat(81));
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      screen.getByText("Partner code must be 80 characters or fewer."),
+    ).toBeTruthy();
+    const submit = screen.getByRole("button", { name: /create account/i });
+    expect(submit).toHaveProperty("disabled", true);
+    await user.click(submit);
+    await user.click(field);
+    await user.keyboard("{Enter}");
+    expect(assign).not.toHaveBeenCalled();
+    expect(telemetryCapture).not.toHaveBeenCalled();
+
+    await user.keyboard("{Backspace}");
+    expect(field).toHaveProperty("value", "x".repeat(80));
+    expect(
+      screen.queryByText("Partner code must be 80 characters or fewer."),
+    ).toBeNull();
+    await user.click(submit);
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(
+      new URL(assign.mock.calls[0]![0].toString()).searchParams.get(
+        "partner_code",
+      ),
+    ).toBe("x".repeat(80));
+  } finally {
+    assign.mockRestore();
+  }
+});
+
+it("blocks oversized query codes instead of silently changing them", () => {
+  renderPanel("/sign-up", undefined, "x".repeat(81));
+  expect(screen.getByText(/Partner code must be 80/)).toBeTruthy();
+  expect(
+    screen
+      .getByRole("button", { name: /create account/i })
+      .hasAttribute("disabled"),
+  ).toBe(true);
 });

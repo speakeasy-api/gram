@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	auth "github.com/speakeasy-api/gram/server/gen/auth"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -17,6 +19,8 @@ import (
 type RegisterRequestBody struct {
 	// The name of the org to register
 	OrgName *string `form:"org_name,omitempty" json:"org_name,omitempty" xml:"org_name,omitempty"`
+	// Optional partner signup code.
+	PartnerCode *string `form:"partner_code,omitempty" json:"partner_code,omitempty" xml:"partner_code,omitempty"`
 }
 
 // LogoutEverywhereResponseBody is the type of the "auth" service
@@ -3352,10 +3356,11 @@ func NewCallbackPayload(code string, state *string) *auth.CallbackPayload {
 }
 
 // NewLoginPayload builds a auth service login endpoint payload.
-func NewLoginPayload(redirect *string, orgName *string, email *string, supportHandoff *string) *auth.LoginPayload {
+func NewLoginPayload(redirect *string, orgName *string, partnerCode *string, email *string, supportHandoff *string) *auth.LoginPayload {
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
 	v.OrgName = orgName
+	v.PartnerCode = partnerCode
 	v.Email = email
 	v.SupportHandoff = supportHandoff
 
@@ -3400,7 +3405,8 @@ func NewLogoutEverywherePayload(sessionToken *string) *auth.LogoutEverywherePayl
 // NewRegisterPayload builds a auth service register endpoint payload.
 func NewRegisterPayload(body *RegisterRequestBody, sessionToken *string) *auth.RegisterPayload {
 	v := &auth.RegisterPayload{
-		OrgName: *body.OrgName,
+		OrgName:     *body.OrgName,
+		PartnerCode: body.PartnerCode,
 	}
 	v.SessionToken = sessionToken
 
@@ -3441,6 +3447,11 @@ func NewTransferInPayload(sourceHost *string, code *string, redirect *string) *a
 func ValidateRegisterRequestBody(body *RegisterRequestBody) (err error) {
 	if body.OrgName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("org_name", "body"))
+	}
+	if body.PartnerCode != nil {
+		if utf8.RuneCountInString(*body.PartnerCode) > 80 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.partner_code", *body.PartnerCode, utf8.RuneCountInString(*body.PartnerCode), 80, false))
+		}
 	}
 	return
 }

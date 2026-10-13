@@ -344,6 +344,18 @@ type Client struct {
 	// requests to the assignOrganizationOnboardingPlaybook endpoint.
 	AssignOrganizationOnboardingPlaybookDoer goahttp.Doer
 
+	// ListSignupOffers Doer is the HTTP client used to make requests to the
+	// listSignupOffers endpoint.
+	ListSignupOffersDoer goahttp.Doer
+
+	// CreateSignupOffer Doer is the HTTP client used to make requests to the
+	// createSignupOffer endpoint.
+	CreateSignupOfferDoer goahttp.Doer
+
+	// UpdateSignupOffer Doer is the HTTP client used to make requests to the
+	// updateSignupOffer endpoint.
+	UpdateSignupOfferDoer goahttp.Doer
+
 	// GetStripeSubscriptionCandidate Doer is the HTTP client used to make requests
 	// to the getStripeSubscriptionCandidate endpoint.
 	GetStripeSubscriptionCandidateDoer goahttp.Doer
@@ -458,6 +470,9 @@ func NewClient(
 		CloneOnboardingPlaybookDoer:               doer,
 		GetOrganizationOnboardingPlaybookDoer:     doer,
 		AssignOrganizationOnboardingPlaybookDoer:  doer,
+		ListSignupOffersDoer:                      doer,
+		CreateSignupOfferDoer:                     doer,
+		UpdateSignupOfferDoer:                     doer,
 		GetStripeSubscriptionCandidateDoer:        doer,
 		SetStripeSubscriptionDoer:                 doer,
 		ListCustomerUsageDoer:                     doer,
@@ -2437,6 +2452,78 @@ func (c *Client) AssignOrganizationOnboardingPlaybook() goa.Endpoint {
 		resp, err := c.AssignOrganizationOnboardingPlaybookDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "assignOrganizationOnboardingPlaybook", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListSignupOffers returns an endpoint that makes HTTP requests to the admin
+// service listSignupOffers server.
+func (c *Client) ListSignupOffers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListSignupOffersRequest(c.encoder)
+		decodeResponse = DecodeListSignupOffersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListSignupOffersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListSignupOffersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listSignupOffers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateSignupOffer returns an endpoint that makes HTTP requests to the admin
+// service createSignupOffer server.
+func (c *Client) CreateSignupOffer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateSignupOfferRequest(c.encoder)
+		decodeResponse = DecodeCreateSignupOfferResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateSignupOfferRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateSignupOfferDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "createSignupOffer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateSignupOffer returns an endpoint that makes HTTP requests to the admin
+// service updateSignupOffer server.
+func (c *Client) UpdateSignupOffer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateSignupOfferRequest(c.encoder)
+		decodeResponse = DecodeUpdateSignupOfferResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateSignupOfferRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateSignupOfferDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "updateSignupOffer", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -148,6 +148,11 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		return "", oops.E(oops.CodeUnavailable, nil, "self-serve billing is temporarily unavailable").LogWarn(ctx, s.logger)
 	}
 
+	promotionCodeID, err := s.stripeCheckoutPromotionCodeID(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return "", err
+	}
+
 	now := s.checkoutNow()
 	var productTrialEnd *time.Time
 	var expectedTrial *stripeCheckoutTrialFingerprint
@@ -155,7 +160,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	switch {
 	case err == nil:
 		expectedTrial = newStripeCheckoutTrialFingerprint(trial)
-		if trial.Tier == "enterprise" && !trial.ConvertedAt.Valid && !trial.DemotedAt.Valid && trial.EndsAt.Valid && trial.EndsAt.Time.After(now) {
+		if promotionCodeID == "" && trial.Tier == "enterprise" && !trial.ConvertedAt.Valid && !trial.DemotedAt.Valid && trial.EndsAt.Valid && trial.EndsAt.Time.After(now) {
 			end := trial.EndsAt.Time.UTC()
 			productTrialEnd = &end
 		}
@@ -263,6 +268,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 			CustomerID:         preparedIntent.customerID,
 			OrganizationID:     authCtx.ActiveOrganizationID,
 			OrganizationSlug:   authCtx.OrganizationSlug,
+			PromotionCodeID:    promotionCodeID,
 			SuccessURL:         billingURL,
 			CancelURL:          billingURL,
 			TrialEnd:           preparedIntent.trialEnd,
@@ -356,6 +362,14 @@ func (s *Service) prepareStripeCheckoutIntent(
 	if err := queries.LockBillingMetadataOrganization(ctx, organizationID); err != nil {
 		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeUnexpected, err, "lock billing metadata organization").LogError(ctx, s.logger)
 	}
+	// Activation uses this same organization advisory lock before recording a redemption.
+	redeemed, err := queries.HasRedeemedSelectedPromotion(ctx, organizationID)
+	if err != nil {
+		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeUnexpected, err, "check promotion redemption history").LogError(ctx, s.logger)
+	}
+	if redeemed {
+		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeConflict, nil, "this organization's promotion has already been redeemed; contact support to restart billing without reusing this promotion")
+	}
 	stored, err := queries.StoreStripeCustomer(ctx, repo.StoreStripeCustomerParams{
 		OrganizationID:   organizationID,
 		StripeCustomerID: pgtype.Text{String: customerID, Valid: true},
@@ -408,6 +422,25 @@ func isStripeCheckoutCASConflict(err error) bool {
 	return errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.DeadlockDetected || pgErr.Code == pgerrcode.SerializationFailure)
 }
 
+// stripeCheckoutPromotionCodeID reads the immutable promotion code ID captured during partner
+// signup. Do not resolve it from current offer configuration: Checkout retries
+// must keep the same parameters even after deployment configuration changes.
+func (s *Service) stripeCheckoutPromotionCodeID(ctx context.Context, organizationID string) (string, error) {
+	application, err := s.orgRepo.GetOrganizationPromotionApplication(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to load promotion application for billing").LogError(ctx, s.logger)
+	}
+	// Refuse before stale-intent recovery can replay a Stripe create request.
+	// prepareStripeCheckoutIntent repeats this check under the activation lock.
+	if application.RedeemedAt.Valid {
+		return "", oops.E(oops.CodeConflict, nil, "this organization's promotion has already been redeemed; contact support to restart billing without reusing this promotion")
+	}
+	return application.StripePromotionCodeID, nil
+}
+
 func (s *Service) checkoutNow() time.Time {
 	if s.now == nil {
 		return time.Now().UTC().Truncate(time.Second)
@@ -441,9 +474,14 @@ func (s *Service) expireLifecycleStaleCheckoutSession(
 		if urlErr != nil {
 			return pgtype.Text{}, oops.E(oops.CodeUnavailable, urlErr, "failed to recover the previous Stripe Checkout intent").LogWarn(ctx, s.logger)
 		}
+		promotionCodeID, err := s.stripeCheckoutPromotionCodeID(ctx, organizationID)
+		if err != nil {
+			return pgtype.Text{}, err
+		}
 		stale, createErr := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
 			CustomerID: customerID, OrganizationID: organizationID, OrganizationSlug: organizationSlug,
-			SuccessURL: billingURL, CancelURL: billingURL, TrialEnd: staleIntent.trialEnd,
+			PromotionCodeID: promotionCodeID,
+			SuccessURL:      billingURL, CancelURL: billingURL, TrialEnd: staleIntent.trialEnd,
 			BillingCycleAnchor: staleIntent.billingCycleAnchor, ExpiresAt: staleIntent.expiresAt, IdempotencyKey: staleIntent.idempotencyKey,
 		})
 		if createErr != nil || stale == nil || stale.ID == "" {
