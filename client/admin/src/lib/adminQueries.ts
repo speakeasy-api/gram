@@ -13,7 +13,6 @@ import {
   getOrganization,
   getOrganizationChatAnalysisSettings,
   getOrganizationStats,
-  getInferenceKeys,
   getInferenceSpendHistory,
   getPaygBillingSummary,
   getStripeSubscription,
@@ -26,7 +25,6 @@ import {
   listUserOrganizations,
   listProjectMcpServers,
   omitUnset,
-  type AdminInferenceKey,
   type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminOrganizationChatAnalysisSettings,
@@ -160,19 +158,6 @@ export function organizationMembersQuery(
   return queryOptions({
     queryKey: ["gram-admin-organization-members", organizationID] as const,
     queryFn: () => listOrganizationMembers(organizationID),
-  });
-}
-
-export function inferenceKeysQuery(
-  organizationID: string,
-): AdminQuery<
-  AdminInferenceKey[],
-  readonly ["gram-admin-inference-keys", string]
-> {
-  return queryOptions({
-    queryKey: ["gram-admin-inference-keys", organizationID] as const,
-    queryFn: () => getInferenceKeys(organizationID),
-    retry: false,
   });
 }
 

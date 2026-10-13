@@ -10,14 +10,24 @@ import (
 )
 
 type UnproxiedMcpServer struct {
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-	Name        pgtype.Text
-	Slug        pgtype.Text
-	Url         string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	Name pgtype.Text
+	// @access: restricted
+	Slug pgtype.Text
+	// @access: restricted
+	Url string
+	// @access: opaque-restricted
 	Description pgtype.Text
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	DeletedAt   pgtype.Timestamptz
-	Deleted     bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

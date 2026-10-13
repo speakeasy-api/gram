@@ -226,6 +226,12 @@ func (c *Client) AcquireFeatureCacheLocks(ctx context.Context, organizationID st
 }
 
 func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {
+	return c.AcquireOrganizationFeatureCacheLocks(ctx, []string{organizationID}, features)
+}
+
+// AcquireOrganizationFeatureCacheLocks holds a sorted batch on one connection,
+// so bulk transactions cannot exhaust the pool waiting on their own locks.
+func (c *Client) AcquireOrganizationFeatureCacheLocks(ctx context.Context, organizationIDs []string, features []Feature) (*pgxpool.Conn, func(), error) {
 	conn, err := c.db.Acquire(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("acquire feature cache lock connection: %w", err)
@@ -244,7 +250,7 @@ func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID st
 			if unlockErr != nil || !unlocked {
 				c.logger.ErrorContext(unlockCtx, "failed to release feature cache lock",
 					attr.SlogError(unlockErr),
-					attr.SlogOrganizationID(organizationID),
+					attr.SlogOrganizationID(params.OrganizationID),
 					attr.SlogProductFeatureName(params.FeatureName),
 				)
 				_ = conn.Hijack().Close(unlockCtx)
@@ -254,15 +260,20 @@ func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID st
 		conn.Release()
 	}
 
-	for _, feature := range features {
-		params := repo.AcquireFeatureCacheLockParams{OrganizationID: organizationID, FeatureName: string(feature)}
-		if err := queries.AcquireFeatureCacheLock(ctx, params); err != nil {
-			release()
-			return nil, nil, fmt.Errorf("acquire feature cache lock: %w", err)
+	organizationIDs = slices.Clone(organizationIDs)
+	slices.Sort(organizationIDs)
+	organizationIDs = slices.Compact(organizationIDs)
+	for _, organizationID := range organizationIDs {
+		for _, feature := range features {
+			params := repo.AcquireFeatureCacheLockParams{OrganizationID: organizationID, FeatureName: string(feature)}
+			if err := queries.AcquireFeatureCacheLock(ctx, params); err != nil {
+				release()
+				return nil, nil, fmt.Errorf("acquire feature cache lock: %w", err)
+			}
+			acquired = append(acquired, params)
 		}
-		acquired = append(acquired, params)
-	}
 
+	}
 	return conn, release, nil
 }
 

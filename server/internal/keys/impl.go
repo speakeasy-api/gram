@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -48,7 +47,6 @@ type Service struct {
 	orgsRepo    *organizations_repo.Queries
 	audit       *audit.Logger
 	authorizer  *agentmanagement.Authorizer
-	features    feature.Provider
 	keyPrefix   string
 }
 
@@ -62,15 +60,10 @@ func NewService(
 	env string,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	featureProviders ...feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("keys"))
 
 	fullKeyPrefix := auth.APIKeyPrefix(env)
-	var features feature.Provider
-	if len(featureProviders) > 0 {
-		features = featureProviders[0]
-	}
 	return &Service{
 		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/keys"),
 		logger:      logger,
@@ -82,7 +75,6 @@ func NewService(
 		orgsRepo:    organizations_repo.New(db),
 		audit:       auditLogger,
 		authorizer:  agentmanagement.NewAuthorizer(authzEngine),
-		features:    features,
 		keyPrefix:   fullKeyPrefix,
 	}
 }

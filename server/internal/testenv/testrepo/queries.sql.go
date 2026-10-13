@@ -1976,34 +1976,6 @@ func (q *Queries) GetPreparationFixtureRegistration(ctx context.Context, arg Get
 	return i, err
 }
 
-const getPrincipalGrantEffectFixture = `-- name: GetPrincipalGrantEffectFixture :one
-SELECT effect
-FROM principal_grants
-WHERE organization_id = $1
-  AND principal_urn = $2
-  AND scope = $3
-  AND selectors = $4
-`
-
-type GetPrincipalGrantEffectFixtureParams struct {
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	Scope          string
-	Selectors      []byte
-}
-
-func (q *Queries) GetPrincipalGrantEffectFixture(ctx context.Context, arg GetPrincipalGrantEffectFixtureParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getPrincipalGrantEffectFixture,
-		arg.OrganizationID,
-		arg.PrincipalUrn,
-		arg.Scope,
-		arg.Selectors,
-	)
-	var effect pgtype.Text
-	err := row.Scan(&effect)
-	return effect, err
-}
-
 const getPrincipalRemoteSessionBindingIssuerFixture = `-- name: GetPrincipalRemoteSessionBindingIssuerFixture :one
 SELECT user_session_issuer_id
 FROM principal_remote_session_bindings
@@ -2639,29 +2611,6 @@ func (q *Queries) InsertKillswitchPrescriptionFixture(ctx context.Context, arg I
 		arg.ResourceScope,
 		arg.InternalNote,
 		arg.ExternalNote,
-	)
-	return err
-}
-
-const insertLegacyDenyPrincipalGrantFixture = `-- name: InsertLegacyDenyPrincipalGrantFixture :exec
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, $2, $3, 'deny', $4)
-`
-
-type InsertLegacyDenyPrincipalGrantFixtureParams struct {
-	OrganizationID string
-	PrincipalUrn   urn.Principal
-	Scope          string
-	Selectors      []byte
-}
-
-// Test-only fixture for exercising allow-only writes against legacy rows.
-func (q *Queries) InsertLegacyDenyPrincipalGrantFixture(ctx context.Context, arg InsertLegacyDenyPrincipalGrantFixtureParams) error {
-	_, err := q.db.Exec(ctx, insertLegacyDenyPrincipalGrantFixture,
-		arg.OrganizationID,
-		arg.PrincipalUrn,
-		arg.Scope,
-		arg.Selectors,
 	)
 	return err
 }

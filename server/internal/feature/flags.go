@@ -30,14 +30,6 @@ const (
 	// keeps the default limit.
 	FlagRiskEnforcementMaxContentBytes Flag = "risk-enforcement-max-content-bytes"
 
-	// FlagAgentManagement gates the first-class agent management API. It is
-	// evaluated per organization and fails closed unless explicitly on.
-	FlagAgentManagement Flag = "agent-management"
-	// FlagAgentIdentityCredentials gates agent credential issuance, management,
-	// and agent identity selection in MCP OAuth authorization.
-	// It is evaluated per organization and fails closed unless explicitly on.
-	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
-
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
 	// its hardware serial against device-keyed ones, falling back to email
