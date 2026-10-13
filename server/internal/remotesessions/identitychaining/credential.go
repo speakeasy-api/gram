@@ -182,8 +182,10 @@ func upsertSpeakeasyCredential(ctx context.Context, tx pgx.Tx, params repo.Upser
 	}); err != nil {
 		return fmt.Errorf("retire legacy EMA credential slot: %w", err)
 	}
-	_, err = q.UpsertSpeakeasyEMACredential(ctx, params)
-	return err
+	if _, err := q.UpsertSpeakeasyEMACredential(ctx, params); err != nil {
+		return fmt.Errorf("publish Speakeasy EMA credential after retiring legacy slot: %w", err)
+	}
+	return nil
 }
 
 // storedScopes keeps NOT NULL array columns non-NULL for empty scope sets.

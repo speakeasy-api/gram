@@ -253,7 +253,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	require.EqualValues(t, 2, calls.Load())
 	require.False(t, chainer.HasUsableCredential(ctx, f.req), "the legacy index keeps one slot per subject")
 	// Once the legacy index is dropped, each grant keeps its own slot.
-	_, err = f.db.Exec(ctx, "DROP INDEX remote_session_ema_credentials_subject_key")
+	_, err = f.db.Exec(ctx, "DROP INDEX remote_session_ema_credentials_subject_key") //nolint:glint // notestingrawsql: DDL simulating the contract migration in this cloned database; sqlc does not generate DDL.
 	require.NoError(t, err)
 	_, outcome = chainer.Acquire(ctx, f.req)
 	checkExchange()
