@@ -110,6 +110,14 @@ func TestHosts_SharedIssuerURLRefusals(t *testing.T) {
 		{name: "unserved host", err: authserver.ErrHostNotServed, issuer: func() repo.UserSessionIssuer {
 			return pinnedIssuer("https://other.example.com")
 		}},
+		{name: "no origin", err: authserver.ErrPinnedIssuerURLInvalid, issuer: func() repo.UserSessionIssuer {
+			return pinnedIssuer("")
+		}},
+		{name: "unparseable", err: authserver.ErrPinnedIssuerURLInvalid, issuer: func() repo.UserSessionIssuer {
+			issuer := sharedIssuer(false)
+			issuer.PinnedIssuerUrl = conv.ToPGText("https://app.example.com/%zz")
+			return issuer
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

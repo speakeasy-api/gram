@@ -122,7 +122,7 @@ export type UserSessionIssuer = {
   trustedRemoteSessionIssuerId?: string | undefined;
   updatedAt: Date;
   /**
-   * Whether the issuer's authorization servers are announced on the deployment's authentication host rather than the MCP host.
+   * Whether the issuer opts in to announcing its authorization servers on the deployment's authentication host rather than the MCP host. This is the stored setting: on a deployment without an authentication host it has no effect, and issuer_url shows the host actually used.
    */
   useAuthenticationHost: boolean;
 };

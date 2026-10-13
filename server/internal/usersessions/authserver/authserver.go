@@ -100,12 +100,17 @@ func (h Hosts) SharedIssuerURL(issuer repo.UserSessionIssuer) (string, error) {
 	if IssuerURLPinned(issuer) {
 		pinned, err := url.Parse(issuer.PinnedIssuerUrl.String)
 		if err != nil {
-			return "", fmt.Errorf("parse pinned issuer URL: %w: %w", ErrPinnedIssuerURLInvalid, err)
+			return "", fmt.Errorf("invalid pinned issuer URL: %w: %w", ErrPinnedIssuerURLInvalid, err)
 		}
 		if pinned.RawQuery != "" || pinned.Fragment != "" || pinned.Path != path {
 			return "", fmt.Errorf("pinned issuer URL %q: %w", issuer.PinnedIssuerUrl.String, ErrPinnedIssuerURLInvalid)
 		}
 		origin = requestorigin.URLOrigin(issuer.PinnedIssuerUrl.String)
+		if origin == "" {
+			// Without a scheme and host the pin names no server, rather than
+			// one the deployment does not serve.
+			return "", fmt.Errorf("pinned issuer URL %q has no origin: %w", issuer.PinnedIssuerUrl.String, ErrPinnedIssuerURLInvalid)
+		}
 	} else {
 		base := h.ServerURL
 		if issuer.UseAuthenticationHost && h.AuthenticationHostBaseURL != "" {

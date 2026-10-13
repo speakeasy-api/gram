@@ -82,8 +82,10 @@ type CreateUserSessionIssuerResponseBody struct {
 	// falls back to per-endpoint authorization servers, and
 	// authorization_server_unavailable_reason says why.
 	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
-	// Whether the issuer's authorization servers are announced on the deployment's
-	// authentication host rather than the MCP host.
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
 	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
 	// Whether the shared authorization server's issuer URL was fixed when the
 	// issuer was set up, so it stays the same if the deployment's hosts change. An
@@ -150,8 +152,10 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// falls back to per-endpoint authorization servers, and
 	// authorization_server_unavailable_reason says why.
 	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
-	// Whether the issuer's authorization servers are announced on the deployment's
-	// authentication host rather than the MCP host.
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
 	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
 	// Whether the shared authorization server's issuer URL was fixed when the
 	// issuer was set up, so it stays the same if the deployment's hosts change. An
@@ -226,8 +230,10 @@ type GetUserSessionIssuerResponseBody struct {
 	// falls back to per-endpoint authorization servers, and
 	// authorization_server_unavailable_reason says why.
 	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
-	// Whether the issuer's authorization servers are announced on the deployment's
-	// authentication host rather than the MCP host.
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
 	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
 	// Whether the shared authorization server's issuer URL was fixed when the
 	// issuer was set up, so it stays the same if the deployment's hosts change. An
@@ -1244,8 +1250,10 @@ type UserSessionIssuerResponseBody struct {
 	// falls back to per-endpoint authorization servers, and
 	// authorization_server_unavailable_reason says why.
 	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
-	// Whether the issuer's authorization servers are announced on the deployment's
-	// authentication host rather than the MCP host.
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
 	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
 	// Whether the shared authorization server's issuer URL was fixed when the
 	// issuer was set up, so it stays the same if the deployment's hosts change. An
