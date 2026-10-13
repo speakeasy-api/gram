@@ -885,6 +885,30 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
+  "shadow-ai-targets": [
+    {
+      title: "What does the library cover?",
+      label: "Library coverage",
+      icon: "shield",
+      prompt:
+        "Using the Shadow AI target counts on this page, summarize what device agents probe for by kind (harnesses, assistants, open models) and which targets this organization added itself.",
+    },
+    {
+      title: "Any unverified MCP activity?",
+      label: "Shadow MCP findings",
+      icon: "server",
+      prompt:
+        "List shadow_mcp findings from the last 7 days: the MCP server identifier (its match is a server URL or command and safe to name), how many sessions it appeared in, and when it was first seen.",
+    },
+    {
+      title: "What should we add?",
+      label: "Suggest targets",
+      icon: "sparkles",
+      prompt:
+        "Based on recent shadow_mcp findings and the tools named in agent sessions, suggest AI tools that are not yet in this organization's Shadow AI target library, and say why each matters.",
+    },
+  ],
+
   "risk-policies": [
     {
       title: "Are policies healthy?",

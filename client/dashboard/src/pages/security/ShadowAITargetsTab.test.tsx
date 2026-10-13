@@ -27,6 +27,24 @@ vi.mock("@/pages/device-agent/ai-scan-targets", () => ({
   ),
 }));
 
+vi.mock("@gram/client/react-query/aiScanTargets.js", () => ({
+  useAiScanTargets: () => ({ data: { listVersion: 7, targets: [] } }),
+}));
+
+vi.mock("@/components/insights-dock", () => ({
+  InsightsConfig: ({
+    title,
+    contextInfo,
+  }: {
+    title?: string;
+    contextInfo?: string;
+  }) => (
+    <div data-testid="insights" data-title={title}>
+      {contextInfo}
+    </div>
+  ),
+}));
+
 afterEach(cleanup);
 
 describe("ShadowAITargetsTab", () => {
@@ -36,6 +54,16 @@ describe("ShadowAITargetsTab", () => {
     expect(screen.getByTestId("scan-targets").textContent).toBe(
       "Shadow AI targets",
     );
+  });
+
+  it("registers target-specific assistant insights built from the library", () => {
+    render(<ShadowAITargetsTab />);
+
+    const insights = screen.getByTestId("insights");
+    expect(insights.getAttribute("data-title")).toBe(
+      "Shadow AI target insights",
+    );
+    expect(insights.textContent).toContain("Library version 7.");
   });
 
   it("gates the library behind org:admin with the page-level notice", () => {
