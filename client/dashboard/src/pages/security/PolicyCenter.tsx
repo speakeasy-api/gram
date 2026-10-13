@@ -102,6 +102,13 @@ import {
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
 import { DetectionRulesTab } from "./DetectionRules";
+import {
+  POLICY_CENTER_TABS,
+  policyCenterTabs,
+  visiblePolicyCenterTab,
+  type PolicyCenterTab,
+} from "./policy-center-tabs";
+import { ShadowAITargetsTab } from "./ShadowAITargetsTab";
 import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
@@ -546,17 +553,6 @@ function truncateSessionID(sessionID: string): string {
   return `${sessionID.slice(0, 8)}...${sessionID.slice(-6)}`;
 }
 
-// Suppressed findings used to be a third tab here; they now live in the
-// Watchdog page's Suppressed section. `tab` is parsed as a string literal
-// union, so a stale `?tab=dismissed` link falls back to "policies" rather
-// than rendering an empty page.
-const POLICY_CENTER_TABS = [
-  "policies",
-  "detection-rules",
-  "exclusions",
-  "quarantines",
-] as const;
-
 /** Assistant context for the Detection Rules tab: assembled from the static
  *  client-side rule catalog so the other tabs pay no extra queries for it.
  *  Rule-activity questions route through the finding-level tools. */
@@ -571,7 +567,7 @@ const DETECTION_RULES_INSIGHTS_CONTEXT = [
 /** The page-level primary action follows the active tab: each tab creates its
  *  own kind of resource. */
 function policyCenterHeaderAction(
-  activeTab: (typeof POLICY_CENTER_TABS)[number],
+  activeTab: PolicyCenterTab,
   actions: {
     newPolicy: () => void;
     newDetectionRule: () => void;
@@ -586,6 +582,9 @@ function policyCenterHeaderAction(
         label: "Custom Detection Rule",
         onClick: actions.newDetectionRule,
       };
+    // The targets library carries its own add button in its toolbar.
+    case "shadow-ai-targets":
+      return null;
     case "exclusions":
       return { label: "Set up Exclusion Rule", onClick: actions.newExclusion };
     // Quarantines are event-driven; the tab has no creation affordance.
@@ -614,10 +613,12 @@ function PolicyCenterContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
-  // The Type column arrives with the Shadow AI fold-in: until the flag is on,
-  // "Shadow AI" is not vocabulary the page uses anywhere.
-  const showPolicyType =
+  // The Type column and the Shadow AI targets tab arrive with the Shadow AI
+  // fold-in: until the flag is on, "Shadow AI" is not vocabulary the page
+  // uses anywhere.
+  const shadowAIEnabled =
     useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
+  const showPolicyType = shadowAIEnabled;
   const {
     data: quarantinesData,
     isLoading: quarantinesLoading,
@@ -642,10 +643,11 @@ function PolicyCenterContent() {
 
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [activeTab] = useQueryState(
+  const [requestedTab] = useQueryState(
     "tab",
     parseAsStringLiteral(POLICY_CENTER_TABS).withDefault("policies"),
   );
+  const activeTab = visiblePolicyCenterTab(requestedTab, shadowAIEnabled);
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
   // The Detection Rules tab's create sheet is owned here so the page-level
@@ -1133,24 +1135,7 @@ function PolicyCenterContent() {
       description="Configure the policies, detection rules, and exclusion rules that govern risk detection in agent session interactions."
       primaryAction={primaryAction}
       activeTab={activeTab}
-      tabs={[
-        { value: "policies", label: "Policies", href: "?tab=policies" },
-        {
-          value: "detection-rules",
-          label: "Detection Rules",
-          href: "?tab=detection-rules",
-        },
-        {
-          value: "exclusions",
-          label: "Exclusion Rules",
-          href: "?tab=exclusions",
-        },
-        {
-          value: "quarantines",
-          label: "Quarantines",
-          href: "?tab=quarantines",
-        },
-      ]}
+      tabs={policyCenterTabs(shadowAIEnabled)}
     >
       {/* The dock follows the active tab: the Detection Rules tab took over
           the standalone page whose URL used to select these suggestions. */}
@@ -1176,6 +1161,7 @@ function PolicyCenterContent() {
           onCreateOpenChange={setRuleCreateOpen}
         />
       )}
+      {activeTab === "shadow-ai-targets" && <ShadowAITargetsTab />}
       {activeTab === "exclusions" && (
         <ExclusionsTab
           policies={data?.policies ?? []}

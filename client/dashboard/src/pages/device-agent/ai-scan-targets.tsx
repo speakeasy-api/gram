@@ -35,12 +35,17 @@ import {
 
 // Its own tab rather than a section under the configuration form: what agents
 // probe for is a different question from how the fleet is configured.
-export function AiScanTargetsSection(): JSX.Element {
+export function AiScanTargetsSection({
+  title = "AI scan targets",
+}: {
+  /** The section heading; Guardrails retitles it to match its tab. */
+  title?: string;
+} = {}): JSX.Element {
   return (
     <Stack gap={6}>
       <div>
         <Heading variant="h4" className="mb-2">
-          AI scan targets
+          {title}
         </Heading>
         <Text muted small>
           The AI tools this organization's device agents probe for. Every target
