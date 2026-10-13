@@ -13379,7 +13379,7 @@ func accessListIdentityAccessUsage() {
 
 // agentUsage displays the usage of the agent command and its subcommands.
 func agentUsage() {
-	fmt.Fprintln(os.Stderr, `Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.`)
+	fmt.Fprintln(os.Stderr, `Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. A headless device enrolled as a workload may call getPlugins with a device-agent token instead. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] agent COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-plugins: Resolve the marketplaces, plugins, and optional organization configuration assigned to the enrolled user. The device agent reconciles these into the AI developer tools it manages. Organization configuration is delivered on this existing poll so agents do not need a second control-plane request.`)
@@ -18116,8 +18116,8 @@ func hooksUsage() {
 	fmt.Fprintln(os.Stderr, `    ingest: Feature-first unified endpoint for hook events from supported coding assistants.`)
 	fmt.Fprintln(os.Stderr, `    upload-skill-content: Uploads skill manifest content requested by the unified hook ingest endpoint.`)
 	fmt.Fprintln(os.Stderr, `    skill-feedback: Records agent-volunteered feedback about a distributed skill.`)
-	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
-	fmt.Fprintln(os.Stderr, `    metrics: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.`)
+	fmt.Fprintln(os.Stderr, `    logs: Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.`)
+	fmt.Fprintln(os.Stderr, `    metrics: Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.`)
 	fmt.Fprintln(os.Stderr, `    get-status: Report whether the organization has any hook telemetry source configured. Reads configuration only; it does not query hook traffic.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -18286,7 +18286,7 @@ func hooksLogsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.`)
+	fmt.Fprintln(os.Stderr, `Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -18310,7 +18310,7 @@ func hooksMetricsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.`)
+	fmt.Fprintln(os.Stderr, `Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

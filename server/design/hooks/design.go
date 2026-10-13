@@ -513,7 +513,7 @@ var _ = Service("hooks", func() {
 	})
 
 	Method("logs", func() {
-		Description("Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.")
+		Description("Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.")
 
 		// A headless device that authenticates as a workload presents a
 		// device-agent token; tried first so a request without one keeps the
@@ -543,7 +543,7 @@ var _ = Service("hooks", func() {
 	})
 
 	Method("metrics", func() {
-		Description("Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.")
+		Description("Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.")
 
 		// A headless device that authenticates as a workload presents a
 		// device-agent token; tried first so a request without one keeps the

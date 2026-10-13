@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * metrics hooks
  *
  * @remarks
- * Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.
+ * Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.
  */
 export function hooksHooksNumberMetrics(
   client: GramCore,

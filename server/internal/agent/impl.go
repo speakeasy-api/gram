@@ -115,7 +115,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
-	server.Use(deviceagenttoken.BearerChallenge)
+	// Only getPlugins accepts device-agent tokens.
+	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
 	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
@@ -160,8 +161,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // A request with no device-agent token returns unchanged for the API key
 // requirement Goa tries next.
 func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
-	if token == "" || !deviceagenttoken.IsToken(token) || s.deviceAgentTokens == nil {
+	if token == "" || !deviceagenttoken.IsToken(token) {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if s.deviceAgentTokens == nil {
+		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
+		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
 	}
 	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
 		return ctx, oops.C(oops.CodeForbidden)

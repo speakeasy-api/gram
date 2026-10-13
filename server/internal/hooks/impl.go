@@ -362,8 +362,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // A request with no device-agent token returns unchanged for the API key
 // requirement Goa tries next.
 func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
-	if token == "" || !deviceagenttoken.IsToken(token) || s.deviceAgentTokens == nil {
+	if token == "" || !deviceagenttoken.IsToken(token) {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if s.deviceAgentTokens == nil {
+		refusal := oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")
+		return deviceagenttoken.WithAuthFailure(ctx, refusal), refusal
 	}
 	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
 	case "cursor", "codex", "logs", "metrics":
@@ -413,7 +417,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	server := srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil)
-	server.Use(deviceagenttoken.BearerChallenge)
+	// Only these methods accept device-agent tokens.
+	server.Cursor = deviceagenttoken.BearerChallenge(server.Cursor)
+	server.Codex = deviceagenttoken.BearerChallenge(server.Codex)
+	server.Logs = deviceagenttoken.BearerChallenge(server.Logs)
+	server.Metrics = deviceagenttoken.BearerChallenge(server.Metrics)
 	srv.Mount(mux, server)
 	AttachServerNames(mux, service)
 }

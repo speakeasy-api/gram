@@ -9,7 +9,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -48,28 +50,52 @@ func TestNew_NilSignerServesNothing(t *testing.T) {
 	require.Nil(t, deviceagenttoken.New(nil, nil))
 }
 
-func TestEncodeCeiling_Encodes(t *testing.T) {
+func TestEncodeCeiling_CarriesTheOrganizationsDeviceAgentGrants(t *testing.T) {
 	t.Parallel()
 
 	encoded, version, err := deviceagenttoken.EncodeCeiling("org-123")
 	require.NoError(t, err)
-	require.NotEmpty(t, encoded)
-	require.Positive(t, version)
+	policy, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(version), encoded)
+	require.NoError(t, err)
+
+	grants := policy.RuntimeGrants()
+	for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
+		require.True(t, authz.GrantsSatisfy(grants, authz.Check{Scope: scope, ResourceKind: "", ResourceID: "org-123", Dimensions: nil}), scope)
+		require.False(t, authz.GrantsSatisfy(grants, authz.Check{Scope: scope, ResourceKind: "", ResourceID: "org-other", Dimensions: nil}), "%s must be scoped to its organization", scope)
+	}
+	require.True(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: uuid.NewString(), Dimensions: nil}))
+	require.False(t, authz.GrantsSatisfy(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceKind: "", ResourceID: uuid.NewString(), Dimensions: nil}), "the ceiling must not reach MCP")
 }
 
 func TestBearerChallenge_ChallengesARefusedDeviceAgentToken(t *testing.T) {
 	t.Parallel()
 
-	handler := deviceagenttoken.BearerChallenge(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
+	for _, tc := range []struct {
+		name      string
+		refused   bool
+		challenge string
+	}{
+		{name: "token refused", refused: true, challenge: `Bearer error="invalid_token"`},
+		{name: "refused for another reason", refused: false, challenge: "Bearer"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/rpc/agent.getPlugins", nil)
-	req.Header.Set("Authorization", "Bearer "+mintToken(t))
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	require.Equal(t, http.StatusUnauthorized, w.Code)
-	require.Equal(t, `Bearer error="invalid_token"`, w.Header().Get("WWW-Authenticate"))
+			handler := deviceagenttoken.BearerChallenge(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.refused {
+					deviceagenttoken.MarkInvalidToken(r.Context())
+				}
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/rpc/agent.getPlugins", nil)
+			req.Header.Set("Authorization", "Bearer "+mintToken(t))
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			require.Equal(t, http.StatusUnauthorized, w.Code)
+			require.Equal(t, tc.challenge, w.Header().Get("WWW-Authenticate"))
+		})
+	}
 }
 
 func TestBearerChallenge_LeavesOtherRequestsAlone(t *testing.T) {

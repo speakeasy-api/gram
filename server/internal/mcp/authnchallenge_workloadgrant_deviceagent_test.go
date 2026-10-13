@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -287,6 +288,17 @@ func TestDeviceAgentToken_SuspendedAgentRefused(t *testing.T) {
 
 	f := newDeviceAgentGrantFixture(t)
 	_, err := agentsrepo.New(f.ti.conn).SuspendAgent(t.Context(), agentsrepo.SuspendAgentParams{OrganizationID: f.fx.orgID, ID: f.agentID})
+	require.NoError(t, err)
+	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL)))
+}
+
+// A disabled organization is issued no token, since every request it made
+// with one would be refused.
+func TestDeviceAgentToken_DisabledOrganizationRefused(t *testing.T) {
+	t.Parallel()
+
+	f := newDeviceAgentGrantFixture(t)
+	_, err := adminrepo.New(f.ti.conn).AdminDisableOrganization(t.Context(), f.fx.orgID)
 	require.NoError(t, err)
 	requireWorkloadGrantRefused(t, f.exchangeDeviceAgent(t, f.assertion(t, f.tokenURL)))
 }

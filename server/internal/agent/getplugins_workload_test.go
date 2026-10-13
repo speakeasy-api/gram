@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
@@ -40,11 +41,18 @@ type workloadDevice struct {
 // and mints it a device-agent token.
 func newWorkloadDevice(t *testing.T, ctx context.Context, ti *testInstance, grants []authz.Grant) workloadDevice {
 	t.Helper()
+	return newWorkloadDeviceInProject(t, ctx, ti, grants, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+}
+
+// newWorkloadDeviceInProject is newWorkloadDevice with the agent bound to
+// projectID.
+func newWorkloadDeviceInProject(t *testing.T, ctx context.Context, ti *testInstance, grants []authz.Grant, projectID uuid.NullUUID) workloadDevice {
+	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
 	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
-		OrganizationID: ti.orgID, OwnerUserID: authCtx.UserID, Name: "Headless box agent",
+		OrganizationID: ti.orgID, OwnerUserID: authCtx.UserID, ProjectID: projectID, Name: "Headless box agent",
 	})
 	require.NoError(t, err)
 	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
@@ -138,6 +146,23 @@ func TestJWTAuth_WithdrawnAssignmentRefusedOnNextCall(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, withdrawn, 1)
+
+	_, err = ti.service.JWTAuth(getPluginsContext(t), device.token, deviceAgentTokenScheme)
+	requireCode(t, err, oops.CodeUnauthorized)
+}
+
+// A deleted project leaves its agent's devices refused, not answered with a
+// server error.
+func TestJWTAuth_AgentInDeletedProjectIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	device := newWorkloadDeviceInProject(t, ctx, ti, []authz.Grant{authz.NewGrant(authz.ScopeOrgDeviceAgentSync, ti.orgID)}, uuid.NullUUID{UUID: ti.projectID, Valid: true})
+
+	_, err := ti.service.JWTAuth(getPluginsContext(t), device.token, deviceAgentTokenScheme)
+	require.NoError(t, err)
+
+	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, ti.projectID)
+	require.NoError(t, err)
 
 	_, err = ti.service.JWTAuth(getPluginsContext(t), device.token, deviceAgentTokenScheme)
 	requireCode(t, err, oops.CodeUnauthorized)

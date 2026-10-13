@@ -129,11 +129,17 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	// Checked before the rollout so an organization that does not exist is
 	// refused like any other bad assertion, rather than surfacing as the
 	// lookup failure the rollout check would report.
-	if _, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID); err != nil {
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("organization_unknown", err))
 		}
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("organization_unavailable", err))
+	}
+	// A disabled organization's tokens are refused on every request, so none
+	// is issued; the refusal looks like any other bad assertion.
+	if org.DisabledAt.Valid {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("organization_unknown", errors.New("the organization is disabled")))
 	}
 
 	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, organizationID, logger); refused {

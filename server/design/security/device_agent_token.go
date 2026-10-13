@@ -11,7 +11,7 @@ import (
 // exchanging its workload identity at the device-agent token endpoint, and
 // presents to the device-agent API in place of an agent API key.
 var DeviceAgentToken = JWTSecurity(constants.DeviceAgentTokenSecurityScheme, func() {
-	Description("Device-agent token from the workload assertion grant at /oauth/workload/device-agent/token.")
+	Description("Device-agent token from the workload assertion grant at /oauth/workload/device-agent/{organization_id}/token.")
 })
 
 var DeviceAgentTokenPayload = func() {

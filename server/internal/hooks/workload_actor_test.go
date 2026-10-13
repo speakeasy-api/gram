@@ -16,16 +16,19 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	workloadpolicyrepo "github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
 )
 
 var (
@@ -36,9 +39,12 @@ var (
 // hooksWorkload is an admitted workload assigned to an agent that holds the
 // hooks grant, and a device-agent token for it.
 type hooksWorkload struct {
-	actor       urn.Principal
-	token       string
-	projectSlug string
+	actor          urn.Principal
+	token          string
+	projectSlug    string
+	organizationID string
+	issuerID       uuid.UUID
+	subject        string
 }
 
 // newHooksWorkload admits a workload assigned to a new agent, bound to the
@@ -107,7 +113,7 @@ func newHooksWorkload(t *testing.T, ctx context.Context, ti *testInstance, bindP
 
 	token, _, err := ti.service.deviceAgentTokens.Mint(authCtx.ActiveOrganizationID, urn.NewWorkloadPrincipal(issuerID, subject), time.Now())
 	require.NoError(t, err)
-	return hooksWorkload{actor: actor, token: token, projectSlug: *authCtx.ProjectSlug}
+	return hooksWorkload{actor: actor, token: token, projectSlug: *authCtx.ProjectSlug, organizationID: authCtx.ActiveOrganizationID, issuerID: issuerID, subject: subject}
 }
 
 // authenticateWorkload runs the device-agent token requirement Goa runs for
@@ -180,4 +186,74 @@ func TestJWTAuth_WorkloadTokenRefusedOnOtherMethods(t *testing.T) {
 
 	_, err := ti.service.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "claude"), workload.token, workloadTokenScheme)
 	requireShareableCode(t, err, oops.CodeForbidden)
+}
+
+// A workload whose agent lacks org:hooks_ingest is refused, as an agent key
+// without it is.
+func TestCursor_WorkloadTokenRefusedWithoutTheHooksGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti, false)
+
+	selectors, err := authz.NewSelector(authz.ScopeOrgHooksIngest, workload.organizationID).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).DeletePrincipalGrantByIdentity(ctx, accessrepo.DeletePrincipalGrantByIdentityParams{
+		OrganizationID: workload.organizationID,
+		PrincipalUrn:   workload.actor,
+		Scope:          string(authz.ScopeOrgHooksIngest),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+
+	_, err = authenticateWorkload(t, ti, "cursor", workload.token, workload.projectSlug)
+	require.Error(t, err)
+}
+
+// Withdrawing the workload's agent assignment refuses its next ingest, though
+// its token has not expired: admission re-reads the assignment per request.
+func TestCodex_WithdrawnWorkloadIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti, false)
+
+	withdrawn, err := workloadpolicyrepo.New(ti.conn).SoftDeleteWorkloadAgentAssignmentForSubject(ctx, workloadpolicyrepo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
+		OrganizationID:   workload.organizationID,
+		WorkloadIssuerID: workload.issuerID,
+		MatchKind:        string(workloadidentity.MatchKindExact),
+		Subject:          workload.subject,
+	})
+	require.NoError(t, err)
+	require.Len(t, withdrawn, 1)
+
+	_, err = authenticateWorkload(t, ti, "codex", workload.token, workload.projectSlug)
+	requireShareableCode(t, err, oops.CodeUnauthorized)
+}
+
+// A token not signed by the platform key is refused on every ingest method.
+func TestJWTAuth_ForgedWorkloadTokenIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	workload := newHooksWorkload(t, ctx, ti, false)
+
+	forged, _, err := deviceagenttoken.New(mcpauthztest.NewIssuer(t), nil).Mint(workload.organizationID, urn.NewWorkloadPrincipal(uuid.New(), workload.subject), time.Now())
+	require.NoError(t, err)
+	for _, method := range []string{"cursor", "codex", "logs", "metrics"} {
+		_, err := authenticateWorkload(t, ti, method, forged, workload.projectSlug)
+		requireShareableCode(t, err, oops.CodeUnauthorized)
+	}
+}
+
+// A deployment with no platform signer refuses a device-agent token with a
+// recorded reason, so the API key requirement Goa tries next reports it
+// instead of a missing key.
+func TestJWTAuth_DeploymentWithoutTokensRecordsTheRefusal(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+	token, _, err := deviceagenttoken.New(mcpauthztest.NewIssuer(t), nil).Mint("org-"+uuid.NewString(), urn.NewWorkloadPrincipal(uuid.New(), "device:"+uuid.NewString()), time.Now())
+	require.NoError(t, err)
+	ti.service.deviceAgentTokens = nil
+
+	refusedCtx, err := ti.service.JWTAuth(context.WithValue(t.Context(), goa.MethodKey, "cursor"), token, workloadTokenScheme)
+	requireShareableCode(t, err, oops.CodeUnauthorized)
+	require.ErrorContains(t, deviceagenttoken.AuthFailure(refusedCtx), "does not accept device-agent tokens")
 }

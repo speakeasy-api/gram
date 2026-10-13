@@ -22,6 +22,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/agents"
@@ -267,7 +268,12 @@ func (i *Issuer) ResolveAssignedAgent(ctx context.Context) (AssignedAgent, error
 	assignedAgent := AssignedAgent{Principal: principal, Agent: agent, ProjectSlug: ""}
 	if agent.ProjectID.Valid {
 		project, err := projectsrepo.New(i.db).GetProjectByID(ctx, agent.ProjectID.UUID)
-		if err != nil {
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// A deleted project leaves its agent's devices nowhere to send
+			// to, which is a refusal, not a server failure.
+			return AssignedAgent{}, oops.C(oops.CodeUnauthorized)
+		case err != nil:
 			return AssignedAgent{}, fmt.Errorf("load assigned agent project: %w", err)
 		}
 		assignedAgent.ProjectSlug = project.Slug
@@ -283,7 +289,12 @@ func (i *Issuer) ResolveAssignedAgent(ctx context.Context) (AssignedAgent, error
 // A malformed, forged, or expired token, a disabled organization, and a
 // workload that admission refuses are all CodeUnauthorized, so the device
 // exchanges again; a failure that reached no decision is CodeUnexpected.
-func (i *Issuer) Admit(ctx context.Context, raw string, engine *authz.Engine) (context.Context, AssignedAgent, error) {
+func (i *Issuer) Admit(ctx context.Context, raw string, engine *authz.Engine) (_ context.Context, _ AssignedAgent, err error) {
+	defer func() {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeUnauthorized {
+			MarkInvalidToken(ctx)
+		}
+	}()
 	authenticated, err := i.Authenticate(ctx, raw)
 	switch {
 	case errors.Is(err, ErrNotToken), errors.Is(err, ErrInvalid):
@@ -358,9 +369,13 @@ func AuthFailure(ctx context.Context) error {
 }
 
 // BearerChallenge adds `WWW-Authenticate: Bearer` to a 401 answering a request
-// that presented a device-agent token, so the device agent knows to exchange
-// for a fresh one (RFC 6750 §3). Requests presenting anything else are
-// answered unchanged.
+// that presented a device-agent token (RFC 6750 §3). The challenge carries
+// `error="invalid_token"`, telling the device agent to exchange for a fresh
+// token, only when Admit refused the token itself; a 401 for any other reason,
+// such as a deployment that accepts no device-agent tokens, gets a plain
+// Bearer challenge. Requests presenting anything else are answered unchanged.
+//
+// Wrap only the handlers that accept device-agent tokens.
 func BearerChallenge(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
@@ -368,17 +383,39 @@ func BearerChallenge(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		next.ServeHTTP(&challengeWriter{ResponseWriter: w}, r)
+		state := &challengeState{invalidToken: false}
+		next.ServeHTTP(&challengeWriter{ResponseWriter: w, state: state}, r.WithContext(context.WithValue(r.Context(), challengeStateKey{}, state)))
 	})
+}
+
+type challengeStateKey struct{}
+
+// challengeState is shared between BearerChallenge and the Admit call that
+// runs while it serves the request.
+type challengeState struct {
+	invalidToken bool
+}
+
+// MarkInvalidToken records, for BearerChallenge serving the request, that the
+// presented token itself was refused.
+func MarkInvalidToken(ctx context.Context) {
+	if state, ok := ctx.Value(challengeStateKey{}).(*challengeState); ok {
+		state.invalidToken = true
+	}
 }
 
 type challengeWriter struct {
 	http.ResponseWriter
+	state *challengeState
 }
 
 func (c *challengeWriter) WriteHeader(status int) {
 	if status == http.StatusUnauthorized && c.Header().Get("WWW-Authenticate") == "" {
-		c.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+		challenge := "Bearer"
+		if c.state.invalidToken {
+			challenge = `Bearer error="invalid_token"`
+		}
+		c.Header().Set("WWW-Authenticate", challenge)
 	}
 	c.ResponseWriter.WriteHeader(status)
 }

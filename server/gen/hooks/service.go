@@ -34,10 +34,12 @@ type Service interface {
 	// Records agent-volunteered feedback about a distributed skill.
 	SkillFeedback(context.Context, *SkillFeedbackPayload) (err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
-	// authentication.
+	// authentication, or a device-agent token from a headless device enrolled as a
+	// workload.
 	Logs(context.Context, *LogsPayload) (err error)
 	// Endpoint to receive OTEL metrics data from Claude Code. Requires API key
-	// authentication.
+	// authentication, or a device-agent token from a headless device enrolled as a
+	// workload.
 	Metrics(context.Context, *MetricsPayload) (err error)
 	// Report whether the organization has any hook telemetry source configured.
 	// Reads configuration only; it does not query hook traffic.

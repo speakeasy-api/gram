@@ -2,6 +2,8 @@ package workloadidentity
 
 import (
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 )
 
 // deviceIssuerPath is the path under the server URL that names an
@@ -21,8 +23,31 @@ func DeviceIssuerURL(serverURL, organizationID string) string {
 // serverURL's device issuer prefix. The whole prefix is reserved: an operator
 // issuer there would verify against a key set of its choosing instead of the
 // keys devices registered.
+//
+// Both sides are compared in the canonical form issuer lookup uses, so a
+// spelling such as an explicit default port or an uppercase host cannot claim
+// the namespace.
 func IsUnderDeviceIssuerPrefix(serverURL, issuerURL string) bool {
-	return strings.HasPrefix(strings.TrimSpace(issuerURL), strings.TrimSuffix(serverURL, "/")+deviceIssuerPath)
+	prefix, ok := canonicalDeviceIssuerPrefix(serverURL)
+	if !ok {
+		return strings.HasPrefix(strings.TrimSpace(issuerURL), strings.TrimSuffix(serverURL, "/")+deviceIssuerPath)
+	}
+	canonical, err := issuerurl.Parse(issuerURL)
+	if err != nil {
+		return false
+	}
+	c := canonical.String()
+	return c == prefix || strings.HasPrefix(c, prefix+"/")
+}
+
+// canonicalDeviceIssuerPrefix is serverURL's device issuer prefix in canonical
+// form, without its trailing slash.
+func canonicalDeviceIssuerPrefix(serverURL string) (string, bool) {
+	canonical, err := issuerurl.Parse(strings.TrimSuffix(serverURL, "/") + strings.TrimSuffix(deviceIssuerPath, "/"))
+	if err != nil {
+		return "", false
+	}
+	return canonical.String(), true
 }
 
 // DeviceIssuerOrganization returns the organization a Speakeasy device issuer
@@ -33,8 +58,15 @@ func IsUnderDeviceIssuerPrefix(serverURL, issuerURL string) bool {
 // as its own issuer gains nothing: the row looked up is always the named
 // organization's.
 func DeviceIssuerOrganization(serverURL, issuerURL string) (string, bool) {
-	prefix := strings.TrimSuffix(serverURL, "/") + deviceIssuerPath
-	organizationID, ok := strings.CutPrefix(issuerURL, prefix)
+	prefix, ok := canonicalDeviceIssuerPrefix(serverURL)
+	if !ok {
+		return "", false
+	}
+	canonical, err := issuerurl.Parse(issuerURL)
+	if err != nil {
+		return "", false
+	}
+	organizationID, ok := strings.CutPrefix(canonical.String(), prefix+"/")
 	if !ok || organizationID == "" || strings.ContainsAny(organizationID, "/?#") {
 		return "", false
 	}
