@@ -6,6 +6,10 @@ ALTER TABLE "internal_session_issuers" ADD COLUMN "allowed_sign_in_methods" text
 COMMENT ON COLUMN "internal_session_issuers"."allowed_sign_in_methods" IS '@access: confidential';
 -- Set comment to column: "allowed_microsoft_tenant_ids" on table: "internal_session_issuers"
 COMMENT ON COLUMN "internal_session_issuers"."allowed_microsoft_tenant_ids" IS '@access: opaque-confidential';
+-- Create index "remote_session_ema_credentials_external_subject_key" to table: "remote_session_ema_credentials"
+CREATE UNIQUE INDEX CONCURRENTLY "remote_session_ema_credentials_external_subject_key" ON "remote_session_ema_credentials" ("project_id", "user_session_issuer_id", "remote_session_client_id", "resource", "subject_urn") WHERE ((deleted IS FALSE) AND (ema_provider = 'external'::text));
+-- Create index "remote_session_ema_credentials_speakeasy_subject_key" to table: "remote_session_ema_credentials"
+CREATE UNIQUE INDEX CONCURRENTLY "remote_session_ema_credentials_speakeasy_subject_key" ON "remote_session_ema_credentials" ("project_id", "user_session_issuer_id", "remote_session_client_id", "resource", "subject_urn", "user_session_id") WHERE ((deleted IS FALSE) AND (ema_provider = 'speakeasy'::text));
 -- Drop index "sign_in_revocation_deliveries_pending_idx" from table: "sign_in_revocation_deliveries"
 DROP INDEX CONCURRENTLY "sign_in_revocation_deliveries_pending_idx";
 -- Modify "sign_in_revocation_deliveries" table
