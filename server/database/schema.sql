@@ -10388,7 +10388,7 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   -- ID-JAG source: 'external' or 'speakeasy', selected by the application.
   -- The default preserves existing external-provider writers.
   -- Unknown values do not qualify for cached token reuse.
-  ema_provider TEXT DEFAULT 'external',
+  ema_provider TEXT NOT NULL DEFAULT 'external',
   -- Speakeasy issuer that authorized this cached vendor access token.
   -- External credentials leave the Speakeasy-specific references below NULL.
   internal_session_issuer_id uuid,
