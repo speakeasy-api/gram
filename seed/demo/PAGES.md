@@ -279,9 +279,10 @@ The Identity providers tab lists Speakeasy as a provider for enterprise
 authorization once the organization is offered the issuer. A fresh demo workspace
 shows the not-configured or unavailable state; it does not seed a working issuer
 or signing key. The public demo stays read-only. A local organization admin can
-enable an issuer when its SSO entitlement and deployment signing configuration
-are available. Existing issuers retain their copyable URI after disabling, and
-can be disabled even if the SSO entitlement has been removed.
+enable an issuer from its Speakeasy provider page when it has a verified email
+domain and deployment signing is configured. Existing issuers retain their
+copyable URI after disabling, and can be disabled even after the last verified
+domain is removed.
 
 ### [~] Organization Identity: Slack workspaces
 
