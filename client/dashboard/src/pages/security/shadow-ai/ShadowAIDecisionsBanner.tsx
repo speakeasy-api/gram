@@ -25,7 +25,7 @@ function postureSentence(policy: RiskPolicy | undefined): string {
 
 /** The Guardrails banner for the Shadow AI backlog: how many detected tools
  *  and servers have no decision, and the way to record one. */
-export function UndecidedToolsBanner({
+function UndecidedToolsBanner({
   policies,
 }: {
   policies: readonly RiskPolicy[];
