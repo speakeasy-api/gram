@@ -27,7 +27,6 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -387,7 +386,5 @@ func seedOtherOrganization(t *testing.T, f deviceAgentGrantFixture) string {
 		DisabledAt:         pgtype.Timestamptz{},
 		CreatedAt:          pgtype.Timestamptz{},
 	}))
-	f.ti.features.SetFlag(feature.FlagAgentManagement, id, true)
-	f.ti.features.SetFlag(feature.FlagAgentIdentityCredentials, id, true)
 	return id
 }

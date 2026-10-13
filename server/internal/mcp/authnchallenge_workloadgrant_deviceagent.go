@@ -126,9 +126,8 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	if issuerOrganization, isDeviceIssuer := workloadidentity.DeviceIssuerOrganization(serverURL, unverified.Issuer); isDeviceIssuer && issuerOrganization != organizationID {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("device_issuer_wrong_organization", errors.New("iss is another organization's device issuer")))
 	}
-	// Checked before the rollout so an organization that does not exist is
-	// refused like any other bad assertion, rather than surfacing as the
-	// lookup failure the rollout check would report.
+	// An organization that does not exist is refused like any other bad
+	// assertion, so the endpoint does not reveal which organizations exist.
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -142,7 +141,7 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("organization_unknown", errors.New("the organization is disabled")))
 	}
 
-	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, organizationID, logger); refused {
+	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, logger); refused {
 		return err
 	}
 
@@ -185,7 +184,7 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	authorizationCtx := contextvalues.WithAuthenticatedActor(ctx, authCtx, principal)
 	_, err = s.admitWorkloadSession(authorizationCtx, organizationID, subject, workloadSessionCredential{DelegatedGrants: ceiling, DelegatedGrantsVersion: version})
 	switch {
-	case errors.Is(err, errWorkloadRolloutDisabled), errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
+	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("agent_admission_denied", err))
 	case err != nil:
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
