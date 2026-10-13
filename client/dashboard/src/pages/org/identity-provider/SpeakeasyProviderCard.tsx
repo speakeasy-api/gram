@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import { invalidateAllInternalSessionIssuer } from "@gram/client/react-query/internalSessionIssuer.js";
+import { useRotateInternalSessionIssuerMutation } from "@gram/client/react-query/rotateInternalSessionIssuer.js";
 import { useSetInternalSessionIssuerEnabledMutation } from "@gram/client/react-query/setInternalSessionIssuerEnabled.js";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -21,7 +22,7 @@ import {
   useEnterpriseIssuer,
 } from "./useEnterpriseIssuer";
 
-type Action = "disable" | null;
+type Action = "disable" | "replace" | null;
 
 type BadgeVariant = NonNullable<BadgeProps["variant"]>;
 
@@ -68,15 +69,29 @@ function SpeakeasyProviderContent(): JSX.Element {
   const enable = useSetInternalSessionIssuerEnabledMutation({
     onSuccess: update,
   });
+  const rotate = useRotateInternalSessionIssuerMutation({
+    onSuccess: update,
+  });
   const issuer = query.data;
-  const pending = enable.isPending;
+  const pending = enable.isPending || rotate.isPending;
   const canEnable = canManage && issuer?.canEnable;
   const canDisable =
     canManage && !!issuer?.issuer && issuer.state !== "disabled";
+  const activeKid = issuer?.keys.find((key) => key.state === "active")?.kid;
+  const canReplace = canManage && !!activeKid;
+  const canFinish = canManage && issuer?.state === "keyless";
   const chooseAction = (nextAction: Action) => {
     enable.reset();
+    rotate.reset();
     setAction(nextAction);
   };
+  // A compromised rotation withdraws every current key, then sets up a new
+  // one. With no active key left it only finishes the setup.
+  const replaceKey = (kid: string | undefined) =>
+    rotate.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: { rotateRequestBody: { activeKid: kid, compromised: true } },
+    });
   const badge = issuer ? STATE_BADGE[issuer.state] : undefined;
 
   return (
@@ -94,7 +109,7 @@ function SpeakeasyProviderContent(): JSX.Element {
         servers with their organization sign-in, without authorizing each
         service individually.
       </Text>
-      {query.isPending && (
+      {query.isLoading && (
         <>
           <SkeletonParagraph />
           <span role="status" className="sr-only">
@@ -160,8 +175,21 @@ function SpeakeasyProviderContent(): JSX.Element {
           Managed Authorization.
         </Text>
       )}
-      {(canEnable || canDisable) && (
+      {(canEnable || canDisable || canReplace || canFinish) && (
         <div className="flex flex-wrap gap-2">
+          {canFinish && (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={pending}
+              onClick={() => {
+                chooseAction(null);
+                replaceKey(undefined);
+              }}
+            >
+              {rotate.isPending ? "Setting up…" : "Finish setting up a new key"}
+            </Button>
+          )}
           {canEnable && (
             <Button
               variant="primary"
@@ -191,7 +219,24 @@ function SpeakeasyProviderContent(): JSX.Element {
               </Button>
             </SimpleTooltip>
           )}
+          {canReplace && (
+            <SimpleTooltip tooltip="If a signing key may be exposed, stop using it now and set up a new one. The issuer URI stays the same.">
+              <Button
+                variant="tertiary"
+                size="sm"
+                disabled={pending}
+                onClick={() => chooseAction("replace")}
+              >
+                Replace compromised key
+              </Button>
+            </SimpleTooltip>
+          )}
         </div>
+      )}
+      {rotate.isError && action === null && (
+        <Alert variant="error">
+          Couldn't finish setting up a new key. Try again.
+        </Alert>
       )}
       {enable.isError && action === null && (
         <Alert variant="error">
@@ -199,6 +244,32 @@ function SpeakeasyProviderContent(): JSX.Element {
           your Speakeasy administrator.
         </Alert>
       )}
+      <ConfirmDialog
+        open={action === "replace"}
+        onOpenChange={(open) => {
+          if (!open) chooseAction(null);
+        }}
+        title="Replace the signing key?"
+        confirmLabel="Replace key"
+        pendingLabel="Replacing…"
+        confirmVariant="destructive-primary"
+        description={
+          <>
+            Speakeasy stops signing with every current key right away and
+            withdraws them, then sets up a new key. The issuer URI doesn't
+            change, so services keep trusting it.
+            <br />
+            <br />
+            Automatic authorization pauses until the new key is ready, and
+            services can take a few minutes to see it.
+          </>
+        }
+        isPending={rotate.isPending}
+        error={
+          rotate.isError ? "Couldn't replace the key. Try again." : undefined
+        }
+        onConfirm={() => replaceKey(activeKid)}
+      />
       <ConfirmDialog
         open={action === "disable"}
         onOpenChange={(open) => {
@@ -272,7 +343,7 @@ function IssuerStatus({
       break;
     case "keyless":
       message =
-        "Enterprise Managed Authorization is unavailable. Ask an organization administrator to contact Speakeasy support to restore it.";
+        "Enterprise Managed Authorization is paused because its signing key was withdrawn. An organization administrator can finish setting up a new key here; the issuer URI stays the same.";
       break;
     case "unavailable":
       message =

@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   error: false,
   refetch: vi.fn(),
   mutate: vi.fn(),
+  rotate: vi.fn(),
   reset: vi.fn(),
   setData: vi.fn(),
   invalidate: vi.fn(),
@@ -48,7 +49,7 @@ vi.mock("./useEnterpriseIssuer", () => ({
   ],
   useEnterpriseIssuer: () => ({
     data: mocks.issuer,
-    isPending: mocks.loading,
+    isLoading: mocks.loading,
     isError: mocks.error,
     isFetching: false,
     refetch: mocks.refetch,
@@ -69,6 +70,15 @@ vi.mock("@gram/client/react-query/setInternalSessionIssuerEnabled.js", () => ({
       isError: false,
     };
   },
+}));
+
+vi.mock("@gram/client/react-query/rotateInternalSessionIssuer.js", () => ({
+  useRotateInternalSessionIssuerMutation: () => ({
+    mutate: mocks.rotate,
+    reset: mocks.reset,
+    isPending: false,
+    isError: false,
+  }),
 }));
 
 const enabledIssuer: InternalSessionIssuer = {
@@ -147,13 +157,43 @@ describe("Speakeasy identity provider card", () => {
     expect(mocks.invalidate).toHaveBeenCalledOnce();
   });
 
-  it("hands keyless recovery to an administrator with support guidance", () => {
+  it("lets an administrator finish setting up a key for a keyless issuer", () => {
     mocks.issuer = { ...enabledIssuer, keys: [], state: "keyless" };
     show();
+    expect(screen.getByText(/finish setting up a new key here/)).toBeTruthy();
+    expect(screen.queryByText(/Speakeasy support/)).toBeNull();
     expect(
-      screen.getByText(/contact Speakeasy support to restore it/),
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Rotate key" })).toBeNull();
+      screen.queryByRole("button", { name: "Replace compromised key" }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Finish setting up a new key" }),
+    );
+    expect(mocks.rotate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        rotateRequestBody: { activeKid: undefined, compromised: true },
+      },
+    });
+  });
+
+  it("replaces a compromised key only after confirmation", () => {
+    mocks.issuer = enabledIssuer;
+    show();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Replace compromised key" }),
+    );
+    expect(mocks.rotate).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Replace key",
+      }),
+    );
+    expect(mocks.rotate).toHaveBeenCalledWith({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        rotateRequestBody: { activeKid: "example-key", compromised: true },
+      },
+    });
   });
 
   it("shows the stable issuer URI with a copy action", () => {
@@ -209,7 +249,9 @@ describe("Speakeasy identity provider card", () => {
           name: "Disable",
         }),
       ).toBeNull();
-      expect(screen.queryByRole("button", { name: "Rotate key" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Replace compromised key" }),
+      ).toBeNull();
       expect(
         screen.getByRole("button", { name: "Copy issuer URI" }),
       ).toBeTruthy();
@@ -312,11 +354,13 @@ describe("Speakeasy identity provider card", () => {
         name: "Disable",
       }),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Rotate key" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Replace compromised key" }),
+    ).toBeNull();
   });
 
   it.each([undefined, new Date("2030-01-01"), new Date("2020-01-01")])(
-    "leaves signing-key maintenance out of the page (%s)",
+    "leaves routine rotation out of the page (%s)",
     (rotationReadyAt) => {
       mocks.issuer = { ...enabledIssuer, rotationReadyAt };
       show();
