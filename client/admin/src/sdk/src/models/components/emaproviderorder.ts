@@ -10,15 +10,15 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { EMAProvider, EMAProvider$inboundSchema } from "./emaprovider.js";
 
 /**
- * The EMA providers identity chaining tries, in order, for one vendor authorization server; each failure falls through to the next.
+ * The selected EMA provider for one vendor authorization server. Automatic provider fallback is not supported.
  */
 export type EMAProviderOrder = {
   /**
-   * No order is saved, so every available provider applies: external first, then Speakeasy.
+   * No selection is saved, so the endpoint uses its configured external issuer.
    */
   isDefault: boolean;
   /**
-   * Providers in the order they are tried.
+   * The explicitly selected provider, or the external default.
    */
   providers: Array<EMAProvider>;
   /**

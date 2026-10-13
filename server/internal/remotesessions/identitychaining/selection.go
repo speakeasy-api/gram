@@ -2,12 +2,16 @@ package identitychaining
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -39,6 +43,13 @@ type selection struct {
 	// A token is released or published only while it can still serve.
 	provider remotesessions.EMAProvider
 
+	// Speakeasy provenance snapshots fence issuer and SSO changes during exchange.
+	internalIssuerVersion time.Time
+	internalKeyID         uuid.UUID
+	userSessionID         uuid.UUID
+	signInID              uuid.UUID
+	email                 string
+
 	// audience is the ID-JAG audience: an administrator-confirmed Okta
 	// resource app audience when one exists, else the resource authorization
 	// server's issuer. Filled in by authorize.
@@ -63,11 +74,21 @@ func GrantScopes(scopes []string) []string {
 // interactive path.
 func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req Request) (selection, Outcome) {
 	var none selection
+	// Every caller has already authenticated the human or management
+	// principal. Unconfigured endpoints perform no discovery at all.
+	resource, err := g.ResolveResource(ctx, req)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve identity chaining resource", attr.SlogError(err))
+		if errors.Is(err, protectedresource.ErrEndpointResourceInvalid) {
+			return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
+		}
+		return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceUnknown, true)
+	}
 	bindings, err := repo.New(g.db).ListEMAChainingBindings(ctx, repo.ListEMAChainingBindingsParams{
 		ProjectID:             req.ProjectID,
 		OrganizationID:        req.OrganizationID,
 		UserSessionIssuerID:   req.UserSessionIssuerID,
-		UpstreamResource:      strings.TrimRight(req.UpstreamResource, "/"),
+		UpstreamResource:      strings.TrimRight(resource.Resource, "/"),
 		RemoteSessionIssuerID: req.RemoteSessionIssuerID,
 	})
 	if err != nil {
@@ -103,23 +124,27 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 	case result.State != remotesessions.PreparationStateReady || result.BindingID != b.ID || result.ClientID == uuid.Nil || result.ExternalClientID == "":
 		return none, bindingNotReady
 	}
+	if resource.Discovered && !slices.Contains(resource.AuthorizationServers, result.Issuer) {
+		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
+	}
 	scopes := GrantScopes(result.Scopes)
 	if len(scopes) == 0 && len(result.Scopes) > 0 {
 		logger.DebugContext(ctx, "identity chaining dropped every configured scope as OIDC reserved", attr.SlogOAuthScope(strings.Join(result.Scopes, " ")))
 	}
 	return selection{
-		bindingID:        result.BindingID,
-		generation:       result.Generation,
-		remoteIssuerID:   b.RemoteSessionIssuerID,
-		clientID:         result.ClientID,
-		externalClientID: result.ExternalClientID,
-		issuer:           result.Issuer,
-		resource:         result.Resource,
-		scopes:           scopes,
-		configuredScopes: result.Scopes,
-		trustedIssuerID:  uuid.Nil,
-		trustedClientID:  uuid.Nil,
-		provider:         remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
-		audience:         "",
+		bindingID:             result.BindingID,
+		generation:            result.Generation,
+		remoteIssuerID:        b.RemoteSessionIssuerID,
+		clientID:              result.ClientID,
+		externalClientID:      result.ExternalClientID,
+		issuer:                result.Issuer,
+		resource:              result.Resource,
+		scopes:                scopes,
+		configuredScopes:      result.Scopes,
+		trustedIssuerID:       uuid.Nil,
+		trustedClientID:       uuid.Nil,
+		provider:              remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
+		audience:              "",
+		internalIssuerVersion: time.Time{}, internalKeyID: uuid.Nil, userSessionID: uuid.Nil, signInID: uuid.Nil, email: "",
 	}, success
 }

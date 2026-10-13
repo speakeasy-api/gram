@@ -89,6 +89,10 @@ type Service struct {
 	// featureFlags gates rollouts; nil reads every flag as off.
 	featureFlags feature.Provider
 
+	// speakeasySigningAvailable matches the runtime deployment capability.
+	speakeasySigningAvailable bool
+	speakeasyReadiness        EMAProviderReadiness
+
 	createDiscoveryBudget time.Duration
 }
 
@@ -138,9 +142,11 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		registrationTelemetry: registrationTelemetry,
 		origins:               DefaultCallbackOrigins(serverURL),
 
-		productFeatures:       productFeatures,
-		featureFlags:          nil,
-		createDiscoveryBudget: defaultCreateDiscoveryBudget,
+		productFeatures:           productFeatures,
+		featureFlags:              nil,
+		speakeasySigningAvailable: false,
+		speakeasyReadiness:        nil,
+		createDiscoveryBudget:     defaultCreateDiscoveryBudget,
 	}
 }
 
@@ -229,4 +235,15 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	}
 
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+// SetSpeakeasySigningAvailable configures the deployment capability used by
+// provider-order views. Organization lifecycle and entitlements remain live checks.
+func (s *Service) SetSpeakeasySigningAvailable(available bool) {
+	s.speakeasySigningAvailable = available
+}
+
+// SetSpeakeasyReadiness installs the runtime's live issuer eligibility check.
+func (s *Service) SetSpeakeasyReadiness(check EMAProviderReadiness) {
+	s.speakeasyReadiness = check
 }

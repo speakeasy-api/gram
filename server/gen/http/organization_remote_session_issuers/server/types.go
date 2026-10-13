@@ -245,7 +245,7 @@ type SetEMAProvidersRequestBody struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// Providers in the order they are tried; each at most once.
+	// One selected provider; an empty list restores the external default.
 	Providers []*EMAProviderInputRequestBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
@@ -786,10 +786,9 @@ type MigrateIssuerResponseBody struct {
 type SetEMAProvidersResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved, so every available provider applies: external first, then
-	// Speakeasy.
+	// No selection is saved, so the endpoint uses its configured external issuer.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// Providers in the order they are tried.
+	// The explicitly selected provider, or the external default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
@@ -3354,10 +3353,9 @@ type RefreshIssuerMetadataGatewayErrorResponseBody struct {
 type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved, so every available provider applies: external first, then
-	// Speakeasy.
+	// No selection is saved, so the endpoint uses its configured external issuer.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// Providers in the order they are tried.
+	// The explicitly selected provider, or the external default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
@@ -3370,8 +3368,8 @@ type EMAProviderResponseBody struct {
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
-	// Why the provider cannot serve now; omitted when it can. Unavailable
-	// providers are skipped.
+	// Why the provider cannot serve now; omitted when it can. An unavailable
+	// selection does not fall back to another provider.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
 
@@ -6608,8 +6606,8 @@ func ValidateSetEMAProvidersRequestBody(body *SetEMAProvidersRequestBody) (err e
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
-	if len(body.Providers) > 10 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.providers", body.Providers, len(body.Providers), 10, false))
+	if len(body.Providers) > 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.providers", body.Providers, len(body.Providers), 1, false))
 	}
 	for _, e := range body.Providers {
 		if e != nil {

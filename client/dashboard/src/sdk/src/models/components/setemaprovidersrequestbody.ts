@@ -12,7 +12,7 @@ import {
 
 export type SetEMAProvidersRequestBody = {
   /**
-   * Providers in the order they are tried; each at most once.
+   * One selected provider; an empty list restores the external default.
    */
   providers: Array<EMAProviderInput>;
   /**

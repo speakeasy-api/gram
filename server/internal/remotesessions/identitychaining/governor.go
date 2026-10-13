@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,14 +13,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Governor answers configuration questions about identity chaining from the
-// database alone. It never contacts a provider, retires a credential, or
-// acquires a token, so status surfaces can share one.
+// Governor answers configuration questions about identity chaining. It may
+// resolve public resource metadata but never acquires a token or retires a
+// credential, so authenticated status surfaces can share one.
 type Governor struct {
 	logger     *slog.Logger
 	db         *pgxpool.Pool
@@ -31,21 +31,40 @@ type Governor struct {
 
 	// sources builds each EMA provider kind's token source.
 	sources map[remotesessions.EMAProviderKind]sourceFactory
+
+	// resolveResource maps a direct HTTP transport to its authorization resource.
+	resolveResource func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error)
 }
 
-// NewGovernor builds a database-only governor; enc verifies stored credentials
+// NewGovernor builds a configuration governor; enc verifies stored credentials
 // and delegation checks the human's retained delegation against the current
 // trusted registration.
 func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, delegation *remotesessions.DelegationService) *Governor {
 	return &Governor{
 		logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, delegation: delegation, now: time.Now,
+		resolveResource: nil,
 		sources: map[remotesessions.EMAProviderKind]sourceFactory{
 			remotesessions.EMAProviderExternal: func(p remotesessions.EMAProvider) tokenSource {
 				return externalSource{c: nil, issuer: p.RemoteSessionIssuerID}
 			},
-			remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return speakeasySource{} },
+			remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return new(speakeasySource) },
 		},
 	}
+}
+
+// SetResourceResolver installs public metadata resolution before serving any
+// authenticated runtime, consent, or management requests.
+func (g *Governor) SetResourceResolver(resolve func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error)) {
+	g.resolveResource = resolve
+}
+
+// ResolveResource returns the resource identity used by binding selection.
+// Tunneled resources are explicit operator configuration and are not probed.
+func (g *Governor) ResolveResource(ctx context.Context, req Request) (protectedresource.EndpointResource, error) {
+	if g.resolveResource == nil || req.RemoteSessionIssuerID.Valid || !g.Configured(ctx, req.OrganizationID, req.ProjectID, req.UserSessionIssuerID) {
+		return protectedresource.EndpointResource{Resource: req.UpstreamResource, AuthorizationServers: nil, Discovered: false}, nil
+	}
+	return g.resolveResource(ctx, req.OrganizationID, req.ProjectID, req.UpstreamResource)
 }
 
 // Governs reports whether identity chaining owns the request's upstream: a
@@ -71,7 +90,7 @@ func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !outcome.Succeeded() {
 		return uuid.Nil, false
 	}
-	if _, outcome := g.servingProviders(ctx, g.logger, req, sel); !outcome.Succeeded() {
+	if order, outcome := g.readyProviderOrder(ctx, req, sel); !outcome.Succeeded() || len(order.Available()) == 0 {
 		return uuid.Nil, false
 	}
 	return sel.remoteIssuerID, true
@@ -89,7 +108,7 @@ func (g *Governor) ProviderOrder(ctx context.Context, req Request) (remotesessio
 	if !outcome.Succeeded() {
 		return none, false
 	}
-	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
+	order, outcome := g.readyProviderOrder(ctx, req, sel)
 	if !outcome.Succeeded() {
 		return none, false
 	}
@@ -128,13 +147,34 @@ func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 	if !outcome.Succeeded() {
 		return false
 	}
-	// Stored credentials come from the endpoint's trusted issuer, so one is
-	// usable only while an available external provider names it.
-	// TODO(AIM-523): record provider provenance on the credential instead.
 	providers, outcome := g.servingProviders(ctx, g.logger, req, sel)
-	if !outcome.Succeeded() || !slices.ContainsFunc(providers, func(p remotesessions.EMAProvider) bool { return p.Kind == remotesessions.EMAProviderExternal }) {
+	if !outcome.Succeeded() {
 		return false
 	}
+	for _, p := range providers {
+		current := sel
+		current.provider = p
+		if p.Kind == remotesessions.EMAProviderSpeakeasy {
+			source := g.source(p)
+			if !source.authorize(ctx, g.logger, req, &current).Succeeded() {
+				continue
+			}
+			row, err := readCredential(ctx, repo.New(g.db), req, current, g.now())
+			if err != nil || !row.Usable || g.enc == nil {
+				continue
+			}
+			value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
+			if err == nil && value != "" {
+				return true
+			}
+		} else if g.hasExternalCredential(ctx, req, current) {
+			return true
+		}
+	}
+	return false
+}
+
+func (g *Governor) hasExternalCredential(ctx context.Context, req Request, sel selection) bool {
 	q := repo.New(g.db)
 	issuer, err := q.GetEMAChainingUserIssuer(ctx, repo.GetEMAChainingUserIssuerParams{ID: req.UserSessionIssuerID, OrganizationID: conv.ToPGText(req.OrganizationID)})
 	switch {

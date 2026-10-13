@@ -2,8 +2,11 @@ package remotesessions_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -70,20 +73,19 @@ func setEMAProviders(ctx context.Context, ti *testInstance, vendor uuid.UUID, pr
 	return ti.service.SetEMAProviders(ctx, &orgissuersgen.SetEMAProvidersPayload{SessionToken: nil, RemoteSessionIssuerID: vendor.String(), Providers: providers})
 }
 
-func TestSetEMAProviders_SavesOrderAndAudits(t *testing.T) {
+func TestSetEMAProviders_SavesSelectionAndAudits(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	f := newEMAProvidersFixture(t, ctx, ti)
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProviders)
 	require.NoError(t, err)
 
-	order, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput(), externalInput(f.external))
+	order, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
 	require.NoError(t, err)
 	require.False(t, order.IsDefault)
 	require.Equal(t, "https://vendor.example.com", order.VendorIssuer)
 	require.Equal(t, []*types.EMAProvider{
 		{Kind: "speakeasy", RemoteSessionIssuerID: nil, InternalSessionIssuerID: conv.PtrEmpty(f.internalIssuer.String()), UnavailableReason: conv.PtrEmpty("signing_unavailable")},
-		{Kind: "external", RemoteSessionIssuerID: conv.PtrEmpty(f.external.String()), InternalSessionIssuerID: nil, UnavailableReason: nil},
 	}, order.Providers)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProviders)
@@ -100,7 +102,7 @@ func TestSetEMAProviders_SavesOrderAndAudits(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, order, view.EmaProviders, "the issuer view shows the saved order")
 
-	_, err = setEMAProviders(ctx, ti, f.vendor, speakeasyInput(), externalInput(f.external))
+	_, err = setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
 	require.NoError(t, err)
 	unchanged, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProviders)
 	require.NoError(t, err)
@@ -109,7 +111,7 @@ func TestSetEMAProviders_SavesOrderAndAudits(t *testing.T) {
 	restored, err := setEMAProviders(ctx, ti, f.vendor)
 	require.NoError(t, err)
 	require.True(t, restored.IsDefault)
-	require.Equal(t, []*types.EMAProvider{{Kind: "external", RemoteSessionIssuerID: conv.PtrEmpty(f.external.String()), InternalSessionIssuerID: nil, UnavailableReason: nil}}, restored.Providers, "the default holds every available provider; Speakeasy joins once it signs")
+	require.Equal(t, []*types.EMAProvider{{Kind: "external", RemoteSessionIssuerID: nil, InternalSessionIssuerID: nil, UnavailableReason: nil}}, restored.Providers, "the default retains the endpoint external provider")
 }
 
 func TestSetEMAProviders_SameVendorAcrossIssuerSpellings(t *testing.T) {
@@ -136,6 +138,7 @@ func TestSetEMAProviders_RejectsInvalidOrders(t *testing.T) {
 		"external without issuer":   {{Kind: "external", RemoteSessionIssuerID: nil}},
 		"speakeasy with an issuer":  {{Kind: "speakeasy", RemoteSessionIssuerID: conv.PtrEmpty(f.external.String())}},
 		"duplicate":                 {externalInput(f.external), externalInput(f.external)},
+		"automatic fallback":        {speakeasyInput(), externalInput(f.external)},
 		"untrusted external issuer": {externalInput(untrusted)},
 		"null entry":                {nil},
 	} {
@@ -221,8 +224,8 @@ func TestSetEMAProviders_ConcurrentReplacesSerialize(t *testing.T) {
 	ctx, ti := newTestService(t)
 	f := newEMAProvidersFixture(t, ctx, ti)
 	orders := [][]*types.EMAProviderInput{
-		{speakeasyInput(), externalInput(f.external)},
-		{externalInput(f.external), speakeasyInput()},
+		{speakeasyInput()},
+		{externalInput(f.external)},
 		{externalInput(f.external)},
 	}
 
@@ -249,4 +252,39 @@ func TestSetEMAProviders_ConcurrentReplacesSerialize(t *testing.T) {
 	for i, row := range rows {
 		require.Equal(t, int32(i), row.Position, "the surviving order is one whole write")
 	}
+}
+
+func TestSetEMAProviders_ReadinessRunsAfterTransaction(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: 1})
+	f := newEMAProvidersFixture(t, ctx, ti)
+	ti.service.SetSpeakeasySigningAvailable(true)
+	ready := true
+	var readinessErr error
+	ti.service.SetSpeakeasyReadiness(func(ctx context.Context, org string, issuerID uuid.UUID) (bool, error) {
+		require.Equal(t, f.org, org)
+		require.Equal(t, f.internalIssuer, issuerID)
+		// A query on the only connection proves the caller released its transaction.
+		_, err := repo.New(ti.conn).GetEMAInternalSessionIssuer(ctx, org)
+		if err != nil {
+			return false, fmt.Errorf("read issuer after order commit: %w", err)
+		}
+		return ready, readinessErr
+	})
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	for _, wantReady := range []bool{true, false} {
+		ready = wantReady
+		order, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
+		require.NoError(t, err, "both changed and unchanged orders release their transaction before readiness")
+		require.Len(t, order.Providers, 1)
+		if wantReady {
+			require.Nil(t, order.Providers[0].UnavailableReason)
+		} else {
+			require.Equal(t, "signing_unavailable", *order.Providers[0].UnavailableReason)
+		}
+	}
+	readinessErr = errors.New("temporary issuer lookup failure")
+	_, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
+	requireOopsCode(t, err, oops.CodeUnavailable)
 }

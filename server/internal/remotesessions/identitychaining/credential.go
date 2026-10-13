@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -38,7 +39,7 @@ func (c *Chainer) cachedToken(ctx context.Context, logger *slog.Logger, req Requ
 	var none Token
 	q := repo.New(c.db)
 	now := c.now()
-	row, err := q.GetEMACredentialForUse(ctx, credentialForUseParams(req, sel, now))
+	row, err := readCredential(ctx, q, req, sel, now)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, false
@@ -92,24 +93,39 @@ func (c *Chainer) publish(ctx context.Context, logger *slog.Logger, req Request,
 		}
 		return fmt.Errorf("check ema provider order: %s", outcome.Reason)
 	}
-	_, err = q.UpsertEMACredential(ctx, repo.UpsertEMACredentialParams{
-		OrganizationID:                 req.OrganizationID,
-		ProjectID:                      req.ProjectID,
-		UserSessionIssuerID:            req.UserSessionIssuerID,
-		RemoteSessionIssuerID:          sel.remoteIssuerID,
-		RemoteSessionClientID:          sel.clientID,
-		Resource:                       sel.resource,
-		SubjectUrn:                     urn.NewUserSubject(req.UserID).String(),
-		BindingID:                      sel.bindingID,
-		BindingGeneration:              sel.generation,
-		TrustedIssuerSessionID:         cred.trustedSessionID,
-		TrustedCredentialObtainedAt:    conv.PtrToPGTimestamptz(conv.PtrEmpty(cred.trustedObtainedAt)),
-		RequestedScopes:                storedScopes(sel.scopes),
-		GrantedScopes:                  storedScopes(cred.grantedScopes),
-		AccessTokenEncrypted:           encrypted,
-		AccessExpiresAt:                pgtype.Timestamptz{Time: cred.expiresAt, Valid: true, InfinityModifier: pgtype.Finite},
-		DownstreamRefreshTokenObserved: cred.refreshObserved,
-	})
+	if sel.provider.Kind == remotesessions.EMAProviderSpeakeasy {
+		if err := c.checkSpeakeasyPublish(ctx, tx, req, sel); err != nil {
+			return err
+		}
+		_, err = q.UpsertSpeakeasyEMACredential(ctx, repo.UpsertSpeakeasyEMACredentialParams{
+			OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, UserSessionIssuerID: req.UserSessionIssuerID,
+			RemoteSessionIssuerID: sel.remoteIssuerID, RemoteSessionClientID: sel.clientID, Resource: sel.resource,
+			SubjectUrn: urn.NewUserSubject(req.UserID).String(), BindingID: sel.bindingID, BindingGeneration: sel.generation,
+			InternalSessionIssuerID: sel.provider.InternalSessionIssuerID, InternalSessionIssuerUpdatedAt: conv.ToPGTimestamptz(sel.internalIssuerVersion),
+			InternalSessionIssuerKeyID: sel.internalKeyID, SsoSignInID: sel.signInID, UserSessionID: sel.userSessionID,
+			RequestedScopes: storedScopes(sel.scopes), GrantedScopes: storedScopes(cred.grantedScopes), AccessTokenEncrypted: encrypted,
+			AccessExpiresAt: conv.ToPGTimestamptz(cred.expiresAt), DownstreamRefreshTokenObserved: cred.refreshObserved,
+		})
+	} else {
+		_, err = q.UpsertEMACredential(ctx, repo.UpsertEMACredentialParams{
+			OrganizationID:                 req.OrganizationID,
+			ProjectID:                      req.ProjectID,
+			UserSessionIssuerID:            req.UserSessionIssuerID,
+			RemoteSessionIssuerID:          sel.remoteIssuerID,
+			RemoteSessionClientID:          sel.clientID,
+			Resource:                       sel.resource,
+			SubjectUrn:                     urn.NewUserSubject(req.UserID).String(),
+			BindingID:                      sel.bindingID,
+			BindingGeneration:              sel.generation,
+			TrustedIssuerSessionID:         cred.trustedSessionID,
+			TrustedCredentialObtainedAt:    conv.PtrToPGTimestamptz(conv.PtrEmpty(cred.trustedObtainedAt)),
+			RequestedScopes:                storedScopes(sel.scopes),
+			GrantedScopes:                  storedScopes(cred.grantedScopes),
+			AccessTokenEncrypted:           encrypted,
+			AccessExpiresAt:                pgtype.Timestamptz{Time: cred.expiresAt, Valid: true, InfinityModifier: pgtype.Finite},
+			DownstreamRefreshTokenObserved: cred.refreshObserved,
+		})
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errStale
 	}
@@ -128,4 +144,27 @@ func storedScopes(scopes []string) []string {
 		return []string{}
 	}
 	return scopes
+}
+
+// readCredential shares provider-specific storage checks between runtime and status.
+func readCredential(ctx context.Context, q *repo.Queries, req Request, sel selection, now time.Time) (repo.GetEMACredentialForUseRow, error) {
+	if sel.provider.Kind != remotesessions.EMAProviderSpeakeasy {
+		row, err := q.GetEMACredentialForUse(ctx, credentialForUseParams(req, sel, now))
+		if err != nil {
+			return row, fmt.Errorf("read external EMA credential: %w", err)
+		}
+		return row, nil
+	}
+	r, err := q.GetSpeakeasyEMACredentialForUse(ctx, repo.GetSpeakeasyEMACredentialForUseParams{
+		OrganizationID: req.OrganizationID, ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: req.UserSessionIssuerID, Valid: true}, RemoteSessionIssuerID: sel.remoteIssuerID,
+		RemoteSessionClientID: uuid.NullUUID{UUID: sel.clientID, Valid: true}, Resource: sel.resource, SubjectUrn: urn.NewUserSubject(req.UserID).String(),
+		BindingID: sel.bindingID, BindingGeneration: sel.generation, RequestedScopes: storedScopes(sel.scopes), UsableAfter: conv.ToPGTimestamptz(now.Add(accessExpirySkew)),
+		InternalSessionIssuerID: sel.provider.InternalSessionIssuerID, InternalSessionIssuerUpdatedAt: conv.ToPGTimestamptz(sel.internalIssuerVersion),
+		InternalSessionIssuerKeyID: sel.internalKeyID, SsoSignInID: sel.signInID, UserSessionID: sel.userSessionID,
+	})
+	if err != nil {
+		return repo.GetEMACredentialForUseRow(r), fmt.Errorf("read Speakeasy EMA credential: %w", err)
+	}
+	return repo.GetEMACredentialForUseRow(r), nil
 }

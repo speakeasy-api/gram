@@ -16,7 +16,7 @@ type EMAProvider struct {
 	RemoteSessionIssuerID *string
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string
-	// Why the provider cannot serve now; omitted when it can. Unavailable
-	// providers are skipped.
+	// Why the provider cannot serve now; omitted when it can. An unavailable
+	// selection does not fall back to another provider.
 	UnavailableReason *string
 }

@@ -55,7 +55,7 @@ export type IdentityChainingPreparation = {
    */
   clientId?: string | undefined;
   /**
-   * The EMA providers identity chaining tries, in order, for one vendor authorization server; each failure falls through to the next.
+   * The selected EMA provider for one vendor authorization server. Automatic provider fallback is not supported.
    */
   emaProviders?: EMAProviderOrder | undefined;
   /**

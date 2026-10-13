@@ -106,10 +106,14 @@ func TestIdentityChainingRequest_OnlyValidatedHumans(t *testing.T) {
 				chainer = &recordingChainer{}
 			}
 			s := chainingService(t, chainer)
-			req, ok := s.identityChainingRequest(tc.ctx(t), chainingTestOrg, project, tc.issuer, "https://upstream.example.test/mcp", false, uuid.NullUUID{})
+			ctx := tc.ctx(t)
+			req, ok := s.identityChainingRequest(ctx, chainingTestOrg, project, tc.issuer, "https://upstream.example.test/mcp", false, uuid.NullUUID{})
 			require.Equal(t, tc.want, ok)
 			if tc.want {
-				require.Equal(t, identitychaining.Request{OrganizationID: chainingTestOrg, ProjectID: project, UserSessionIssuerID: issuer, UserID: "user-1", UpstreamResource: "https://upstream.example.test/mcp", RemoteSessionIssuerID: uuid.NullUUID{}}, req)
+				identity, hasIdentity := mcpidentity.FromContext(ctx)
+				require.True(t, hasIdentity)
+				require.NotEmpty(t, req.UserSessionJTI)
+				require.Equal(t, identitychaining.Request{OrganizationID: chainingTestOrg, ProjectID: project, UserSessionIssuerID: issuer, UserID: "user-1", UserSessionJTI: identity.SessionJTI(), UpstreamResource: "https://upstream.example.test/mcp", RemoteSessionIssuerID: uuid.NullUUID{}}, req)
 			}
 		})
 	}
@@ -252,4 +256,9 @@ func TestUpstreamTokenPresent_SelfCredential(t *testing.T) {
 	}
 	require.True(t, upstreamTokenPresent(audienceBound, "https://upstream.example.test/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true}), "a self credential requested for this upstream is present")
 	require.False(t, upstreamTokenPresent(audienceBound, "https://sibling.example.test/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true}), "a self credential requested for a sibling upstream is not")
+}
+
+func (g *recordingChainer) CheckConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) identitychaining.Outcome {
+	_, outcome := g.Acquire(ctx, req)
+	return outcome
 }

@@ -1929,10 +1929,9 @@ type RemoteSessionIssuerResponseBody struct {
 type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
-	// No order is saved, so every available provider applies: external first, then
-	// Speakeasy.
+	// No selection is saved, so the endpoint uses its configured external issuer.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	// Providers in the order they are tried.
+	// The explicitly selected provider, or the external default.
 	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
@@ -1945,8 +1944,8 @@ type EMAProviderResponseBody struct {
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
-	// Why the provider cannot serve now; omitted when it can. Unavailable
-	// providers are skipped.
+	// Why the provider cannot serve now; omitted when it can. An unavailable
+	// selection does not fall back to another provider.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
 

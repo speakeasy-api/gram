@@ -30,7 +30,7 @@ var EMAProvider = Type("EMAProvider", func() {
 	Attribute("internal_session_issuer_id", String, "The organization's internal session issuer, for speakeasy.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("unavailable_reason", String, "Why the provider cannot serve now; omitted when it can. Unavailable providers are skipped.", func() {
+	Attribute("unavailable_reason", String, "Why the provider cannot serve now; omitted when it can. An unavailable selection does not fall back to another provider.", func() {
 		Enum("deleted", "disabled", "not_trusted_by_endpoint", "signing_unavailable")
 	})
 	Required("kind")
@@ -39,9 +39,9 @@ var EMAProvider = Type("EMAProvider", func() {
 // EMAProviderOrder is a vendor's EMA provider order, saved or default.
 var EMAProviderOrder = Type("EMAProviderOrder", func() {
 	Meta("struct:pkg:path", "types")
-	Description("The EMA providers identity chaining tries, in order, for one vendor authorization server; each failure falls through to the next.")
+	Description("The selected EMA provider for one vendor authorization server. Automatic provider fallback is not supported.")
 	Attribute("vendor_issuer", String, "The vendor authorization server issuer, canonicalized.")
-	Attribute("is_default", Boolean, "No order is saved, so every available provider applies: external first, then Speakeasy.")
-	Attribute("providers", ArrayOf(EMAProvider), "Providers in the order they are tried.")
+	Attribute("is_default", Boolean, "No selection is saved, so the endpoint uses its configured external issuer.")
+	Attribute("providers", ArrayOf(EMAProvider), "The explicitly selected provider, or the external default.")
 	Required("vendor_issuer", "is_default", "providers")
 })

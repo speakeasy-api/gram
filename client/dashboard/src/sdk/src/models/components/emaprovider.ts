@@ -22,7 +22,7 @@ export const EMAProviderKind = {
 export type EMAProviderKind = ClosedEnum<typeof EMAProviderKind>;
 
 /**
- * Why the provider cannot serve now; omitted when it can. Unavailable providers are skipped.
+ * Why the provider cannot serve now; omitted when it can. An unavailable selection does not fall back to another provider.
  */
 export const UnavailableReason = {
   Deleted: "deleted",
@@ -31,7 +31,7 @@ export const UnavailableReason = {
   SigningUnavailable: "signing_unavailable",
 } as const;
 /**
- * Why the provider cannot serve now; omitted when it can. Unavailable providers are skipped.
+ * Why the provider cannot serve now; omitted when it can. An unavailable selection does not fall back to another provider.
  */
 export type UnavailableReason = ClosedEnum<typeof UnavailableReason>;
 
@@ -52,7 +52,7 @@ export type EMAProvider = {
    */
   remoteSessionIssuerId?: string | undefined;
   /**
-   * Why the provider cannot serve now; omitted when it can. Unavailable providers are skipped.
+   * Why the provider cannot serve now; omitted when it can. An unavailable selection does not fall back to another provider.
    */
   unavailableReason?: UnavailableReason | undefined;
 };

@@ -9073,7 +9073,7 @@ components:
           format: uuid
         unavailable_reason:
           type: string
-          description: Why the provider cannot serve now; omitted when it can. Unavailable providers are skipped.
+          description: Why the provider cannot serve now; omitted when it can. An unavailable selection does not fall back to another provider.
           enum:
             - deleted
             - disabled
@@ -9087,16 +9087,16 @@ components:
       properties:
         is_default:
           type: boolean
-          description: 'No order is saved, so every available provider applies: external first, then Speakeasy.'
+          description: No selection is saved, so the endpoint uses its configured external issuer.
         providers:
           type: array
           items:
             $ref: '#/components/schemas/EMAProvider'
-          description: Providers in the order they are tried.
+          description: The explicitly selected provider, or the external default.
         vendor_issuer:
           type: string
           description: The vendor authorization server issuer, canonicalized.
-      description: The EMA providers identity chaining tries, in order, for one vendor authorization server; each failure falls through to the next.
+      description: The selected EMA provider for one vendor authorization server. Automatic provider fallback is not supported.
       required:
         - vendor_issuer
         - is_default

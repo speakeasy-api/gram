@@ -2,12 +2,14 @@ package identitychaining
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -55,7 +57,35 @@ func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req R
 	return g.providerOrderWith(ctx, repo.New(g.db), logger, req, sel)
 }
 
-// providerOrderWith is providerOrder over q, such as a publishing transaction.
+// readyProviderOrder decorates a configured order for status views. Acquisition
+// keeps the raw order so transient authority failures retain their retryability.
+func (g *Governor) readyProviderOrder(ctx context.Context, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
+	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
+	if !outcome.Succeeded() {
+		return order, outcome
+	}
+	order, err := remotesessions.ApplyEMAProviderReadiness(ctx, req.OrganizationID, order, func(ctx context.Context, organizationID string, issuerID uuid.UUID) (bool, error) {
+		source, ok := g.source(remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: issuerID, Unavailable: ""}).(interface {
+			configuration(context.Context, *slog.Logger, string) (internalsessionissuers.Status, Outcome)
+		})
+		if !ok {
+			return g.sourceAvailable(remotesessions.EMAProviderSpeakeasy), nil
+		}
+		_, outcome := source.configuration(ctx, g.logger, organizationID)
+		if outcome.Retryable {
+			return false, fmt.Errorf("issuer readiness: %s", outcome.Reason)
+		}
+		return outcome.Succeeded(), nil
+	})
+	if err != nil {
+		return order, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
+	}
+	return order, success
+}
+
+// providerOrderWith reads the saved order over q, such as a publishing
+// transaction. Live source readiness is checked outside the transaction; the
+// selected source's publish fence rechecks its issuer and sign-in under lock.
 func (g *Governor) providerOrderWith(ctx context.Context, q *repo.Queries, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
 	vendor, err := remotesessions.NormalizeVendorIssuer(sel.issuer)
 	if err != nil {
@@ -120,7 +150,7 @@ func (g *Governor) source(p remotesessions.EMAProvider) tokenSource {
 	if build, ok := g.sources[p.Kind]; ok {
 		return build(p)
 	}
-	return speakeasySource{}
+	return new(speakeasySource)
 }
 
 // sourceAvailable reports whether kind's source can serve on this deployment.
@@ -162,26 +192,4 @@ func (s externalSource) checkReuse(ctx context.Context, req Request, sel selecti
 
 func (s externalSource) issue(ctx context.Context, logger *slog.Logger, req Request, sel selection, ready func() Outcome) (issuedGrant, Outcome) {
 	return s.c.exchangeGrant(ctx, logger, req, sel, ready)
-}
-
-// speakeasySource will sign ID-JAGs with the organization's internal session
-// issuer (AIM-523). Until then it is unavailable and never presented as serving.
-type speakeasySource struct{}
-
-func (speakeasySource) kind() remotesessions.EMAProviderKind {
-	return remotesessions.EMAProviderSpeakeasy
-}
-
-func (speakeasySource) available() bool { return remotesessions.SpeakeasyEMASigning }
-
-func (speakeasySource) authorize(context.Context, *slog.Logger, Request, *selection) Outcome {
-	return providerUnavailable
-}
-
-func (speakeasySource) checkReuse(context.Context, Request, selection) Outcome {
-	return providerUnavailable
-}
-
-func (speakeasySource) issue(context.Context, *slog.Logger, Request, selection, func() Outcome) (issuedGrant, Outcome) {
-	return issuedGrant{value: "", trustedSessionID: uuid.Nil, trustedObtainedAt: time.Time{}}, providerUnavailable
 }

@@ -474,7 +474,7 @@ func TestStore_WaitersAdoptHolderOutcome(t *testing.T) {
 		failure := newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
 		key := cacheKey("identityChainingAttempt", f.req, f.sel)
 		require.NoError(t, f.chainer.locks.Set(t.Context(), key, attemptResult{Outcome: failure, FinishedAt: time.Now().Add(time.Second)}, time.Minute))
-		_, outcome := f.chainer.awaitConcurrentAcquisition(t.Context(), testenv.NewLogger(t), f.req, f.sel, true)
+		_, outcome := f.chainer.awaitConcurrentAcquisition(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 		require.Equal(t, failure, outcome, "a waiter reports the holder's failure instead of timing out")
 	})
 	t.Run("holder credential", func(t *testing.T) {
@@ -485,7 +485,7 @@ func TestStore_WaitersAdoptHolderOutcome(t *testing.T) {
 		key := cacheKey("identityChainingAttempt", f.req, f.sel)
 		require.NoError(t, f.chainer.locks.Set(t.Context(), key, attemptResult{Outcome: stale, FinishedAt: time.Now().Add(-time.Hour)}, time.Minute))
 		require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("holder-token")))
-		token, outcome := f.chainer.awaitConcurrentAcquisition(t.Context(), testenv.NewLogger(t), f.req, f.sel, true)
+		token, outcome := f.chainer.awaitConcurrentAcquisition(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 		require.True(t, outcome.Succeeded(), "an earlier attempt's failure is never adopted")
 		require.Equal(t, "holder-token", token.Value())
 	})

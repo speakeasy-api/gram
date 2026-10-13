@@ -111,22 +111,21 @@ func TestProviders_DefaultOrderIsTheEndpointsExternalIssuer(t *testing.T) {
 	order, ok := f.chainer.ProviderOrder(t.Context(), f.req)
 	require.True(t, ok)
 	require.True(t, order.IsDefault)
-	require.Equal(t, []remotesessions.EMAProvider{{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}}, order.Providers, "Speakeasy joins the default once it can sign")
+	require.Equal(t, []remotesessions.EMAProvider{{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}}, order.Providers, "Speakeasy requires an explicit selection")
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.Equal(t, remotesessions.EMAProviderExternal, outcome.Provider)
 }
 
-func TestProviders_DefaultAddsSpeakeasyLastOnceItSigns(t *testing.T) {
+func TestProviders_DefaultDoesNotSelectSpeakeasyWhenItCanSign(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
-	issuer := seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
+	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
 	useSpeakeasySource(f, &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0})
 
 	order, ok := f.chainer.ProviderOrder(t.Context(), f.req)
 	require.True(t, ok)
-	require.Equal(t, []remotesessions.EMAProviderKind{remotesessions.EMAProviderExternal, remotesessions.EMAProviderSpeakeasy}, kinds(order))
-	require.Equal(t, issuer, order.Providers[1].InternalSessionIssuerID)
+	require.Equal(t, []remotesessions.EMAProviderKind{remotesessions.EMAProviderExternal}, kinds(order))
 }
 
 func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {
@@ -150,14 +149,14 @@ func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {
 			require.True(t, ok)
 			vendor, err := remotesessions.NormalizeVendorIssuer(f.vendorIssuer)
 			require.NoError(t, err)
-			read, err := remotesessions.EndpointEMAProviders(t.Context(), repo.New(f.db), f.req.OrganizationID, f.req.UserSessionIssuerID, vendor, remotesessions.SpeakeasyEMASigning)
+			read, err := remotesessions.EndpointEMAProviders(t.Context(), repo.New(f.db), f.req.OrganizationID, f.req.UserSessionIssuerID, vendor, f.chainer.sourceAvailable(remotesessions.EMAProviderSpeakeasy))
 			require.NoError(t, err)
 			require.Equal(t, runtime, read)
 		})
 	}
 }
 
-func TestProviders_OrderFallsThroughToExternal(t *testing.T) {
+func TestProviders_ExplicitSelectionNeverFallsThroughToExternal(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
 	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageExchange, ReasonAccessDenied, ConfidenceInferred, false), issued: 0}
@@ -166,14 +165,14 @@ func TestProviders_OrderFallsThroughToExternal(t *testing.T) {
 
 	order, ok := f.chainer.ProviderOrder(t.Context(), f.req)
 	require.True(t, ok)
-	require.Equal(t, []remotesessions.EMAProviderKind{remotesessions.EMAProviderSpeakeasy, remotesessions.EMAProviderExternal}, kinds(order))
+	require.Equal(t, []remotesessions.EMAProviderKind{remotesessions.EMAProviderSpeakeasy}, kinds(order))
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
-	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
-	require.Equal(t, remotesessions.EMAProviderExternal, outcome.Provider)
+	require.False(t, outcome.Succeeded(), "outcome: %+v", outcome)
+	require.Equal(t, remotesessions.EMAProviderSpeakeasy, outcome.Provider)
 	require.Equal(t, 1, src.issued)
 }
 
-func TestProviders_FallsThroughOnEveryFailure(t *testing.T) {
+func TestProviders_ExplicitSelectionFailureNeverUsesAnotherProvider(t *testing.T) {
 	t.Parallel()
 	denied := newOutcome(StageExchange, ReasonAccessDenied, ConfidenceInferred, false)
 	for _, tc := range []struct {
@@ -194,9 +193,9 @@ func TestProviders_FallsThroughOnEveryFailure(t *testing.T) {
 			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)), external(f.trustedIssuerID))
 
 			token, outcome := f.chainer.Acquire(t.Context(), f.req)
-			require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
-			require.NotEmpty(t, token.Value())
-			require.Equal(t, remotesessions.EMAProviderExternal, outcome.Provider)
+			require.False(t, outcome.Succeeded(), "outcome: %+v", outcome)
+			require.Empty(t, token.Value())
+			require.Equal(t, remotesessions.EMAProviderSpeakeasy, outcome.Provider)
 			require.Equal(t, tc.issues, tc.source.issued)
 		})
 	}

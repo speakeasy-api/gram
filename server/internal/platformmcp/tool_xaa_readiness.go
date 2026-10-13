@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -292,6 +293,10 @@ type postgresXAAIdentityInspector struct {
 	origins  remotesessions.CallbackOrigins
 }
 
+type identityChainingResourceResolver interface {
+	ResolveResource(context.Context, identitychaining.Request) (protectedresource.EndpointResource, error)
+}
+
 func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organizationID string, projectID, serverID, remoteSessionIssuerID uuid.UUID, resource string) (XAAIdentityChaining, *string, error) {
 	out := XAAIdentityChaining{Served: false, NotServedReason: nil, Providers: []XAAEMAProvider{}, Bindings: []XAAIdentityChainingBinding{}}
 	server, err := mcpserversrepo.New(i.db).GetMCPServerByLiveProjectForOrganization(ctx, mcpserversrepo.GetMCPServerByLiveProjectForOrganizationParams{OrganizationID: organizationID, ID: serverID, ProjectID: projectID})
@@ -328,6 +333,13 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 	scope := uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true}
 	if routable {
 		scope = req.RemoteSessionIssuerID
+		if resolver, ok := i.governor.(identityChainingResourceResolver); ok {
+			identity, err := resolver.ResolveResource(ctx, req)
+			if err != nil {
+				return out, callback, fmt.Errorf("resolve XAA readiness resource: %w", err)
+			}
+			resource = identity.Resource
+		}
 	}
 	results, err := remotesessions.InspectIdentityChainingForTenant(ctx, i.db, projectID, organizationID, userIssuerID, scope, resource)
 	if err != nil {
