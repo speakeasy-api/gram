@@ -649,6 +649,13 @@ type AdminMcpServerHealthUserSessionIssuer struct {
 	ClientIDMetadataAdmissionMode *string
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost bool
+	// Which OAuth authorization server the issuer's MCP servers point clients to:
+	// one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id}
+	// (shared).
+	AuthorizationServerMode string
+	// Whether a shared authorization server's issuer URL is pinned, so it stays
+	// the same if the deployment's hosts change.
+	IssuerURLPinned bool
 	// Set when the issuer trusts an external authorization server's assertions.
 	TrustedRemoteSession *AdminMcpServerHealthTrustedRemoteSession
 	// Other live servers in the project that share this issuer.
