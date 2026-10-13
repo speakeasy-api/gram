@@ -20,19 +20,19 @@ read-only; it cannot enable, disable, rotate, or replace an issuer.
    `state`, `can_enable`, optional `issuer`, and `next_step`. Match any organization the user
    specified; otherwise ask the user to confirm the returned organization.
    Never guess an organization name or construct an issuer URI.
-3. Live membership, external organization-admin access, SSO entitlement and
+3. Live membership, external organization-admin access, verified domains and
    deployment availability remain authoritative. For `unavailable` or
-   `entitlement_required`, explain the returned limitation and stop. Do not
-   change entitlements, sign-in providers, or deployment settings to bypass it.
+   `verified_domain_required`, explain the returned limitation and stop. Do not
+   change domains, sign-in providers, or deployment settings to bypass it.
 
 ## Guide setup and retrieve the issuer
 
-Each user must sign in to Speakeasy through the organization's enterprise SSO
-before using enterprise authorization. Google Workspace connected through
-enterprise SAML or OIDC qualifies. Personal Google or another social sign-in alone
-is insufficient. SSO entitlement and an enabled issuer do not prove that the
-current user has an enterprise SSO session. Explain this prerequisite during
-setup and when returning an already-enabled issuer. A configured vendor grant
+Each user needs a company sign-in to Speakeasy (SSO, company-managed Google or
+Microsoft account, magic link, or password with MFA) with an email on one of the
+organization's verified domains. Personal Google or Microsoft accounts and
+passwords without MFA don't qualify. An enabled issuer does not prove that the
+current user has a qualifying sign-in. Explain this prerequisite during setup and
+when returning an already-enabled issuer. A configured vendor grant
 is not required merely to enable the issuer; vendor trust is a separate step.
 
 For `setup_required` or `disabled`, first require `can_enable: true`. If it is

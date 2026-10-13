@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import { invalidateAllInternalSessionIssuer } from "@gram/client/react-query/internalSessionIssuer.js";
@@ -32,8 +32,8 @@ const STATE_BADGE: Record<
   enabled: { label: "Enabled", variant: "success" },
   disabled: { label: "Off", variant: "neutral" },
   setup_required: { label: "Off", variant: "neutral" },
-  entitlement_required: {
-    label: "Not on your plan",
+  verified_domain_required: {
+    label: "Needs a verified domain",
     variant: "neutral",
   },
   signing_paused: { label: "Paused", variant: "warning" },
@@ -240,7 +240,7 @@ function IssuerStatus({
 }: {
   issuer: InternalSessionIssuer;
 }): JSX.Element | null {
-  let message: string;
+  let message: ReactNode;
   switch (issuer.state) {
     case "enabled":
       return null;
@@ -254,9 +254,17 @@ function IssuerStatus({
         ? "Enterprise Managed Authorization is disabled. Re-enable it to restore automatic authorization."
         : "Enterprise Managed Authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and your plan.";
       break;
-    case "entitlement_required":
-      message =
-        "Enterprise Managed Authorization isn't included in your organization's plan. Contact your Speakeasy administrator to enable it.";
+    case "verified_domain_required":
+      message = (
+        <>
+          Speakeasy only vouches for emails on your organization's verified
+          domains. Verify a domain on the{" "}
+          <a href="?tab=sso" className="underline">
+            Single sign-on
+          </a>{" "}
+          tab first.
+        </>
+      );
       break;
     case "signing_paused":
       message =

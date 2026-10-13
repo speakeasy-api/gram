@@ -14,11 +14,11 @@ import {
 } from "./internalsessionissuerkey.js";
 
 /**
- * unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
+ * unavailable: not offered to this organization yet. verified_domain_required: needs at least one verified email domain. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
  */
 export const InternalSessionIssuerState = {
   Unavailable: "unavailable",
-  EntitlementRequired: "entitlement_required",
+  VerifiedDomainRequired: "verified_domain_required",
   SetupRequired: "setup_required",
   Enabled: "enabled",
   Disabled: "disabled",
@@ -26,7 +26,7 @@ export const InternalSessionIssuerState = {
   Keyless: "keyless",
 } as const;
 /**
- * unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
+ * unavailable: not offered to this organization yet. verified_domain_required: needs at least one verified email domain. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
  */
 export type InternalSessionIssuerState = ClosedEnum<
   typeof InternalSessionIssuerState
@@ -58,7 +58,7 @@ export type InternalSessionIssuer = {
    */
   rotationReadyAt?: Date | undefined;
   /**
-   * unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
+   * unavailable: not offered to this organization yet. verified_domain_required: needs at least one verified email domain. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
    */
   state: InternalSessionIssuerState;
 };

@@ -171,7 +171,7 @@ describe("Speakeasy identity provider card", () => {
   });
 
   it.each([
-    "entitlement_required",
+    "verified_domain_required",
     "unavailable",
     "signing_paused",
     "keyless",
@@ -287,19 +287,19 @@ describe("Speakeasy identity provider card", () => {
     },
   );
 
-  it("says the plan is missing when the organization lacks the entitlement", () => {
+  it("asks for a verified domain and links to where domains are verified", () => {
     mocks.issuer = {
       keys: [],
       kmsCleanupPending: 0,
-      state: "entitlement_required",
+      state: "verified_domain_required",
       canEnable: false,
     };
     show();
-    expect(screen.getByText("Not on your plan")).toBeTruthy();
+    expect(screen.getByText("Needs a verified domain")).toBeTruthy();
     expect(
-      screen.getByText(/isn't included in your organization's plan/),
-    ).toBeTruthy();
-    expect(screen.queryByText(/verified domain|single sign-on/i)).toBeNull();
+      screen.getByRole("link", { name: "Single sign-on" }).getAttribute("href"),
+    ).toBe("?tab=sso");
+    expect(screen.queryByText(/your organization's plan/)).toBeNull();
   });
 
   it("keeps the shared demo read-only", () => {

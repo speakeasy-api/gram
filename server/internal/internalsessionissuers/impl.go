@@ -146,6 +146,7 @@ func (s *Service) Get(ctx context.Context, _ *gensvc.GetPayload) (*gensvc.Intern
 	return s.view(ctx, logger, organizationID)
 }
 
+// TODO(AIM-551): expose allowed sign-in methods and Microsoft tenants once their columns reach main.
 func (s *Service) SetEnabled(ctx context.Context, payload *gensvc.SetEnabledPayload) (*gensvc.InternalSessionIssuer, error) {
 	if !payload.Enabled {
 		return s.disable(ctx)
