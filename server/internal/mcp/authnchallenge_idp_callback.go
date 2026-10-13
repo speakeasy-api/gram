@@ -374,12 +374,12 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 	// Recorded only for members, and only in the endpoint's organization.
 	ssoSignInID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	enforced := ssosignins.Enforced(ctx, s.features, endpoint.OrganizationID, "")
+	enforced := ssosignins.Enforced(ctx, s.features, endpoint.OrganizationID)
 	if exchange != nil {
 		recorded := ssosignins.RecordExchange(ctx, logger, s.db, *exchange)
 		ssoSignInID = recorded.ID
 		if recorded.Revoked && enforced && !challengeState.FreshLoginForced {
-			return s.restartRevokedSignIn(w, r, logger, endpoint, challengeState, exchange.WorkOSSessionID)
+			return s.restartRevokedSignIn(w, r, logger, endpoint, challengeState, exchange.UserID, exchange.WorkOSSessionID)
 		}
 	}
 
@@ -488,12 +488,19 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 // restartRevokedSignIn ends a WorkOS session whose sign-in was revoked, then
 // sends the browser back to authenticate again, once, so the client is not
 // left retrying a grant that can never be vouched for.
-func (s *Service) restartRevokedSignIn(w http.ResponseWriter, r *http.Request, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, workosSessionID string) error {
+func (s *Service) restartRevokedSignIn(w http.ResponseWriter, r *http.Request, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, userID, workosSessionID string) error {
 	ctx := r.Context()
 	issuerID, mcpSlug := challengeState.UserSessionIssuerID.String(), endpoint.Slug
+	// A WorkOS session still backing another organization's live sign-in
+	// stays up; prompt=login alone forces the fresh authentication.
 	revokeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revokedSignInRevokeTimeout)
-	if err := s.sessions.RevokeSession(revokeCtx, workosSessionID); err != nil {
-		logger.WarnContext(ctx, "end revoked workos session before fresh login", attr.SlogError(err))
+	switch used, err := ssosignins.WorkOSSessionUsedElsewhere(revokeCtx, s.db, userID, workosSessionID, []string{endpoint.OrganizationID}); {
+	case err != nil:
+		logger.WarnContext(ctx, "check revoked workos session use elsewhere", attr.SlogError(err))
+	case !used:
+		if err := s.sessions.RevokeSession(revokeCtx, workosSessionID); err != nil {
+			logger.WarnContext(ctx, "end revoked workos session before fresh login", attr.SlogError(err))
+		}
 	}
 	cancel()
 	challengeState.ID = uuid.NewString()

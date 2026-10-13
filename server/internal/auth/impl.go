@@ -104,6 +104,9 @@ type authErr string
 const (
 	authErrCodeLookup authErr = "lookup_error"
 	authErrInit       authErr = "init_error"
+	// authErrSignInRevoked asks the user to sign in again: the identity
+	// provider handed back a session whose sign-in was revoked.
+	authErrSignInRevoked authErr = "sign_in_revoked"
 )
 
 type AuthConfigurations struct {
@@ -424,7 +427,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
 	}
-	ssosignins.RecordExchange(ctx, logger, s.db, ssosignins.ExchangeParams{
+	recorded := ssosignins.RecordExchange(ctx, logger, s.db, ssosignins.ExchangeParams{
 		Flow:                   ssosignins.FlowDashboard,
 		WorkOSOrganizationID:   idpUser.OrganizationID,
 		ExpectedOrganizationID: "",
@@ -441,6 +444,12 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		Impersonated:    idpUser.ImpersonatorEmail() != "",
 		AuthenticatedAt: authenticatedAt,
 	})
+	if recorded.Revoked && s.sessions.SSOSignInEnforced(ctx, recorded.OrganizationID) {
+		// No dashboard session from a revoked sign-in. Ending the WorkOS
+		// session makes the next login authenticate afresh.
+		s.endRevokedWorkOSSession(ctx, logger, recorded.OrganizationID, userID, idpUser.WorkOSSessionID)
+		return redirectWithError(authErrSignInRevoked, errors.New("identity provider session belongs to a revoked sign-in"))
+	}
 
 	if supportOrgID != "" {
 		isAdmin, err := s.sessions.IsPlatformAdmin(ctx, userID)
@@ -505,7 +514,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 
 		if s.dispositionFromState(payload) == dispositionAssistants {
-			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session)
+			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session, authenticatedAt)
 			if err != nil {
 				return redirectWithError(authErrInit, err)
 			}
@@ -1024,12 +1033,11 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").LogError(ctx, s.logger)
 	}
 
-	signedOut, err := s.revokeSignedOutSSOSignIn(ctx, *authCtx.SessionID, authCtx)
-	if err != nil {
-		if s.sessions.SSOSignInEnforced(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
-			return nil, oops.E(oops.CodeUnexpected, err, "error revoking sso sign-in").LogError(ctx, s.logger)
-		}
-		s.logger.WarnContext(ctx, "revoke sso sign-in on sign-out", attr.SlogError(err))
+	// The dashboard session is cleared even when revoking its sign-in fails,
+	// so a sign-out always signs out; the failure is logged for follow-up.
+	signedOut, revokeErr := s.revokeSignedOutSSOSignIn(ctx, *authCtx.SessionID, authCtx)
+	if revokeErr != nil {
+		s.logger.ErrorContext(ctx, "revoke sso sign-in on sign-out", attr.SlogError(revokeErr))
 	}
 
 	if err := s.sessions.ClearSession(ctx, authsessions.Session{
@@ -1045,6 +1053,27 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 	}
 	s.deliverer.DeliverNow(ctx, signedOut.Organizations, signedOut.DeliveryIDs)
 	return &gen.LogoutResult{SessionCookie: ""}, nil
+}
+
+// endRevokedWorkOSSession ends a WorkOS session whose sign-in was revoked,
+// unless it still backs a live sign-in in another organization.
+func (s *Service) endRevokedWorkOSSession(ctx context.Context, logger *slog.Logger, organizationID, userID, workosSessionID string) {
+	if workosSessionID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), epochTimeout)
+	defer cancel()
+	used, err := ssosignins.WorkOSSessionUsedElsewhere(ctx, s.db, userID, workosSessionID, []string{organizationID})
+	if err != nil {
+		logger.WarnContext(ctx, "check revoked workos session use elsewhere", attr.SlogError(err))
+		return
+	}
+	if used {
+		return
+	}
+	if err := s.sessions.RevokeSession(ctx, workosSessionID); err != nil {
+		logger.WarnContext(ctx, "end revoked workos session", attr.SlogError(err))
+	}
 }
 
 func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.InfoResult, err error) {
@@ -1387,7 +1416,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	return nil
 }
 
-func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *authsessions.CachedUserInfo, session *authsessions.Session) (string, error) {
+func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *authsessions.CachedUserInfo, session *authsessions.Session, authenticatedAt time.Time) (string, error) {
 	orgName := generateLegibleOrgName()
 
 	// Assistants is a live product for users who never asked for a trial, so a
@@ -1420,7 +1449,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *auth
 	}
 
 	session.ActiveOrganizationID = org.ID
-	if err := s.sessions.StoreSession(ctx, *session); err != nil {
+	if err := s.sessions.StoreSessionIssuedAt(ctx, *session, authenticatedAt); err != nil {
 		return "", fmt.Errorf("store session: %w", err)
 	}
 

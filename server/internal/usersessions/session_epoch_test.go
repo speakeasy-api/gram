@@ -132,3 +132,35 @@ func TestSessionEpoch_ClearingASessionDropsItsIssuance(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, known)
 }
+
+func TestSessionEpoch_ASessionStoredAfterSignOutEverywhereWithoutIssuanceIsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	userID := "epoch-user-" + uuid.NewString()
+	require.NoError(t, ti.sessionManager.RaiseUserEpoch(ctx, userID, time.Now()))
+
+	// A login that started before the sign-out everywhere and stores its
+	// session only afterwards, without an issuance.
+	late := sessions.Session{
+		SessionID:             "epoch-session-" + uuid.NewString(),
+		UserID:                userID,
+		ActiveOrganizationID:  "",
+		WorkOSSessionID:       "",
+		ImpersonatorEmail:     "",
+		SupportOrganizationID: "",
+		SupportExpiresAt:      time.Time{},
+	}
+	require.NoError(t, ti.sessionManager.StoreSession(ctx, late))
+	predates, err := ti.sessionManager.SessionPredatesEpoch(ctx, userID, late.SessionID)
+	require.NoError(t, err)
+	require.True(t, predates)
+
+	started := time.Now().Add(-time.Minute)
+	issued := late
+	issued.SessionID = "epoch-session-" + uuid.NewString()
+	require.NoError(t, ti.sessionManager.StoreSessionIssuedAt(ctx, issued, started))
+	predates, err = ti.sessionManager.SessionPredatesEpoch(ctx, userID, issued.SessionID)
+	require.NoError(t, err)
+	require.True(t, predates, "a session whose authentication started before the epoch is rejected too")
+}

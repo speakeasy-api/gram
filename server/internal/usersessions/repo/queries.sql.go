@@ -642,7 +642,7 @@ sign_in AS (
             FROM sso_sign_in_revocation_cutoffs AS c
             WHERE c.organization_id = si.organization_id
               AND c.user_id = si.user_id
-              AND c.cutoff_at >= si.authenticated_at
+              AND c.cutoff_at >= LEAST(si.authenticated_at, COALESCE(si.idp_authenticated_at, si.authenticated_at))
         ) AS fenced
     FROM sso_sign_ins AS si
     JOIN issuer ON si.organization_id = issuer.organization_id
@@ -3618,7 +3618,7 @@ SELECT
         FROM sso_sign_in_revocation_cutoffs AS c
         WHERE c.organization_id = si.organization_id
           AND c.user_id = si.user_id
-          AND c.cutoff_at >= si.authenticated_at
+          AND c.cutoff_at >= LEAST(si.authenticated_at, COALESCE(si.idp_authenticated_at, si.authenticated_at))
     ) AS fenced
 FROM sso_sign_ins AS si
 WHERE si.id = $1

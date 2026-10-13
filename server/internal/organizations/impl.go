@@ -1682,6 +1682,9 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Taken before authenticating so a sign-out everywhere that lands
+	// meanwhile still ends this session.
+	authenticatedAt := time.Now()
 	idpUser, err := s.invite.AuthenticateWithMagicAuth(ctx, invite.Email)
 	if err != nil {
 		if inviteRequiresNormalLogin(err) {
@@ -1787,7 +1790,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
 	}
-	if err := s.sessions.StoreSession(ctx, session); err != nil {
+	if err := s.sessions.StoreSessionIssuedAt(ctx, session, authenticatedAt); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))
 		span.RecordError(err)
 		redirectError("failed to create session")

@@ -10,31 +10,32 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 const (
 	ssoSignInRevocationSweepScheduleID = "v1:sso-sign-in-revocation-sweep-schedule"
 	ssoSignInRevocationSweepWorkflowID = ssoSignInRevocationSweepScheduleID + "/scheduled"
-	ssoSignInRevocationSweepInterval   = 1 * time.Hour
+	ssoSignInRevocationSweepInterval   = 5 * time.Minute
 
 	// Allow lateness up to one interval minus 1s; skip older missed ticks.
 	ssoSignInRevocationSweepCatchupWindow = ssoSignInRevocationSweepInterval - time.Second
 
-	// Matches the deliverer's batch size: a full batch means more may wait.
-	ssoSignInRevocationSweepBatchSize        = 200
+	// A full batch means more may wait.
+	ssoSignInRevocationSweepBatchSize        = ssosignins.SweepBatchSize
 	ssoSignInRevocationSweepMaxBatchesPerRun = 10
-	ssoSignInRevocationSweepRunTimeout       = 15 * time.Minute
+	ssoSignInRevocationSweepRunTimeout       = 4 * time.Minute
 )
 
 // SSOSignInRevocationSweepWorkflow retries SSO sign-in revocation deliveries
-// (revoked JTIs and WorkOS sessions) that failed right after their
+// (revoked JTIs, WorkOS sessions and dashboard epochs) that failed right after their
 // revocation committed. It is a safety net: the request that revoked already
 // tried once, and issuance and refresh already refuse revoked sign-ins.
 //
-// Temporal actions/month ≈ 720 starts + ~720 activities ≈ 1,440 per namespace
-// (more only while a backlog drains: one activity per batch). Fixed: one
-// fleet-wide schedule, not per tenant.
+// Temporal actions/month ≈ 8,640 starts + ~8,640 activities ≈ 17,300 per
+// namespace (more only while a backlog drains: one activity per batch).
+// Fixed: one fleet-wide schedule, not per tenant.
 func SSOSignInRevocationSweepWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,

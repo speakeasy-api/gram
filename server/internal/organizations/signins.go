@@ -36,7 +36,7 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	if !s.sessions.SSOSignInEnforced(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug) {
+	if !s.sessions.SSOSignInEnforced(ctx, ac.ActiveOrganizationID) {
 		return nil, oops.E(oops.CodeForbidden, nil, "sign-in revocation is not available")
 	}
 	if payload.UserID == "" {

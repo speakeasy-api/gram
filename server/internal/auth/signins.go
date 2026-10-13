@@ -44,7 +44,10 @@ func (s *Service) LogoutEverywhere(ctx context.Context, _ *gen.LogoutEverywhereP
 	if !ok || authCtx == nil || authCtx.SessionID == nil || authCtx.UserID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if !s.sessions.SSOSignInEnforced(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
+	// Gated on the caller's active organization. Once available it signs the
+	// user out of every organization: the user's own action over their own
+	// sessions.
+	if !s.sessions.SSOSignInEnforced(ctx, authCtx.ActiveOrganizationID) {
 		return nil, oops.E(oops.CodeForbidden, nil, "sign out everywhere is not available")
 	}
 	logger := s.logger.With(attr.SlogUserID(authCtx.UserID))

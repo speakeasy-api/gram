@@ -111,8 +111,9 @@ type Evidence struct {
 // returned, so a grant made from it stays reachable by later revocations and
 // is never vouched for.
 type Recorded struct {
-	ID      uuid.NullUUID
-	Revoked bool
+	ID             uuid.NullUUID
+	OrganizationID string
+	Revoked        bool
 }
 
 var errSignInOwnedByAnotherUser = errors.New("sso sign-in session belongs to another user")
@@ -162,10 +163,18 @@ func Record(ctx context.Context, db Beginner, p RecordParams) (Recorded, error) 
 	case err != nil:
 		return none, fmt.Errorf("upsert sso sign-in: %w", err)
 	}
+	// A sign-in recorded already revoked (fenced or signed out) must not
+	// leave its WorkOS session usable, unless another organization still
+	// relies on it.
+	if row.RevokedAt.Valid {
+		if _, err := enqueueEndingWorkOSSessions(ctx, q, p.OrganizationID, userIDSessions{userID: p.UserID, organizationIDs: []string{p.OrganizationID}}, []string{p.WorkOSSessionID}); err != nil {
+			return none, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return none, fmt.Errorf("commit: %w", err)
 	}
-	return Recorded{ID: uuid.NullUUID{UUID: row.ID, Valid: true}, Revoked: row.RevokedAt.Valid}, nil
+	return Recorded{ID: uuid.NullUUID{UUID: row.ID, Valid: true}, OrganizationID: p.OrganizationID, Revoked: row.RevokedAt.Valid}, nil
 }
 
 // LiveSignInForSession returns the unrevoked sign-in recorded for a WorkOS
@@ -350,6 +359,13 @@ func RevokeSession(ctx context.Context, db repo.DBTX, organizationIDs []string, 
 		if err := q.MarkWorkOSSessionSignedOut(ctx, repo.MarkWorkOSSessionSignedOutParams{OrganizationID: organizationIDs[0], UserID: userID, WorkosSessionID: workosSessionID}); err != nil {
 			return out, fmt.Errorf("mark workos session signed out: %w", err)
 		}
+		ids, err := enqueue(ctx, q, organizationIDs[0], DeliveryWorkOSSession, []string{workosSessionID})
+		if err != nil {
+			return out, err
+		}
+		out.Organizations = []string{organizationIDs[0]}
+		out.DeliveryIDs = ids
+		return out, nil
 	}
 	seen := make(map[string]struct{}, len(rows))
 	for _, r := range rows {
@@ -435,7 +451,14 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 		return out, nil
 	}
 	q := repo.New(db)
-	if err := lockUser(ctx, q, organizationIDs, userID); err != nil {
+	// Lock every organization the user has signed in to, not only the ones
+	// being revoked, so recordings elsewhere wait for the check below that
+	// keeps their WorkOS sessions up.
+	recorded, err := q.ListSSOSignInOrganizationsForUser(ctx, userID)
+	if err != nil {
+		return out, fmt.Errorf("list sso sign-in organizations: %w", err)
+	}
+	if err := lockUser(ctx, q, slices.Concat(organizationIDs, recorded), userID); err != nil {
 		return out, err
 	}
 	if _, err := q.LockUserSSOSignIns(ctx, repo.LockUserSSOSignInsParams{OrganizationIds: organizationIDs, UserID: userID}); err != nil {
@@ -490,23 +513,7 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 		out.DeliveryIDs = append(out.DeliveryIDs, ids...)
 	}
 	for organizationID, workosSessions := range workosByOrg {
-		// A WorkOS session that still backs a live sign-in in another
-		// organization stays up; only this revocation's rows are revoked.
-		ended := make([]string, 0, len(workosSessions))
-		for _, workosSessionID := range workosSessions {
-			others, err := q.OtherOrganizationsUsingWorkOSSession(ctx, repo.OtherOrganizationsUsingWorkOSSessionParams{
-				UserID:          userID,
-				WorkosSessionID: workosSessionID,
-				OrganizationIds: organizationIDs,
-			})
-			if err != nil {
-				return out, fmt.Errorf("check workos session use elsewhere: %w", err)
-			}
-			if len(others) == 0 {
-				ended = append(ended, workosSessionID)
-			}
-		}
-		ids, err := enqueue(ctx, q, organizationID, DeliveryWorkOSSession, ended)
+		ids, err := enqueueEndingWorkOSSessions(ctx, q, organizationID, userIDSessions{userID: userID, organizationIDs: organizationIDs}, workosSessions)
 		if err != nil {
 			return out, err
 		}
@@ -527,6 +534,48 @@ func EnqueueUserEpoch(ctx context.Context, db repo.DBTX, organizationID, userID 
 		return uuid.Nil, fmt.Errorf("enqueue user epoch delivery: %w", err)
 	}
 	return id, nil
+}
+
+// userIDSessions names whose WorkOS sessions are being ended, and the
+// organizations whose own sign-ins on them don't count as other use.
+type userIDSessions struct {
+	userID          string
+	organizationIDs []string
+}
+
+// enqueueEndingWorkOSSessions enqueues ending each WorkOS session that backs
+// no live sign-in outside the given organizations; the others stay up.
+func enqueueEndingWorkOSSessions(ctx context.Context, q *repo.Queries, organizationID string, owner userIDSessions, workosSessionIDs []string) ([]uuid.UUID, error) {
+	ended := make([]string, 0, len(workosSessionIDs))
+	for _, workosSessionID := range workosSessionIDs {
+		used, err := workOSSessionUsedElsewhere(ctx, q, owner.userID, workosSessionID, owner.organizationIDs)
+		if err != nil {
+			return nil, err
+		}
+		if !used {
+			ended = append(ended, workosSessionID)
+		}
+	}
+	return enqueue(ctx, q, organizationID, DeliveryWorkOSSession, ended)
+}
+
+func workOSSessionUsedElsewhere(ctx context.Context, q *repo.Queries, userID, workosSessionID string, organizationIDs []string) (bool, error) {
+	others, err := q.OtherOrganizationsUsingWorkOSSession(ctx, repo.OtherOrganizationsUsingWorkOSSessionParams{
+		UserID:          userID,
+		WorkosSessionID: workosSessionID,
+		OrganizationIds: organizationIDs,
+	})
+	if err != nil {
+		return false, fmt.Errorf("check workos session use elsewhere: %w", err)
+	}
+	return len(others) > 0, nil
+}
+
+// WorkOSSessionUsedElsewhere reports whether a WorkOS session still backs a
+// live sign-in of the user outside organizationIDs, so ending it would sign
+// the user out there.
+func WorkOSSessionUsedElsewhere(ctx context.Context, db repo.DBTX, userID, workosSessionID string, organizationIDs []string) (bool, error) {
+	return workOSSessionUsedElsewhere(ctx, repo.New(db), userID, workosSessionID, organizationIDs)
 }
 
 // lockUser takes the user's per-organization sign-in locks in sorted order,

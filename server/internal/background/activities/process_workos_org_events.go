@@ -311,7 +311,7 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	if err != nil {
 		return "", err
 	}
-	if r := effects.revokeSignIns; r != nil && ssosignins.Enforced(ctx, p.flags, r.organizationID, "") {
+	if r := effects.revokeSignIns; r != nil && ssosignins.Enforced(ctx, p.flags, r.organizationID) {
 		if err := revokeDeprovisionedSignIns(ctx, dbtx, *r, &effects); err != nil {
 			return "", err
 		}

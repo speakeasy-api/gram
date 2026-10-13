@@ -229,24 +229,6 @@ func (q *Queries) GetOrganizationIDByWorkOSID(ctx context.Context, workosID pgty
 	return id, err
 }
 
-const getOrganizationSlugByWorkOSID = `-- name: GetOrganizationSlugByWorkOSID :one
-SELECT id, slug
-FROM organization_metadata
-WHERE workos_id = $1
-`
-
-type GetOrganizationSlugByWorkOSIDRow struct {
-	ID   string
-	Slug string
-}
-
-func (q *Queries) GetOrganizationSlugByWorkOSID(ctx context.Context, workosID pgtype.Text) (GetOrganizationSlugByWorkOSIDRow, error) {
-	row := q.db.QueryRow(ctx, getOrganizationSlugByWorkOSID, workosID)
-	var i GetOrganizationSlugByWorkOSIDRow
-	err := row.Scan(&i.ID, &i.Slug)
-	return i, err
-}
-
 const getSSOSignInBySession = `-- name: GetSSOSignInBySession :one
 SELECT id
 FROM sso_sign_ins
@@ -304,7 +286,7 @@ SELECT
         FROM sso_sign_in_revocation_cutoffs AS c
         WHERE c.organization_id = $1
           AND c.user_id = si.user_id
-          AND c.cutoff_at >= si.authenticated_at
+          AND c.cutoff_at >= LEAST(si.authenticated_at, COALESCE(si.idp_authenticated_at, si.authenticated_at))
     )::boolean AS fenced,
     u.email AS user_email,
     om.verified_domains,
@@ -874,6 +856,7 @@ inherited AS (
     SELECT prior.revoke_reason
     FROM prior
     WHERE prior.revoked_at IS NOT NULL
+      AND prior.revoke_reason IN ('sign_out', 'sign_out_everywhere')
     ORDER BY (prior.revoke_reason = 'sign_out'), prior.revoked_at
     LIMIT 1
 ),
@@ -883,7 +866,7 @@ fence AS (
         FROM sso_sign_in_revocation_cutoffs AS c, auth
         WHERE c.organization_id = $1
           AND c.user_id = $2
-          AND c.cutoff_at >= auth.at
+          AND c.cutoff_at >= LEAST(auth.at, COALESCE(auth.idp_at, auth.at))
     ) AS fenced
 )
 INSERT INTO sso_sign_ins (
@@ -956,10 +939,11 @@ type UpsertSSOSignInRow struct {
 // Never reassigns a row to another user, clears a revocation or moves the
 // recorded times later. A WorkOS session already seen in another of the
 // user's organizations keeps its earliest times, so recording it elsewhere
-// cannot restart the age window, and inherits any revocation of that
-// session, so a signed-out session can't come back through a new
-// organization. A sign-in that started at or before a revocation cutoff is
-// recorded revoked. Evidence missing from an earlier exchange of the same
+// cannot restart the age window, and inherits a sign-out of that session,
+// so a signed-out session can't come back through a new organization;
+// organization-scoped revocations (admin, deprovisioning) stay where they
+// were made. A sign-in whose real authentication or exchange started at or
+// before a revocation cutoff is recorded revoked. Evidence missing from an earlier exchange of the same
 // method is filled in.
 func (q *Queries) UpsertSSOSignIn(ctx context.Context, arg UpsertSSOSignInParams) (UpsertSSOSignInRow, error) {
 	row := q.db.QueryRow(ctx, upsertSSOSignIn,

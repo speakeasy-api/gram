@@ -3,6 +3,7 @@ package usersessions_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
 	ssosigninsrepo "github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -965,4 +967,82 @@ func TestMintUserSession_FailsClosedWhenTheSignInLookupFails(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnavailable, oopsErr.Code, "no unlinked grant while enforcement is on")
+}
+
+func TestRecord_ASessionAuthenticatedBeforeARevocationStaysFencedWhenReused(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSSOFixture(t)
+	authenticated := time.Now().Add(-time.Hour)
+	_, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonSignOutEverywhere)
+	require.NoError(t, err)
+
+	// A WorkOS session never recorded here, authenticated before the
+	// revocation and handed back by AuthKit afterwards.
+	workosSessionID := "session_" + uuid.NewString()
+	reused := f.signInParams(workosSessionID, time.Now())
+	reused.Evidence.IDPAuthenticatedAt = authenticated
+	recorded, err := ssosignins.Record(ctx, f.ti.conn, reused)
+	require.NoError(t, err)
+	require.True(t, recorded.Revoked, "the real authentication predates the cutoff")
+
+	var ended []string
+	for _, d := range deliveries(t, ctx, f) {
+		if d.Kind == string(ssosignins.DeliveryWorkOSSession) && d.DeliveredAt.Time.IsZero() {
+			ended = append(ended, d.Target)
+		}
+	}
+	require.Contains(t, ended, workosSessionID, "a sign-in recorded revoked enqueues ending its WorkOS session")
+}
+
+func TestRecord_InheritsOnlySessionWideRevocations(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSSOFixture(t)
+	otherOrg := seedOtherOrganization(t, ctx, f.ti.conn)
+	workosSessionID := "session_" + uuid.NewString()
+	elsewhere := f.signInParams(workosSessionID, time.Now())
+	elsewhere.OrganizationID = otherOrg
+	_, err := ssosignins.Record(ctx, f.ti.conn, elsewhere)
+	require.NoError(t, err)
+	_, err = ssosignins.RevokeUser(ctx, f.ti.conn, []string{otherOrg}, f.userID, ssosignins.RevokeReasonAdmin)
+	require.NoError(t, err)
+
+	here, err := ssosignins.Record(ctx, f.ti.conn, f.signInParams(workosSessionID, time.Now()))
+	require.NoError(t, err)
+	require.False(t, here.Revoked, "an administrator's revocation stays in its organization")
+}
+
+func TestRevokeSession_WithNothingRecordedStillEndsTheWorkOSSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSSOFixture(t)
+	out, err := ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, "session_"+uuid.NewString())
+	require.NoError(t, err)
+	require.Len(t, out.DeliveryIDs, 1, "the signed-out WorkOS session is ended durably")
+	require.Equal(t, []string{f.orgID}, out.Organizations)
+}
+
+type goneRevoker struct{ recordingRevoker }
+
+func (g *goneRevoker) RevokeSession(_ context.Context, id string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.calls = append(g.calls, id)
+	return &workos.APIError{Method: "POST", Path: "/user_management/sessions/revoke", StatusCode: http.StatusNotFound, Body: "not found"}
+}
+
+func TestDeliveries_AWorkOSSessionThatIsGoneCountsAsDelivered(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSSOFixture(t)
+	out, err := ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, "session_"+uuid.NewString())
+	require.NoError(t, err)
+
+	gone := &goneRevoker{recordingRevoker: recordingRevoker{mu: sync.Mutex{}, calls: nil, fail: false, ctxErrs: nil}}
+	deliverer := ssosignins.NewDeliverer(testenv.NewLogger(t), testenv.NewMeterProvider(t), f.ti.conn, gone, gone, nil)
+	deliverer.DeliverNow(ctx, out.Organizations, out.DeliveryIDs)
+	deliverer.Wait()
+	require.Len(t, gone.calls, 1)
+	require.Equal(t, 0, pendingDeliveries(t, ctx, f))
 }

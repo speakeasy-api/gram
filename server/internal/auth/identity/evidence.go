@@ -126,11 +126,11 @@ func (a *WorkOSAdapter) signInEvidence(ctx context.Context, resp usermanagement.
 		ev.VerifiedEmail = resp.User.Email
 	}
 	c := a.evidence
+	ctx, cancel := context.WithTimeout(ctx, evidenceTimeout)
+	defer cancel()
 	if c.enabled == nil || resp.OrganizationID == "" || !c.enabled(ctx, resp.OrganizationID) {
 		return ev
 	}
-	ctx, cancel := context.WithTimeout(ctx, evidenceTimeout)
-	defer cancel()
 
 	ev.AuthenticatedAt = a.sessionCreatedAt(ctx, resp.User.ID, extractSessionIDFromJWT(resp.AccessToken))
 

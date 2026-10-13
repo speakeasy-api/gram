@@ -427,7 +427,7 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 // unlinked.
 func (s *Service) dashboardSSOSignIn(ctx context.Context, authCtx *contextvalues.AuthContext) (uuid.NullUUID, error) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" || !s.sessions.SSOSignInEnforced(ctx, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug) {
+	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" || !s.sessions.SSOSignInEnforced(ctx, authCtx.ActiveOrganizationID) {
 		return none, nil
 	}
 	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)

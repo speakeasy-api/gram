@@ -2,18 +2,22 @@ package ssosignins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/workos/workos-go/v6/pkg/workos_errors"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/ssosignins/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 // DeliveryKind is what a durable revocation delivery pushes.
@@ -29,13 +33,15 @@ const (
 	DeliveryUserEpoch DeliveryKind = "user_epoch"
 )
 
+// Delivered rows are pruned by the retention sweep tracked in AIM-539.
 const (
-	// sweepBatchSize bounds one sweep claim.
-	sweepBatchSize = 200
+	// SweepBatchSize bounds one sweep claim so every push in it finishes
+	// well inside the lease: SweepBatchSize * pushTimeout < deliveryLease.
+	SweepBatchSize = 20
 	// deliveryLease is how long a claim keeps other workers off a delivery.
 	deliveryLease = 2 * time.Minute
 	// pushTimeout bounds one external push.
-	pushTimeout = 10 * time.Second
+	pushTimeout = 5 * time.Second
 	// stuckAttempts marks a delivery as stuck for alerting; it still retries.
 	stuckAttempts = 10
 )
@@ -110,7 +116,7 @@ func (d *Deliverer) Sweep(ctx context.Context) (int, error) {
 	q := repo.New(d.db)
 	rows, err := q.ClaimPendingRevocationDeliveries(ctx, repo.ClaimPendingRevocationDeliveriesParams{
 		LeaseSeconds: deliveryLease.Seconds(),
-		BatchSize:    sweepBatchSize,
+		BatchSize:    SweepBatchSize,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("claim pending revocation deliveries: %w", err)
@@ -170,7 +176,7 @@ func (d *Deliverer) push(ctx context.Context, row repo.ClaimPendingRevocationDel
 		if d.idp == nil {
 			return fmt.Errorf("no identity provider revoker")
 		}
-		if err := d.idp.RevokeSession(ctx, row.Target); err != nil {
+		if err := d.idp.RevokeSession(ctx, row.Target); err != nil && !workosSessionGone(err) {
 			return fmt.Errorf("revoke workos session: %w", err)
 		}
 		return nil
@@ -188,4 +194,14 @@ func (d *Deliverer) push(ctx context.Context, row repo.ClaimPendingRevocationDel
 	default:
 		return fmt.Errorf("unknown revocation delivery kind %q", row.Kind)
 	}
+}
+
+// workosSessionGone reports a WorkOS session that no longer exists, which is
+// what ending it wanted.
+func workosSessionGone(err error) bool {
+	if workos.IsNotFound(err) {
+		return true
+	}
+	httpErr, ok := errors.AsType[workos_errors.HTTPError](err)
+	return ok && httpErr.Code == http.StatusNotFound
 }

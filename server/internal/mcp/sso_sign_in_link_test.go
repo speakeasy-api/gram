@@ -517,7 +517,7 @@ func TestHandleToken_RefreshAfterSingleSignOutKeepsWorking(t *testing.T) {
 	require.Equal(t, ssosignins.ReasonSignInRevoked, result.Reason, "the grant works but is never vouched for")
 }
 
-func TestHandleToken_EnforcementOffLeavesGrantsUnlinkedAndRefreshable(t *testing.T) {
+func TestHandleToken_FlagOffKeepsTheLinkThroughRefresh(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -528,17 +528,14 @@ func TestHandleToken_EnforcementOffLeavesGrantsUnlinkedAndRefreshable(t *testing
 
 	tokens := exchangeLinkedCode(t, ctx, ti, toolset, client, userID, &signIn.ID.UUID)
 	session := sessionForAccessToken(t, ctx, ti, toolset, tokens.AccessToken)
-	require.False(t, session.SsoSignInID.Valid, "the kill switch links nothing at mint")
+	require.Equal(t, signIn.ID, session.SsoSignInID, "a link made while enforcement was on survives it going off")
 
-	_, err = ssosigninsrepo.New(ti.conn).RevokeUserSSOSignIns(ctx, ssosigninsrepo.RevokeUserSSOSignInsParams{
-		RevokeReason:    conv.ToPGText(string(ssosignins.RevokeReasonAdmin)),
-		OrganizationIds: []string{toolset.OrganizationID},
-		UserID:          userID,
-	})
-	require.NoError(t, err)
 	refreshed := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, tokens.RefreshToken)
 	require.NoError(t, refreshed.err)
-	require.Equal(t, http.StatusOK, refreshed.code, "and refuses nothing at refresh: %s", refreshed.body)
+	require.Equal(t, http.StatusOK, refreshed.code, refreshed.body)
+	var rotated linkedTokens
+	require.NoError(t, json.Unmarshal([]byte(refreshed.body), &rotated))
+	require.Equal(t, signIn.ID, sessionForAccessToken(t, ctx, ti, toolset, rotated.AccessToken).SsoSignInID, "and through refresh, so turning it back on finds it")
 }
 
 func TestHandleIDPCallback_RevokedSignInForcesAFreshLogin(t *testing.T) {

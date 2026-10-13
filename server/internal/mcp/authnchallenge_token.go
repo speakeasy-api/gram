@@ -832,7 +832,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		DesiredSessionDuration: desiredSessionDuration,
 		Replayable:             false,
 		Policy:                 policy,
-		SSOSignInID:            s.enforcedSSOSignInID(ctx, endpoint.OrganizationID, grantSSOSignInID(grant)),
+		SSOSignInID:            grantSSOSignInID(grant),
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 	}, logger)
@@ -1112,7 +1112,9 @@ func (s *Service) rotateRefreshToken(
 	// Sign-in before session row, the order revocation locks in, so a
 	// revocation either waits for this rotation and then soft-deletes the
 	// successor, or commits first and this rotation refuses.
-	if lookupErr == nil && refreshSession.SsoSignInID.Valid && ssosignins.Enforced(ctx, s.features, endpoint.OrganizationID, "") {
+	// A link, once made, is always honoured whatever the flag says: the flag
+	// gates making new links and the revocation actions, not their effect.
+	if lookupErr == nil && refreshSession.SsoSignInID.Valid {
 		signIn, err := txRepo.LockSSOSignInForGrant(ctx, usersessions_repo.LockSSOSignInForGrantParams{
 			ID: refreshSession.SsoSignInID.UUID, OrganizationID: endpoint.OrganizationID,
 		})
@@ -1286,7 +1288,7 @@ func (s *Service) rotateRefreshToken(
 		DesiredSessionDuration: nil,
 		Replayable:             true,
 		Policy:                 policy,
-		SSOSignInID:            s.enforcedSSOSignInID(ctx, endpoint.OrganizationID, oldSession.SsoSignInID),
+		SSOSignInID:            oldSession.SsoSignInID,
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 	}, logger)
@@ -2006,15 +2008,6 @@ func grantSSOSignInID(grant UserSessionGrant) uuid.NullUUID {
 }
 
 var errSSOSignInRevoked = errors.New("sso sign-in revoked")
-
-// enforcedSSOSignInID keeps a grant's sign-in link only while enforcement is
-// on; the kill switch leaves new and refreshed grants unlinked.
-func (s *Service) enforcedSSOSignInID(ctx context.Context, organizationID string, id uuid.NullUUID) uuid.NullUUID {
-	if !id.Valid || !ssosignins.Enforced(ctx, s.features, organizationID, "") {
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	}
-	return id
-}
 
 // ssoSignInUserID is the user a linked sign-in must belong to: the session's
 // own human subject. Other subjects never keep a link.

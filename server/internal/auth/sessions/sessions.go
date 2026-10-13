@@ -276,13 +276,15 @@ func (s *Manager) GetSession(ctx context.Context, sessionID string) (Session, er
 }
 
 // StoreSession stores a session. A session stored again keeps its original
-// issuance, so re-storing never lifts it past the sign-out-everywhere epoch.
+// issuance, so re-storing never lifts it past the sign-out-everywhere epoch;
+// one stored for the first time this way has unknown issuance (EpochZero).
+// New sessions use StoreSessionIssuedAt with when authentication started.
 func (s *Manager) StoreSession(ctx context.Context, session Session) error {
 	if err := s.sessionCache.Store(ctx, session); err != nil {
 		return fmt.Errorf("store session: %w", err)
 	}
 	return s.storeIssuedAt(ctx, session, func() error {
-		return s.redis.SetNX(ctx, sessionIssuedAtKey(session.SessionID), time.Now().UnixMicro(), sessionMarkerTTL).Err()
+		return s.redis.SetNX(ctx, sessionIssuedAtKey(session.SessionID), EpochZero.UnixMicro(), sessionMarkerTTL).Err()
 	})
 }
 
@@ -367,8 +369,8 @@ func (s *Manager) SetFlags(flags feature.Provider) { s.flags = flags }
 
 // SSOSignInEnforced reports whether SSO sign-in enforcement is on for the
 // organization.
-func (s *Manager) SSOSignInEnforced(ctx context.Context, organizationID, organizationSlug string) bool {
-	return feature.SSOSignInEnforced(ctx, s.flags, organizationID, organizationSlug)
+func (s *Manager) SSOSignInEnforced(ctx context.Context, organizationID string) bool {
+	return feature.SSOSignInEnforced(ctx, s.flags, organizationID)
 }
 
 // storeIssuedAt records issuance. It is best effort while enforcement is off
@@ -382,7 +384,7 @@ func (s *Manager) storeIssuedAt(ctx context.Context, session Session, write func
 	if err == nil {
 		return nil
 	}
-	if s.SSOSignInEnforced(ctx, session.ActiveOrganizationID, "") {
+	if s.SSOSignInEnforced(ctx, session.ActiveOrganizationID) {
 		return fmt.Errorf("store session issuance: %w", err)
 	}
 	s.logger.WarnContext(ctx, "store session issuance", attr.SlogError(err))

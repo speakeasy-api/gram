@@ -8,10 +8,11 @@ SELECT pg_advisory_xact_lock(hashtextextended('sso_sign_in:' || @organization_id
 -- Never reassigns a row to another user, clears a revocation or moves the
 -- recorded times later. A WorkOS session already seen in another of the
 -- user's organizations keeps its earliest times, so recording it elsewhere
--- cannot restart the age window, and inherits any revocation of that
--- session, so a signed-out session can't come back through a new
--- organization. A sign-in that started at or before a revocation cutoff is
--- recorded revoked. Evidence missing from an earlier exchange of the same
+-- cannot restart the age window, and inherits a sign-out of that session,
+-- so a signed-out session can't come back through a new organization;
+-- organization-scoped revocations (admin, deprovisioning) stay where they
+-- were made. A sign-in whose real authentication or exchange started at or
+-- before a revocation cutoff is recorded revoked. Evidence missing from an earlier exchange of the same
 -- method is filled in.
 WITH prior AS (
     SELECT p.authenticated_at, p.idp_authenticated_at, p.revoked_at, p.revoke_reason
@@ -39,6 +40,7 @@ inherited AS (
     SELECT prior.revoke_reason
     FROM prior
     WHERE prior.revoked_at IS NOT NULL
+      AND prior.revoke_reason IN ('sign_out', 'sign_out_everywhere')
     ORDER BY (prior.revoke_reason = 'sign_out'), prior.revoked_at
     LIMIT 1
 ),
@@ -48,7 +50,7 @@ fence AS (
         FROM sso_sign_in_revocation_cutoffs AS c, auth
         WHERE c.organization_id = @organization_id
           AND c.user_id = @user_id
-          AND c.cutoff_at >= auth.at
+          AND c.cutoff_at >= LEAST(auth.at, COALESCE(auth.idp_at, auth.at))
     ) AS fenced
 )
 INSERT INTO sso_sign_ins (
@@ -152,7 +154,7 @@ SELECT
         FROM sso_sign_in_revocation_cutoffs AS c
         WHERE c.organization_id = @organization_id
           AND c.user_id = si.user_id
-          AND c.cutoff_at >= si.authenticated_at
+          AND c.cutoff_at >= LEAST(si.authenticated_at, COALESCE(si.idp_authenticated_at, si.authenticated_at))
     )::boolean AS fenced,
     u.email AS user_email,
     om.verified_domains,
@@ -393,10 +395,5 @@ WHERE si.organization_id = ANY(ARRAY(
 
 -- name: GetOrganizationIDByWorkOSID :one
 SELECT id
-FROM organization_metadata
-WHERE workos_id = @workos_id;
-
--- name: GetOrganizationSlugByWorkOSID :one
-SELECT id, slug
 FROM organization_metadata
 WHERE workos_id = @workos_id;

@@ -9,9 +9,9 @@ import (
 )
 
 // Enforced reports whether SSO sign-in linking and revocation enforcement
-// are on for an organization.
-func Enforced(ctx context.Context, flags feature.Provider, organizationID, organizationSlug string) bool {
-	return feature.SSOSignInEnforced(ctx, flags, organizationID, organizationSlug)
+// are on for an organization. Callers evaluate it once per request.
+func Enforced(ctx context.Context, flags feature.Provider, organizationID string) bool {
+	return feature.SSOSignInEnforced(ctx, flags, organizationID)
 }
 
 // EnableForTests turns enforcement on for the given organizations in an
@@ -29,10 +29,10 @@ func EvidenceGate(db repo.DBTX, flags feature.Provider) func(ctx context.Context
 		if workosOrganizationID == "" {
 			return false
 		}
-		org, err := repo.New(db).GetOrganizationSlugByWorkOSID(ctx, conv.ToPGText(workosOrganizationID))
+		organizationID, err := repo.New(db).GetOrganizationIDByWorkOSID(ctx, conv.ToPGText(workosOrganizationID))
 		if err != nil {
 			return false
 		}
-		return Enforced(ctx, flags, org.ID, org.Slug)
+		return Enforced(ctx, flags, organizationID)
 	}
 }
