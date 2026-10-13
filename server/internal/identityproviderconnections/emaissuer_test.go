@@ -669,6 +669,31 @@ func TestEMAIssuer_CompromiseOfARetiredKeyStillContains(t *testing.T) {
 	require.True(t, containment.Coalesced, "once revoked, repeats naming it coalesce")
 }
 
+// The sweep revokes a retired key after a routine rotation on its own. A
+// compromise call naming that key must still contain its successor, which
+// was active before the compromise was reported.
+func TestEMAIssuer_CompromiseOfASweptKeyStillContainsItsSuccessor(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, _ := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	setID := issuerKeySet(t, ctx, f, f.ti.orgID)
+	compromised := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	rotator, _ := f.provisioner(t)
+	successor := rotateFully(t, ctx, f, rotator, f.ti.orgID, compromised)
+	require.NoError(t, repo.New(f.ti.conn).BackdateRetiredJsonWebKeys(ctx, repo.BackdateRetiredJsonWebKeysParams{JsonWebKeySetID: setID, OrganizationID: f.ti.orgID, AgeSeconds: int32(internalsessionissuers.RetiredKeyOverlap/time.Second) + 1}))
+	_, err = rotator.SweepEMAIssuerKeys(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, []string{successor}, publishedIssuerKids(t, ctx, f, f.ti.orgID), "the sweep revoked the old key")
+
+	containment, err := f.lifecycle().Contain(ctx, f.ti.orgID, &compromised)
+	require.NoError(t, err)
+	require.False(t, containment.Coalesced, "a key revoked by the sweep was never contained")
+	require.Len(t, containment.Revoked, 1)
+	require.Empty(t, publishedIssuerKids(t, ctx, f, f.ti.orgID))
+}
+
 func TestEMAIssuer_SweepSkipsTombstonedIssuersButFinishesTheirCleanup(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)
@@ -795,6 +820,50 @@ func TestEMAIssuer_SweepMovesPastAnOrganizationThatHangs(t *testing.T) {
 	require.Equal(t, created[1:], kms.Disabled())
 }
 
+// A key that keeps failing goes to the back of the line, so keys after it are
+// reached on the next run even when the first one spends the whole budget.
+func TestEMAIssuer_CleanupRetriesFailingKeysLast(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, kms := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	active := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	rotator, rotatingKMS := f.provisioner(t)
+	var pending *internalsessionissuers.RotationPendingError
+	require.ErrorAs(t, rotator.RotateEMAIssuer(ctx, f.ti.orgID, active), &pending)
+	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, &active)
+	require.NoError(t, err)
+
+	queue, err := jwksrepo.New(f.ti.conn).ListPendingEMAIssuerKMSCleanup(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, queue, 2)
+	first, err := repo.New(f.ti.conn).GetManagedKeyResource(ctx, repo.GetManagedKeyResourceParams{ID: queue[0].ExternalKeyID, OrganizationID: conv.ToPGText(f.ti.orgID)})
+	require.NoError(t, err)
+	healthy := slices.DeleteFunc(append(kms.Created(), rotatingKMS.Created()...), func(v string) bool { return v == first.ResourceName })
+	require.Len(t, healthy, 1)
+
+	cleaner, cleaningKMS := f.provisioner(t)
+	cleaner.SetIssuerKeyCleanupTimeout(time.Minute)
+	cleaningKMS.mu.Lock()
+	cleaningKMS.stallDisable = first.ResourceName
+	cleaningKMS.mu.Unlock()
+	run := func() (int, int) {
+		runCtx, cancel := context.WithTimeout(ctx, 400*time.Millisecond)
+		defer cancel()
+		cleaned, stillPending, _ := cleaner.CleanupEMAIssuerKMS(runCtx, f.ti.orgID)
+		return cleaned, stillPending
+	}
+
+	cleaned, stillPending := run()
+	require.Zero(t, cleaned, "the stalled key spends the whole run")
+	require.Equal(t, 2, stillPending)
+	cleaned, stillPending = run()
+	require.Equal(t, 1, cleaned, "the next run starts with the key not yet tried")
+	require.Equal(t, 1, stillPending)
+	require.Equal(t, healthy, cleaningKMS.Disabled())
+}
+
 func TestEMAIssuer_CleanupGivesEachKeyItsOwnDeadline(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)
@@ -819,6 +888,7 @@ func TestEMAIssuer_CleanupGivesEachKeyItsOwnDeadline(t *testing.T) {
 	require.Equal(t, 1, cleaned, "the healthy key after a stalled one is still cleaned up")
 	require.Equal(t, 1, stillPending)
 	require.Equal(t, rotatingKMS.Created(), cleaningKMS.Disabled())
+	require.Len(t, cleaningKMS.RevokedGrants(), 2, "a stalled disable doesn't stop removing that key's grant")
 }
 
 func TestEMAIssuer_CleanupOpeningKMSStopsAtTheCallerDeadline(t *testing.T) {

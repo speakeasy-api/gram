@@ -446,9 +446,12 @@ WHERE isi.organization_id > @after_organization_id::text
     OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL)
     OR (isi.deleted IS FALSE
       AND isi.disabled_at IS NULL
+      AND EXISTS (SELECT 1 FROM organization_metadata AS o WHERE o.id = isi.organization_id AND o.disabled_at IS NULL)
       AND k.state = 'pending'
       AND k.deleted IS FALSE
-      AND k.updated_at <= clock_timestamp() - make_interval(secs => @activation_seconds::integer)))
+      -- 'infinity' is a publication that committed but was never observed;
+      -- the sweep observes it and activates it a full delay later.
+      AND (k.updated_at = 'infinity' OR k.updated_at <= clock_timestamp() - make_interval(secs => @activation_seconds::integer))))
 ORDER BY isi.organization_id
 LIMIT @max_organizations;
 
@@ -464,7 +467,9 @@ WHERE k.state = 'revoked'
   AND k.kms_disabled_at IS NULL;
 
 -- Revoked issuer keys whose KMS version is not yet confirmed disabled, from
--- any issuer row the organization ever had.
+-- any issuer row the organization ever had. Least recently attempted first:
+-- a failed attempt bumps updated_at, so keys that keep failing can't hold
+-- back the rest.
 -- name: ListPendingEMAIssuerKMSCleanup :many
 SELECT k.*
 FROM internal_session_issuers AS isi
@@ -474,7 +479,16 @@ JOIN json_web_keys AS k
 WHERE isi.organization_id = @organization_id
   AND k.state = 'revoked'
   AND k.kms_disabled_at IS NULL
-ORDER BY k.id;
+ORDER BY k.updated_at, k.id;
+
+-- Records a failed KMS cleanup attempt so the next run tries other keys first.
+-- name: TouchJsonWebKeyKMSCleanupAttempt :exec
+UPDATE json_web_keys
+SET updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND state = 'revoked'
+  AND kms_disabled_at IS NULL;
 
 -- Records that a revoked issuer key's KMS version is disabled and its signer
 -- grant removed.

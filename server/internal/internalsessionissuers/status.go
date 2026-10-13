@@ -197,15 +197,14 @@ func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups 
 	return ""
 }
 
+// flagEnabled evaluates without per-call analytics events: Status runs on
+// every signature and every sweep. Anything but an explicit on is off.
 func (g *Gate) flagEnabled(ctx context.Context, flag feature.Flag, organizationID string, groups map[string]string) (bool, error) {
-	if g.flags == nil {
-		return false, nil
-	}
-	enabled, err := g.flags.IsFlagEnabled(ctx, flag, organizationID, groups)
+	evaluation, err := feature.EvaluateFlag(ctx, g.flags, flag, organizationID, groups)
 	if err != nil {
 		return false, fmt.Errorf("evaluate %s: %w", flag, err)
 	}
-	return enabled, nil
+	return evaluation == feature.EvaluationEnabled, nil
 }
 
 // Ready reports live signing readiness for the exact issuer referenced by a

@@ -115,8 +115,6 @@ type Provisioner struct {
 	kmsClients  gcpkms.ProvisioningClientFactory
 	audit       *audit.Logger
 	cfg         Config
-	// emaTokenPurger drops vendor tokens obtained with a disabled issuer.
-	emaTokenPurger EMAIssuerTokenPurger
 	// emaActivationCheck approves the sweep activating a ready pending issuer
 	// key; without one the sweep never activates.
 	emaActivationCheck EMAIssuerActivationCheck
@@ -155,7 +153,6 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.
 		kmsClients:         kmsClients,
 		audit:              auditLogger,
 		cfg:                cfg,
-		emaTokenPurger:     nil,
 		emaActivationCheck: nil,
 		sweepPage:          sweepOrganizationPage,
 
@@ -497,13 +494,14 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 	}
 
 	if err := p.audit.LogJsonWebKeySetCreate(ctx, dbtx, audit.LogJsonWebKeySetCreateEvent{
-		OrganizationID:   params.OrganizationID,
-		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Actor:            systemActor(),
-		ActorDisplayName: systemActorDisplayName(),
-		ActorSlug:        nil,
-		SetURN:           urn.NewJsonWebKeySet(set.ID),
-		SetName:          set.Name,
+		OrganizationID:        params.OrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Actor:                 systemActor(),
+		ActorDisplayName:      systemActorDisplayName(),
+		ActorSlug:             nil,
+		SetURN:                urn.NewJsonWebKeySet(set.ID),
+		SetName:               set.Name,
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, fmt.Errorf("record managed key set creation: %w", err)
 	}
@@ -682,15 +680,16 @@ func (p *Provisioner) rotateRows(ctx context.Context, params RotateClientParams)
 		return fmt.Errorf("re-point managed key set: %w", err)
 	}
 	if err := p.audit.LogJsonWebKeySetUpdate(ctx, dbtx, audit.LogJsonWebKeySetUpdateEvent{
-		OrganizationID:    params.OrganizationID,
-		ProjectID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Actor:             systemActor(),
-		ActorDisplayName:  systemActorDisplayName(),
-		ActorSlug:         nil,
-		SetURN:            urn.NewJsonWebKeySet(set.ID),
-		SetName:           updated.Name,
-		SetSnapshotBefore: &audit.JsonWebKeySetSnapshot{Name: set.Name, ExternalKeyID: set.ExternalKeyID.String()},
-		SetSnapshotAfter:  &audit.JsonWebKeySetSnapshot{Name: updated.Name, ExternalKeyID: updated.ExternalKeyID.String()},
+		OrganizationID:        params.OrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Actor:                 systemActor(),
+		ActorDisplayName:      systemActorDisplayName(),
+		ActorSlug:             nil,
+		SetURN:                urn.NewJsonWebKeySet(set.ID),
+		SetName:               updated.Name,
+		SetSnapshotBefore:     &audit.JsonWebKeySetSnapshot{Name: set.Name, ExternalKeyID: set.ExternalKeyID.String()},
+		SetSnapshotAfter:      &audit.JsonWebKeySetSnapshot{Name: updated.Name, ExternalKeyID: updated.ExternalKeyID.String()},
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return fmt.Errorf("record managed key set update: %w", err)
 	}
@@ -1487,13 +1486,14 @@ func (p *Provisioner) switchToKeySetRows(ctx context.Context, params SwitchAuthM
 	}
 
 	if err := p.audit.LogJsonWebKeySetCreate(ctx, dbtx, audit.LogJsonWebKeySetCreateEvent{
-		OrganizationID:   params.OrganizationID,
-		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Actor:            params.Actor,
-		ActorDisplayName: params.ActorDisplayName,
-		ActorSlug:        nil,
-		SetURN:           urn.NewJsonWebKeySet(set.ID),
-		SetName:          set.Name,
+		OrganizationID:        params.OrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Actor:                 params.Actor,
+		ActorDisplayName:      params.ActorDisplayName,
+		ActorSlug:             nil,
+		SetURN:                urn.NewJsonWebKeySet(set.ID),
+		SetName:               set.Name,
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, fmt.Errorf("record managed key set creation: %w", err)
 	}
@@ -2149,5 +2149,7 @@ func keyEvent(organizationID string, key jwksrepo.JsonWebKey, before, after *aud
 		SetURN:            urn.NewJsonWebKeySet(key.JsonWebKeySetID),
 		KeySnapshotBefore: before,
 		KeySnapshotAfter:  after,
+
+		InternalSessionIssuer: false,
 	}
 }

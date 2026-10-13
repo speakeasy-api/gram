@@ -149,12 +149,17 @@ func TestGet_RetainsIssuerDuringAuthorityFailure(t *testing.T) {
 	require.Equal(t, "disabled", disabled.State)
 }
 
-func TestGet_WithoutIssuerStillFailsWhenStatusUnavailable(t *testing.T) {
+// With no issuer there is nothing to disable or contain, so a flag provider
+// outage reads as not offered rather than an error every admin would see.
+func TestGet_WithoutIssuerReadsUnavailableWhenStatusFails(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t, true)
 	ti.providersFail.Store(true)
-	_, err := ti.service.Get(readCtx(t, ctx), &gen.GetPayload{SessionToken: nil})
-	requireOopsCode(t, err, oops.CodeUnavailable)
+	view, err := ti.service.Get(readCtx(t, ctx), &gen.GetPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.Equal(t, "unavailable", view.State)
+	require.False(t, view.CanEnable)
+	require.Nil(t, view.Issuer)
 }
 
 func TestSetEnabled_RequiresEnableAuthority(t *testing.T) {

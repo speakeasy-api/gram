@@ -59,6 +59,8 @@ func KeyEvent(ctx context.Context, organizationID string, key repo.JsonWebKey, b
 		SetURN:            urn.NewJsonWebKeySet(key.JsonWebKeySetID),
 		KeySnapshotBefore: before,
 		KeySnapshotAfter:  after,
+
+		InternalSessionIssuer: true,
 	}
 }
 
@@ -133,8 +135,8 @@ type Containment struct {
 // Contain revokes every live issuer key (active, pending and retired) in one
 // transaction, so the issuer publishes nothing and cannot sign until a
 // replacement is activated. activeKid names the active key the caller saw:
-// if that key is already revoked, an earlier compromise call contained it
-// and this one changes nothing. A keyless issuer needs no kid.
+// if an earlier compromise call already revoked it and minted the current
+// active key, this one changes nothing. A keyless issuer needs no kid.
 func (l *Lifecycle) Contain(ctx context.Context, organizationID string, activeKid *string) (Containment, error) {
 	none := Containment{Revoked: nil, Coalesced: false}
 	tx, err := l.db.Begin(ctx)
@@ -169,9 +171,11 @@ func (l *Lifecycle) Contain(ctx context.Context, organizationID string, activeKi
 		if i < 0 {
 			return none, ErrUnknownKid
 		}
-		// Only a key that is already revoked was contained by an earlier
-		// call. A retired or pending key is still published, so contain.
-		if all[i].State == "revoked" {
+		// A repeat is coalesced only when the named key is revoked and the
+		// active key was minted after that revocation, as a compromise
+		// replacement is. A key the sweep revoked after a routine rotation
+		// leaves the pre-compromise successor active, so that is contained.
+		if all[i].State == "revoked" && all[i].RevokedAt.Valid && active.CreatedAt.Valid && active.CreatedAt.Time.After(all[i].RevokedAt.Time) {
 			return Containment{Revoked: nil, Coalesced: true}, nil
 		}
 	}

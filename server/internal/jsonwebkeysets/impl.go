@@ -196,13 +196,14 @@ func (s *Service) CreateSet(ctx context.Context, payload *gensvc.CreateSetPayloa
 	}
 
 	if err := s.audit.LogJsonWebKeySetCreate(ctx, dbtx, audit.LogJsonWebKeySetCreateEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
-		ProjectID:        uuid.NullUUID{UUID: uuid.UUID{}, Valid: false},
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		SetURN:           urn.NewJsonWebKeySet(set.ID),
-		SetName:          set.Name,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: uuid.UUID{}, Valid: false},
+		Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:      authCtx.Email,
+		ActorSlug:             nil,
+		SetURN:                urn.NewJsonWebKeySet(set.ID),
+		SetName:               set.Name,
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording key set creation").LogError(ctx, logger)
 	}
@@ -297,6 +298,7 @@ func (s *Service) UpdateSet(ctx context.Context, payload *gensvc.UpdateSetPayloa
 			Name:          set.Name,
 			ExternalKeyID: set.ExternalKeyID.String(),
 		},
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording key set update").LogError(ctx, logger)
 	}

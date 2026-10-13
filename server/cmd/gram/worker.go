@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -856,14 +857,18 @@ func newWorkerCommand() *cli.Command {
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 			// Issuer URLs are pinned to the outbound origin, as on the server.
+			// The worker only sweeps issuer keys, so a bad issuer setting turns
+			// the sweep off with an error log instead of stopping every
+			// workflow; issuers fail closed meanwhile.
 			callbackOrigins, err := callbackOriginsFromCLI(c, serverURL, c.String("environment"), platformHosts)
+			var issuerProvisioner *identityproviderconnections.Provisioner
 			if err != nil {
-				return err
-			}
-			// Sweeps retired internal session issuer keys; nil where KMS provisioning is unconfigured.
-			issuerProvisioner, err := newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, callbackOrigins.Outbound)
-			if err != nil {
-				return fmt.Errorf("build identity provider provisioner: %w", err)
+				logger.ErrorContext(ctx, "invalid outbound callback origin; internal session issuer key sweep is off", attr.SlogError(err))
+				callbackOrigins = remotesessions.DefaultCallbackOrigins(serverURL)
+			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, callbackOrigins.Outbound); err != nil {
+				// Nil where KMS provisioning is unconfigured, too.
+				logger.ErrorContext(ctx, "identity provider provisioner unavailable; internal session issuer key sweep is off", attr.SlogError(err))
+				issuerProvisioner = nil
 			}
 			issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, issuerProvisioner != nil)
 			issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))

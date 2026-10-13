@@ -128,6 +128,10 @@ func TestGcpIamPlatformCredential_GuardsIssuerKeyGrants(t *testing.T) {
 	require.NoError(t, update("renamed", signer), "a rename keeps the account")
 	require.NoError(t, update("renamed", strings.ToUpper(signer)), "the account is stored lowercased, so a case-only change is no change")
 	requireOopsCode(t, update("renamed", "other-"+signer), oops.CodeConflict)
+	_, err = ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+		ID: cred.ID, SessionToken: nil, Name: "renamed", ImpersonateServiceAccount: conv.PtrEmpty(signer), WifPoolID: conv.PtrEmpty("pool"), WifProviderID: conv.PtrEmpty("provider"), WifProjectNumber: conv.PtrEmpty("123456"),
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
 	requireOopsCode(t, remove(), oops.CodeConflict)
 
 	_, err = jq.RevokeJsonWebKey(ctx, jwksrepo.RevokeJsonWebKeyParams{ID: key.ID, OrganizationID: ti.orgID})

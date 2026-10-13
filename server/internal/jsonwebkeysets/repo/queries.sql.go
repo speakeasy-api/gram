@@ -782,9 +782,12 @@ WHERE isi.organization_id > $1::text
     OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL)
     OR (isi.deleted IS FALSE
       AND isi.disabled_at IS NULL
+      AND EXISTS (SELECT 1 FROM organization_metadata AS o WHERE o.id = isi.organization_id AND o.disabled_at IS NULL)
       AND k.state = 'pending'
       AND k.deleted IS FALSE
-      AND k.updated_at <= clock_timestamp() - make_interval(secs => $3::integer)))
+      -- 'infinity' is a publication that committed but was never observed;
+      -- the sweep observes it and activates it a full delay later.
+      AND (k.updated_at = 'infinity' OR k.updated_at <= clock_timestamp() - make_interval(secs => $3::integer))))
 ORDER BY isi.organization_id
 LIMIT $4
 `
@@ -834,11 +837,13 @@ JOIN json_web_keys AS k
 WHERE isi.organization_id = $1
   AND k.state = 'revoked'
   AND k.kms_disabled_at IS NULL
-ORDER BY k.id
+ORDER BY k.updated_at, k.id
 `
 
 // Revoked issuer keys whose KMS version is not yet confirmed disabled, from
-// any issuer row the organization ever had.
+// any issuer row the organization ever had. Least recently attempted first:
+// a failed attempt bumps updated_at, so keys that keep failing can't hold
+// back the rest.
 func (q *Queries) ListPendingEMAIssuerKMSCleanup(ctx context.Context, organizationID string) ([]JsonWebKey, error) {
 	rows, err := q.db.Query(ctx, listPendingEMAIssuerKMSCleanup, organizationID)
 	if err != nil {
@@ -1380,6 +1385,26 @@ func (q *Queries) SummarizeRemoteSessionClientsForJsonWebKeySet(ctx context.Cont
 	var i SummarizeRemoteSessionClientsForJsonWebKeySetRow
 	err := row.Scan(&i.ClientCount, &i.ClientIds)
 	return i, err
+}
+
+const touchJsonWebKeyKMSCleanupAttempt = `-- name: TouchJsonWebKeyKMSCleanupAttempt :exec
+UPDATE json_web_keys
+SET updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND state = 'revoked'
+  AND kms_disabled_at IS NULL
+`
+
+type TouchJsonWebKeyKMSCleanupAttemptParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Records a failed KMS cleanup attempt so the next run tries other keys first.
+func (q *Queries) TouchJsonWebKeyKMSCleanupAttempt(ctx context.Context, arg TouchJsonWebKeyKMSCleanupAttemptParams) error {
+	_, err := q.db.Exec(ctx, touchJsonWebKeyKMSCleanupAttempt, arg.ID, arg.OrganizationID)
+	return err
 }
 
 const updateJsonWebKeySet = `-- name: UpdateJsonWebKeySet :one

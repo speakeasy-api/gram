@@ -11,8 +11,9 @@ import (
 const tokenPurgeTimeout = 10 * time.Second
 
 // EMAIssuerTokenPurger erases retained vendor credentials independently of KMS.
-// Wire this even when provisioning is unavailable. Cleanup is best effort after
-// authoritative revocation; cleanup failure must never roll back containment.
+// It is the only purge seam: wire it on the Service, which also runs without
+// provisioning. Cleanup is best effort after authoritative revocation; cleanup
+// failure must never roll back containment.
 type EMAIssuerTokenPurger interface {
 	PurgeEMAIssuerTokens(context.Context, string) error
 }
@@ -29,10 +30,6 @@ func (s *Service) purgeIssuerTokens(ctx context.Context, organizationID string) 
 		if err := s.tokenPurger.PurgeEMAIssuerTokens(ctx, organizationID); err != nil {
 			s.logger.ErrorContext(ctx, "issuer vendor credential cleanup failed after containment", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
 		}
-		return
-	}
-	if s.manager != nil {
-		s.manager.PurgeEMAIssuerTokens(ctx, organizationID)
 		return
 	}
 	// TODO(AIM-523): wire the purger with the vendor-token cache.

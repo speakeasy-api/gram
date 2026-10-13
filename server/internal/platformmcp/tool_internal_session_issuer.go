@@ -36,8 +36,11 @@ var internalSessionIssuerNextSteps = map[internalsessionissuers.State]string{
 }
 
 func internalSessionIssuerNextStep(state internalsessionissuers.State, canEnable bool) string {
-	if !canEnable && (state == internalsessionissuers.StateSetupRequired || state == internalsessionissuers.StateDisabled) {
-		return "Signing is unavailable. Ask a Speakeasy administrator to check the organization's verified domains and this deployment's signing configuration before enabling Enterprise Managed Authorization."
+	switch {
+	case !canEnable && state == internalsessionissuers.StateSetupRequired:
+		return "Signing is unavailable on this deployment. Ask a Speakeasy administrator to check its signing configuration before enabling Enterprise Managed Authorization."
+	case !canEnable && state == internalsessionissuers.StateDisabled:
+		return "Signing is disabled and can't be re-enabled right now. Check that the organization still has a verified email domain on IDP and SSO; if it does, ask a Speakeasy administrator to check this deployment's signing configuration."
 	}
 	return internalSessionIssuerNextSteps[state]
 }

@@ -43,7 +43,6 @@ type Manager interface {
 	RotateEMAIssuer(ctx context.Context, organizationID, activeKid string) error
 	ProvisionEMAIssuerKey(ctx context.Context, organizationID string) error
 	CleanupEMAIssuerKMS(ctx context.Context, organizationID string) (cleaned, pending int, err error)
-	PurgeEMAIssuerTokens(ctx context.Context, organizationID string)
 }
 
 type Service struct {
@@ -304,6 +303,11 @@ func (s *Service) replace(ctx context.Context, logger *slog.Logger, organization
 	return nil
 }
 
+func isRefused(err error) bool {
+	_, ok := errors.AsType[*SigningRefusedError](err)
+	return ok
+}
+
 func isPending(err error) bool {
 	_, ok := errors.AsType[*RotationPendingError](err)
 	return ok
@@ -328,6 +332,8 @@ func (s *Service) operationError(ctx context.Context, logger *slog.Logger, err e
 		return oops.E(oops.CodeBadRequest, err, "active_kid is required while the issuer has an active key")
 	case errors.Is(err, ErrUnknownKid):
 		return oops.E(oops.CodeConflict, err, "active_kid was never published by this issuer; read the issuer again")
+	case isRefused(err):
+		return oops.E(oops.CodeForbidden, err, "%s: the issuer is not enabled for signing", msg)
 	case errors.Is(err, ErrRotationConflict):
 		return oops.E(oops.CodeConflict, err, "the active key changed; read the issuer again")
 	case errors.Is(err, ErrMisconfigured):
@@ -357,7 +363,9 @@ func (s *Service) view(ctx context.Context, logger *slog.Logger, organizationID 
 		view.State = string(status.State)
 		view.CanEnable = s.gate.CanEnable(organizationID, status)
 	case row.ID == uuid.Nil:
-		return nil, oops.E(oops.CodeUnavailable, err, "issuer availability could not be determined").LogError(ctx, logger)
+		// Nothing to disable or contain, so a provider outage reads as not offered.
+		logger.WarnContext(ctx, "issuer availability could not be determined; reporting unavailable", attr.SlogError(err))
+		return view, nil
 	default:
 		logger.WarnContext(ctx, "issuer status unavailable, reporting database state", attr.SlogError(err))
 		view.State = string(s.databaseState(ctx, organizationID, row))

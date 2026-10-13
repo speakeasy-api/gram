@@ -18,11 +18,10 @@ import (
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
-// The sweep is a backstop: rotation and management reads already retire
-// expired issuer keys. It activates pending keys past the activation delay
-// (finishing a routine rotation within the hour), revokes retired keys past
-// the overlap and retries
-// KMS cleanup of every revoked key until it succeeds. Each activity sweeps
+// The sweep is a backstop: rotation already retires expired issuer keys. It
+// activates pending keys past the activation delay (finishing a routine
+// rotation within the hour), revokes retired keys past the overlap and
+// retries KMS cleanup of every revoked key until it succeeds. Each activity sweeps
 // for a fixed budget and returns a cursor; the workflow continues from it for
 // a bounded number of pages and returns where it stopped. The next hourly run
 // resumes there through the schedule's last completion result, so slow or
@@ -32,16 +31,20 @@ import (
 //
 // Temporal actions/month: ~2,200 per namespace (one schedule start and one
 // activity per hour); each extra page costs one activity, at most
-// internalSessionIssuerKeySweepMaxPages-1 more per hour (~4,400 worst case).
+// internalSessionIssuerKeySweepMaxPages-1 more per hour (~4,400 worst case,
+// plus one retry per failed page).
 // Carrying the cursor costs no actions. Fixed: it doesn't scale with orgs.
 const (
 	internalSessionIssuerKeySweepWorkflowID = "v1:internal-session-issuer-key-sweep" //nolint:gosec // A workflow ID, not a credential.
 	internalSessionIssuerKeySweepInterval   = time.Hour
 	internalSessionIssuerKeySweepCatchup    = internalSessionIssuerKeySweepInterval - time.Second
 	internalSessionIssuerKeySweepRunTimeout = 55 * time.Minute
-	// A page stops starting organizations after this, well inside its
-	// StartToClose timeout.
-	internalSessionIssuerKeySweepPageBudget   = 8 * time.Minute
+	// A page stops starting organizations after its budget; the last one
+	// started may then run its full share. Budget plus share stays a minute
+	// inside StartToClose, and every page with its retry fits the run timeout:
+	// 3 pages x 2 attempts x 8m plus backoff is about 50m.
+	internalSessionIssuerKeySweepPageBudget   = 5 * time.Minute
+	internalSessionIssuerKeySweepStartToClose = 8 * time.Minute
 	internalSessionIssuerKeySweepMaxPages     = 3
 	InternalSessionIssuerKeySweepActivityName = "SweepInternalSessionIssuerKeys"
 )
@@ -65,9 +68,9 @@ type InternalSessionIssuerKeySweepResult struct {
 
 func InternalSessionIssuerKeySweepWorkflow(ctx workflow.Context) (InternalSessionIssuerKeySweepResult, error) {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
+		StartToCloseTimeout: internalSessionIssuerKeySweepStartToClose,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
+			MaximumAttempts:    2,
 			InitialInterval:    30 * time.Second,
 			BackoffCoefficient: 2,
 			MaximumInterval:    5 * time.Minute,

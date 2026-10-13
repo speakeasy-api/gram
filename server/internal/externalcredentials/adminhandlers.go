@@ -235,7 +235,12 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading platform gcp iam credential").LogError(ctx, logger)
 	}
-	if strings.ToLower(strings.TrimSpace(locked.GcpIamCredential.ImpersonateServiceAccount.String)) != cols.ImpersonateServiceAccount.String {
+	// Issuer keys sign through this exact identity: the account they were
+	// granted to and how Speakeasy reaches it. Renames stay allowed.
+	stored := locked.GcpIamCredential
+	identityChanged := strings.ToLower(strings.TrimSpace(stored.ImpersonateServiceAccount.String)) != cols.ImpersonateServiceAccount.String ||
+		stored.WifPoolID != cols.WifPoolID || stored.WifProviderID != cols.WifProviderID || stored.WifProjectNumber != cols.WifProjectNumber
+	if identityChanged {
 		granted, err := q.CountIssuerKeysGrantedByCredential(ctx, repo.CountIssuerKeysGrantedByCredentialParams{ExternalCredentialID: id, IncludePendingCleanup: true})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error counting issuer signing keys").LogError(ctx, logger)

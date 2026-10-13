@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
+	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -79,6 +81,7 @@ func TestEMAIssuer_SweepActivatesOnlyAReadyPendingKey(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, string(urn.PrincipalTypeSystem), row.ActorType, "%s is a system change", action)
 		require.Equal(t, "System", row.ActorDisplay)
+		require.Contains(t, string(row.Metadata), `"internal_session_issuer": true`, "issuer key events are marked so audit links skip the signing-keys pages")
 	}
 
 	progress, err = provisioner.SweepEMAIssuerKeysFrom(ctx, "", 0)
@@ -144,4 +147,71 @@ func TestEMAIssuer_SweepNeverActivatesWithoutAnActivationCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, progress.Activated)
 	require.Equal(t, before, activeIssuerKid(t, ctx, f, f.ti.orgID))
+}
+
+// A publication that committed but was never observed is recovered by the
+// sweep alone: observed first, then activated a full delay later.
+func TestEMAIssuer_SweepRecoversAnUnobservedPublication(t *testing.T) {
+	t.Parallel()
+	ctx, f, provisioner, before := rotatingIssuer(t, false)
+	q := repo.New(f.ti.conn)
+	var pendingID uuid.UUID
+	keys, err := jwksrepo.New(f.ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: issuerKeySet(t, ctx, f, f.ti.orgID), OrganizationID: f.ti.orgID, IncludeRevoked: false})
+	require.NoError(t, err)
+	for _, key := range keys {
+		if key.State == "pending" {
+			pendingID = key.ID
+		}
+	}
+	require.NotEqual(t, uuid.Nil, pendingID)
+	require.NoError(t, q.MarkRotationPublicationUnobserved(ctx, repo.MarkRotationPublicationUnobservedParams{ID: pendingID, OrganizationID: f.ti.orgID}))
+
+	progress, err := provisioner.SweepEMAIssuerKeysFrom(ctx, "", 0)
+	require.NoError(t, err)
+	require.Zero(t, progress.Activated, "an unobserved publication is never treated as ready")
+	require.Equal(t, 1, progress.Swept, "but it is swept, so it gets observed")
+	require.Equal(t, before, activeIssuerKid(t, ctx, f, f.ti.orgID))
+
+	makeRotationReady(t, ctx, f)
+	progress, err = provisioner.SweepEMAIssuerKeysFrom(ctx, "", 0)
+	require.NoError(t, err)
+	require.Equal(t, 1, progress.Activated)
+	require.NotEqual(t, before, activeIssuerKid(t, ctx, f, f.ti.orgID))
+}
+
+// The gates are checked again under the issuer lock, so a pause that lands
+// after the sweep approved the key still stops the activation.
+func TestEMAIssuer_SweepRechecksActivationUnderTheLock(t *testing.T) {
+	t.Parallel()
+	ctx, f, provisioner, before := rotatingIssuer(t, false)
+	makeRotationReady(t, ctx, f)
+	calls := 0
+	provisioner.SetEMAIssuerActivationCheck(func(context.Context, string, jwksrepo.JsonWebKey) error {
+		calls++
+		if calls > 1 {
+			return &internalsessionissuers.SigningRefusedError{State: internalsessionissuers.StateSigningPaused, Reason: internalsessionissuers.PauseReasonFlagOn}
+		}
+		return nil
+	})
+
+	progress, err := provisioner.SweepEMAIssuerKeysFrom(ctx, "", 0)
+	require.NoError(t, err)
+	require.Equal(t, 2, calls)
+	require.Zero(t, progress.Activated)
+	require.Equal(t, before, activeIssuerKid(t, ctx, f, f.ti.orgID))
+}
+
+// A disable committed after the caller's checks still stops a manual
+// activation, which runs under the same lock.
+func TestEMAIssuer_RotationRefusesADisabledIssuerUnderTheLock(t *testing.T) {
+	t.Parallel()
+	ctx, f, provisioner, before := rotatingIssuer(t, false)
+	makeRotationReady(t, ctx, f)
+	require.NoError(t, f.lifecycle().SetDisabled(ctx, f.ti.orgID, true))
+
+	err := provisioner.RotateEMAIssuer(ctx, f.ti.orgID, before)
+	var refused *internalsessionissuers.SigningRefusedError
+	require.ErrorAs(t, err, &refused)
+	require.Equal(t, internalsessionissuers.StateDisabled, refused.State)
+	require.Zero(t, auditCount(t, ctx, f, audit.ActionJsonWebKeyActivate))
 }
