@@ -264,6 +264,40 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 	return tombstone.RootDomainIDs(append(clearedRoots, moved...)), nil
 }
 
+// NonIssuerDrift lists what Sync (no requested mode) would write besides the issuer; empty means an issuer-only sync.
+// endpoints are the wrapper's live endpoints and dead the custom domains LockDomains reported deleted.
+func NonIssuerDrift(toolset toolsetsrepo.Toolset, server mcpserversrepo.McpServer, endpoints []mcpendpointsrepo.McpEndpoint, dead map[uuid.UUID]bool) []string {
+	var drift []string
+	if !server.Name.Valid || server.Name.String != toolset.Name {
+		drift = append(drift, "name")
+	}
+	if server.Slug != toolset.McpSlug {
+		drift = append(drift, "slug")
+	}
+	wantVisibility := Visibility(toolset)
+	if server.Visibility != wantVisibility {
+		drift = append(drift, "visibility")
+	}
+	if server.ToolVariationsGroupID != toolset.ToolVariationsGroupID {
+		drift = append(drift, "tool_variations_group")
+	}
+	if _, err := networkaccess.Effective(server.NetworkAccessMode); err != nil {
+		drift = append(drift, "network_access_mode")
+	}
+	if wantVisibility == visibility.Disabled && slices.ContainsFunc(endpoints, isRoot) {
+		drift = append(drift, "domain_root")
+	}
+	hasSlug := toolset.McpSlug.Valid && toolset.McpSlug.String != ""
+	addressed := hasSlug && (!toolset.CustomDomainID.Valid || !dead[toolset.CustomDomainID.UUID])
+	switch {
+	case !hasSlug && len(endpoints) > 0:
+		drift = append(drift, "endpoint")
+	case addressed && (len(endpoints) != 1 || endpoints[0].Slug != toolset.McpSlug.String || endpoints[0].CustomDomainID != toolset.CustomDomainID):
+		drift = append(drift, "endpoint")
+	}
+	return drift
+}
+
 // createServerError classifies a racing slug claim without swallowing the failed write.
 // The caller must still roll back the transaction; retain the database cause for diagnostics.
 func createServerError(err error) error {

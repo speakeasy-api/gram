@@ -1433,6 +1433,72 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 	return items, nil
 }
 
+const lockHostedToolsetsByUserSessionIssuer = `-- name: LockHostedToolsetsByUserSessionIssuer :many
+SELECT toolsets.id, toolsets.organization_id, toolsets.project_id, toolsets.name, toolsets.slug, toolsets.description, toolsets.default_environment_slug, toolsets.mcp_slug, toolsets.mcp_is_public, toolsets.mcp_enabled, toolsets.tool_selection_mode, toolsets.custom_domain_id, toolsets.external_oauth_server_id, toolsets.oauth_proxy_server_id, toolsets.user_session_issuer_id, toolsets.tool_variations_group_id, toolsets.created_at, toolsets.updated_at, toolsets.deleted_at, toolsets.deleted
+FROM toolsets
+JOIN projects
+  ON projects.id = toolsets.project_id
+ AND projects.organization_id = $1::text
+ AND projects.deleted IS FALSE
+JOIN mcp_servers
+  ON mcp_servers.id = toolsets.id
+ AND mcp_servers.toolset_id = toolsets.id
+ AND mcp_servers.project_id = toolsets.project_id
+ AND mcp_servers.deleted IS FALSE
+WHERE toolsets.user_session_issuer_id = $2::uuid
+  AND toolsets.organization_id = $1::text
+  AND toolsets.deleted IS FALSE
+ORDER BY toolsets.id
+FOR UPDATE OF toolsets
+`
+
+type LockHostedToolsetsByUserSessionIssuerParams struct {
+	OrganizationID      string
+	UserSessionIssuerID uuid.UUID
+}
+
+// Live toolsets on the issuer that own a live canonical wrapper, locked in id order.
+func (q *Queries) LockHostedToolsetsByUserSessionIssuer(ctx context.Context, arg LockHostedToolsetsByUserSessionIssuerParams) ([]Toolset, error) {
+	rows, err := q.db.Query(ctx, lockHostedToolsetsByUserSessionIssuer, arg.OrganizationID, arg.UserSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Toolset
+	for rows.Next() {
+		var i Toolset
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.DefaultEnvironmentSlug,
+			&i.McpSlug,
+			&i.McpIsPublic,
+			&i.McpEnabled,
+			&i.ToolSelectionMode,
+			&i.CustomDomainID,
+			&i.ExternalOauthServerID,
+			&i.OauthProxyServerID,
+			&i.UserSessionIssuerID,
+			&i.ToolVariationsGroupID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setToolsetCustomDomain = `-- name: SetToolsetCustomDomain :exec
 UPDATE toolsets
 SET

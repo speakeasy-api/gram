@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,11 +21,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -417,6 +424,10 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// Hosted toolset saves take this lock before issuer and toolset locks.
+	if err := networkingressrepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle").LogError(ctx, logger)
+	}
 	q := repo.New(dbtx)
 	source, target, err := loadUserSessionMigrationPair(ctx, q, authCtx.ActiveOrganizationID, sourceID, targetID, false)
 	if err != nil {
@@ -504,6 +515,9 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list MCP server projects for issuer migration").LogError(ctx, logger)
 	}
+	if err := migrateHostedToolsetsToUserSessionIssuer(ctx, logger, dbtx, s.audit, authCtx, source.ID, target.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "migrate hosted MCP servers").LogError(ctx, logger)
+	}
 	ownerUpdates := []struct {
 		name string
 		fn   func() (int64, error)
@@ -553,4 +567,112 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	return &orggen.MigrateOrganizationUserSessionIssuerResult{
 		Issuer: targetView, ClientsMigrated: int(clientsMigrated), SessionsMigrated: int(sessionsMigrated), ConsentsMigrated: int(consentsMigrated), CimdClientsMigrated: int(cimdClientsMigrated), RemoteSessionsMigrated: int(remoteSessionsMigrated), SourceDeleted: true,
 	}, nil
+}
+
+// migrateHostedToolsetsToUserSessionIssuer moves each hosted toolset like a toolset save: column write, then wrapper Sync with its audit.
+// Sync runs only where it would change nothing but the issuer; every other wrapper keeps the bulk issuer update, as before.
+// Lock order matches UpdateToolset: toolsets in id order, then their domains in one sorted pass, then each wrapper's endpoints and row.
+func migrateHostedToolsetsToUserSessionIssuer(ctx context.Context, logger *slog.Logger, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, sourceID, targetID uuid.UUID) error {
+	toolsets := toolsetsrepo.New(tx)
+	locked, err := toolsets.LockHostedToolsetsByUserSessionIssuer(ctx, toolsetsrepo.LockHostedToolsetsByUserSessionIssuerParams{
+		OrganizationID: authCtx.ActiveOrganizationID, UserSessionIssuerID: sourceID,
+	})
+	if err != nil {
+		return fmt.Errorf("lock hosted toolsets: %w", err)
+	}
+	if len(locked) == 0 {
+		return nil
+	}
+	endpoints := mcpendpointsrepo.New(tx)
+	updated := make([]toolsetsrepo.Toolset, 0, len(locked))
+	domainIDs := make([]uuid.NullUUID, 0, len(locked))
+	for _, toolset := range locked {
+		row, err := toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+			UserSessionIssuerID: conv.ToNullUUID(targetID), Slug: toolset.Slug, ProjectID: toolset.ProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("update hosted toolset %s: %w", toolset.ID, err)
+		}
+		updated = append(updated, row)
+		domainIDs = append(domainIDs, row.CustomDomainID)
+		endpointDomainIDs, err := endpoints.ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{McpServerID: row.ID, ProjectID: row.ProjectID})
+		if err != nil {
+			return fmt.Errorf("list hosted MCP domains %s: %w", row.ID, err)
+		}
+		for _, id := range endpointDomainIDs {
+			domainIDs = append(domainIDs, conv.ToNullUUID(id))
+		}
+	}
+	dead, err := hostedmcp.LockDomains(ctx, tx, authCtx.ActiveOrganizationID, domainIDs...)
+	if err != nil {
+		return fmt.Errorf("lock hosted MCP domains: %w", err)
+	}
+	// An issuer migration must not change a URL, name or plugin entry, so drifted wrappers keep the bulk issuer update.
+	skipped := map[uuid.UUID]bool{}
+	servers := mcpserversrepo.New(tx)
+	for _, toolset := range updated {
+		wrapperEndpoints, err := endpoints.LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{McpServerID: toolset.ID, ProjectID: toolset.ProjectID})
+		if err != nil {
+			return fmt.Errorf("lock hosted MCP endpoints %s: %w", toolset.ID, err)
+		}
+		wrapper, err := servers.LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
+		if err != nil {
+			return fmt.Errorf("lock hosted MCP server %s: %w", toolset.ID, err)
+		}
+		if drift := hostedmcp.NonIssuerDrift(toolset, wrapper, wrapperEndpoints, dead); len(drift) > 0 {
+			logger.WarnContext(ctx, "hosted MCP server drifted from its toolset; issuer migration leaves it to the issuer-only update", attr.SlogToolsetID(toolset.ID.String()), attr.SlogReason(strings.Join(drift, ",")))
+			skipped[toolset.ID] = true
+		}
+	}
+	actor := hostedmcp.Actor{UserID: authCtx.UserID, Email: authCtx.Email, System: ""}
+	// One savepoint per attempt, not per toolset, keeps the subtransaction count bounded.
+	for attempt := 0; attempt < maxHostedSyncAttempts; attempt++ {
+		rejected, err := syncHostedToolsetsInSavepoint(ctx, tx, auditLogger, actor, updated, skipped)
+		if err != nil {
+			return err
+		}
+		if rejected == nil {
+			return nil
+		}
+		logger.WarnContext(ctx, "hosted MCP sync rejected during issuer migration; falling back to issuer-only update", attr.SlogToolsetID(rejected.toolsetID.String()), attr.SlogError(rejected.err))
+		skipped[rejected.toolsetID] = true
+	}
+	logger.WarnContext(ctx, "too many hosted MCP sync rejections during issuer migration; falling back to issuer-only updates")
+	return nil
+}
+
+const maxHostedSyncAttempts = 4
+
+var errHostedSyncClearedRoot = errors.New("hosted MCP sync would clear a custom domain root")
+
+type hostedSyncRejection struct {
+	toolsetID uuid.UUID
+	err       error
+}
+
+// syncHostedToolsetsInSavepoint syncs every non-skipped toolset, rolling all of them back on the first rejection.
+func syncHostedToolsetsInSavepoint(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor hostedmcp.Actor, toolsets []toolsetsrepo.Toolset, skipped map[uuid.UUID]bool) (*hostedSyncRejection, error) {
+	savepoint, err := tx.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin hosted MCP sync savepoint: %w", err)
+	}
+	for _, toolset := range toolsets {
+		if skipped[toolset.ID] {
+			continue
+		}
+		cleared, syncErr := hostedmcp.Sync(ctx, savepoint, auditLogger, actor, toolset, nil)
+		if syncErr == nil && len(cleared) > 0 {
+			syncErr = errHostedSyncClearedRoot
+		}
+		if syncErr != nil {
+			if err := savepoint.Rollback(ctx); err != nil {
+				return nil, fmt.Errorf("roll back hosted MCP sync savepoint: %w", err)
+			}
+			return &hostedSyncRejection{toolsetID: toolset.ID, err: syncErr}, nil
+		}
+	}
+	if err := savepoint.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("release hosted MCP sync savepoint: %w", err)
+	}
+	return nil, nil
 }
