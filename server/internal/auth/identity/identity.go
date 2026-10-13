@@ -201,7 +201,7 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 
 	resp, err := r.idpClient.AuthenticateWithCode(ctx, r.idpClientID, code)
 	if err != nil {
-		return nil, fmt.Errorf("workos authenticate with code: %w", err)
+		return nil, &codeExchangeError{cause: err}
 	}
 	if resp == nil {
 		return nil, errors.New("workos authenticate with code: empty response")
