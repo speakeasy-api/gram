@@ -147,9 +147,13 @@ describe("enterprise authorization", () => {
     (state) => {
       mocks.issuer = { ...enabledIssuer, state };
       show();
-      expect(
-        screen.getByText(/each user must sign in to/).textContent,
-      ).toContain("Google or other social sign-in alone is not sufficient");
+      const prerequisite = screen.getByText(/each user must sign in to/);
+      expect(prerequisite.textContent).toContain(
+        "Personal Google or other social sign-in alone is not sufficient",
+      );
+      expect(prerequisite.textContent).toContain(
+        "Google Workspace connected through enterprise SAML or OIDC qualifies",
+      );
     },
   );
 

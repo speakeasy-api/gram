@@ -2,13 +2,16 @@ package identitychaining
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -71,11 +74,21 @@ func GrantScopes(scopes []string) []string {
 // interactive path.
 func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req Request) (selection, Outcome) {
 	var none selection
+	// Every caller has already authenticated the human or management
+	// principal. Unconfigured endpoints perform no discovery at all.
+	resource, err := g.ResolveResource(ctx, req)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve identity chaining resource", attr.SlogError(err))
+		if errors.Is(err, protectedresource.ErrEndpointResourceInvalid) {
+			return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
+		}
+		return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceUnknown, true)
+	}
 	bindings, err := repo.New(g.db).ListEMAChainingBindings(ctx, repo.ListEMAChainingBindingsParams{
 		ProjectID:             req.ProjectID,
 		OrganizationID:        req.OrganizationID,
 		UserSessionIssuerID:   req.UserSessionIssuerID,
-		UpstreamResource:      strings.TrimRight(req.UpstreamResource, "/"),
+		UpstreamResource:      strings.TrimRight(resource.Resource, "/"),
 		RemoteSessionIssuerID: req.RemoteSessionIssuerID,
 	})
 	if err != nil {
@@ -110,6 +123,9 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		return none, bindingNotReady
 	case result.State != remotesessions.PreparationStateReady || result.BindingID != b.ID || result.ClientID == uuid.Nil || result.ExternalClientID == "":
 		return none, bindingNotReady
+	}
+	if resource.Discovered && !slices.Contains(resource.AuthorizationServers, result.Issuer) {
+		return none, newOutcome(StageSelection, ReasonConfigurationRequired, ConfidenceVerified, false)
 	}
 	scopes := GrantScopes(result.Scopes)
 	if len(scopes) == 0 && len(result.Scopes) > 0 {

@@ -97,6 +97,8 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	f.req.UserSessionJTI = uuid.NewString()
 
 	var calls atomic.Int32
+	var metadataCalls atomic.Int32
+	var metadataUnavailable atomic.Bool
 	var revokeDuringExchange atomic.Bool
 	exchangeErrors := make(chan error, 4)
 	checkExchange := func() {
@@ -110,6 +112,20 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	}
 	var expectedAudience string
 	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/oauth-protected-resource/mcp" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Path == "/.well-known/oauth-protected-resource" {
+			metadataCalls.Add(1)
+			if metadataUnavailable.Load() {
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"resource": expectedAudience, "authorization_servers": []string{expectedAudience}})
+			return
+		}
 		calls.Add(1)
 		fail := func(err error) { exchangeErrors <- err; http.Error(w, "invalid test exchange", http.StatusBadRequest) }
 		if revokeDuringExchange.Load() {
@@ -150,7 +166,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 			fail(fmt.Errorf("missing assertion ID or invalid lifetime"))
 			return
 		}
-		if claims.Email != f.req.UserID+"@example.test" || claims.ClientID != testResourceClient || claims.Resource != testResource || claims.Scope != "read" {
+		if claims.Email != f.req.UserID+"@example.test" || claims.ClientID != testResourceClient || claims.Resource != expectedAudience || claims.Scope != "read" {
 			fail(fmt.Errorf("unexpected assertion identity or authorization claims"))
 			return
 		}
@@ -170,19 +186,37 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	expectedAudience = endpoint.URL
 	// Replace the fixture binding's resource client with a live HTTP endpoint.
 	remoteID, clientID := prepareResourceClient(t, f.db, f.chainer.enc, f.req.OrganizationID, endpoint.URL, endpoint.URL, testResourceClient, "resource-secret")
-	bindResource(t, f.db, f.req, remoteID, clientID, testResource, remotesessions.PreparationStateReady)
-	// The original binding names the same resource; retire it to keep selection unique.
+	bindResource(t, f.db, f.req, remoteID, clientID, endpoint.URL, remotesessions.PreparationStateReady)
+	// Retire the original fixture binding before testing the live resource.
 	f.setBinding(t, remotesessions.PreparationStateUnlinked)
+	f.req.UpstreamResource = endpoint.URL + "/mcp"
 	require.NoError(t, repo.New(f.db).InsertEMAProvider(ctx, repo.InsertEMAProviderParams{OrganizationID: f.req.OrganizationID, VendorIssuer: endpoint.URL, InternalSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true}}))
 	policy, err := guardian.NewUnsafePolicy(tp, nil)
 	require.NoError(t, err)
-	challenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.chainer.enc, policy, nil, nil, base)
-	chainer := New(logger, f.db, f.chainer.enc, challenges, nil, nil, cache.NewRedisCacheAdapter(redisClient))
+	sharedCache := cache.NewRedisCacheAdapter(redisClient)
+	challenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.chainer.enc, policy, nil, sharedCache, base)
+	chainer := New(logger, f.db, f.chainer.enc, challenges, nil, nil, sharedCache)
 	chainer.SetSpeakeasyIssuer(gate, signer)
+	chainer.SetResourceResolver(challenges.ResolveEMAResource)
+	// First consent can resolve a parent resource without a prior MCP request.
 	preGrant := f.req
 	preGrant.UserSessionJTI = ""
 	require.Equal(t, ReasonConsentRequired, chainer.CheckConsent(ctx, preGrant, signIn.ID.UUID).Reason)
+	require.EqualValues(t, 0, calls.Load(), "cold pre-grant eligibility never redeems a token")
+	governor := NewGovernor(logger, f.db, f.chainer.enc, nil)
+	governor.SetSpeakeasyIssuer(gate, signer)
+	governor.SetResourceResolver(challenges.ResolveEMAResource)
+	served, ready := governor.Serves(ctx, f.req)
+	require.True(t, ready)
+	require.Equal(t, remoteID, served)
+	require.EqualValues(t, 1, metadataCalls.Load())
+	// A second replica reads the shared result while discovery is unavailable.
+	metadataUnavailable.Store(true)
+	otherChallenges := remotesessions.NewChallengeManager(logger, tp, mp, f.db, f.chainer.enc, policy, nil, sharedCache, base)
+	chainer.SetResourceResolver(otherChallenges.ResolveEMAResource)
+	require.Equal(t, ReasonConsentRequired, chainer.CheckConsent(ctx, preGrant, signIn.ID.UUID).Reason)
 	require.EqualValues(t, 0, calls.Load(), "pre-grant eligibility never redeems a token")
+	require.EqualValues(t, 1, metadataCalls.Load(), "another replica reuses verified metadata")
 	_, preGrantOutcome := chainer.Acquire(ctx, preGrant)
 	require.Equal(t, ReasonReauthenticationRequired, preGrantOutcome.Reason, "readiness never bypasses runtime grant validation")
 	wrongConsent := preGrant

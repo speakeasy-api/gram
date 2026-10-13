@@ -104,9 +104,10 @@ function EnterpriseIssuerContent({ ssoFeatureEnabled }: Props): JSX.Element {
           ["enabled", "setup_required", "disabled"].includes(issuer.state) && (
             <Text small muted>
               To use enterprise authorization, each user must sign in to
-              Speakeasy through your organization's enterprise SSO. Google or
-              other social sign-in alone is not sufficient. Enabling the issuer
-              does not establish an enterprise SSO session.
+              Speakeasy through your organization's enterprise SSO. Google
+              Workspace connected through enterprise SAML or OIDC qualifies.
+              Personal Google or other social sign-in alone is not sufficient.
+              Enabling the issuer does not establish an enterprise SSO session.
             </Text>
           )}
         {issuer?.issuer && (

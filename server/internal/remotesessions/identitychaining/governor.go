@@ -13,14 +13,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Governor answers configuration questions about identity chaining from the
-// database alone. It never contacts a provider, retires a credential, or
-// acquires a token, so status surfaces can share one.
+// Governor answers configuration questions about identity chaining. It may
+// resolve public resource metadata but never acquires a token or retires a
+// credential, so authenticated status surfaces can share one.
 type Governor struct {
 	logger     *slog.Logger
 	db         *pgxpool.Pool
@@ -30,14 +31,18 @@ type Governor struct {
 
 	// sources builds each EMA provider kind's token source.
 	sources map[remotesessions.EMAProviderKind]sourceFactory
+
+	// resolveResource maps a direct HTTP transport to its authorization resource.
+	resolveResource func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error)
 }
 
-// NewGovernor builds a database-only governor; enc verifies stored credentials
+// NewGovernor builds a configuration governor; enc verifies stored credentials
 // and delegation checks the human's retained delegation against the current
 // trusted registration.
 func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, delegation *remotesessions.DelegationService) *Governor {
 	return &Governor{
 		logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, delegation: delegation, now: time.Now,
+		resolveResource: nil,
 		sources: map[remotesessions.EMAProviderKind]sourceFactory{
 			remotesessions.EMAProviderExternal: func(p remotesessions.EMAProvider) tokenSource {
 				return externalSource{c: nil, issuer: p.RemoteSessionIssuerID}
@@ -45,6 +50,21 @@ func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, 
 			remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return new(speakeasySource) },
 		},
 	}
+}
+
+// SetResourceResolver installs public metadata resolution before serving any
+// authenticated runtime, consent, or management requests.
+func (g *Governor) SetResourceResolver(resolve func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error)) {
+	g.resolveResource = resolve
+}
+
+// ResolveResource returns the resource identity used by binding selection.
+// Tunneled resources are explicit operator configuration and are not probed.
+func (g *Governor) ResolveResource(ctx context.Context, req Request) (protectedresource.EndpointResource, error) {
+	if g.resolveResource == nil || req.RemoteSessionIssuerID.Valid || !g.Configured(ctx, req.OrganizationID, req.ProjectID, req.UserSessionIssuerID) {
+		return protectedresource.EndpointResource{Resource: req.UpstreamResource, AuthorizationServers: nil, Discovered: false}, nil
+	}
+	return g.resolveResource(ctx, req.OrganizationID, req.ProjectID, req.UpstreamResource)
 }
 
 // Governs reports whether identity chaining owns the request's upstream: a

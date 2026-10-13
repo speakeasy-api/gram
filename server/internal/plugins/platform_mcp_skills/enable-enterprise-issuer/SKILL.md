@@ -28,7 +28,8 @@ read-only; it cannot enable, disable, rotate, or replace an issuer.
 ## Guide setup and retrieve the issuer
 
 Each user must sign in to Speakeasy through the organization's enterprise SSO
-before using enterprise authorization. Google or another social sign-in alone
+before using enterprise authorization. Google Workspace connected through
+enterprise SAML or OIDC qualifies. Personal Google or another social sign-in alone
 is insufficient. SSO entitlement and an enabled issuer do not prove that the
 current user has an enterprise SSO session. Explain this prerequisite during
 setup and when returning an already-enabled issuer. A configured vendor grant

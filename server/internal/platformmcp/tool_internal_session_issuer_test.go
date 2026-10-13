@@ -27,6 +27,8 @@ func TestInternalSessionIssuerToolContract(t *testing.T) {
 	require.Equal(t, externalOnly, d.Meta.Audiences)
 	require.True(t, d.Annotations.ReadOnlyHint)
 	require.Empty(t, reg.For(AudienceAssistant))
+	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "Google Workspace connected through enterprise SAML or OIDC qualifies")
+	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "personal Google or other social sign-in alone is insufficient")
 }
 
 func TestInternalSessionIssuerToolStates(t *testing.T) {
