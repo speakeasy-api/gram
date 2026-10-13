@@ -49,7 +49,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isSignalsIntelligenceEnabled =
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
-  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
   const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
   const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
@@ -83,9 +82,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         projectId,
       },
       { route: routes.identities, scope: observe },
-      ...(agentManagementFlag.status === "enabled"
-        ? [{ route: routes.agents, scope: [] }]
-        : []),
+      { route: routes.agents, scope: [] },
       ...(userSessionsFlag.status === "enabled"
         ? [
             {
@@ -159,7 +156,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     ];
   }, [
     routes,
-    agentManagementFlag.status,
     userSessionsFlag.status,
     projectId,
     isAssistantsEnabled,

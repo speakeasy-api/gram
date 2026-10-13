@@ -101,7 +101,6 @@ beforeEach(() => {
     data: { signalsIntelligenceEnabled: false },
   };
   testState.featureFlags = {
-    [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
     [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
     [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
@@ -131,21 +130,11 @@ describe("useProjectNavRoutes", () => {
     expect(visible()).toBe(false);
   });
 
-  it.each(["loading", "disabled", "missing", "error"] as const)(
-    "hides agent management when its rollout is %s",
-    (status) => {
-      testState.featureFlags[FEATURE_FLAGS.agentManagement] = { status };
-      const { result } = renderHook(() => useProjectNavRoutes());
-      expect(
-        result.current.some((entry) => entry.route === routes.agents),
-      ).toBe(false);
-    },
-  );
-
-  it("includes sessions and remote providers in project navigation", () => {
+  it("includes agents, sessions and remote providers in project navigation", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     expect(result.current.map((entry) => entry.route)).toEqual(
       expect.arrayContaining([
+        routes.agents,
         routes.mcpSessions,
         routes.remoteIdentityProviders,
       ]),
@@ -235,7 +224,6 @@ describe("useProjectNavRoutes", () => {
     "preserves opt-in and opt-out navigation while flags are %s",
     (status) => {
       testState.featureFlags = {
-        [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
         [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
         [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
@@ -274,7 +262,6 @@ describe("useProjectNavRoutes", () => {
 
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
-      [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
       [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
       [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },

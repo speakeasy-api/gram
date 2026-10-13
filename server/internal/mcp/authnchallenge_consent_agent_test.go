@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -48,9 +47,6 @@ func newAgentConsentFixture(t *testing.T, ctx context.Context, ti *testInstance)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-
-	ti.features.SetFlag(feature.FlagAgentManagement, authCtx.ActiveOrganizationID, true)
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, true)
 
 	stateID := uuid.NewString()
 	csrf := "csrf-" + uuid.NewString()
@@ -374,27 +370,4 @@ func TestConsentAgentSelectionRejectsLegacyAuthorizerWithoutProvenance(t *testin
 	require.Empty(t, w.Header().Get("Location"))
 	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
 	require.NoError(t, err, "legacy-state rejection must not consume the challenge")
-}
-
-func TestConsentAgentSelectionFailsClosedWhenRolloutDisabled(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	fx := newAgentConsentFixture(t, ctx, ti)
-	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
-	agent := createConsentAgent(t, ctx, ti, fx, "Hidden agent")
-	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
-
-	w := serveAgentConsentGet(t, ctx, ti, fx)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NotContains(t, w.Body.String(), "Authorize as")
-	require.NotContains(t, w.Body.String(), agent.Name)
-
-	w, err := serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
-	require.Error(t, err)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeForbidden, shareable.Code)
-	require.Empty(t, w.Header().Get("Location"))
 }

@@ -755,7 +755,7 @@ func TestConsentTemplateAgentSelectionShowsFixedPolicyAndSetupOnly(t *testing.T)
 }
 
 // TestConsentTemplateAgentSelectionWithoutEligibleAgents pins the degenerate
-// rollout state: the picker is omitted (no agent_id control at all) and only
+// state: the picker is omitted (no agent_id control at all) and only
 // the pointer to Agent management renders.
 func TestConsentTemplateAgentSelectionWithoutEligibleAgents(t *testing.T) {
 	t.Parallel()
