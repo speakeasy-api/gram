@@ -333,6 +333,11 @@ func mcpRuntimeFlags() []cli.Flag {
 		pluginPublicationEmitFlag(),
 		platformHostsCLIFlag(),
 		&cli.StringFlag{
+			Name:    "google-userinfo-url",
+			Usage:   "Google OpenID Connect userinfo endpoint used to confirm a Google sign-in's Workspace domain. Leave unset in production.",
+			EnvVars: []string{"GRAM_GOOGLE_USERINFO_URL"},
+		},
+		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},

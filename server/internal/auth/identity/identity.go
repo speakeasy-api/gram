@@ -67,6 +67,7 @@ type AuthenticateResult struct {
 	OrganizationID string // WorkOS org ID the user selected during auth (may be empty)
 	// AuthenticationMethod is WorkOS's method for this sign-in, e.g. "SSO".
 	AuthenticationMethod string
+	Evidence             SignInEvidence
 	User                 AuthenticatedUser
 	impersonatorEmail    string
 }
@@ -114,7 +115,8 @@ type IDPUserInfo struct {
 	WorkOSSessionID string  `json:"-"`
 	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
 	// AuthenticationMethod is WorkOS's method for this sign-in, e.g. "SSO".
-	AuthenticationMethod string `json:"-"`
+	AuthenticationMethod string         `json:"-"`
+	Evidence             SignInEvidence `json:"-"`
 	impersonatorEmail    string
 }
 
@@ -259,6 +261,7 @@ func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 		WorkOSSessionID:      extractSessionIDFromJWT(resp.AccessToken),
 		OrganizationID:       resp.OrganizationID,
 		AuthenticationMethod: resp.AuthenticationMethod,
+		Evidence:             resp.Evidence,
 		impersonatorEmail:    resp.impersonatorEmail,
 	}
 }

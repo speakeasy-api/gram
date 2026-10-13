@@ -1,5 +1,5 @@
-// Package ssosignins records the SSO sign-ins that authorize MCP grants and
-// judges whether a grant still traces to a current, revocable one.
+// Package ssosignins records the sign-ins that authorize MCP grants and judges
+// whether a grant still traces to a current, revocable one of an accepted tier.
 package ssosignins
 
 import (
@@ -20,14 +20,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// MaxAge is the default bound on how long after its SSO sign-in a grant may
-// still be vouched for.
+// MaxAge is the longest any sign-in can back a grant: the SSO tier's bound.
 // TODO: prune revoked and expired sso_sign_ins rows (retention sweep follow-up).
 const MaxAge = 7 * 24 * time.Hour
-
-// MethodSSO is the WorkOS authentication method of an enterprise SSO sign-in,
-// the only one that qualifies.
-const MethodSSO = "SSO"
 
 // RevokeReason records why a sign-in was revoked.
 type RevokeReason string
@@ -49,7 +44,10 @@ const (
 	ReasonNotLinked            Reason = "not_linked"
 	ReasonNotUserSubject       Reason = "not_user_subject"
 	ReasonSignInRevoked        Reason = "sign_in_revoked"
-	ReasonNotSSO               Reason = "not_sso"
+	ReasonMethodNotEligible    Reason = "sign_in_method_not_eligible"
+	ReasonUnmanagedAccount     Reason = "unmanaged_account"
+	ReasonMFARequired          Reason = "mfa_required"
+	ReasonMethodNotAllowed     Reason = "sign_in_method_not_allowed"
 	ReasonExpired              Reason = "expired"
 	ReasonOrganizationDisabled Reason = "organization_disabled"
 	ReasonNotMember            Reason = "not_member"
@@ -62,6 +60,8 @@ type Identity struct {
 	UserID   string
 	Email    string
 	SignInID uuid.UUID
+	// Tier is the sign-in tier that backs the identity, e.g. TierSSO.
+	Tier string
 }
 
 // Result is the outcome of CheckSignInIdentity: Identity is set only when
@@ -80,7 +80,20 @@ type RecordParams struct {
 	UserID               string
 	WorkOSSessionID      string
 	AuthenticationMethod string
+	Evidence             Evidence
 	AuthenticatedAt      time.Time
+}
+
+// Evidence is what the identity provider vouched for at sign-in, beyond the
+// method itself.
+type Evidence struct {
+	// MFAVerified is set when a password sign-in completed a second factor.
+	MFAVerified bool
+	// HostedDomain is the domain a social provider says manages the account:
+	// the Google Workspace hosted domain or a Microsoft work account's UPN domain.
+	HostedDomain string
+	// TenantID is a Microsoft account's Entra tenant.
+	TenantID string
 }
 
 // Recorded is the sign-in a code exchange resolved to. A revoked row is still
@@ -105,6 +118,9 @@ func Record(ctx context.Context, db repo.DBTX, p RecordParams) (Recorded, error)
 		UserID:               p.UserID,
 		WorkosSessionID:      p.WorkOSSessionID,
 		AuthenticationMethod: p.AuthenticationMethod,
+		MfaVerified:          p.Evidence.MFAVerified,
+		IdpHostedDomain:      conv.ToPGTextEmpty(p.Evidence.HostedDomain),
+		IdpTenantID:          conv.ToPGTextEmpty(p.Evidence.TenantID),
 		AuthenticatedAt:      pgtype.Timestamptz{Time: p.AuthenticatedAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	switch {
@@ -158,10 +174,10 @@ func SignInForSession(ctx context.Context, db repo.DBTX, organizationID, userID,
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
-// CheckSignInIdentity judges whether an MCP grant traces to a current SSO
-// sign-in whose user Speakeasy may vouch for in organizationID. maxAge <= 0
-// uses MaxAge. A grant without a recorded sign-in is ineligible, never an
-// error.
+// CheckSignInIdentity judges whether an MCP grant traces to a current sign-in
+// whose user Speakeasy may vouch for in organizationID. The sign-in's tier sets
+// how old it may be; a positive maxAge can only shorten that. A grant without a
+// recorded sign-in is ineligible, never an error.
 func CheckSignInIdentity(ctx context.Context, db repo.DBTX, organizationID string, userSessionID uuid.UUID, now time.Time, maxAge time.Duration) (Result, error) {
 	row, err := repo.New(db).GetSignInEligibility(ctx, repo.GetSignInEligibilityParams{
 		OrganizationID:    organizationID,
@@ -174,9 +190,6 @@ func CheckSignInIdentity(ctx context.Context, db repo.DBTX, organizationID strin
 		return Result{Reason: ReasonSessionNotFound, Identity: nil}, nil
 	case err != nil:
 		return Result{Reason: ReasonSessionNotFound, Identity: nil}, fmt.Errorf("get sign-in eligibility: %w", err)
-	}
-	if maxAge <= 0 {
-		maxAge = MaxAge
 	}
 	return judge(row, now, maxAge), nil
 }
@@ -200,7 +213,7 @@ func CheckConsentIdentity(ctx context.Context, db repo.DBTX, organizationID, use
 	if err != nil {
 		return Result{Reason: ReasonNotLinked, Identity: nil}, fmt.Errorf("get consent sign-in eligibility: %w", err)
 	}
-	return judge(row, now, MaxAge), nil
+	return judge(row, now, 0), nil
 }
 
 func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration) Result {
@@ -215,11 +228,20 @@ func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration
 	if row.SubjectUrn != urn.NewUserSubject(userID).String() {
 		return reject(ReasonNotUserSubject)
 	}
-	switch {
-	case row.RevokedAt.Valid:
+	if row.RevokedAt.Valid {
 		return reject(ReasonSignInRevoked)
-	case row.AuthenticationMethod.String != MethodSSO:
-		return reject(ReasonNotSSO)
+	}
+	tier, reason := classify(row)
+	if reason != ReasonEligible {
+		return reject(reason)
+	}
+	if !tierAllowed(tier, row) {
+		return reject(ReasonMethodNotAllowed)
+	}
+	if limit := TierMaxAge(tier); maxAge <= 0 || maxAge > limit {
+		maxAge = limit
+	}
+	switch {
 	case !row.AuthenticatedAt.Valid || now.Sub(row.AuthenticatedAt.Time) > maxAge:
 		return reject(ReasonExpired)
 	case row.OrganizationDisabledAt.Valid:
@@ -233,7 +255,7 @@ func judge(row repo.GetSignInEligibilityRow, now time.Time, maxAge time.Duration
 	if !emailOnDomain(email, row.VerifiedDomains) {
 		return reject(ReasonEmailDomain)
 	}
-	return Result{Reason: ReasonEligible, Identity: &Identity{UserID: userID, Email: email, SignInID: row.SignInID.UUID}}
+	return Result{Reason: ReasonEligible, Identity: &Identity{UserID: userID, Email: email, SignInID: row.SignInID.UUID, Tier: tier}}
 }
 
 func emailOnDomain(email string, verified []string) bool {

@@ -85,6 +85,8 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /user_management/authenticate", h.handleWorkosAuthenticate)
 	mux.HandleFunc("POST /user_management/sessions/revoke", h.handleWorkosRevokeSession)
 	mux.HandleFunc("GET /user_management/users/{id}", h.handleWorkosGetUser)
+	mux.HandleFunc("GET /user_management/users/{id}/auth_factors", h.handleWorkosListAuthFactors)
+	mux.HandleFunc("GET /google/userinfo", h.handleGoogleUserInfo)
 	mux.HandleFunc("GET /user_management/users", h.handleWorkosListUsers)
 
 	mux.HandleFunc("GET /organizations/{id}", h.handleWorkosGetOrganization)
@@ -290,6 +292,9 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 		resp["authentication_method"] = "MagicAuth"
 	} else if method := authenticationMethod(); method != "" {
 		resp["authentication_method"] = method
+		if tokens := oauthTokens(method, user.Email); tokens != nil {
+			resp["oauth_tokens"] = tokens
+		}
 	}
 	if orgID != "" {
 		resp["organization_id"] = orgID

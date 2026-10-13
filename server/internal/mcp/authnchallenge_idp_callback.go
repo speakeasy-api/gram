@@ -337,6 +337,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			UserID:                 gramUserID,
 			WorkOSSessionID:        idpUser.WorkOSSessionID,
 			AuthenticationMethod:   idpUser.AuthenticationMethod,
+			Evidence:               ssosignins.Evidence{MFAVerified: idpUser.Evidence.MFAVerified, HostedDomain: idpUser.Evidence.HostedDomain, TenantID: idpUser.Evidence.TenantID},
 			Impersonated:           impersonated,
 			AuthenticatedAt:        authenticatedAt,
 		}

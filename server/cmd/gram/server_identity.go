@@ -82,7 +82,7 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	if umClient == nil {
 		return nil, fmt.Errorf("failed to create IDP user management client: idp-client-secret is required")
 	}
-	idpClient := identity.NewWorkOSAdapter(umClient)
+	idpClient := identity.NewWorkOSAdapter(umClient).WithGoogleUserInfoURL(c.String("google-userinfo-url"))
 	productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 
 	growth := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)

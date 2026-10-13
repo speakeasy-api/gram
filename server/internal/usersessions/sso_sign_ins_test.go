@@ -66,12 +66,18 @@ func setVerifiedDomains(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 
 func (f ssoFixture) recordSignIn(t *testing.T, ctx context.Context, method string, at time.Time) uuid.UUID {
 	t.Helper()
+	return f.recordSignInWith(t, ctx, method, ssosignins.Evidence{MFAVerified: false, HostedDomain: "", TenantID: ""}, at)
+}
+
+func (f ssoFixture) recordSignInWith(t *testing.T, ctx context.Context, method string, evidence ssosignins.Evidence, at time.Time) uuid.UUID {
+	t.Helper()
 
 	id, err := ssosignins.Record(ctx, f.ti.conn, ssosignins.RecordParams{
 		OrganizationID:       f.orgID,
 		UserID:               f.userID,
 		WorkOSSessionID:      "session_" + uuid.NewString(),
 		AuthenticationMethod: method,
+		Evidence:             evidence,
 		AuthenticatedAt:      at,
 	})
 	require.NoError(t, err)
@@ -109,6 +115,22 @@ func (f ssoFixture) linkedSession(t *testing.T, ctx context.Context, method stri
 	return f.seedSession(t, ctx, urn.NewUserSubject(f.userID), uuid.NullUUID{UUID: signIn, Valid: true})
 }
 
+func (f ssoFixture) linkedSessionWith(t *testing.T, ctx context.Context, method string, evidence ssosignins.Evidence, at time.Time) repo.UserSession {
+	t.Helper()
+	signIn := f.recordSignInWith(t, ctx, method, evidence, at)
+	return f.seedSession(t, ctx, urn.NewUserSubject(f.userID), uuid.NullUUID{UUID: signIn, Valid: true})
+}
+
+func (f ssoFixture) limitSignInMethods(t *testing.T, ctx context.Context, tiers ...string) {
+	t.Helper()
+	require.NoError(t, testrepo.New(f.ti.conn).SeedInternalSessionIssuerSignInMethodsFixture(ctx, testrepo.SeedInternalSessionIssuerSignInMethodsFixtureParams{
+		OrganizationID:       f.orgID,
+		Issuer:               "https://issuer.example.com/oauth/idp/org/" + f.orgID,
+		AllowedSignInMethods: tiers,
+		Name:                 conv.ToPGText("issuer-" + uuid.NewString()[:8]),
+	}))
+}
+
 func (f ssoFixture) check(t *testing.T, ctx context.Context, orgID string, sessionID uuid.UUID) ssosignins.Result {
 	t.Helper()
 	result, err := ssosignins.CheckSignInIdentity(ctx, f.ti.conn, orgID, sessionID, time.Now(), 0)
@@ -129,6 +151,45 @@ func TestCheckSignInIdentity_EligibleSSOSignIn(t *testing.T) {
 	require.Equal(t, session.SsoSignInID.UUID, result.Identity.SignInID)
 }
 
+func TestCheckSignInIdentity_AcceptsEachTierByDefault(t *testing.T) {
+	t.Parallel()
+
+	none := ssosignins.Evidence{MFAVerified: false, HostedDomain: "", TenantID: ""}
+	for _, tc := range []struct {
+		name     string
+		method   string
+		evidence ssosignins.Evidence
+		tier     string
+	}{
+		{name: "sso", method: ssosignins.MethodSSO, evidence: none, tier: ssosignins.TierSSO},
+		{name: "google workspace", method: ssosignins.MethodGoogleOAuth, evidence: ssosignins.Evidence{MFAVerified: false, HostedDomain: "example.com", TenantID: ""}, tier: ssosignins.TierGoogle},
+		{name: "microsoft work account", method: ssosignins.MethodMicrosoftOAuth, evidence: ssosignins.Evidence{MFAVerified: false, HostedDomain: "example.com", TenantID: "tenant-1"}, tier: ssosignins.TierMicrosoft},
+		{name: "magic link", method: ssosignins.MethodMagicAuth, evidence: none, tier: ssosignins.TierMagicLink},
+		{name: "password with mfa", method: ssosignins.MethodPassword, evidence: ssosignins.Evidence{MFAVerified: true, HostedDomain: "", TenantID: ""}, tier: ssosignins.TierPasswordMFA},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, f := newSSOFixture(t)
+			session := f.linkedSessionWith(t, ctx, tc.method, tc.evidence, time.Now())
+			result := f.check(t, ctx, f.orgID, session.ID)
+			require.True(t, result.Eligible(), result.Reason)
+			require.Equal(t, tc.tier, result.Identity.Tier)
+		})
+	}
+}
+
+func TestCheckSignInIdentity_HonoursTheTiersTheAdminKept(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSSOFixture(t)
+	f.limitSignInMethods(t, ctx, ssosignins.TierSSO, ssosignins.TierMagicLink)
+	require.True(t, f.check(t, ctx, f.orgID, f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now()).ID).Eligible())
+	require.True(t, f.check(t, ctx, f.orgID, f.linkedSession(t, ctx, ssosignins.MethodMagicAuth, time.Now()).ID).Eligible())
+	password := f.linkedSessionWith(t, ctx, ssosignins.MethodPassword, ssosignins.Evidence{MFAVerified: true, HostedDomain: "", TenantID: ""}, time.Now())
+	require.Equal(t, ssosignins.ReasonMethodNotAllowed, f.check(t, ctx, f.orgID, password.ID).Reason)
+}
+
 func TestCheckSignInIdentity_RejectsEachFailedRequirement(t *testing.T) {
 	t.Parallel()
 
@@ -141,9 +202,22 @@ func TestCheckSignInIdentity_RejectsEachFailedRequirement(t *testing.T) {
 			t.Helper()
 			return f.orgID, f.seedSession(t, ctx, urn.NewUserSubject(f.userID), uuid.NullUUID{UUID: uuid.Nil, Valid: false}).ID
 		}},
-		{name: "magic auth sign-in", want: ssosignins.ReasonNotSSO, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+		{name: "password sign-in without mfa", want: ssosignins.ReasonMFARequired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()
-			return f.orgID, f.linkedSession(t, ctx, "MagicAuth", time.Now()).ID
+			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodPassword, time.Now()).ID
+		}},
+		{name: "personal google account on the company email", want: ssosignins.ReasonUnmanagedAccount, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+			t.Helper()
+			return f.orgID, f.linkedSessionWith(t, ctx, ssosignins.MethodGoogleOAuth, ssosignins.Evidence{MFAVerified: false, HostedDomain: "", TenantID: ""}, time.Now()).ID
+		}},
+		{name: "magic link older than its tier allows", want: ssosignins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+			t.Helper()
+			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodMagicAuth, time.Now().Add(-5*time.Hour)).ID
+		}},
+		{name: "tier turned off by the admin", want: ssosignins.ReasonMethodNotAllowed, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
+			t.Helper()
+			f.limitSignInMethods(t, ctx, ssosignins.TierSSO)
+			return f.orgID, f.linkedSession(t, ctx, ssosignins.MethodMagicAuth, time.Now()).ID
 		}},
 		{name: "sign-in older than the maximum age", want: ssosignins.ReasonExpired, prepare: func(t *testing.T, ctx context.Context, f ssoFixture) (string, uuid.UUID) {
 			t.Helper()

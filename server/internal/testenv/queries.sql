@@ -1921,3 +1921,22 @@ SELECT count(*)
 FROM sso_sign_in_revocation_deliveries
 WHERE organization_id = @organization_id
   AND delivered_at IS NULL;
+
+-- name: SeedInternalSessionIssuerSignInMethodsFixture :exec
+-- Plants an organization's internal session issuer limited to the given
+-- sign-in tiers, skipping the KMS provisioning the real enable performs.
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES (@organization_id, 'gcp_iam', @name || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT @organization_id, credential.id, 'gcp_kms', 'RS256', @name || '-key' FROM credential
+    RETURNING id
+), key_set AS (
+    INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+    SELECT @organization_id, key.id, @name FROM key
+    RETURNING id
+)
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id, allowed_sign_in_methods)
+SELECT @organization_id, @issuer, key_set.id, @allowed_sign_in_methods::text[] FROM key_set;

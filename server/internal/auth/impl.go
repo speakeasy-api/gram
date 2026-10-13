@@ -430,6 +430,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		UserID:                 userID,
 		WorkOSSessionID:        idpUser.WorkOSSessionID,
 		AuthenticationMethod:   idpUser.AuthenticationMethod,
+		Evidence:               ssosignins.Evidence{MFAVerified: idpUser.Evidence.MFAVerified, HostedDomain: idpUser.Evidence.HostedDomain, TenantID: idpUser.Evidence.TenantID},
 		Impersonated:           idpUser.ImpersonatorEmail() != "",
 		AuthenticatedAt:        authenticatedAt,
 	})

@@ -43,6 +43,9 @@ INSERT INTO sso_sign_ins (
     user_id,
     workos_session_id,
     authentication_method,
+    mfa_verified,
+    idp_hosted_domain,
+    idp_tenant_id,
     authenticated_at,
     revoked_at,
     revoke_reason
@@ -52,6 +55,9 @@ SELECT
     @user_id,
     @workos_session_id,
     @authentication_method,
+    @mfa_verified::boolean,
+    sqlc.narg('idp_hosted_domain')::text,
+    sqlc.narg('idp_tenant_id')::text,
     auth.at,
     CASE WHEN fence.fenced THEN clock_timestamp() END,
     CASE WHEN fence.fenced THEN 'cutoff' END
@@ -103,10 +109,15 @@ SELECT
     si.id AS sign_in_id,
     si.user_id AS sign_in_user_id,
     si.authentication_method,
+    si.mfa_verified,
+    si.idp_hosted_domain,
+    si.idp_tenant_id,
     si.authenticated_at,
     si.revoked_at,
     u.email AS user_email,
     om.verified_domains,
+    (isi.allowed_sign_in_methods IS NULL)::boolean AS all_sign_in_methods_allowed,
+    COALESCE(isi.allowed_sign_in_methods, '{}'::text[])::text[] AS allowed_sign_in_methods,
     om.disabled_at AS organization_disabled_at,
     EXISTS (
         SELECT 1
@@ -140,6 +151,9 @@ LEFT JOIN users AS u
     ON u.id = si.user_id
    AND u.deleted_at IS NULL
    AND u.workos_deleted_at IS NULL
+LEFT JOIN internal_session_issuers AS isi
+    ON isi.organization_id = @organization_id
+   AND isi.deleted IS FALSE
 ;
 
 -- name: LockSSOSignInsBySession :many

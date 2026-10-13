@@ -229,10 +229,15 @@ SELECT
     si.id AS sign_in_id,
     si.user_id AS sign_in_user_id,
     si.authentication_method,
+    si.mfa_verified,
+    si.idp_hosted_domain,
+    si.idp_tenant_id,
     si.authenticated_at,
     si.revoked_at,
     u.email AS user_email,
     om.verified_domains,
+    (isi.allowed_sign_in_methods IS NULL)::boolean AS all_sign_in_methods_allowed,
+    COALESCE(isi.allowed_sign_in_methods, '{}'::text[])::text[] AS allowed_sign_in_methods,
     om.disabled_at AS organization_disabled_at,
     EXISTS (
         SELECT 1
@@ -266,6 +271,9 @@ LEFT JOIN users AS u
     ON u.id = si.user_id
    AND u.deleted_at IS NULL
    AND u.workos_deleted_at IS NULL
+LEFT JOIN internal_session_issuers AS isi
+    ON isi.organization_id = $1
+   AND isi.deleted IS FALSE
 `
 
 type GetSignInEligibilityParams struct {
@@ -276,20 +284,25 @@ type GetSignInEligibilityParams struct {
 }
 
 type GetSignInEligibilityRow struct {
-	UserSessionID          uuid.UUID
-	SubjectUrn             string
-	SsoSignInID            uuid.NullUUID
-	SessionLive            bool
-	SignInID               uuid.NullUUID
-	SignInUserID           pgtype.Text
-	AuthenticationMethod   pgtype.Text
-	AuthenticatedAt        pgtype.Timestamptz
-	RevokedAt              pgtype.Timestamptz
-	UserEmail              pgtype.Text
-	VerifiedDomains        []string
-	OrganizationDisabledAt pgtype.Timestamptz
-	IsMember               bool
-	IsDeprovisioned        bool
+	UserSessionID           uuid.UUID
+	SubjectUrn              string
+	SsoSignInID             uuid.NullUUID
+	SessionLive             bool
+	SignInID                uuid.NullUUID
+	SignInUserID            pgtype.Text
+	AuthenticationMethod    pgtype.Text
+	MfaVerified             pgtype.Bool
+	IdpHostedDomain         pgtype.Text
+	IdpTenantID             pgtype.Text
+	AuthenticatedAt         pgtype.Timestamptz
+	RevokedAt               pgtype.Timestamptz
+	UserEmail               pgtype.Text
+	VerifiedDomains         []string
+	AllSignInMethodsAllowed bool
+	AllowedSignInMethods    []string
+	OrganizationDisabledAt  pgtype.Timestamptz
+	IsMember                bool
+	IsDeprovisioned         bool
 }
 
 // Both runtime grants and pre-grant consent use one set of identity checks.
@@ -310,10 +323,15 @@ func (q *Queries) GetSignInEligibility(ctx context.Context, arg GetSignInEligibi
 		&i.SignInID,
 		&i.SignInUserID,
 		&i.AuthenticationMethod,
+		&i.MfaVerified,
+		&i.IdpHostedDomain,
+		&i.IdpTenantID,
 		&i.AuthenticatedAt,
 		&i.RevokedAt,
 		&i.UserEmail,
 		&i.VerifiedDomains,
+		&i.AllSignInMethodsAllowed,
+		&i.AllowedSignInMethods,
 		&i.OrganizationDisabledAt,
 		&i.IsMember,
 		&i.IsDeprovisioned,
@@ -680,7 +698,7 @@ func (q *Queries) RevokeUserSessionsForUserSignIns(ctx context.Context, arg Revo
 const upsertSSOSignIn = `-- name: UpsertSSOSignIn :one
 WITH auth AS (
     SELECT LEAST(
-        $5::timestamptz,
+        $8::timestamptz,
         COALESCE(
             (
                 SELECT min(prior.authenticated_at)
@@ -699,7 +717,7 @@ WITH auth AS (
                   AND prior.user_id = $2
                   AND prior.workos_session_id = $3
             ),
-            $5::timestamptz
+            $8::timestamptz
         )
     ) AS at
 ),
@@ -717,6 +735,9 @@ INSERT INTO sso_sign_ins (
     user_id,
     workos_session_id,
     authentication_method,
+    mfa_verified,
+    idp_hosted_domain,
+    idp_tenant_id,
     authenticated_at,
     revoked_at,
     revoke_reason
@@ -726,6 +747,9 @@ SELECT
     $2,
     $3,
     $4,
+    $5::boolean,
+    $6::text,
+    $7::text,
     auth.at,
     CASE WHEN fence.fenced THEN clock_timestamp() END,
     CASE WHEN fence.fenced THEN 'cutoff' END
@@ -741,6 +765,9 @@ type UpsertSSOSignInParams struct {
 	UserID               string
 	WorkosSessionID      string
 	AuthenticationMethod string
+	MfaVerified          bool
+	IdpHostedDomain      pgtype.Text
+	IdpTenantID          pgtype.Text
 	AuthenticatedAt      pgtype.Timestamptz
 }
 
@@ -760,6 +787,9 @@ func (q *Queries) UpsertSSOSignIn(ctx context.Context, arg UpsertSSOSignInParams
 		arg.UserID,
 		arg.WorkosSessionID,
 		arg.AuthenticationMethod,
+		arg.MfaVerified,
+		arg.IdpHostedDomain,
+		arg.IdpTenantID,
 		arg.AuthenticatedAt,
 	)
 	var i UpsertSSOSignInRow

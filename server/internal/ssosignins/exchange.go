@@ -36,6 +36,7 @@ type ExchangeParams struct {
 	UserID                 string
 	WorkOSSessionID        string
 	AuthenticationMethod   string
+	Evidence               Evidence
 	Impersonated           bool
 	// AuthenticatedAt is when the exchange started, so a revocation that
 	// lands while it is in flight fences it out.
@@ -87,6 +88,7 @@ func RecordExchange(ctx context.Context, logger *slog.Logger, db repo.DBTX, p Ex
 		UserID:               p.UserID,
 		WorkOSSessionID:      p.WorkOSSessionID,
 		AuthenticationMethod: p.AuthenticationMethod,
+		Evidence:             p.Evidence,
 		AuthenticatedAt:      authenticatedAt(p.AuthenticatedAt),
 	})
 	switch {

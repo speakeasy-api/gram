@@ -4560,6 +4560,43 @@ func (q *Queries) SeedDelegationLoaderOrganizationFixture(ctx context.Context, a
 	return err
 }
 
+const seedInternalSessionIssuerSignInMethodsFixture = `-- name: SeedInternalSessionIssuerSignInMethodsFixture :exec
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES ($1, 'gcp_iam', $4 || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT $1, credential.id, 'gcp_kms', 'RS256', $4 || '-key' FROM credential
+    RETURNING id
+), key_set AS (
+    INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+    SELECT $1, key.id, $4 FROM key
+    RETURNING id
+)
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id, allowed_sign_in_methods)
+SELECT $1, $2, key_set.id, $3::text[] FROM key_set
+`
+
+type SeedInternalSessionIssuerSignInMethodsFixtureParams struct {
+	OrganizationID       string
+	Issuer               string
+	AllowedSignInMethods []string
+	Name                 pgtype.Text
+}
+
+// Plants an organization's internal session issuer limited to the given
+// sign-in tiers, skipping the KMS provisioning the real enable performs.
+func (q *Queries) SeedInternalSessionIssuerSignInMethodsFixture(ctx context.Context, arg SeedInternalSessionIssuerSignInMethodsFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedInternalSessionIssuerSignInMethodsFixture,
+		arg.OrganizationID,
+		arg.Issuer,
+		arg.AllowedSignInMethods,
+		arg.Name,
+	)
+	return err
+}
+
 const seedJsonWebKeySetFixture = `-- name: SeedJsonWebKeySetFixture :one
 WITH credential AS (
     INSERT INTO external_credentials (organization_id, provider, name)

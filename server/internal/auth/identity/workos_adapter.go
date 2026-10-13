@@ -11,7 +11,8 @@ import (
 // IDPClient (for identity) and sessions.SessionRevoker (for sessions),
 // translating between Speakeasy's slim interfaces and the SDK's richer types.
 type WorkOSAdapter struct {
-	client *usermanagement.Client
+	client            *usermanagement.Client
+	googleUserInfoURL string
 }
 
 // NewWorkOSAdapter creates an adapter from a WorkOS SDK client.
@@ -20,7 +21,16 @@ func NewWorkOSAdapter(client *usermanagement.Client) *WorkOSAdapter {
 	if client == nil {
 		return nil
 	}
-	return &WorkOSAdapter{client: client}
+	return &WorkOSAdapter{client: client, googleUserInfoURL: DefaultGoogleUserInfoURL}
+}
+
+// WithGoogleUserInfoURL points Google hosted-domain lookups elsewhere, e.g. at
+// the dev-idp locally. Empty keeps Google's endpoint.
+func (a *WorkOSAdapter) WithGoogleUserInfoURL(url string) *WorkOSAdapter {
+	if a != nil && url != "" {
+		a.googleUserInfoURL = url
+	}
+	return a
 }
 
 func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code string) (*AuthenticateResult, error) {
@@ -44,6 +54,7 @@ func (a *WorkOSAdapter) AuthenticateWithCode(ctx context.Context, clientID, code
 		AccessToken:          resp.AccessToken,
 		OrganizationID:       resp.OrganizationID,
 		AuthenticationMethod: string(resp.AuthenticationMethod),
+		Evidence:             a.signInEvidence(ctx, resp),
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,
@@ -89,6 +100,7 @@ func (a *WorkOSAdapter) AuthenticateWithMagicAuth(ctx context.Context, clientID,
 		AccessToken:          resp.AccessToken,
 		OrganizationID:       resp.OrganizationID,
 		AuthenticationMethod: string(resp.AuthenticationMethod),
+		Evidence:             SignInEvidence{MFAVerified: false, HostedDomain: "", TenantID: ""},
 		User: AuthenticatedUser{
 			ID:                resp.User.ID,
 			FirstName:         resp.User.FirstName,
