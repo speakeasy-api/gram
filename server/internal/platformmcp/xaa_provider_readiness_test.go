@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -37,11 +38,13 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagEMAProviders, f.organizationID, true)
+	flags.SetFlag(feature.FlagOktaConnections, f.organizationID, true)
 	speakeasy := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: internal.ID, Unavailable: ""}
 	governor := selectedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, selection: remotesessions.EMAProviderSelection{VendorIssuer: "https://as-a.example.test", IsDefault: false, Provider: speakeasy}, selected: true}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	// No Okta connections reader: the organization has no Okta connection.
-	service := NewPostgresReader(testenv.NewLogger(t), conn).WithXAAReadiness(nil, nil, flags).WithXAAIdentityChaining(governor, nil).WithAuthorization(engine).xaaReadiness
+	// The Okta rollout is on but the organization has no Okta connection.
+	okta := &xaaReaderStub{err: oops.C(oops.CodeFailedPrecondition)}
+	service := NewPostgresReader(testenv.NewLogger(t), conn).WithXAAReadiness(okta, nil, flags).WithXAAIdentityChaining(governor, nil).WithAuthorization(engine).xaaReadiness
 	require.NotNil(t, service)
 
 	user := "user-" + uuid.NewString()
@@ -64,6 +67,7 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	require.True(t, output.IdentityChaining.Served)
 	require.Equal(t, string(remotesessions.EMAProviderSpeakeasy), output.IdentityChaining.Provider.Kind)
 	require.Len(t, output.IdentityChaining.Bindings, 1)
+	require.Equal(t, 1, okta.calls, "the Okta reader reported no connection before the fallback")
 
 	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin}), f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
@@ -74,6 +78,11 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	requireXAARefusal(t, result, "not_found")
 
 	flags.SetFlag(feature.FlagEMAProviders, f.organizationID, false)
+	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
+	require.NoError(t, err)
+	requireXAARefusal(t, result, "setup_required")
+
+	flags.SetFlag(feature.FlagOktaConnections, f.organizationID, false)
 	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
 	requireXAARefusal(t, result, unavailableCode)
