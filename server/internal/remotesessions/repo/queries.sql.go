@@ -5582,7 +5582,7 @@ SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.gran
     AND c.internal_session_issuer_id = $5::uuid
     AND c.internal_session_issuer_updated_at = $6::timestamptz
     AND c.internal_session_issuer_key_id = $7::uuid
-    AND c.sso_sign_in_id = $8::uuid
+    AND c.sign_in_id = $8::uuid
     AND c.user_session_id = $9::uuid
     AND c.access_token_encrypted IS NOT NULL
     AND c.access_expires_at > $10::timestamptz
@@ -5611,7 +5611,7 @@ type GetSpeakeasyEMACredentialForUseParams struct {
 	InternalSessionIssuerID        uuid.UUID
 	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
 	InternalSessionIssuerKeyID     uuid.UUID
-	SsoSignInID                    uuid.UUID
+	SignInID                       uuid.UUID
 	UserSessionID                  uuid.UUID
 	UsableAfter                    pgtype.Timestamptz
 	OrganizationID                 string
@@ -5640,7 +5640,7 @@ func (q *Queries) GetSpeakeasyEMACredentialForUse(ctx context.Context, arg GetSp
 		arg.InternalSessionIssuerID,
 		arg.InternalSessionIssuerUpdatedAt,
 		arg.InternalSessionIssuerKeyID,
-		arg.SsoSignInID,
+		arg.SignInID,
 		arg.UserSessionID,
 		arg.UsableAfter,
 		arg.OrganizationID,
@@ -5663,11 +5663,11 @@ func (q *Queries) GetSpeakeasyEMACredentialForUse(ctx context.Context, arg GetSp
 }
 
 const getSpeakeasyEMAGrant = `-- name: GetSpeakeasyEMAGrant :one
-SELECT s.id, s.sso_sign_in_id
+SELECT s.id, s.sign_in_id
 FROM user_sessions AS s
 JOIN user_session_issuers AS i ON i.id = s.user_session_issuer_id
 JOIN projects AS p ON p.id = $1::uuid AND p.organization_id = s.organization_id AND p.deleted IS FALSE
-WHERE s.sso_sign_in_id IS NOT NULL AND s.jti = $2 AND s.organization_id = $3
+WHERE s.sign_in_id IS NOT NULL AND s.jti = $2 AND s.organization_id = $3
   AND s.user_session_issuer_id = $4
   AND (s.project_id IS NULL OR s.project_id = p.id)
   AND s.subject_urn = $5 AND s.deleted IS FALSE
@@ -5684,8 +5684,8 @@ type GetSpeakeasyEMAGrantParams struct {
 }
 
 type GetSpeakeasyEMAGrantRow struct {
-	ID          uuid.UUID
-	SsoSignInID uuid.NullUUID
+	ID       uuid.UUID
+	SignInID uuid.NullUUID
 }
 
 // Only the exact authenticated MCP grant may supply SSO provenance.
@@ -5698,7 +5698,7 @@ func (q *Queries) GetSpeakeasyEMAGrant(ctx context.Context, arg GetSpeakeasyEMAG
 		arg.SubjectUrn,
 	)
 	var i GetSpeakeasyEMAGrantRow
-	err := row.Scan(&i.ID, &i.SsoSignInID)
+	err := row.Scan(&i.ID, &i.SignInID)
 	return i, err
 }
 
@@ -10628,7 +10628,7 @@ func (q *Queries) LockSpeakeasyEMAKeySet(ctx context.Context, arg LockSpeakeasyE
 }
 
 const lockSpeakeasyEMASignIn = `-- name: LockSpeakeasyEMASignIn :one
-SELECT id FROM sso_sign_ins
+SELECT id FROM sign_ins
 WHERE id = $1 AND organization_id = $2
 FOR SHARE
 `
@@ -14764,7 +14764,7 @@ DO UPDATE SET
   internal_session_issuer_id = NULL,
   internal_session_issuer_updated_at = NULL,
   internal_session_issuer_key_id = NULL,
-  sso_sign_in_id = NULL,
+  sign_in_id = NULL,
   user_session_id = NULL,
   organization_id = EXCLUDED.organization_id,
   remote_session_issuer_id = EXCLUDED.remote_session_issuer_id,
@@ -14975,7 +14975,7 @@ INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
   ema_provider, internal_session_issuer_id, internal_session_issuer_updated_at, internal_session_issuer_key_id,
-  sso_sign_in_id, user_session_id, requested_scopes, granted_scopes, access_token_encrypted,
+  sign_in_id, user_session_id, requested_scopes, granted_scopes, access_token_encrypted,
   access_expires_at, downstream_refresh_token_observed, last_used_at
 )
 SELECT $1::text, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
@@ -15008,7 +15008,7 @@ DO UPDATE SET
   internal_session_issuer_id = EXCLUDED.internal_session_issuer_id,
   internal_session_issuer_updated_at = EXCLUDED.internal_session_issuer_updated_at,
   internal_session_issuer_key_id = EXCLUDED.internal_session_issuer_key_id,
-  sso_sign_in_id = EXCLUDED.sso_sign_in_id,
+  sign_in_id = EXCLUDED.sign_in_id,
   user_session_id = EXCLUDED.user_session_id,
   requested_scopes = EXCLUDED.requested_scopes,
   granted_scopes = EXCLUDED.granted_scopes,
@@ -15033,7 +15033,7 @@ type UpsertSpeakeasyEMACredentialParams struct {
 	InternalSessionIssuerID        uuid.UUID
 	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
 	InternalSessionIssuerKeyID     uuid.UUID
-	SsoSignInID                    uuid.UUID
+	SignInID                       uuid.UUID
 	UserSessionID                  uuid.UUID
 	RequestedScopes                []string
 	GrantedScopes                  []string
@@ -15058,7 +15058,7 @@ func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSp
 		arg.InternalSessionIssuerID,
 		arg.InternalSessionIssuerUpdatedAt,
 		arg.InternalSessionIssuerKeyID,
-		arg.SsoSignInID,
+		arg.SignInID,
 		arg.UserSessionID,
 		arg.RequestedScopes,
 		arg.GrantedScopes,

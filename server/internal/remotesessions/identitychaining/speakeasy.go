@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -72,7 +72,7 @@ func (s speakeasySource) authorize(ctx context.Context, logger *slog.Logger, req
 		logger.ErrorContext(ctx, "read authenticated EMA grant", attr.SlogError(err))
 		return newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
 	}
-	result, err := ssosignins.CheckSignInIdentity(ctx, s.g.db, req.OrganizationID, grant.ID, s.g.now(), ssosignins.MaxAge)
+	result, err := signins.CheckSignInIdentity(ctx, s.g.db, req.OrganizationID, grant.ID, s.g.now(), signins.MaxAge)
 	if err != nil {
 		logger.ErrorContext(ctx, "check EMA sign-in", attr.SlogError(err))
 		return newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
@@ -82,7 +82,7 @@ func (s speakeasySource) authorize(ctx context.Context, logger *slog.Logger, req
 }
 
 func (s speakeasySource) checkConsent(ctx context.Context, logger *slog.Logger, req Request, sel selection, signInID uuid.UUID) Outcome {
-	result, err := ssosignins.CheckConsentIdentity(ctx, s.g.db, req.OrganizationID, req.UserID, signInID, s.g.now())
+	result, err := signins.CheckConsentIdentity(ctx, s.g.db, req.OrganizationID, req.UserID, signInID, s.g.now())
 	if err != nil {
 		logger.ErrorContext(ctx, "check EMA consent sign-in", attr.SlogError(err))
 		return newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
@@ -90,7 +90,7 @@ func (s speakeasySource) checkConsent(ctx context.Context, logger *slog.Logger, 
 	return s.authorizeIdentity(ctx, logger, req, &sel, result)
 }
 
-func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Logger, req Request, sel *selection, result ssosignins.Result) Outcome {
+func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Logger, req Request, sel *selection, result signins.Result) Outcome {
 	if !result.Eligible() || result.Identity.UserID != req.UserID {
 		return newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
 	}
@@ -194,7 +194,7 @@ func (c *Chainer) checkSpeakeasyPublish(ctx context.Context, tx pgx.Tx, req Requ
 		}
 		return fmt.Errorf("lock EMA issuer: %w", err)
 	}
-	result, err := ssosignins.CheckSignInIdentity(ctx, tx, req.OrganizationID, sel.userSessionID, c.now(), ssosignins.MaxAge)
+	result, err := signins.CheckSignInIdentity(ctx, tx, req.OrganizationID, sel.userSessionID, c.now(), signins.MaxAge)
 	if err != nil {
 		return fmt.Errorf("recheck EMA sign-in: %w", err)
 	}

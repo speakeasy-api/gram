@@ -107,8 +107,8 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	owner := s.newResourceDisplayOwner(endpoint)
 	display, _ := issuerCardBranding(*client, owner.ownsOrFallsBack(ctx, logger, *client), s.serverURL)
 	signInID := uuid.Nil
-	if challengeState.SSOSignInID != nil {
-		signInID = *challengeState.SSOSignInID
+	if challengeState.SignInID != nil {
+		signInID = *challengeState.SignInID
 	}
 	result := s.checkIdentityChaining(ctx, requests, display, signInID)
 

@@ -20474,7 +20474,7 @@ paths:
                 name: Logout
     /rpc/auth.logoutEverywhere:
         post:
-            description: 'Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their SSO sign-ins in every organization, and revokes every MCP grant made from them.'
+            description: 'Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.'
             operationId: logoutEverywhere
             parameters:
                 - allowEmptyValue: true
@@ -48383,7 +48383,7 @@ paths:
                 name: RevokeInvite
     /rpc/organizations.revokeMemberSignIns:
         post:
-            description: Revoke a member's SSO sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
+            description: Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
             operationId: revokeOrganizationMemberSignIns
             parameters:
                 - allowEmptyValue: true
@@ -109586,7 +109586,7 @@ components:
                     format: int64
                 revoked_sign_ins:
                     type: integer
-                    description: Number of SSO sign-ins revoked.
+                    description: Number of sign-ins revoked.
                     format: int64
             description: What a sign-in revocation revoked.
             required:

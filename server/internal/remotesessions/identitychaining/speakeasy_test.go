@@ -32,7 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
@@ -93,7 +93,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	var key jose.JSONWebKey
 	require.NoError(t, key.UnmarshalJSON(status.ActiveKey.PublicJwk))
 	require.NoError(t, orgrepo.New(f.db).SetVerifiedDomains(ctx, orgrepo.SetVerifiedDomainsParams{ID: f.req.OrganizationID, VerifiedDomains: []string{"example.test"}}))
-	signIn, err := ssosignins.Record(ctx, f.db, ssosignins.RecordParams{OrganizationID: f.req.OrganizationID, UserID: f.req.UserID, WorkOSSessionID: uuid.NewString(), AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now().Add(-time.Minute)})
+	signIn, err := signins.Record(ctx, f.db, signins.RecordParams{OrganizationID: f.req.OrganizationID, UserID: f.req.UserID, WorkOSSessionID: uuid.NewString(), AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now().Add(-time.Minute)})
 	require.NoError(t, err)
 	f.req.UserSessionJTI = uuid.NewString()
 
@@ -130,7 +130,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 		calls.Add(1)
 		fail := func(err error) { exchangeErrors <- err; http.Error(w, "invalid test exchange", http.StatusBadRequest) }
 		if revokeDuringExchange.Load() {
-			if _, err := ssosignins.RevokeUser(ctx, f.db, []string{f.req.OrganizationID}, f.req.UserID, ssosignins.RevokeReasonAdmin); err != nil {
+			if _, err := signins.RevokeUser(ctx, f.db, []string{f.req.OrganizationID}, f.req.UserID, signins.RevokeReasonAdmin); err != nil {
 				fail(fmt.Errorf("revoke during exchange: %w", err))
 				return
 			}
@@ -225,14 +225,14 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 	wrongConsent := preGrant
 	wrongConsent.OrganizationID = "another-organization"
 	require.NotEqual(t, ReasonConsentRequired, chainer.CheckConsent(ctx, wrongConsent, signIn.ID.UUID).Reason)
-	wrongOrg, err := ssosignins.CheckConsentIdentity(ctx, f.db, "another-organization", f.req.UserID, signIn.ID.UUID, time.Now())
+	wrongOrg, err := signins.CheckConsentIdentity(ctx, f.db, "another-organization", f.req.UserID, signIn.ID.UUID, time.Now())
 	require.NoError(t, err)
 	require.False(t, wrongOrg.Eligible())
 	wrongConsent = preGrant
 	wrongConsent.UserID = "another-user"
 	require.Equal(t, ReasonReauthenticationRequired, chainer.CheckConsent(ctx, wrongConsent, signIn.ID.UUID).Reason)
 	require.Equal(t, ReasonReauthenticationRequired, chainer.CheckConsent(ctx, preGrant, uuid.Nil).Reason)
-	_, err = usersessionsrepo.New(f.db).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{UserSessionIssuerID: f.req.UserSessionIssuerID, SubjectUrn: urn.NewUserSubject(f.req.UserID), Jti: f.req.UserSessionJTI, RefreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), ExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), SsoSignInID: signIn.ID, SsoSignInUserID: conv.ToPGText(f.req.UserID)})
+	_, err = usersessionsrepo.New(f.db).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{UserSessionIssuerID: f.req.UserSessionIssuerID, SubjectUrn: urn.NewUserSubject(f.req.UserID), Jti: f.req.UserSessionJTI, RefreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), ExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), SignInID: signIn.ID, SignInUserID: conv.ToPGText(f.req.UserID)})
 	require.NoError(t, err)
 	token, outcome := chainer.Acquire(ctx, f.req)
 	checkExchange()

@@ -102,7 +102,7 @@ func (c *Chainer) publish(ctx context.Context, logger *slog.Logger, req Request,
 			RemoteSessionIssuerID: sel.remoteIssuerID, RemoteSessionClientID: sel.clientID, Resource: sel.resource,
 			SubjectUrn: urn.NewUserSubject(req.UserID).String(), BindingID: sel.bindingID, BindingGeneration: sel.generation,
 			InternalSessionIssuerID: sel.provider.InternalSessionIssuerID, InternalSessionIssuerUpdatedAt: conv.ToPGTimestamptz(sel.internalIssuerVersion),
-			InternalSessionIssuerKeyID: sel.internalKeyID, SsoSignInID: sel.signInID, UserSessionID: sel.userSessionID,
+			InternalSessionIssuerKeyID: sel.internalKeyID, SignInID: sel.signInID, UserSessionID: sel.userSessionID,
 			RequestedScopes: storedScopes(sel.scopes), GrantedScopes: storedScopes(cred.grantedScopes), AccessTokenEncrypted: encrypted,
 			AccessExpiresAt: conv.ToPGTimestamptz(cred.expiresAt), DownstreamRefreshTokenObserved: cred.refreshObserved,
 		})
@@ -161,7 +161,7 @@ func readCredential(ctx context.Context, q *repo.Queries, req Request, sel selec
 		RemoteSessionClientID: uuid.NullUUID{UUID: sel.clientID, Valid: true}, Resource: sel.resource, SubjectUrn: urn.NewUserSubject(req.UserID).String(),
 		BindingID: sel.bindingID, BindingGeneration: sel.generation, RequestedScopes: storedScopes(sel.scopes), UsableAfter: conv.ToPGTimestamptz(now.Add(accessExpirySkew)),
 		InternalSessionIssuerID: sel.provider.InternalSessionIssuerID, InternalSessionIssuerUpdatedAt: conv.ToPGTimestamptz(sel.internalIssuerVersion),
-		InternalSessionIssuerKeyID: sel.internalKeyID, SsoSignInID: sel.signInID, UserSessionID: sel.userSessionID,
+		InternalSessionIssuerKeyID: sel.internalKeyID, SignInID: sel.signInID, UserSessionID: sel.userSessionID,
 	})
 	if err != nil {
 		return repo.GetEMACredentialForUseRow(r), fmt.Errorf("read Speakeasy EMA credential: %w", err)
