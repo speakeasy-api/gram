@@ -115,7 +115,9 @@ func TestNewLakeStorageEmulatedPubSubWithoutMappingDisablesLake(t *testing.T) {
 }
 
 func TestNewLakeStorageEmulatedPubSubWithMappingUsesGCS(t *testing.T) {
-	t.Parallel()
+	// The storage emulator host lets the GCS client build without application
+	// default credentials. It is never dialled here.
+	t.Setenv("STORAGE_EMULATOR_HOST", "localhost:9023")
 	flags := flag.NewFlagSet("lake", flag.ContinueOnError)
 	flags.String("environment", "dev", "")
 	flags.String("storage-buckets", `{"lake":"preview-lake"}`, "")
@@ -123,11 +125,7 @@ func TestNewLakeStorageEmulatedPubSubWithMappingUsesGCS(t *testing.T) {
 	c := cli.NewContext(cli.NewApp(), flags, nil)
 
 	store, buckets, shutdown, err := newLakeStorage(t.Context(), testenv.NewLogger(t), c)
-	if err != nil {
-		// Creating a GCS client needs application default credentials.
-		require.ErrorContains(t, err, "create lake GCS client")
-		return
-	}
+	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, shutdown(t.Context())) })
 	require.IsType(t, &storage.GCSStore{}, store)
 	require.Equal(t, "preview-lake", buckets["lake"])
