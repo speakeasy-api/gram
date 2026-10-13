@@ -108,7 +108,7 @@ function HorizontalStepper({
               </span>
               <span
                 className={cn(
-                  "hidden text-sm font-medium sm:inline",
+                  "sr-only text-sm font-medium sm:not-sr-only sm:inline",
                   isCurrent ? "text-foreground" : "text-muted-foreground",
                 )}
               >

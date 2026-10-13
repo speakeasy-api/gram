@@ -148,8 +148,11 @@ export function ToolDecisionsSection({
     assistant: routes.shadowAI.assistants.detail,
     local_model: routes.shadowAI.models.detail,
   };
+  // The decide sheet words its form and picks its write path from the
+  // policy set's disposition, so no MCP decision is offered until that set
+  // is known: a failed read must not pass for "no policy".
   const mcpReady =
-    (policiesQuery.isError || !!policiesQuery.data) &&
+    !!policiesQuery.data &&
     (membersQuery.isError || !!membersQuery.data) &&
     (rolesQuery.isError || !!rolesQuery.data);
   const toggle = (key: string) =>
@@ -159,7 +162,7 @@ export function ToolDecisionsSection({
     <Card>
       <SectionHeader
         title="Tool decisions"
-        description="Approve or disallow each tool. A disallowed tool is refused when it connects to the MCP gateway; a disallowed MCP server is refused on every tool call."
+        description="Approve or disallow each tool. A disallowed tool is refused when it connects to the MCP gateway; a disallowed MCP server is refused on every tool call. Harness and assistant decisions apply across the organization; this policy's audience scopes MCP server decisions only."
       />
       <PostureNote policy={policy} />
       <div className="divide-border border divide-y">
@@ -205,7 +208,12 @@ export function ToolDecisionsSection({
           />
           {expanded[MCP_GROUP_KEY] ? (
             <div className="border-border border-t px-4 py-4">
-              {mcpReady ? (
+              {policiesQuery.isError ? (
+                <Text small muted className="block py-2">
+                  The project's policies could not be loaded, so MCP server
+                  decisions are unavailable. Reload to try again.
+                </Text>
+              ) : mcpReady ? (
                 <ShadowMCPInventoryTable
                   members={membersQuery.data?.members ?? []}
                   onOpenServer={(server) =>

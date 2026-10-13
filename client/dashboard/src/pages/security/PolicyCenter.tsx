@@ -1008,9 +1008,12 @@ function PolicyCenterContent() {
       )
     : "";
 
+  const shadowAIBanner = (
+    <ShadowAIDecisionsBanner policies={data?.policies ?? []} />
+  );
   let policiesBody = (
     <>
-      <ShadowAIDecisionsBanner policies={data?.policies ?? []} />
+      {shadowAIBanner}
       <Table
         columns={policyColumns}
         data={policyRows}
@@ -1035,7 +1038,14 @@ function PolicyCenterContent() {
       </div>
     );
   } else if (policyRows.length === 0) {
-    policiesBody = policiesEmptyState;
+    // The banner's "Set up Shadow AI" matters most here, where no policy
+    // exists yet.
+    policiesBody = (
+      <>
+        {shadowAIBanner}
+        {policiesEmptyState}
+      </>
+    );
   }
 
   const activeQuarantines = quarantinesData?.quarantines ?? [];

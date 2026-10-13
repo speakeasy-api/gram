@@ -15,14 +15,17 @@ export function countUndecidedAITools(
   }).length;
 }
 
-/** Servers nobody has approved or denied: no review on file, or one that is
- *  still waiting on a decision. */
+/** Servers nobody has approved or denied: no review on file, or a request
+ *  still waiting with no earlier decision standing behind it. A reopened
+ *  request keeps enforcing its prior decision until re-decided, so it is not
+ *  part of the backlog. */
 export function countUndecidedMCPServers(
   servers: readonly ShadowMCPInventoryServer[],
 ): number {
   return servers.filter(
     (server) =>
       matchesReviewFilter(server, "none") ||
-      matchesReviewFilter(server, "requested"),
+      (matchesReviewFilter(server, "requested") &&
+        server.approvalRequest?.standingDecision === undefined),
   ).length;
 }

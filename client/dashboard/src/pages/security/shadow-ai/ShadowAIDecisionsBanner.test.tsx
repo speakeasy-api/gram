@@ -7,7 +7,14 @@ import { ShadowAIDecisionsBanner } from "./ShadowAIDecisionsBanner";
 
 const mocks = vi.hoisted(() => ({
   flag: { status: "enabled" } as { status: string },
-  count: { aiTools: 6, mcpServers: 3, total: 9, isPending: false },
+  count: {
+    aiTools: 6,
+    mcpServers: 3,
+    total: 9,
+    isPending: false,
+    isError: false,
+    truncated: false,
+  },
 }));
 
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -51,7 +58,14 @@ describe("ShadowAIDecisionsBanner", () => {
   afterEach(() => {
     cleanup();
     mocks.flag = { status: "enabled" };
-    mocks.count = { aiTools: 6, mcpServers: 3, total: 9, isPending: false };
+    mocks.count = {
+      aiTools: 6,
+      mcpServers: 3,
+      total: 9,
+      isPending: false,
+      isError: false,
+      truncated: false,
+    };
   });
 
   it("points at the Shadow AI policy when one exists", () => {
@@ -80,14 +94,41 @@ describe("ShadowAIDecisionsBanner", () => {
     );
   });
 
-  it("stays out of the way with nothing to decide, or with the fold-in off", () => {
-    mocks.count = { aiTools: 0, mcpServers: 0, total: 0, isPending: false };
+  it("stays out of the way with nothing to decide", () => {
+    mocks.count = { ...mocks.count, aiTools: 0, mcpServers: 0, total: 0 };
     const { container } = renderBanner([shadowAIPolicy("allow_all")]);
     expect(container.textContent).toBe("");
+  });
 
-    cleanup();
+  it("stays out of the way with the fold-in off, backlog or not", () => {
     mocks.flag = { status: "disabled" };
-    const off = renderBanner([shadowAIPolicy("allow_all")]);
-    expect(off.container.textContent).toBe("");
+    const { container } = renderBanner([shadowAIPolicy("allow_all")]);
+    expect(container.textContent).toBe("");
+  });
+
+  it("shows nothing when a count could not be read, rather than a zero", () => {
+    mocks.count = { ...mocks.count, isError: true };
+    const { container } = renderBanner([shadowAIPolicy("allow_all")]);
+    expect(container.textContent).toBe("");
+  });
+
+  it("reports a floor when the inventory has more pages", () => {
+    mocks.count = { ...mocks.count, truncated: true };
+    renderBanner([shadowAIPolicy("allow_all")]);
+
+    expect(
+      screen.getByText("At least 9 AI tools without a decision in Shadow AI"),
+    ).toBeTruthy();
+  });
+
+  it("opens a mixed blocking policy without promising a decisions list", () => {
+    renderBanner([
+      { ...shadowAIPolicy("block_all"), sources: ["shadow_mcp", "gitleaks"] },
+    ]);
+
+    expect(screen.getByText(/also runs other detectors/)).toBeTruthy();
+    expect(screen.getByText("Open policy").getAttribute("href")).toBe(
+      "/guardrails/policy-ta",
+    );
   });
 });

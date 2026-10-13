@@ -34,10 +34,14 @@ function AIToolDecisionControl({
   const queryClient = useQueryClient();
   const current = aiToolDecisionOf(detection);
   const mutation = useSetAIToolDecisionMutation({
-    onSuccess: () => {
-      void invalidateAllAiDetections(queryClient);
-      void invalidateAllAiDetectionUsers(queryClient);
-    },
+    // Returned so `isPending` holds until the rows refetch: `current` is
+    // read from the row, and a press before the refetch would act on the
+    // decision that was just replaced.
+    onSuccess: () =>
+      Promise.all([
+        invalidateAllAiDetections(queryClient),
+        invalidateAllAiDetectionUsers(queryClient),
+      ]),
     onError: () => {
       toast.error(
         `The decision for ${detection.displayName} could not be saved. Try again.`,
