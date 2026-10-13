@@ -1,5 +1,4 @@
 import { Card } from "@/components/ui/Card";
-import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
@@ -77,9 +76,6 @@ const SHADOW_AI_SOURCES = ["shadow_mcp"];
  *  someone denies it. The disposition cannot change after create. */
 const SHADOW_AI_DISPOSITION: ShadowMCPDisposition = "allow_all";
 
-const SHADOW_AI_ACTION_LOCK_REASON =
-  "A Shadow AI policy refuses denied tools when they connect. To log Shadow MCP traffic without refusing it, create a Built-in policy with the Shadow MCP detector instead.";
-
 type AudienceType = "everyone" | "targeted";
 
 function audienceTypeOf(policy: RiskPolicy | null): AudienceType {
@@ -105,7 +101,8 @@ function dispositionLabel(disposition: ShadowMCPDisposition): string {
 }
 
 /** The Scope step: who the policy applies to, what a refused user sees, and
- *  how severe its findings are. The action is not a choice here. */
+ *  how severe its findings are. The action is fixed, so it is not shown here;
+ *  the Review step names it. */
 function ShadowAIScopeStep({
   audienceType,
   setAudienceType,
@@ -140,17 +137,12 @@ function ShadowAIScopeStep({
             Audience applies to MCP server enforcement. Harness and assistant
             decisions apply to everyone in the organization.
           </Text>
-          <div className="space-y-1">
-            <Label className="text-sm font-medium">Action</Label>
-            <Text small>Deny the request</Text>
-            <Text small muted>
-              {SHADOW_AI_ACTION_LOCK_REASON}
-            </Text>
-          </div>
           <ActionMessageField
             action="block"
             userMessage={userMessage}
             setUserMessage={setUserMessage}
+            label="Message shown when a server is refused"
+            description="Shown to the user when a call to a denied MCP server is refused. Harness refusals at sign-in use the gateway's own message."
           />
         </Stack>
       </Card>

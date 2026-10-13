@@ -271,7 +271,7 @@ describe("ShadowAIPolicyEditor", () => {
     expect(mocks.goToDetail).not.toHaveBeenCalled();
   });
 
-  it("scopes the audience to MCP enforcement and keeps the action fixed", () => {
+  it("scopes the audience to MCP enforcement and names the refusal message", () => {
     mocks.step = "scope";
     renderEditor(null);
 
@@ -279,8 +279,12 @@ describe("ShadowAIPolicyEditor", () => {
     expect(
       screen.getByText(/Audience applies to MCP server enforcement/),
     ).toBeTruthy();
-    expect(screen.getByText("Deny the request")).toBeTruthy();
-    expect(screen.getByText("Block message")).toBeTruthy();
+    expect(
+      screen.getByText("Message shown when a server is refused"),
+    ).toBeTruthy();
+    expect(screen.getByText(/Harness refusals at sign-in/)).toBeTruthy();
+    expect(screen.queryByText("Deny the request")).toBeNull();
+    expect(screen.getByText("Severity")).toBeTruthy();
   });
 
   it("counts the drafted decisions on the review step", () => {

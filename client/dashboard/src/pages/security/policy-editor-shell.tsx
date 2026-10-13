@@ -515,15 +515,20 @@ export function ActionStep({
   );
 }
 
-/** The message a user sees when an interrupting action fires. */
+/** The message a user sees when an interrupting action fires. The label and
+ *  hint follow the action unless an editor has something more exact to say. */
 export function ActionMessageField({
   action,
   userMessage,
   setUserMessage,
+  label = POLICY_ACTION_MESSAGE[action].label,
+  description = POLICY_ACTION_MESSAGE[action].description,
 }: {
   action: Exclude<PolicyAction, "flag">;
   userMessage: string;
   setUserMessage: React.Dispatch<React.SetStateAction<string>>;
+  label?: string;
+  description?: string;
 }): JSX.Element {
   return (
     <div className="space-y-2">
@@ -531,11 +536,9 @@ export function ActionMessageField({
         className="text-sm font-medium"
         htmlFor={POLICY_ACTION_MESSAGE_FIELD_ID}
       >
-        {POLICY_ACTION_MESSAGE[action].label}
+        {label}
       </Label>
-      <p className="text-muted-foreground text-xs">
-        {POLICY_ACTION_MESSAGE[action].description}
-      </p>
+      <p className="text-muted-foreground text-xs">{description}</p>
       <TextArea
         id={POLICY_ACTION_MESSAGE_FIELD_ID}
         value={userMessage}
