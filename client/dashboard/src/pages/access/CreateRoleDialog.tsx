@@ -14,8 +14,6 @@ import {
 } from "@/components/ui/Sheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
@@ -214,15 +212,10 @@ export function CreateRoleDialog({
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
-  const agentManagementEnabled =
-    useFeatureFlag(FEATURE_FLAGS.agentManagement).status === "enabled";
-  // throwOnError is off because the agents service answers 404 (and 403 for
-  // callers without agent:read) when the rollout is off for the organization,
-  // and the global query policy only suppresses 401 and 403. The agent picker
-  // is optional here, so on any error it shows no agents instead of taking the
-  // role editor down.
+  // The agent picker is optional here, so on any error (including 403 for
+  // callers without agent:read) it shows no agents instead of taking the role
+  // editor down.
   const { data: agentsData } = useAgents(undefined, undefined, {
-    enabled: agentManagementEnabled,
     throwOnError: false,
   });
   // Suspended and revoked agents keep the roles they hold but cannot be given
@@ -678,10 +671,8 @@ export function CreateRoleDialog({
                 ? Array.from(selectedMembers)
                 : undefined,
             // Agent membership is declarative: an agent has no other surface
-            // to be taken off a role on. Preserve it when the rollout is unavailable.
-            ...(agentManagementEnabled
-              ? { agentIds: Array.from(selectedAgents) }
-              : {}),
+            // to be taken off a role on.
+            agentIds: Array.from(selectedAgents),
           },
         },
       });
@@ -696,7 +687,7 @@ export function CreateRoleDialog({
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
                 : undefined,
-            ...(agentManagementEnabled && selectedAgents.size > 0
+            ...(selectedAgents.size > 0
               ? { agentIds: Array.from(selectedAgents) }
               : {}),
           },
@@ -1137,7 +1128,7 @@ export function CreateRoleDialog({
             {/* ─── Assign Agents ─────────────────────────────────────
                 Not gated on SCIM: a directory syncs people, never agents,
                 so this is the only place an agent's roles are decided. */}
-            {agentManagementEnabled && !hideAssignments && (
+            {!hideAssignments && (
               <div className="border-border border-t pt-4 pb-4">
                 <button
                   type="button"

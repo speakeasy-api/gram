@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -238,39 +237,6 @@ func TestApplyIssuerGate_WorkloadSessionRefusedWhenItsIssuerIsDeleted(t *testing
 	require.NoError(t, err, "the workload must be admitted before the delete, or the refusal below proves nothing")
 
 	softDeleteWorkloadIssuer(t, ctx, ti, fx.orgID, issuerID)
-
-	w = httptest.NewRecorder()
-	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
-}
-
-// The agent authorization rollout gates workload sessions exactly as it gates
-// agent sessions. The gate answers a refused bearer with a re-auth challenge
-// either way, so the refusal surfaces as unauthorized.
-func TestApplyIssuerGate_WorkloadSessionHiddenWhenAgentRolloutDisabled(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	fx := newAgentConsentFixture(t, ctx, ti)
-	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
-	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
-
-	issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
-	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, agent.ID)
-
-	subject := urn.NewWorkloadSubject(issuerID, workloadSessionSubject)
-	session := seedWorkloadSession(t, ctx, ti, fx, subject)
-	endpoint := workloadSessionEndpoint(fx)
-	token := mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
-
-	w := httptest.NewRecorder()
-	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
-	require.NoError(t, err, "the workload must be admitted while the rollout is on, or the refusal below proves nothing")
-
-	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
 
 	w = httptest.NewRecorder()
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), endpoint)
