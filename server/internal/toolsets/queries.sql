@@ -107,7 +107,7 @@ SET
   , mcp_enabled = COALESCE(@mcp_enabled, mcp_enabled)
   , tool_selection_mode = COALESCE(@tool_selection_mode, tool_selection_mode)
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: DeleteToolset :one
@@ -305,7 +305,7 @@ UPDATE toolsets
 SET
     user_session_issuer_id = @user_session_issuer_id
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: UpdateToolsetToolVariationsGroup :one
@@ -313,7 +313,7 @@ UPDATE toolsets
 SET
     tool_variations_group_id = @tool_variations_group_id
   , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
+WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: ClearToolsetOAuthServers :one
@@ -425,3 +425,8 @@ WHERE t.project_id = @project_id
 -- name: DeleteAssistantToolsetsByToolset :exec
 DELETE FROM assistant_toolsets
 WHERE toolset_id = @toolset_id AND project_id = @project_id;
+
+-- name: GetToolsetByIDIncludingDeletedFixture :one
+SELECT *
+FROM toolsets
+WHERE id = @id AND project_id = @project_id;
