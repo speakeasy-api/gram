@@ -184,7 +184,9 @@ function EnterpriseIssuerContent({ ssoFeatureEnabled }: Props): JSX.Element {
       </div>
       <ConfirmDialog
         open={action === "disable"}
-        onOpenChange={(open) => !open && chooseAction(null)}
+        onOpenChange={(open) => {
+          if (!open) chooseAction(null);
+        }}
         title="Disable enterprise authorization?"
         confirmLabel="Disable"
         pendingLabel="Disabling…"
@@ -203,7 +205,9 @@ function EnterpriseIssuerContent({ ssoFeatureEnabled }: Props): JSX.Element {
       />
       <ConfirmDialog
         open={action === "rotate"}
-        onOpenChange={(open) => !open && chooseAction(null)}
+        onOpenChange={(open) => {
+          if (!open) chooseAction(null);
+        }}
         title="Rotate the signing key?"
         confirmLabel="Rotate key"
         pendingLabel="Preparing key…"

@@ -24,8 +24,8 @@ describe("OverridesFields", () => {
         scopeOverride=""
         audienceOverride=""
         issuerScopeOverride={["admin", "offline_access"]}
-        onScopeOverrideChange={vi.fn()}
-        onAudienceOverrideChange={vi.fn()}
+        onScopeOverrideChange={vi.fn<(value: string) => void>()}
+        onAudienceOverrideChange={vi.fn<(value: string) => void>()}
       />,
     );
     expect(
