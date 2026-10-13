@@ -218,7 +218,8 @@ type AiScanTarget struct {
 	Customized bool
 	// The organization's access decision for the target, computed with the same
 	// rules the AI detections carry: unreviewed when nothing is recorded, and
-	// never enforceable without a verifiable gateway matcher.
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
 	Access *types.AIToolAccessSummary
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string

@@ -2330,7 +2330,8 @@ type AiScanTargetResponseBody struct {
 	Customized *bool `form:"customized,omitempty" json:"customized,omitempty" xml:"customized,omitempty"`
 	// The organization's access decision for the target, computed with the same
 	// rules the AI detections carry: unreviewed when nothing is recorded, and
-	// never enforceable without a verifiable gateway matcher.
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
 	Access *AIToolAccessSummaryResponseBody `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -7298,9 +7299,6 @@ func ValidateAiScanTargetResponseBody(body *AiScanTargetResponseBody) (err error
 	}
 	if body.Customized == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("customized", "body"))
-	}
-	if body.Access == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("access", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.id", *body.ID, "^[a-z0-9][a-z0-9-]{0,63}$"))

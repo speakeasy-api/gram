@@ -2695,7 +2695,9 @@ func unmarshalAiScanTargetResponseBodyToAgentAiScanTarget(v *AiScanTargetRespons
 	}
 	res.Signatures = unmarshalAiScanTargetSignaturesResponseBodyToAgentAiScanTargetSignatures(v.Signatures)
 	res.GatewayClient = unmarshalAiScanTargetGatewayClientResponseBodyToAgentAiScanTargetGatewayClient(v.GatewayClient)
-	res.Access = unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v.Access)
+	if v.Access != nil {
+		res.Access = unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v.Access)
+	}
 
 	return res
 }
@@ -2750,6 +2752,9 @@ func unmarshalAiScanTargetGatewayClientResponseBodyToAgentAiScanTargetGatewayCli
 // value of type *types.AIToolAccessSummary from a value of type
 // *AIToolAccessSummaryResponseBody.
 func unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(v *AIToolAccessSummaryResponseBody) *types.AIToolAccessSummary {
+	if v == nil {
+		return nil
+	}
 	res := &types.AIToolAccessSummary{
 		State:       *v.State,
 		Decision:    *v.Decision,

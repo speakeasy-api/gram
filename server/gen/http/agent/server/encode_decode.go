@@ -2512,6 +2512,9 @@ func marshalAgentAiScanTargetGatewayClientToAiScanTargetGatewayClientResponseBod
 // value of type *AIToolAccessSummaryResponseBody from a value of type
 // *types.AIToolAccessSummary.
 func marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(v *types.AIToolAccessSummary) *AIToolAccessSummaryResponseBody {
+	if v == nil {
+		return nil
+	}
 	res := &AIToolAccessSummaryResponseBody{
 		State:       v.State,
 		Decision:    v.Decision,

@@ -88325,7 +88325,6 @@ components:
                 - gateway_client
                 - origin
                 - customized
-                - access
         AiScanTargetGatewayClient:
             type: object
             properties:
