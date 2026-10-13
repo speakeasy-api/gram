@@ -400,7 +400,7 @@ describe("IdentityProviderStep domain verification", () => {
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        "No domain verification detected yet. Finish setup in the WorkOS tab, then try again.",
+        "Domain not verified yet. Finish setup in the WorkOS tab, then try again.",
       ),
     );
     expect(refetch).toHaveBeenCalledOnce();
@@ -555,7 +555,7 @@ describe("IdentityProviderStep failure feedback", () => {
     fireEvent.click(verify);
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        "No directory sync detected yet. Finish setup in the WorkOS tab, then try again.",
+        "Directory sync not detected yet. Finish setup in the WorkOS tab, then try again.",
       ),
     );
   });

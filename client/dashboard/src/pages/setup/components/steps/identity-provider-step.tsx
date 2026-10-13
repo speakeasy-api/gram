@@ -109,12 +109,23 @@ function StatusUnavailableAlert({
 
 type PortalIntent = "domain_verification" | "sso" | "dsync";
 
-// Names the thing being set up in the middle of a sentence, so one message
-// shape covers all three portal round trips.
-const PORTAL_NOUN: Record<PortalIntent, string> = {
-  domain_verification: "domain verification",
-  sso: "single sign-on",
-  dsync: "directory sync",
+// `noun` names the thing being set up mid-sentence, so the messages that only
+// differ by subject share one shape. `missing` is spelled out per intent
+// instead: "No domain verification detected yet" is the wrong sentence for a
+// step whose whole job is verifying, and these three already read well.
+const PORTAL_COPY: Record<PortalIntent, { noun: string; missing: string }> = {
+  domain_verification: {
+    noun: "domain verification",
+    missing: "Domain not verified yet.",
+  },
+  sso: {
+    noun: "single sign-on",
+    missing: "SSO connection not detected yet.",
+  },
+  dsync: {
+    noun: "directory sync",
+    missing: "Directory sync not detected yet.",
+  },
 };
 
 const CONFIGURED_KEY: Record<
@@ -135,7 +146,7 @@ const CONFIGURED_KEY: Record<
  * missing.
  */
 function usePortalSetup(intent: PortalIntent) {
-  const noun = PORTAL_NOUN[intent];
+  const { noun, missing } = PORTAL_COPY[intent];
   const [portalOpened, setPortalOpened] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
@@ -202,9 +213,7 @@ function usePortalSetup(intent: PortalIntent) {
         return;
       }
       if (result.data[CONFIGURED_KEY[intent]]) return;
-      toast.error(
-        `No ${noun} detected yet. Finish setup in the WorkOS tab, then try again.`,
-      );
+      toast.error(`${missing} Finish setup in the WorkOS tab, then try again.`);
     } finally {
       setVerifying(false);
     }
