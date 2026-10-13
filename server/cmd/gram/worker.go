@@ -860,20 +860,22 @@ func newWorkerCommand() *cli.Command {
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every
 			// workflow; issuers fail closed meanwhile.
-			callbackOrigins, err := callbackOriginsFromCLI(c, serverURL, c.String("environment"), platformHosts)
+			outboundOrigin, err := outboundCallbackOriginFromCLI(c, serverURL, c.String("environment"), platformHosts)
 			var issuerProvisioner *identityproviderconnections.Provisioner
 			if err != nil {
 				logger.ErrorContext(ctx, "invalid outbound callback origin; internal session issuer key sweep is off", attr.SlogError(err))
-				callbackOrigins = remotesessions.DefaultCallbackOrigins(serverURL)
-			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, callbackOrigins.Outbound); err != nil {
+			} else if issuerProvisioner, err = newIdentityProviderConnectionsProvisioner(ctx, logger, c, db, gcpIdentity, kmsSigningClients, auditLogger, outboundOrigin); err != nil {
 				// Nil where KMS provisioning is unconfigured, too.
 				logger.ErrorContext(ctx, "identity provider provisioner unavailable; internal session issuer key sweep is off", attr.SlogError(err))
 				issuerProvisioner = nil
 			}
-			issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, issuerProvisioner != nil)
-			issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
-			issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
-			enableIssuerKeyAutoActivation(issuerProvisioner, issuerSigner)
+			// No signer authority without a valid outbound origin.
+			if issuerProvisioner != nil {
+				issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, true)
+				issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, outboundOrigin))
+				issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
+				enableIssuerKeyAutoActivation(issuerProvisioner, issuerSigner)
+			}
 
 			var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
 			if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {
