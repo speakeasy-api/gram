@@ -39,15 +39,24 @@ type ExternalKey struct {
 }
 
 type InternalSessionIssuer struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	Issuer          string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: restricted
+	Issuer string
+	// @access: confidential
 	JsonWebKeySetID uuid.UUID
-	DisabledAt      pgtype.Timestamptz
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
-	DeletedAt       pgtype.Timestamptz
-	Deleted         bool
+	// @access: confidential
+	DisabledAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type JsonWebKey struct {
