@@ -40,6 +40,7 @@ func TestParse(t *testing.T) {
 		"@access: confidential\n@access: confidential",
 		"@access: confidential\n@access: confidential-pii",
 		"Prefix @access: confidential",
+		"Old class: @access: confidential; superseded.\n@access: restricted",
 	}
 	for _, comment := range invalid {
 		_, err := dataclassification.Parse(comment)

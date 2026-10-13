@@ -77,7 +77,7 @@ func Parse(comment string) (Class, error) {
 		if strings.TrimSpace(line) != "" {
 			last = i
 		}
-		if strings.HasPrefix(strings.TrimLeft(line, " \t"), Marker) {
+		if strings.Contains(line, Marker) {
 			markers++
 			index = i
 		}
@@ -89,6 +89,8 @@ func Parse(comment string) (Class, error) {
 		return "", errors.New("more than one " + Marker + " marker")
 	case index != last:
 		return "", errors.New(Marker + " marker must be the last non-empty line")
+	case !strings.HasPrefix(strings.TrimSpace(lines[index]), Marker):
+		return "", errors.New(Marker + " marker must start its line")
 	}
 	value := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[index]), Marker))
 	class := Class(value)
