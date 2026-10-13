@@ -23,6 +23,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -189,7 +190,7 @@ func TestHandlerAcceptsSignedNullTenant(t *testing.T) {
 func TestAttachDeniesResolverFailures(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logs, nil)).With(attr.SlogComponent("server"))
+	logger := slog.New(&o11y.ContextHandler{Handler: slog.NewJSONHandler(&logs, nil)}).With(attr.SlogComponent("server"))
 	mux := goahttp.NewMuxer()
 	Attach(mux, logger, nil, &testResolver{config: Config{}, err: errors.New("storage failed")})
 	response := httptest.NewRecorder()
@@ -197,6 +198,7 @@ func TestAttachDeniesResolverFailures(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	require.JSONEq(t, fallbackVerdictJSON, response.Body.String())
 
+	require.Equal(t, 1, bytes.Count(logs.Bytes(), []byte(`"`+string(attr.ComponentKey)+`":`)))
 	var record map[string]any
 	require.NoError(t, json.Unmarshal(logs.Bytes(), &record))
 	require.Equal(t, "resolve Anthropic inference hook", record[slog.MessageKey])
@@ -206,7 +208,7 @@ func TestAttachDeniesResolverFailures(t *testing.T) {
 func TestAttachTagsProcessingErrorsWithComponent(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logs, nil)).With(attr.SlogComponent("server"))
+	logger := slog.New(&o11y.ContextHandler{Handler: slog.NewJSONHandler(&logs, nil)}).With(attr.SlogComponent("server"))
 	processor := &testProcessor{err: errors.New("scanner unavailable")}
 	key := []byte("EXAMPLE-signing-secret")
 	resolver := &testResolver{config: Config{SigningSecrets: []string{"whsec_" + base64.StdEncoding.EncodeToString(key)}}}
@@ -222,6 +224,7 @@ func TestAttachTagsProcessingErrorsWithComponent(t *testing.T) {
 	require.JSONEq(t, fallbackVerdictJSON, response.Body.String())
 	require.Equal(t, 1, processor.calls)
 
+	require.Equal(t, 1, bytes.Count(logs.Bytes(), []byte(`"`+string(attr.ComponentKey)+`":`)))
 	var record map[string]any
 	require.NoError(t, json.Unmarshal(logs.Bytes(), &record))
 	require.Equal(t, "process Anthropic inference hook", record[slog.MessageKey])

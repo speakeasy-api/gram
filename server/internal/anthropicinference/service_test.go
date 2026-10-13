@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -114,7 +115,7 @@ func exampleFrame() Frame {
 func TestNewServiceTagsLoggerWithComponent(t *testing.T) {
 	t.Parallel()
 	var logs bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logs, nil)).With(attr.SlogComponent("server"), attr.SlogOrganizationID("org_example"))
+	logger := slog.New(&o11y.ContextHandler{Handler: slog.NewJSONHandler(&logs, nil)}).With(attr.SlogComponent("server"), attr.SlogOrganizationID("org_example"))
 	service := NewService(logger, testenv.NewMeterProvider(t), nil, nil, nil, nil)
 	store, ok := service.store.(*postgresStore)
 	require.True(t, ok)
@@ -125,8 +126,12 @@ func TestNewServiceTagsLoggerWithComponent(t *testing.T) {
 
 	decoder := json.NewDecoder(&logs)
 	for _, component := range []string{"anthropic-inference", "anthropic-inference", "server"} {
+		var raw json.RawMessage
+		require.NoError(t, decoder.Decode(&raw))
+		require.Equal(t, 1, bytes.Count(raw, []byte(`"`+string(attr.ComponentKey)+`":`)))
+
 		var record map[string]any
-		require.NoError(t, decoder.Decode(&record))
+		require.NoError(t, json.Unmarshal(raw, &record))
 		require.Equal(t, component, record[string(attr.ComponentKey)])
 		require.Equal(t, "org_example", record[string(attr.OrganizationIDKey)])
 	}
