@@ -43,7 +43,7 @@ describe("ShadowAIAccessStep", () => {
     expect(screen.getByText("4 · 6")).toBeTruthy();
     expect(screen.getByText("Acme Tool")).toBeTruthy();
     expect(screen.getByText("Not seen yet")).toBeTruthy();
-    expect(screen.getAllByText("Built-in")).toHaveLength(1);
+    expect(screen.queryByText("Built-in")).toBeNull();
     expect(screen.getAllByText("Custom")).toHaveLength(1);
   });
 

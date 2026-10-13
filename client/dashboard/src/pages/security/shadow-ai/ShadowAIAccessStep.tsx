@@ -108,11 +108,11 @@ function columns(
             className="h-6 w-6 shrink-0"
           />
           <Text className="truncate font-medium">{row.target.displayName}</Text>
-          <Badge variant="neutral">
-            <Badge.Text>
-              {row.target.origin === "default" ? "Built-in" : "Custom"}
-            </Badge.Text>
-          </Badge>
+          {row.target.origin === "organization" ? (
+            <Badge variant="neutral">
+              <Badge.Text>Custom</Badge.Text>
+            </Badge>
+          ) : null}
         </div>
       ),
     },
