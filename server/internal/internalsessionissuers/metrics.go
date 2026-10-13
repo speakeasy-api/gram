@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -43,7 +44,11 @@ func (m *metrics) record(ctx context.Context, op string, err error) {
 	if m == nil || m.operations == nil {
 		return
 	}
-	m.operations.Add(ctx, 1, metric.WithAttributes(attr.InternalSessionIssuerOperation(op), attr.Outcome(outcome(err))))
+	attrs := []attribute.KeyValue{attr.InternalSessionIssuerOperation(op), attr.Outcome(outcome(err))}
+	if refused, ok := errors.AsType[*SigningRefusedError](err); ok && refused.Reason != "" {
+		attrs = append(attrs, attr.InternalSessionIssuerPauseReason(string(refused.Reason)))
+	}
+	m.operations.Add(ctx, 1, metric.WithAttributes(attrs...))
 }
 
 func outcome(err error) string {

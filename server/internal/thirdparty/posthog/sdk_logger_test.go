@@ -148,7 +148,7 @@ func TestDefinitionsTransportRecordsSuccessfulDefinitionFetches(t *testing.T) {
 	status := atomic.Int32{}
 	status.Store(http.StatusOK)
 	body := atomic.Pointer[string]{}
-	definitions, maintenance := `{"flags":[]}`, `<html>maintenance</html>`
+	definitions, maintenance, incompatible := `{"flags":[]}`, `<html>maintenance</html>`, `{"flags":[{"key":"pause","active":"invalid"}]}`
 	body.Store(&definitions)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(int(status.Load()))
@@ -189,6 +189,15 @@ func TestDefinitionsTransportRecordsSuccessfulDefinitionFetches(t *testing.T) {
 	after, ok = provider.FlagDefinitionsConfirmedAt()
 	require.True(t, ok)
 	require.Equal(t, first, after, "a body the SDK can't load never refreshes the confirmation")
+
+	body.Store(&incompatible)
+	for range 3 {
+		fetch("/api/feature_flag/local_evaluation")
+	}
+	after, ok = provider.FlagDefinitionsConfirmedAt()
+	require.True(t, ok)
+	require.Equal(t, first, after, "flags JSON the SDK's typed decode rejects never refreshes the confirmation, so it ages past the pause window")
+	body.Store(&definitions)
 
 	status.Store(http.StatusNotModified)
 	fetch("/api/feature_flag/local_evaluation")

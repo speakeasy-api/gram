@@ -2,6 +2,8 @@ package internalsessionissuers
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/singleflight"
 
@@ -77,4 +80,13 @@ func TestDiscoveryServesMissesFromTheirOwnCache(t *testing.T) {
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeNotFound, shareable.Code, "a cached miss needs no fill slot")
 	require.Zero(t, h.cache.Len(), "misses never occupy the document cache")
+}
+
+func TestDiscoveryTreatsLostDatabaseConnectionsAsRetryable(t *testing.T) {
+	t.Parallel()
+	for _, code := range []string{"57P01", "57P03", "08006", "53300"} {
+		require.True(t, transientDatabaseError(fmt.Errorf("load issuer: %w", &pgconn.PgError{Code: code})), code)
+	}
+	require.False(t, transientDatabaseError(&pgconn.PgError{Code: "23505"}))
+	require.False(t, transientDatabaseError(errors.New("decode issuer keys")))
 }

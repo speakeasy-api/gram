@@ -104,15 +104,25 @@ func newSDKConfig(logger *slog.Logger, endpoint string, personalAPIKey string, d
 	if personalAPIKey != "" {
 		config.PersonalApiKey = personalAPIKey
 		config.DefaultFeatureFlagsPollingInterval = 1 * time.Minute
-		if base, ok := http.DefaultTransport.(*http.Transport); ok {
-			config.Transport = &definitionsTransport{base: base.Clone(), confirmedAt: definitionsConfirmedAt}
+		base, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			// Without the hook, definitions never read as fresh and fail-closed
+			// callers such as the issuer pause switch stay paused.
+			logger.WarnContext(context.Background(), "http.DefaultTransport is not an *http.Transport; flag definition freshness is not tracked")
+			return config
 		}
+		// The SDK tunes its own transport only when none is given.
+		tuned := base.Clone()
+		tuned.MaxIdleConns = posthog.DefaultIdleConns
+		tuned.MaxIdleConnsPerHost = posthog.DefaultIdleConnsPerHost
+		config.Transport = &definitionsTransport{base: tuned, confirmedAt: definitionsConfirmedAt}
 	}
 	return config
 }
 
 // definitionsTransport records when the SDK last received current flag
-// definitions: a 200 or a 304 from the local evaluation endpoint.
+// definitions: a 304, or a 200 whose body decodes the way the SDK decodes it
+// before installing it.
 type definitionsTransport struct {
 	base        http.RoundTripper
 	confirmedAt *atomic.Int64
@@ -135,9 +145,7 @@ func (t *definitionsTransport) RoundTrip(req *http.Request) (*http.Response, err
 			return nil, fmt.Errorf("read feature flag definitions: %w", readErr)
 		}
 		res.Body = io.NopCloser(bytes.NewReader(body))
-		var definitions struct {
-			Flags []json.RawMessage `json:"flags"`
-		}
+		var definitions posthog.FeatureFlagsResponse
 		if json.Unmarshal(body, &definitions) == nil && definitions.Flags != nil {
 			t.confirmedAt.Store(time.Now().UnixNano())
 		}

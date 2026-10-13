@@ -33,7 +33,11 @@ var ErrInvalidClaims = errors.New("internalsessionissuers: invalid assertion cla
 
 // SigningRefusedError means the organization's issuer state doesn't allow
 // signing: disabled, paused, no verified domain or not rolled out.
-type SigningRefusedError struct{ State State }
+type SigningRefusedError struct {
+	State State
+	// Reason is set when the pause switch refused.
+	Reason PauseReason
+}
 
 func (e *SigningRefusedError) Error() string {
 	return "internalsessionissuers: signing refused, issuer is " + string(e.State)
@@ -90,12 +94,11 @@ func (c Claims) validate(now time.Time) error {
 // emailOnVerifiedDomain reports whether email's domain is exactly one of the
 // organization's verified domains. Vendors match users on email alone.
 func emailOnVerifiedDomain(email string, verifiedDomains []string) bool {
-	at := strings.LastIndex(email, "@")
-	if at <= 0 || at == len(email)-1 {
+	local, domain, ok := strings.Cut(email, "@")
+	if !ok || local == "" || domain == "" || strings.Contains(domain, "@") || domain != strings.TrimSpace(domain) {
 		return false
 	}
-	domain := strings.ToLower(strings.TrimSpace(email[at+1:]))
-	return slices.ContainsFunc(verifiedDomains, func(d string) bool { return strings.ToLower(strings.TrimSpace(d)) == domain })
+	return slices.ContainsFunc(verifiedDomains, func(d string) bool { return strings.EqualFold(strings.TrimSpace(d), domain) })
 }
 
 func (c Claims) body(issuer string, now time.Time) map[string]any {
@@ -196,7 +199,7 @@ func (s *Signer) authority(ctx context.Context, organizationID string, status St
 		return none, fmt.Errorf("%w: signing configuration unavailable", ErrMisconfigured)
 	}
 	if status.State != StateEnabled || status.Issuer == nil || status.ActiveKey == nil {
-		return none, &SigningRefusedError{State: status.State}
+		return none, &SigningRefusedError{State: status.State, Reason: status.PauseReason}
 	}
 	if status.Issuer.OrganizationID != organizationID || status.ActiveKey.OrganizationID != organizationID || status.ActiveKey.JsonWebKeySetID != status.Issuer.JsonWebKeySetID {
 		return none, fmt.Errorf("%w: issuer organization mismatch", ErrMisconfigured)
@@ -286,7 +289,7 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 		return "", fmt.Errorf("recheck signing gate: %w", err)
 	}
 	if currentStatus.State != StateEnabled {
-		return "", &SigningRefusedError{State: currentStatus.State}
+		return "", &SigningRefusedError{State: currentStatus.State, Reason: currentStatus.PauseReason}
 	}
 	if !emailOnVerifiedDomain(claims.Email, currentStatus.VerifiedDomains) {
 		return "", fmt.Errorf("%w: email is not on a verified domain of the organization", ErrInvalidClaims)
@@ -297,14 +300,14 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims Claims)
 		return "", fmt.Errorf("recheck issuer after signing: %w", err)
 	}
 	if current.DisabledAt.Valid {
-		return "", &SigningRefusedError{State: StateDisabled}
+		return "", &SigningRefusedError{State: StateDisabled, Reason: ""}
 	}
 	live, err := q.ListJsonWebKeys(ctx, repo.ListJsonWebKeysParams{JsonWebKeySetID: issuer.JsonWebKeySetID, OrganizationID: organizationID, IncludeRevoked: false})
 	if err != nil {
 		return "", fmt.Errorf("recheck issuer key after signing: %w", err)
 	}
 	if !slices.ContainsFunc(live, func(k repo.JsonWebKey) bool { return k.ID == key.ID }) {
-		return "", &SigningRefusedError{State: StateKeyless}
+		return "", &SigningRefusedError{State: StateKeyless, Reason: ""}
 	}
 	logger.InfoContext(ctx, "issued internal session issuer assertion",
 		attr.SlogIssuedAssertionID(claims.ID), attr.SlogIssuedAssertionAudience(claims.Audience), attr.SlogOAuthClientID(claims.ClientID), attr.SlogIssuedAssertionKeyID(key.Kid))

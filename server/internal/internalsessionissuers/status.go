@@ -80,13 +80,27 @@ type Status struct {
 	// ActiveKey is the signing key Status read; set only for an issuer that
 	// reached the key check.
 	ActiveKey *repo.JsonWebKey
+	// PauseReason says why signing is paused; empty unless SigningPaused.
+	PauseReason PauseReason
 }
+
+// PauseReason is why the pause switch stopped signing.
+type PauseReason string
+
+const (
+	PauseReasonStartup PauseReason = "startup"
+	PauseReasonFlagOn  PauseReason = "flag_on"
+	// PauseReasonIndeterminate covers a missing flag or a provider error.
+	PauseReasonIndeterminate PauseReason = "indeterminate"
+	PauseReasonStale         PauseReason = "stale_definitions"
+	PauseReasonNoFreshness   PauseReason = "no_freshness"
+)
 
 // Status reads an organization's state. A flag or organization lookup failure
 // is an error, never a silent state. A keyless issuer is checked before the
 // pause switch: it cannot sign either way.
 func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error) {
-	status := Status{State: StateUnavailable, Issuer: nil, RolledOut: false, HasVerifiedDomain: false, VerifiedDomains: nil, ActiveKey: nil}
+	status := Status{State: StateUnavailable, Issuer: nil, RolledOut: false, HasVerifiedDomain: false, VerifiedDomains: nil, ActiveKey: nil, PauseReason: ""}
 	row, err := repo.New(g.db).GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -123,11 +137,11 @@ func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error
 			return status, err
 		}
 		status.State = StateEnabled
-		switch {
-		case status.ActiveKey == nil:
+		if status.ActiveKey == nil {
 			status.State = StateKeyless
-		case g.signingPaused(ctx, organizationID, groups):
+		} else if reason := g.signingPaused(ctx, organizationID, groups); reason != "" {
 			status.State = StateSigningPaused
+			status.PauseReason = reason
 		}
 	}
 	if status.State == StateEnabled && g.signingAuthority != nil {
@@ -162,20 +176,25 @@ const PauseFlagMaxAge = 150 * time.Second
 // authoritatively and recently off. A missing flag, an unavailable provider,
 // a lookup error, stale definitions or a provider that can't report their age
 // all pause signing.
-func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups map[string]string) bool {
+func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups map[string]string) PauseReason {
 	if g.paused {
-		return true
+		return PauseReasonStartup
 	}
 	evaluation, err := feature.EvaluateFlag(ctx, g.flags, feature.FlagInternalSessionIssuerSigningPaused, organizationID, groups)
-	if err != nil || evaluation != feature.EvaluationDisabled {
-		return true
+	switch {
+	case err == nil && evaluation == feature.EvaluationEnabled:
+		return PauseReasonFlagOn
+	case err != nil || evaluation != feature.EvaluationDisabled:
+		return PauseReasonIndeterminate
 	}
 	freshness, ok := g.flags.(feature.DefinitionsFreshness)
 	if !ok {
-		return true
+		return PauseReasonNoFreshness
 	}
-	confirmedAt, known := freshness.FlagDefinitionsConfirmedAt()
-	return !known || time.Since(confirmedAt) > PauseFlagMaxAge
+	if confirmedAt, known := freshness.FlagDefinitionsConfirmedAt(); !known || time.Since(confirmedAt) > PauseFlagMaxAge {
+		return PauseReasonStale
+	}
+	return ""
 }
 
 func (g *Gate) flagEnabled(ctx context.Context, flag feature.Flag, organizationID string, groups map[string]string) (bool, error) {

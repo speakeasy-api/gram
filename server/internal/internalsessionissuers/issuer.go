@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,7 +18,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goahttp "goa.design/goa/v3/http"
 	"golang.org/x/sync/singleflight"
@@ -229,7 +232,7 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 			return document, nil
 		})
 		switch {
-		case errors.Is(err, errDiscoveryBusy), errors.Is(err, context.DeadlineExceeded):
+		case errors.Is(err, errDiscoveryBusy), errors.Is(err, context.DeadlineExceeded), transientDatabaseError(err):
 			w.Header().Set("Retry-After", "1")
 			w.Header().Set("Cache-Control", "no-store")
 			return oops.E(oops.CodeUnavailable, err, "issuer discovery is busy, try again shortly")
@@ -253,6 +256,18 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 	// window, so a revoked key is never cached longer than CacheTTL in total.
 	maxAge := int((CacheTTL - time.Since(cached.renderedAt)) / time.Second)
 	return httpcache.WriteCacheableJSON(ctx, w, r, h.logger, contentType, max(maxAge, 0), cached.body)
+}
+
+// transientDatabaseError is a failure a retry can clear: a lost or refused
+// connection, or a server shutting down or starting up.
+func transientDatabaseError(err error) bool {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return pgerrcode.IsConnectionException(pgErr.Code) || pgErr.Code == pgerrcode.AdminShutdown || pgErr.Code == pgerrcode.CrashShutdown || pgErr.Code == pgerrcode.CannotConnectNow || pgErr.Code == pgerrcode.TooManyConnections
+	}
+	if _, ok := errors.AsType[net.Error](err); ok {
+		return true
+	}
+	return pgconn.SafeToRetry(err)
 }
 
 // render builds a document. Metadata needs only the issuer; keys are read
