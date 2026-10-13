@@ -333,7 +333,7 @@ func (p *Provisioner) CleanupEMAIssuerKMS(ctx context.Context, organizationID st
 			return 0, len(keys), err
 		}
 	}
-	openCtx, cancelOpen := context.WithTimeout(context.WithoutCancel(ctx), p.issuerKeyCleanupTimeout)
+	openCtx, cancelOpen := p.issuerKeyCleanupContext(ctx)
 	defer cancelOpen()
 	kms, err := p.openKMSClient(openCtx)
 	if err != nil {
@@ -357,14 +357,19 @@ func (p *Provisioner) CleanupEMAIssuerKMS(ctx context.Context, organizationID st
 	return cleaned, len(keys) - cleaned, errors.Join(errs...)
 }
 
-func (p *Provisioner) cleanupEMAIssuerKey(ctx context.Context, kms gcpkms.ProvisioningClient, organizationID string, key jwksrepo.JsonWebKey) error {
-	// Detached from cancellation so a cancelled request still records a
-	// finished step, but never past the caller's deadline.
+// issuerKeyCleanupContext is detached from cancellation so a cancelled request
+// still records a finished step, but never runs past the cleanup timeout or
+// the caller's deadline.
+func (p *Provisioner) issuerKeyCleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	deadline := time.Now().Add(p.issuerKeyCleanupTimeout)
 	if callerDeadline, ok := ctx.Deadline(); ok && callerDeadline.Before(deadline) {
 		deadline = callerDeadline
 	}
-	keyCtx, cancel := context.WithDeadline(context.WithoutCancel(ctx), deadline)
+	return context.WithDeadline(context.WithoutCancel(ctx), deadline)
+}
+
+func (p *Provisioner) cleanupEMAIssuerKey(ctx context.Context, kms gcpkms.ProvisioningClient, organizationID string, key jwksrepo.JsonWebKey) error {
+	keyCtx, cancel := p.issuerKeyCleanupContext(ctx)
 	defer cancel()
 	if err := p.disableEMAIssuerKey(keyCtx, kms, organizationID, key); err != nil {
 		return err

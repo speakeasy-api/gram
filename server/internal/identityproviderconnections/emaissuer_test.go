@@ -821,6 +821,31 @@ func TestEMAIssuer_CleanupGivesEachKeyItsOwnDeadline(t *testing.T) {
 	require.Equal(t, rotatingKMS.Created(), cleaningKMS.Disabled())
 }
 
+func TestEMAIssuer_CleanupOpeningKMSStopsAtTheCallerDeadline(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, _ := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	kid := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, &kid)
+	require.NoError(t, err)
+
+	cleaner, cleaningKMS := f.provisioner(t)
+	cleaner.SetIssuerKeyCleanupTimeout(time.Minute)
+	cleaningKMS.mu.Lock()
+	cleaningKMS.stallOpen = true
+	cleaningKMS.mu.Unlock()
+	callCtx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	cleaned, pending, err := cleaner.CleanupEMAIssuerKMS(callCtx, f.ti.orgID)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(started), 30*time.Second, "opening the kms client stops at the caller deadline, not the cleanup timeout")
+	require.Zero(t, cleaned)
+	require.Equal(t, 1, pending)
+}
+
 func TestEMAIssuer_CleanupRevokesTheOriginallyGrantedAccountOrStaysPending(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)

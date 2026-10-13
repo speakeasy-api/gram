@@ -107,6 +107,8 @@ type hookedKMSClients struct {
 	stallDisable string
 	// onDisable runs at the start of every DisableKeyVersion.
 	onDisable func()
+	// stallOpen holds every client construction until the caller's deadline.
+	stallOpen bool
 }
 
 func (c *hookedKMSClients) failDisable(err error) {
@@ -124,7 +126,12 @@ func (c *hookedKMSClients) failCreate(err error) {
 func (c *hookedKMSClients) Factory(ctx context.Context, tokenSource oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
 	c.mu.Lock()
 	c.opened++
+	stall := c.stallOpen
 	c.mu.Unlock()
+	if stall {
+		<-ctx.Done()
+		return nil, fmt.Errorf("stalled fixture kms client: %w", ctx.Err())
+	}
 
 	client, err := c.inner.Factory(ctx, tokenSource)
 	if err != nil {
