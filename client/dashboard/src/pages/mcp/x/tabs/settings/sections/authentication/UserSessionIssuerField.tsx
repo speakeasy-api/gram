@@ -120,14 +120,10 @@ export function UserSessionIssuerField({
               disabled={disabled || update.isPending || !draftIssuerId}
               onClick={() => {
                 if (!draftIssuerId) return;
-                // Only replacing an issuer disturbs connected clients; a
-                // server's first issuer has none signed in through one yet.
-                if (currentIssuerId) {
-                  update.reset();
-                  setConfirmOpen(true);
-                } else {
-                  update.mutate(draftIssuerId);
-                }
+                // Every change disturbs connected clients: replacing an issuer
+                // signs them out, and a first one starts requiring sign-in.
+                update.reset();
+                setConfirmOpen(true);
               }}
             >
               {update.isPending ? (
@@ -145,6 +141,7 @@ export function UserSessionIssuerField({
           open={confirmOpen}
           onOpenChange={setConfirmOpen}
           target={target}
+          replacing={!!currentIssuerId}
           candidate={selectedIssuer}
           onConfirm={() => update.mutate(selectedIssuer.id)}
           isPending={update.isPending}

@@ -20,7 +20,7 @@ const testState = vi.hoisted(() => ({
           candidateIssuer?: { issuerUrl?: string };
         }
       | undefined,
-    isPending: false,
+    isFetching: false,
     isError: false,
   },
   impactRequests: [] as unknown[],
@@ -141,7 +141,7 @@ function chooseCandidateAndSave(): void {
 beforeEach(() => {
   link.mockReset();
   link.mockResolvedValue(undefined);
-  testState.impact = { data: undefined, isPending: false, isError: false };
+  testState.impact = { data: undefined, isFetching: false, isError: false };
   testState.impactRequests = [];
 });
 
@@ -197,12 +197,38 @@ describe("UserSessionIssuerField", () => {
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
   });
 
-  it("attaches a first issuer without asking", async () => {
+  it("confirms before a first issuer starts requiring sign-in", async () => {
+    testState.impact.data = {
+      authorizationServerChanges: true,
+      candidateIssuer: { issuerUrl: "https://app.example.com/oauth/usi/x" },
+    };
     renderField(null);
 
     chooseCandidateAndSave();
 
-    expect(screen.queryByText("Change user session issuer?")).toBeNull();
+    expect(screen.getByText("Require sign-in for this server?")).toBeDefined();
+    expect(
+      screen.getByText(
+        "Clients will sign in through the shared authorization server, https://app.example.com/oauth/usi/x.",
+      ),
+    ).toBeDefined();
+    expect(link).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Require sign-in" }));
     await waitFor(() => expect(link).toHaveBeenCalledWith("candidate"));
+  });
+
+  it("waits for a refreshed preview before confirming", () => {
+    testState.impact.data = { authorizationServerChanges: false };
+    testState.impact.isFetching = true;
+    renderField("current");
+
+    chooseCandidateAndSave();
+
+    expect(
+      screen
+        .getByRole("button", { name: "Change issuer" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
   });
 });

@@ -6,7 +6,10 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
-import { PROJECT_SPECIFIC_ISSUER_VALUE } from "./user-session-issuer-select.utils";
+import {
+  PROJECT_SPECIFIC_ISSUER_VALUE,
+  userSessionIssuerLabel,
+} from "./user-session-issuer-select.utils";
 
 export function UserSessionIssuerSelect({
   issuers,
@@ -25,7 +28,7 @@ export function UserSessionIssuerSelect({
 }): JSX.Element {
   const labelCounts = new Map<string, number>();
   for (const issuer of issuers) {
-    const label = issuerLabel(issuer);
+    const label = userSessionIssuerLabel(issuer);
     labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
   }
 
@@ -41,7 +44,7 @@ export function UserSessionIssuerSelect({
           </SelectItem>
         ) : null}
         {issuers.map((issuer) => {
-          const label = issuerLabel(issuer);
+          const label = userSessionIssuerLabel(issuer);
           const disambiguator =
             (labelCounts.get(label) ?? 0) > 1
               ? ` · ${issuer.id.slice(0, 8)}`
@@ -57,16 +60,4 @@ export function UserSessionIssuerSelect({
       </SelectContent>
     </Select>
   );
-}
-
-// Names an issuer by slug and owner, and marks one whose servers share a
-// single authorization server, since attaching to it changes where clients
-// sign in.
-function issuerLabel(issuer: UserSessionIssuer): string {
-  const ownership = issuer.projectId === "" ? "Organization" : "Project";
-  const shared =
-    issuer.authorizationServerMode === "shared"
-      ? " · Shared authorization server"
-      : "";
-  return `${issuer.slug} — ${ownership}${shared}`;
 }

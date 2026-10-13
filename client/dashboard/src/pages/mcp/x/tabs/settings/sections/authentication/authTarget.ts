@@ -106,7 +106,13 @@ export function useMcpServerAuthTarget(
 
 export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
   const client = useSdkClient();
-  const { url: mcpUrl } = useMcpUrl(toolset);
+  const { url, customServerURL } = useMcpUrl(toolset);
+  // A custom-domain URL takes the platform host until the domain resolves;
+  // that address is not the one clients use, so leave it unknown until then.
+  const mcpUrl =
+    toolset.customDomainId && toolset.mcpSlug && !customServerURL
+      ? undefined
+      : url;
 
   return useMemo(
     () => ({
