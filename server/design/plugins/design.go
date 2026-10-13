@@ -623,7 +623,7 @@ var AddPluginServerForm = Type("AddPluginServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Speakeasy MCP server ID. Provide exactly one backend ID.")
+		Description("Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.")
 		Format(FormatUUID)
 	})
 	Attribute("meta_mcp_server_id", String, func() {

@@ -43,7 +43,8 @@ type AddPluginServerRequestBody struct {
 	// meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may
 	// both be sent when equal.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Speakeasy MCP server ID. Provide exactly one backend ID.
+	// Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP
+	// server's toolset_id and mcp_server_id may both be sent when equal.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. Provide exactly one backend ID.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`

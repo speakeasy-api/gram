@@ -86390,7 +86390,7 @@ components:
                     description: Display name for the server. Defaults to the backing server name when omitted.
                 mcp_server_id:
                     type: string
-                    description: Speakeasy MCP server ID. Provide exactly one backend ID.
+                    description: Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.
                     format: uuid
                 meta_mcp_server_id:
                     type: string

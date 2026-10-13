@@ -115,7 +115,8 @@ type AddPluginServerPayload struct {
 	// meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may
 	// both be sent when equal.
 	ToolsetID *string
-	// Speakeasy MCP server ID. Provide exactly one backend ID.
+	// Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP
+	// server's toolset_id and mcp_server_id may both be sent when equal.
 	McpServerID *string
 	// MCP gateway ID. Provide exactly one backend ID.
 	MetaMcpServerID *string
