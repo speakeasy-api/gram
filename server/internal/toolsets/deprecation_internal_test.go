@@ -55,6 +55,8 @@ func TestLogDeprecatedHostingUse(t *testing.T) {
 	require.Equal(t, "external-client/1.0", record["http.request.header.user_agent"])
 	require.Equal(t, "app.example.com", record["http.request.referer_host"])
 	require.Equal(t, []any{"mcp_slug"}, record["gram.deprecated.fields"])
+	require.Equal(t, "org-test", record["gram.org.id"])
+	require.Equal(t, "user-test", record["user.id"])
 	require.Equal(t, "key-test", record["gram.api_key.id"])
 
 	buf.Reset()

@@ -12,6 +12,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 type lockedBuffer struct {
@@ -69,6 +70,10 @@ func TestToolsetsService_DeprecatedHostingInputsLog(t *testing.T) {
 	records := buf.deprecationRecords(t)
 	require.Len(t, records, 1)
 	require.Equal(t, []any{"mcp_is_public"}, records[0]["gram.deprecated.fields"])
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, authCtx.ActiveOrganizationID, records[0]["gram.org.id"])
+	require.Equal(t, authCtx.UserID, records[0]["user.id"])
 
 	_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: created.Slug})
 	require.NoError(t, err)
