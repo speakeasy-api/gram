@@ -1407,12 +1407,12 @@ func (s *Service) buildRemoteSessionCards(
 	}
 	clients = s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)
 	// Cards read the cached resource row only; the login probes. The row is
-	// the one the login resolves (keyed by the endpoint's server URL) and,
-	// as at login, it decides only for a client whose grant is qualified to
-	// that resource among the bound clients. A gateway, a tunneled or hosted
-	// server, or a client whose grant goes elsewhere is decided by its
-	// authorization server alone; a client's own claimed resource never
-	// stands in, because no login reads it.
+	// the one the login resolves (keyed by the endpoint's server URL, or on a
+	// gateway the member the client is qualified to) and, as at login, it
+	// decides only for a client whose grant is qualified to that resource. A
+	// tunneled or hosted server, or a client whose grant goes elsewhere, is
+	// decided by its authorization server alone; a client's own claimed
+	// resource never stands in, because no login reads it.
 	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
 	var serverResource remotesessions.ResourceScopes
 	var serverResourceURL string
@@ -1435,6 +1435,8 @@ func (s *Service) buildRemoteSessionCards(
 			resourceApplies = nil
 		}
 	}
+
+	memberResources := s.gatewayMemberResourceScopes(ctx, endpoint, challengeState, clients, discoverScopes)
 
 	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients)
 	if err != nil {
@@ -1499,6 +1501,9 @@ func (s *Service) buildRemoteSessionCards(
 		resourceScopes := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discoverScopes}
 		if resourceApplies[c.ID] {
 			resourceScopes = serverResource
+		}
+		if member, ok := memberResources[c.ID]; ok {
+			resourceScopes = member
 		}
 		requested := c.RequestedScopes(resourceScopes).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable

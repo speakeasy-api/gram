@@ -19,11 +19,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // resolveMetaMemberResource returns the upstream resource (remote server URL
 // or tunneled resource identifier) of the meta MCP member whose upstream
-// authenticates against remoteSessionIssuerID.
+// authenticates against remoteSessionIssuerID, and that member's mcp_servers
+// id (the first, when members front one URL).
 //
 // Tri-state: ("", true) means members claimed the issuer but no single member
 // wins, and the caller must not fall back to a weaker derivation; ("", false)
@@ -35,16 +37,18 @@ func (s *Service) resolveMetaMemberResource(
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	remoteSessionIssuerID uuid.UUID,
-) (string, bool, error) {
+) (string, uuid.NullUUID, bool, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	candidates, claimed, err := s.claimingMetaMembers(ctx, endpoint, remoteSessionIssuerID)
 	if err != nil || !claimed {
-		return "", false, err
+		return "", none, false, err
 	}
 
 	// The resource is sent upstream verbatim: a provider may match it exactly
 	// against its RFC 9728 resource, trailing slash included. Trailing slashes
 	// are ignored only to decide whether members share a destination.
 	resource := ""
+	member := none
 	for _, row := range candidates {
 		upstream := row.UpstreamUrl
 		trimmed := strings.TrimRight(upstream, "/")
@@ -56,10 +60,10 @@ func (s *Service) resolveMetaMemberResource(
 		// shortest, so the result does not depend on member order.
 		case resource != "" && trimmed == strings.TrimRight(resource, "/"):
 			if len(upstream) < len(resource) {
-				resource = upstream
+				resource, member = upstream, uuid.NullUUID{UUID: row.McpServerID, Valid: true}
 			}
 		case resource == "":
-			resource = upstream
+			resource, member = upstream, uuid.NullUUID{UUID: row.McpServerID, Valid: true}
 		default:
 			// One authorization server, two members: a grant records one resource per
 			// (subject, client), so nothing routes both.
@@ -68,10 +72,10 @@ func (s *Service) resolveMetaMemberResource(
 				attr.SlogRemoteSessionIssuerID(remoteSessionIssuerID.String()),
 				attr.SlogMcpServerID(row.McpServerID.String()),
 			)
-			return "", true, nil
+			return "", none, true, nil
 		}
 	}
-	return resource, true, nil
+	return resource, member, true, nil
 }
 
 // claimingMetaMembers lists the proxied members authenticating against
@@ -145,4 +149,41 @@ func (s *Service) authorizedMetaMembers(
 		authorized = append(authorized, row)
 	}
 	return authorized, nil
+}
+
+// gatewayMemberResourceScopes reads, for each card on a gateway, the cached
+// resource row of the member a login through that client would read, so the
+// card requests what the login will. A client no single member claims has no
+// entry; a lookup fault logs and leaves the card on its issuer's scopes.
+func (s *Service) gatewayMemberResourceScopes(
+	ctx context.Context,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	clients []remotesessions.Client,
+	discover bool,
+) map[uuid.UUID]remotesessions.ResourceScopes {
+	if !discover || !endpoint.MetaMcpServerID.Valid || challengeState.Subject == nil {
+		return nil
+	}
+	memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "stamp consent subject for gateway member scopes", attr.SlogError(err))
+		return nil
+	}
+	out := make(map[uuid.UUID]remotesessions.ResourceScopes, len(clients))
+	for _, c := range clients {
+		resource, member, _, err := s.resolveMetaMemberResource(memberCtx, s.logger, endpoint, c.RemoteSessionIssuerID)
+		if err != nil {
+			s.logger.WarnContext(ctx, "resolve gateway member for consent card", attr.SlogError(err), attr.SlogRemoteSessionClientID(c.ID.String()))
+			continue
+		}
+		if !member.Valid {
+			continue
+		}
+		scopes, resourceURL, ok := s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, member, true)
+		if ok && strings.TrimRight(resourceURL, "/") == strings.TrimRight(resource, "/") {
+			out[c.ID] = scopes
+		}
+	}
+	return out
 }

@@ -254,6 +254,37 @@ func TestRemoteLogin_LiveProbeFillsRowAndDecides(t *testing.T) {
 	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceLiveResource, protectedresource.ProbeOutcomeFetched)
 }
 
+// A gateway login reads the member it qualified the client to, as a server
+// login reads its own server.
+func TestRemoteLogin_GatewayMemberResourceDecides(t *testing.T) {
+	t.Parallel()
+
+	resource, hits := fakeResource(t, []string{"files:read", "files:write"})
+	_, env := newSyntheticExpiryEnv(t, "gateway-member", scopelessToken,
+		withIssuerScopes("admin", "openid"),
+		withRemoteServer(resource.URL), withGatewayMember(), withResource(resource.URL),
+		withProber(), withLiveResourceScopes(), withRegistrationTelemetry(),
+	)
+	require.Equal(t, "files:read files:write openid", scopeOf(t, env.authURL))
+	require.EqualValues(t, 1, hits.Load())
+	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceLiveResource, protectedresource.ProbeOutcomeFetched)
+}
+
+// A member whose URL is not the resource the grant names does not decide.
+func TestRemoteLogin_GatewayMemberMismatchedResourceFallsBack(t *testing.T) {
+	t.Parallel()
+
+	resource, hits := fakeResource(t, []string{"files:read"})
+	_, env := newSyntheticExpiryEnv(t, "gateway-mismatch", scopelessToken,
+		withIssuerScopes("admin", "openid"),
+		withRemoteServer(resource.URL), withGatewayMember(), withResource("https://elsewhere.example.com/mcp"),
+		withProber(), withLiveResourceScopes(), withRegistrationTelemetry(),
+	)
+	require.Equal(t, "admin openid", scopeOf(t, env.authURL))
+	require.Zero(t, hits.Load())
+	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceIssuerCatalogue, protectedresource.ProbeOutcomeNotOwned)
+}
+
 // A row read moments ago is still probed: the resource may have changed what
 // it advertises, so the live list wins over the cached one.
 func TestRemoteLogin_RecentRowStillProbes(t *testing.T) {
