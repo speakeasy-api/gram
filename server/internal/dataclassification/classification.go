@@ -10,8 +10,9 @@
 //
 // Class names follow the levels of Speakeasy's data classification policy
 // (public, internal use, confidential, restricted). A suffix or prefix narrows
-// a level: confidential-pii is confidential data about a person, and
-// secret-restricted and opaque-restricted are kinds of restricted data.
+// a level: confidential-pii and opaque-confidential are kinds of confidential
+// data, and secret-restricted and opaque-restricted are kinds of restricted
+// data.
 //
 // Descriptive prose may precede the marker. The class records what the data
 // is. Each consumer, such as a read-only SQL agent, log redaction, retention
@@ -38,6 +39,12 @@ const (
 	// personal names, handles, avatar URLs, IP addresses, user agents, person
 	// IDs in external identity providers.
 	ConfidentialPII Class = "confidential-pii"
+	// OpaqueConfidential is a short identifier or label whose value customers,
+	// their systems or producers choose, so Speakeasy can't vouch for it, but
+	// which support needs to see: names of tools, skills, agents, MCP servers
+	// and clients, span and event names, producer-supplied session IDs,
+	// attribute keys. Free text and payloads are OpaqueRestricted instead.
+	OpaqueConfidential Class = "opaque-confidential"
 	// SecretRestricted grants access or proves identity: passwords and their
 	// hashes, API keys and tokens and their hashes, client secrets, signing
 	// keys, encrypted credentials, auth-flow state and verifiers.
@@ -56,7 +63,7 @@ const (
 )
 
 // Classes lists every valid class.
-var Classes = []Class{Confidential, ConfidentialPII, SecretRestricted, Restricted, OpaqueRestricted}
+var Classes = []Class{Confidential, ConfidentialPII, OpaqueConfidential, SecretRestricted, Restricted, OpaqueRestricted}
 
 // Marker prefixes the classification line of a column comment.
 const Marker = "@access:"

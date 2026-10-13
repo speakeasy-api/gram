@@ -12,12 +12,13 @@ func TestParse(t *testing.T) {
 	t.Parallel()
 
 	valid := map[string]dataclassification.Class{
-		"@access: confidential":                                dataclassification.Confidential,
-		"Primary key.\n@access: confidential":                  dataclassification.Confidential,
-		"Owner email.\r\n\t@access: confidential-pii \t\r\n\n": dataclassification.ConfidentialPII,
-		"@access: secret-restricted":                           dataclassification.SecretRestricted,
-		"@access: restricted":                                  dataclassification.Restricted,
-		"Raw message text.\n@access: opaque-restricted":        dataclassification.OpaqueRestricted,
+		"@access: confidential":                                    dataclassification.Confidential,
+		"Primary key.\n@access: confidential":                      dataclassification.Confidential,
+		"Owner email.\r\n\t@access: confidential-pii \t\r\n\n":     dataclassification.ConfidentialPII,
+		"@access: secret-restricted":                               dataclassification.SecretRestricted,
+		"@access: restricted":                                      dataclassification.Restricted,
+		"Raw message text.\n@access: opaque-restricted":            dataclassification.OpaqueRestricted,
+		"Producer-stated tool name.\n@access: opaque-confidential": dataclassification.OpaqueConfidential,
 	}
 	for comment, want := range valid {
 		got, err := dataclassification.Parse(comment)
