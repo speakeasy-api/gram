@@ -14,12 +14,17 @@ export type CreateDeviceJoinTokenRequestBody = {
    * How long the token stays redeemable. Defaults to one hour.
    */
   expiresInSeconds?: number | undefined;
+  /**
+   * The project the enrolled device may send hooks to. Recorded on its admission, it bounds the hooks grant the device's tokens carry. Must be a project in the caller's organization.
+   */
+  hooksProjectId: string;
 };
 
 /** @internal */
 export type CreateDeviceJoinTokenRequestBody$Outbound = {
   agent_id: string;
   expires_in_seconds: number;
+  hooks_project_id: string;
 };
 
 /** @internal */
@@ -30,11 +35,13 @@ export const CreateDeviceJoinTokenRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     agentId: z.string(),
     expiresInSeconds: z._default(z.int(), 3600),
+    hooksProjectId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       agentId: "agent_id",
       expiresInSeconds: "expires_in_seconds",
+      hooksProjectId: "hooks_project_id",
     });
   }),
 );

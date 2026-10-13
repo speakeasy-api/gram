@@ -33,34 +33,59 @@ type WorkloadAgentAssignment struct {
 }
 
 type WorkloadDeviceJoinToken struct {
-	ID                uuid.UUID
-	OrganizationID    string
-	TokenHash         string
-	AgentID           uuid.UUID
-	HooksProjectID    uuid.UUID
-	CreatedByUserID   string
-	ExpiresAt         pgtype.Timestamptz
-	ConsumedAt        pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: secret-restricted
+	TokenHash string
+	// @access: confidential
+	AgentID uuid.UUID
+	// @access: confidential
+	HooksProjectID uuid.UUID
+	// @access: confidential
+	CreatedByUserID string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential
+	ConsumedAt pgtype.Timestamptz
+	// @access: restricted
 	ConsumedBySubject pgtype.Text
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	DeletedAt         pgtype.Timestamptz
-	Deleted           bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type WorkloadDeviceKey struct {
-	ID               uuid.UUID
-	OrganizationID   string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
 	WorkloadIssuerID uuid.UUID
-	Subject          string
-	PublicJwk        []byte
-	Thumbprint       string
-	Hostname         pgtype.Text
-	Serial           pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	DeletedAt        pgtype.Timestamptz
-	Deleted          bool
+	// @access: restricted
+	Subject string
+	// @access: confidential
+	PublicJwk []byte
+	// @access: confidential
+	Thumbprint string
+	// @access: confidential-pii
+	Hostname pgtype.Text
+	// @access: confidential-pii
+	Serial pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type WorkloadIdentityAdmission struct {

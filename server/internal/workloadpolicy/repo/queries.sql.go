@@ -135,8 +135,11 @@ func (q *Queries) CreateDeviceIssuer(ctx context.Context, arg CreateDeviceIssuer
 }
 
 const createWorkloadAdmission = `-- name: CreateWorkloadAdmission :one
-INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, hooks_project_id, hooks_project_organization_id)
+VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8,
+  CASE WHEN $8::uuid IS NULL THEN NULL ELSE $1 END
+)
 RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, hooks_project_id, hooks_project_organization_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -148,6 +151,7 @@ type CreateWorkloadAdmissionParams struct {
 	MatchKind        string
 	Name             pgtype.Text
 	Tags             []string
+	HooksProjectID   uuid.NullUUID
 }
 
 func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloadAdmissionParams) (WorkloadIdentityAdmission, error) {
@@ -159,6 +163,7 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 		arg.MatchKind,
 		arg.Name,
 		arg.Tags,
+		arg.HooksProjectID,
 	)
 	var i WorkloadIdentityAdmission
 	err := row.Scan(
@@ -181,8 +186,8 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 }
 
 const createWorkloadDeviceJoinToken = `-- name: CreateWorkloadDeviceJoinToken :one
-INSERT INTO workload_device_join_tokens (organization_id, token_hash, agent_id, created_by_user_id, expires_at)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO workload_device_join_tokens (organization_id, token_hash, agent_id, hooks_project_id, created_by_user_id, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, organization_id, token_hash, agent_id, hooks_project_id, created_by_user_id, expires_at, consumed_at, consumed_by_subject, created_at, updated_at, deleted_at, deleted
 `
 
@@ -190,6 +195,7 @@ type CreateWorkloadDeviceJoinTokenParams struct {
 	OrganizationID  string
 	TokenHash       string
 	AgentID         uuid.UUID
+	HooksProjectID  uuid.UUID
 	CreatedByUserID string
 	ExpiresAt       pgtype.Timestamptz
 }
@@ -199,6 +205,7 @@ func (q *Queries) CreateWorkloadDeviceJoinToken(ctx context.Context, arg CreateW
 		arg.OrganizationID,
 		arg.TokenHash,
 		arg.AgentID,
+		arg.HooksProjectID,
 		arg.CreatedByUserID,
 		arg.ExpiresAt,
 	)
@@ -462,6 +469,34 @@ func (q *Queries) GetDeviceJoinAgent(ctx context.Context, arg GetDeviceJoinAgent
 	return i, err
 }
 
+const getHooksProject = `-- name: GetHooksProject :one
+SELECT id, slug
+FROM projects
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+`
+
+type GetHooksProjectParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type GetHooksProjectRow struct {
+	ID   uuid.UUID
+	Slug string
+}
+
+// A project in the caller's organization that a workload may be bound to for
+// hooks. Scoped by organization so naming another tenant's project is a
+// not-found.
+func (q *Queries) GetHooksProject(ctx context.Context, arg GetHooksProjectParams) (GetHooksProjectRow, error) {
+	row := q.db.QueryRow(ctx, getHooksProject, arg.OrganizationID, arg.ID)
+	var i GetHooksProjectRow
+	err := row.Scan(&i.ID, &i.Slug)
+	return i, err
+}
+
 const getOrganizationAgent = `-- name: GetOrganizationAgent :one
 SELECT id, name
 FROM agents
@@ -490,8 +525,12 @@ func (q *Queries) GetOrganizationAgent(ctx context.Context, arg GetOrganizationA
 }
 
 const getReplayedDeviceRegistration = `-- name: GetReplayedDeviceRegistration :one
-SELECT t.organization_id, t.agent_id, t.consumed_by_subject AS subject, i.issuer
+SELECT t.organization_id, t.agent_id, t.consumed_by_subject AS subject, i.issuer, t.hooks_project_id, p.slug AS hooks_project_slug
 FROM workload_device_join_tokens t
+JOIN projects p
+  ON p.organization_id = t.organization_id
+  AND p.id = t.hooks_project_id
+  AND p.deleted IS FALSE
 JOIN workload_device_keys k
   ON k.organization_id = t.organization_id
   AND k.subject = t.consumed_by_subject
@@ -526,10 +565,12 @@ type GetReplayedDeviceRegistrationParams struct {
 }
 
 type GetReplayedDeviceRegistrationRow struct {
-	OrganizationID string
-	AgentID        uuid.UUID
-	Subject        pgtype.Text
-	Issuer         string
+	OrganizationID   string
+	AgentID          uuid.UUID
+	Subject          pgtype.Text
+	Issuer           string
+	HooksProjectID   uuid.UUID
+	HooksProjectSlug string
 }
 
 // The enrollment a spent join token already produced, when the same key asks
@@ -544,6 +585,8 @@ func (q *Queries) GetReplayedDeviceRegistration(ctx context.Context, arg GetRepl
 		&i.AgentID,
 		&i.Subject,
 		&i.Issuer,
+		&i.HooksProjectID,
+		&i.HooksProjectSlug,
 	)
 	return i, err
 }
@@ -692,7 +735,8 @@ SELECT
   i.name AS issuer_name,
   i.allow_wildcard_admission,
   g.agent_id,
-  ag.name AS agent_name
+  ag.name AS agent_name,
+  hp.slug AS hooks_project_slug
 FROM workload_identity_admissions a
 JOIN workload_issuers i
   ON i.organization_id = a.organization_id
@@ -712,6 +756,10 @@ LEFT JOIN agents ag
   ON ag.organization_id = g.organization_id
  AND ag.id = g.agent_id
  AND ag.deleted IS FALSE
+LEFT JOIN projects hp
+  ON hp.organization_id = a.organization_id
+ AND hp.id = a.hooks_project_id
+ AND hp.deleted IS FALSE
 WHERE a.organization_id = $2
   AND (a.project_id IS NULL OR a.project_id = $1)
   AND a.deleted IS FALSE
@@ -743,6 +791,7 @@ type ListWorkloadAdmissionsRow struct {
 	AllowWildcardAdmission     bool
 	AgentID                    uuid.NullUUID
 	AgentName                  pgtype.Text
+	HooksProjectSlug           pgtype.Text
 }
 
 // The admitted set as an operator reads it: the subject, the issuer that must
@@ -778,6 +827,7 @@ func (q *Queries) ListWorkloadAdmissions(ctx context.Context, arg ListWorkloadAd
 			&i.AllowWildcardAdmission,
 			&i.AgentID,
 			&i.AgentName,
+			&i.HooksProjectSlug,
 		); err != nil {
 			return nil, err
 		}
@@ -1169,10 +1219,12 @@ const updateWorkloadAdmission = `-- name: UpdateWorkloadAdmission :one
 UPDATE workload_identity_admissions
 SET name = $1,
     tags = $2,
+    hooks_project_id = $3,
+    hooks_project_organization_id = CASE WHEN $3::uuid IS NULL THEN NULL ELSE organization_id END,
     updated_at = clock_timestamp()
-WHERE organization_id = $3
-  AND id = $4
-  AND (project_id IS NULL OR project_id = $5)
+WHERE organization_id = $4
+  AND id = $5
+  AND (project_id IS NULL OR project_id = $6)
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, tags, hooks_project_id, hooks_project_organization_id, created_at, updated_at, deleted_at, deleted
 `
@@ -1180,6 +1232,7 @@ RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_ki
 type UpdateWorkloadAdmissionParams struct {
 	Name           pgtype.Text
 	Tags           []string
+	HooksProjectID uuid.NullUUID
 	OrganizationID string
 	ID             uuid.UUID
 	ProjectID      uuid.NullUUID
@@ -1193,6 +1246,7 @@ func (q *Queries) UpdateWorkloadAdmission(ctx context.Context, arg UpdateWorkloa
 	row := q.db.QueryRow(ctx, updateWorkloadAdmission,
 		arg.Name,
 		arg.Tags,
+		arg.HooksProjectID,
 		arg.OrganizationID,
 		arg.ID,
 		arg.ProjectID,

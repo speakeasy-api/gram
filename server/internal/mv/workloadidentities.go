@@ -68,6 +68,11 @@ func BuildWorkloadAdmissionView(row repo.ListWorkloadAdmissionsRow) *types.Workl
 		agentID = row.AgentID.UUID.String()
 	}
 
+	hooksProjectID := ""
+	if row.HooksProjectID.Valid {
+		hooksProjectID = row.HooksProjectID.UUID.String()
+	}
+
 	wildcardActive := true
 	if workloadidentity.MatchKind(row.MatchKind) == workloadidentity.MatchKindWildcard {
 		wildcardActive = row.AllowWildcardAdmission
@@ -86,6 +91,8 @@ func BuildWorkloadAdmissionView(row repo.ListWorkloadAdmissionsRow) *types.Workl
 		Tags:             conv.DefaultSlice(row.Tags, []string{}),
 		AgentID:          agentID,
 		AgentName:        conv.PtrValOrEmpty(conv.FromPGText[string](row.AgentName), ""),
+		HooksProjectID:   hooksProjectID,
+		HooksProjectSlug: conv.PtrValOrEmpty(conv.FromPGText[string](row.HooksProjectSlug), ""),
 		WildcardActive:   wildcardActive,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),

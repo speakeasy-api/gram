@@ -205,6 +205,7 @@ func TestAdmitSubject_WithoutAProjectRefusesProjectScoped(t *testing.T) {
 		Tags:             nil,
 		AgentID:          agentID.String(),
 		ProjectScoped:    true,
+		HooksProjectID:   nil,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Contains(t, err.Error(), "project_scoped requires a caller that names a project")

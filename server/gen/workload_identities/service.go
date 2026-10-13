@@ -134,6 +134,10 @@ type AdmitSubjectPayload struct {
 	// organization. Requires a caller that names a project; a dashboard session
 	// does not. Defaults to false.
 	ProjectScoped bool
+	// The project the workload may send hooks to, which bounds the hooks grant its
+	// device-agent tokens carry. Must be a project in the caller's organization.
+	// Omitted, the workload sends no hooks.
+	HooksProjectID *string
 }
 
 // CreateDeviceJoinTokenPayload is the payload type of the workloadIdentities
@@ -141,6 +145,10 @@ type AdmitSubjectPayload struct {
 type CreateDeviceJoinTokenPayload struct {
 	// The agent the enrolled device inherits its policy from.
 	AgentID string
+	// The project the enrolled device may send hooks to. Recorded on its
+	// admission, it bounds the hooks grant the device's tokens carry. Must be a
+	// project in the caller's organization.
+	HooksProjectID string
 	// How long the token stays redeemable. Defaults to one hour.
 	ExpiresInSeconds int
 	SessionToken     *string
@@ -266,6 +274,9 @@ type UpdateSubjectPayload struct {
 	// The agent whose policy the admitted workload inherits. Shared with any
 	// admission of the same subject under the same issuer at the other tier.
 	AgentID *string
+	// The project the workload may send hooks to: a project id in the caller's
+	// organization, or blank to stop it sending hooks.
+	HooksProjectID *string
 }
 
 // WithdrawIssuerPayload is the payload type of the workloadIdentities service
@@ -322,6 +333,11 @@ type WorkloadDeviceRegistration struct {
 	AgentID string
 	// The organization the device enrolled in.
 	OrganizationID string
+	// The project the device may send hooks to.
+	HooksProjectID string
+	// That project's slug, which the device sends as Gram-Project on hooks
+	// requests.
+	HooksProjectSlug string
 }
 
 // A custom flow's form, held to the management API form it submits.
