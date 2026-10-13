@@ -5224,3 +5224,75 @@ WHERE g.user_session_issuer_id = @user_session_issuer_id
   AND p.deleted IS FALSE
   AND g.deleted IS FALSE
 ORDER BY p.name, g.id;
+
+-- name: ListEMAProviders :many
+-- The organization's EMA provider order for one vendor issuer. A row whose
+-- provider was deleted or disabled is flagged, not dropped, so a policy left
+-- with only those never reads as no policy.
+SELECT p.id, p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
+  (
+    (p.remote_session_issuer_id IS NOT NULL AND (r.id IS NULL OR r.deleted IS TRUE))
+    OR (p.internal_session_issuer_id IS NOT NULL AND (i.id IS NULL OR i.deleted IS TRUE))
+  )::boolean AS provider_deleted,
+  (p.internal_session_issuer_id IS NOT NULL AND i.disabled_at IS NOT NULL)::boolean AS provider_disabled
+FROM remote_session_ema_providers AS p
+LEFT JOIN remote_session_issuers AS r
+  ON r.organization_id = p.organization_id
+ AND r.id = p.remote_session_issuer_id
+LEFT JOIN internal_session_issuers AS i
+  ON i.organization_id = p.organization_id
+ AND i.id = p.internal_session_issuer_id
+WHERE p.organization_id = @organization_id
+  AND p.vendor_issuer = @vendor_issuer
+  AND p.deleted IS FALSE
+ORDER BY p.position;
+
+-- name: ListEMAExternalProviderCandidates :many
+-- External EMA providers the organization can name: live organization-level
+-- remote session issuers that a live organization user session issuer trusts,
+-- since identity chaining exchanges at the endpoint's trusted issuer.
+SELECT DISTINCT r.id, r.created_at
+FROM remote_session_issuers AS r
+JOIN user_session_issuers AS u
+  ON u.organization_id = r.organization_id
+ AND u.trusted_remote_session_issuer_id = r.id
+ AND u.project_id IS NULL
+ AND u.deleted IS FALSE
+WHERE r.organization_id = @organization_id
+  AND r.project_id IS NULL
+  AND r.deleted IS FALSE
+ORDER BY r.created_at, r.id;
+
+-- name: GetEMAInternalSessionIssuer :one
+-- The organization's live internal session issuer, and whether it is off.
+SELECT id, (disabled_at IS NOT NULL)::boolean AS disabled
+FROM internal_session_issuers
+WHERE organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: LockEMAProviders :exec
+-- Serializes EMA provider order replaces for one organization.
+SELECT pg_advisory_xact_lock(hashtextextended('remote_session_ema_providers:' || @organization_id::text, 0));
+
+-- name: LockEMAProvidersShared :exec
+-- Held while publishing a chained credential, so an order replace cannot
+-- commit between the eligibility check and the write.
+SELECT pg_advisory_xact_lock_shared(hashtextextended('remote_session_ema_providers:' || @organization_id::text, 0));
+
+-- name: SetEMAProvidersLockTimeout :exec
+-- Bounds how long a replace waits on another in the same organization.
+SET LOCAL lock_timeout = '5s';
+
+-- name: DeleteEMAProviders :execrows
+-- Retires the organization's EMA provider order for one vendor issuer.
+UPDATE remote_session_ema_providers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND vendor_issuer = @vendor_issuer
+  AND deleted IS FALSE;
+
+-- name: InsertEMAProvider :exec
+INSERT INTO remote_session_ema_providers (
+  organization_id, vendor_issuer, remote_session_issuer_id, internal_session_issuer_id, position
+) VALUES (
+  @organization_id, @vendor_issuer, @remote_session_issuer_id, @internal_session_issuer_id, @position
+);

@@ -200,7 +200,7 @@ func TestXAAReadinessReportsIdentityChainingAndFederatedCallback(t *testing.T) {
 	reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{
 		{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "connected", IssuerID: &issuerID, ResourceIndicator: "https://upstream.example.test/mcp"},
 	}}}
-	identity := &xaaIdentityStub{callback: &callback, chaining: XAAIdentityChaining{Served: false, Bindings: []XAAIdentityChainingBinding{
+	identity := &xaaIdentityStub{callback: &callback, chaining: XAAIdentityChaining{Served: false, NotServedReason: nil, Providers: []XAAEMAProvider{}, Bindings: []XAAIdentityChainingBinding{
 		{State: "unknown_grants", Stage: "registration", Remediation: "An administrator must confirm effective registration grants.", GrantSource: "unknown", RequestedScopes: []string{"read"}},
 	}}}
 	enabled := func(context.Context, string) (bool, error) { return true, nil }

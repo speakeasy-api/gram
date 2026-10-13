@@ -545,6 +545,35 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MigrateOrganizationRemoteSessionIssuer"}`)
 	})
 
+	Method("setEMAProviders", func() {
+		Description("Replace the order in which EMA providers issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external first, then Speakeasy. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("remote_session_issuer_id", String, "Any remote_session_issuer in the caller's organization that names the vendor authorization server.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("providers", ArrayOf(shared.EMAProviderInput), "Providers in the order they are tried; each at most once.", func() {
+				MaxLength(10)
+			})
+			Required("remote_session_issuer_id", "providers")
+			security.SessionPayload()
+		})
+
+		Result(shared.EMAProviderOrder)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.setEMAProviders")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setOrganizationRemoteSessionIssuerEMAProviders")
+		Meta("openapi:extension:x-speakeasy-name-override", "setEMAProviders")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetOrganizationRemoteSessionIssuerEMAProviders"}`)
+	})
+
 	Method("fetchIssuerMetadata", func() {
 		Description("Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.")
 
@@ -751,6 +780,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	nullableCapability("scope_override", "Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.")
 	Attribute("omit_scope_fallback", Boolean, "When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Null when unset.")
 	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.")
+	Attribute("ema_providers", shared.EMAProviderOrder, "The organization's EMA provider order for this issuer's vendor. Returned by organizationRemoteSessionIssuers.getIssuer only.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

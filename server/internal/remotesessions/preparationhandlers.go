@@ -5,10 +5,12 @@ import (
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // preparationAPIInput authenticates the management surface before parsing object
@@ -73,7 +75,26 @@ func (s *Service) ReadEMA(ctx context.Context, p *gen.ReadEMAPayload) (*gen.Iden
 	if err != nil {
 		return nil, err
 	}
-	return preparationAPIView(result), nil
+	view := preparationAPIView(result)
+	if view.EmaProviders, err = s.endpointEMAProviders(ctx, in, result.Issuer); err != nil {
+		return nil, err
+	}
+	return view, nil
+}
+
+// endpointEMAProviders is the order identity chaining resolves for the
+// endpoint, or nil when the vendor issuer is not an issuer identifier.
+func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput, issuer string) (*types.EMAProviderOrder, error) {
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	vendor, err := NormalizeVendorIssuer(issuer)
+	if err != nil || authCtx == nil {
+		return nil, nil //nolint:nilnil // No order for an issuer that is not an identifier.
+	}
+	order, err := EndpointEMAProviders(ctx, repo.New(s.db), authCtx.ActiveOrganizationID, in.UserSessionIssuerID, vendor, SpeakeasyEMASigning)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, s.logger)
+	}
+	return EMAProviderOrderView(order), nil
 }
 
 func (s *Service) UnlinkEMA(ctx context.Context, p *gen.UnlinkEMAPayload) (*gen.IdentityChainingPreparation, error) {
@@ -95,6 +116,7 @@ func preparationAPIView(r *PreparationResult) *gen.IdentityChainingPreparation {
 		State: r.State, Stage: r.Stage, Remediation: r.Remediation, Retryable: r.Retryable,
 		Generation: r.Generation, ExternalClientID: conv.PtrEmpty(r.ExternalClientID), Issuer: conv.PtrEmpty(r.Issuer),
 		Resource: r.Resource, GrantTypes: r.GrantTypes, Scopes: append([]string{}, r.Scopes...), GrantSource: r.GrantSource,
+		EmaProviders: nil,
 	}
 	if r.BindingID != uuid.Nil {
 		out.BindingID = conv.PtrEmpty(r.BindingID.String())

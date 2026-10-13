@@ -27,6 +27,10 @@ const (
 	ReasonTransientFailure         Reason = "transient_failure"
 	ReasonUnknownRejection         Reason = "unknown_rejection"
 
+	// ReasonProviderUnavailable: no identity provider allowed for the vendor
+	// can serve the request, so the interactive path applies unchanged.
+	ReasonProviderUnavailable Reason = "provider_unavailable"
+
 	// ReasonStaleConfiguration: the binding, delegation or tenant changed
 	// during the attempt, so its result was discarded.
 	ReasonStaleConfiguration Reason = "stale_configuration"
