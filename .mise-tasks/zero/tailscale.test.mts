@@ -30,7 +30,7 @@ const status = {
 const source = parseTOML(
   readFileSync(new URL("../../mise.toml", import.meta.url), "utf8"),
 ) as { env: Record<string, unknown> };
-const dependents = dependentEnvVars(source.env, ["GRAM_HOST"]);
+const dependents = dependentEnvVars(source.env, ["GRAM_HOST", "GRAM_BIND_IP"]);
 const bindings: [string, string][] = [
   ["GRAM_DEVIDP_ADDRESS", source.env.GRAM_DEVIDP_ADDRESS as string],
   [
@@ -80,7 +80,7 @@ process.exit(Number(process.env.TEST_EXIT || 0));
     ...Object.fromEntries(bindings),
     ...Object.fromEntries([...dependents].reverse()),
     GRAM_HOST: "localhost",
-    GRAM_BIND_IP: "",
+    GRAM_BIND_IP: "127.0.0.1",
     GRAM_SSL_EXTRA_HOSTS: "existing.example.com",
   };
   const writeConfig = (file: string, values: Record<string, unknown>) =>
@@ -285,7 +285,7 @@ test("setup can create mise.local.toml and read addresses from top-level status"
   });
   const saved = f.read();
   assert.equal(saved.GRAM_HOST, hostname);
-  assert.equal(saved.GRAM_BIND_IP, undefined);
+  assert.equal(saved.GRAM_BIND_IP, ipv4);
   assert.equal(saved.GRAM_SSL_EXTRA_HOSTS, `${hostname},${ipv4},${ipv6}`);
 });
 
@@ -344,6 +344,19 @@ test("completed setup refreshes newly introduced host dependencies", async (t) =
   assert.equal(f.read().NEW_HOST_URL, "https://{{env.GRAM_HOST}}/new");
 });
 
+test("existing hostname-only setup prompts to switch loopback to the Tailnet", async (t) => {
+  const f = fixture(t);
+  f.writeConfig("mise.local.toml", {
+    ...f.local,
+    GRAM_HOST: hostname,
+    GRAM_SSL_EXTRA_HOSTS: `${hostname},${ipv4},${ipv6}`,
+  });
+  const prompt = t.mock.fn(async () => true);
+  await setupTailscale({ root: f.root, env: f.env, prompt });
+  assert.equal(prompt.mock.callCount(), 1);
+  assert.equal(f.read().GRAM_BIND_IP, ipv4);
+});
+
 test("completed setup refreshes changed Tailnet IPs", async (t) => {
   const f = fixture(t);
   await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
@@ -361,6 +374,7 @@ test("completed setup refreshes changed Tailnet IPs", async (t) => {
   });
   assert.equal(prompt.mock.callCount(), 1);
   assert.ok(f.read().GRAM_SSL_EXTRA_HOSTS.split(",").includes("100.64.0.2"));
+  assert.equal(f.read().GRAM_BIND_IP, "100.64.0.2");
 });
 
 for (const operation of ["unset", "set"]) {
@@ -456,7 +470,7 @@ for (const skipped of ["", "*", "zero:tailscale", "zero:tailscale-other"]) {
     assert.equal(prompts, 1);
     const saved = f.read();
     assert.equal(saved.GRAM_HOST, hostname);
-    assert.equal(saved.GRAM_BIND_IP, f.local.GRAM_BIND_IP);
+    assert.equal(saved.GRAM_BIND_IP, ipv4);
     assert.equal(
       saved.GRAM_SSL_EXTRA_HOSTS,
       `existing.example.com,${hostname},${ipv4},${ipv6}`,
@@ -480,7 +494,10 @@ for (const skipped of ["", "*", "zero:tailscale", "zero:tailscale-other"]) {
       `http://${hostname}:4000`,
     );
     assert.equal(resolved.WORKOS_API_URL, `http://${hostname}:35291/workos`);
-    assert.equal(resolved.GRAM_DEVIDP_ADDRESS, "127.0.0.1:35291");
+    assert.equal(resolved.GRAM_SERVER_ADDRESS, `${ipv4}:23456`);
+    assert.equal(resolved.GRAM_ADMIN_SERVER_ADDRESS, `${ipv4}:23458`);
+    assert.equal(resolved.MOCK_OIDC_ADDRESS, `${ipv4}:4000`);
+    assert.equal(resolved.GRAM_DEVIDP_ADDRESS, `${ipv4}:35291`);
     assert.equal(resolved.GRAM_DEVIDP_CONTROL_ADDRESS, "127.0.0.1:35292");
     const call = JSON.parse(readFileSync(f.calls, "utf8").trim());
     assert.deepEqual(call.args, ["status", "--json", "--peers=false"]);
@@ -488,7 +505,7 @@ for (const skipped of ["", "*", "zero:tailscale", "zero:tailscale-other"]) {
   });
 }
 
-test("setup leaves explicit listener bindings and overrides unchanged", async (t) => {
+test("setup switches the shared bind address and preserves per-service overrides", async (t) => {
   const f = fixture(t);
   f.writeConfig("mise.local.toml", {
     ...f.local,
@@ -499,12 +516,12 @@ test("setup leaves explicit listener bindings and overrides unchanged", async (t
   await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
   const saved = f.read();
   assert.equal(saved.GRAM_HOST, hostname);
-  assert.equal(saved.GRAM_BIND_IP, "192.0.2.10");
+  assert.equal(saved.GRAM_BIND_IP, ipv4);
   assert.equal(saved.GRAM_DEVIDP_ADDRESS, "192.0.2.11:35291");
   assert.equal(saved.GRAM_DEVIDP_CONTROL_ADDRESS, "192.0.2.12:35292");
 });
 
-test("setup accepts an IPv6-only status without changing listener bindings", async (t) => {
+test("setup brackets an IPv6-only bind address", async (t) => {
   const f = fixture(t);
   await setupTailscale({
     root: f.root,
@@ -519,7 +536,16 @@ test("setup accepts an IPv6-only status without changing listener bindings", asy
   });
   const saved = f.read();
   assert.equal(saved.GRAM_HOST, hostname);
-  assert.equal(saved.GRAM_BIND_IP, f.local.GRAM_BIND_IP);
+  assert.equal(saved.GRAM_BIND_IP, `[${ipv6}]`);
+  const resolved = JSON.parse(
+    execFileSync("mise", ["env", "--json"], {
+      cwd: f.root,
+      env: f.env,
+      encoding: "utf8",
+    }),
+  );
+  assert.equal(resolved.GRAM_SERVER_ADDRESS, `[${ipv6}]:23456`);
+  assert.equal(resolved.GRAM_DEVIDP_ADDRESS, `[${ipv6}]:35291`);
   assert.equal(
     saved.GRAM_SSL_EXTRA_HOSTS,
     `existing.example.com,${hostname},${ipv6}`,

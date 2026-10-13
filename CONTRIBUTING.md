@@ -6,11 +6,11 @@ The main dependencies for this project are Mise and Docker. The `./zero` script 
 
 ### Development over Tailscale
 
-With the Tailscale CLI installed, logged in, and a Tailnet DNS name assigned to this machine, `./zero` offers to configure remote development before generating TLS certificates. Accepting saves the DNS name as `GRAM_HOST` and refreshes its dependent settings in `mise.local.toml` without changing assigned ports or listener bindings. The machine's DNS name and IPs are also included in the mkcert certificate. Other devices must trust the local mkcert CA.
+With the Tailscale CLI installed, logged in, and a Tailnet DNS name assigned to this machine, `./zero` offers to configure remote development before generating TLS certificates. Accepting saves the DNS name as `GRAM_HOST`, switches `GRAM_BIND_IP` to the machine's Tailnet IP (preferring IPv4), and refreshes their dependent settings in `mise.local.toml`. Assigned ports and explicit per-service listener overrides are preserved. The machine's DNS name and IPs are also included in the mkcert certificate. Other devices must trust the local mkcert CA.
 
-Public services use `GRAM_BIND_IP` (wildcard by default); health/control listeners stay on `127.0.0.1` independently of the public bind address.
+Services using `GRAM_BIND_IP` default to `127.0.0.1` for local development; Tailscale is optional. Accepting Tailscale setup opts these services into listening on the Tailnet address. Health/control listeners stay on `127.0.0.1` independently of the public bind address. The dashboard and parking server have separate listener settings.
 
-Declining adds `zero:tailscale` to the comma-separated `GRAM_ZERO_SKIP` setting. That task also honors `*`. Completed setup does not prompt again unless forced or the machine's hostname, IPs, or dependent templates change. To retry setup, run `mise run zero:tailscale --force`, then `mise run zero:tls`. Agent-mode setup skips the interactive Tailscale step.
+Declining adds `zero:tailscale` to the comma-separated `GRAM_ZERO_SKIP` setting. That task also honors `*`. Completed setup does not prompt again unless forced or the machine's hostname, IPs, shared bind address, or dependent templates change. To retry setup, run `mise run zero:tailscale --force`, then `mise run zero:tls` and restart the stack with `mise run start`. Agent-mode setup skips the interactive Tailscale step.
 
 `GRAM_SSL_EXTRA_HOSTS` accepts comma-separated DNS names or bare IP addresses, not URLs or hostnames with ports. Invalid entries are rejected before TLS configuration or CA trust changes.
 
