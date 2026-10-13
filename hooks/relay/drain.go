@@ -154,6 +154,11 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			// Mirror the live path's one fallback (a rejected cached key
 			// retries through the config's shared org key), then skip the
 			// deployment's remaining entries. Never delete on auth rejection.
+			if a.c.Source == credToken {
+				// Drop the rejected token so the next drain asks the device
+				// agent for a fresh one; never fall back to a key.
+				forgetAuth()
+			}
 			if a.c.Source == credCache && a.orgKey != "" {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
 				res = cl.send(ctx, org, entry.Envelope, entry.IdempotencyKey)
@@ -380,7 +385,10 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 				}
 			}
 		}
-		if a.ok && entry.ProjectSlug != "" {
+		// A token's project is the one the box's admission authorizes; the
+		// project recorded at spool time came from the plugin config and
+		// would be refused by the project filter.
+		if a.ok && entry.ProjectSlug != "" && a.c.Source != credToken {
 			// The stored deployment identity is the replay routing truth: a
 			// SPEAKEASY_AI_HOOKS_PROJECT_SLUG (or cached project) inherited from the
 			// spawning session must not reroute another project's entries.
