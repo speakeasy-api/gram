@@ -31082,7 +31082,7 @@ paths:
         name: UpdateMcpEndpoint
   /rpc/mcpMetadata.export:
     post:
-      description: Export MCP server details as JSON for documentation and integration purposes.
+      description: Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.
       operationId: exportMcpMetadata
       parameters:
         - allowEmptyValue: true
@@ -86859,13 +86859,15 @@ components:
     ExportMcpMetadataRequestBody:
       type: object
       properties:
+        mcp_server_id:
+          type: string
+          description: The ID of a toolset-backed MCP server. Mutually exclusive with mcp_slug.
+          format: uuid
         mcp_slug:
           type: string
-          description: The MCP server slug (from the install URL)
+          description: The MCP server slug (from the install URL). Mutually exclusive with mcp_server_id.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
-      required:
-        - mcp_slug
     ExprCompileResult:
       type: object
       properties:

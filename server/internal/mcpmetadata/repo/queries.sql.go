@@ -41,11 +41,19 @@ func (q *Queries) DeleteEnvironmentConfig(ctx context.Context, arg DeleteEnviron
 const getHeaderDisplayNames = `-- name: GetHeaderDisplayNames :one
 SELECT header_display_names
 FROM mcp_metadata
-WHERE toolset_id = $1
+WHERE project_id = $1
+  AND (toolset_id = $2::uuid OR mcp_server_id = $2::uuid)
+ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
+LIMIT 1
 `
 
-func (q *Queries) GetHeaderDisplayNames(ctx context.Context, toolsetID uuid.NullUUID) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getHeaderDisplayNames, toolsetID)
+type GetHeaderDisplayNamesParams struct {
+	ProjectID uuid.UUID
+	BackendID uuid.UUID
+}
+
+func (q *Queries) GetHeaderDisplayNames(ctx context.Context, arg GetHeaderDisplayNamesParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getHeaderDisplayNames, arg.ProjectID, arg.BackendID)
 	var header_display_names []byte
 	err := row.Scan(&header_display_names)
 	return header_display_names, err
@@ -65,10 +73,11 @@ func (q *Queries) GetHeaderDisplayNamesByMcpServerID(ctx context.Context, mcpSer
 }
 
 const getHeaderDisplayNamesByToolsetIDs = `-- name: GetHeaderDisplayNamesByToolsetIDs :many
-SELECT toolset_id, header_display_names
+SELECT COALESCE(toolset_id, mcp_server_id)::uuid AS toolset_id, header_display_names
 FROM mcp_metadata
 WHERE project_id = $1
-  AND toolset_id = ANY($2::uuid[])
+  AND (toolset_id = ANY($2::uuid[]) OR mcp_server_id = ANY($2::uuid[]))
+ORDER BY (toolset_id IS NOT NULL), updated_at
 `
 
 type GetHeaderDisplayNamesByToolsetIDsParams struct {
@@ -77,10 +86,11 @@ type GetHeaderDisplayNamesByToolsetIDsParams struct {
 }
 
 type GetHeaderDisplayNamesByToolsetIDsRow struct {
-	ToolsetID          uuid.NullUUID
+	ToolsetID          uuid.UUID
 	HeaderDisplayNames []byte
 }
 
+// Toolset-keyed rows sort last so they win when the caller builds a map.
 func (q *Queries) GetHeaderDisplayNamesByToolsetIDs(ctx context.Context, arg GetHeaderDisplayNamesByToolsetIDsParams) ([]GetHeaderDisplayNamesByToolsetIDsRow, error) {
 	rows, err := q.db.Query(ctx, getHeaderDisplayNamesByToolsetIDs, arg.ProjectID, arg.ToolsetIds)
 	if err != nil {
@@ -101,7 +111,7 @@ func (q *Queries) GetHeaderDisplayNamesByToolsetIDs(ctx context.Context, arg Get
 	return items, nil
 }
 
-const getMetadataByMcpServerID = `-- name: GetMetadataByMcpServerID :one
+const getMetadataByBackendID = `-- name: GetMetadataByBackendID :one
 SELECT id,
        toolset_id,
        mcp_server_id,
@@ -116,54 +126,20 @@ SELECT id,
        created_at,
        updated_at
 FROM mcp_metadata
-WHERE mcp_server_id = $1
-ORDER BY updated_at DESC
+WHERE project_id = $1
+  AND (toolset_id = $2::uuid OR mcp_server_id = $2::uuid)
+ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetMetadataByMcpServerID(ctx context.Context, mcpServerID uuid.NullUUID) (McpMetadatum, error) {
-	row := q.db.QueryRow(ctx, getMetadataByMcpServerID, mcpServerID)
-	var i McpMetadatum
-	err := row.Scan(
-		&i.ID,
-		&i.ToolsetID,
-		&i.McpServerID,
-		&i.ProjectID,
-		&i.ExternalDocumentationUrl,
-		&i.ExternalDocumentationText,
-		&i.LogoID,
-		&i.Instructions,
-		&i.HeaderDisplayNames,
-		&i.DefaultEnvironmentID,
-		&i.InstallationOverrideUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+type GetMetadataByBackendIDParams struct {
+	ProjectID uuid.UUID
+	BackendID uuid.UUID
 }
 
-const getMetadataForToolset = `-- name: GetMetadataForToolset :one
-SELECT id,
-       toolset_id,
-       mcp_server_id,
-       project_id,
-       external_documentation_url,
-       external_documentation_text,
-       logo_id,
-       instructions,
-       header_display_names,
-       default_environment_id,
-       installation_override_url,
-       created_at,
-       updated_at
-FROM mcp_metadata
-WHERE toolset_id = $1
-ORDER BY updated_at DESC
-LIMIT 1
-`
-
-func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.NullUUID) (McpMetadatum, error) {
-	row := q.db.QueryRow(ctx, getMetadataForToolset, toolsetID)
+// A canonical wrapper shares its toolset's id, so one id matches the row under either key.
+func (q *Queries) GetMetadataByBackendID(ctx context.Context, arg GetMetadataByBackendIDParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, getMetadataByBackendID, arg.ProjectID, arg.BackendID)
 	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
@@ -263,6 +239,53 @@ type SetDefaultLogoIfUnsetParams struct {
 // their branding/install-page settings the way a full-record upsert would.
 func (q *Queries) SetDefaultLogoIfUnset(ctx context.Context, arg SetDefaultLogoIfUnsetParams) (McpMetadatum, error) {
 	row := q.db.QueryRow(ctx, setDefaultLogoIfUnset, arg.McpServerID, arg.ProjectID, arg.LogoID)
+	var i McpMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const setHeaderDisplayNames = `-- name: SetHeaderDisplayNames :one
+UPDATE mcp_metadata
+SET header_display_names = $1
+WHERE id = $2
+  AND project_id = $3
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at
+`
+
+type SetHeaderDisplayNamesParams struct {
+	HeaderDisplayNames []byte
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+}
+
+func (q *Queries) SetHeaderDisplayNames(ctx context.Context, arg SetHeaderDisplayNamesParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, setHeaderDisplayNames, arg.HeaderDisplayNames, arg.ID, arg.ProjectID)
 	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,

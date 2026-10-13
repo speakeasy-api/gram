@@ -335,7 +335,7 @@ func handleToolsCall(
 		MCPClient:  clientIdentity,
 	}
 
-	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, toolsetID)
+	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, payload.projectID, toolsetID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to filter omitted environment variables").LogError(ctx, logger)
 	}
@@ -869,9 +869,10 @@ func filterOmittedEnvVars(
 	ctx context.Context,
 	env toolconfig.ToolCallEnv,
 	repo *mcpmetadata_repo.Queries,
+	projectID uuid.UUID,
 	toolsetID uuid.UUID,
 ) error {
-	rawMetadata, err := repo.GetMetadataForToolset(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
+	rawMetadata, err := repo.GetMetadataByBackendID(ctx, mcpmetadata_repo.GetMetadataByBackendIDParams{ProjectID: projectID, BackendID: toolsetID})
 	if err != nil {
 		// Fallback behavior for backwards compatibility
 		if errors.Is(err, pgx.ErrNoRows) {
