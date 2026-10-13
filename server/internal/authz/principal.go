@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -22,6 +23,16 @@ var ErrPrincipalNotFound = errors.New("principal not found")
 // ErrPrincipalInvalid reports caller input that cannot identify a supported
 // principal.
 var ErrPrincipalInvalid = errors.New("principal invalid")
+
+// ResolveActorPrincipals resolves the principals an audience or bypass check
+// considers for the request: the effective agent and its roles when an agent or
+// an admitted workload acts, else userID's principals.
+func ResolveActorPrincipals(ctx context.Context, db repo.DBTX, organizationID string, userID string) ([]urn.Principal, error) {
+	if agent, ok := contextvalues.EffectiveAgent(ctx); ok {
+		return ResolveAgentPrincipals(ctx, db, organizationID, agent)
+	}
+	return ResolveUserPrincipals(ctx, db, organizationID, userID)
+}
 
 // ResolveAgentPrincipals resolves the principals considered for an agent actor:
 // user:all (so everyone-audience policies still apply), the agent, and the

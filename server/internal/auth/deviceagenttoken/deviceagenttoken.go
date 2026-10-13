@@ -321,6 +321,7 @@ func (i *Issuer) Admit(ctx context.Context, raw string, engine *authz.Engine) (_
 		}
 		return ctx, AssignedAgent{}, oops.E(oops.CodeUnexpected, err, "resolve device-agent token agent")
 	}
+	admitted = contextvalues.WithWorkloadAgent(admitted, agent.Principal)
 	return context.WithValue(admitted, assignedAgentKey{}, agent), agent, nil
 }
 
@@ -336,18 +337,8 @@ func AssignedAgentFromContext(ctx context.Context) (AssignedAgent, bool) {
 // agent key authenticated it, or the agent Admit resolved when a workload did.
 // The workload stays the authenticated actor, so audit and logs name the device;
 // the agent supplies policy, plugin selection, attribution and spend.
-func EffectiveAgent(ctx context.Context) (agent urn.Principal, ok bool) {
-	actor, found := contextvalues.AuthenticatedActor(ctx)
-	switch {
-	case !found:
-	case actor.Type == urn.PrincipalTypeAgent:
-		agent, ok = actor, true
-	case actor.Type == urn.PrincipalTypeWorkload:
-		if assigned, found := AssignedAgentFromContext(ctx); found {
-			agent, ok = assigned.Principal, true
-		}
-	}
-	return agent, ok
+func EffectiveAgent(ctx context.Context) (urn.Principal, bool) {
+	return contextvalues.EffectiveAgent(ctx)
 }
 
 // IsWorkloadActor reports whether a workload authenticated the request.
