@@ -400,7 +400,7 @@ jobs:
 
   docker-build-server:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    needs: [changes, server-build-lint]
+    needs: [changes, server-build]
     if: needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 4
@@ -1160,6 +1160,58 @@ jobs:
           cat breaking-changes.md
           exit 1
 
+  # Builds and uploads the server binary on its own so docker-build-server,
+  # and the preview environments waiting on its image, do not wait minutes for
+  # lint and codegen checks. ci-gate still requires server-build-lint.
+  server-build:
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    env:
+      GOMAXPROCS: 16
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
+
+      - name: Compute runtime image content hash
+        id: assistant-runtime-hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          hash=$(mise run hash:assistant-runtime-image)
+          if [ -z "$hash" ]; then
+            echo "runtime image hash is empty" >&2
+            exit 1
+          fi
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          GRAM_ASSISTANT_RUNTIME_IMAGE_HASH: ${{ steps.assistant-runtime-hash.outputs.hash }}
+        run: mise run build:server --readonly
+
+      - name: Build tunnel gateway
+        run: mise run build:tunnel-gateway --readonly
+
+      - name: Upload server build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: server-bin
+          path: server/bin
+          retention-days: 2
+
   server-build-lint:
     runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
@@ -1226,13 +1278,6 @@ jobs:
           # Skips a JSONSchema fetch from golangci-lint.run on every run.
           verify: false
           working-directory: server
-
-      - name: Upload server build
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: server-bin
-          path: server/bin
-          retention-days: 2
 
       - name: Install Go tools
         run: go install tool
@@ -2410,6 +2455,7 @@ jobs:
     needs:
       - changes
       - format-check
+      - server-build
       - server-build-lint
       - server-test
       - demo-seed-safety
