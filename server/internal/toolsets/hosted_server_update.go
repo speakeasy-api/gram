@@ -43,8 +43,8 @@ func (s *Service) DisableHostedServer(ctx context.Context, toolsetID uuid.UUID) 
 		ToolsetID:             toolsetID,
 		Name:                  nil,
 		Visibility:            mcpservers.VisibilityDisabled,
-		UserSessionIssuerID:   uuid.NullUUID{},
-		ToolVariationsGroupID: uuid.NullUUID{},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		NetworkAccessMode:     nil,
 	}, true)
 	return err
