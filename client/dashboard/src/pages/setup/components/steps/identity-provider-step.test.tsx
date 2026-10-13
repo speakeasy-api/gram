@@ -530,13 +530,15 @@ describe("IdentityProviderStep failure feedback", () => {
 
   // A status check that never completed is not the same answer as a directory
   // WorkOS says is missing, and only one of them is worth retrying right away.
+  // A failed refetch keeps the last successful data, which on this screen is
+  // always populated, so the error flag is the only thing that tells them
+  // apart — reading `data` alone reports every failed check as "not detected".
   it("separates a failed status check from setup WorkOS has not seen", async () => {
+    const stale = { ...onboardingStatus.current.data };
     const refetch = vi
       .fn()
-      .mockResolvedValueOnce({ data: undefined })
-      .mockResolvedValueOnce({
-        data: { ...onboardingStatus.current.data },
-      });
+      .mockResolvedValueOnce({ isError: true, data: stale })
+      .mockResolvedValueOnce({ isError: false, data: stale });
     onboardingStatus.current = { ...onboardingStatus.current, refetch };
 
     render(<IdentityProviderStep onComplete={() => {}} />);
@@ -558,8 +560,26 @@ describe("IdentityProviderStep failure feedback", () => {
     );
   });
 
+  it("reports a status check that returned nothing at all", async () => {
+    const refetch = vi
+      .fn()
+      .mockResolvedValue({ isError: true, data: undefined });
+    onboardingStatus.current = { ...onboardingStatus.current, refetch };
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    openPortalFor("Connect directory");
+    fireEvent.click(screen.getByRole("button", { name: "Verify connection" }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Could not check directory sync. Try again in a moment.",
+      ),
+    );
+  });
+
   it("stays quiet when verification finds the directory", async () => {
     const refetch = vi.fn().mockResolvedValue({
+      isError: false,
       data: { ...onboardingStatus.current.data, dsyncConfigured: true },
     });
     onboardingStatus.current = { ...onboardingStatus.current, refetch };

@@ -193,11 +193,15 @@ function usePortalSetup(intent: PortalIntent) {
     setVerifying(true);
     try {
       const result = await refetchOnboardingStatus();
-      if (result.data?.[CONFIGURED_KEY[intent]]) return;
-      if (result.data === undefined) {
+      // A refetch that fails keeps the last successful data, which on this
+      // screen is always populated — the sub-step rendered from it. So the
+      // error flag, not the absence of data, is what separates "could not
+      // check" from "checked, and the setup is not there".
+      if (result.isError || result.data === undefined) {
         toast.error(`Could not check ${noun}. Try again in a moment.`);
         return;
       }
+      if (result.data[CONFIGURED_KEY[intent]]) return;
       toast.error(
         `No ${noun} detected yet. Finish setup in the WorkOS tab, then try again.`,
       );

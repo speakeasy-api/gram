@@ -1375,21 +1375,35 @@ func portalLinkError(intent workos.PortalIntent, cause error) *oops.ShareableErr
 	case apiErr.StatusCode == http.StatusUnauthorized, apiErr.StatusCode == http.StatusForbidden:
 		return oops.E(oops.CodeUnexpected, cause, "%s setup could not be started. Contact Speakeasy support.", label)
 	case apiErr.StatusCode == http.StatusTooManyRequests:
+		// Mapped to gateway_error, so this leaves as a 502 rather than a 429.
+		// CodeUnavailable is reserved for a Speakeasy-side dependency being
+		// down, and only codes declared in the shared Goa error responses keep
+		// their message through the SDK, so 502 is the closest declared fit.
 		return oops.E(oops.CodeGatewayError, cause, "Too many %s setup attempts. Wait a minute, then try again.", label)
 	case apiErr.StatusCode >= http.StatusInternalServerError:
 		return oops.E(oops.CodeGatewayError, cause, "%s setup could not be started right now. Try again in a few minutes.", label)
-	case apiErr.StatusCode >= http.StatusBadRequest && intent == workos.PortalIntentSSO:
-		// A missing verified domain is the one precondition an admin can clear
-		// without support, and it is the common cause of a refused SSO portal
-		// session. No equivalent precondition is established for the other
-		// intents, so they get the generic next step rather than advice that
-		// may send the admin somewhere irrelevant.
-		return oops.E(oops.CodeBadRequest, cause, "Verify a domain for this organization before setting up %s.", label)
+	case isPortalValidationStatus(apiErr.StatusCode) && intent == workos.PortalIntentSSO:
+		// A missing verified domain is the common cause of a refused SSO portal
+		// session and the one precondition an admin can clear without support,
+		// so it leads. It is not the only validation failure WorkOS can return
+		// here — a caller passing intent options can trip others — which is why
+		// the message offers support as the alternative rather than asserting
+		// the diagnosis. No equivalent precondition is established for the
+		// other intents, so they fall through to the generic next step.
+		return oops.E(oops.CodeBadRequest, cause, "%s setup was refused. Verify a domain for this organization, then try again, or contact Speakeasy support if one is already verified.", label)
 	case apiErr.StatusCode >= http.StatusBadRequest:
 		return oops.E(oops.CodeBadRequest, cause, "%s setup could not be started. Contact Speakeasy support if it keeps failing.", label)
 	default:
 		return oops.E(oops.CodeGatewayError, cause, "%s setup could not be started. Try again, and contact Speakeasy support if it keeps failing.", label)
 	}
+}
+
+// isPortalValidationStatus reports whether WorkOS rejected the content of the
+// request, as opposed to the statuses handled above or a transport-level 4xx
+// such as a 408 timeout. Only a rejection carries a precondition the admin
+// might be able to clear.
+func isPortalValidationStatus(status int) bool {
+	return status == http.StatusBadRequest || status == http.StatusUnprocessableEntity
 }
 
 // requirePortalIntentEntitlement fails closed: an intent without an explicit

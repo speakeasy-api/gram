@@ -293,8 +293,9 @@ func TestService_GenerateWorkOSAdminPortalLink_LogStreamsNonEnterpriseDenied(t *
 	ti.orgs.AssertNotCalled(t, "GenerateAdminPortalLink", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
-// A WorkOS response body carries the organization id and the request path. It
-// belongs in the logs, never in the message the admin reads.
+// A WorkOS failure carries detail the admin must never be shown: the response
+// body names the organization, and the APIError around it names the request
+// path. Both belong in the logs. The organization id here is a placeholder.
 const testWorkOSErrorBody = `{"code":"organization_domain_not_verified","message":"Organization org_01SECRET has no verified domain","organization_id":"org_01SECRET"}`
 
 func workosAPIError(status int) *thirdpartyworkos.APIError {
@@ -333,7 +334,25 @@ func TestService_GenerateWorkOSAdminPortalLink_SSORejectedNeedsVerifiedDomain(t 
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "sso",
 	})
-	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "Verify a domain for this organization before setting up Single Sign-On.")
+	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "Single Sign-On setup was refused. Verify a domain for this organization, then try again, or contact Speakeasy support if one is already verified.")
+
+	ti.orgs.AssertExpectations(t)
+}
+
+// A 408 is WorkOS not answering in time, not WorkOS objecting to the request,
+// so it must not hand the admin the verified-domain step as its diagnosis.
+func TestService_GenerateWorkOSAdminPortalLink_SSOTimeoutIsNotADomainPrecondition(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithFeatures(t, enabledFeatures(productfeatures.FeatureSSO))
+
+	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentSSO, mock.Anything).
+		Return("", workosAPIError(408)).Once()
+
+	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: "sso",
+	})
+	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "Single Sign-On setup could not be started. Contact Speakeasy support if it keeps failing.")
 
 	ti.orgs.AssertExpectations(t)
 }
