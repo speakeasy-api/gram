@@ -265,7 +265,7 @@ func TestRemoteLogin_GatewayMemberResourceDecides(t *testing.T) {
 		withRemoteServer(resource.URL), withGatewayMember(), withResource(resource.URL),
 		withProber(), withLiveResourceScopes(), withRegistrationTelemetry(),
 	)
-	require.Equal(t, "files:read files:write openid", scopeOf(t, env.authURL))
+	require.Equal(t, "files:read files:write", scopeOf(t, env.authURL))
 	require.EqualValues(t, 1, hits.Load())
 	requireScopeResolution(t, env, remotesessionmetrics.ScopeSourceLiveResource, protectedresource.ProbeOutcomeFetched)
 }
