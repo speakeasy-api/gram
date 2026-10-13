@@ -757,6 +757,25 @@ func (q *Queries) GetPlatformGcpIamCredentialForProvisioning(ctx context.Context
 	return i, err
 }
 
+const getPlatformGcpIamCredentialServiceAccount = `-- name: GetPlatformGcpIamCredentialServiceAccount :one
+SELECT gic.impersonate_service_account
+FROM external_credentials AS ec
+JOIN gcp_iam_credentials AS gic ON gic.external_credential_id = ec.id
+WHERE ec.id = $1
+  AND ec.organization_id IS NULL
+  AND ec.project_id IS NULL
+  AND ec.provider = 'gcp_iam'
+`
+
+// The service account a platform credential impersonates, tombstones
+// included: the signer grant made with it outlives the credential.
+func (q *Queries) GetPlatformGcpIamCredentialServiceAccount(ctx context.Context, id uuid.UUID) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getPlatformGcpIamCredentialServiceAccount, id)
+	var impersonate_service_account pgtype.Text
+	err := row.Scan(&impersonate_service_account)
+	return impersonate_service_account, err
+}
+
 const keySetAttached = `-- name: KeySetAttached :one
 SELECT EXISTS (
   SELECT 1

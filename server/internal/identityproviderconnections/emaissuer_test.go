@@ -734,7 +734,7 @@ func TestEMAIssuer_SweepPagesThroughEveryOrganization(t *testing.T) {
 	require.Len(t, kms.Disabled(), len(organizations))
 }
 
-func TestEMAIssuer_CleanupWithoutTheKeyCredentialRevokesTheConfiguredSignerOrStaysPending(t *testing.T) {
+func TestEMAIssuer_CleanupRevokesTheOriginallyGrantedAccountOrStaysPending(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)
 	provisioner, _ := f.provisioner(t)
@@ -745,20 +745,22 @@ func TestEMAIssuer_CleanupWithoutTheKeyCredentialRevokesTheConfiguredSignerOrSta
 	require.NoError(t, err)
 	require.NoError(t, testrepo.New(f.ti.conn).SoftDeleteExternalCredentialFixture(ctx, testrepo.SoftDeleteExternalCredentialFixtureParams{ID: f.credentialID, OrganizationID: pgtype.Text{String: "", Valid: false}}))
 
-	unconfigured, _ := f.provisioner(t)
-	cleaned, pending, err := unconfigured.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
-	require.Error(t, err, "a grant with no known account is never reported removed")
+	require.NoError(t, testrepo.New(f.ti.conn).SetGcpIamCredentialServiceAccountFixture(ctx, testrepo.SetGcpIamCredentialServiceAccountFixtureParams{ImpersonateServiceAccount: pgtype.Text{String: "", Valid: false}, ExternalCredentialID: f.credentialID}))
+	reconfigured := provisiontest.NewProvisioner(t, f.ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, f.credentialID, "other-signer@example.iam.gserviceaccount.com")
+	cleaned, pending, err := reconfigured.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
+	require.Error(t, err, "with the granted account unknown, the configured signer never stands in")
 	require.Zero(t, cleaned)
 	require.Equal(t, 1, pending)
 
+	require.NoError(t, testrepo.New(f.ti.conn).SetGcpIamCredentialServiceAccountFixture(ctx, testrepo.SetGcpIamCredentialServiceAccountFixtureParams{ImpersonateServiceAccount: conv.ToPGText(provisiontest.SigningServiceAccount()), ExternalCredentialID: f.credentialID}))
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
-	configured := provisiontest.NewProvisioner(t, f.ti.conn, kms.Factory, testServerURL, f.credentialID, provisiontest.SigningServiceAccount())
-	cleaned, pending, err = configured.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
+	reconfigured = provisiontest.NewProvisioner(t, f.ti.conn, kms.Factory, testServerURL, f.credentialID, "other-signer@example.iam.gserviceaccount.com")
+	cleaned, pending, err = reconfigured.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, 1, cleaned)
 	require.Zero(t, pending)
 	require.Len(t, kms.RevokedGrants(), 1)
-	require.Contains(t, kms.RevokedGrants()[0], provisiontest.SigningServiceAccount(), "the configured signer's grant is removed")
+	require.Contains(t, kms.RevokedGrants()[0], provisiontest.SigningServiceAccount(), "the deleted credential's account, which holds the grant, loses it")
 }
 
 func TestEMAIssuer_CopiedDeploymentCannotSignOrManageSourceKeys(t *testing.T) {

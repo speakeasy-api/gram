@@ -367,17 +367,15 @@ func (p *Provisioner) disableEMAIssuerKey(ctx context.Context, kms gcpkms.Provis
 	if err != nil {
 		return fmt.Errorf("derive revoked issuer kms key name: %w", err)
 	}
-	// The grant belongs to the account the key's credential impersonated. If
-	// that credential is gone, the configured platform signer is the same
-	// account; with neither, cleanup stays pending rather than claim success.
-	serviceAccount := strings.TrimSpace(p.cfg.SigningServiceAccount)
-	signer, err := q.GetPlatformGcpIamCredentialForProvisioning(ctx, row.ExternalCredentialID)
-	switch {
-	case err == nil && signer.GcpIamCredential.ImpersonateServiceAccount.String != "":
-		serviceAccount = signer.GcpIamCredential.ImpersonateServiceAccount.String
-	case err != nil && !errors.Is(err, pgx.ErrNoRows):
+	// The grant belongs to the account the key's credential impersonated when
+	// the key was created, read even after the credential is deleted. The
+	// configured signer may have changed since, so it never stands in; with no
+	// known account, cleanup stays pending rather than claim success.
+	granted, err := q.GetPlatformGcpIamCredentialServiceAccount(ctx, row.ExternalCredentialID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("load revoked issuer key's signing credential: %w", err)
 	}
+	serviceAccount := strings.TrimSpace(granted.String)
 	if serviceAccount == "" {
 		return errors.New("revoked issuer key's signer grant has no known service account; remove it by hand")
 	}

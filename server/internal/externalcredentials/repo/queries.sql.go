@@ -12,6 +12,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countIssuerKeysGrantedByCredential = `-- name: CountIssuerKeysGrantedByCredential :one
+SELECT count(*)
+FROM external_keys AS ek
+JOIN json_web_keys AS k
+  ON k.external_key_id = ek.id
+ AND k.organization_id = ek.organization_id
+JOIN internal_session_issuers AS isi
+  ON isi.organization_id = k.organization_id
+ AND isi.json_web_key_set_id = k.json_web_key_set_id
+WHERE ek.external_credential_id = $1::uuid
+  AND k.kms_disabled_at IS NULL
+`
+
+// Issuer keys still holding a signer grant made with this credential's
+// service account: live keys and revoked keys whose KMS cleanup is pending.
+func (q *Queries) CountIssuerKeysGrantedByCredential(ctx context.Context, externalCredentialID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countIssuerKeysGrantedByCredential, externalCredentialID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countLiveManagedExternalKeysByCredential = `-- name: CountLiveManagedExternalKeysByCredential :one
 SELECT count(*)
 FROM external_keys

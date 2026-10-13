@@ -64,6 +64,17 @@ WHERE ec.id = @id
   AND ec.provider = 'gcp_iam'
   AND ec.deleted IS FALSE;
 
+-- The service account a platform credential impersonates, tombstones
+-- included: the signer grant made with it outlives the credential.
+-- name: GetPlatformGcpIamCredentialServiceAccount :one
+SELECT gic.impersonate_service_account
+FROM external_credentials AS ec
+JOIN gcp_iam_credentials AS gic ON gic.external_credential_id = ec.id
+WHERE ec.id = @id
+  AND ec.organization_id IS NULL
+  AND ec.project_id IS NULL
+  AND ec.provider = 'gcp_iam';
+
 -- The managed client, its set, and the set's active key. The key join is LEFT
 -- so a revoked connection (live client, live set, no live keys) still resolves.
 -- The set join is LEFT for client-secret clients, which have no set; a client

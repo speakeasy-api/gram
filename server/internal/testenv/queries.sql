@@ -1637,6 +1637,11 @@ WHERE id = @id
   AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
   AND project_id IS NULL;
 
+-- name: SetGcpIamCredentialServiceAccountFixture :exec
+-- Test-only re-point of a credential's impersonated account, tombstones included.
+UPDATE gcp_iam_credentials SET impersonate_service_account = sqlc.narg(impersonate_service_account)::text
+WHERE external_credential_id = @external_credential_id;
+
 -- name: RevokeDelegationUserIssuersFixture :exec
 -- Test-only revocation of organization-scoped delegation authority.
 UPDATE user_session_issuers SET deleted_at = clock_timestamp()

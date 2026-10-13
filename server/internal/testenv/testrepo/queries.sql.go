@@ -5109,6 +5109,22 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
+const setGcpIamCredentialServiceAccountFixture = `-- name: SetGcpIamCredentialServiceAccountFixture :exec
+UPDATE gcp_iam_credentials SET impersonate_service_account = $1::text
+WHERE external_credential_id = $2
+`
+
+type SetGcpIamCredentialServiceAccountFixtureParams struct {
+	ImpersonateServiceAccount pgtype.Text
+	ExternalCredentialID      uuid.UUID
+}
+
+// Test-only re-point of a credential's impersonated account, tombstones included.
+func (q *Queries) SetGcpIamCredentialServiceAccountFixture(ctx context.Context, arg SetGcpIamCredentialServiceAccountFixtureParams) error {
+	_, err := q.db.Exec(ctx, setGcpIamCredentialServiceAccountFixture, arg.ImpersonateServiceAccount, arg.ExternalCredentialID)
+	return err
+}
+
 const setLocalLockTimeoutFixture = `-- name: SetLocalLockTimeoutFixture :one
 SELECT set_config('lock_timeout', $1::text, true)
 `

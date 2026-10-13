@@ -224,6 +224,15 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 		// A concurrent delete between the load above and the lock.
 		return nil, oops.E(oops.CodeNotFound, nil, "platform gcp iam credential not found")
 	}
+	// Issuer key cleanup removes the grant from this credential's account, so
+	// it must stay the account the grant was made to.
+	granted, err := q.CountIssuerKeysGrantedByCredential(ctx, id)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error counting issuer signing keys").LogError(ctx, logger)
+	}
+	if granted > 0 {
+		return nil, oops.E(oops.CodeConflict, nil, "credential holds signer grants on %d issuer keys; rotate them and let their cleanup finish first", granted)
+	}
 
 	ec, err := q.UpdateExternalCredential(ctx, repo.UpdateExternalCredentialParams{
 		Name:           name,
