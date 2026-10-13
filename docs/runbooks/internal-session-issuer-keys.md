@@ -2,6 +2,8 @@
 
 An organization's internal session issuer signs enterprise-managed authorization assertions (ID-JAGs) for its users. Vendors trust its issuer URL, `<origin>/oauth/idp/org/<org-id>`, which never changes. Its signing keys live in GCP KMS on the platform identity provider key ring (`GRAM_IDENTITY_PROVIDER_KMS_KEY_RING`), named `emaissuer-*`. Each assertion's email must be on one of the organization's verified domains at signing time, since vendors trust the email alone.
 
+Speakeasy serves a vendor only where an admin selected it as that vendor's EMA provider, and only while the `sign-in-enforcement` flag is on for the organization.
+
 ## Issuer origin
 
 `<origin>` is the outbound callback origin (`GRAM_OUTBOUND_CALLBACK_URL`, defaulting to the server URL). The `start` and `worker` deployments must set the same value: the server signs and serves discovery, and the worker sweeps keys. Each issuer pins the origin it was created on, and a deployment refuses to sign, provision keys, rotate routinely or clean up KMS for an issuer pinned to another origin. Disabling and compromise containment still work, since they only touch the database, so never skip them during an origin mismatch. Changing the outbound origin makes every existing issuer unable to sign (`state: unavailable`); it does not move them, because vendors trust the old URL. To recover, set `GRAM_OUTBOUND_CALLBACK_URL` back to the origin the issuers were created on, on both deployments. Moving issuers to a new origin means each organization re-registering a new URL with every vendor, which this runbook doesn't cover.
@@ -18,7 +20,7 @@ An organization admin replaces a compromised key on IDP and SSO › Identity pro
 3. Read the response:
    - `state: enabled` and `kms_cleanup_pending: 0`: done.
    - `kms_cleanup_pending` above 0: the compromised keys are already unpublished. The hourly sweep retries cleanup until it succeeds. Watch `gram.internal_session_issuer.kms_cleanup.pending`, or clean up by hand (below).
-   - `state: keyless` with `replacement_error`: no replacement yet (KMS outage, signing misconfiguration, or the mint rate limit is exhausted or unreachable, since minting fails closed). The page shows the error instead of success. Nothing is signed meanwhile, and EMA connections fall back to other identity providers. The page offers **Finish setting up a new key** under **Signing keys**, which repeats the call; through the API, with no active key, `active_kid` may be left out.
+   - `state: keyless` with `replacement_error`: no replacement yet (KMS outage, signing misconfiguration, or the mint rate limit is exhausted or unreachable, since minting fails closed). The page shows the error instead of success. Nothing is signed meanwhile: services that selected Speakeasy get the interactive sign-in, and nothing falls back to another provider. The page offers **Finish setting up a new key** under **Signing keys**, which repeats the call; through the API, with no active key, `active_kid` may be left out.
 4. Repeats that name a key that was already replaced change nothing, so retries never revoke the fresh key or mint further keys.
 5. If the platform signing identity itself is suspect (the signing service account or its credential, not one organization's key), rotating alone doesn't help: whoever holds the identity can sign directly with KMS. In order:
    1. Pause all signing (below).
