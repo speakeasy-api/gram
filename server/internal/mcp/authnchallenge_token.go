@@ -1423,7 +1423,11 @@ func (s *Service) writeRefreshTokenReplay(
 	if payload.Subject.Kind == urn.SessionSubjectKindUser {
 		// A replay must not hand back a successor that a revocation has
 		// since soft-deleted or whose sign-in it revoked.
-		if reason, ok := s.humanReplayRevoked(ctx, endpoint, payload.JTI); !ok {
+		check := s.humanReplayRevoked
+		if s.replayLiveness != nil {
+			check = s.replayLiveness
+		}
+		if reason, ok := check(ctx, endpoint, payload.JTI); !ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refreshed session is no longer active; sign in again")
 		}

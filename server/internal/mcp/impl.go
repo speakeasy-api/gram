@@ -238,6 +238,9 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+	// replayLiveness overrides the refresh-replay session check in unit tests
+	// that run without a database.
+	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool)
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -492,6 +495,7 @@ func NewService(
 	)
 
 	service := &Service{
+		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
 		consentBindings:           nil,
