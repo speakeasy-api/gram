@@ -155,10 +155,11 @@ type selectedGovernor struct {
 	*recordingGovernor
 	selection remotesessions.EMAProviderSelection
 	selected  bool
+	err       error
 }
 
-func (g selectedGovernor) ProviderSelection(context.Context, identitychaining.Request) (remotesessions.EMAProviderSelection, bool) {
-	return g.selection, g.selected
+func (g selectedGovernor) ProviderSelection(context.Context, identitychaining.Request) (remotesessions.EMAProviderSelection, bool, error) {
+	return g.selection, g.selected, g.err
 }
 
 func TestXAAIdentityInspectorReportsTheProvider(t *testing.T) {
@@ -190,6 +191,11 @@ func TestXAAIdentityInspectorReportsTheProvider(t *testing.T) {
 	unbound := inspect(selectedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, selection: remotesessions.EMAProviderSelection{}, selected: false})
 	require.Equal(t, "binding_not_ready", conv.PtrValOr(unbound.NotServedReason, ""))
 	require.Nil(t, unbound.Provider)
+
+	unreadable := inspect(selectedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, selection: remotesessions.EMAProviderSelection{}, selected: false, err: identitychaining.ErrProviderSelectionUnavailable})
+	require.False(t, unreadable.Served)
+	require.Equal(t, "provider_selection_unavailable", conv.PtrValOr(unreadable.NotServedReason, ""), "an unreadable selection is not reported as a missing binding")
+	require.Nil(t, unreadable.Provider)
 }
 
 type failedResourceGovernor struct {
@@ -202,7 +208,7 @@ func (g *failedResourceGovernor) ResolveResource(context.Context, identitychaini
 	g.calls++
 	return protectedresource.EndpointResource{}, g.err
 }
-func (*failedResourceGovernor) ProviderSelection(context.Context, identitychaining.Request) (remotesessions.EMAProviderSelection, bool) {
+func (*failedResourceGovernor) ProviderSelection(context.Context, identitychaining.Request) (remotesessions.EMAProviderSelection, bool, error) {
 	panic("failed discovery must not be probed a second time")
 }
 

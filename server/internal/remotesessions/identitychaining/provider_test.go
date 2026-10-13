@@ -102,7 +102,7 @@ func TestProviders_DefaultIsTheEndpointsExternalIssuer(t *testing.T) {
 	f := newDevIDPFixture(t, devIDPOptions{})
 	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
 
-	selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
+	selection, ok, _ := f.chainer.ProviderSelection(t.Context(), f.req)
 	require.True(t, ok)
 	require.True(t, selection.IsDefault)
 	require.Equal(t, remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}, selection.Provider, "Speakeasy requires an explicit selection")
@@ -117,7 +117,7 @@ func TestProviders_DefaultDoesNotSelectSpeakeasyWhenItCanSign(t *testing.T) {
 	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
 	useSpeakeasySource(f, &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0})
 
-	selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
+	selection, ok, _ := f.chainer.ProviderSelection(t.Context(), f.req)
 	require.True(t, ok)
 	require.Equal(t, remotesessions.EMAProviderExternal, selection.Provider.Kind)
 }
@@ -139,7 +139,7 @@ func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {
 			f := newDevIDPFixture(t, devIDPOptions{})
 			tc.setup(t, f)
 
-			runtime, ok := f.chainer.ProviderSelection(t.Context(), f.req)
+			runtime, ok, _ := f.chainer.ProviderSelection(t.Context(), f.req)
 			require.True(t, ok)
 			vendor, err := remotesessions.NormalizeVendorIssuer(f.vendorIssuer)
 			require.NoError(t, err)
@@ -158,7 +158,7 @@ func TestProviders_ExplicitSelectionNeverFallsThroughToExternal(t *testing.T) {
 	setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
 	requests := f.idp.Requests()
 
-	selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
+	selection, ok, _ := f.chainer.ProviderSelection(t.Context(), f.req)
 	require.True(t, ok)
 	require.Equal(t, remotesessions.EMAProviderSpeakeasy, selection.Provider.Kind)
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
@@ -218,8 +218,9 @@ func TestProviders_SeveralSavedProvidersFailClosed(t *testing.T) {
 	setPolicy(t, f, f.req.OrganizationID, external(f.trustedIssuerID), speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
 	requests := f.idp.Requests()
 
-	_, ok := f.chainer.ProviderSelection(t.Context(), f.req)
+	_, ok, err := f.chainer.ProviderSelection(t.Context(), f.req)
 	require.False(t, ok, "no provider is picked from several")
+	require.ErrorIs(t, err, ErrProviderSelectionUnavailable)
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.Equal(t, ReasonTransientFailure, outcome.Reason)
 	require.Zero(t, src.issued)
@@ -255,7 +256,7 @@ func TestProviders_UnavailableSelectionIsNotServed(t *testing.T) {
 			tc.setup(t, f)
 			requests := f.idp.Requests()
 
-			selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
+			selection, ok, _ := f.chainer.ProviderSelection(t.Context(), f.req)
 			require.True(t, ok)
 			require.Equal(t, tc.reason, selection.Provider.Unavailable)
 			_, serves := f.chainer.Serves(t.Context(), f.req)
@@ -289,7 +290,7 @@ func TestProviders_AnotherOrganizationsSelectionDoesNotApply(t *testing.T) {
 	require.NoError(t, testrepo.New(f.db).SeedDelegationLoaderOrganizationFixture(t.Context(), testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: other, Name: "Other organization", Slug: "other-" + uuid.NewString()[:8]}))
 	setPolicy(t, f, other, speakeasy(seedSpeakeasyIssuer(t, f, other)))
 
-	selection, ok := f.chainer.ProviderSelection(t.Context(), f.req)
+	selection, ok, _ := f.chainer.ProviderSelection(t.Context(), f.req)
 	require.True(t, ok)
 	require.True(t, selection.IsDefault)
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)

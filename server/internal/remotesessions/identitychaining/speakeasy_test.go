@@ -262,7 +262,7 @@ func TestSpeakeasy_SignedExchangeAndRevocation(t *testing.T) {
 		governor.SetSpeakeasyIssuer(gate, otherSigner, flags)
 		_, serves := governor.Serves(ctx, f.req)
 		require.False(t, serves, "foreign deployment must not advertise issuer readiness")
-		selection, resolved := governor.ProviderSelection(ctx, f.req)
+		selection, resolved, _ := governor.ProviderSelection(ctx, f.req)
 		require.True(t, resolved)
 		require.Equal(t, remotesessions.EMAProviderSigningUnavailable, selection.Provider.Unavailable)
 		require.EqualValues(t, 1, calls.Load())

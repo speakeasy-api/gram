@@ -99,23 +99,28 @@ func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	return sel.remoteIssuerID, true
 }
 
+// ErrProviderSelectionUnavailable means a single ready binding names the
+// upstream but its vendor's EMA provider selection could not be read.
+var ErrProviderSelectionUnavailable = errors.New("identitychaining: ema provider selection unavailable")
+
 // ProviderSelection is req's vendor EMA provider for this endpoint, flagged
 // when it cannot serve. False when no single ready binding names the
-// upstream or the selection cannot be read.
-func (g *Governor) ProviderSelection(ctx context.Context, req Request) (remotesessions.EMAProviderSelection, bool) {
+// upstream; ErrProviderSelectionUnavailable when the binding is ready but its
+// selection cannot be read.
+func (g *Governor) ProviderSelection(ctx context.Context, req Request) (remotesessions.EMAProviderSelection, bool, error) {
 	var none remotesessions.EMAProviderSelection
 	if !req.complete() {
-		return none, false
+		return none, false, nil
 	}
 	sel, outcome := g.selectBinding(ctx, g.logger, req)
 	if !outcome.Succeeded() {
-		return none, false
+		return none, false, nil
 	}
 	selection, outcome := g.readyProviderSelection(ctx, req, sel)
 	if !outcome.Succeeded() {
-		return none, false
+		return none, false, ErrProviderSelectionUnavailable
 	}
-	return selection, true
+	return selection, true, nil
 }
 
 // Configured reports whether any binding exists for the user session issuer

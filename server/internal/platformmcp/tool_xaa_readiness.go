@@ -102,7 +102,7 @@ type GetXAAReadinessOutput struct {
 
 type XAAIdentityChaining struct {
 	Served          bool                         `json:"served" jsonschema:"true when exactly one ready binding serves this server's upstream at runtime and the vendor's EMA provider can serve now"`
-	NotServedReason *string                      `json:"not_served_reason,omitempty" jsonschema:"why served is false: binding_not_ready (no single ready binding) provider_unavailable (the vendor's EMA provider cannot serve now; provider.unavailable_reason says why), or resource_unavailable (resource metadata could not be validated; check the endpoint and its protected-resource metadata, then retry); omitted when served or when the server is not routable through identity chaining"`
+	NotServedReason *string                      `json:"not_served_reason,omitempty" jsonschema:"why served is false: binding_not_ready (no single ready binding), provider_selection_unavailable (the vendor's EMA provider selection could not be read; retry), provider_unavailable (the vendor's EMA provider cannot serve now; provider.unavailable_reason says why), or resource_unavailable (resource metadata could not be validated; check the endpoint and its protected-resource metadata, then retry); omitted when served or when the server is not routable through identity chaining"`
 	Provider        *XAAEMAProvider              `json:"provider,omitempty" jsonschema:"the vendor's EMA provider: its trusted external issuer by default or the administrator's explicit selection. A provider that cannot serve never falls back to another. Omitted when no single ready binding serves the upstream"`
 	Bindings        []XAAIdentityChainingBinding `json:"bindings"`
 }
@@ -380,7 +380,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 	if i.governor != nil && routable && !discoveryFailed {
 		// One read of binding and selection, so served, provider and the
 		// reason never disagree during a change.
-		selection, ok := i.governor.ProviderSelection(ctx, req)
+		selection, ok, selectionErr := i.governor.ProviderSelection(ctx, req)
 		if ok {
 			p := selection.Provider
 			provider := &XAAEMAProvider{Kind: string(p.Kind), RemoteSessionIssuerID: nil, UnavailableReason: nil}
@@ -393,6 +393,8 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 			out.Provider = provider
 		}
 		switch {
+		case selectionErr != nil:
+			out.NotServedReason = new("provider_selection_unavailable")
 		case !ok:
 			out.NotServedReason = new("binding_not_ready")
 		case !selection.Provider.Available():
