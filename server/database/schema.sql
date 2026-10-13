@@ -3309,6 +3309,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- omits the scope parameter so the authorization server applies its
   -- default. NULL or false sends the list.
   omit_scope_fallback BOOLEAN,
+  -- When false, logins send each scope base as written instead of adding the
+  -- standard scopes (openid, email, profile, offline_access) the issuer
+  -- advertises. NULL or true adds them.
+  add_standard_scopes BOOLEAN,
   -- Whether the issuer accepts the RFC 8707 resource parameter. NULL until
   -- learned. False once a login succeeded only after the resource parameter
   -- was dropped, or when an operator states it.
@@ -3394,6 +3398,7 @@ COMMENT ON COLUMN remote_session_issuers.backchannel_logout_supported IS '@acces
 COMMENT ON COLUMN remote_session_issuers.authorization_response_iss_parameter_supported IS '@access: confidential';
 COMMENT ON COLUMN remote_session_issuers.scope_override IS '@access: opaque-restricted';
 COMMENT ON COLUMN remote_session_issuers.omit_scope_fallback IS '@access: confidential';
+COMMENT ON COLUMN remote_session_issuers.add_standard_scopes IS '@access: confidential';
 COMMENT ON COLUMN remote_session_issuers.resource_indicator_supported IS '@access: confidential';
 COMMENT ON COLUMN remote_session_issuers.oidc IS '@access: confidential';
 COMMENT ON COLUMN remote_session_issuers.passthrough IS '@access: confidential';

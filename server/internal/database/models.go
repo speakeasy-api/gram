@@ -5136,6 +5136,8 @@ type RemoteSessionIssuer struct {
 	// @access: confidential
 	OmitScopeFallback pgtype.Bool
 	// @access: confidential
+	AddStandardScopes pgtype.Bool
+	// @access: confidential
 	ResourceIndicatorSupported pgtype.Bool
 	// @access: confidential
 	Oidc bool

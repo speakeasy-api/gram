@@ -78,6 +78,7 @@ type federatedIssuerSnapshot struct {
 	AuthorizationResponseIssParameterSupported pgtype.Bool        `json:"AuthorizationResponseIssParameterSupported"`
 	ScopeOverride                              []string           `json:"ScopeOverride"`
 	OmitScopeFallback                          pgtype.Bool        `json:"OmitScopeFallback"`
+	AddStandardScopes                          pgtype.Bool        `json:"AddStandardScopes"`
 	ResourceIndicatorSupported                 pgtype.Bool        `json:"ResourceIndicatorSupported"`
 	Oidc                                       bool               `json:"Oidc"`
 	Passthrough                                bool               `json:"Passthrough"`
