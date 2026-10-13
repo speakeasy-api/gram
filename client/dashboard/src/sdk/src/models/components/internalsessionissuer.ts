@@ -54,6 +54,10 @@ export type InternalSessionIssuer = {
    */
   kmsCleanupPending: number;
   /**
+   * Set only by a compromised rotation whose replacement key could not be activated: the keys are contained, the issuer stays keyless, and repeating the call retries the replacement.
+   */
+  replacementError?: string | undefined;
+  /**
    * When a pending rotation can be activated.
    */
   rotationReadyAt?: Date | undefined;
@@ -79,6 +83,7 @@ export const InternalSessionIssuer$inboundSchema: z.ZodMiniType<
     jwks_uri: z.optional(z.string()),
     keys: z.array(InternalSessionIssuerKey$inboundSchema),
     kms_cleanup_pending: z.int(),
+    replacement_error: z.optional(z.string()),
     rotation_ready_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -89,6 +94,7 @@ export const InternalSessionIssuer$inboundSchema: z.ZodMiniType<
       "can_enable": "canEnable",
       "jwks_uri": "jwksUri",
       "kms_cleanup_pending": "kmsCleanupPending",
+      "replacement_error": "replacementError",
       "rotation_ready_at": "rotationReadyAt",
     });
   }),

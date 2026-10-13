@@ -61,6 +61,7 @@ function SpeakeasyProviderContent(): JSX.Element {
   const query = useEnterpriseIssuer();
   const queryClient = useQueryClient();
   const [action, setAction] = useState<Action>(null);
+  const [replacementError, setReplacementError] = useState<string>();
   const update = (data: InternalSessionIssuer) => {
     queryClient.setQueryData(enterpriseIssuerQueryKey(organization.id), data);
     void invalidateAllInternalSessionIssuer(queryClient);
@@ -70,7 +71,10 @@ function SpeakeasyProviderContent(): JSX.Element {
     onSuccess: update,
   });
   const rotate = useRotateInternalSessionIssuerMutation({
-    onSuccess: update,
+    onSuccess: (data) => {
+      update(data);
+      setReplacementError(data.replacementError);
+    },
   });
   const issuer = query.data;
   const pending = enable.isPending || rotate.isPending;
@@ -83,6 +87,7 @@ function SpeakeasyProviderContent(): JSX.Element {
   const chooseAction = (nextAction: Action) => {
     enable.reset();
     rotate.reset();
+    setReplacementError(undefined);
     setAction(nextAction);
   };
   // A compromised rotation withdraws every current key, then sets up a new
@@ -232,6 +237,9 @@ function SpeakeasyProviderContent(): JSX.Element {
             </SimpleTooltip>
           )}
         </div>
+      )}
+      {replacementError && issuer?.state === "keyless" && (
+        <Alert variant="error">{replacementError}</Alert>
       )}
       {rotate.isError && action === null && (
         <Alert variant="error">

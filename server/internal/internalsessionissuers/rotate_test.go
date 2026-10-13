@@ -78,6 +78,7 @@ func TestRotate_CompromisedContainsWithoutVerifiedDomain(t *testing.T) {
 	require.Empty(t, view.Keys, "every compromised key is withdrawn, and no replacement is minted for an issuer the organization can't use")
 	require.Zero(t, view.KmsCleanupPending, "the compromised versions are disabled")
 	require.Equal(t, wantIssuer(ti), *view.Issuer, "the issuer URI never changes")
+	require.Nil(t, view.ReplacementError, "a skipped replacement is not a failure")
 }
 
 func TestRotate_CompromisedNamesTheActiveKeyAndCoalesces(t *testing.T) {
@@ -91,6 +92,7 @@ func TestRotate_CompromisedNamesTheActiveKeyAndCoalesces(t *testing.T) {
 
 	first, err := ti.service.Rotate(admin, &gen.RotatePayload{ActiveKid: &compromised, Compromised: true, SessionToken: nil})
 	require.NoError(t, err)
+	require.Nil(t, first.ReplacementError)
 	again, err := ti.service.Rotate(admin, &gen.RotatePayload{ActiveKid: &compromised, Compromised: true, SessionToken: nil})
 	require.NoError(t, err)
 	require.Equal(t, first.Keys, again.Keys, "a repeat for the replaced key mints nothing")
@@ -154,4 +156,5 @@ func TestMinting_FailsClosedWithoutTheRateLimiter(t *testing.T) {
 	require.NoError(t, err, "revocation never depends on the limiter")
 	require.Equal(t, "keyless", contained.State, "the replacement waits for the limiter")
 	require.Empty(t, contained.Keys)
+	require.NotNil(t, contained.ReplacementError, "a deferred replacement is reported, not shown as done")
 }

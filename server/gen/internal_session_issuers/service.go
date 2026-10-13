@@ -96,6 +96,10 @@ type InternalSessionIssuer struct {
 	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
 	// until it is.
 	KmsCleanupPending int
+	// Set only by a compromised rotation whose replacement key could not be
+	// activated: the keys are contained, the issuer stays keyless, and repeating
+	// the call retries the replacement.
+	ReplacementError *string
 }
 
 type InternalSessionIssuerKey struct {

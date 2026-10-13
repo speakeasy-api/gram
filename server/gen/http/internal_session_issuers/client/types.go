@@ -53,6 +53,10 @@ type GetResponseBody struct {
 	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
 	// until it is.
 	KmsCleanupPending *int `form:"kms_cleanup_pending,omitempty" json:"kms_cleanup_pending,omitempty" xml:"kms_cleanup_pending,omitempty"`
+	// Set only by a compromised rotation whose replacement key could not be
+	// activated: the keys are contained, the issuer stays keyless, and repeating
+	// the call retries the replacement.
+	ReplacementError *string `form:"replacement_error,omitempty" json:"replacement_error,omitempty" xml:"replacement_error,omitempty"`
 }
 
 // SetEnabledResponseBody is the type of the "internalSessionIssuers" service
@@ -79,6 +83,10 @@ type SetEnabledResponseBody struct {
 	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
 	// until it is.
 	KmsCleanupPending *int `form:"kms_cleanup_pending,omitempty" json:"kms_cleanup_pending,omitempty" xml:"kms_cleanup_pending,omitempty"`
+	// Set only by a compromised rotation whose replacement key could not be
+	// activated: the keys are contained, the issuer stays keyless, and repeating
+	// the call retries the replacement.
+	ReplacementError *string `form:"replacement_error,omitempty" json:"replacement_error,omitempty" xml:"replacement_error,omitempty"`
 }
 
 // RotateResponseBody is the type of the "internalSessionIssuers" service
@@ -105,6 +113,10 @@ type RotateResponseBody struct {
 	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
 	// until it is.
 	KmsCleanupPending *int `form:"kms_cleanup_pending,omitempty" json:"kms_cleanup_pending,omitempty" xml:"kms_cleanup_pending,omitempty"`
+	// Set only by a compromised rotation whose replacement key could not be
+	// activated: the keys are contained, the issuer stays keyless, and repeating
+	// the call retries the replacement.
+	ReplacementError *string `form:"replacement_error,omitempty" json:"replacement_error,omitempty" xml:"replacement_error,omitempty"`
 }
 
 // GetUnauthorizedResponseBody is the type of the "internalSessionIssuers"
@@ -698,6 +710,7 @@ func NewGetInternalSessionIssuerOK(body *GetResponseBody) *internalsessionissuer
 		JwksURI:           body.JwksURI,
 		RotationReadyAt:   body.RotationReadyAt,
 		KmsCleanupPending: *body.KmsCleanupPending,
+		ReplacementError:  body.ReplacementError,
 	}
 	v.Keys = make([]*internalsessionissuers.InternalSessionIssuerKey, len(body.Keys))
 	for i, val := range body.Keys {
@@ -871,6 +884,7 @@ func NewSetEnabledInternalSessionIssuerOK(body *SetEnabledResponseBody) *interna
 		JwksURI:           body.JwksURI,
 		RotationReadyAt:   body.RotationReadyAt,
 		KmsCleanupPending: *body.KmsCleanupPending,
+		ReplacementError:  body.ReplacementError,
 	}
 	v.Keys = make([]*internalsessionissuers.InternalSessionIssuerKey, len(body.Keys))
 	for i, val := range body.Keys {
@@ -1044,6 +1058,7 @@ func NewRotateInternalSessionIssuerOK(body *RotateResponseBody) *internalsession
 		JwksURI:           body.JwksURI,
 		RotationReadyAt:   body.RotationReadyAt,
 		KmsCleanupPending: *body.KmsCleanupPending,
+		ReplacementError:  body.ReplacementError,
 	}
 	v.Keys = make([]*internalsessionissuers.InternalSessionIssuerKey, len(body.Keys))
 	for i, val := range body.Keys {

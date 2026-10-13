@@ -242,7 +242,7 @@ func (s *Service) rotateCompromised(ctx context.Context, activeKid *string) (*ge
 	s.purgeIssuerTokens(ctx, organizationID)
 	if s.manager == nil {
 		s.metrics.record(ctx, opRotateCompromised, errNoManager)
-		return s.view(ctx, logger, organizationID)
+		return withReplacementError(s.view(ctx, logger, organizationID))
 	}
 	var errs []error
 	if _, _, err := s.manager.CleanupEMAIssuerKMS(ctx, organizationID); err != nil {
@@ -255,17 +255,28 @@ func (s *Service) rotateCompromised(ctx context.Context, activeKid *string) (*ge
 	if err != nil {
 		logger.ErrorContext(ctx, "could not check whether to replace the contained issuer key; it stays keyless", attr.SlogError(err))
 		s.metrics.record(ctx, opRotateCompromised, errors.Join(append(errs, err)...))
-		return s.view(ctx, logger, organizationID)
+		return withReplacementError(s.view(ctx, logger, organizationID))
 	}
 	if !status.RolledOut || !status.HasVerifiedDomain {
 		s.metrics.record(ctx, opRotateCompromised, errors.Join(errs...))
 		return s.view(ctx, logger, organizationID)
 	}
-	if err := s.replace(ctx, logger, organizationID); err != nil {
-		errs = append(errs, err)
+	replaceErr := s.replace(ctx, logger, organizationID)
+	s.metrics.record(ctx, opRotateCompromised, errors.Join(append(errs, replaceErr)...))
+	if replaceErr != nil {
+		return withReplacementError(s.view(ctx, logger, organizationID))
 	}
-	s.metrics.record(ctx, opRotateCompromised, errors.Join(errs...))
 	return s.view(ctx, logger, organizationID)
+}
+
+// withReplacementError marks a contained issuer whose replacement key isn't
+// active, so callers don't read containment alone as a finished replacement.
+func withReplacementError(view *gensvc.InternalSessionIssuer, err error) (*gensvc.InternalSessionIssuer, error) {
+	if err == nil && view != nil && view.State == string(StateKeyless) {
+		message := "The compromised keys are withdrawn, but a replacement key couldn't be set up yet. Try again."
+		view.ReplacementError = &message
+	}
+	return view, err
 }
 
 // errNoManager marks a containment that could not continue past revocation.
@@ -331,7 +342,7 @@ func (s *Service) operationError(ctx context.Context, logger *slog.Logger, err e
 // material. It falls back to database-only state when the gate's providers
 // fail, so a containment response never depends on them.
 func (s *Service) view(ctx context.Context, logger *slog.Logger, organizationID string) (*gensvc.InternalSessionIssuer, error) {
-	view := &gensvc.InternalSessionIssuer{State: string(StateUnavailable), Issuer: nil, JwksURI: nil, Keys: []*gensvc.InternalSessionIssuerKey{}, RotationReadyAt: nil, KmsCleanupPending: 0, CanEnable: false}
+	view := &gensvc.InternalSessionIssuer{State: string(StateUnavailable), Issuer: nil, JwksURI: nil, Keys: []*gensvc.InternalSessionIssuerKey{}, RotationReadyAt: nil, KmsCleanupPending: 0, CanEnable: false, ReplacementError: nil}
 	q := repo.New(s.db)
 	row, err := q.GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	switch {

@@ -81,6 +81,7 @@ var InternalSessionIssuer = Type("InternalSessionIssuer", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("kms_cleanup_pending", Int, "Revoked keys whose signing material is not yet disabled. Speakeasy retries until it is.")
+	Attribute("replacement_error", String, "Set only by a compromised rotation whose replacement key could not be activated: the keys are contained, the issuer stays keyless, and repeating the call retries the replacement.")
 	Required("state", "can_enable", "keys", "kms_cleanup_pending")
 })
 

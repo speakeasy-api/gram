@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   setData: vi.fn(),
   invalidate: vi.fn(),
   onSuccess: undefined as ((data: InternalSessionIssuer) => void) | undefined,
+  rotateResult: undefined as InternalSessionIssuer | undefined,
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
@@ -73,8 +74,13 @@ vi.mock("@gram/client/react-query/setInternalSessionIssuerEnabled.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/rotateInternalSessionIssuer.js", () => ({
-  useRotateInternalSessionIssuerMutation: () => ({
-    mutate: mocks.rotate,
+  useRotateInternalSessionIssuerMutation: (options: {
+    onSuccess: (data: InternalSessionIssuer) => void;
+  }) => ({
+    mutate: (...args: unknown[]) => {
+      mocks.rotate(...args);
+      if (mocks.rotateResult) options.onSuccess(mocks.rotateResult);
+    },
     reset: mocks.reset,
     isPending: false,
     isError: false,
@@ -107,6 +113,7 @@ afterEach(() => {
   mocks.issuer = undefined;
   mocks.loading = false;
   mocks.error = false;
+  mocks.rotateResult = undefined;
 });
 
 describe("Speakeasy identity provider card", () => {
@@ -174,6 +181,21 @@ describe("Speakeasy identity provider card", () => {
         rotateRequestBody: { activeKid: undefined, compromised: true },
       },
     });
+  });
+
+  it("reports a replacement that couldn't be set up instead of success", () => {
+    mocks.issuer = { ...enabledIssuer, keys: [], state: "keyless" };
+    mocks.rotateResult = {
+      ...mocks.issuer,
+      replacementError: "a replacement key couldn't be set up yet",
+    };
+    show();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Finish setting up a new key" }),
+    );
+    expect(
+      screen.getByText("a replacement key couldn't be set up yet"),
+    ).toBeTruthy();
   });
 
   it("replaces a compromised key only after confirmation", () => {

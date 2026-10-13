@@ -99329,6 +99329,9 @@ components:
                     type: integer
                     description: Revoked keys whose signing material is not yet disabled. Speakeasy retries until it is.
                     format: int64
+                replacement_error:
+                    type: string
+                    description: 'Set only by a compromised rotation whose replacement key could not be activated: the keys are contained, the issuer stays keyless, and repeating the call retries the replacement.'
                 rotation_ready_at:
                     type: string
                     description: When a pending rotation can be activated.
