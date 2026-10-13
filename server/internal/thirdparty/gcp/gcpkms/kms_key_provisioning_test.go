@@ -652,3 +652,18 @@ func TestDisableKeyVersion_TreatsUnusableVersionsAsDisabled(t *testing.T) {
 	ring := &stateVersionRing{fakeKeyRing: newFakeKeyRing(), state: kmspb.CryptoKeyVersion_ENABLED}
 	require.Error(t, newFakeProvisioningClient(t, ring, ring.fakeKeyRing).DisableKeyVersion(t.Context(), versionName))
 }
+
+// Service account emails are case-insensitive, so a grant made under one
+// casing is revoked under another.
+func TestRevokeSignerVerifier_IgnoresServiceAccountCase(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeKeyRing()
+	client := newFakeProvisioningClient(t, fake, fake)
+	keyName := testKeyRing + "/cryptoKeys/okta-case"
+
+	require.NoError(t, client.GrantSignerVerifier(t.Context(), keyName, "Signer@Speakeasy-Signing.iam.gserviceaccount.com"))
+	require.Equal(t, []string{"serviceAccount:signer@speakeasy-signing.iam.gserviceaccount.com"}, fake.members(keyName, string(SignerVerifierRole)))
+	require.NoError(t, client.RevokeSignerVerifier(t.Context(), keyName, "SIGNER@speakeasy-signing.iam.gserviceaccount.com"))
+	require.Nil(t, fake.members(keyName, string(SignerVerifierRole)))
+}

@@ -1,6 +1,7 @@
 package externalcredentials_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -125,6 +126,7 @@ func TestGcpIamPlatformCredential_GuardsIssuerKeyGrants(t *testing.T) {
 	}
 
 	require.NoError(t, update("renamed", signer), "a rename keeps the account")
+	require.NoError(t, update("renamed", strings.ToUpper(signer)), "the account is stored lowercased, so a case-only change is no change")
 	requireOopsCode(t, update("renamed", "other-"+signer), oops.CodeConflict)
 	requireOopsCode(t, remove(), oops.CodeConflict)
 

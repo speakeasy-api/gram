@@ -26,3 +26,13 @@ func TestSignVerifiesKMSResultAgainstPublishedKey(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, assertion)
 }
+
+func TestEmailOnVerifiedDomainFoldsASCIIOnly(t *testing.T) {
+	t.Parallel()
+	verified := []string{"Kiosk.Example"}
+	require.True(t, emailOnVerifiedDomain("user@kiosk.example", verified))
+	require.True(t, emailOnVerifiedDomain("user@KIOSK.EXAMPLE", verified))
+	require.False(t, emailOnVerifiedDomain("user@Kiosk.example", verified), "the Kelvin sign is not k")
+	require.False(t, emailOnVerifiedDomain("user@evil.example@kiosk.example", verified))
+	require.False(t, emailOnVerifiedDomain("@kiosk.example", verified))
+}

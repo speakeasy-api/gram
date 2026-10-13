@@ -227,7 +227,7 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 	// Issuer keys sign as this credential's account, and their cleanup removes
 	// the grant from it, so it can't change while any issuer key holds a grant.
 	// Renames and other changes stay allowed.
-	if !strings.EqualFold(strings.TrimSpace(prior.GcpIamCredential.ImpersonateServiceAccount.String), strings.TrimSpace(cols.ImpersonateServiceAccount.String)) {
+	if strings.ToLower(strings.TrimSpace(prior.GcpIamCredential.ImpersonateServiceAccount.String)) != cols.ImpersonateServiceAccount.String {
 		granted, err := q.CountIssuerKeysGrantedByCredential(ctx, repo.CountIssuerKeysGrantedByCredentialParams{ExternalCredentialID: id, IncludePendingCleanup: true})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error counting issuer signing keys").LogError(ctx, logger)

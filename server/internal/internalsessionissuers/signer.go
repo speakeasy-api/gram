@@ -95,10 +95,22 @@ func (c Claims) validate(now time.Time) error {
 // organization's verified domains. Vendors match users on email alone.
 func emailOnVerifiedDomain(email string, verifiedDomains []string) bool {
 	local, domain, ok := strings.Cut(email, "@")
-	if !ok || local == "" || domain == "" || strings.Contains(domain, "@") || domain != strings.TrimSpace(domain) {
+	if !ok || local == "" || domain == "" || strings.Contains(domain, "@") || domain != strings.TrimSpace(domain) || !isASCII(domain) {
 		return false
 	}
-	return slices.ContainsFunc(verifiedDomains, func(d string) bool { return strings.EqualFold(strings.TrimSpace(d), domain) })
+	// ASCII-only folding: Unicode case folding would match lookalikes such as
+	// the Kelvin sign against k.
+	domain = strings.ToLower(domain)
+	return slices.ContainsFunc(verifiedDomains, func(d string) bool { return strings.ToLower(strings.TrimSpace(d)) == domain })
+}
+
+func isASCII(s string) bool {
+	for i := range len(s) {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
 }
 
 func (c Claims) body(issuer string, now time.Time) map[string]any {

@@ -765,6 +765,36 @@ func TestEMAIssuer_SweepKeepsItsCursorWhenListingFails(t *testing.T) {
 	require.NotEmpty(t, progress.Next, "a failed listing keeps the cursor instead of restarting the traversal")
 }
 
+func TestEMAIssuer_SweepMovesPastAnOrganizationThatHangs(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	var created []string
+	for _, orgID := range []string{f.ti.orgID, createOrganization(t, ctx, f.ti.conn)} {
+		provisioner, kms := f.provisioner(t)
+		_, err := provisioner.EnsureEMAIssuer(ctx, orgID)
+		require.NoError(t, err)
+		created = append(created, kms.Created()...)
+		kid := activeIssuerKid(t, ctx, f, orgID)
+		_, err = f.lifecycle().Contain(ctx, orgID, &kid)
+		require.NoError(t, err)
+	}
+	sweeper, kms := f.provisioner(t)
+	sweeper.SetIssuerKeyCleanupTimeout(time.Minute)
+	sweeper.SetSweepOrganizationTimeout(300 * time.Millisecond)
+	kms.mu.Lock()
+	kms.stallDisable = created[0]
+	kms.mu.Unlock()
+
+	started := time.Now()
+	progress, err := sweeper.SweepEMAIssuerKeysFrom(ctx, "", 0)
+	require.Error(t, err)
+	require.Less(t, time.Since(started), 30*time.Second, "the hanging organization's keys are bounded by its share, not each key's own deadline")
+	require.Equal(t, 2, progress.Swept, "the cursor moves past the hanging organization")
+	require.True(t, progress.Done)
+	require.Equal(t, 1, progress.Pending)
+	require.Equal(t, created[1:], kms.Disabled())
+}
+
 func TestEMAIssuer_CleanupGivesEachKeyItsOwnDeadline(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)

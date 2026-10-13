@@ -108,7 +108,7 @@ func newSDKConfig(logger *slog.Logger, endpoint string, personalAPIKey string, d
 		if !ok {
 			// Without the hook, definitions never read as fresh and fail-closed
 			// callers such as the issuer pause switch stay paused.
-			logger.WarnContext(context.Background(), "http.DefaultTransport is not an *http.Transport; flag definition freshness is not tracked")
+			logger.ErrorContext(context.Background(), "http.DefaultTransport is not an *http.Transport; flag definition freshness is not tracked and issuer signing stays paused")
 			return config
 		}
 		// The SDK tunes its own transport only when none is given.

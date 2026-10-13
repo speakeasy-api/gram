@@ -32,6 +32,10 @@ const emaIssuerKMSPrefix = internalsessionissuers.KMSKeyPrefix
 // sweepOrganizationPage is how many organizations one sweep query returns.
 const sweepOrganizationPage = 500
 
+// sweepOrganizationTimeout bounds one organization's share of a sweep, so a
+// KMS hang on its keys can't hold the cursor in place.
+const sweepOrganizationTimeout = 2 * time.Minute
+
 // issuerTokenPurgeTimeout bounds local credential cleanup after containment.
 const issuerTokenPurgeTimeout = 10 * time.Second
 
@@ -338,6 +342,11 @@ func (p *Provisioner) CleanupEMAIssuerKMS(ctx context.Context, organizationID st
 	defer o11y.LogDefer(ctx, p.logger, "failed to close gcp kms client", func() error { return kms.Close() })
 	var errs []error
 	for _, key := range keys {
+		// A caller deadline caps the whole run; keys left stay pending.
+		if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+			errs = append(errs, fmt.Errorf("issuer kms cleanup stopped at its deadline: %w", context.DeadlineExceeded))
+			break
+		}
 		// Each key gets its own deadline, so one slow key can't starve the rest.
 		if err := p.cleanupEMAIssuerKey(ctx, kms, organizationID, key); err != nil {
 			errs = append(errs, err)
@@ -349,7 +358,13 @@ func (p *Provisioner) CleanupEMAIssuerKMS(ctx context.Context, organizationID st
 }
 
 func (p *Provisioner) cleanupEMAIssuerKey(ctx context.Context, kms gcpkms.ProvisioningClient, organizationID string, key jwksrepo.JsonWebKey) error {
-	keyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), p.issuerKeyCleanupTimeout)
+	// Detached from cancellation so a cancelled request still records a
+	// finished step, but never past the caller's deadline.
+	deadline := time.Now().Add(p.issuerKeyCleanupTimeout)
+	if callerDeadline, ok := ctx.Deadline(); ok && callerDeadline.Before(deadline) {
+		deadline = callerDeadline
+	}
+	keyCtx, cancel := context.WithDeadline(context.WithoutCancel(ctx), deadline)
 	defer cancel()
 	if err := p.disableEMAIssuerKey(keyCtx, kms, organizationID, key); err != nil {
 		return err
@@ -471,7 +486,10 @@ pages:
 				progress.Next = after
 				break pages
 			}
-			if _, err := p.SweepEMAIssuerKeys(ctx, organizationID); err != nil && !errors.Is(err, internalsessionissuers.ErrNotFound) {
+			orgCtx, cancel := context.WithTimeout(ctx, p.sweepOrganizationTimeout)
+			_, err := p.SweepEMAIssuerKeys(orgCtx, organizationID)
+			cancel()
+			if err != nil && !errors.Is(err, internalsessionissuers.ErrNotFound) {
 				errs = append(errs, fmt.Errorf("sweep organization issuer keys: %w", err))
 			}
 			progress.Swept++

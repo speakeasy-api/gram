@@ -15,5 +15,8 @@ func (p *Provisioner) PublicationAbsent(ctx context.Context, organizationID stri
 // SetSweepPage shrinks sweep pages so tests can cross page boundaries.
 func (p *Provisioner) SetSweepPage(n int32) { p.sweepPage = n }
 
+// SetSweepOrganizationTimeout shortens one organization's share of a sweep.
+func (p *Provisioner) SetSweepOrganizationTimeout(d time.Duration) { p.sweepOrganizationTimeout = d }
+
 // SetIssuerKeyCleanupTimeout shortens each issuer key's KMS cleanup deadline.
 func (p *Provisioner) SetIssuerKeyCleanupTimeout(d time.Duration) { p.issuerKeyCleanupTimeout = d }

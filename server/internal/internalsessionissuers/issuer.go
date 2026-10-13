@@ -25,6 +25,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
@@ -232,7 +233,12 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 			return document, nil
 		})
 		switch {
-		case errors.Is(err, errDiscoveryBusy), errors.Is(err, context.DeadlineExceeded), transientDatabaseError(err):
+		case err != nil && !errors.Is(err, errDiscoveryBusy) && (errors.Is(err, context.DeadlineExceeded) || transientDatabaseError(err)):
+			h.logger.WarnContext(ctx, "issuer discovery database read failed transiently", attr.SlogError(err))
+			w.Header().Set("Retry-After", "1")
+			w.Header().Set("Cache-Control", "no-store")
+			return oops.E(oops.CodeUnavailable, err, "issuer discovery is busy, try again shortly")
+		case errors.Is(err, errDiscoveryBusy):
 			w.Header().Set("Retry-After", "1")
 			w.Header().Set("Cache-Control", "no-store")
 			return oops.E(oops.CodeUnavailable, err, "issuer discovery is busy, try again shortly")

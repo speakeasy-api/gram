@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	kmspb "cloud.google.com/go/kms/apiv1/kmspb"
@@ -260,7 +261,7 @@ func (c *kmsSigningClient) GrantSignerVerifier(ctx context.Context, keyName, ser
 		return fmt.Errorf("read gcp kms key iam policy: %w", err)
 	}
 
-	member := "serviceAccount:" + serviceAccountEmail
+	member := "serviceAccount:" + strings.ToLower(serviceAccountEmail)
 	if policy.HasRole(member, SignerVerifierRole) {
 		return nil
 	}
@@ -289,7 +290,7 @@ func (c *kmsSigningClient) RevokeSignerVerifier(ctx context.Context, keyName, se
 		return fmt.Errorf("read gcp kms key iam policy: %w", err)
 	}
 
-	member := "serviceAccount:" + serviceAccountEmail
+	member := "serviceAccount:" + strings.ToLower(serviceAccountEmail)
 	if !policy.HasRole(member, SignerVerifierRole) {
 		return nil
 	}
