@@ -124,32 +124,22 @@ async function main() {
     const localIPs = Object.values(networkInterfaces()).flatMap(
       (addresses) => addresses?.map((address) => address.address) ?? [],
     );
-    let host = process.env["usage_listen_host"];
-    if (
-      host &&
-      (!net.isIP(host) ||
-        !localIPs.includes(host) ||
-        host === "::1" ||
-        host.startsWith("127."))
-    ) {
-      throw new Error(
-        "Assistant relay requires a Docker gateway IP on a local non-loopback interface. " +
-          "Check GRAM_ASSISTANT_RELAY_HOST or use an explicit reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
-      );
-    }
-    if (!host) {
-      try {
-        const info = await $({
-          quiet: true,
-          timeout: 15_000,
-        })`docker info --format ${"{{json .}}"}`.json<{
-          OperatingSystem: string;
-        }>();
-        if (/docker desktop/i.test(info.OperatingSystem)) {
-          // Docker Desktop forwards host traffic without a host-local bridge.
-          reason = "Docker Desktop host forwarding";
-        } else {
-          host = bridgeGateway(
+    let host: string | undefined;
+    try {
+      const info = await $({
+        quiet: true,
+        timeout: 15_000,
+      })`docker info --format ${"{{json .}}"}`.json<{
+        OperatingSystem: string;
+      }>();
+      if (/docker desktop/i.test(info.OperatingSystem)) {
+        // Docker Desktop forwards host traffic without a host-local bridge;
+        // an explicit relay host must not enable a listener there either.
+        reason = "Docker Desktop host forwarding";
+      } else {
+        host =
+          process.env["usage_listen_host"] ||
+          bridgeGateway(
             (
               await $({
                 quiet: true,
@@ -157,16 +147,27 @@ async function main() {
               })`docker network inspect bridge`.json()
             )[0],
           );
-        }
-      } catch (error) {
-        reason = "inactive: Docker gateway discovery failed";
-        console.warn(
-          `Assistant relay inactive: Docker gateway discovery failed: ${error instanceof Error ? error.message : String(error)}. ` +
-            "Restart assistant-relay after Docker is available, or configure a container-reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
-        );
       }
+    } catch (error) {
+      reason = "inactive: Docker gateway discovery failed";
+      console.warn(
+        `Assistant relay inactive: Docker gateway discovery failed: ${error instanceof Error ? error.message : String(error)}. ` +
+          "Restart assistant-relay after Docker is available, or configure a container-reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
+      );
     }
     if (host) {
+      if (
+        process.env["usage_listen_host"] &&
+        (!net.isIP(host) ||
+          !localIPs.includes(host) ||
+          host === "::1" ||
+          host.startsWith("127."))
+      ) {
+        throw new Error(
+          "Assistant relay requires a Docker gateway IP on a local non-loopback interface. " +
+            "Check GRAM_ASSISTANT_RELAY_HOST or use an explicit reachable GRAM_ASSISTANT_RUNTIME_SERVER_URL.",
+        );
+      }
       if (!localIPs.includes(host)) {
         // Some CI and remote Docker engines expose published ports without
         // sharing their bridge interface with this process. Assistant callback
