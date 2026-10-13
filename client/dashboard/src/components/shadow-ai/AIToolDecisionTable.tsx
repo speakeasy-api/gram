@@ -1,6 +1,7 @@
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { AIToolIcon } from "@/components/ai-tools/AIToolIcon";
 import { SignalBadges } from "@/components/shadow-ai/SignalBadges";
+import { accessOf } from "@/components/shadow-ai/access";
 import { ToggleButton } from "@/components/ui/SegmentedControl";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
@@ -55,11 +56,16 @@ function AIToolDecisionControl({
   }
 
   const record = (clicked: "approved" | "blocked") => {
+    // `current` only moves once the refetch lands, so a second press inside
+    // that window would re-record the option instead of withdrawing it.
+    if (mutation.isPending) return;
     mutation.mutate({
       request: {
         setAIToolDecisionRequestBody: {
           targetId: detection.targetId,
           decision: nextAIToolDecision(current, clicked),
+          // An omitted rationale is stored as empty, so carry the one on file.
+          rationale: accessOf(detection).rationale,
         },
       },
     });
