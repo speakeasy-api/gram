@@ -32,8 +32,11 @@ const emaIssuerKMSPrefix = "emaissuer"
 // sweepOrganizationPage is how many organizations one sweep query returns.
 const sweepOrganizationPage = 500
 
-// EMAIssuerTokenPurger drops vendor tokens obtained with an organization's
-// issuer, so disabling it or a compromised rotation cuts access at once.
+// issuerTokenPurgeTimeout bounds local credential cleanup after containment.
+const issuerTokenPurgeTimeout = 10 * time.Second
+
+// EMAIssuerTokenPurger erases vendor tokens obtained with an organization's
+// issuer after disabling it or a compromised rotation fences their use.
 type EMAIssuerTokenPurger interface {
 	PurgeEMAIssuerTokens(ctx context.Context, organizationID string) error
 }
@@ -45,11 +48,13 @@ func (p *Provisioner) SetEMAIssuerTokenPurger(purger EMAIssuerTokenPurger) {
 
 // PurgeEMAIssuerTokens drops cached vendor tokens for the organization.
 func (p *Provisioner) PurgeEMAIssuerTokens(ctx context.Context, organizationID string) {
-	// TODO(AIM-523): log at error when the purger is nil once signing caches vendor tokens.
 	if p.emaTokenPurger == nil {
+		p.logger.ErrorContext(ctx, "issuer vendor-token purger is not configured", attr.SlogOrganizationID(organizationID))
 		return
 	}
-	if err := p.emaTokenPurger.PurgeEMAIssuerTokens(context.WithoutCancel(ctx), organizationID); err != nil {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerTokenPurgeTimeout)
+	defer cancel()
+	if err := p.emaTokenPurger.PurgeEMAIssuerTokens(ctx, organizationID); err != nil {
 		p.logger.ErrorContext(ctx, "failed to purge vendor tokens for issuer", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
 	}
 }
@@ -66,12 +71,34 @@ func (p *Provisioner) issuerLifecycle() *internalsessionissuers.Lifecycle {
 	return internalsessionissuers.NewLifecycle(p.db, p.audit)
 }
 
+// issuerDeployment keeps preview copies from taking authority over source keys.
+func (p *Provisioner) issuerDeployment() internalsessionissuers.Deployment {
+	return internalsessionissuers.Deployment{ServerURL: p.cfg.ServerURL, AllowLoopbackIssuer: p.cfg.AllowLoopbackIssuer, KeyRing: p.cfg.KeyRing}
+}
+
+func (p *Provisioner) checkIssuerDeployment(ctx context.Context, organizationID string) error {
+	issuer, err := jwksrepo.New(p.db).GetOrganizationInternalSessionIssuerURL(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return internalsessionissuers.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("load issuer ownership: %w", err)
+	}
+	if err := p.issuerDeployment().CheckIssuer(organizationID, issuer); err != nil {
+		return fmt.Errorf("check issuer deployment: %w", err)
+	}
+	return nil
+}
+
 // EnsureEMAIssuer creates the organization's issuer with one dedicated KMS
 // key, re-enables a disabled one, or returns the live one. Concurrent callers
 // adopt the winner and disable their unused key.
 func (p *Provisioner) EnsureEMAIssuer(ctx context.Context, organizationID string) (uuid.UUID, error) {
 	existing, err := jwksrepo.New(p.db).GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	if err == nil {
+		if err := p.issuerDeployment().CheckIssuer(organizationID, existing.Issuer); err != nil {
+			return uuid.Nil, fmt.Errorf("check existing issuer deployment: %w", err)
+		}
 		if existing.DisabledAt.Valid {
 			if err := p.issuerLifecycle().SetDisabled(ctx, organizationID, false); err != nil {
 				return uuid.Nil, fmt.Errorf("re-enable issuer: %w", err)
@@ -81,6 +108,9 @@ func (p *Provisioner) EnsureEMAIssuer(ctx context.Context, organizationID string
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, fmt.Errorf("read organization issuer: %w", err)
+	}
+	if _, err := internalsessionissuers.URL(p.cfg.ServerURL, organizationID, p.cfg.AllowLoopbackIssuer); err != nil {
+		return uuid.Nil, fmt.Errorf("%w: issuer origin is unavailable", internalsessionissuers.ErrMisconfigured)
 	}
 	// A disabled or missing organization gets no KMS key.
 	org, err := orgrepo.New(p.db).GetOrganizationMetadata(ctx, organizationID)
@@ -180,6 +210,9 @@ func (p *Provisioner) createEMAIssuerRows(ctx context.Context, organizationID st
 // previous key, which stays published for RetiredKeyOverlap. activeKid is the
 // key the caller saw active.
 func (p *Provisioner) RotateEMAIssuer(ctx context.Context, organizationID, activeKid string) error {
+	if err := p.checkIssuerDeployment(ctx, organizationID); err != nil {
+		return err
+	}
 	err := p.rotateEMAIssuerRows(ctx, organizationID, activeKid)
 	if _, _, cleanupErr := p.CleanupEMAIssuerKMS(ctx, organizationID); cleanupErr != nil {
 		p.logger.WarnContext(ctx, "issuer kms cleanup is pending; the sweep retries it", attr.SlogOrganizationID(organizationID), attr.SlogError(cleanupErr))
@@ -286,6 +319,15 @@ func (p *Provisioner) CleanupEMAIssuerKMS(ctx context.Context, organizationID st
 	if len(keys) == 0 {
 		return 0, 0, nil
 	}
+	for _, key := range keys {
+		issuer, err := jwksrepo.New(p.db).GetInternalSessionIssuerForOwnership(ctx, jwksrepo.GetInternalSessionIssuerForOwnershipParams{OrganizationID: organizationID, JsonWebKeySetID: key.JsonWebKeySetID})
+		if err != nil {
+			return 0, len(keys), fmt.Errorf("load cleanup issuer ownership: %w", err)
+		}
+		if err := p.issuerDeployment().CheckIssuer(organizationID, issuer); err != nil {
+			return 0, len(keys), err
+		}
+	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyCleanupTimeout)
 	defer cancel()
 	kms, err := p.openKMSClient(cleanupCtx)
@@ -313,6 +355,9 @@ func (p *Provisioner) disableEMAIssuerKey(ctx context.Context, kms gcpkms.Provis
 	row, err := q.GetManagedKeyResource(ctx, repo.GetManagedKeyResourceParams{ID: key.ExternalKeyID, OrganizationID: conv.ToPGText(organizationID)})
 	if err != nil {
 		return fmt.Errorf("load revoked issuer key resource: %w", err)
+	}
+	if err := p.issuerDeployment().CheckKey(row.ResourceName); err != nil {
+		return fmt.Errorf("check revoked issuer key deployment: %w", err)
 	}
 	if err := kms.DisableKeyVersion(ctx, row.ResourceName); err != nil {
 		return fmt.Errorf("disable revoked issuer kms key version: %w", err)
@@ -585,6 +630,9 @@ func (p *Provisioner) insertEMAIssuerKey(ctx context.Context, tx pgx.Tx, organiz
 // step of a compromise response. It mints nothing when a key is already
 // active, and a concurrent caller's key wins, so repeats never pile up keys.
 func (p *Provisioner) ProvisionEMAIssuerKey(ctx context.Context, organizationID string) error {
+	if err := p.checkIssuerDeployment(ctx, organizationID); err != nil {
+		return err
+	}
 	keyless, err := p.emaIssuerKeyless(ctx, p.db, organizationID)
 	if err != nil || !keyless {
 		return err

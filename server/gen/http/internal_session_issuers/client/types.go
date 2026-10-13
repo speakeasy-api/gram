@@ -38,6 +38,10 @@ type GetResponseBody struct {
 	// enabled, but Speakeasy has paused all signing. keyless: every key was
 	// revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// Whether deployment readiness, rollout and SSO entitlement currently allow
+	// enabling this issuer. The caller still needs organization administrator
+	// access.
+	CanEnable *bool `form:"can_enable,omitempty" json:"can_enable,omitempty" xml:"can_enable,omitempty"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Public verification keys.
@@ -60,6 +64,10 @@ type SetEnabledResponseBody struct {
 	// enabled, but Speakeasy has paused all signing. keyless: every key was
 	// revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// Whether deployment readiness, rollout and SSO entitlement currently allow
+	// enabling this issuer. The caller still needs organization administrator
+	// access.
+	CanEnable *bool `form:"can_enable,omitempty" json:"can_enable,omitempty" xml:"can_enable,omitempty"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Public verification keys.
@@ -82,6 +90,10 @@ type RotateResponseBody struct {
 	// enabled, but Speakeasy has paused all signing. keyless: every key was
 	// revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// Whether deployment readiness, rollout and SSO entitlement currently allow
+	// enabling this issuer. The caller still needs organization administrator
+	// access.
+	CanEnable *bool `form:"can_enable,omitempty" json:"can_enable,omitempty" xml:"can_enable,omitempty"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Public verification keys.
@@ -681,6 +693,7 @@ func NewRotateRequestBody(p *internalsessionissuers.RotatePayload) *RotateReques
 func NewGetInternalSessionIssuerOK(body *GetResponseBody) *internalsessionissuers.InternalSessionIssuer {
 	v := &internalsessionissuers.InternalSessionIssuer{
 		State:             *body.State,
+		CanEnable:         *body.CanEnable,
 		Issuer:            body.Issuer,
 		JwksURI:           body.JwksURI,
 		RotationReadyAt:   body.RotationReadyAt,
@@ -853,6 +866,7 @@ func NewGetGatewayError(body *GetGatewayErrorResponseBody) *goa.ServiceError {
 func NewSetEnabledInternalSessionIssuerOK(body *SetEnabledResponseBody) *internalsessionissuers.InternalSessionIssuer {
 	v := &internalsessionissuers.InternalSessionIssuer{
 		State:             *body.State,
+		CanEnable:         *body.CanEnable,
 		Issuer:            body.Issuer,
 		JwksURI:           body.JwksURI,
 		RotationReadyAt:   body.RotationReadyAt,
@@ -1025,6 +1039,7 @@ func NewSetEnabledGatewayError(body *SetEnabledGatewayErrorResponseBody) *goa.Se
 func NewRotateInternalSessionIssuerOK(body *RotateResponseBody) *internalsessionissuers.InternalSessionIssuer {
 	v := &internalsessionissuers.InternalSessionIssuer{
 		State:             *body.State,
+		CanEnable:         *body.CanEnable,
 		Issuer:            body.Issuer,
 		JwksURI:           body.JwksURI,
 		RotationReadyAt:   body.RotationReadyAt,
@@ -1197,6 +1212,9 @@ func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
+	if body.CanEnable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_enable", "body"))
+	}
 	if body.Keys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("keys", "body"))
 	}
@@ -1227,6 +1245,9 @@ func ValidateSetEnabledResponseBody(body *SetEnabledResponseBody) (err error) {
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
+	if body.CanEnable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_enable", "body"))
+	}
 	if body.Keys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("keys", "body"))
 	}
@@ -1255,6 +1276,9 @@ func ValidateSetEnabledResponseBody(body *SetEnabledResponseBody) (err error) {
 func ValidateRotateResponseBody(body *RotateResponseBody) (err error) {
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.CanEnable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_enable", "body"))
 	}
 	if body.Keys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("keys", "body"))

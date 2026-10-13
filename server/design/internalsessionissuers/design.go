@@ -73,6 +73,7 @@ var InternalSessionIssuer = Type("InternalSessionIssuer", func() {
 	Attribute("state", String, "unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.", func() {
 		Enum("unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless")
 	})
+	Attribute("can_enable", Boolean, "Whether deployment readiness, rollout and SSO entitlement currently allow enabling this issuer. The caller still needs organization administrator access.")
 	Attribute("issuer", String, "Issuer URI to register with supported services. It never changes.")
 	Attribute("jwks_uri", String, "Public verification keys.")
 	Attribute("keys", ArrayOf(InternalSessionIssuerKey), "Published keys.")
@@ -80,7 +81,7 @@ var InternalSessionIssuer = Type("InternalSessionIssuer", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("kms_cleanup_pending", Int, "Revoked keys whose signing material is not yet disabled. Speakeasy retries until it is.")
-	Required("state", "keys", "kms_cleanup_pending")
+	Required("state", "can_enable", "keys", "kms_cleanup_pending")
 })
 
 // InternalSessionIssuerKey is one published issuer key.

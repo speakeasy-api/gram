@@ -547,6 +547,18 @@ and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
 
+## Enterprise authorization
+
+Open Organization Identity > Single sign-on. The enterprise authorization section
+shows a not-configured or unavailable state in the fresh demo; no synthetic
+signing key is presented as working. In a local organization with signing and
+SSO configured, enable the issuer and copy its URI. Rotate the key and confirm
+the pending publication message clears after activation. Disable the issuer and
+confirm the URI remains visible. Disabling must remain possible after removing
+the SSO entitlement; re-enabling requires it. Read-only and support sessions show
+the URI and status without mutation controls. At a 400px viewport, the URI wraps
+and the copy control remains visible.
+
 ## Slack workspaces
 
 With an ordinary `org:admin` session, open Organization Identity > Slack workspaces. The seed shows Acme Engineering and Acme Operations as requiring authorization. Neither has usable credentials. Disconnected workspaces are hidden. In the retargeted local organization, when the matching Slack app credentials (`SLACK_CLIENT_ID` and the existing `SLACK_CLIENT_SECRET`) are unconfigured, Connect Slack is disabled. Shared Explore Demo always shows a read-only explanation and disables Connect Slack and Disconnect, even with valid app credentials. Its server refuses mutation requests before OAuth state or credentials can be used. In the retargeted local organization, disconnecting Acme Operations requires confirmation and removes it from the list. Reseeding restores the two history rows with fresh connection generations.
