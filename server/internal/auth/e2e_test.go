@@ -1612,6 +1612,12 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), audited)
 
+	reused, err := inst.callbackWithNonce(t.Context(), t)
+	require.NoError(t, err)
+	require.Contains(t, reused.Location, "signin_error=sign_in_revoked", "a WorkOS session from before is sent back to sign in afresh")
+	require.Empty(t, reused.SessionToken)
+
+	userInfo.WorkOSSessionID = "session_04FRESHSIGNIN"
 	fresh, err := inst.callbackWithNonce(t.Context(), t)
 	require.NoError(t, err)
 	_, err = inst.sessionManager.Authenticate(t.Context(), fresh.SessionToken)

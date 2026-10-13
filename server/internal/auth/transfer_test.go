@@ -180,7 +180,7 @@ func newTransfer(t *testing.T, opts transferOptions) (context.Context, *transfer
 	if opts.supportOrgID != "" {
 		source.SupportExpiresAt = time.Now().Add(time.Hour)
 	}
-	require.NoError(t, instance.sessionManager.StoreSession(ctx, source))
+	require.NoError(t, instance.sessionManager.StoreSessionIssuedAt(ctx, source, time.Now()))
 
 	return ctx, &transferFixture{instance: instance, userInfo: userInfo, source: source}
 }
