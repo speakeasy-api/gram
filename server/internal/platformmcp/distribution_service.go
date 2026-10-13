@@ -176,8 +176,10 @@ func (s *DistributionService) Current(ctx context.Context, principal Principal, 
 		return Distribution{}, err
 	}
 	live, err := pluginsrepo.New(s.db).GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
-		PluginID:    plugin.ID,
-		McpServerID: uuid.NullUUID{UUID: target.McpServerID.UUID, Valid: true},
+		PluginID:       plugin.ID,
+		ProjectID:      target.ProjectID,
+		OrganizationID: principal.OrganizationID,
+		McpServerID:    uuid.NullUUID{UUID: target.McpServerID.UUID, Valid: true},
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Distribution{}, fmt.Errorf("get current platform mcp plugin attachment: %w", err)
@@ -253,8 +255,10 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 
 	pluginQueries := pluginsrepo.New(tx)
 	live, err := pluginQueries.GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
-		PluginID:    plugin.ID,
-		McpServerID: uuid.NullUUID{UUID: target.McpServerID.UUID, Valid: true},
+		PluginID:       plugin.ID,
+		ProjectID:      target.ProjectID,
+		OrganizationID: principal.OrganizationID,
+		McpServerID:    uuid.NullUUID{UUID: target.McpServerID.UUID, Valid: true},
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Distribution{}, fmt.Errorf("get live platform mcp plugin attachment: %w", err)
@@ -382,8 +386,10 @@ func (s *DistributionService) Remove(ctx context.Context, principal Principal, i
 
 	pluginQueries := pluginsrepo.New(tx)
 	live, err := pluginQueries.GetPluginServerByBackend(ctx, pluginsrepo.GetPluginServerByBackendParams{
-		PluginID:    plugin.ID,
-		McpServerID: uuid.NullUUID{UUID: target.McpServerID.UUID, Valid: true},
+		PluginID:       plugin.ID,
+		ProjectID:      target.ProjectID,
+		OrganizationID: principal.OrganizationID,
+		McpServerID:    uuid.NullUUID{UUID: target.McpServerID.UUID, Valid: true},
 	})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Distribution{}, fmt.Errorf("get live platform mcp plugin attachment for removal: %w", err)

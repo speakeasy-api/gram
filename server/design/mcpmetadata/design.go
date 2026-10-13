@@ -212,16 +212,17 @@ var _ = Service("mcpMetadata", func() {
 	})
 
 	Method("exportMcpMetadata", func() {
-		Description("Export MCP server details as JSON for documentation and integration purposes.")
+		Description("Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.")
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("consumer")
 		})
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Attribute("mcp_slug", shared.Slug, "The MCP server slug (from the install URL)")
-
-			Required("mcp_slug")
+			Attribute("mcp_slug", shared.Slug, "The MCP server slug (from the install URL). Mutually exclusive with mcp_server_id.")
+			Attribute("mcp_server_id", String, "The ID of a toolset-backed MCP server. Mutually exclusive with mcp_slug.", func() {
+				Format(FormatUUID)
+			})
 
 			security.ByKeyPayload()
 			security.SessionPayload()

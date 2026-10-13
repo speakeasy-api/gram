@@ -1034,6 +1034,9 @@ INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
 VALUES (@id, @project_id, @toolset_id, @visibility)
 RETURNING id;
 
+-- name: SetMCPServerVisibilityFixture :exec
+UPDATE mcp_servers SET visibility = @visibility WHERE id = @id AND project_id = @project_id;
+
 -- name: CreateMCPServerCatalogueFixtures :execrows
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
 SELECT
@@ -1933,3 +1936,21 @@ WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
 SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks
 WHERE locktype = 'advisory' AND NOT granted
   AND database = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database());
+
+-- name: CountMcpMetadataForBackendIDFixture :one
+SELECT count(*)
+FROM mcp_metadata
+WHERE project_id = @project_id
+  AND (toolset_id = @backend_id::uuid OR mcp_server_id = @backend_id::uuid);
+
+-- name: RekeyMcpMetadataToMcpServerFixture :execrows
+UPDATE mcp_metadata
+SET toolset_id = NULL, mcp_server_id = toolset_id
+WHERE project_id = @project_id
+  AND toolset_id = @toolset_id;
+
+-- name: SetMcpMetadataHeaderDisplayNamesFixture :execrows
+UPDATE mcp_metadata
+SET header_display_names = @header_display_names
+WHERE id = @id
+  AND project_id = @project_id;
