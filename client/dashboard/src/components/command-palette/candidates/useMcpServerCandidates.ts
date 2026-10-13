@@ -153,17 +153,8 @@ export function useMcpServerCandidates({
       void invalidateMcpServerQueries(queryClient).catch(() => {});
     };
 
-    // A hosted server keeps its public flag on the toolset while disabled, so enabling restores it.
-    const setVisibility = (
-      server: McpServer,
-      verb: Verb,
-      hostedPublic = false,
-    ) =>
-      applyVisibility(
-        server,
-        verb === "disable" ? "disabled" : hostedPublic ? "public" : "private",
-        true,
-      );
+    const setVisibility = (server: McpServer, verb: Verb) =>
+      applyVisibility(server, verb === "enable" ? "private" : "disabled", true);
 
     const toolsetCandidates: LauncherCandidate[] = toolsets.map((toolset) => {
       const linked = byToolsetId.get(toolset.id);
@@ -177,12 +168,15 @@ export function useMcpServerCandidates({
         icon: "network",
         group: GROUP,
         run: (verb) => {
-          if (linked && (verb === "enable" || verb === "disable")) {
-            return setVisibility(
-              linked,
-              verb,
-              isCanonicalHostedWrapper(linked) && toolset.mcpIsPublic === true,
-            );
+          // Enabling a hosted server picks private or public, with its warnings, on the toolset page.
+          const hostedEnable =
+            verb === "enable" && !!linked && isCanonicalHostedWrapper(linked);
+          if (
+            linked &&
+            !hostedEnable &&
+            (verb === "enable" || verb === "disable")
+          ) {
+            return setVisibility(linked, verb);
           }
           routes.mcp.details.goTo(toolset.slug);
         },
