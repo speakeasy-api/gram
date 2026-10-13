@@ -51,7 +51,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -60,7 +59,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -248,9 +246,6 @@ type ChallengeManager struct {
 	// it within a short budget; nil skips the resource steps of scope resolution.
 	protectedResources *protectedresource.Prober
 
-	// features gates resource-first scope discovery per organization; nil reads as off.
-	features feature.Provider
-
 	registrationTelemetry registration.Recorder
 
 	// privateAuthorityValidator is injected at construction. The callback package
@@ -360,11 +355,6 @@ func WithProtectedResourceProber(prober *protectedresource.Prober) ChallengeMana
 	return func(m *ChallengeManager) { m.protectedResources = prober }
 }
 
-// WithFeatureFlags evaluates the resource-first scope discovery rollout flag.
-func WithFeatureFlags(features feature.Provider) ChallengeManagerOption {
-	return func(m *ChallengeManager) { m.features = features }
-}
-
 func NewChallengeManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -401,7 +391,6 @@ func NewChallengeManager(
 		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
 		scopeMetrics:              remotesessionmetrics.NewScopeResolution(logger, meterProvider),
 		protectedResources:        nil,
-		features:                  nil,
 		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
@@ -606,8 +595,8 @@ type ScopeResolution struct {
 // scope, the resource's challenge scopes, the resource pin, the resource's
 // scopes_supported, the issuer's override (verbatim), the issuer's
 // scopes_supported. Every base but the issuer override gains the standard
-// scopes the issuer advertises. Without resource discovery the issuer's
-// override still beats the client's scope, as before the rollout flag.
+// scopes the issuer advertises. Without resource discovery (no prober) the
+// issuer's override still beats the client's scope.
 func (c Client) RequestedScopes(resource ResourceScopes) ScopeResolution {
 	var base []string
 	var source remotesessionmetrics.ScopeSource
@@ -669,36 +658,12 @@ func (c Client) withStandardScopes(base []string) (scopes []string, widened []st
 	return scopes, widened
 }
 
-// ResourceScopeDiscoveryEnabled reports whether the organization's logins
-// consult the protected resource row (its challenge scopes, pin, and
-// advertised list) when deciding their scope request. A manager without a
-// prober, an unreadable organization, or an unreadable flag reads as off, so
-// the consent card and the login always agree.
-func (m *ChallengeManager) ResourceScopeDiscoveryEnabled(ctx context.Context, organizationID string) bool {
-	if m.features == nil || m.protectedResources == nil {
-		return false
-	}
-	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		m.logger.WarnContext(ctx, "read organization for scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return false
-	}
-	return ResourceScopeDiscoveryEnabled(ctx, m.logger, m.features, organizationID, org.Slug)
-}
-
-// ResourceScopeDiscoveryEnabled evaluates the resource-first scope discovery
-// rollout flag for an organization whose slug the caller already holds. A
-// nil provider or an unreadable flag reads as off.
-func ResourceScopeDiscoveryEnabled(ctx context.Context, logger *slog.Logger, features feature.Provider, organizationID, organizationSlug string) bool {
-	if features == nil {
-		return false
-	}
-	enabled, err := features.IsFlagEnabledLocal(ctx, feature.FlagRemoteSessionLiveResourceScopes, organizationID, feature.OrgProjectGroups(organizationSlug, ""), nil)
-	if err != nil {
-		logger.WarnContext(ctx, "evaluate scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return false
-	}
-	return enabled
+// ResourceScopeDiscoveryEnabled reports whether logins consult the protected
+// resource row (its challenge scopes, pin, and advertised list) when deciding
+// their scope request. Only a manager without a prober reads as off, so the
+// consent card and the login always agree.
+func (m *ChallengeManager) ResourceScopeDiscoveryEnabled() bool {
+	return m.protectedResources != nil
 }
 
 // CachedResourceScopesForServer is the protected resource row of a
@@ -786,13 +751,13 @@ func (m *ChallengeManager) ResourceAppliesToClients(ctx context.Context, organiz
 
 // loginResourceScopes resolves the protected resource row of the MCP server
 // the login is for, probing it within the login budget, and returns the
-// resource URL it consulted. An organization not enrolled (discover false), a
+// resource URL it consulted. A manager without a prober (discover false), a
 // client whose own scope decides, a login with no remote-backed server, or a
 // server whose resource the selected client's grant is not qualified to has
 // no row.
 func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent ParentChallenge, client Client, discover bool) (ResourceScopes, protectedresource.LoginResolution, string) {
-	// UseDiscovered carries the flag alone, so an enrolled login that skips
-	// the resource still ranks the client's scope above the issuer override.
+	// UseDiscovered carries discover alone, so a login that skips the
+	// resource still ranks the client's scope above the issuer override.
 	none := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discover}
 	skipped := protectedresource.LoginResolution{Row: nil, ScopesSupported: nil, Live: false, Outcome: protectedresource.ProbeOutcomeNotApplicable, ProbeDuration: 0}
 	switch {
@@ -1186,14 +1151,14 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		return "", ErrSelfCredentialClient
 	}
 	// Evaluated once per login; the retry leg reuses the scopes it chose.
-	discover := m.ResourceScopeDiscoveryEnabled(ctx, parent.OrganizationID)
+	discover := m.ResourceScopeDiscoveryEnabled()
 	return m.mintAuthorization(ctx, parent, client, nil, discover)
 }
 
 // mintAuthorization is BuildAuthorizationUrl; retryOf is the state of the
 // first leg when this is the single resource-less leg minted after
-// invalid_target, and discover is the resource-first scope discovery flag as
-// the login evaluated it.
+// invalid_target, and discover reports whether the login consults the
+// protected resource row.
 func (m *ChallengeManager) mintAuthorization(
 	ctx context.Context,
 	parent ParentChallenge,

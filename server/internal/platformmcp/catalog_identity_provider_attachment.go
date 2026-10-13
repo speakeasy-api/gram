@@ -295,7 +295,8 @@ func attachmentIdentityPlan(principal Principal, project ResolvedProject, regist
 		UserSessionIssuerID: userSessionIssuerID,
 		Provider:            provider,
 		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
-			Scope:                   append([]string(nil), resourceMetadata.ScopesSupported...),
+			// No copied scope: login discovers what to request live.
+			Scope:                   nil,
 			Audience:                nil,
 			TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
 			RequireClientSecret:     true,

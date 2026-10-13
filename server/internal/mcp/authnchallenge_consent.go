@@ -1426,7 +1426,7 @@ func (s *Service) buildRemoteSessionCards(
 	// server, or a client whose grant goes elsewhere is decided by its
 	// authorization server alone; a client's own claimed resource never
 	// stands in, because no login reads it.
-	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
+	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled()
 	var serverResource remotesessions.ResourceScopes
 	var serverResourceURL string
 	hasServerResource := false
