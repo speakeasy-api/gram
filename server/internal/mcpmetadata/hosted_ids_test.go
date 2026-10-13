@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -116,6 +117,26 @@ func TestMcpMetadata_NonHostedRowsKeepOneID(t *testing.T) {
 	got, err = ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{ToolsetSlug: new(types.Slug(deletedWrapper.Slug))})
 	require.NoError(t, err)
 	require.Equal(t, new(deletedWrapper.ID.String()), got.Metadata.ToolsetID)
+	require.Nil(t, got.Metadata.McpServerID)
+
+	// A disabled canonical wrapper still shares its toolset's id.
+	disabled := createHostedToolset(t, ctx, ti, "ids-disabled-wrapper")
+	createCanonicalWrapper(t, ctx, ti, disabled)
+	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: mcpservers.VisibilityDisabled, ID: disabled.ID, ProjectID: disabled.ProjectID}))
+	seedToolsetKeyedRow(t, ctx, ti, disabled, "legacy")
+	got, err = ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{ToolsetSlug: new(types.Slug(disabled.Slug))})
+	require.NoError(t, err)
+	requireHostedIDs(t, ctx, ti, got.Metadata, disabled.ID, false)
+
+	// A wrapper that outlived its toolset is not a hosted server.
+	orphaned := createHostedToolset(t, ctx, ti, "ids-orphaned")
+	createCanonicalWrapper(t, ctx, ti, orphaned)
+	seedToolsetKeyedRow(t, ctx, ti, orphaned, "legacy")
+	_, err = toolsets_repo.New(ti.conn).DeleteToolset(ctx, toolsets_repo.DeleteToolsetParams{Slug: orphaned.Slug, ProjectID: orphaned.ProjectID})
+	require.NoError(t, err)
+	got, err = ti.service.GetMcpMetadata(ctx, &gen.GetMcpMetadataPayload{McpServerID: new(orphaned.ID.String())})
+	require.NoError(t, err)
+	require.Equal(t, new(orphaned.ID.String()), got.Metadata.ToolsetID)
 	require.Nil(t, got.Metadata.McpServerID)
 
 	// A fresh-id server backed by a toolset is not that toolset's canonical wrapper.

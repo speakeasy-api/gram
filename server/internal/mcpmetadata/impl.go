@@ -341,7 +341,7 @@ func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadat
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "convert metadata").LogError(ctx, logger)
 	}
-	wrapperID, err := backend.canonicalWrapperID(ctx, s.mcpServersRepo, *authCtx.ProjectID)
+	wrapperID, err := backend.canonicalWrapperID(ctx, s.toolsetRepo, s.mcpServersRepo, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "fetch canonical MCP server").LogError(ctx, logger)
 	}
@@ -619,7 +619,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		}
 	}
 
-	wrapperID, err := backend.canonicalWrapperID(ctx, msr, *authCtx.ProjectID)
+	wrapperID, err := backend.canonicalWrapperID(ctx, tr, msr, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "fetch canonical MCP server").LogError(ctx, logger)
 	}
@@ -874,8 +874,8 @@ func (b *resolvedMetadataBackend) backendID() uuid.UUID {
 	return b.mcpServer.ID
 }
 
-// canonicalWrapperID returns the live canonical wrapper of a hosted backend.
-func (b *resolvedMetadataBackend) canonicalWrapperID(ctx context.Context, msr *mcpservers_repo.Queries, projectID uuid.UUID) (uuid.NullUUID, error) {
+// canonicalWrapperID returns the live canonical wrapper of a hosted backend whose toolset is live.
+func (b *resolvedMetadataBackend) canonicalWrapperID(ctx context.Context, tr *toolsets_repo.Queries, msr *mcpservers_repo.Queries, projectID uuid.UUID) (uuid.NullUUID, error) {
 	server := b.mcpServer
 	if server == nil {
 		found, err := msr.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: b.toolset.ID, ProjectID: projectID})
@@ -889,6 +889,15 @@ func (b *resolvedMetadataBackend) canonicalWrapperID(ctx context.Context, msr *m
 	}
 	if !isCanonicalWrapper(server) {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	if b.toolset == nil {
+		_, err := tr.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: server.ID, ProjectID: projectID})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+		case err != nil:
+			return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("get canonical mcp server toolset: %w", err)
+		}
 	}
 	return uuid.NullUUID{UUID: server.ID, Valid: true}, nil
 }

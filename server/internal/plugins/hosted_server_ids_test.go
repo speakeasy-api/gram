@@ -19,9 +19,11 @@ type backendIDs struct {
 	mcpServerID *string
 }
 
-func entryIDs(servers []*gen.PluginServer) map[string]backendIDs {
+func entryIDs(t *testing.T, servers []*gen.PluginServer) map[string]backendIDs {
+	t.Helper()
 	out := make(map[string]backendIDs, len(servers))
 	for _, s := range servers {
+		require.NotContains(t, out, s.DisplayName, "display names are unique per entry")
 		out[s.DisplayName] = backendIDs{toolsetID: s.ToolsetID, mcpServerID: s.McpServerID}
 	}
 	return out
@@ -100,7 +102,7 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 
 	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
-	require.Equal(t, want, entryIDs(got.Servers))
+	require.Equal(t, want, entryIDs(t, got.Servers))
 
 	list, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
 	require.NoError(t, err)
@@ -111,11 +113,11 @@ func TestPluginsService_HostedEntriesReportBothIDs(t *testing.T) {
 		}
 	}
 	require.NotNil(t, listed)
-	require.Equal(t, want, entryIDs(listed.Servers))
+	require.Equal(t, want, entryIDs(t, listed.Servers))
 
 	updated, err := ti.service.UpdatePlugin(ctx, &gen.UpdatePluginPayload{ID: plugin.ID, Name: "Both IDs", Slug: got.Slug})
 	require.NoError(t, err)
-	require.Equal(t, want, entryIDs(updated.Servers))
+	require.Equal(t, want, entryIDs(t, updated.Servers))
 
 	for name, id := range map[string]string{"ServerKeyed": added.ID, "ToolsetKeyed": toolsetKeyedEntry.ID.String(), "Unwrapped": unwrappedEntry.ID.String()} {
 		updatedEntry, err := ti.service.UpdatePluginServer(ctx, &gen.UpdatePluginServerPayload{ID: id, PluginID: plugin.ID, DisplayName: name, Policy: "optional", SortOrder: 0})

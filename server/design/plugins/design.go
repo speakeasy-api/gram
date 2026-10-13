@@ -512,11 +512,11 @@ var PluginServerModel = Type("PluginServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Speakeasy toolset ID. A hosted MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.")
+		Description("Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Speakeasy MCP server ID. A hosted MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.")
+		Description("Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("meta_mcp_server_id", String, func() {

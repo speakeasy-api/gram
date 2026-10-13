@@ -232,11 +232,13 @@ type UpdatePluginResponseBody struct {
 type AddPluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Speakeasy toolset ID. A hosted MCP server sets toolset_id and mcp_server_id
-	// to the same id; otherwise exactly one backend ID is set.
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Speakeasy MCP server ID. A hosted MCP server sets toolset_id and
-	// mcp_server_id to the same id; otherwise exactly one backend ID is set.
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. When set, no other backend ID is set.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
@@ -254,11 +256,13 @@ type AddPluginServerResponseBody struct {
 type UpdatePluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Speakeasy toolset ID. A hosted MCP server sets toolset_id and mcp_server_id
-	// to the same id; otherwise exactly one backend ID is set.
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Speakeasy MCP server ID. A hosted MCP server sets toolset_id and
-	// mcp_server_id to the same id; otherwise exactly one backend ID is set.
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. When set, no other backend ID is set.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
@@ -4554,11 +4558,13 @@ type PluginResponseBody struct {
 type PluginServerResponseBody struct {
 	// Unique plugin server identifier.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Speakeasy toolset ID. A hosted MCP server sets toolset_id and mcp_server_id
-	// to the same id; otherwise exactly one backend ID is set.
+	// Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server
+	// sets toolset_id and mcp_server_id to the same id; otherwise exactly one
+	// backend ID is set.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// Speakeasy MCP server ID. A hosted MCP server sets toolset_id and
-	// mcp_server_id to the same id; otherwise exactly one backend ID is set.
+	// Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP
+	// server sets toolset_id and mcp_server_id to the same id; otherwise exactly
+	// one backend ID is set.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// MCP gateway ID. When set, no other backend ID is set.
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
