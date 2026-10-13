@@ -33,6 +33,8 @@ import {
 // apart from the standard and prompt editors so a third editor can use them
 // without importing the 4,000-line file those two share.
 
+const POLICY_ACTION_MESSAGE_FIELD_ID = "policy-action-message";
+
 const POLICY_ACTION_MESSAGE: Record<
   Exclude<PolicyAction, "flag">,
   { label: string; description: string; placeholder: string }
@@ -82,6 +84,7 @@ function HorizontalStepper({
           <Fragment key={step.id}>
             <button
               type="button"
+              aria-current={isCurrent ? "step" : undefined}
               onClick={() => onStep(index)}
               className="group flex shrink-0 items-center gap-2 py-1 pr-1 text-left"
             >
@@ -411,6 +414,7 @@ function SeveritySection({
       </Text>
       <div className="pt-3">
         <Slider
+          aria-label="Severity"
           value={score}
           onChange={(v) =>
             setScore(Math.max(SEVERITY_MIN, Math.min(SEVERITY_MAX, v)))
@@ -482,13 +486,17 @@ export function ActionStep({
           />
           {action !== "flag" && (
             <div className="space-y-2">
-              <Label className="text-sm font-medium">
+              <Label
+                className="text-sm font-medium"
+                htmlFor={POLICY_ACTION_MESSAGE_FIELD_ID}
+              >
                 {POLICY_ACTION_MESSAGE[action].label}
               </Label>
               <p className="text-muted-foreground text-xs">
                 {POLICY_ACTION_MESSAGE[action].description}
               </p>
               <TextArea
+                id={POLICY_ACTION_MESSAGE_FIELD_ID}
                 value={userMessage}
                 onChange={setUserMessage}
                 placeholder={POLICY_ACTION_MESSAGE[action].placeholder}

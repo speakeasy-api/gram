@@ -40,7 +40,7 @@ const SHADOW_AI_STEPS: PolicyStep[] = [
   },
 ];
 
-export const SHADOW_AI_DEFAULT_NAME = "Shadow AI";
+const SHADOW_AI_DEFAULT_NAME = "Shadow AI";
 const SHADOW_AI_DEFAULT_SCORE = 8;
 
 /** The only detector a Shadow AI policy runs. The server counts one enabled
@@ -197,6 +197,10 @@ export function ShadowAIPolicyEditor({
 
   const principals =
     audienceType === "targeted" ? [...audiencePrincipalUrns] : [];
+  // The server rejects a targeted audience with nobody in it; the standard
+  // editor holds the button the same way.
+  const targetedWithoutPrincipals =
+    audienceType === "targeted" && audiencePrincipalUrns.size === 0;
   const trimmedName = name.trim() || SHADOW_AI_DEFAULT_NAME;
 
   const save = () => {
@@ -244,7 +248,7 @@ export function ShadowAIPolicyEditor({
       onNameChange={setName}
       dirty={dirty}
       saving={saving}
-      actionDisabled={false}
+      actionDisabled={targetedWithoutPrincipals}
       onSubmit={save}
       onCreate={save}
     />

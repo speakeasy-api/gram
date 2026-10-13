@@ -414,6 +414,48 @@ function PolicyKindCard({
   );
 }
 
+/** Why the Shadow AI card cannot be picked right now, or undefined when it
+ *  can. The list has to be known before offering a create: a pending or
+ *  failed read is not proof that the project's one blocking slot is free. */
+function shadowAIKindCardNote({
+  pending,
+  failed,
+  existing,
+  href,
+}: {
+  pending: boolean;
+  failed: boolean;
+  existing: RiskPolicy | undefined;
+  href: string | undefined;
+}): ReactNode {
+  if (failed) {
+    return (
+      <Text small muted>
+        This project's policies could not be loaded, so a Shadow AI policy
+        cannot be created yet.
+      </Text>
+    );
+  }
+  if (pending) {
+    return (
+      <Text small muted>
+        Checking this project's policies…
+      </Text>
+    );
+  }
+  if (existing && href) {
+    return (
+      <Text small muted>
+        This project already has one.{" "}
+        <Link to={href} className="underline underline-offset-2">
+          Open {existing.name}
+        </Link>
+      </Text>
+    );
+  }
+  return undefined;
+}
+
 function PolicyKindChooser(): JSX.Element {
   const [, setKind] = useQueryState("kind");
   const routes = useRoutes();
@@ -425,6 +467,14 @@ function PolicyKindChooser(): JSX.Element {
   const existingShadowAI = findBlockingShadowMCPPolicy(
     policiesQuery.data?.policies ?? [],
   );
+  const shadowAIKindNote = shadowAIKindCardNote({
+    pending: !policiesQuery.data && !policiesQuery.isError,
+    failed: policiesQuery.isError,
+    existing: existingShadowAI,
+    href: existingShadowAI
+      ? routes.policyCenter.detail.href(existingShadowAI.id)
+      : undefined,
+  });
   return (
     <Page>
       <Page.Header>
@@ -466,21 +516,7 @@ function PolicyKindChooser(): JSX.Element {
                 title="Shadow AI"
                 description="Allow or disallow the harnesses, assistants and MCP servers found on devices and in gateway traffic."
                 onPick={() => void setKind("shadow-ai")}
-                disabledNote={
-                  existingShadowAI ? (
-                    <Text small muted>
-                      This project already has one.{" "}
-                      <Link
-                        to={routes.policyCenter.detail.href(
-                          existingShadowAI.id,
-                        )}
-                        className="underline underline-offset-2"
-                      >
-                        Open {existingShadowAI.name}
-                      </Link>
-                    </Text>
-                  ) : undefined
-                }
+                disabledNote={shadowAIKindNote}
               />
             ) : null}
           </div>

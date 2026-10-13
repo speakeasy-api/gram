@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   flag: { status: "enabled" } as { status: string },
   setKind: vi.fn(),
   policies: [] as RiskPolicy[],
+  list: { state: "ready" } as { state: "ready" | "pending" | "error" },
 }));
 
 vi.mock("sonner", () => ({
@@ -60,8 +61,10 @@ vi.mock("nuqs", () => ({
 
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
   useRiskListPolicies: () => ({
-    data: { policies: mocks.policies },
-    isLoading: false,
+    data:
+      mocks.list.state === "ready" ? { policies: mocks.policies } : undefined,
+    isLoading: mocks.list.state === "pending",
+    isError: mocks.list.state === "error",
   }),
   invalidateAllRiskListPolicies: vi.fn(),
 }));
@@ -136,6 +139,7 @@ describe("PolicyKindChooser", () => {
     vi.clearAllMocks();
     mocks.flag = { status: "enabled" };
     mocks.policies = [];
+    mocks.list = { state: "ready" };
   });
 
   it("offers Shadow AI as a third kind", () => {
@@ -153,6 +157,23 @@ describe("PolicyKindChooser", () => {
     expect(screen.getByText(/already has one/)).toBeTruthy();
     const link = screen.getByText("Open Shadow MCP Server Policy");
     expect(link.getAttribute("href")).toBe("/guardrails/policy-sm");
+    fireEvent.click(screen.getByText("Shadow AI"));
+    expect(mocks.setKind).not.toHaveBeenCalled();
+  });
+
+  it("holds the Shadow AI card until the policy list is known", () => {
+    mocks.list = { state: "pending" };
+    renderChooser();
+
+    expect(screen.getByText(/Checking this project's policies/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Shadow AI"));
+    expect(mocks.setKind).not.toHaveBeenCalled();
+
+    cleanup();
+    mocks.list = { state: "error" };
+    renderChooser();
+
+    expect(screen.getByText(/could not be loaded/)).toBeTruthy();
     fireEvent.click(screen.getByText("Shadow AI"));
     expect(mocks.setKind).not.toHaveBeenCalled();
   });

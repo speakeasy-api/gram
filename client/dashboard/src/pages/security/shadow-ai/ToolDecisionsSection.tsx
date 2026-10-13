@@ -77,6 +77,25 @@ function groupDetections(
   return byCategory;
 }
 
+/** Nothing to list: either nothing was detected, or the read failed, which
+ *  must not read as "nothing detected". */
+function AIToolGroupEmptyState({
+  failed,
+  noun,
+}: {
+  failed: boolean;
+  noun: string;
+}): JSX.Element {
+  if (failed) {
+    return (
+      <Text small muted className="block px-4 py-6">
+        Detected {noun} could not be loaded. Reload to try again.
+      </Text>
+    );
+  }
+  return <ShadowAISetupEmptyState heading={`No ${noun} detected yet`} />;
+}
+
 /** What "unreviewed" means under this policy, said once above the groups. The
  *  server reads a missing disposition as block_all, as the standard editor
  *  does. */
@@ -161,8 +180,9 @@ export function ToolDecisionsSection({
                     detections={detections}
                     isLoading={detectionsQuery.isPending}
                     emptyState={
-                      <ShadowAISetupEmptyState
-                        heading={`No ${group.noun} detected yet`}
+                      <AIToolGroupEmptyState
+                        failed={detectionsQuery.isError}
+                        noun={group.noun}
                       />
                     }
                     onOpenTool={(detection) =>

@@ -7,6 +7,7 @@ import { AIToolDecisionTable } from "./AIToolDecisionTable";
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
+  isPending: false,
 }));
 
 vi.mock("sonner", () => ({
@@ -16,7 +17,7 @@ vi.mock("sonner", () => ({
 vi.mock("@gram/client/react-query/setAIToolDecision.js", () => ({
   useSetAIToolDecisionMutation: () => ({
     mutate: mocks.mutate,
-    isPending: false,
+    isPending: mocks.isPending,
   }),
 }));
 
@@ -66,6 +67,37 @@ describe("AIToolDecisionTable", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    mocks.isPending = false;
+  });
+
+  it("carries the rationale on file with an inline decision", () => {
+    renderTable([
+      detection({
+        access: {
+          state: "allowed",
+          decision: "approved",
+          enforceable: true,
+          rationale: "Approved by security review",
+        },
+      }),
+    ]);
+
+    fireEvent.click(screen.getByText("Disallow"));
+
+    expect(decisionBody()).toEqual({
+      targetId: "cursor",
+      decision: "blocked",
+      rationale: "Approved by security review",
+    });
+  });
+
+  it("ignores presses while a decision is still saving", () => {
+    mocks.isPending = true;
+    renderTable([detection()]);
+
+    fireEvent.click(screen.getByText("Approve"));
+
+    expect(mocks.mutate).not.toHaveBeenCalled();
   });
 
   it("marks a tool with no decision as unreviewed beside the control", () => {
