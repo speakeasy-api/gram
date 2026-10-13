@@ -2,8 +2,11 @@ package remotesessions_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -249,4 +252,39 @@ func TestSetEMAProviders_ConcurrentReplacesSerialize(t *testing.T) {
 	for i, row := range rows {
 		require.Equal(t, int32(i), row.Position, "the surviving order is one whole write")
 	}
+}
+
+func TestSetEMAProviders_ReadinessRunsAfterTransaction(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: 1})
+	f := newEMAProvidersFixture(t, ctx, ti)
+	ti.service.SetSpeakeasySigningAvailable(true)
+	ready := true
+	var readinessErr error
+	ti.service.SetSpeakeasyReadiness(func(ctx context.Context, org string, issuerID uuid.UUID) (bool, error) {
+		require.Equal(t, f.org, org)
+		require.Equal(t, f.internalIssuer, issuerID)
+		// A query on the only connection proves the caller released its transaction.
+		_, err := repo.New(ti.conn).GetEMAInternalSessionIssuer(ctx, org)
+		if err != nil {
+			return false, fmt.Errorf("read issuer after order commit: %w", err)
+		}
+		return ready, readinessErr
+	})
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	for _, wantReady := range []bool{true, false} {
+		ready = wantReady
+		order, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
+		require.NoError(t, err, "both changed and unchanged orders release their transaction before readiness")
+		require.Len(t, order.Providers, 1)
+		if wantReady {
+			require.Nil(t, order.Providers[0].UnavailableReason)
+		} else {
+			require.Equal(t, "signing_unavailable", *order.Providers[0].UnavailableReason)
+		}
+	}
+	readinessErr = errors.New("temporary issuer lookup failure")
+	_, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
+	requireOopsCode(t, err, oops.CodeUnavailable)
 }

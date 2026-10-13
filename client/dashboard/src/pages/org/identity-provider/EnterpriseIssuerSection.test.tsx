@@ -84,11 +84,12 @@ const enabledIssuer: InternalSessionIssuer = {
   keys: [{ kid: "example-key", state: "active" }],
   state: "enabled",
   kmsCleanupPending: 0,
+  canEnable: false,
 };
-function show(ssoFeatureEnabled = true) {
+function show() {
   return render(
     <TooltipProvider>
-      <EnterpriseIssuerSection ssoFeatureEnabled={ssoFeatureEnabled} />
+      <EnterpriseIssuerSection />
     </TooltipProvider>,
   );
 }
@@ -113,7 +114,7 @@ describe("enterprise authorization", () => {
     mocks.error = true;
     view.rerender(
       <TooltipProvider>
-        <EnterpriseIssuerSection ssoFeatureEnabled />
+        <EnterpriseIssuerSection />
       </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -121,7 +122,12 @@ describe("enterprise authorization", () => {
   });
 
   it("provisions an issuer through the management API", () => {
-    mocks.issuer = { keys: [], kmsCleanupPending: 0, state: "setup_required" };
+    mocks.issuer = {
+      keys: [],
+      kmsCleanupPending: 0,
+      state: "setup_required",
+      canEnable: true,
+    };
     show();
     fireEvent.click(
       screen.getByRole("button", { name: "Enable enterprise authorization" }),
@@ -185,7 +191,7 @@ describe("enterprise authorization", () => {
     "keeps containment available for an existing issuer in %s state",
     (state) => {
       mocks.issuer = { ...enabledIssuer, state };
-      show(false);
+      show();
       fireEvent.click(
         screen.getByRole("button", {
           name: "Disable enterprise authorization",
@@ -223,12 +229,67 @@ describe("enterprise authorization", () => {
 
   it("does not offer re-enable after entitlement removal", () => {
     mocks.issuer = { ...enabledIssuer, state: "disabled" };
-    show(false);
+    show();
     expect(
       screen.queryByRole("button", { name: "Enable enterprise authorization" }),
     ).toBeNull();
-    expect(screen.getByText(/restore SSO access/)).toBeTruthy();
+    expect(screen.getByText(/check availability and SSO access/)).toBeTruthy();
   });
+
+  it.each(["rollout is disabled", "status lookup failed"])(
+    "does not offer re-enable when %s despite existing SSO access",
+    () => {
+      mocks.issuer = { ...enabledIssuer, state: "disabled", canEnable: false };
+      show();
+      expect(
+        screen.queryByRole("button", {
+          name: "Enable enterprise authorization",
+        }),
+      ).toBeNull();
+      expect(screen.getByText(/cannot be re-enabled right now/)).toBeTruthy();
+      expect(screen.getByText(enabledIssuer.issuer!)).toBeTruthy();
+    },
+  );
+
+  it("offers re-enable when the server confirms eligibility", () => {
+    mocks.issuer = { ...enabledIssuer, state: "disabled", canEnable: true };
+    show();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enable enterprise authorization" }),
+    );
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      request: { setEnabledRequestBody: { enabled: true } },
+    });
+  });
+
+  it("does not offer initial enable when the server cannot confirm eligibility", () => {
+    mocks.issuer = {
+      keys: [],
+      kmsCleanupPending: 0,
+      state: "setup_required",
+      canEnable: false,
+    };
+    show();
+    expect(
+      screen.queryByRole("button", { name: "Enable enterprise authorization" }),
+    ).toBeNull();
+    expect(screen.getByText(/cannot be enabled right now/)).toBeTruthy();
+  });
+
+  it.each(["reader", "support"])(
+    "does not offer eligible enable to a %s session",
+    (role) => {
+      mocks.admin = role !== "reader";
+      mocks.support = role === "support";
+      mocks.issuer = { ...enabledIssuer, state: "disabled", canEnable: true };
+      show();
+      expect(
+        screen.queryByRole("button", {
+          name: "Enable enterprise authorization",
+        }),
+      ).toBeNull();
+    },
+  );
 
   it("keeps the shared demo read-only", () => {
     mocks.issuer = enabledIssuer;
@@ -280,7 +341,7 @@ describe("enterprise authorization", () => {
     mocks.organizationId = "other-example-org";
     view.rerender(
       <TooltipProvider>
-        <EnterpriseIssuerSection ssoFeatureEnabled />
+        <EnterpriseIssuerSection />
       </TooltipProvider>,
     );
     expect(screen.queryByRole("dialog")).toBeNull();

@@ -34,6 +34,7 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 	return &Service{
 		bindingAuthorizer:         nil,
 		speakeasySigningAvailable: false,
+		speakeasyReadiness:        nil,
 		featureFlags:              nil,
 		auth:                      nil,
 		sessions:                  nil,

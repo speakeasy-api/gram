@@ -34,6 +34,10 @@ export type InternalSessionIssuerState = ClosedEnum<
 
 export type InternalSessionIssuer = {
   /**
+   * Whether deployment readiness, rollout and SSO entitlement currently allow enabling this issuer. The caller still needs organization administrator access.
+   */
+  canEnable: boolean;
+  /**
    * Issuer URI to register with supported services. It never changes.
    */
   issuer?: string | undefined;
@@ -70,6 +74,7 @@ export const InternalSessionIssuer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    can_enable: z.boolean(),
     issuer: z.optional(z.string()),
     jwks_uri: z.optional(z.string()),
     keys: z.array(InternalSessionIssuerKey$inboundSchema),
@@ -81,6 +86,7 @@ export const InternalSessionIssuer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "can_enable": "canEnable",
       "jwks_uri": "jwksUri",
       "kms_cleanup_pending": "kmsCleanupPending",
       "rotation_ready_at": "rotationReadyAt",

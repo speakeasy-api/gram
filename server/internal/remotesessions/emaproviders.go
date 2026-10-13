@@ -167,3 +167,30 @@ func EndpointEMAProviders(ctx context.Context, q *repo.Queries, organizationID s
 	}
 	return ResolveEMAProviders(ctx, q, organizationID, vendorIssuer, EMAProviderScope{Endpoint: true, TrustedIssuer: trusted, SpeakeasySigns: speakeasySigns})
 }
+
+// EMAProviderReadiness checks live signing eligibility for an organization issuer.
+// A false result is an authoritative refusal; an error means readiness is unknown.
+type EMAProviderReadiness func(context.Context, string, uuid.UUID) (bool, error)
+
+// ApplyEMAProviderReadiness decorates a database order without minting tokens or
+// requiring a user grant. Call after releasing transactions: readiness may query
+// the database and external flag providers.
+func ApplyEMAProviderReadiness(ctx context.Context, organizationID string, order EMAProviderOrder, check EMAProviderReadiness) (EMAProviderOrder, error) {
+	order.Providers = append([]EMAProvider(nil), order.Providers...)
+	for i, provider := range order.Providers {
+		if provider.Kind != EMAProviderSpeakeasy || !provider.Available() {
+			continue
+		}
+		if check == nil {
+			continue
+		}
+		ready, err := check(ctx, organizationID, provider.InternalSessionIssuerID)
+		if err != nil {
+			return order, fmt.Errorf("check issuer readiness: %w", err)
+		}
+		if !ready {
+			order.Providers[i].Unavailable = EMAProviderSigningUnavailable
+		}
+	}
+	return order, nil
+}

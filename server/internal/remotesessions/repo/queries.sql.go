@@ -1295,6 +1295,42 @@ func (q *Queries) CountTrustedUserSessionIssuersForRemoteSessionIssuerClients(ct
 	return count, err
 }
 
+const createEMAIssuerPurgeCredentialFixture = `-- name: CreateEMAIssuerPurgeCredentialFixture :one
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, resource, subject_urn, client_selection,
+  ema_provider, access_token_encrypted, access_expires_at, deleted_at
+)
+VALUES (
+  $1, $2, 'https://resource.example.test', $3,
+  'implicit', $4::text, 'encrypted-fixture', clock_timestamp() + interval '1 hour',
+  CASE WHEN $5::boolean THEN clock_timestamp() ELSE NULL END
+)
+RETURNING id
+`
+
+type CreateEMAIssuerPurgeCredentialFixtureParams struct {
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	SubjectUrn     string
+	EmaProvider    pgtype.Text
+	Retired        bool
+}
+
+// TEST FIXTURE ONLY. Retained credentials with independent provider and
+// retirement states exercise containment without unrelated OAuth setup.
+func (q *Queries) CreateEMAIssuerPurgeCredentialFixture(ctx context.Context, arg CreateEMAIssuerPurgeCredentialFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createEMAIssuerPurgeCredentialFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SubjectUrn,
+		arg.EmaProvider,
+		arg.Retired,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createLocalFixtureGlobalRemoteSessionIssuer = `-- name: CreateLocalFixtureGlobalRemoteSessionIssuer :one
 INSERT INTO remote_session_issuers (
     id,
@@ -6687,6 +6723,40 @@ func (q *Queries) ListEMAExternalProviderCandidates(ctx context.Context, organiz
 	return items, nil
 }
 
+const listEMAIssuerPurgeCredentialsFixture = `-- name: ListEMAIssuerPurgeCredentialsFixture :many
+SELECT ema_provider, deleted, access_token_encrypted
+FROM remote_session_ema_credentials
+WHERE project_id = $1
+ORDER BY id
+`
+
+type ListEMAIssuerPurgeCredentialsFixtureRow struct {
+	EmaProvider          pgtype.Text
+	Deleted              bool
+	AccessTokenEncrypted pgtype.Text
+}
+
+// TEST FIXTURE ONLY. Read provider and erased payloads after containment.
+func (q *Queries) ListEMAIssuerPurgeCredentialsFixture(ctx context.Context, projectID uuid.NullUUID) ([]ListEMAIssuerPurgeCredentialsFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listEMAIssuerPurgeCredentialsFixture, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAIssuerPurgeCredentialsFixtureRow
+	for rows.Next() {
+		var i ListEMAIssuerPurgeCredentialsFixtureRow
+		if err := rows.Scan(&i.EmaProvider, &i.Deleted, &i.AccessTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEMAProviders = `-- name: ListEMAProviders :many
 SELECT p.id, p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
   (
@@ -10454,6 +10524,30 @@ func (q *Queries) LockSpeakeasyEMAIssuer(ctx context.Context, arg LockSpeakeasyE
 	return id, err
 }
 
+const lockSpeakeasyEMAKeySet = `-- name: LockSpeakeasyEMAKeySet :one
+SELECT s.id
+FROM internal_session_issuers i
+JOIN json_web_key_sets s
+  ON s.id = i.json_web_key_set_id AND s.organization_id = i.organization_id
+WHERE i.id = $1 AND i.organization_id = $2
+  AND i.deleted IS FALSE AND s.deleted IS FALSE AND s.project_id IS NULL
+FOR SHARE OF s
+`
+
+type LockSpeakeasyEMAKeySetParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Publication shares the key-set lock that containment and rotation take
+// exclusively. Acquire it before the issuer row to preserve lifecycle order.
+func (q *Queries) LockSpeakeasyEMAKeySet(ctx context.Context, arg LockSpeakeasyEMAKeySetParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockSpeakeasyEMAKeySet, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockSpeakeasyEMASignIn = `-- name: LockSpeakeasyEMASignIn :one
 SELECT id FROM sso_sign_ins
 WHERE id = $1 AND organization_id = $2
@@ -10888,6 +10982,25 @@ func (q *Queries) OktaIdentityProviderConnectionReferencesIssuer(ctx context.Con
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const purgeSpeakeasyEMACredentials = `-- name: PurgeSpeakeasyEMACredentials :exec
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL,
+    deleted_at = COALESCE(deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1::text
+  AND ema_provider = 'speakeasy'
+  AND (deleted IS FALSE OR access_token_encrypted IS NOT NULL)
+`
+
+// Issuer containment is organization-scoped and covers every project. The
+// provider discriminator excludes external-provider credentials, including
+// rows written before provider provenance was introduced. Retired rows may
+// still contain ciphertext and must be erased as well.
+func (q *Queries) PurgeSpeakeasyEMACredentials(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, purgeSpeakeasyEMACredentials, organizationID)
+	return err
 }
 
 const readEMAClient = `-- name: ReadEMAClient :one

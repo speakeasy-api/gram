@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -141,7 +142,7 @@ func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgx
 // internalIssuerSignerConfig pins signing to this deployment's public origin
 // and KMS ring, so a preview database cannot use another deployment's keys.
 func internalIssuerSignerConfig(c *cli.Context, serverURL *url.URL) internalsessionissuers.SignerConfig {
-	ring := c.String(identityProviderKMSKeyRingFlag)
+	ring := strings.TrimSpace(c.String(identityProviderKMSKeyRingFlag))
 	if ring == "" && c.String("environment") == "local" {
 		ring = identityProviderKMSKeyRingLocalDefault
 	}

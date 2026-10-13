@@ -90,7 +90,7 @@ func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !outcome.Succeeded() {
 		return uuid.Nil, false
 	}
-	if _, outcome := g.servingProviders(ctx, g.logger, req, sel); !outcome.Succeeded() {
+	if order, outcome := g.readyProviderOrder(ctx, req, sel); !outcome.Succeeded() || len(order.Available()) == 0 {
 		return uuid.Nil, false
 	}
 	return sel.remoteIssuerID, true
@@ -108,7 +108,7 @@ func (g *Governor) ProviderOrder(ctx context.Context, req Request) (remotesessio
 	if !outcome.Succeeded() {
 		return none, false
 	}
-	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
+	order, outcome := g.readyProviderOrder(ctx, req, sel)
 	if !outcome.Succeeded() {
 		return none, false
 	}

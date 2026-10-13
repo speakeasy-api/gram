@@ -56,6 +56,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	gate     *internalsessionissuers.Gate
 	service  *internalsessionissuers.Service
 	conn     *pgxpool.Pool
 	features *productfeatures.Client
@@ -155,7 +156,7 @@ func newTestServiceWithMintStore(t *testing.T, provisioning, mintStoreDown bool)
 		mintStore = ratelimit.NewRedisStore(down)
 	}
 	service := internalsessionissuers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, audit.NewLogger(), gate, manager, mintStore)
-	return ctx, &testInstance{service: service, conn: conn, features: features, flags: flags, orgID: orgID, providersFail: providersFail}
+	return ctx, &testInstance{gate: gate, service: service, conn: conn, features: features, flags: flags, orgID: orgID, providersFail: providersFail}
 }
 
 // provisionIssuer creates the organization's issuer outside the service, for

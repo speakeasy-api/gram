@@ -91,6 +91,7 @@ type Service struct {
 
 	// speakeasySigningAvailable matches the runtime deployment capability.
 	speakeasySigningAvailable bool
+	speakeasyReadiness        EMAProviderReadiness
 
 	createDiscoveryBudget time.Duration
 }
@@ -144,6 +145,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		productFeatures:           productFeatures,
 		featureFlags:              nil,
 		speakeasySigningAvailable: false,
+		speakeasyReadiness:        nil,
 		createDiscoveryBudget:     defaultCreateDiscoveryBudget,
 	}
 }
@@ -239,4 +241,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // provider-order views. Organization lifecycle and entitlements remain live checks.
 func (s *Service) SetSpeakeasySigningAvailable(available bool) {
 	s.speakeasySigningAvailable = available
+}
+
+// SetSpeakeasyReadiness installs the runtime's live issuer eligibility check.
+func (s *Service) SetSpeakeasyReadiness(check EMAProviderReadiness) {
+	s.speakeasyReadiness = check
 }

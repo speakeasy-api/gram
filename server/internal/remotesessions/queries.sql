@@ -5135,6 +5135,40 @@ SET last_used_at = @now_ts
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
   AND (last_used_at IS NULL OR last_used_at < @used_cutoff);
 
+-- name: PurgeSpeakeasyEMACredentials :exec
+-- Issuer containment is organization-scoped and covers every project. The
+-- provider discriminator excludes external-provider credentials, including
+-- rows written before provider provenance was introduced. Retired rows may
+-- still contain ciphertext and must be erased as well.
+UPDATE remote_session_ema_credentials
+SET access_token_encrypted = NULL,
+    deleted_at = COALESCE(deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id::text
+  AND ema_provider = 'speakeasy'
+  AND (deleted IS FALSE OR access_token_encrypted IS NOT NULL);
+
+-- name: CreateEMAIssuerPurgeCredentialFixture :one
+-- TEST FIXTURE ONLY. Retained credentials with independent provider and
+-- retirement states exercise containment without unrelated OAuth setup.
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, resource, subject_urn, client_selection,
+  ema_provider, access_token_encrypted, access_expires_at, deleted_at
+)
+VALUES (
+  @organization_id, @project_id, 'https://resource.example.test', @subject_urn,
+  'implicit', sqlc.narg(ema_provider)::text, 'encrypted-fixture', clock_timestamp() + interval '1 hour',
+  CASE WHEN @retired::boolean THEN clock_timestamp() ELSE NULL END
+)
+RETURNING id;
+
+-- name: ListEMAIssuerPurgeCredentialsFixture :many
+-- TEST FIXTURE ONLY. Read provider and erased payloads after containment.
+SELECT ema_provider, deleted, access_token_encrypted
+FROM remote_session_ema_credentials
+WHERE project_id = @project_id
+ORDER BY id;
+
 -- name: SoftDeleteTrustedIssuerSessionFixture :execrows
 -- TEST FIXTURE ONLY. Soft deletes a retained delegation without erasing its
 -- secrets, the parent state a chained credential must treat as unusable.
@@ -5328,6 +5362,17 @@ FOR SHARE;
 SELECT id FROM internal_session_issuers
 WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
 FOR SHARE;
+
+-- name: LockSpeakeasyEMAKeySet :one
+-- Publication shares the key-set lock that containment and rotation take
+-- exclusively. Acquire it before the issuer row to preserve lifecycle order.
+SELECT s.id
+FROM internal_session_issuers i
+JOIN json_web_key_sets s
+  ON s.id = i.json_web_key_set_id AND s.organization_id = i.organization_id
+WHERE i.id = @id AND i.organization_id = @organization_id
+  AND i.deleted IS FALSE AND s.deleted IS FALSE AND s.project_id IS NULL
+FOR SHARE OF s;
 
 -- name: GetSpeakeasyEMACredentialForUse :one
 SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.granted_scopes,

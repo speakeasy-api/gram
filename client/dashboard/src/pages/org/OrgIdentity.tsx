@@ -462,7 +462,7 @@ function SingleSignOnTab(): JSX.Element {
         }
       />
 
-      <EnterpriseIssuerSection ssoFeatureEnabled={ssoFeatureEnabled} />
+      <EnterpriseIssuerSection />
 
       <IdentitySection
         sectionId="directory_sync"

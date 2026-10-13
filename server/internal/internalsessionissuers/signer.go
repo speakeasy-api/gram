@@ -152,6 +152,18 @@ func (s *Signer) Available() bool {
 	return gcpkms.ValidateKeyRingName(s.deployment.KeyRing) == nil
 }
 
+// CheckEnableAuthority checks configuration and retained issuer ownership without
+// requiring an active key: disabled and new issuers may not have one yet.
+func (s *Signer) CheckEnableAuthority(organizationID string, status Status) error {
+	if !s.Available() {
+		return fmt.Errorf("%w: signing configuration unavailable", ErrMisconfigured)
+	}
+	if status.Issuer != nil {
+		return s.deployment.CheckIssuer(organizationID, status.Issuer.Issuer)
+	}
+	return nil
+}
+
 // CheckAuthority requires the selected issuer and active key to belong to this
 // deployment. Cache readers use the same check as fresh signing, so copying a
 // database cannot grant authority to release credentials from another issuer.

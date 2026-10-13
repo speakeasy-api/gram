@@ -201,7 +201,7 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 
 	resp, err := r.idpClient.AuthenticateWithCode(ctx, r.idpClientID, code)
 	if err != nil {
-		return nil, &codeExchangeError{cause: err}
+		return nil, &providerError{operation: "code exchange", cause: err}
 	}
 	if resp == nil {
 		return nil, errors.New("workos authenticate with code: empty response")
@@ -221,7 +221,7 @@ func (r *Resolver) AuthenticateWithMagicAuth(ctx context.Context, email string) 
 
 	challenge, err := r.idpClient.CreateMagicAuth(ctx, email)
 	if err != nil {
-		return nil, fmt.Errorf("workos create magic auth: %w", err)
+		return nil, &providerError{operation: "magic auth creation", cause: err}
 	}
 	if challenge == nil || challenge.Code == "" {
 		return nil, errors.New("workos create magic auth: empty code")
@@ -229,14 +229,14 @@ func (r *Resolver) AuthenticateWithMagicAuth(ctx context.Context, email string) 
 
 	resp, err := r.idpClient.AuthenticateWithMagicAuth(ctx, r.idpClientID, challenge.Email, challenge.Code)
 	if err != nil {
-		return nil, fmt.Errorf("workos authenticate with magic auth: %w", err)
+		return nil, &providerError{operation: "magic auth", cause: err}
 	}
 	if resp == nil {
 		return nil, errors.New("workos authenticate with magic auth: empty response")
 	}
 	if !resp.User.EmailVerified {
 		if err := r.idpClient.SetEmailVerified(ctx, resp.User.ID); err != nil {
-			return nil, fmt.Errorf("workos mark email verified: %w", err)
+			return nil, &providerError{operation: "email verification", cause: err}
 		}
 	}
 

@@ -32,8 +32,11 @@ const emaIssuerKMSPrefix = "emaissuer"
 // sweepOrganizationPage is how many organizations one sweep query returns.
 const sweepOrganizationPage = 500
 
-// EMAIssuerTokenPurger drops vendor tokens obtained with an organization's
-// issuer, so disabling it or a compromised rotation cuts access at once.
+// issuerTokenPurgeTimeout bounds local credential cleanup after containment.
+const issuerTokenPurgeTimeout = 10 * time.Second
+
+// EMAIssuerTokenPurger erases vendor tokens obtained with an organization's
+// issuer after disabling it or a compromised rotation fences their use.
 type EMAIssuerTokenPurger interface {
 	PurgeEMAIssuerTokens(ctx context.Context, organizationID string) error
 }
@@ -45,11 +48,13 @@ func (p *Provisioner) SetEMAIssuerTokenPurger(purger EMAIssuerTokenPurger) {
 
 // PurgeEMAIssuerTokens drops cached vendor tokens for the organization.
 func (p *Provisioner) PurgeEMAIssuerTokens(ctx context.Context, organizationID string) {
-	// TODO(AIM-523): log at error when the purger is nil once signing caches vendor tokens.
 	if p.emaTokenPurger == nil {
+		p.logger.ErrorContext(ctx, "issuer vendor-token purger is not configured", attr.SlogOrganizationID(organizationID))
 		return
 	}
-	if err := p.emaTokenPurger.PurgeEMAIssuerTokens(context.WithoutCancel(ctx), organizationID); err != nil {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerTokenPurgeTimeout)
+	defer cancel()
+	if err := p.emaTokenPurger.PurgeEMAIssuerTokens(ctx, organizationID); err != nil {
 		p.logger.ErrorContext(ctx, "failed to purge vendor tokens for issuer", attr.SlogOrganizationID(organizationID), attr.SlogError(err))
 	}
 }

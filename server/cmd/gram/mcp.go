@@ -352,6 +352,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	issuerGate := newInternalSessionIssuerGate(c, db, productFeatures, featureFlags, false)
 	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
+	issuerGate.SetEnableAuthority(issuerSigner.CheckEnableAuthority)
 
 	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
 	if err != nil {

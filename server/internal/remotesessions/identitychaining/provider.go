@@ -2,12 +2,14 @@ package identitychaining
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -55,7 +57,35 @@ func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req R
 	return g.providerOrderWith(ctx, repo.New(g.db), logger, req, sel)
 }
 
-// providerOrderWith is providerOrder over q, such as a publishing transaction.
+// readyProviderOrder decorates a configured order for status views. Acquisition
+// keeps the raw order so transient authority failures retain their retryability.
+func (g *Governor) readyProviderOrder(ctx context.Context, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
+	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
+	if !outcome.Succeeded() {
+		return order, outcome
+	}
+	order, err := remotesessions.ApplyEMAProviderReadiness(ctx, req.OrganizationID, order, func(ctx context.Context, organizationID string, issuerID uuid.UUID) (bool, error) {
+		source, ok := g.source(remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: issuerID, Unavailable: ""}).(interface {
+			configuration(context.Context, *slog.Logger, string) (internalsessionissuers.Status, Outcome)
+		})
+		if !ok {
+			return g.sourceAvailable(remotesessions.EMAProviderSpeakeasy), nil
+		}
+		_, outcome := source.configuration(ctx, g.logger, organizationID)
+		if outcome.Retryable {
+			return false, fmt.Errorf("issuer readiness: %s", outcome.Reason)
+		}
+		return outcome.Succeeded(), nil
+	})
+	if err != nil {
+		return order, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
+	}
+	return order, success
+}
+
+// providerOrderWith reads the saved order over q, such as a publishing
+// transaction. Live source readiness is checked outside the transaction; the
+// selected source's publish fence rechecks its issuer and sign-in under lock.
 func (g *Governor) providerOrderWith(ctx context.Context, q *repo.Queries, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
 	vendor, err := remotesessions.NormalizeVendorIssuer(sel.issuer)
 	if err != nil {

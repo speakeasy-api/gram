@@ -39,6 +39,7 @@ describe("issuer query isolation", () => {
       state: "enabled",
       keys: [],
       kmsCleanupPending: 0,
+      canEnable: false,
     });
     mocks.load.mockImplementation(() => new Promise(() => {}));
     const wrapper = ({ children }: PropsWithChildren) => (

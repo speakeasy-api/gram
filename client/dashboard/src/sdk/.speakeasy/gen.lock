@@ -7134,7 +7134,7 @@ examples:
     speakeasy-default-get-internal-session-issuer:
       responses:
         "200":
-          application/json: {"keys": [{"kid": "<id>", "state": "pending"}], "kms_cleanup_pending": 738548, "state": "unavailable"}
+          application/json: {"can_enable": false, "keys": [{"kid": "<id>", "state": "pending"}], "kms_cleanup_pending": 738548, "state": "unavailable"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -11627,7 +11627,7 @@ examples:
         application/json: {"compromised": false}
       responses:
         "200":
-          application/json: {"keys": [], "kms_cleanup_pending": 142679, "state": "disabled"}
+          application/json: {"can_enable": true, "keys": [], "kms_cleanup_pending": 142679, "state": "disabled"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -11998,7 +11998,7 @@ examples:
         application/json: {"enabled": false}
       responses:
         "200":
-          application/json: {"keys": [{"kid": "<id>", "state": "active"}], "kms_cleanup_pending": 808614, "state": "unavailable"}
+          application/json: {"can_enable": false, "keys": [{"kid": "<id>", "state": "active"}], "kms_cleanup_pending": 808614, "state": "unavailable"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

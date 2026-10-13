@@ -1123,9 +1123,14 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			issuerTokenPurger := remotesessions.NewEMAIssuerTokenPurger(db)
+			if identityProviderProvisioner != nil {
+				identityProviderProvisioner.SetEMAIssuerTokenPurger(issuerTokenPurger)
+			}
 			issuerGate := newInternalSessionIssuerGate(c, db, productFeatures, featureFlags, identityProviderProvisioner != nil)
 			issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
 			issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
+			issuerGate.SetEnableAuthority(issuerSigner.CheckEnableAuthority)
 
 			tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
 			if err != nil {
@@ -1687,7 +1692,9 @@ func newStartCommand() *cli.Command {
 			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			jsonwebkeysets.Attach(mux, jsonwebkeysets.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
-			internalsessionissuers.Attach(mux, internalsessionissuers.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, issuerGate, internalSessionIssuerManager(identityProviderProvisioner), ratelimit.NewRedisStore(redisClient)))
+			issuerService := internalsessionissuers.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, issuerGate, internalSessionIssuerManager(identityProviderProvisioner), ratelimit.NewRedisStore(redisClient))
+			issuerService.SetEMAIssuerTokenPurger(issuerTokenPurger)
+			internalsessionissuers.Attach(mux, issuerService)
 			internalsessionissuers.AttachDiscovery(mux, db, logger)
 			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner, encryptionClient), encryptionClient, identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
 			oktaresourceconnections.Attach(mux, oktaresourceconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags))
@@ -1730,6 +1737,7 @@ func newStartCommand() *cli.Command {
 			remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 			remoteSessionsService.SetFeatureFlags(featureFlags)
 			remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())
+			remoteSessionsService.SetSpeakeasyReadiness(issuerGate.Ready)
 			remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 				authCtx, ok := contextvalues.GetAuthContext(ctx)
 				if !ok || authCtx == nil {

@@ -38,6 +38,10 @@ type GetResponseBody struct {
 	// enabled, but Speakeasy has paused all signing. keyless: every key was
 	// revoked after a compromise and no replacement is active yet.
 	State string `form:"state" json:"state" xml:"state"`
+	// Whether deployment readiness, rollout and SSO entitlement currently allow
+	// enabling this issuer. The caller still needs organization administrator
+	// access.
+	CanEnable bool `form:"can_enable" json:"can_enable" xml:"can_enable"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Public verification keys.
@@ -60,6 +64,10 @@ type SetEnabledResponseBody struct {
 	// enabled, but Speakeasy has paused all signing. keyless: every key was
 	// revoked after a compromise and no replacement is active yet.
 	State string `form:"state" json:"state" xml:"state"`
+	// Whether deployment readiness, rollout and SSO entitlement currently allow
+	// enabling this issuer. The caller still needs organization administrator
+	// access.
+	CanEnable bool `form:"can_enable" json:"can_enable" xml:"can_enable"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Public verification keys.
@@ -82,6 +90,10 @@ type RotateResponseBody struct {
 	// enabled, but Speakeasy has paused all signing. keyless: every key was
 	// revoked after a compromise and no replacement is active yet.
 	State string `form:"state" json:"state" xml:"state"`
+	// Whether deployment readiness, rollout and SSO entitlement currently allow
+	// enabling this issuer. The caller still needs organization administrator
+	// access.
+	CanEnable bool `form:"can_enable" json:"can_enable" xml:"can_enable"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
 	// Public verification keys.
@@ -656,6 +668,7 @@ type InternalSessionIssuerKeyResponseBody struct {
 func NewGetResponseBody(res *internalsessionissuers.InternalSessionIssuer) *GetResponseBody {
 	body := &GetResponseBody{
 		State:             res.State,
+		CanEnable:         res.CanEnable,
 		Issuer:            res.Issuer,
 		JwksURI:           res.JwksURI,
 		RotationReadyAt:   res.RotationReadyAt,
@@ -681,6 +694,7 @@ func NewGetResponseBody(res *internalsessionissuers.InternalSessionIssuer) *GetR
 func NewSetEnabledResponseBody(res *internalsessionissuers.InternalSessionIssuer) *SetEnabledResponseBody {
 	body := &SetEnabledResponseBody{
 		State:             res.State,
+		CanEnable:         res.CanEnable,
 		Issuer:            res.Issuer,
 		JwksURI:           res.JwksURI,
 		RotationReadyAt:   res.RotationReadyAt,
@@ -706,6 +720,7 @@ func NewSetEnabledResponseBody(res *internalsessionissuers.InternalSessionIssuer
 func NewRotateResponseBody(res *internalsessionissuers.InternalSessionIssuer) *RotateResponseBody {
 	body := &RotateResponseBody{
 		State:             res.State,
+		CanEnable:         res.CanEnable,
 		Issuer:            res.Issuer,
 		JwksURI:           res.JwksURI,
 		RotationReadyAt:   res.RotationReadyAt,

@@ -18,15 +18,14 @@ import {
   useEnterpriseIssuer,
 } from "./useEnterpriseIssuer";
 
-type Props = { ssoFeatureEnabled: boolean };
 type Action = "disable" | "rotate" | null;
 
-export function EnterpriseIssuerSection(props: Props): JSX.Element {
+export function EnterpriseIssuerSection(): JSX.Element {
   const organization = useOrganization();
-  return <EnterpriseIssuerContent key={organization.id} {...props} />;
+  return <EnterpriseIssuerContent key={organization.id} />;
 }
 
-function EnterpriseIssuerContent({ ssoFeatureEnabled }: Props): JSX.Element {
+function EnterpriseIssuerContent(): JSX.Element {
   const organization = useOrganization();
   const session = useSession();
   const { hasScope } = useRBAC();
@@ -51,10 +50,7 @@ function EnterpriseIssuerContent({ ssoFeatureEnabled }: Props): JSX.Element {
   const issuer = query.data;
   const pending = enable.isPending || rotate.isPending;
   const activeKey = issuer?.keys.find((key) => key.state === "active");
-  const canEnable =
-    canManage &&
-    ssoFeatureEnabled &&
-    (issuer?.state === "setup_required" || issuer?.state === "disabled");
+  const canEnable = canManage && issuer?.canEnable;
   const canDisable =
     canManage && !!issuer?.issuer && issuer.state !== "disabled";
   const canRotate =
@@ -97,9 +93,7 @@ function EnterpriseIssuerContent({ ssoFeatureEnabled }: Props): JSX.Element {
             </Button>
           </Alert>
         )}
-        {issuer && (
-          <IssuerStatus issuer={issuer} ssoFeatureEnabled={ssoFeatureEnabled} />
-        )}
+        {issuer && <IssuerStatus issuer={issuer} />}
         {issuer &&
           ["enabled", "setup_required", "disabled"].includes(issuer.state) && (
             <Text small muted>
@@ -251,10 +245,8 @@ function EnterpriseIssuerContent({ ssoFeatureEnabled }: Props): JSX.Element {
 
 function IssuerStatus({
   issuer,
-  ssoFeatureEnabled,
 }: {
   issuer: InternalSessionIssuer;
-  ssoFeatureEnabled: boolean;
 }): JSX.Element | null {
   let message: string;
   switch (issuer.state) {
@@ -264,13 +256,14 @@ function IssuerStatus({
         "The new signing key is being published. Speakeasy will activate it automatically when it is ready.";
       break;
     case "setup_required":
-      message =
-        "Enable enterprise authorization to create your organization's issuer.";
+      message = issuer.canEnable
+        ? "Enable enterprise authorization to create your organization's issuer."
+        : "Enterprise authorization cannot be enabled right now. Contact your Speakeasy administrator to check availability and SSO access.";
       break;
     case "disabled":
-      message = ssoFeatureEnabled
+      message = issuer.canEnable
         ? "Enterprise authorization is disabled. Re-enable it to resume issuing authorization tokens."
-        : "Enterprise authorization is disabled. Contact your Speakeasy administrator to restore SSO access before re-enabling it.";
+        : "Enterprise authorization is disabled and cannot be re-enabled right now. Contact your Speakeasy administrator to check availability and SSO access.";
       break;
     case "entitlement_required":
       message =

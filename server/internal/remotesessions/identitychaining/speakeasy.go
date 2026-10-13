@@ -94,20 +94,9 @@ func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Log
 	if !result.Eligible() || result.Identity.UserID != req.UserID {
 		return newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
 	}
-	status, err := s.gate.Status(ctx, req.OrganizationID)
-	if err != nil {
-		logger.ErrorContext(ctx, "check EMA issuer", attr.SlogError(err))
-		return newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
-	}
-	if status.State != internalsessionissuers.StateEnabled || status.Issuer == nil || status.ActiveKey == nil || status.Issuer.ID != s.issuerID {
-		return providerUnavailable
-	}
-	if err := s.signer.CheckAuthority(ctx, req.OrganizationID, status); err != nil {
-		logger.WarnContext(ctx, "check EMA deployment authority", attr.SlogError(err))
-		if errors.Is(err, internalsessionissuers.ErrMisconfigured) {
-			return newOutcome(StageAuthorization, ReasonConfigurationRequired, ConfidenceVerified, false)
-		}
-		return newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
+	status, outcome := s.configuration(ctx, logger, req.OrganizationID)
+	if !outcome.Succeeded() {
+		return outcome
 	}
 	sel.signInID = result.Identity.SignInID
 	sel.email = result.Identity.Email
@@ -115,6 +104,30 @@ func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Log
 	sel.internalKeyID = status.ActiveKey.ID
 	sel.audience = sel.issuer
 	return success
+}
+
+// configuration checks live issuer readiness without requiring a user's grant
+// or signing an assertion. Provider discovery uses the same authority as minting.
+func (s speakeasySource) configuration(ctx context.Context, logger *slog.Logger, organizationID string) (internalsessionissuers.Status, Outcome) {
+	if !s.available() {
+		return internalsessionissuers.Status{State: internalsessionissuers.StateUnavailable, Issuer: nil, RolledOut: false, Entitled: false, ActiveKey: nil}, providerUnavailable
+	}
+	status, err := s.gate.Status(ctx, organizationID)
+	if err != nil {
+		logger.ErrorContext(ctx, "check EMA issuer", attr.SlogError(err))
+		return status, newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
+	}
+	if status.State != internalsessionissuers.StateEnabled || status.Issuer == nil || status.ActiveKey == nil || status.Issuer.ID != s.issuerID {
+		return status, providerUnavailable
+	}
+	if err := s.signer.CheckAuthority(ctx, organizationID, status); err != nil {
+		logger.WarnContext(ctx, "check EMA deployment authority", attr.SlogError(err))
+		if errors.Is(err, internalsessionissuers.ErrMisconfigured) {
+			return status, newOutcome(StageAuthorization, ReasonConfigurationRequired, ConfidenceVerified, false)
+		}
+		return status, newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
+	}
+	return status, success
 }
 
 func (s speakeasySource) checkReuse(ctx context.Context, req Request, sel selection) Outcome {
@@ -159,13 +172,26 @@ func (s speakeasySource) issue(ctx context.Context, logger *slog.Logger, req Req
 }
 
 // checkSpeakeasyPublish fences revocation against publication. The transaction
-// holds the same sign-in row that revocation locks before it changes grants.
+// holds the sign-in row before grant changes, and the issuer key set before
+// issuer state, matching containment's key-write lock order.
 func (c *Chainer) checkSpeakeasyPublish(ctx context.Context, tx pgx.Tx, req Request, sel selection) error {
 	q := repo.New(tx)
 	if _, err := q.LockSpeakeasyEMASignIn(ctx, repo.LockSpeakeasyEMASignInParams{ID: sel.signInID, OrganizationID: req.OrganizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errStale
+		}
 		return fmt.Errorf("lock EMA sign-in: %w", err)
 	}
+	if _, err := q.LockSpeakeasyEMAKeySet(ctx, repo.LockSpeakeasyEMAKeySetParams{ID: sel.provider.InternalSessionIssuerID, OrganizationID: req.OrganizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errStale
+		}
+		return fmt.Errorf("lock EMA issuer key set: %w", err)
+	}
 	if _, err := q.LockSpeakeasyEMAIssuer(ctx, repo.LockSpeakeasyEMAIssuerParams{ID: sel.provider.InternalSessionIssuerID, OrganizationID: req.OrganizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errStale
+		}
 		return fmt.Errorf("lock EMA issuer: %w", err)
 	}
 	result, err := ssosignins.CheckSignInIdentity(ctx, tx, req.OrganizationID, sel.userSessionID, c.now(), ssosignins.MaxAge)

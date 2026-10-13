@@ -120,3 +120,39 @@ func TestCodeExchangeErrorPreservesCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.EqualError(t, err, "identity provider code exchange failed")
 }
+
+func TestMagicAuthProviderErrorsDoNotExposeCredentials(t *testing.T) {
+	t.Parallel()
+	const pendingToken = "pending-magic-authentication-secret"
+	const code = "magic-authorization-code-secret"
+	for _, failCreation := range []bool{true, false} {
+		t.Run(fmt.Sprintf("creation=%t", failCreation), func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/user_management/magic_auth" && !failCreation {
+					_, _ = fmt.Fprintf(w, `{"email":"user@example.test","code":%q}`, code)
+					return
+				}
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = fmt.Fprintf(w, `{"error":"invalid_grant","error_description":%q,"pending_authentication_token":%q}`, code, pendingToken)
+			}))
+			t.Cleanup(server.Close)
+			client := usermanagement.NewClient("test-key")
+			client.Endpoint = server.URL
+			client.HTTPClient = server.Client()
+			recorder := tracetest.NewSpanRecorder()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+			t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+			resolver := identity.NewResolver(testenv.NewLogger(t), provider, nil, server.URL, "client_test", identity.NewWorkOSAdapter(client), nil, nil, nil, nil, nil, nil, "")
+			_, err := resolver.AuthenticateWithMagicAuth(t.Context(), "user@example.test")
+			require.Error(t, err)
+			for _, secret := range []string{pendingToken, code, "pending_authentication_token"} {
+				require.NotContains(t, fmt.Sprintf("%+v", err), secret)
+				for _, span := range recorder.Ended() {
+					require.NotContains(t, fmt.Sprint(span.Attributes(), span.Events(), span.Status()), secret)
+				}
+			}
+		})
+	}
+}

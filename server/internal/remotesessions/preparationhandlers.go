@@ -94,7 +94,7 @@ func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput,
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, s.logger)
 	}
-	return EMAProviderOrderView(order), nil
+	return s.liveEMAProvidersView(ctx, s.logger, authCtx.ActiveOrganizationID, order)
 }
 
 func (s *Service) UnlinkEMA(ctx context.Context, p *gen.UnlinkEMAPayload) (*gen.IdentityChainingPreparation, error) {
