@@ -5650,6 +5650,8 @@ type SignIn struct {
 	// @access: confidential
 	RevokeReason pgtype.Text
 	// @access: confidential
+	SessionSignedOutAt pgtype.Timestamptz
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
