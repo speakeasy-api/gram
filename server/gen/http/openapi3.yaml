@@ -46456,7 +46456,7 @@ paths:
                 name: DeleteOrganizationUserSessionIssuerCimdClient
     /rpc/organizationUserSessionIssuers.get:
         get:
-            description: Get an organization-owned user_session_issuer by id. Requires org:read.
+            description: Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.
             operationId: getOrganizationUserSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -46825,7 +46825,7 @@ paths:
                 name: OrganizationUserSessionIssuerMigratePreflight
     /rpc/organizationUserSessionIssuers.list:
         get:
-            description: List organization-owned user_session_issuers. Requires org:read.
+            description: 'List the user_session_issuers in the caller''s organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.'
             operationId: listOrganizationUserSessionIssuers
             parameters:
                 - allowEmptyValue: true
@@ -46844,6 +46844,16 @@ paths:
                     description: Page size (default 50, max 100).
                     format: int64
                     type: integer
+                - allowEmptyValue: true
+                  description: 'Only issuers from one tier: organization-owned (organization) or project-specific (project). Omitted lists both.'
+                  in: query
+                  name: tier
+                  schema:
+                    description: 'Only issuers from one tier: organization-owned (organization) or project-specific (project). Omitted lists both.'
+                    enum:
+                        - organization
+                        - project
+                    type: string
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -47042,6 +47052,120 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: OrganizationUserSessionIssuerCimdClients
+    /rpc/organizationUserSessionIssuers.listMcpServers:
+        get:
+            description: List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.
+            operationId: listOrganizationUserSessionIssuerMcpServers
+            parameters:
+                - allowEmptyValue: true
+                  description: The user_session_issuer whose attached MCP servers are listed.
+                  in: query
+                  name: user_session_issuer_id
+                  required: true
+                  schema:
+                    description: The user_session_issuer whose attached MCP servers are listed.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: 'Pagination cursor: id of the last item from the previous page.'
+                  in: query
+                  name: cursor
+                  schema:
+                    description: 'Pagination cursor: id of the last item from the previous page.'
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size (default 50, max 100).
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size (default 50, max 100).
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListUserSessionIssuerMcpServersResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listMcpServers organizationUserSessionIssuers
+            tags:
+                - organizationUserSessionIssuers
+            x-speakeasy-name-override: listMcpServers
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: OrganizationUserSessionIssuerMcpServers
     /rpc/organizationUserSessionIssuers.migrate:
         post:
             description: Consolidate a source user_session_issuer onto a target issuer, preserving clients, sessions, attachments, and remote-session credentials before soft-deleting the source. The target must be in the same project or a broader organization scope. Access tokens issued through the authorization_code and refresh_token grants are audience-bound to the issuer, so once a repointed MCP server verifies bearers against the target, outstanding access tokens minted under the source are rejected until the client refreshes. Migrated sessions and refresh tokens keep working, so the refresh succeeds without re-authorization. Tokens from the jwt-bearer (ID-JAG) grant are bound to the resource URL and are unaffected. Requires org:admin.
@@ -87281,6 +87405,12 @@ components:
                     enum:
                         - chain
                         - interactive
+                authorization_server_mode:
+                    type: string
+                    description: 'Which OAuth authorization server the issuer''s MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).'
+                    enum:
+                        - endpoint
+                        - shared
                 classification:
                     type: string
                     description: custom, or project_default_idp for the auto-provisioned issuer of private servers.
@@ -87301,6 +87431,9 @@ components:
                 id:
                     type: string
                     description: The user session issuer ID.
+                issuer_url_pinned:
+                    type: boolean
+                    description: Whether a shared authorization server's issuer URL is pinned, so it stays the same if the deployment's hosts change.
                 other_servers_using_issuer:
                     type: array
                     items:
@@ -87334,6 +87467,8 @@ components:
                 - session_duration_hours
                 - attachment_scope
                 - use_authentication_host
+                - authorization_server_mode
+                - issuer_url_pinned
                 - other_servers_using_issuer
                 - created_at
                 - sessions
@@ -101487,7 +101622,7 @@ components:
                 next_cursor:
                     type: string
                     description: Cursor for the next page; empty when exhausted.
-            description: Result type for listing organization-owned user_session_issuers.
+            description: Result type for listing the user_session_issuers in an organization.
             required:
                 - items
         ListPackagesResult:
@@ -102534,6 +102669,19 @@ components:
                     type: string
                     description: Cursor for the next page; empty when exhausted.
             description: Result type for listing an issuer's custom CIMD document URLs.
+            required:
+                - items
+        ListUserSessionIssuerMcpServersResult:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/UserSessionIssuerMcpServer'
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+            description: Result type for listing the MCP servers attached to a user_session_issuer.
             required:
                 - items
         ListUserSessionIssuersResult:
@@ -105452,7 +105600,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/UserSessionIssuerFieldMismatch'
-                    description: Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected.
+                    description: 'Configuration differences that do not block the migration. The target''s values become authoritative for future authorization; existing sessions and refresh tokens are unaffected. Besides the issuer settings, this reports authorization_server_mode, use_authentication_host, and issuer_url (the shared authorization server''s issuer identifier, empty when not served) whenever they differ: repointed MCP servers then direct clients to a different authorization server, so anything configured with the source''s values, such as an identity provider or a federated platform, must be updated.'
                 warnings_fingerprint:
                     type: string
                     description: Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.
@@ -121031,6 +121179,18 @@ components:
                 authn_challenge_mode:
                     type: string
                     description: chain | interactive.
+                authorization_server_mode:
+                    type: string
+                    description: Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every MCP server its own authorization server, rooted at the server's URL. 'shared' serves one authorization server for the issuer, used by all of its MCP servers; issuer_url and token_endpoint locate it. A shared issuer whose authorization server this deployment does not serve falls back to per-endpoint authorization servers, and authorization_server_unavailable_reason says why.
+                    enum:
+                        - endpoint
+                        - shared
+                authorization_server_unavailable_reason:
+                    type: string
+                    description: 'Why a shared issuer''s authorization server is not served, so its MCP servers fall back to per-endpoint authorization servers: the pinned issuer URL is not this issuer''s shared authorization server (pinned_issuer_url_invalid), or it is on a host this deployment does not serve (host_not_served). Absent otherwise.'
+                    enum:
+                        - pinned_issuer_url_invalid
+                        - host_not_served
                 client_id_metadata_admission_mode:
                     type: string
                     description: 'The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. ''open'' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and ''presets'' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note ''reporting'' can be READ but not written: it is a legacy value that admits exactly what ''open'' admits, and no issuer is created with it.'
@@ -121046,12 +121206,21 @@ components:
                     type: string
                     description: The user_session_issuer id.
                     format: uuid
+                issuer_url:
+                    type: string
+                    description: The RFC 8414 issuer identifier of the issuer's shared authorization server. Present only for a shared issuer whose authorization server this deployment serves.
+                issuer_url_pinned:
+                    type: boolean
+                    description: Whether the shared authorization server's issuer URL was fixed when the issuer was set up, so it stays the same if the deployment's hosts change. An unpinned shared issuer derives its issuer URL from the deployment's current hosts, so a host change also changes the values configured on other platforms. Always false outside shared mode.
                 organization_id:
                     type: string
                     description: The owning organization id.
                 project_id:
                     type: string
                     description: The owning project id; empty for organization-owned issuers.
+                project_name:
+                    type: string
+                    description: The owning project's name. Present on organization-level reads of project-specific issuers.
                 session_duration_hours:
                     type: integer
                     description: Maximum issued user session lifetime, in hours.
@@ -121059,6 +121228,9 @@ components:
                 slug:
                     type: string
                     description: Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.
+                token_endpoint:
+                    type: string
+                    description: The token endpoint of the issuer's shared authorization server. Present exactly when issuer_url is.
                 trusted_remote_session_client_id:
                     type: string
                     description: The organization-level remote_session_client Speakeasy uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.
@@ -121070,6 +121242,9 @@ components:
                 updated_at:
                     type: string
                     format: date-time
+                use_authentication_host:
+                    type: boolean
+                    description: Whether the issuer's authorization servers are announced on the deployment's authentication host rather than the MCP host.
             description: A user_session_issuer record.
             required:
                 - id
@@ -121079,6 +121254,9 @@ components:
                 - authn_challenge_mode
                 - session_duration_hours
                 - client_id_metadata_admission_mode
+                - authorization_server_mode
+                - use_authentication_host
+                - issuer_url_pinned
                 - created_at
                 - updated_at
         UserSessionIssuerCimdClient:
@@ -121133,6 +121311,40 @@ components:
                 - field
                 - source_value
                 - target_value
+        UserSessionIssuerMcpServer:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The MCP server, toolset, or meta MCP server id.
+                    format: uuid
+                kind:
+                    type: string
+                    description: Which kind of MCP server this is.
+                    enum:
+                        - mcp_server
+                        - toolset
+                        - meta_mcp_server
+                name:
+                    type: string
+                    description: The display name.
+                project_id:
+                    type: string
+                    description: The owning project id.
+                    format: uuid
+                project_name:
+                    type: string
+                    description: The owning project name.
+                slug:
+                    type: string
+                    description: The MCP server or toolset slug. Absent for meta MCP servers and MCP servers without one.
+            description: A live MCP server, toolset, or meta MCP server attached to a user_session_issuer.
+            required:
+                - kind
+                - id
+                - name
+                - project_id
+                - project_name
         UserSessionUpstream:
             type: object
             properties:

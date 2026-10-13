@@ -182,10 +182,13 @@ var _ = Service("organizationUserSessionIssuers", func() {
 	})
 
 	Method("listIssuers", func() {
-		Description("List organization-owned user_session_issuers. Requires org:read.")
+		Description("List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.")
 		Payload(func() {
 			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() { Format(FormatUUID) })
 			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Attribute("tier", String, "Only issuers from one tier: organization-owned (organization) or project-specific (project). Omitted lists both.", func() {
+				Enum("organization", "project")
+			})
 			security.SessionPayload()
 		})
 		Result(ListOrganizationUserSessionIssuersResult)
@@ -193,6 +196,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 			GET("/rpc/organizationUserSessionIssuers.list")
 			Param("cursor")
 			Param("limit")
+			Param("tier")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
@@ -203,7 +207,7 @@ var _ = Service("organizationUserSessionIssuers", func() {
 	})
 
 	Method("getIssuer", func() {
-		Description("Get an organization-owned user_session_issuer by id. Requires org:read.")
+		Description("Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.")
 		Payload(func() {
 			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
 			Required("id")
@@ -236,6 +240,30 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Meta("openapi:operationId", "updateOrganizationUserSessionIssuer")
 		Meta("openapi:extension:x-speakeasy-name-override", "update")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOrganizationUserSessionIssuer"}`)
+	})
+
+	Method("listMcpServers", func() {
+		Description("List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.")
+		Payload(func() {
+			Attribute("user_session_issuer_id", String, "The user_session_issuer whose attached MCP servers are listed.", func() { Format(FormatUUID) })
+			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page.", func() { Format(FormatUUID) })
+			Attribute("limit", Int, "Page size (default 50, max 100).")
+			Required("user_session_issuer_id")
+			security.SessionPayload()
+		})
+		Result(ListUserSessionIssuerMcpServersResult)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.listMcpServers")
+			Param("user_session_issuer_id")
+			Param("cursor")
+			Param("limit")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		shared.CursorPagination()
+		Meta("openapi:operationId", "listOrganizationUserSessionIssuerMcpServers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listMcpServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerMcpServers"}`)
 	})
 
 	Method("getIssuerDeletePreflight", func() {
@@ -490,6 +518,17 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	Attribute("trusted_remote_session_client_id", String, "The organization-level remote_session_client Speakeasy uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("authorization_server_mode", String, "Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every MCP server its own authorization server, rooted at the server's URL. 'shared' serves one authorization server for the issuer, used by all of its MCP servers; issuer_url and token_endpoint locate it. A shared issuer whose authorization server this deployment does not serve falls back to per-endpoint authorization servers, and authorization_server_unavailable_reason says why.", func() {
+		Enum("endpoint", "shared")
+	})
+	Attribute("use_authentication_host", Boolean, "Whether the issuer's authorization servers are announced on the deployment's authentication host rather than the MCP host.")
+	Attribute("issuer_url_pinned", Boolean, "Whether the shared authorization server's issuer URL was fixed when the issuer was set up, so it stays the same if the deployment's hosts change. An unpinned shared issuer derives its issuer URL from the deployment's current hosts, so a host change also changes the values configured on other platforms. Always false outside shared mode.")
+	Attribute("issuer_url", String, "The RFC 8414 issuer identifier of the issuer's shared authorization server. Present only for a shared issuer whose authorization server this deployment serves.")
+	Attribute("token_endpoint", String, "The token endpoint of the issuer's shared authorization server. Present exactly when issuer_url is.")
+	Attribute("authorization_server_unavailable_reason", String, "Why a shared issuer's authorization server is not served, so its MCP servers fall back to per-endpoint authorization servers: the pinned issuer URL is not this issuer's shared authorization server (pinned_issuer_url_invalid), or it is on a host this deployment does not serve (host_not_served). Absent otherwise.", func() {
+		Enum("pinned_issuer_url_invalid", "host_not_served")
+	})
+	Attribute("project_name", String, "The owning project's name. Present on organization-level reads of project-specific issuers.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -497,7 +536,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "slug", "authn_challenge_mode", "session_duration_hours", "client_id_metadata_admission_mode", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "slug", "authn_challenge_mode", "session_duration_hours", "client_id_metadata_admission_mode", "authorization_server_mode", "use_authentication_host", "issuer_url_pinned", "created_at", "updated_at")
 })
 
 var ListUserSessionIssuersResult = Type("ListUserSessionIssuersResult", func() {
@@ -510,8 +549,28 @@ var ListUserSessionIssuersResult = Type("ListUserSessionIssuersResult", func() {
 })
 
 var ListOrganizationUserSessionIssuersResult = Type("ListOrganizationUserSessionIssuersResult", func() {
-	Description("Result type for listing organization-owned user_session_issuers.")
+	Description("Result type for listing the user_session_issuers in an organization.")
 	Attribute("items", ArrayOf(UserSessionIssuer))
+	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
+	Required("items")
+})
+
+var UserSessionIssuerMcpServer = Type("UserSessionIssuerMcpServer", func() {
+	Description("A live MCP server, toolset, or meta MCP server attached to a user_session_issuer.")
+	Attribute("kind", String, "Which kind of MCP server this is.", func() {
+		Enum("mcp_server", "toolset", "meta_mcp_server")
+	})
+	Attribute("id", String, "The MCP server, toolset, or meta MCP server id.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The display name.")
+	Attribute("slug", String, "The MCP server or toolset slug. Absent for meta MCP servers and MCP servers without one.")
+	Attribute("project_id", String, "The owning project id.", func() { Format(FormatUUID) })
+	Attribute("project_name", String, "The owning project name.")
+	Required("kind", "id", "name", "project_id", "project_name")
+})
+
+var ListUserSessionIssuerMcpServersResult = Type("ListUserSessionIssuerMcpServersResult", func() {
+	Description("Result type for listing the MCP servers attached to a user_session_issuer.")
+	Attribute("items", ArrayOf(UserSessionIssuerMcpServer))
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 	Required("items")
 })
@@ -556,7 +615,7 @@ var OrganizationUserSessionIssuerMigratePreflight = Type("OrganizationUserSessio
 	Attribute("principal_binding_conflict_count", Int, "Active principal bindings that would violate target uniqueness. Non-zero blocks migration.")
 	Attribute("ema_binding_conflict_count", Int, "Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.")
 	Attribute("platform_owned", Boolean, "Whether a Platform MCP catalog registration owns either issuer. True blocks migration.")
-	Attribute("warnings", ArrayOf(UserSessionIssuerFieldMismatch), "Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected.")
+	Attribute("warnings", ArrayOf(UserSessionIssuerFieldMismatch), "Configuration differences that do not block the migration. The target's values become authoritative for future authorization; existing sessions and refresh tokens are unaffected. Besides the issuer settings, this reports authorization_server_mode, use_authentication_host, and issuer_url (the shared authorization server's issuer identifier, empty when not served) whenever they differ: repointed MCP servers then direct clients to a different authorization server, so anything configured with the source's values, such as an identity provider or a federated platform, must be updated.")
 	Attribute("warnings_fingerprint", String, "Stable fingerprint of the current warnings. Empty when there are no warnings; otherwise pass this exact value to migrateIssuer to confirm them.")
 	Attribute("can_migrate", Boolean, "True when no hard blocker is present.")
 	Required("client_count", "session_count", "consent_count", "cimd_client_count", "remote_session_count", "conflicting_client_ids", "principal_binding_conflict_count", "ema_binding_conflict_count", "platform_owned", "warnings", "warnings_fingerprint", "can_migrate")

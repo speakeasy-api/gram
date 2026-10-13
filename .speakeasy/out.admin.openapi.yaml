@@ -7727,6 +7727,12 @@ components:
           enum:
             - chain
             - interactive
+        authorization_server_mode:
+          type: string
+          description: 'Which OAuth authorization server the issuer''s MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).'
+          enum:
+            - endpoint
+            - shared
         classification:
           type: string
           description: custom, or project_default_idp for the auto-provisioned issuer of private servers.
@@ -7747,6 +7753,9 @@ components:
         id:
           type: string
           description: The user session issuer ID.
+        issuer_url_pinned:
+          type: boolean
+          description: Whether a shared authorization server's issuer URL is pinned, so it stays the same if the deployment's hosts change.
         other_servers_using_issuer:
           type: array
           items:
@@ -7780,6 +7789,8 @@ components:
         - session_duration_hours
         - attachment_scope
         - use_authentication_host
+        - authorization_server_mode
+        - issuer_url_pinned
         - other_servers_using_issuer
         - created_at
         - sessions

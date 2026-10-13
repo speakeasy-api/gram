@@ -137,13 +137,23 @@ ORDER BY id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: ListOrganizationUserSessionIssuers :many
-SELECT *
-FROM user_session_issuers
-WHERE project_id IS NULL
-  AND organization_id = @organization_id::text
-  AND deleted IS FALSE
-  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
-ORDER BY id DESC
+-- Issuers an organization administers: organization-owned
+-- (include_organizational) and project-specific (include_project_specific),
+-- each tier gated by its own boolean. A project-specific issuer's tenancy is
+-- read through its live project alone, as GetOrganizationManagedUserSessionIssuerByID
+-- reads it. project_name is empty for organization-owned issuers.
+SELECT
+    sqlc.embed(issuer),
+    COALESCE(project.name, '')::text AS project_name
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE (
+    (@include_organizational::boolean AND issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+    OR (@include_project_specific::boolean AND issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+  )
+  AND issuer.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR issuer.id < sqlc.narg('cursor')::uuid)
+ORDER BY issuer.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: ListSharedUserSessionIssuersInOrganization :many
@@ -280,6 +290,90 @@ WHERE issuer.id = @id
     (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
     OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
   );
+
+-- name: GetOrganizationManagedUserSessionIssuerWithProjectByID :one
+-- GetOrganizationManagedUserSessionIssuerByID with the owning project's name,
+-- empty for organization-owned issuers, for showing the issuer.
+SELECT
+    sqlc.embed(issuer),
+    COALESCE(project.name, '')::text AS project_name
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @id
+  AND issuer.deleted IS FALSE
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+  );
+
+-- name: ListOrganizationManagedUserSessionIssuerMCPServers :many
+-- The live MCP servers, toolsets, and meta MCP servers attached to an issuer,
+-- each read through its own live project in the organization. A toolset
+-- wrapped by a live MCP server is listed once, as that server, because clients
+-- reach it through the server's endpoints. Pages by id across the three kinds.
+-- A wrapper MCP server can share its toolset's id, so the cursor relies on that
+-- exclusion: without it the two rows would share a cursor position and a page
+-- boundary between them would skip one.
+SELECT
+    attachment.kind,
+    attachment.id,
+    attachment.name,
+    attachment.slug,
+    attachment.project_id,
+    attachment.project_name
+FROM (
+    SELECT
+        'mcp_server'::text AS kind,
+        server.id,
+        COALESCE(server.name, server.slug, server.id::text)::text AS name,
+        COALESCE(server.slug, '')::text AS slug,
+        project.id AS project_id,
+        project.name AS project_name
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id
+    WHERE server.user_session_issuer_id = @user_session_issuer_id::uuid
+      AND server.deleted IS FALSE
+      AND project.organization_id = @organization_id::text
+      AND project.deleted IS FALSE
+    UNION ALL
+    SELECT
+        'toolset'::text,
+        toolset.id,
+        toolset.name,
+        toolset.slug,
+        project.id,
+        project.name
+    FROM toolsets AS toolset
+    JOIN projects AS project ON project.id = toolset.project_id
+    WHERE toolset.user_session_issuer_id = @user_session_issuer_id::uuid
+      AND toolset.deleted IS FALSE
+      AND project.organization_id = @organization_id::text
+      AND project.deleted IS FALSE
+      AND NOT EXISTS (
+          SELECT 1
+          FROM mcp_servers AS server
+          WHERE server.toolset_id = toolset.id
+            AND server.project_id = toolset.project_id
+            AND server.deleted IS FALSE
+      )
+    UNION ALL
+    SELECT
+        'meta_mcp_server'::text,
+        meta_server.id,
+        meta_server.name,
+        ''::text,
+        project.id,
+        project.name
+    FROM meta_mcp_servers AS meta_server
+    JOIN projects AS project ON project.id = meta_server.project_id
+    WHERE meta_server.user_session_issuer_id = @user_session_issuer_id::uuid
+      AND meta_server.deleted IS FALSE
+      AND project.organization_id = @organization_id::text
+      AND project.deleted IS FALSE
+) AS attachment
+WHERE sqlc.narg('cursor')::uuid IS NULL OR attachment.id < sqlc.narg('cursor')::uuid
+ORDER BY attachment.id DESC
+LIMIT sqlc.arg('limit_value');
 
 -- name: GetOrganizationManagedUserSessionIssuerByIDForUpdate :one
 SELECT issuer.*

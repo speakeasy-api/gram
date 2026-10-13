@@ -19088,6 +19088,8 @@ func marshalAdminAdminMcpServerHealthUserSessionIssuerToAdminMcpServerHealthUser
 		AttachmentScope:               v.AttachmentScope,
 		ClientIDMetadataAdmissionMode: v.ClientIDMetadataAdmissionMode,
 		UseAuthenticationHost:         v.UseAuthenticationHost,
+		AuthorizationServerMode:       v.AuthorizationServerMode,
+		IssuerURLPinned:               v.IssuerURLPinned,
 		CreatedAt:                     v.CreatedAt,
 	}
 	if v.TrustedRemoteSession != nil {

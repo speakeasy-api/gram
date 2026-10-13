@@ -121,8 +121,41 @@ type CreateIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer's authorization servers are announced on the deployment's
+	// authentication host rather than the MCP host.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListIssuersResponseBody is the type of the "organizationUserSessionIssuers"
@@ -164,8 +197,41 @@ type GetIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer's authorization servers are announced on the deployment's
+	// authentication host rather than the MCP host.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateIssuerResponseBody is the type of the "organizationUserSessionIssuers"
@@ -199,8 +265,50 @@ type UpdateIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer's authorization servers are announced on the deployment's
+	// authentication host rather than the MCP host.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListMcpServersResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body.
+type ListMcpServersResponseBody struct {
+	Items []*UserSessionIssuerMcpServerResponseBody `form:"items" json:"items" xml:"items"`
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
 // GetIssuerDeletePreflightResponseBody is the type of the
@@ -254,8 +362,41 @@ type MoveIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer's authorization servers are announced on the deployment's
+	// authentication host rather than the MCP host.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetIssuerMigratePreflightResponseBody is the type of the
@@ -286,7 +427,13 @@ type GetIssuerMigratePreflightResponseBody struct {
 	PlatformOwned bool `form:"platform_owned" json:"platform_owned" xml:"platform_owned"`
 	// Configuration differences that do not block the migration. The target's
 	// values become authoritative for future authorization; existing sessions and
-	// refresh tokens are unaffected.
+	// refresh tokens are unaffected. Besides the issuer settings, this reports
+	// authorization_server_mode, use_authentication_host, and issuer_url (the
+	// shared authorization server's issuer identifier, empty when not served)
+	// whenever they differ: repointed MCP servers then direct clients to a
+	// different authorization server, so anything configured with the source's
+	// values, such as an identity provider or a federated platform, must be
+	// updated.
 	Warnings []*UserSessionIssuerFieldMismatchResponseBody `form:"warnings" json:"warnings" xml:"warnings"`
 	// Stable fingerprint of the current warnings. Empty when there are no
 	// warnings; otherwise pass this exact value to migrateIssuer to confirm them.
@@ -1094,6 +1241,196 @@ type UpdateIssuerUnexpectedResponseBody struct {
 // "organizationUserSessionIssuers" service "updateIssuer" endpoint HTTP
 // response body for the "gateway_error" error.
 type UpdateIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersUnauthorizedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListMcpServersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersForbiddenResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "forbidden" error.
+type ListMcpServersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersBadRequestResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "bad_request" error.
+type ListMcpServersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersNotFoundResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "not_found" error.
+type ListMcpServersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersConflictResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "conflict" error.
+type ListMcpServersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersUnsupportedMediaResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListMcpServersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersInvalidResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "invalid" error.
+type ListMcpServersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersInvariantViolationResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListMcpServersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersUnexpectedResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "unexpected" error.
+type ListMcpServersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMcpServersGatewayErrorResponseBody is the type of the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListMcpServersGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2850,8 +3187,59 @@ type UserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether the issuer's authorization servers are announced on the deployment's
+	// authentication host rather than the MCP host.
+	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// UserSessionIssuerMcpServerResponseBody is used to define fields on response
+// body types.
+type UserSessionIssuerMcpServerResponseBody struct {
+	// Which kind of MCP server this is.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The MCP server, toolset, or meta MCP server id.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The display name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The MCP server or toolset slug. Absent for meta MCP servers and MCP servers
+	// without one.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The owning project id.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The owning project name.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
 }
 
 // OrganizationUserSessionIssuerReferenceResponseBody is used to define fields
@@ -2899,17 +3287,24 @@ type UserSessionIssuerCimdClientResponseBody struct {
 // the "createIssuer" endpoint of the "organizationUserSessionIssuers" service.
 func NewCreateIssuerResponseBody(res *types.UserSessionIssuer) *CreateIssuerResponseBody {
 	body := &CreateIssuerResponseBody{
-		ID:                            res.ID,
-		ProjectID:                     res.ProjectID,
-		OrganizationID:                res.OrganizationID,
-		Slug:                          res.Slug,
-		AuthnChallengeMode:            res.AuthnChallengeMode,
-		SessionDurationHours:          res.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
-		CreatedAt:                     res.CreatedAt,
-		UpdatedAt:                     res.UpdatedAt,
+		ID:                                   res.ID,
+		ProjectID:                            res.ProjectID,
+		OrganizationID:                       res.OrganizationID,
+		Slug:                                 res.Slug,
+		AuthnChallengeMode:                   res.AuthnChallengeMode,
+		SessionDurationHours:                 res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              res.AuthorizationServerMode,
+		UseAuthenticationHost:                res.UseAuthenticationHost,
+		IssuerURLPinned:                      res.IssuerURLPinned,
+		IssuerURL:                            res.IssuerURL,
+		TokenEndpoint:                        res.TokenEndpoint,
+		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
+		ProjectName:                          res.ProjectName,
+		CreatedAt:                            res.CreatedAt,
+		UpdatedAt:                            res.UpdatedAt,
 	}
 	return body
 }
@@ -2939,17 +3334,24 @@ func NewListIssuersResponseBody(res *organizationusersessionissuers.ListOrganiza
 // the "getIssuer" endpoint of the "organizationUserSessionIssuers" service.
 func NewGetIssuerResponseBody(res *types.UserSessionIssuer) *GetIssuerResponseBody {
 	body := &GetIssuerResponseBody{
-		ID:                            res.ID,
-		ProjectID:                     res.ProjectID,
-		OrganizationID:                res.OrganizationID,
-		Slug:                          res.Slug,
-		AuthnChallengeMode:            res.AuthnChallengeMode,
-		SessionDurationHours:          res.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
-		CreatedAt:                     res.CreatedAt,
-		UpdatedAt:                     res.UpdatedAt,
+		ID:                                   res.ID,
+		ProjectID:                            res.ProjectID,
+		OrganizationID:                       res.OrganizationID,
+		Slug:                                 res.Slug,
+		AuthnChallengeMode:                   res.AuthnChallengeMode,
+		SessionDurationHours:                 res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              res.AuthorizationServerMode,
+		UseAuthenticationHost:                res.UseAuthenticationHost,
+		IssuerURLPinned:                      res.IssuerURLPinned,
+		IssuerURL:                            res.IssuerURL,
+		TokenEndpoint:                        res.TokenEndpoint,
+		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
+		ProjectName:                          res.ProjectName,
+		CreatedAt:                            res.CreatedAt,
+		UpdatedAt:                            res.UpdatedAt,
 	}
 	return body
 }
@@ -2958,17 +3360,46 @@ func NewGetIssuerResponseBody(res *types.UserSessionIssuer) *GetIssuerResponseBo
 // the "updateIssuer" endpoint of the "organizationUserSessionIssuers" service.
 func NewUpdateIssuerResponseBody(res *types.UserSessionIssuer) *UpdateIssuerResponseBody {
 	body := &UpdateIssuerResponseBody{
-		ID:                            res.ID,
-		ProjectID:                     res.ProjectID,
-		OrganizationID:                res.OrganizationID,
-		Slug:                          res.Slug,
-		AuthnChallengeMode:            res.AuthnChallengeMode,
-		SessionDurationHours:          res.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
-		CreatedAt:                     res.CreatedAt,
-		UpdatedAt:                     res.UpdatedAt,
+		ID:                                   res.ID,
+		ProjectID:                            res.ProjectID,
+		OrganizationID:                       res.OrganizationID,
+		Slug:                                 res.Slug,
+		AuthnChallengeMode:                   res.AuthnChallengeMode,
+		SessionDurationHours:                 res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              res.AuthorizationServerMode,
+		UseAuthenticationHost:                res.UseAuthenticationHost,
+		IssuerURLPinned:                      res.IssuerURLPinned,
+		IssuerURL:                            res.IssuerURL,
+		TokenEndpoint:                        res.TokenEndpoint,
+		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
+		ProjectName:                          res.ProjectName,
+		CreatedAt:                            res.CreatedAt,
+		UpdatedAt:                            res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListMcpServersResponseBody builds the HTTP response body from the result
+// of the "listMcpServers" endpoint of the "organizationUserSessionIssuers"
+// service.
+func NewListMcpServersResponseBody(res *organizationusersessionissuers.ListUserSessionIssuerMcpServersResult) *ListMcpServersResponseBody {
+	body := &ListMcpServersResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Items != nil {
+		body.Items = make([]*UserSessionIssuerMcpServerResponseBody, len(res.Items))
+		for i, val := range res.Items {
+			if val == nil {
+				body.Items[i] = nil
+				continue
+			}
+			body.Items[i] = marshalOrganizationusersessionissuersUserSessionIssuerMcpServerToUserSessionIssuerMcpServerResponseBody(val)
+		}
+	} else {
+		body.Items = []*UserSessionIssuerMcpServerResponseBody{}
 	}
 	return body
 }
@@ -3014,17 +3445,24 @@ func NewGetIssuerDeletePreflightResponseBody(res *organizationusersessionissuers
 // the "moveIssuer" endpoint of the "organizationUserSessionIssuers" service.
 func NewMoveIssuerResponseBody(res *types.UserSessionIssuer) *MoveIssuerResponseBody {
 	body := &MoveIssuerResponseBody{
-		ID:                            res.ID,
-		ProjectID:                     res.ProjectID,
-		OrganizationID:                res.OrganizationID,
-		Slug:                          res.Slug,
-		AuthnChallengeMode:            res.AuthnChallengeMode,
-		SessionDurationHours:          res.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
-		CreatedAt:                     res.CreatedAt,
-		UpdatedAt:                     res.UpdatedAt,
+		ID:                                   res.ID,
+		ProjectID:                            res.ProjectID,
+		OrganizationID:                       res.OrganizationID,
+		Slug:                                 res.Slug,
+		AuthnChallengeMode:                   res.AuthnChallengeMode,
+		SessionDurationHours:                 res.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        res.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         res.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              res.AuthorizationServerMode,
+		UseAuthenticationHost:                res.UseAuthenticationHost,
+		IssuerURLPinned:                      res.IssuerURLPinned,
+		IssuerURL:                            res.IssuerURL,
+		TokenEndpoint:                        res.TokenEndpoint,
+		AuthorizationServerUnavailableReason: res.AuthorizationServerUnavailableReason,
+		ProjectName:                          res.ProjectName,
+		CreatedAt:                            res.CreatedAt,
+		UpdatedAt:                            res.UpdatedAt,
 	}
 	return body
 }
@@ -3725,6 +4163,156 @@ func NewUpdateIssuerUnexpectedResponseBody(res *goa.ServiceError) *UpdateIssuerU
 // "organizationUserSessionIssuers" service.
 func NewUpdateIssuerGatewayErrorResponseBody(res *goa.ServiceError) *UpdateIssuerGatewayErrorResponseBody {
 	body := &UpdateIssuerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersUnauthorizedResponseBody(res *goa.ServiceError) *ListMcpServersUnauthorizedResponseBody {
+	body := &ListMcpServersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersForbiddenResponseBody builds the HTTP response body from
+// the result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersForbiddenResponseBody(res *goa.ServiceError) *ListMcpServersForbiddenResponseBody {
+	body := &ListMcpServersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersBadRequestResponseBody builds the HTTP response body from
+// the result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersBadRequestResponseBody(res *goa.ServiceError) *ListMcpServersBadRequestResponseBody {
+	body := &ListMcpServersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersNotFoundResponseBody builds the HTTP response body from the
+// result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersNotFoundResponseBody(res *goa.ServiceError) *ListMcpServersNotFoundResponseBody {
+	body := &ListMcpServersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersConflictResponseBody builds the HTTP response body from the
+// result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersConflictResponseBody(res *goa.ServiceError) *ListMcpServersConflictResponseBody {
+	body := &ListMcpServersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersUnsupportedMediaResponseBody(res *goa.ServiceError) *ListMcpServersUnsupportedMediaResponseBody {
+	body := &ListMcpServersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersInvalidResponseBody builds the HTTP response body from the
+// result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersInvalidResponseBody(res *goa.ServiceError) *ListMcpServersInvalidResponseBody {
+	body := &ListMcpServersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersInvariantViolationResponseBody(res *goa.ServiceError) *ListMcpServersInvariantViolationResponseBody {
+	body := &ListMcpServersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersUnexpectedResponseBody(res *goa.ServiceError) *ListMcpServersUnexpectedResponseBody {
+	body := &ListMcpServersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMcpServersGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "listMcpServers" endpoint of the
+// "organizationUserSessionIssuers" service.
+func NewListMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *ListMcpServersGatewayErrorResponseBody {
+	body := &ListMcpServersGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5102,10 +5690,11 @@ func NewCreateIssuerPayload(body *CreateIssuerRequestBody, sessionToken *string)
 
 // NewListIssuersPayload builds a organizationUserSessionIssuers service
 // listIssuers endpoint payload.
-func NewListIssuersPayload(cursor *string, limit *int, sessionToken *string) *organizationusersessionissuers.ListIssuersPayload {
+func NewListIssuersPayload(cursor *string, limit *int, tier *string, sessionToken *string) *organizationusersessionissuers.ListIssuersPayload {
 	v := &organizationusersessionissuers.ListIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Tier = tier
 	v.SessionToken = sessionToken
 
 	return v
@@ -5133,6 +5722,18 @@ func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string)
 		SessionDurationHours:          body.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: body.ClientIDMetadataAdmissionMode,
 	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListMcpServersPayload builds a organizationUserSessionIssuers service
+// listMcpServers endpoint payload.
+func NewListMcpServersPayload(userSessionIssuerID string, cursor *string, limit *int, sessionToken *string) *organizationusersessionissuers.ListMcpServersPayload {
+	v := &organizationusersessionissuers.ListMcpServersPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.Cursor = cursor
+	v.Limit = limit
 	v.SessionToken = sessionToken
 
 	return v
