@@ -82,7 +82,12 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 		return nil, err
 	}
 
-	plan := req.plan(authCtx, target, s.registrationResource(ctx, logger, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.ID))
+	// Only an automatic registration names what the first login will request.
+	var registrationResource *ResourceScopes
+	if req.clientMode == serverIdentityClientModeAuto {
+		registrationResource = s.registrationResource(ctx, logger, *authCtx.ProjectID, authCtx.ActiveOrganizationID, target.ID)
+	}
+	plan := req.plan(authCtx, target, registrationResource)
 	commit := s.identity.Prepare(plan)
 	if err := commit.Preflight(ctx); err != nil {
 		return nil, identityOopsError(err, "check identity configuration").LogError(ctx, logger)

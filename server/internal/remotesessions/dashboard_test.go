@@ -661,15 +661,16 @@ func createServerIdentityTarget(t *testing.T, ctx context.Context, ti *testInsta
 	return createServerIdentityTargetOnIssuer(t, ctx, ti, slug, userIssuerID), userIssuerID
 }
 
-// createServerIdentityTargetOnIssuer serves from a closed loopback port, so
-// the live resource read at registration fails fast without leaving the host.
+// createServerIdentityTargetOnIssuer serves from loopback port 0, which no
+// listener can hold, so the live resource read at registration fails fast
+// without leaving the host.
 func createServerIdentityTargetOnIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string, userIssuerID uuid.UUID) uuid.UUID {
 	t.Helper()
 	return createServerIdentityTargetAt(t, ctx, ti, slug, closedTargetURL(slug), userIssuerID)
 }
 
 func closedTargetURL(slug string) string {
-	return "http://127.0.0.1:9/" + slug
+	return "http://127.0.0.1:0/" + slug
 }
 
 func createServerIdentityTargetAt(t *testing.T, ctx context.Context, ti *testInstance, slug, serverURL string, userIssuerID uuid.UUID) uuid.UUID {
