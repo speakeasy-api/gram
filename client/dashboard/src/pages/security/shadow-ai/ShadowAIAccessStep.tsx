@@ -46,10 +46,12 @@ const DEFAULT_EXPANDED: Record<string, boolean> = {
 function DecisionControl({
   row,
   decision,
+  disabled,
   onDecide,
 }: {
   row: AccessRow;
   decision: AccessDecision;
+  disabled: boolean;
   onDecide: (targetId: string, decision: AccessDecision) => void;
 }): JSX.Element {
   if (!row.enforceable) {
@@ -66,6 +68,7 @@ function DecisionControl({
       <SegmentedControl
         ariaLabel={`Access decision for ${row.target.displayName}`}
         className="h-7"
+        disabled={disabled}
         value={decision === "unreviewed" ? null : decision}
         onChange={(clicked) =>
           onDecide(row.target.id, nextAIToolDecision(decision, clicked))
@@ -89,6 +92,7 @@ function DecisionControl({
 
 function columns(
   draft: ReadonlyMap<string, AccessDecision>,
+  disabled: boolean,
   onDecide: (targetId: string, decision: AccessDecision) => void,
 ): Column<AccessRow>[] {
   return [
@@ -146,6 +150,7 @@ function columns(
           <DecisionControl
             row={row}
             decision={effectiveDecision(row, draft)}
+            disabled={disabled}
             onDecide={onDecide}
           />
         </div>
@@ -194,6 +199,7 @@ export function ShadowAIAccessStep({
   libraryFailed,
   detectionsFailed,
   draft,
+  disabled = false,
   onDecide,
   disposition,
   onOpenTool,
@@ -205,6 +211,8 @@ export function ShadowAIAccessStep({
   /** The detections read failed: evidence and decisions on file are unknown. */
   detectionsFailed: boolean;
   draft: ReadonlyMap<string, AccessDecision>;
+  /** Locks the controls while the draft is being written. */
+  disabled?: boolean;
   onDecide: (targetId: string, decision: AccessDecision) => void;
   disposition: ShadowMCPDisposition;
   onOpenTool?: (detection: AIDetection) => void;
@@ -213,7 +221,7 @@ export function ShadowAIAccessStep({
     useState<Record<string, boolean>>(DEFAULT_EXPANDED);
   const toggle = (key: string) =>
     setExpanded((current) => ({ ...current, [key]: !current[key] }));
-  const cols = columns(draft, onDecide);
+  const cols = columns(draft, disabled, onDecide);
 
   return (
     <Card>

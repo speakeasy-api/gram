@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { accessLibrary, detection } from "./shadow-ai/access-fixtures";
@@ -191,6 +192,49 @@ describe("ShadowAIPolicyEditor", () => {
     expect(mocks.setDecision.mock.invocationCallOrder[0]).toBeGreaterThan(
       mocks.mutateCreate.mock.invocationCallOrder[0] ?? 0,
     );
+  });
+
+  it("locks the draft and holds the decisions until the policy write resolves", async () => {
+    let resolveCreate: (value: { id: string }) => void = () => {};
+    mocks.mutateCreate.mockImplementation(
+      () =>
+        new Promise<{ id: string }>((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+    renderEditor(null);
+
+    fireEvent.click(within(cursorControl()).getByText("Deny"));
+    fireEvent.click(screen.getByText("Create policy"));
+
+    await waitFor(() => expect(mocks.mutateCreate).toHaveBeenCalledTimes(1));
+    expect(mocks.setDecision).not.toHaveBeenCalled();
+    expect(
+      within(cursorControl()).getByText("Deny").hasAttribute("disabled"),
+    ).toBe(true);
+
+    resolveCreate({ id: "policy-new" });
+
+    await waitFor(() => expect(mocks.setDecision).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(mocks.goToDetail).toHaveBeenCalledWith("policy-new"),
+    );
+  });
+
+  it("names the target whose decision failed and withholds the success toast", async () => {
+    mocks.setDecision.mockRejectedValue(new Error("boom"));
+    renderEditor(null);
+
+    fireEvent.click(within(cursorControl()).getByText("Deny"));
+    fireEvent.click(screen.getByText("Create policy"));
+
+    await waitFor(() =>
+      expect(mocks.goToDetail).toHaveBeenCalledWith("policy-new"),
+    );
+    expect(vi.mocked(toast.error)).toHaveBeenCalledWith(
+      expect.stringContaining("the decision for Cursor could not be saved"),
+    );
+    expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
   });
 
   it("writes nothing until the policy is created", () => {

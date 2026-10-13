@@ -21,7 +21,7 @@ import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoli
 import { useSetAIToolDecisionMutation } from "@gram/client/react-query/setAIToolDecision.js";
 import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PolicyAudiencePicker } from "./PolicyCenter";
 import {
@@ -40,6 +40,7 @@ import {
   buildAccessRows,
   changedDecisions,
   countDecisions,
+  type DecisionChange,
   type DecisionCounts,
 } from "./shadow-ai/access-rows";
 import { ShadowAIAccessStep } from "./shadow-ai/ShadowAIAccessStep";
@@ -274,6 +275,11 @@ export function ShadowAIPolicyEditor({
     setDraft((current) => new Map(current).set(targetId, decision));
   const changes = changedDecisions(rows, draft);
   const counts = countDecisions(rows, draft);
+  // What gets written is read at write time, not from the render that
+  // started the save: the controls lock while saving, but a press that lands
+  // between the click and the lock must still be the one applied.
+  const latest = useRef({ rows, draft });
+  latest.current = { rows, draft };
 
   const disposition: ShadowMCPDisposition =
     policy?.shadowMcpDisposition ??
@@ -315,10 +321,13 @@ export function ShadowAIPolicyEditor({
   const trimmedName = name.trim() || SHADOW_AI_DEFAULT_NAME;
 
   // Every changed decision, one by one, after the policy write. A failure
-  // names its tool and leaves the rest applied; the draft keeps the failed
-  // entry, so Save offers it again.
-  const applyDecisions = async () => {
-    for (const change of changes) {
+  // leaves the rest applied and is returned so the save can say which
+  // targets are still unreviewed; the draft keeps the failed entries, so
+  // Save offers them again.
+  const applyDecisions = async (): Promise<DecisionChange[]> => {
+    const pending = changedDecisions(latest.current.rows, latest.current.draft);
+    const failed: DecisionChange[] = [];
+    for (const change of pending) {
       try {
         await decisionMutation.mutateAsync({
           request: {
@@ -330,18 +339,28 @@ export function ShadowAIPolicyEditor({
           },
         });
       } catch {
-        toast.error(
-          `The decision for ${change.displayName} could not be saved. The others were applied; try it again.`,
-        );
+        failed.push(change);
       }
     }
-    if (changes.length > 0) {
+    if (pending.length > 0) {
       await Promise.all([
         invalidateAllAiScanTargets(queryClient),
         invalidateAllAiDetections(queryClient),
         invalidateAllAiDetectionUsers(queryClient),
       ]);
     }
+    return failed;
+  };
+
+  const reportDecisions = (failed: DecisionChange[], written: string) => {
+    if (failed.length === 0) {
+      toast.success(written);
+      return;
+    }
+    const names = failed.map((change) => change.displayName).join(", ");
+    toast.error(
+      `${written}, but the decision for ${names} could not be saved, so ${failed.length === 1 ? "it stays" : "they stay"} unreviewed. Open the policy and try again.`,
+    );
   };
 
   const save = async () => {
@@ -363,8 +382,7 @@ export function ShadowAIPolicyEditor({
             },
           },
         });
-        await applyDecisions();
-        toast.success("Policy updated");
+        reportDecisions(await applyDecisions(), "Policy updated");
         return;
       }
       const created = await createMutation.mutateAsync({
@@ -383,8 +401,7 @@ export function ShadowAIPolicyEditor({
           },
         },
       });
-      await applyDecisions();
-      toast.success("Shadow AI policy created");
+      reportDecisions(await applyDecisions(), "Shadow AI policy created");
       routes.policyCenter.detail.goTo(created.id);
     } catch {
       toast.error(
@@ -434,6 +451,7 @@ export function ShadowAIPolicyEditor({
           libraryFailed={targetsQuery.isError}
           detectionsFailed={detectionsQuery.isError}
           draft={draft}
+          disabled={saving}
           onDecide={decide}
           disposition={disposition}
           onOpenTool={openTool}
