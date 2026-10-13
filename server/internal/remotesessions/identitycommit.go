@@ -984,7 +984,11 @@ func listUserSessionIssuerClients(ctx context.Context, q *repo.Queries, projectI
 // shared across projects. A project-owned client is invisible to other
 // projects, so its binding only ever changes the scope's own project.
 func (c *IdentityCommit) refuseOrgWideBinding(client repo.RemoteSessionClient) error {
-	if c.userIssuerOrgLevel && !client.ProjectID.Valid {
+	return refuseOrgWideBinding(c.userIssuerOrgLevel, client.ProjectID)
+}
+
+func refuseOrgWideBinding(userIssuerOrgLevel bool, clientProjectID uuid.NullUUID) error {
+	if userIssuerOrgLevel && !clientProjectID.Valid {
 		return identityRefusal(ErrIdentityOrgWideBinding, nil, OrgWideBindingMessage)
 	}
 	return nil

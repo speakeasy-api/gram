@@ -10,51 +10,95 @@ import (
 )
 
 type AdminMcpConnection struct {
-	ID                        uuid.UUID
-	SubjectUrn                string
-	OauthClientID             uuid.UUID
-	AdminSessionIDEnc         string
-	Scopes                    []string
-	ResourceUri               string
-	ActiveGeneration          uuid.UUID
-	AuthorizedAt              pgtype.Timestamptz
-	ReauthorizedAt            pgtype.Timestamptz
-	AuthorizationExpiresAt    pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential-pii
+	SubjectUrn string
+	// @access: confidential
+	OauthClientID uuid.UUID
+	// @access: secret-restricted
+	AdminSessionIDEnc string
+	// @access: confidential
+	Scopes []string
+	// @access: confidential
+	ResourceUri string
+	// @access: confidential
+	ActiveGeneration uuid.UUID
+	// @access: confidential
+	AuthorizedAt pgtype.Timestamptz
+	// @access: confidential
+	ReauthorizedAt pgtype.Timestamptz
+	// @access: confidential
+	AuthorizationExpiresAt pgtype.Timestamptz
+	// @access: confidential
 	ReauthorizationRequiredAt pgtype.Timestamptz
-	ReauthorizationReason     pgtype.Text
-	RevokedAt                 pgtype.Timestamptz
-	CreatedAt                 pgtype.Timestamptz
-	UpdatedAt                 pgtype.Timestamptz
+	// @access: confidential
+	ReauthorizationReason pgtype.Text
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type AdminMcpWriteProposal struct {
-	ID                     uuid.UUID
-	SubjectUrn             string
-	OauthClientID          uuid.UUID
-	ConnectionID           uuid.UUID
-	ConnectionGeneration   uuid.UUID
-	Operation              string
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential-pii
+	SubjectUrn string
+	// @access: confidential
+	OauthClientID uuid.UUID
+	// @access: confidential
+	ConnectionID uuid.UUID
+	// @access: confidential
+	ConnectionGeneration uuid.UUID
+	// @access: confidential
+	Operation string
+	// @access: confidential
 	OperationSchemaVersion int32
-	PlatformGlobal         bool
-	OrganizationID         pgtype.Text
-	ProjectID              uuid.NullUUID
-	ResourceKind           pgtype.Text
-	ResourceID             pgtype.Text
-	IdempotencyKey         string
-	Arguments              []byte
-	ExpectedStateDigest    string
-	ProposalDigest         string
-	Preview                []byte
-	Status                 string
-	ExpiresAt              pgtype.Timestamptz
-	ApprovedBySubjectUrn   pgtype.Text
-	ApprovedAt             pgtype.Timestamptz
-	RejectedAt             pgtype.Timestamptz
-	InvalidatedAt          pgtype.Timestamptz
-	InvalidationReason     pgtype.Text
-	ExecutedAt             pgtype.Timestamptz
-	ResultCode             pgtype.Text
-	ResultPayload          []byte
-	CreatedAt              pgtype.Timestamptz
-	UpdatedAt              pgtype.Timestamptz
+	// @access: confidential
+	PlatformGlobal bool
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: restricted
+	ResourceKind pgtype.Text
+	// @access: restricted
+	ResourceID pgtype.Text
+	// @access: opaque-confidential
+	IdempotencyKey string
+	// @access: opaque-restricted
+	Arguments []byte
+	// @access: confidential
+	ExpectedStateDigest string
+	// @access: confidential
+	ProposalDigest string
+	// @access: opaque-restricted
+	Preview []byte
+	// @access: confidential
+	Status string
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
+	// @access: confidential-pii
+	ApprovedBySubjectUrn pgtype.Text
+	// @access: confidential
+	ApprovedAt pgtype.Timestamptz
+	// @access: confidential
+	RejectedAt pgtype.Timestamptz
+	// @access: confidential
+	InvalidatedAt pgtype.Timestamptz
+	// @access: confidential
+	InvalidationReason pgtype.Text
+	// @access: confidential
+	ExecutedAt pgtype.Timestamptz
+	// @access: confidential
+	ResultCode pgtype.Text
+	// @access: opaque-restricted
+	ResultPayload []byte
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

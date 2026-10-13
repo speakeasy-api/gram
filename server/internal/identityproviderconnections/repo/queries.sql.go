@@ -734,6 +734,132 @@ func (q *Queries) KeySetAttached(ctx context.Context, arg KeySetAttachedParams) 
 	return exists, err
 }
 
+const listOktaSignInClients = `-- name: ListOktaSignInClients :many
+SELECT c.id, c.token_endpoint_auth_method, c.token_endpoint_auth_audience_format,
+  c.json_web_key_set_id, c.scope, c.callback_base_url,
+  k.kid AS active_kid, k.public_jwk AS active_public_jwk
+FROM remote_session_clients AS c
+LEFT JOIN json_web_key_sets AS s
+  ON s.organization_id = c.organization_id
+ AND s.id = c.json_web_key_set_id
+ AND s.deleted IS FALSE
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = s.organization_id
+ AND k.json_web_key_set_id = s.id
+ AND k.state = 'active'
+ AND k.deleted IS FALSE
+WHERE c.organization_id = $1
+  AND c.project_id IS NULL
+  AND c.identity_provider_connection_id IS NULL
+  AND c.remote_session_issuer_id = $2
+  AND c.client_id = $3
+  AND c.deleted IS FALSE
+ORDER BY c.id
+`
+
+type ListOktaSignInClientsParams struct {
+	OrganizationID        pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
+	ClientID              string
+}
+
+type ListOktaSignInClientsRow struct {
+	ID                              uuid.UUID
+	TokenEndpointAuthMethod         pgtype.Text
+	TokenEndpointAuthAudienceFormat pgtype.Text
+	JsonWebKeySetID                 uuid.NullUUID
+	Scope                           []string
+	CallbackBaseUrl                 pgtype.Text
+	ActiveKid                       pgtype.Text
+	ActivePublicJwk                 []byte
+}
+
+// Organization-owned, unmanaged sign-in clients registered for the recorded
+// Okta agent under the connection's issuer, with the active signing key.
+func (q *Queries) ListOktaSignInClients(ctx context.Context, arg ListOktaSignInClientsParams) ([]ListOktaSignInClientsRow, error) {
+	rows, err := q.db.Query(ctx, listOktaSignInClients, arg.OrganizationID, arg.RemoteSessionIssuerID, arg.ClientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOktaSignInClientsRow
+	for rows.Next() {
+		var i ListOktaSignInClientsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TokenEndpointAuthMethod,
+			&i.TokenEndpointAuthAudienceFormat,
+			&i.JsonWebKeySetID,
+			&i.Scope,
+			&i.CallbackBaseUrl,
+			&i.ActiveKid,
+			&i.ActivePublicJwk,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOktaSignInIssuerTrusts = `-- name: ListOktaSignInIssuerTrusts :many
+SELECT u.id, u.slug, c.id AS trusted_client_row_id, c.client_id AS trusted_client_id,
+  c.deleted AS trusted_client_deleted
+FROM user_session_issuers AS u
+JOIN remote_session_clients AS c
+  ON c.organization_id = u.organization_id
+ AND c.id = u.trusted_remote_session_client_id
+WHERE u.organization_id = $1
+  AND u.project_id IS NULL
+  AND u.trusted_remote_session_issuer_id = $2
+  AND u.deleted IS FALSE
+  AND c.identity_provider_connection_id IS NULL
+ORDER BY u.slug, u.id
+`
+
+type ListOktaSignInIssuerTrustsParams struct {
+	OrganizationID        pgtype.Text
+	RemoteSessionIssuerID uuid.NullUUID
+}
+
+type ListOktaSignInIssuerTrustsRow struct {
+	ID                   uuid.UUID
+	Slug                 string
+	TrustedClientRowID   uuid.UUID
+	TrustedClientID      string
+	TrustedClientDeleted bool
+}
+
+// Organization sign-in issuers that trust an unmanaged client of the connection's issuer.
+func (q *Queries) ListOktaSignInIssuerTrusts(ctx context.Context, arg ListOktaSignInIssuerTrustsParams) ([]ListOktaSignInIssuerTrustsRow, error) {
+	rows, err := q.db.Query(ctx, listOktaSignInIssuerTrusts, arg.OrganizationID, arg.RemoteSessionIssuerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOktaSignInIssuerTrustsRow
+	for rows.Next() {
+		var i ListOktaSignInIssuerTrustsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.TrustedClientRowID,
+			&i.TrustedClientID,
+			&i.TrustedClientDeleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listParkedConnectionKeySets = `-- name: ListParkedConnectionKeySets :many
 SELECT s.id, s.organization_id, s.project_id, s.external_key_id, s.name, s.identity_provider_connection_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM json_web_key_sets AS s

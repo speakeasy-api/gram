@@ -148,6 +148,8 @@ export const AUDIT_ACTIONS = [
   "organization:disabled",
   "organization:enabled",
   "organization:whitelist_updated",
+  "organization:account_type_changed",
+  "organization:inference_key_repaired",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
@@ -212,8 +214,11 @@ export const AUDIT_ACTIONS = [
   "remote-session-client:detach-json-web-key-set",
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
+  "remote-session-client:disable-identity-chaining",
+  "remote-session-client:enable-identity-chaining",
   "remote-session-client:revoke-sessions",
   "remote-session-client:update",
+  "remote-session-client:update-identity-chaining-scopes",
   "remote-session-issuer:create",
   "remote-session-issuer:delete",
   "remote-session-issuer:migrate",
@@ -646,6 +651,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled fail-open for hooks";
     case "organization:device_agent_configuration_updated":
       return "updated device agent configuration";
+    case "organization:account_type_changed":
+      return "changed account type for";
+    case "organization:inference_key_repaired":
+      return "repaired inference key for";
     case "organization:enterprise_trial_armed":
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
@@ -793,6 +802,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":
       return "revoked sessions for";
+    case "remote-session-client:enable-identity-chaining":
+      return "enabled identity chaining for";
+    case "remote-session-client:update-identity-chaining-scopes":
+      return "updated identity chaining scopes for";
+    case "remote-session-client:disable-identity-chaining":
+      return "disabled identity chaining for";
     case "remote-session-issuer:create":
       return "created remote session issuer";
     case "remote-session-issuer:update":

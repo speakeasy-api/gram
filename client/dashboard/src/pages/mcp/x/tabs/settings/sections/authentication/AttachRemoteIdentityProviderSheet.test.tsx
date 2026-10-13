@@ -10,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import type { AuthTarget } from "./authTarget";
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 
 const mocks = vi.hoisted(() => ({
   attachClient: vi.fn(),
@@ -33,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   issuersSearch: vi.fn(),
   issuerById: vi.fn(),
   discovery: { snapshot: null as Record<string, unknown> | null },
+  impact: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
@@ -63,6 +65,19 @@ vi.mock(
     }),
   }),
 );
+
+vi.mock("@gram/client/react-query/serverIdentityImpact.js", () => ({
+  invalidateAllServerIdentityImpact: () => Promise.resolve(),
+  useServerIdentityImpact: (
+    request: unknown,
+    _security: unknown,
+    options: { enabled?: boolean },
+  ) => ({
+    data: options.enabled ? mocks.impact(request) : undefined,
+    isError: false,
+    isLoading: false,
+  }),
+}));
 
 vi.mock("@gram/client/react-query/remoteSessionIssuer.js", () => ({
   useRemoteSessionIssuer: (
@@ -130,7 +145,7 @@ vi.mock("./useIssuerDiscovery", () => ({
   }),
 }));
 
-function target(): AuthTarget {
+function target(overrides: Partial<AuthTarget> = {}): AuthTarget {
   return {
     kind: "standard",
     slug: "example-server",
@@ -140,10 +155,15 @@ function target(): AuthTarget {
     userSessionIssuerId: null,
     invalidate: mocks.invalidateTarget,
     linkUserSessionIssuer: mocks.linkTarget,
+    ...overrides,
   };
 }
 
-function renderSheet(excludedIssuerIds?: string[]): void {
+function renderSheet(
+  excludedIssuerIds?: string[],
+  userSessionIssuer: UserSessionIssuer | null = null,
+  targetOverrides: Partial<AuthTarget> = {},
+): void {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
@@ -155,8 +175,8 @@ function renderSheet(excludedIssuerIds?: string[]): void {
           onOpenChange={(open) => {
             mocks.onOpenChange(open);
           }}
-          target={target()}
-          userSessionIssuer={null}
+          target={target(targetOverrides)}
+          userSessionIssuer={userSessionIssuer}
           excludedIssuerIds={excludedIssuerIds}
         />
       </TooltipProvider>
@@ -175,6 +195,7 @@ async function submitManualClient(): Promise<void> {
 
 beforeEach(() => {
   mocks.issuersPage.mockReturnValue([]);
+  mocks.impact.mockReturnValue({ servers: [], hiddenServerCount: 0 });
   mocks.createUserSessionIssuer.mockResolvedValue({
     id: "user-session-issuer-1",
   });
@@ -242,6 +263,91 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     expect(
       request.createRemoteSessionIssuerForm.authorizationGrantProfilesSupported,
     ).toBeUndefined();
+  });
+
+  it("confirms before re-pointing servers that share the user session issuer", async () => {
+    mocks.impact.mockReturnValue({
+      servers: [
+        {
+          id: "mcp-server-2",
+          name: "Sibling",
+          projectId: "project-1",
+          projectName: "Project",
+          impact: "clear",
+        },
+      ],
+      hiddenServerCount: 0,
+    });
+    renderSheet(["provider-old"], { id: "usi-1" } as UserSessionIssuer, {
+      mcpServerId: "mcp-server-1",
+    });
+
+    await submitManualClient();
+
+    expect(
+      await screen.findByText("Change the upstream of other servers?"),
+    ).toBeTruthy();
+    expect(screen.getByText("Sibling")).toBeTruthy();
+    expect(mocks.createProvider).not.toHaveBeenCalled();
+    expect(mocks.impact).toHaveBeenLastCalledWith({
+      userSessionIssuerId: "usi-1",
+      mcpServerId: "mcp-server-1",
+      change: "attach",
+      providerId: undefined,
+      clientId: undefined,
+    });
+
+    const confirm = screen.getAllByRole("button", {
+      name: "Attach Identity Provider",
+    });
+    fireEvent.click(confirm[confirm.length - 1] as HTMLElement);
+    await waitFor(() => expect(mocks.createProvider).toHaveBeenCalled());
+  });
+
+  it("attaches without confirming when no other server is affected", async () => {
+    renderSheet(["provider-old"], { id: "usi-1" } as UserSessionIssuer, {
+      permissionResourceId: "toolset-1",
+      mcpServerId: "mcp-server-1",
+    });
+
+    await submitManualClient();
+
+    await waitFor(() => expect(mocks.createProvider).toHaveBeenCalled());
+    expect(
+      screen.queryByText("Change the upstream of other servers?"),
+    ).toBeNull();
+  });
+
+  it("names affected servers in other projects and blocks on hidden ones", async () => {
+    mocks.impact.mockReturnValue({
+      servers: [
+        {
+          id: "mcp-server-9",
+          name: "Elsewhere",
+          projectId: "project-2",
+          projectName: "Other project",
+          impact: "repoint",
+        },
+      ],
+      hiddenServerCount: 1,
+    });
+    renderSheet([], { id: "usi-1", projectId: "" } as UserSessionIssuer);
+
+    await submitManualClient();
+
+    expect(await screen.findByText("Elsewhere (Other project)")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /1 more server you don't have access to shares this user session issuer and may be affected/,
+      ),
+    ).toBeTruthy();
+    const confirm = screen.getAllByRole("button", {
+      name: "Attach Identity Provider",
+    });
+    expect((confirm[confirm.length - 1] as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(mocks.createProvider).not.toHaveBeenCalled();
   });
 
   it("searches the listing on the server and resolves the pick by id", async () => {

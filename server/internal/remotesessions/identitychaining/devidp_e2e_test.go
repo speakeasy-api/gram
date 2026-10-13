@@ -300,6 +300,7 @@ func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 	f := newDevIDPFixture(t, devIDPOptions{})
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
+	require.True(t, f.chainer.HasUsableCredential(t.Context(), f.req))
 
 	rotated, err := f.enc.Encrypt([]byte("rotated-secret"))
 	require.NoError(t, err)
@@ -307,6 +308,7 @@ func TestDevIDP_RegistrationChangeRetiresStoredToken(t *testing.T) {
 		ClientSecretEncrypted: pgtype.Text{String: rotated, Valid: true}, ID: f.idpClientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
 	})
 	require.NoError(t, err)
+	require.False(t, f.chainer.HasUsableCredential(t.Context(), f.req), "status reads agree with the runtime")
 
 	requests := f.idp.Requests()
 	_, outcome = f.chainer.Acquire(t.Context(), f.req)
