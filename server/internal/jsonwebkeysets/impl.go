@@ -548,6 +548,10 @@ func (s *Service) lockBackingKey(ctx context.Context, logger *slog.Logger, q *re
 		return oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
 	}
 
+	if key.EmaIssuerManaged {
+		return oops.E(oops.CodeForbidden, nil, "enterprise authorization issuer keys are managed by Speakeasy")
+	}
+
 	if err := managedrows.RequireUnmanaged(key.IdentityProviderConnectionID, "this external key"); err != nil {
 		return err
 	}

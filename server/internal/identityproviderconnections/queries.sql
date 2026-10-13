@@ -122,10 +122,14 @@ WHERE id = @id AND organization_id = @organization_id AND state = 'pending' AND 
 
 -- Include tombstones and every organization: resource names are random and
 -- global, so a reference anywhere means the key must never be disabled.
+-- Whether the organization has an external key row for this KMS resource.
 -- name: ManagedKeyResourceExists :one
 SELECT EXISTS (
- SELECT 1 FROM gcp_kms_keys AS k
+ SELECT 1
+ FROM gcp_kms_keys AS k
+ JOIN external_keys AS ek ON ek.id = k.external_key_id AND ek.provider = k.external_keys_provider
  WHERE k.resource_name = @resource_name
+   AND ek.organization_id = @organization_id::text
 );
 
 -- Test fixture: age a pending publication relative to the database clock.
@@ -134,6 +138,13 @@ UPDATE json_web_keys
 SET updated_at = clock_timestamp() - make_interval(secs => @age_seconds::integer)
 WHERE json_web_key_set_id = @json_web_key_set_id
   AND organization_id = @organization_id AND state = 'pending' AND deleted IS FALSE;
+
+-- Test fixture: age retired keys relative to the database clock.
+-- name: BackdateRetiredJsonWebKeys :exec
+UPDATE json_web_keys
+SET retired_at = clock_timestamp() - make_interval(secs => @age_seconds::integer)
+WHERE json_web_key_set_id = @json_web_key_set_id
+  AND organization_id = @organization_id AND state = 'retired' AND deleted IS FALSE;
 
 -- Connection management API. Every query below is organization-qualified.
 
@@ -517,3 +528,13 @@ WHERE u.organization_id = @organization_id
   AND u.deleted IS FALSE
   AND c.identity_provider_connection_id IS NULL
 ORDER BY u.slug, u.id;
+
+-- KMS resource behind any managed key, including enterprise issuer keys that
+-- customer key APIs never see. Used only to disable revoked key versions.
+-- name: GetManagedKeyResource :one
+SELECT gcp.resource_name, ek.external_credential_id
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id
+  AND ek.deleted IS FALSE;
