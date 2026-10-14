@@ -341,12 +341,9 @@ func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.Au
 	return result, nil
 }
 
-// agentMCPServers resolves the MCP servers an agent writes into its tools'
-// configurations: the Speakeasy-hosted servers in the plugins the poll
-// delivers to it. Plugins offered as `available` are left out, because nobody
-// on an agent's machine can turn them on. A server reached through several
-// plugins is listed once, and a name shared by different servers gets a
-// numeric suffix (`speakeasy-linear-2`) so each entry keeps its own key.
+// agentMCPServers lists the Speakeasy-hosted servers in the plugins delivered to
+// an agent, once each. `available` plugins are skipped: nobody on an agent's
+// machine can turn them on.
 func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPluginSetRow) ([]*gen.AgentMCPServer, error) {
 	var projectIDs []uuid.UUID
 	pluginsByProject := make(map[uuid.UUID][]uuid.UUID)
@@ -407,9 +404,8 @@ func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPlugi
 	return servers, nil
 }
 
-// attachWorkloadTokenTarget fills the entry's token fields. A server no
-// workload grant reaches is still listed, with none: its plugin may give it to
-// a person, and the device needs the full list to remove what it wrote before.
+// attachWorkloadTokenTarget fills the entry's token fields. Servers no workload
+// grant reaches stay listed so the device can remove entries it wrote before.
 func (s *Service) attachWorkloadTokenTarget(ctx context.Context, entry *gen.AgentMCPServer) error {
 	if s.workloadTokens == nil {
 		return nil

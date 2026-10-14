@@ -129,11 +129,8 @@ func DeliveredAgentPluginRows(rows []repo.GetAgentPluginSetRow) []repo.GetAgentP
 	return delivered
 }
 
-// walkAgentPluginRows visits each row with a published marketplace, passing
-// the marketplace name it is served under, whether it is the first row to
-// claim that name, and whether its assigned plugin is delivered. Same-named
-// rows collapse to the first; a collapsed project's marketplace isn't served,
-// so its plugins would reference a repo that doesn't contain them.
+// walkAgentPluginRows visits each row with a published marketplace. Same-named
+// rows collapse to the first, since a collapsed project's marketplace isn't served.
 func walkAgentPluginRows(rows []repo.GetAgentPluginSetRow, visit func(row repo.GetAgentPluginSetRow, name string, firstForName, delivered bool)) {
 	// marketplace name -> the project that owns it (the first/lowest-pr.id
 	// row to claim that name).

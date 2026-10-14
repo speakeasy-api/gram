@@ -23,17 +23,9 @@ type WorkloadTokenTarget struct {
 	Resource string
 }
 
-// WorkloadTokenTargetFor resolves the workload token target of the MCP server
-// at mcpURL, a `<base>/mcp/<slug>` address on the platform host or a custom
-// domain. ok is false when no workload grant reaches the server from there: it
-// is not issuer-gated, its authorization server offers no workload grant, or
-// it is addressed on a private network ingress, whose authorization server
-// this public lookup cannot stand in for.
-//
-// A shared authorization server is preferred whenever the issuer is in shared
-// mode, even where browser clients are kept on per-endpoint servers: it mints
-// one session for every server of the issuer, and on the authentication host
-// it serves nothing but this grant.
+// WorkloadTokenTargetFor resolves the token target for the MCP server at mcpURL.
+// ok is false when no workload grant reaches it. A shared authorization server
+// is preferred because one session then covers every server of the issuer.
 func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (WorkloadTokenTarget, bool, error) {
 	var none WorkloadTokenTarget
 	u, err := url.Parse(mcpURL)
@@ -84,10 +76,8 @@ func (s *Service) WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (Wo
 	return WorkloadTokenTarget{TokenEndpoint: urls.Token, Audience: urls.Token, Resource: resource}, true, nil
 }
 
-// publicOriginContext stamps ctx with the request origin a request to host
-// would carry, as the custom-domain middleware does, and returns that origin's
-// base URL. ok is false for a host that is neither a platform host nor an
-// active custom domain, which includes every private network ingress.
+// publicOriginContext stamps ctx with the origin a request to host would carry.
+// ok is false for anything but a platform host or an active custom domain.
 func (s *Service) publicOriginContext(ctx context.Context, rawHost string) (context.Context, string, bool, error) {
 	host, err := requestorigin.CanonicalHost(rawHost)
 	if err != nil {

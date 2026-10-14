@@ -16,10 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
-// DeviceMCPServer is a Speakeasy-hosted MCP server inside a plugin, at the
-// address the plugin's published package uses. The device agent writes these
-// into an agent identity's tool configurations with its own mcp:connect
-// credential.
+// DeviceMCPServer is a Speakeasy-hosted MCP server in a plugin, at the address
+// the plugin's published package uses.
 type DeviceMCPServer struct {
 	// PluginSlug is the slug of the plugin the server belongs to.
 	PluginSlug string
@@ -27,9 +25,8 @@ type DeviceMCPServer struct {
 	// DisplayName is the server's display name within its plugin.
 	DisplayName string
 
-	// Name is the key the device writes the server under in each tool's MCP
-	// configuration: `speakeasy-` followed by the server's slug. The prefix
-	// keeps it apart from servers people add by hand.
+	// Name is the server's key in each tool's MCP configuration. The prefix keeps
+	// it apart from servers people add by hand.
 	Name string
 
 	// URL is the server's streamable-HTTP address.
@@ -39,18 +36,9 @@ type DeviceMCPServer struct {
 	SortOrder int32
 }
 
-// ListDeviceMCPServers returns the Speakeasy-hosted MCP servers in the given
-// plugins of one project, ordered by plugin slug, then position, then display
-// name. It returns nothing when pluginIDs is empty.
-//
-// Unproxied servers are left out: their address is the vendor's own server,
-// which must never receive a Speakeasy credential. Gateway members are left
-// out too: publishing re-checks their distribution admission under the
-// project's admission lock, which a device poll must not take.
-//
-// A server whose address cannot be resolved, or is not https, is logged and
-// skipped, so one misconfigured server does not keep the rest from reaching
-// devices.
+// ListDeviceMCPServers returns the Speakeasy-hosted servers in the given plugins.
+// Unproxied servers (a vendor's own address) and gateway members are left out,
+// and an unresolvable or non-https address is skipped rather than failing the list.
 func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX, serverURL string, projectID uuid.UUID, pluginIDs []uuid.UUID) ([]DeviceMCPServer, error) {
 	if len(pluginIDs) == 0 {
 		return nil, nil
@@ -116,8 +104,7 @@ func requireHTTPS(rawURL string) error {
 	case u.Scheme != "https" || u.Host == "":
 		return fmt.Errorf("MCP server URL is not an https URL: %q", u.Scheme+"://"+u.Host)
 	case u.User != nil:
-		// Embedded credentials would travel alongside the device's own. Only the
-		// origin is reported: Redacted masks a password but not a bare username.
+		// Report only the origin: Redacted masks a password but not a username.
 		return fmt.Errorf("MCP server URL carries credentials: %q", u.Scheme+"://"+u.Host)
 	default:
 		return nil
@@ -128,11 +115,8 @@ func requireHTTPS(rawURL string) error {
 // a tool's configuration.
 const deviceMCPServerNamePrefix = "speakeasy-"
 
-// deviceMCPServerName names a server's entry in a tool's MCP configuration:
-// the prefix followed by slug, or by displayName when the server has no slug,
-// lowercased with each run of characters outside [a-z0-9-] collapsed into one
-// `-` and the ends trimmed. The result is a valid key in Claude Code's
-// mcpServers, Codex's bare TOML table names, and Cursor's mcp.json.
+// deviceMCPServerName returns the prefixed, slugified name (from slug, else
+// displayName). The result is a valid key in Claude Code, Codex and Cursor configs.
 func deviceMCPServerName(slug, displayName string) string {
 	name := slugifyMCPServerName(slug)
 	if name == "" {

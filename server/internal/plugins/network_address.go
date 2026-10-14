@@ -31,14 +31,9 @@ func packageMCPURL(modeValue pgtype.Text, publicBase, publicSlug, privateDNS, pr
 	return publicBase + "/mcp/" + publicSlug, nil
 }
 
-// remoteServerURL resolves an mcp_server-backed plugin server to the address
-// its package uses. unproxied reports that the address is the vendor's own
-// server rather than Speakeasy's gateway, so no Speakeasy credential may be
-// sent to it.
-//
-// The unproxied URL wins whenever it is set: it is the authoritative backend
-// signal, and nothing stops an mcp_endpoints row from also existing for an
-// unproxied-backed server.
+// remoteServerURL resolves a plugin server's package address. unproxied means
+// the address is the vendor's own server, which must never get a Speakeasy
+// credential; it wins whenever set, even if an mcp_endpoints row also exists.
 func remoteServerURL(serverURL string, r repo.ListPluginsWithMcpServersForProjectRow) (mcpURL string, unproxied bool, err error) {
 	if r.UnproxiedUrl.Valid {
 		mode, err := networkaccess.Effective(r.NetworkAccessMode)
