@@ -168,6 +168,13 @@ func (c *checkoutStripeClient) GetCheckoutSession(_ context.Context, id string) 
 	if c.checkoutGetErr != nil {
 		return nil, c.checkoutGetErr
 	}
+	if c.checkoutState == nil {
+		for _, result := range c.checkoutResults {
+			if result.id == id {
+				return &stripeclient.CheckoutSessionState{Partner: nil, ID: id, Status: "open", CustomerID: result.input.CustomerID, SubscriptionID: "", SubscriptionCustomerID: "", SubscriptionStatus: "", BillingCycleAnchor: time.Time{}}, nil
+			}
+		}
+	}
 	if c.checkoutState == nil || c.checkoutState.ID != id {
 		return nil, errors.New("checkout session not found")
 	}
@@ -844,7 +851,8 @@ func TestExpireLifecycleStaleCheckoutSessionAcceptsConcurrentExpiration(t *testi
 	}
 	ti.stripe.expireCheckoutError = errors.New("already expired")
 	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
-		ID: "cs_stale", Status: "expired", CustomerID: "cus_test",
+		Partner: nil,
+		ID:      "cs_stale", Status: "expired", CustomerID: "cus_test",
 	}
 
 	replaceKey, err := ti.service.expireLifecycleStaleCheckoutSession(
@@ -1220,6 +1228,7 @@ func TestCreateStripeCheckoutRotatesExpiredLegacyConvertedTrialReceipt(t *testin
 	now := originalIntent.expiresAt.Add(time.Second)
 	ti.service.now = func() time.Time { return now }
 	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		Partner:    nil,
 		ID:         "cs_1",
 		Status:     "expired",
 		CustomerID: "cus_test",
@@ -1473,6 +1482,7 @@ func TestCreateStripeCheckoutDoesNotRotateCompletedExpiredSession(t *testing.T) 
 	ti := newStripeCheckoutTestInstance(t)
 	oldIntent := seedExpiredCheckoutSession(t, ti, "cs_completed")
 	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		Partner:        nil,
 		ID:             "cs_completed",
 		Status:         "complete",
 		CustomerID:     "cus_test",
@@ -1497,6 +1507,7 @@ func TestCreateStripeCheckoutRotatesStripeConfirmedExpiredSession(t *testing.T) 
 	ti := newStripeCheckoutTestInstance(t)
 	oldIntent := seedExpiredCheckoutSession(t, ti, "cs_expired")
 	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		Partner:    nil,
 		ID:         "cs_expired",
 		Status:     "expired",
 		CustomerID: "cus_test",

@@ -1413,8 +1413,8 @@ JOIN support_matrix_integration_methods m ON m.id = sm.integration_method_id AND
 WHERE s.slug = ANY(@step_slugs::text[])
 ORDER BY s.slug, m.sort_order, m.slug;
 
--- Signup attribution is immutable even after redemption. Future offer selection
--- must not reuse this signup-only operation to adopt an existing organization.
+-- Acceptance is immutable even after redemption. Call only during signup or a
+-- verified first partner Checkout, under the billing/offer acceptance locks.
 -- name: AttributePartnerSignup :execrows
 INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id)
 SELECT sqlc.narg(organization_id), @stripe_promotion_code_id

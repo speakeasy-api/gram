@@ -116,6 +116,11 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 			return err
 		}
 	}
+	if event.Type == "checkout.session.completed" && checkoutEligible {
+		if err := s.acceptManualPartnerCheckout(ctx, event, checkoutState); err != nil {
+			return oops.E(oops.CodeUnavailable, err, "failed to accept partner Checkout").LogWarn(ctx, logger)
+		}
+	}
 	if event.Type == "invoice.created" {
 		invoiceState, err = s.currentStripeInvoice(ctx, event)
 		if err != nil {
@@ -589,13 +594,17 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	if !identity.StripeCustomerID.Valid || identity.StripeCustomerID.String != event.CustomerID {
 		return false, errors.New("stripe invoice customer does not belong to the organization")
 	}
-	if identity.GramAccountType != "payg" {
+	partner, err := q.IsRedeemedPartnerSubscription(ctx, repo.IsRedeemedPartnerSubscriptionParams{OrganizationID: pgtype.Text{String: organizationID, Valid: true}, StripeSubscriptionID: pgtype.Text{String: invoice.SubscriptionID, Valid: true}})
+	if err != nil {
+		return false, fmt.Errorf("verify partner invoice subscription: %w", err)
+	}
+	if identity.GramAccountType != "payg" && !partner {
 		if identity.StripeCheckoutSessionID.Valid {
 			return false, errors.New("PAYG Checkout activation has not committed")
 		}
 		return false, nil
 	}
-	if !identity.StripeSubscriptionID.Valid || identity.StripeSubscriptionID.String != invoice.SubscriptionID || !identity.StripeBillingCycleAnchor.Valid {
+	if (!identity.StripeSubscriptionID.Valid && !partner) || (identity.StripeSubscriptionID.Valid && identity.StripeSubscriptionID.String != invoice.SubscriptionID) || !identity.StripeBillingCycleAnchor.Valid {
 		return false, errors.New("stripe invoice does not belong to active PAYG billing")
 	}
 	if invoice.BillingReason == "subscription_create" && !invoice.ServicePeriodEnd.After(invoice.ServicePeriodStart) {
@@ -611,7 +620,12 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	if invoice.Currency != "usd" {
 		return false, fmt.Errorf("unsupported Stripe invoice currency %q", invoice.Currency)
 	}
-	if !invoice.ServicePeriodStart.Equal(invoice.ServicePeriodStart.Truncate(24*time.Hour)) || !invoice.ServicePeriodEnd.Equal(invoice.ServicePeriodEnd.Truncate(24*time.Hour)) {
+	anchor := identity.StripeBillingCycleAnchor.Time.UTC()
+	if partner && !anchor.Equal(anchor.Truncate(24*time.Hour)) {
+		if !partnerMonthlyPeriod(anchor, invoice.ServicePeriodStart, invoice.ServicePeriodEnd) {
+			return false, errors.New("partner invoice period does not match the immutable monthly billing anchor")
+		}
+	} else if !invoice.ServicePeriodStart.Equal(invoice.ServicePeriodStart.Truncate(24*time.Hour)) || !invoice.ServicePeriodEnd.Equal(invoice.ServicePeriodEnd.Truncate(24*time.Hour)) {
 		return false, errors.New("stripe invoice service period is not UTC-day aligned")
 	}
 
@@ -657,6 +671,11 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		return stripeWebhookResult{}, errors.New("stripe subscription belongs to multiple organizations")
 	case len(owners) == 1 && owners[0] != organizationID:
 		return stripeWebhookResult{}, errors.New("stripe subscription already belongs to another organization")
+	}
+
+	checkout, err = s.verifiedPartnerCheckoutTx(ctx, tx, organizationID, event, state, checkout)
+	if err != nil {
+		return stripeWebhookResult{}, err
 	}
 
 	newlyEnabled := []productfeatures.Feature(nil)

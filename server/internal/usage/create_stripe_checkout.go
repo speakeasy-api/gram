@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -382,6 +383,23 @@ func (s *Service) prepareStripeCheckoutIntent(
 	}
 	if !stored.StripeCustomerID.Valid || stored.StripeCustomerID.String != customerID {
 		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeConflict, nil, "billing customer changed while Checkout was being prepared").LogWarn(ctx, s.logger)
+	}
+
+	application, applicationErr := orgrepo.New(dbtx).GetOrganizationPromotionApplication(ctx, organizationID)
+	if applicationErr != nil && !errors.Is(applicationErr, pgx.ErrNoRows) {
+		return preparedStripeCheckoutIntent{}, fmt.Errorf("load pending partner application: %w", applicationErr)
+	}
+	if applicationErr == nil && !application.RedeemedAt.Valid && stored.StripeCheckoutSessionID.Valid {
+		current, err := s.stripeClient.GetCheckoutSession(ctx, stored.StripeCheckoutSessionID.String)
+		if err != nil {
+			return preparedStripeCheckoutIntent{}, fmt.Errorf("read pending partner Checkout: %w", err)
+		}
+		if current == nil || current.ID != stored.StripeCheckoutSessionID.String || current.CustomerID != customerID {
+			return preparedStripeCheckoutIntent{}, errors.New("partner Checkout state does not match persisted intent")
+		}
+		if current.Status == "complete" {
+			return preparedStripeCheckoutIntent{}, oops.E(oops.CodeConflict, nil, "partner Checkout is still being reconciled; do not start another subscription")
+		}
 	}
 
 	prepared, err := queries.PrepareStripeCheckoutIntent(ctx, repo.PrepareStripeCheckoutIntentParams{

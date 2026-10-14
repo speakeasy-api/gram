@@ -2088,6 +2088,12 @@ WHERE billing_metadata.organization_id = organization_metadata.id
   AND billing_metadata.stripe_customer_id = $5::text
   AND billing_metadata.stripe_subscription_id IS NULL
   AND organization_metadata.gram_account_type = 'payg'
+  -- A redeemed partner's retained anchor is immutable accounting provenance.
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_promotion_applications application
+    WHERE application.organization_id = billing_metadata.organization_id
+      AND application.redeemed_at IS NOT NULL
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM billing_metadata AS other

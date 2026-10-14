@@ -155,8 +155,8 @@ type AttributePartnerSignupParams struct {
 	StripePromotionCodeID string
 }
 
-// Signup attribution is immutable even after redemption. Future offer selection
-// must not reuse this signup-only operation to adopt an existing organization.
+// Acceptance is immutable even after redemption. Call only during signup or a
+// verified first partner Checkout, under the billing/offer acceptance locks.
 func (q *Queries) AttributePartnerSignup(ctx context.Context, arg AttributePartnerSignupParams) (int64, error) {
 	result, err := q.db.Exec(ctx, attributePartnerSignup, arg.OrganizationID, arg.StripePromotionCodeID)
 	if err != nil {

@@ -402,11 +402,17 @@ WHERE id = @organization_id;
 -- name: DeactivatePaygBillingMetadata :execrows
 UPDATE billing_metadata
 SET stripe_subscription_id = NULL,
-    stripe_billing_cycle_anchor = NULL,
+    -- The original partner anchor remains accounting provenance after cancellation.
+    stripe_billing_cycle_anchor = CASE WHEN EXISTS (
+      SELECT 1 FROM organization_promotion_applications application
+      WHERE application.organization_id = billing_metadata.organization_id
+        AND application.stripe_subscription_id = billing_metadata.stripe_subscription_id
+        AND application.redeemed_at IS NOT NULL
+    ) THEN stripe_billing_cycle_anchor ELSE NULL END,
     updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND stripe_customer_id = @stripe_customer_id
-  AND stripe_subscription_id = @stripe_subscription_id;
+WHERE billing_metadata.organization_id = @organization_id
+  AND billing_metadata.stripe_customer_id = @stripe_customer_id
+  AND billing_metadata.stripe_subscription_id = @stripe_subscription_id;
 
 -- name: DeactivatePaygOrganization :execrows
 UPDATE organization_metadata
@@ -635,3 +641,11 @@ ORDER BY redeemed_at, id;
 -- name: InsertOrganizationPromotionApplicationFixture :exec
 INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id, stripe_subscription_id, redeemed_at)
 VALUES (sqlc.narg(organization_id), @stripe_promotion_code_id, sqlc.narg(stripe_subscription_id), sqlc.narg(redeemed_at));
+
+-- name: HasCompletedStripeCheckout :one
+SELECT EXISTS (SELECT 1 FROM stripe_webhook_receipts WHERE organization_id = @organization_id AND event_type = 'checkout.session.completed');
+
+-- name: IsRedeemedPartnerSubscription :one
+SELECT EXISTS (SELECT 1 FROM organization_promotion_applications
+WHERE organization_id = @organization_id AND stripe_subscription_id = @stripe_subscription_id
+AND redeemed_at IS NOT NULL);

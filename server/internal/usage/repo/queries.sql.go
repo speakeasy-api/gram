@@ -174,11 +174,17 @@ func (q *Queries) CreateStripeSubscriptionBillingMetadataFixture(ctx context.Con
 const deactivatePaygBillingMetadata = `-- name: DeactivatePaygBillingMetadata :execrows
 UPDATE billing_metadata
 SET stripe_subscription_id = NULL,
-    stripe_billing_cycle_anchor = NULL,
+    -- The original partner anchor remains accounting provenance after cancellation.
+    stripe_billing_cycle_anchor = CASE WHEN EXISTS (
+      SELECT 1 FROM organization_promotion_applications application
+      WHERE application.organization_id = billing_metadata.organization_id
+        AND application.stripe_subscription_id = billing_metadata.stripe_subscription_id
+        AND application.redeemed_at IS NOT NULL
+    ) THEN stripe_billing_cycle_anchor ELSE NULL END,
     updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND stripe_customer_id = $2
-  AND stripe_subscription_id = $3
+WHERE billing_metadata.organization_id = $1
+  AND billing_metadata.stripe_customer_id = $2
+  AND billing_metadata.stripe_subscription_id = $3
 `
 
 type DeactivatePaygBillingMetadataParams struct {
@@ -642,6 +648,17 @@ func (q *Queries) GetStripeWebhookReceipt(ctx context.Context, stripeEventID str
 	return i, err
 }
 
+const hasCompletedStripeCheckout = `-- name: HasCompletedStripeCheckout :one
+SELECT EXISTS (SELECT 1 FROM stripe_webhook_receipts WHERE organization_id = $1 AND event_type = 'checkout.session.completed')
+`
+
+func (q *Queries) HasCompletedStripeCheckout(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasCompletedStripeCheckout, organizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const hasRedeemedSelectedPromotion = `-- name: HasRedeemedSelectedPromotion :one
 SELECT COALESCE((
   SELECT redeemed_at IS NOT NULL FROM organization_promotion_applications
@@ -678,6 +695,24 @@ func (q *Queries) InsertOrganizationPromotionApplicationFixture(ctx context.Cont
 		arg.RedeemedAt,
 	)
 	return err
+}
+
+const isRedeemedPartnerSubscription = `-- name: IsRedeemedPartnerSubscription :one
+SELECT EXISTS (SELECT 1 FROM organization_promotion_applications
+WHERE organization_id = $1 AND stripe_subscription_id = $2
+AND redeemed_at IS NOT NULL)
+`
+
+type IsRedeemedPartnerSubscriptionParams struct {
+	OrganizationID       pgtype.Text
+	StripeSubscriptionID pgtype.Text
+}
+
+func (q *Queries) IsRedeemedPartnerSubscription(ctx context.Context, arg IsRedeemedPartnerSubscriptionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isRedeemedPartnerSubscription, arg.OrganizationID, arg.StripeSubscriptionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
