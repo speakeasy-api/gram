@@ -1,9 +1,11 @@
 import { Checkbox } from "@/components/ui/Checkbox";
+import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { Markdown } from "@/elements/components/Markdown";
+import { splitFencedCode } from "./fencedCode";
 import { isRelativePath } from "./origin";
 
 const SETUP_PROSE =
@@ -55,9 +57,36 @@ function SafeMarkdown({
   );
 }
 
-/** A passage of setup prose. */
+/**
+ * A passage of setup prose. Fenced code is there for the operator to paste
+ * somewhere else, so it is shown as a snippet with a copy button.
+ */
 export function SetupText({ markdown }: { markdown: string }): JSX.Element {
-  return <SafeMarkdown markdown={markdown} className={SETUP_PROSE} />;
+  const segments = splitFencedCode(markdown);
+  if (segments.every((segment) => segment.kind === "markdown")) {
+    return <SafeMarkdown markdown={markdown} className={SETUP_PROSE} />;
+  }
+  return (
+    <Stack gap={4}>
+      {segments.map((segment, index) =>
+        segment.kind === "code" ? (
+          <CodeSnippet
+            key={index}
+            code={segment.code}
+            language={segment.language}
+            copyable
+            snippetClassName="min-w-0 flex-1 overflow-x-auto"
+          />
+        ) : (
+          <SafeMarkdown
+            key={index}
+            markdown={segment.markdown}
+            className={SETUP_PROSE}
+          />
+        ),
+      )}
+    </Stack>
+  );
 }
 
 /**
