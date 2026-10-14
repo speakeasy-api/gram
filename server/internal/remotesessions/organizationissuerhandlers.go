@@ -300,7 +300,7 @@ func (s *Service) GetIssuer(ctx context.Context, payload *orgissuersgen.GetIssue
 
 	view := mv.BuildRemoteSessionIssuerView(issuer)
 	if vendor, err := NormalizeVendorIssuer(issuer.Issuer); err == nil {
-		view.EmaProvider, err = s.emaProviderView(ctx, logger, repo.New(s.db), authCtx.ActiveOrganizationID, vendor)
+		view.EmaProviders, err = s.emaProvidersView(ctx, logger, repo.New(s.db), authCtx.ActiveOrganizationID, vendor)
 		if err != nil {
 			return nil, err
 		}

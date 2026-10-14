@@ -26,14 +26,14 @@ type Client struct {
 	MoveIssuerEndpoint                  goa.Endpoint
 	GetIssuerMigratePreflightEndpoint   goa.Endpoint
 	MigrateIssuerEndpoint               goa.Endpoint
-	SetEMAProviderEndpoint              goa.Endpoint
+	SetEMAProvidersEndpoint             goa.Endpoint
 	FetchIssuerMetadataEndpoint         goa.Endpoint
 	RefreshIssuerMetadataEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "organizationRemoteSessionIssuers" service client
 // given the endpoints.
-func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, getIssuerDuplicatePreflight, updateIssuer, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer, setEMAProvider, fetchIssuerMetadata, refreshIssuerMetadata goa.Endpoint) *Client {
+func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, getIssuerDuplicatePreflight, updateIssuer, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer, setEMAProviders, fetchIssuerMetadata, refreshIssuerMetadata goa.Endpoint) *Client {
 	return &Client{
 		CreateIssuerEndpoint:                createIssuer,
 		ListIssuersEndpoint:                 listIssuers,
@@ -45,7 +45,7 @@ func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, g
 		MoveIssuerEndpoint:                  moveIssuer,
 		GetIssuerMigratePreflightEndpoint:   getIssuerMigratePreflight,
 		MigrateIssuerEndpoint:               migrateIssuer,
-		SetEMAProviderEndpoint:              setEMAProvider,
+		SetEMAProvidersEndpoint:             setEMAProviders,
 		FetchIssuerMetadataEndpoint:         fetchIssuerMetadata,
 		RefreshIssuerMetadataEndpoint:       refreshIssuerMetadata,
 	}
@@ -277,9 +277,9 @@ func (c *Client) MigrateIssuer(ctx context.Context, p *MigrateIssuerPayload) (re
 	return ires.(*MigrateOrganizationRemoteSessionIssuerResult), nil
 }
 
-// SetEMAProvider calls the "setEMAProvider" endpoint of the
+// SetEMAProviders calls the "setEMAProviders" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-// SetEMAProvider may return the following errors:
+// SetEMAProviders may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -291,13 +291,13 @@ func (c *Client) MigrateIssuer(ctx context.Context, p *MigrateIssuerPayload) (re
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) SetEMAProvider(ctx context.Context, p *SetEMAProviderPayload) (res *types.EMAProviderSelection, err error) {
+func (c *Client) SetEMAProviders(ctx context.Context, p *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error) {
 	var ires any
-	ires, err = c.SetEMAProviderEndpoint(ctx, p)
+	ires, err = c.SetEMAProvidersEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*types.EMAProviderSelection), nil
+	return ires.(*types.EMAProviderOrder), nil
 }
 
 // FetchIssuerMetadata calls the "fetchIssuerMetadata" endpoint of the

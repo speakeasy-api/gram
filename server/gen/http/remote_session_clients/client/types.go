@@ -201,9 +201,9 @@ type PrepareEMAResponseBody struct {
 	Scopes     []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource *string `form:"grant_source,omitempty" json:"grant_source,omitempty" xml:"grant_source,omitempty"`
-	// The EMA provider identity chaining uses for this endpoint. Returned by
-	// readEMA only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
+	// EMA providers identity chaining tries for this endpoint, in order, each with
+	// whether it can serve now. Returned by readEMA only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
 }
 
 // ReadEMAResponseBody is the type of the "remoteSessionClients" service
@@ -228,9 +228,9 @@ type ReadEMAResponseBody struct {
 	Scopes     []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource *string `form:"grant_source,omitempty" json:"grant_source,omitempty" xml:"grant_source,omitempty"`
-	// The EMA provider identity chaining uses for this endpoint. Returned by
-	// readEMA only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
+	// EMA providers identity chaining tries for this endpoint, in order, each with
+	// whether it can serve now. Returned by readEMA only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
 }
 
 // UnlinkEMAResponseBody is the type of the "remoteSessionClients" service
@@ -255,9 +255,9 @@ type UnlinkEMAResponseBody struct {
 	Scopes     []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource *string `form:"grant_source,omitempty" json:"grant_source,omitempty" xml:"grant_source,omitempty"`
-	// The EMA provider identity chaining uses for this endpoint. Returned by
-	// readEMA only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
+	// EMA providers identity chaining tries for this endpoint, in order, each with
+	// whether it can serve now. Returned by readEMA only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
 }
 
 // CreateRemoteSessionClientResponseBody is the type of the
@@ -3512,15 +3512,14 @@ type DeleteRemoteSessionClientGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// EMAProviderSelectionResponseBody is used to define fields on response body
-// types.
-type EMAProviderSelectionResponseBody struct {
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
-	// No selection is saved, so the endpoint uses its configured external issuer.
+	// No order is saved, so the endpoint uses its configured external issuer.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	// The explicitly selected provider, or the external default.
-	Provider *EMAProviderResponseBody `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// The saved providers in order, or the external default.
+	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
 // EMAProviderResponseBody is used to define fields on response body types.
@@ -3528,13 +3527,15 @@ type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default selection with none.
+	// for the endpoint's trusted issuer in a default order with none.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
-	// Why the provider cannot serve now; omitted when it can. An unavailable
-	// selection never falls back to another provider. readiness_unknown means the
-	// Speakeasy issuer's state could not be read just now; retry the read.
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's authorization server does not accept this issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
 
@@ -3819,8 +3820,8 @@ func NewPrepareEMAIdentityChainingPreparationOK(body *PrepareEMAResponseBody) *r
 	for i, val := range body.Scopes {
 		v.Scopes[i] = val
 	}
-	if body.EmaProvider != nil {
-		v.EmaProvider = unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(body.EmaProvider)
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
 	}
 
 	return v
@@ -4002,8 +4003,8 @@ func NewReadEMAIdentityChainingPreparationOK(body *ReadEMAResponseBody) *remotes
 	for i, val := range body.Scopes {
 		v.Scopes[i] = val
 	}
-	if body.EmaProvider != nil {
-		v.EmaProvider = unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(body.EmaProvider)
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
 	}
 
 	return v
@@ -4185,8 +4186,8 @@ func NewUnlinkEMAIdentityChainingPreparationOK(body *UnlinkEMAResponseBody) *rem
 	for i, val := range body.Scopes {
 		v.Scopes[i] = val
 	}
-	if body.EmaProvider != nil {
-		v.EmaProvider = unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(body.EmaProvider)
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
 	}
 
 	return v
@@ -6445,8 +6446,8 @@ func ValidatePrepareEMAResponseBody(body *PrepareEMAResponseBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"selection", "eligibility", "registration", "discovery", "publication"}))
 		}
 	}
-	if body.EmaProvider != nil {
-		if err2 := ValidateEMAProviderSelectionResponseBody(body.EmaProvider); err2 != nil {
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -6490,8 +6491,8 @@ func ValidateReadEMAResponseBody(body *ReadEMAResponseBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"selection", "eligibility", "registration", "discovery", "publication"}))
 		}
 	}
-	if body.EmaProvider != nil {
-		if err2 := ValidateEMAProviderSelectionResponseBody(body.EmaProvider); err2 != nil {
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -6535,8 +6536,8 @@ func ValidateUnlinkEMAResponseBody(body *UnlinkEMAResponseBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *body.Stage, []any{"selection", "eligibility", "registration", "discovery", "publication"}))
 		}
 	}
-	if body.EmaProvider != nil {
-		if err2 := ValidateEMAProviderSelectionResponseBody(body.EmaProvider); err2 != nil {
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -10666,21 +10667,23 @@ func ValidateDeleteRemoteSessionClientGatewayErrorResponseBody(body *DeleteRemot
 	return
 }
 
-// ValidateEMAProviderSelectionResponseBody runs the validations defined on
-// EMAProviderSelectionResponseBody
-func ValidateEMAProviderSelectionResponseBody(body *EMAProviderSelectionResponseBody) (err error) {
+// ValidateEMAProviderOrderResponseBody runs the validations defined on
+// EMAProviderOrderResponseBody
+func ValidateEMAProviderOrderResponseBody(body *EMAProviderOrderResponseBody) (err error) {
 	if body.VendorIssuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("vendor_issuer", "body"))
 	}
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
-	if body.Provider == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	if body.Providers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
 	}
-	if body.Provider != nil {
-		if err2 := ValidateEMAProviderResponseBody(body.Provider); err2 != nil {
-			err = goa.MergeErrors(err, err2)
+	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateEMAProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return

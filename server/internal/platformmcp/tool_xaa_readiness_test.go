@@ -202,7 +202,7 @@ func TestXAAReadinessReportsIdentityChainingAndFederatedCallback(t *testing.T) {
 	reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{
 		{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "connected", IssuerID: &issuerID, ResourceIndicator: "https://upstream.example.test/mcp"},
 	}}}
-	identity := &xaaIdentityStub{callback: &callback, chaining: XAAIdentityChaining{Served: false, NotServedReason: nil, Provider: nil, Bindings: []XAAIdentityChainingBinding{
+	identity := &xaaIdentityStub{callback: &callback, chaining: XAAIdentityChaining{Served: false, NotServedReason: nil, Providers: nil, Bindings: []XAAIdentityChainingBinding{
 		{State: "unknown_grants", Stage: "registration", Remediation: "An administrator must confirm effective registration grants.", GrantSource: "unknown", RequestedScopes: []string{"read"}},
 	}}}
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
@@ -442,9 +442,9 @@ func TestXAAReadinessReportsProvidersWithoutOkta(t *testing.T) {
 	on := func(context.Context, string) (bool, error) { return true, nil }
 	off := func(context.Context, string) (bool, error) { return false, nil }
 	issuer := uuid.New()
-	speakeasy := &XAAEMAProvider{Kind: string(remotesessions.EMAProviderSpeakeasy)}
-	served := XAAIdentityChaining{Served: true, Provider: speakeasy, Bindings: []XAAIdentityChainingBinding{{State: "ready"}}}
-	server := xaaServer{issuerID: issuer, resource: "https://upstream.example.test/mcp", advertisesIDJAG: true, provider: remotesessions.EMAProviderSpeakeasy}
+	speakeasy := []XAAEMAProvider{{Kind: string(remotesessions.EMAProviderSpeakeasy)}, {Kind: string(remotesessions.EMAProviderExternal)}}
+	served := XAAIdentityChaining{Served: true, Providers: speakeasy, Bindings: []XAAIdentityChainingBinding{{State: "ready"}}}
+	server := xaaServer{issuerID: issuer, resource: "https://upstream.example.test/mcp", advertisesIDJAG: true, speakeasy: true}
 	for _, tc := range []struct {
 		name   string
 		okta   FeatureChecker
@@ -468,7 +468,7 @@ func TestXAAReadinessReportsProvidersWithoutOkta(t *testing.T) {
 			require.Equal(t, issuer, identity.issuer)
 			require.Equal(t, server.resource, identity.resource)
 
-			identity.chaining = XAAIdentityChaining{Served: false, NotServedReason: new("provider_unavailable"), Provider: speakeasy, Bindings: []XAAIdentityChainingBinding{}}
+			identity.chaining = XAAIdentityChaining{Served: false, NotServedReason: new("provider_unavailable"), Providers: speakeasy, Bindings: []XAAIdentityChainingBinding{}}
 			output = xaaOutput(t, xaaCall(t, session, xaaProjectID, xaaServerID))
 			require.Equal(t, xaaStateNotReady, output.State)
 			require.True(t, output.Pending)
@@ -497,7 +497,7 @@ func TestXAAReadinessOktaVendorsKeepOktaDetails(t *testing.T) {
 	}}}
 	external := XAAIdentityChaining{Served: false, NotServedReason: new("binding_not_ready"), Bindings: []XAAIdentityChainingBinding{}}
 	identity := &xaaIdentityStub{chaining: external}
-	servers := &xaaServerStub{server: xaaServer{issuerID: uuid.New(), resource: "https://upstream.example.test/mcp", advertisesIDJAG: true, provider: remotesessions.EMAProviderExternal}, found: true}
+	servers := &xaaServerStub{server: xaaServer{issuerID: uuid.New(), resource: "https://upstream.example.test/mcp", advertisesIDJAG: true, speakeasy: false}, found: true}
 	signIn := &signInReaderStub{setup: &idpc.SignInSetup{NextStep: idpc.SignInStepRegisterInOkta}}
 	session := xaaTestSession(t, &xaaReadinessService{connections: reader, signIn: signIn, enabled: on, identity: identity, emaEnabled: on, servers: servers}, false)
 
@@ -507,10 +507,10 @@ func TestXAAReadinessOktaVendorsKeepOktaDetails(t *testing.T) {
 	require.NotNil(t, output.OktaSignIn)
 	require.Equal(t, issuerID, identity.issuer.String(), "the Okta row names the issuer")
 
-	servers.server.provider = remotesessions.EMAProviderSpeakeasy
-	identity.chaining = XAAIdentityChaining{Served: true, Provider: &XAAEMAProvider{Kind: string(remotesessions.EMAProviderSpeakeasy)}, Bindings: []XAAIdentityChainingBinding{}}
+	servers.server.speakeasy = true
+	identity.chaining = XAAIdentityChaining{Served: true, Providers: []XAAEMAProvider{{Kind: string(remotesessions.EMAProviderExternal)}, {Kind: string(remotesessions.EMAProviderSpeakeasy)}}, Bindings: []XAAIdentityChainingBinding{}}
 	output = xaaOutput(t, xaaCall(t, session, xaaProjectID, xaaServerID))
-	require.Equal(t, xaaStateReady, output.State, "the Okta connection does not describe a Speakeasy-selected vendor")
+	require.Equal(t, xaaStateReady, output.State, "the Okta connection does not describe a vendor whose order names Speakeasy")
 	require.Nil(t, output.OktaSignIn)
 	require.Equal(t, servers.server.issuerID, identity.issuer)
 }
@@ -524,7 +524,7 @@ func TestXAAReadinessSpeakeasySelectionNeedsEMAProvidersRollout(t *testing.T) {
 		{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "connected", IssuerID: &issuerID, ResourceIndicator: "https://upstream.example.test/mcp"},
 	}}}
 	identity := &xaaIdentityStub{chaining: XAAIdentityChaining{Served: false, NotServedReason: new("binding_not_ready"), Bindings: []XAAIdentityChainingBinding{}}}
-	servers := &xaaServerStub{server: xaaServer{issuerID: uuid.New(), resource: "https://upstream.example.test/mcp", advertisesIDJAG: true, provider: remotesessions.EMAProviderSpeakeasy}, found: true}
+	servers := &xaaServerStub{server: xaaServer{issuerID: uuid.New(), resource: "https://upstream.example.test/mcp", advertisesIDJAG: true, speakeasy: true}, found: true}
 	signIn := &signInReaderStub{setup: &idpc.SignInSetup{NextStep: idpc.SignInStepRegisterInOkta}}
 	session := xaaTestSession(t, &xaaReadinessService{connections: reader, signIn: signIn, enabled: on, identity: identity, emaEnabled: off, servers: servers}, false)
 	output := xaaOutput(t, xaaCall(t, session, xaaProjectID, xaaServerID))

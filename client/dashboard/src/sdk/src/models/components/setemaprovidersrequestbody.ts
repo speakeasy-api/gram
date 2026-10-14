@@ -10,11 +10,11 @@ import {
   EMAProviderInput$outboundSchema,
 } from "./emaproviderinput.js";
 
-export type SetEMAProviderRequestBody = {
+export type SetEMAProvidersRequestBody = {
   /**
-   * The EMA provider selected to issue ID-JAGs for a vendor.
+   * Providers in the order they are tried; each at most once. An empty list restores the external default.
    */
-  provider?: EMAProviderInput | undefined;
+  providers: Array<EMAProviderInput>;
   /**
    * Any remote_session_issuer in the caller's organization that names the vendor authorization server.
    */
@@ -22,18 +22,18 @@ export type SetEMAProviderRequestBody = {
 };
 
 /** @internal */
-export type SetEMAProviderRequestBody$Outbound = {
-  provider?: EMAProviderInput$Outbound | undefined;
+export type SetEMAProvidersRequestBody$Outbound = {
+  providers: Array<EMAProviderInput$Outbound>;
   remote_session_issuer_id: string;
 };
 
 /** @internal */
-export const SetEMAProviderRequestBody$outboundSchema: z.ZodMiniType<
-  SetEMAProviderRequestBody$Outbound,
-  SetEMAProviderRequestBody
+export const SetEMAProvidersRequestBody$outboundSchema: z.ZodMiniType<
+  SetEMAProvidersRequestBody$Outbound,
+  SetEMAProvidersRequestBody
 > = z.pipe(
   z.object({
-    provider: z.optional(EMAProviderInput$outboundSchema),
+    providers: z.array(EMAProviderInput$outboundSchema),
     remoteSessionIssuerId: z.string(),
   }),
   z.transform((v) => {
@@ -43,10 +43,10 @@ export const SetEMAProviderRequestBody$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function setEMAProviderRequestBodyToJSON(
-  setEMAProviderRequestBody: SetEMAProviderRequestBody,
+export function setEMAProvidersRequestBodyToJSON(
+  setEMAProvidersRequestBody: SetEMAProvidersRequestBody,
 ): string {
   return JSON.stringify(
-    SetEMAProviderRequestBody$outboundSchema.parse(setEMAProviderRequestBody),
+    SetEMAProvidersRequestBody$outboundSchema.parse(setEMAProvidersRequestBody),
   );
 }

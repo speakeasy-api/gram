@@ -1918,22 +1918,21 @@ type RemoteSessionIssuerResponseBody struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	// The organization's EMA provider for this issuer's vendor. Returned by
+	// The organization's EMA provider order for this issuer's vendor. Returned by
 	// organizationRemoteSessionIssuers.getIssuer only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
-	CreatedAt   *string                           `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                           `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// EMAProviderSelectionResponseBody is used to define fields on response body
-// types.
-type EMAProviderSelectionResponseBody struct {
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
-	// No selection is saved, so the endpoint uses its configured external issuer.
+	// No order is saved, so the endpoint uses its configured external issuer.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	// The explicitly selected provider, or the external default.
-	Provider *EMAProviderResponseBody `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// The saved providers in order, or the external default.
+	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
 // EMAProviderResponseBody is used to define fields on response body types.
@@ -1941,13 +1940,15 @@ type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default selection with none.
+	// for the endpoint's trusted issuer in a default order with none.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
-	// Why the provider cannot serve now; omitted when it can. An unavailable
-	// selection never falls back to another provider. readiness_unknown means the
-	// Speakeasy issuer's state could not be read just now; retry the read.
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's authorization server does not accept this issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
 
@@ -5663,8 +5664,8 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
-	if body.EmaProvider != nil {
-		if err2 := ValidateEMAProviderSelectionResponseBody(body.EmaProvider); err2 != nil {
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -5677,21 +5678,23 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	return
 }
 
-// ValidateEMAProviderSelectionResponseBody runs the validations defined on
-// EMAProviderSelectionResponseBody
-func ValidateEMAProviderSelectionResponseBody(body *EMAProviderSelectionResponseBody) (err error) {
+// ValidateEMAProviderOrderResponseBody runs the validations defined on
+// EMAProviderOrderResponseBody
+func ValidateEMAProviderOrderResponseBody(body *EMAProviderOrderResponseBody) (err error) {
 	if body.VendorIssuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("vendor_issuer", "body"))
 	}
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
-	if body.Provider == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	if body.Providers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
 	}
-	if body.Provider != nil {
-		if err2 := ValidateEMAProviderResponseBody(body.Provider); err2 != nil {
-			err = goa.MergeErrors(err, err2)
+	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateEMAProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return

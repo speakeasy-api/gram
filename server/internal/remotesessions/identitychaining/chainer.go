@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
 
@@ -44,8 +43,8 @@ const (
 	// refresh, the token exchange and the redemption.
 	attemptTimeout = 25 * time.Second
 
-	// acquireTimeout bounds the complete selected-provider acquisition,
-	// including queueing and token publication.
+	// acquireTimeout bounds the complete acquisition across every provider
+	// in the order, including retries, queueing and token publication.
 	acquireTimeout = 30 * time.Second
 
 	// legTimeout bounds each token endpoint request.
@@ -123,7 +122,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challeng
 func (c *Chainer) SetMeterProvider(meterProvider metric.MeterProvider) {
 	counter, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining").Int64Counter(
 		meterAttempts,
-		metric.WithDescription("Identity chaining attempts by EMA provider, outcome and, when the provider could not serve, why."),
+		metric.WithDescription("Identity chaining attempts by EMA provider, outcome, whether an earlier provider in the order failed, retries and, when the provider could not serve, why."),
 		metric.WithUnit("{attempt}"),
 	)
 	if err != nil {
@@ -158,32 +157,18 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		attr.SlogRemoteSessionClientID(sel.clientID.String()),
 		attr.SlogOAuthResource(sel.resource),
 	)
-	p, outcome := c.servingProvider(ctx, logger, req, sel)
+	order, outcome := c.providerOrder(ctx, logger, req, sel)
 	if !outcome.Succeeded() {
-		if outcome.Reason == ReasonProviderUnavailable {
-			outcome.Provider = p.Kind
-			c.recordAttempt(ctx, "acquire", outcome)
-		}
 		return none, outcome
 	}
-	// The selected provider's failure is returned as is: no other signing
-	// authority is ever tried.
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
-	token, attempt := c.acquireFrom(ctx, logger.With(attr.SlogIdentityChainingProvider(string(p.Kind))), req, sel, p)
-	attempt.Provider = p.Kind
-	c.recordAttempt(ctx, "acquire", attempt)
-	return token, attempt
-}
-
-// recordAttempt counts one attempt by provider, outcome and, when the
-// provider could not serve, why.
-func (c *Chainer) recordAttempt(ctx context.Context, path string, outcome Outcome) {
-	attrs := []attribute.KeyValue{attr.IdentityChainingPath(path), attr.IdentityChainingProvider(string(outcome.Provider)), attr.Outcome(outcome.Reason)}
-	if outcome.Unavailable != "" {
-		attrs = append(attrs, attr.IdentityChainingUnavailableReason(string(outcome.Unavailable)))
+	if token, outcome, ok := c.reuseStored(ctx, logger, req, sel, order); ok {
+		return token, outcome
 	}
-	c.attempts.Add(ctx, 1, metric.WithAttributes(attrs...))
+	return c.tryProviders(ctx, logger, "acquire", order, func(ctx context.Context, logger *slog.Logger, p remotesessions.EMAProvider) (Token, Outcome) {
+		return c.acquireFrom(ctx, logger, req, sel, p)
+	})
 }
 
 // acquireFrom obtains a token for sel from one source: a still-valid stored
@@ -192,17 +177,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	var none Token
 	src := c.source(p)
 	sel.provider = p
-	// A token obtained after waiting is released only while its provider can
-	// still serve, so a selection changed meanwhile never hands one out.
-	release := func(token Token) (Token, Outcome) {
-		if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
-			return none, outcome
-		}
-		if outcome := c.stillServes(ctx, logger, req, sel); !outcome.Succeeded() {
-			return none, outcome
-		}
-		return token, success
-	}
+	release := func(token Token) (Token, Outcome) { return c.release(ctx, logger, req, sel, src, token) }
 	if outcome := src.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
 		return none, outcome
 	}
@@ -214,7 +189,8 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		}
 	}
 
-	// Stored credentials are checked against their provider and exact provenance.
+	// Stored credentials are checked against their issuing provider and exact
+	// provenance.
 	if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
 		return release(token)
 	}

@@ -83,15 +83,17 @@ type Service interface {
 	// organization-level issuer, and an organization-level issuer may migrate onto
 	// another organization-level issuer. Requires org:admin.
 	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
-	// Select the EMA provider for the vendor authorization server this issuer
-	// names, or omit provider to restore the endpoint's configured external
-	// issuer. Speakeasy is used only for vendors where it is selected explicitly,
-	// and a failing provider never falls back to another one. The selection
-	// applies organization-wide to every issuer with the same canonical issuer
-	// URL. Requires org:admin and the ema-providers rollout; restoring the
-	// external issuer only needs org:admin. Not available from support or
+	// Replace the ordered list of EMA providers that issue ID-JAGs for the vendor
+	// authorization server this issuer names. Identity chaining tries the
+	// providers that can serve and that the endpoint's authorization server
+	// trusts, in order, retrying transient failures briefly before moving to the
+	// next, until one succeeds. An empty list restores the default: the endpoint's
+	// configured external issuer. Speakeasy is used only for vendors whose list
+	// names it. The order applies organization-wide to every issuer with the same
+	// canonical issuer URL. Requires org:admin and the ema-providers rollout;
+	// restoring the default only needs org:admin. Not available from support or
 	// impersonated sessions.
-	SetEMAProvider(context.Context, *SetEMAProviderPayload) (res *types.EMAProviderSelection, err error)
+	SetEMAProviders(context.Context, *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error)
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for
 	// organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need
@@ -129,7 +131,7 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "setEMAProvider", "fetchIssuerMetadata", "refreshIssuerMetadata"}
+var MethodNames = [13]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "setEMAProviders", "fetchIssuerMetadata", "refreshIssuerMetadata"}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -424,14 +426,15 @@ type RefreshIssuerMetadataPayload struct {
 	ApikeyToken  *string
 }
 
-// SetEMAProviderPayload is the payload type of the
-// organizationRemoteSessionIssuers service setEMAProvider method.
-type SetEMAProviderPayload struct {
+// SetEMAProvidersPayload is the payload type of the
+// organizationRemoteSessionIssuers service setEMAProviders method.
+type SetEMAProvidersPayload struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID string
-	// The selected provider; omit it to restore the external default.
-	Provider     *types.EMAProviderInput
+	// Providers in the order they are tried; each at most once. An empty list
+	// restores the external default.
+	Providers    []*types.EMAProviderInput
 	SessionToken *string
 }
 

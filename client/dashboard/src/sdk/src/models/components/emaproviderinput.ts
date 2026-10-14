@@ -19,7 +19,7 @@ export const EMAProviderInputKind = {
 export type EMAProviderInputKind = ClosedEnum<typeof EMAProviderInputKind>;
 
 /**
- * The EMA provider selected to issue ID-JAGs for a vendor.
+ * One EMA provider allowed to issue ID-JAGs for a vendor.
  */
 export type EMAProviderInput = {
   /**

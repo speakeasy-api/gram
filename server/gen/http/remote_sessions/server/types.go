@@ -1797,22 +1797,21 @@ type RemoteSessionIssuerResponseBody struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	// The organization's EMA provider for this issuer's vendor. Returned by
+	// The organization's EMA provider order for this issuer's vendor. Returned by
 	// organizationRemoteSessionIssuers.getIssuer only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
-	CreatedAt   string                            `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string                            `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// EMAProviderSelectionResponseBody is used to define fields on response body
-// types.
-type EMAProviderSelectionResponseBody struct {
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No selection is saved, so the endpoint uses its configured external issuer.
+	// No order is saved, so the endpoint uses its configured external issuer.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The explicitly selected provider, or the external default.
-	Provider *EMAProviderResponseBody `form:"provider" json:"provider" xml:"provider"`
+	// The saved providers in order, or the external default.
+	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
 // EMAProviderResponseBody is used to define fields on response body types.
@@ -1820,13 +1819,15 @@ type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default selection with none.
+	// for the endpoint's trusted issuer in a default order with none.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
-	// Why the provider cannot serve now; omitted when it can. An unavailable
-	// selection never falls back to another provider. readiness_unknown means the
-	// Speakeasy issuer's state could not be read just now; retry the read.
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's authorization server does not accept this issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
 

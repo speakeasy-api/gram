@@ -238,15 +238,16 @@ type MigrateIssuerRequestBody struct {
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
 }
 
-// SetEMAProviderRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // request body.
-type SetEMAProviderRequestBody struct {
+type SetEMAProvidersRequestBody struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
-	// The selected provider; omit it to restore the external default.
-	Provider *EMAProviderInputRequestBody `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// Providers in the order they are tried; each at most once. An empty list
+	// restores the external default.
+	Providers []*EMAProviderInputRequestBody `form:"providers" json:"providers" xml:"providers"`
 }
 
 // FetchIssuerMetadataRequestBody is the type of the
@@ -366,11 +367,11 @@ type CreateIssuerResponseBody struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	// The organization's EMA provider for this issuer's vendor. Returned by
+	// The organization's EMA provider order for this issuer's vendor. Returned by
 	// organizationRemoteSessionIssuers.getIssuer only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
-	CreatedAt   *string                           `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                           `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListIssuersResponseBody is the type of the
@@ -482,11 +483,11 @@ type GetIssuerResponseBody struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	// The organization's EMA provider for this issuer's vendor. Returned by
+	// The organization's EMA provider order for this issuer's vendor. Returned by
 	// organizationRemoteSessionIssuers.getIssuer only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
-	CreatedAt   *string                           `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                           `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetIssuerDeletePreflightResponseBody is the type of the
@@ -619,11 +620,11 @@ type UpdateIssuerResponseBody struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	// The organization's EMA provider for this issuer's vendor. Returned by
+	// The organization's EMA provider order for this issuer's vendor. Returned by
 	// organizationRemoteSessionIssuers.getIssuer only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
-	CreatedAt   *string                           `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                           `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // MoveIssuerResponseBody is the type of the "organizationRemoteSessionIssuers"
@@ -726,11 +727,11 @@ type MoveIssuerResponseBody struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	// The organization's EMA provider for this issuer's vendor. Returned by
+	// The organization's EMA provider order for this issuer's vendor. Returned by
 	// organizationRemoteSessionIssuers.getIssuer only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
-	CreatedAt   *string                           `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                           `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetIssuerMigratePreflightResponseBody is the type of the
@@ -780,16 +781,16 @@ type MigrateIssuerResponseBody struct {
 	SourceDeleted *bool `form:"source_deleted,omitempty" json:"source_deleted,omitempty" xml:"source_deleted,omitempty"`
 }
 
-// SetEMAProviderResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body.
-type SetEMAProviderResponseBody struct {
+type SetEMAProvidersResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
-	// No selection is saved, so the endpoint uses its configured external issuer.
+	// No order is saved, so the endpoint uses its configured external issuer.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	// The explicitly selected provider, or the external default.
-	Provider *EMAProviderResponseBody `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// The saved providers in order, or the external default.
+	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
 // FetchIssuerMetadataResponseBody is the type of the
@@ -2779,10 +2780,10 @@ type MigrateIssuerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "unauthorized" error.
-type SetEMAProviderUnauthorizedResponseBody struct {
+type SetEMAProvidersUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2798,10 +2799,10 @@ type SetEMAProviderUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "forbidden" error.
-type SetEMAProviderForbiddenResponseBody struct {
+type SetEMAProvidersForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2817,10 +2818,10 @@ type SetEMAProviderForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "bad_request" error.
-type SetEMAProviderBadRequestResponseBody struct {
+type SetEMAProvidersBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2836,10 +2837,10 @@ type SetEMAProviderBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "not_found" error.
-type SetEMAProviderNotFoundResponseBody struct {
+type SetEMAProvidersNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2855,10 +2856,10 @@ type SetEMAProviderNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "conflict" error.
-type SetEMAProviderConflictResponseBody struct {
+type SetEMAProvidersConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2874,10 +2875,10 @@ type SetEMAProviderConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "unsupported_media" error.
-type SetEMAProviderUnsupportedMediaResponseBody struct {
+type SetEMAProvidersUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2893,10 +2894,10 @@ type SetEMAProviderUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "invalid" error.
-type SetEMAProviderInvalidResponseBody struct {
+type SetEMAProvidersInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2912,10 +2913,10 @@ type SetEMAProviderInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "invariant_violation" error.
-type SetEMAProviderInvariantViolationResponseBody struct {
+type SetEMAProvidersInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2931,10 +2932,10 @@ type SetEMAProviderInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "unexpected" error.
-type SetEMAProviderUnexpectedResponseBody struct {
+type SetEMAProvidersUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2950,10 +2951,10 @@ type SetEMAProviderUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetEMAProviderGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint HTTP
+// SetEMAProvidersGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body for the "gateway_error" error.
-type SetEMAProviderGatewayErrorResponseBody struct {
+type SetEMAProvidersGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3349,15 +3350,14 @@ type RefreshIssuerMetadataGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// EMAProviderSelectionResponseBody is used to define fields on response body
-// types.
-type EMAProviderSelectionResponseBody struct {
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
-	// No selection is saved, so the endpoint uses its configured external issuer.
+	// No order is saved, so the endpoint uses its configured external issuer.
 	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	// The explicitly selected provider, or the external default.
-	Provider *EMAProviderResponseBody `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// The saved providers in order, or the external default.
+	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
 // EMAProviderResponseBody is used to define fields on response body types.
@@ -3365,13 +3365,15 @@ type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default selection with none.
+	// for the endpoint's trusted issuer in a default order with none.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
-	// Why the provider cannot serve now; omitted when it can. An unavailable
-	// selection never falls back to another provider. readiness_unknown means the
-	// Speakeasy issuer's state could not be read just now; retry the read.
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's authorization server does not accept this issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
 
@@ -3487,11 +3489,11 @@ type RemoteSessionIssuerResponseBody struct {
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	// The organization's EMA provider for this issuer's vendor. Returned by
+	// The organization's EMA provider order for this issuer's vendor. Returned by
 	// organizationRemoteSessionIssuers.getIssuer only.
-	EmaProvider *EMAProviderSelectionResponseBody `form:"ema_provider,omitempty" json:"ema_provider,omitempty" xml:"ema_provider,omitempty"`
-	CreatedAt   *string                           `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt   *string                           `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // TrustedUserSessionIssuerReferenceResponseBody is used to define fields on
@@ -3765,15 +3767,24 @@ func NewMigrateIssuerRequestBody(p *organizationremotesessionissuers.MigrateIssu
 	return body
 }
 
-// NewSetEMAProviderRequestBody builds the HTTP request body from the payload
-// of the "setEMAProvider" endpoint of the "organizationRemoteSessionIssuers"
+// NewSetEMAProvidersRequestBody builds the HTTP request body from the payload
+// of the "setEMAProviders" endpoint of the "organizationRemoteSessionIssuers"
 // service.
-func NewSetEMAProviderRequestBody(p *organizationremotesessionissuers.SetEMAProviderPayload) *SetEMAProviderRequestBody {
-	body := &SetEMAProviderRequestBody{
+func NewSetEMAProvidersRequestBody(p *organizationremotesessionissuers.SetEMAProvidersPayload) *SetEMAProvidersRequestBody {
+	body := &SetEMAProvidersRequestBody{
 		RemoteSessionIssuerID: p.RemoteSessionIssuerID,
 	}
-	if p.Provider != nil {
-		body.Provider = marshalTypesEMAProviderInputToEMAProviderInputRequestBody(p.Provider)
+	if p.Providers != nil {
+		body.Providers = make([]*EMAProviderInputRequestBody, len(p.Providers))
+		for i, val := range p.Providers {
+			if val == nil {
+				body.Providers[i] = nil
+				continue
+			}
+			body.Providers[i] = marshalTypesEMAProviderInputToEMAProviderInputRequestBody(val)
+		}
+	} else {
+		body.Providers = []*EMAProviderInputRequestBody{}
 	}
 	return body
 }
@@ -3894,8 +3905,8 @@ func NewCreateIssuerRemoteSessionIssuerOK(body *CreateIssuerResponseBody) *types
 			v.ScopeOverride[i] = val
 		}
 	}
-	if body.EmaProvider != nil {
-		v.EmaProvider = unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(body.EmaProvider)
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
 	}
 
 	return v
@@ -4316,8 +4327,8 @@ func NewGetIssuerRemoteSessionIssuerOK(body *GetIssuerResponseBody) *types.Remot
 			v.ScopeOverride[i] = val
 		}
 	}
-	if body.EmaProvider != nil {
-		v.EmaProvider = unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(body.EmaProvider)
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
 	}
 
 	return v
@@ -4929,8 +4940,8 @@ func NewUpdateIssuerRemoteSessionIssuerOK(body *UpdateIssuerResponseBody) *types
 			v.ScopeOverride[i] = val
 		}
 	}
-	if body.EmaProvider != nil {
-		v.EmaProvider = unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(body.EmaProvider)
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
 	}
 
 	return v
@@ -5332,8 +5343,8 @@ func NewMoveIssuerRemoteSessionIssuerOK(body *MoveIssuerResponseBody) *types.Rem
 			v.ScopeOverride[i] = val
 		}
 	}
-	if body.EmaProvider != nil {
-		v.EmaProvider = unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(body.EmaProvider)
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
 	}
 
 	return v
@@ -5857,22 +5868,29 @@ func NewMigrateIssuerGatewayError(body *MigrateIssuerGatewayErrorResponseBody) *
 	return v
 }
 
-// NewSetEMAProviderEMAProviderSelectionOK builds a
-// "organizationRemoteSessionIssuers" service "setEMAProvider" endpoint result
+// NewSetEMAProvidersEMAProviderOrderOK builds a
+// "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint result
 // from a HTTP "OK" response.
-func NewSetEMAProviderEMAProviderSelectionOK(body *SetEMAProviderResponseBody) *types.EMAProviderSelection {
-	v := &types.EMAProviderSelection{
+func NewSetEMAProvidersEMAProviderOrderOK(body *SetEMAProvidersResponseBody) *types.EMAProviderOrder {
+	v := &types.EMAProviderOrder{
 		VendorIssuer: *body.VendorIssuer,
 		IsDefault:    *body.IsDefault,
 	}
-	v.Provider = unmarshalEMAProviderResponseBodyToTypesEMAProvider(body.Provider)
+	v.Providers = make([]*types.EMAProvider, len(body.Providers))
+	for i, val := range body.Providers {
+		if val == nil {
+			v.Providers[i] = nil
+			continue
+		}
+		v.Providers[i] = unmarshalEMAProviderResponseBodyToTypesEMAProvider(val)
+	}
 
 	return v
 }
 
-// NewSetEMAProviderUnauthorized builds a organizationRemoteSessionIssuers
-// service setEMAProvider endpoint unauthorized error.
-func NewSetEMAProviderUnauthorized(body *SetEMAProviderUnauthorizedResponseBody) *goa.ServiceError {
+// NewSetEMAProvidersUnauthorized builds a organizationRemoteSessionIssuers
+// service setEMAProviders endpoint unauthorized error.
+func NewSetEMAProvidersUnauthorized(body *SetEMAProvidersUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5885,9 +5903,9 @@ func NewSetEMAProviderUnauthorized(body *SetEMAProviderUnauthorizedResponseBody)
 	return v
 }
 
-// NewSetEMAProviderForbidden builds a organizationRemoteSessionIssuers service
-// setEMAProvider endpoint forbidden error.
-func NewSetEMAProviderForbidden(body *SetEMAProviderForbiddenResponseBody) *goa.ServiceError {
+// NewSetEMAProvidersForbidden builds a organizationRemoteSessionIssuers
+// service setEMAProviders endpoint forbidden error.
+func NewSetEMAProvidersForbidden(body *SetEMAProvidersForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5900,9 +5918,9 @@ func NewSetEMAProviderForbidden(body *SetEMAProviderForbiddenResponseBody) *goa.
 	return v
 }
 
-// NewSetEMAProviderBadRequest builds a organizationRemoteSessionIssuers
-// service setEMAProvider endpoint bad_request error.
-func NewSetEMAProviderBadRequest(body *SetEMAProviderBadRequestResponseBody) *goa.ServiceError {
+// NewSetEMAProvidersBadRequest builds a organizationRemoteSessionIssuers
+// service setEMAProviders endpoint bad_request error.
+func NewSetEMAProvidersBadRequest(body *SetEMAProvidersBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5915,9 +5933,9 @@ func NewSetEMAProviderBadRequest(body *SetEMAProviderBadRequestResponseBody) *go
 	return v
 }
 
-// NewSetEMAProviderNotFound builds a organizationRemoteSessionIssuers service
-// setEMAProvider endpoint not_found error.
-func NewSetEMAProviderNotFound(body *SetEMAProviderNotFoundResponseBody) *goa.ServiceError {
+// NewSetEMAProvidersNotFound builds a organizationRemoteSessionIssuers service
+// setEMAProviders endpoint not_found error.
+func NewSetEMAProvidersNotFound(body *SetEMAProvidersNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5930,9 +5948,9 @@ func NewSetEMAProviderNotFound(body *SetEMAProviderNotFoundResponseBody) *goa.Se
 	return v
 }
 
-// NewSetEMAProviderConflict builds a organizationRemoteSessionIssuers service
-// setEMAProvider endpoint conflict error.
-func NewSetEMAProviderConflict(body *SetEMAProviderConflictResponseBody) *goa.ServiceError {
+// NewSetEMAProvidersConflict builds a organizationRemoteSessionIssuers service
+// setEMAProviders endpoint conflict error.
+func NewSetEMAProvidersConflict(body *SetEMAProvidersConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5945,9 +5963,9 @@ func NewSetEMAProviderConflict(body *SetEMAProviderConflictResponseBody) *goa.Se
 	return v
 }
 
-// NewSetEMAProviderUnsupportedMedia builds a organizationRemoteSessionIssuers
-// service setEMAProvider endpoint unsupported_media error.
-func NewSetEMAProviderUnsupportedMedia(body *SetEMAProviderUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewSetEMAProvidersUnsupportedMedia builds a organizationRemoteSessionIssuers
+// service setEMAProviders endpoint unsupported_media error.
+func NewSetEMAProvidersUnsupportedMedia(body *SetEMAProvidersUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5960,9 +5978,9 @@ func NewSetEMAProviderUnsupportedMedia(body *SetEMAProviderUnsupportedMediaRespo
 	return v
 }
 
-// NewSetEMAProviderInvalid builds a organizationRemoteSessionIssuers service
-// setEMAProvider endpoint invalid error.
-func NewSetEMAProviderInvalid(body *SetEMAProviderInvalidResponseBody) *goa.ServiceError {
+// NewSetEMAProvidersInvalid builds a organizationRemoteSessionIssuers service
+// setEMAProviders endpoint invalid error.
+func NewSetEMAProvidersInvalid(body *SetEMAProvidersInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5975,10 +5993,10 @@ func NewSetEMAProviderInvalid(body *SetEMAProviderInvalidResponseBody) *goa.Serv
 	return v
 }
 
-// NewSetEMAProviderInvariantViolation builds a
-// organizationRemoteSessionIssuers service setEMAProvider endpoint
+// NewSetEMAProvidersInvariantViolation builds a
+// organizationRemoteSessionIssuers service setEMAProviders endpoint
 // invariant_violation error.
-func NewSetEMAProviderInvariantViolation(body *SetEMAProviderInvariantViolationResponseBody) *goa.ServiceError {
+func NewSetEMAProvidersInvariantViolation(body *SetEMAProvidersInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5991,9 +6009,9 @@ func NewSetEMAProviderInvariantViolation(body *SetEMAProviderInvariantViolationR
 	return v
 }
 
-// NewSetEMAProviderUnexpected builds a organizationRemoteSessionIssuers
-// service setEMAProvider endpoint unexpected error.
-func NewSetEMAProviderUnexpected(body *SetEMAProviderUnexpectedResponseBody) *goa.ServiceError {
+// NewSetEMAProvidersUnexpected builds a organizationRemoteSessionIssuers
+// service setEMAProviders endpoint unexpected error.
+func NewSetEMAProvidersUnexpected(body *SetEMAProvidersUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6006,9 +6024,9 @@ func NewSetEMAProviderUnexpected(body *SetEMAProviderUnexpectedResponseBody) *go
 	return v
 }
 
-// NewSetEMAProviderGatewayError builds a organizationRemoteSessionIssuers
-// service setEMAProvider endpoint gateway_error error.
-func NewSetEMAProviderGatewayError(body *SetEMAProviderGatewayErrorResponseBody) *goa.ServiceError {
+// NewSetEMAProvidersGatewayError builds a organizationRemoteSessionIssuers
+// service setEMAProviders endpoint gateway_error error.
+func NewSetEMAProvidersGatewayError(body *SetEMAProvidersGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6480,8 +6498,8 @@ func ValidateCreateIssuerResponseBody(body *CreateIssuerResponseBody) (err error
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
-	if body.EmaProvider != nil {
-		if err2 := ValidateEMAProviderSelectionResponseBody(body.EmaProvider); err2 != nil {
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -6558,8 +6576,8 @@ func ValidateGetIssuerResponseBody(body *GetIssuerResponseBody) (err error) {
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
-	if body.EmaProvider != nil {
-		if err2 := ValidateEMAProviderSelectionResponseBody(body.EmaProvider); err2 != nil {
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -6661,8 +6679,8 @@ func ValidateUpdateIssuerResponseBody(body *UpdateIssuerResponseBody) (err error
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
-	if body.EmaProvider != nil {
-		if err2 := ValidateEMAProviderSelectionResponseBody(body.EmaProvider); err2 != nil {
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -6723,8 +6741,8 @@ func ValidateMoveIssuerResponseBody(body *MoveIssuerResponseBody) (err error) {
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
-	if body.EmaProvider != nil {
-		if err2 := ValidateEMAProviderSelectionResponseBody(body.EmaProvider); err2 != nil {
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -6808,21 +6826,23 @@ func ValidateMigrateIssuerResponseBody(body *MigrateIssuerResponseBody) (err err
 	return
 }
 
-// ValidateSetEMAProviderResponseBody runs the validations defined on
-// SetEMAProviderResponseBody
-func ValidateSetEMAProviderResponseBody(body *SetEMAProviderResponseBody) (err error) {
+// ValidateSetEMAProvidersResponseBody runs the validations defined on
+// SetEMAProvidersResponseBody
+func ValidateSetEMAProvidersResponseBody(body *SetEMAProvidersResponseBody) (err error) {
 	if body.VendorIssuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("vendor_issuer", "body"))
 	}
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
-	if body.Provider == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	if body.Providers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
 	}
-	if body.Provider != nil {
-		if err2 := ValidateEMAProviderResponseBody(body.Provider); err2 != nil {
-			err = goa.MergeErrors(err, err2)
+	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateEMAProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -9279,9 +9299,9 @@ func ValidateMigrateIssuerGatewayErrorResponseBody(body *MigrateIssuerGatewayErr
 	return
 }
 
-// ValidateSetEMAProviderUnauthorizedResponseBody runs the validations defined
-// on setEMAProvider_unauthorized_response_body
-func ValidateSetEMAProviderUnauthorizedResponseBody(body *SetEMAProviderUnauthorizedResponseBody) (err error) {
+// ValidateSetEMAProvidersUnauthorizedResponseBody runs the validations defined
+// on setEMAProviders_unauthorized_response_body
+func ValidateSetEMAProvidersUnauthorizedResponseBody(body *SetEMAProvidersUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9303,9 +9323,9 @@ func ValidateSetEMAProviderUnauthorizedResponseBody(body *SetEMAProviderUnauthor
 	return
 }
 
-// ValidateSetEMAProviderForbiddenResponseBody runs the validations defined on
-// setEMAProvider_forbidden_response_body
-func ValidateSetEMAProviderForbiddenResponseBody(body *SetEMAProviderForbiddenResponseBody) (err error) {
+// ValidateSetEMAProvidersForbiddenResponseBody runs the validations defined on
+// setEMAProviders_forbidden_response_body
+func ValidateSetEMAProvidersForbiddenResponseBody(body *SetEMAProvidersForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9327,9 +9347,9 @@ func ValidateSetEMAProviderForbiddenResponseBody(body *SetEMAProviderForbiddenRe
 	return
 }
 
-// ValidateSetEMAProviderBadRequestResponseBody runs the validations defined on
-// setEMAProvider_bad_request_response_body
-func ValidateSetEMAProviderBadRequestResponseBody(body *SetEMAProviderBadRequestResponseBody) (err error) {
+// ValidateSetEMAProvidersBadRequestResponseBody runs the validations defined
+// on setEMAProviders_bad_request_response_body
+func ValidateSetEMAProvidersBadRequestResponseBody(body *SetEMAProvidersBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9351,9 +9371,9 @@ func ValidateSetEMAProviderBadRequestResponseBody(body *SetEMAProviderBadRequest
 	return
 }
 
-// ValidateSetEMAProviderNotFoundResponseBody runs the validations defined on
-// setEMAProvider_not_found_response_body
-func ValidateSetEMAProviderNotFoundResponseBody(body *SetEMAProviderNotFoundResponseBody) (err error) {
+// ValidateSetEMAProvidersNotFoundResponseBody runs the validations defined on
+// setEMAProviders_not_found_response_body
+func ValidateSetEMAProvidersNotFoundResponseBody(body *SetEMAProvidersNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9375,9 +9395,9 @@ func ValidateSetEMAProviderNotFoundResponseBody(body *SetEMAProviderNotFoundResp
 	return
 }
 
-// ValidateSetEMAProviderConflictResponseBody runs the validations defined on
-// setEMAProvider_conflict_response_body
-func ValidateSetEMAProviderConflictResponseBody(body *SetEMAProviderConflictResponseBody) (err error) {
+// ValidateSetEMAProvidersConflictResponseBody runs the validations defined on
+// setEMAProviders_conflict_response_body
+func ValidateSetEMAProvidersConflictResponseBody(body *SetEMAProvidersConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9399,9 +9419,9 @@ func ValidateSetEMAProviderConflictResponseBody(body *SetEMAProviderConflictResp
 	return
 }
 
-// ValidateSetEMAProviderUnsupportedMediaResponseBody runs the validations
-// defined on setEMAProvider_unsupported_media_response_body
-func ValidateSetEMAProviderUnsupportedMediaResponseBody(body *SetEMAProviderUnsupportedMediaResponseBody) (err error) {
+// ValidateSetEMAProvidersUnsupportedMediaResponseBody runs the validations
+// defined on setEMAProviders_unsupported_media_response_body
+func ValidateSetEMAProvidersUnsupportedMediaResponseBody(body *SetEMAProvidersUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9423,9 +9443,9 @@ func ValidateSetEMAProviderUnsupportedMediaResponseBody(body *SetEMAProviderUnsu
 	return
 }
 
-// ValidateSetEMAProviderInvalidResponseBody runs the validations defined on
-// setEMAProvider_invalid_response_body
-func ValidateSetEMAProviderInvalidResponseBody(body *SetEMAProviderInvalidResponseBody) (err error) {
+// ValidateSetEMAProvidersInvalidResponseBody runs the validations defined on
+// setEMAProviders_invalid_response_body
+func ValidateSetEMAProvidersInvalidResponseBody(body *SetEMAProvidersInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9447,9 +9467,9 @@ func ValidateSetEMAProviderInvalidResponseBody(body *SetEMAProviderInvalidRespon
 	return
 }
 
-// ValidateSetEMAProviderInvariantViolationResponseBody runs the validations
-// defined on setEMAProvider_invariant_violation_response_body
-func ValidateSetEMAProviderInvariantViolationResponseBody(body *SetEMAProviderInvariantViolationResponseBody) (err error) {
+// ValidateSetEMAProvidersInvariantViolationResponseBody runs the validations
+// defined on setEMAProviders_invariant_violation_response_body
+func ValidateSetEMAProvidersInvariantViolationResponseBody(body *SetEMAProvidersInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9471,9 +9491,9 @@ func ValidateSetEMAProviderInvariantViolationResponseBody(body *SetEMAProviderIn
 	return
 }
 
-// ValidateSetEMAProviderUnexpectedResponseBody runs the validations defined on
-// setEMAProvider_unexpected_response_body
-func ValidateSetEMAProviderUnexpectedResponseBody(body *SetEMAProviderUnexpectedResponseBody) (err error) {
+// ValidateSetEMAProvidersUnexpectedResponseBody runs the validations defined
+// on setEMAProviders_unexpected_response_body
+func ValidateSetEMAProvidersUnexpectedResponseBody(body *SetEMAProvidersUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -9495,9 +9515,9 @@ func ValidateSetEMAProviderUnexpectedResponseBody(body *SetEMAProviderUnexpected
 	return
 }
 
-// ValidateSetEMAProviderGatewayErrorResponseBody runs the validations defined
-// on setEMAProvider_gateway_error_response_body
-func ValidateSetEMAProviderGatewayErrorResponseBody(body *SetEMAProviderGatewayErrorResponseBody) (err error) {
+// ValidateSetEMAProvidersGatewayErrorResponseBody runs the validations defined
+// on setEMAProviders_gateway_error_response_body
+func ValidateSetEMAProvidersGatewayErrorResponseBody(body *SetEMAProvidersGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10000,21 +10020,23 @@ func ValidateRefreshIssuerMetadataGatewayErrorResponseBody(body *RefreshIssuerMe
 	return
 }
 
-// ValidateEMAProviderSelectionResponseBody runs the validations defined on
-// EMAProviderSelectionResponseBody
-func ValidateEMAProviderSelectionResponseBody(body *EMAProviderSelectionResponseBody) (err error) {
+// ValidateEMAProviderOrderResponseBody runs the validations defined on
+// EMAProviderOrderResponseBody
+func ValidateEMAProviderOrderResponseBody(body *EMAProviderOrderResponseBody) (err error) {
 	if body.VendorIssuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("vendor_issuer", "body"))
 	}
 	if body.IsDefault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
 	}
-	if body.Provider == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	if body.Providers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
 	}
-	if body.Provider != nil {
-		if err2 := ValidateEMAProviderResponseBody(body.Provider); err2 != nil {
-			err = goa.MergeErrors(err, err2)
+	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateEMAProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -10110,8 +10132,8 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
-	if body.EmaProvider != nil {
-		if err2 := ValidateEMAProviderSelectionResponseBody(body.EmaProvider); err2 != nil {
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}

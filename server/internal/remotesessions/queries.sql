@@ -5283,7 +5283,7 @@ WHERE g.user_session_issuer_id = @user_session_issuer_id
 ORDER BY p.name, g.id;
 
 -- name: ListEMAProviders :many
--- The organization's saved EMA provider for one vendor issuer. A row whose
+-- The organization's EMA provider order for one vendor issuer. A row whose
 -- provider was deleted or disabled is flagged, not dropped, so a policy left
 -- with only those never reads as no policy.
 SELECT p.id, p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
@@ -5327,11 +5327,11 @@ FROM internal_session_issuers
 WHERE organization_id = @organization_id AND deleted IS FALSE;
 
 -- name: LockEMAProviders :exec
--- Serializes EMA provider changes for one organization.
+-- Serializes EMA provider order changes for one organization.
 SELECT pg_advisory_xact_lock(hashtextextended('remote_session_ema_providers:' || @organization_id::text, 0));
 
 -- name: LockEMAProvidersShared :exec
--- Held while publishing a chained credential, so a selection change cannot
+-- Held while publishing a chained credential, so an order change cannot
 -- commit between the eligibility check and the write.
 SELECT pg_advisory_xact_lock_shared(hashtextextended('remote_session_ema_providers:' || @organization_id::text, 0));
 
@@ -5340,7 +5340,7 @@ SELECT pg_advisory_xact_lock_shared(hashtextextended('remote_session_ema_provide
 SET LOCAL lock_timeout = '5s';
 
 -- name: DeleteEMAProviders :execrows
--- Retires the organization's saved EMA provider for one vendor issuer.
+-- Retires the organization's EMA provider order for one vendor issuer.
 UPDATE remote_session_ema_providers
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id

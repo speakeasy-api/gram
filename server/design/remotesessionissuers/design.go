@@ -545,8 +545,8 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MigrateOrganizationRemoteSessionIssuer"}`)
 	})
 
-	Method("setEMAProvider", func() {
-		Description("Select the EMA provider for the vendor authorization server this issuer names, or omit provider to restore the endpoint's configured external issuer. Speakeasy is used only for vendors where it is selected explicitly, and a failing provider never falls back to another one. The selection applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the external issuer only needs org:admin. Not available from support or impersonated sessions.")
+	Method("setEMAProviders", func() {
+		Description("Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint's configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.")
 
 		Security(security.Session)
 
@@ -554,22 +554,24 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 			Attribute("remote_session_issuer_id", String, "Any remote_session_issuer in the caller's organization that names the vendor authorization server.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("provider", shared.EMAProviderInput, "The selected provider; omit it to restore the external default.")
-			Required("remote_session_issuer_id")
+			Attribute("providers", ArrayOf(shared.EMAProviderInput), "Providers in the order they are tried; each at most once. An empty list restores the external default.", func() {
+				MaxLength(10)
+			})
+			Required("remote_session_issuer_id", "providers")
 			security.SessionPayload()
 		})
 
-		Result(shared.EMAProviderSelection)
+		Result(shared.EMAProviderOrder)
 
 		HTTP(func() {
-			POST("/rpc/organizationRemoteSessionIssuers.setEMAProvider")
+			POST("/rpc/organizationRemoteSessionIssuers.setEMAProviders")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "setOrganizationRemoteSessionIssuerEMAProvider")
-		Meta("openapi:extension:x-speakeasy-name-override", "setEMAProvider")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetOrganizationRemoteSessionIssuerEMAProvider"}`)
+		Meta("openapi:operationId", "setOrganizationRemoteSessionIssuerEMAProviders")
+		Meta("openapi:extension:x-speakeasy-name-override", "setEMAProviders")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetOrganizationRemoteSessionIssuerEMAProviders"}`)
 	})
 
 	Method("fetchIssuerMetadata", func() {
@@ -778,7 +780,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	nullableCapability("scope_override", "Operator-pinned scope request, sent verbatim on the upstream authorize redirect in place of the resolved scope set. Null when unset.")
 	Attribute("omit_scope_fallback", Boolean, "When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Null when unset.")
 	Attribute("resource_indicator_supported", Boolean, "Whether the issuer accepts the RFC 8707 resource parameter, as an operator stated it. Null when unset; false omits the parameter on every grant.")
-	Attribute("ema_provider", shared.EMAProviderSelection, "The organization's EMA provider for this issuer's vendor. Returned by organizationRemoteSessionIssuers.getIssuer only.")
+	Attribute("ema_providers", shared.EMAProviderOrder, "The organization's EMA provider order for this issuer's vendor. Returned by organizationRemoteSessionIssuers.getIssuer only.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

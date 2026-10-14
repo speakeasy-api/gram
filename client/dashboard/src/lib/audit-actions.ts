@@ -223,7 +223,7 @@ export const AUDIT_ACTIONS = [
   "remote-session-issuer:delete",
   "remote-session-issuer:migrate",
   "remote-session-issuer:update",
-  "remote-session-issuer:update_ema_provider",
+  "remote-session-issuer:update_ema_providers",
   "remote-session:attach",
   "remote-session:delete",
   "remote-session:detach",
@@ -815,8 +815,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated remote session issuer";
     case "remote-session-issuer:delete":
       return "deleted remote session issuer";
-    case "remote-session-issuer:update_ema_provider":
-      return "changed the EMA provider for";
+    case "remote-session-issuer:update_ema_providers":
+      return "changed the EMA provider order for";
     case "remote-session-issuer:migrate":
       return "migrated remote session issuer";
 

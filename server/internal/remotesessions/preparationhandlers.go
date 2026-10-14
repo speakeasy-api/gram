@@ -76,25 +76,25 @@ func (s *Service) ReadEMA(ctx context.Context, p *gen.ReadEMAPayload) (*gen.Iden
 		return nil, err
 	}
 	view := preparationAPIView(result)
-	if view.EmaProvider, err = s.endpointEMAProvider(ctx, in, result.Issuer); err != nil {
+	if view.EmaProviders, err = s.endpointEMAProviders(ctx, in, result.Issuer); err != nil {
 		return nil, err
 	}
 	return view, nil
 }
 
-// endpointEMAProvider is the provider identity chaining resolves for the
+// endpointEMAProviders is the order identity chaining resolves for the
 // endpoint, or nil when the vendor issuer is not an issuer identifier.
-func (s *Service) endpointEMAProvider(ctx context.Context, in PreparationInput, issuer string) (*types.EMAProviderSelection, error) {
+func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput, issuer string) (*types.EMAProviderOrder, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	vendor, err := NormalizeVendorIssuer(issuer)
 	if err != nil || authCtx == nil {
-		return nil, nil //nolint:nilnil // No selection for an issuer that is not an identifier.
+		return nil, nil //nolint:nilnil // No order for an issuer that is not an identifier.
 	}
-	selection, err := EndpointEMAProvider(ctx, repo.New(s.db), authCtx.ActiveOrganizationID, in.UserSessionIssuerID, vendor, s.speakeasySigningAvailable)
+	order, err := EndpointEMAProviders(ctx, repo.New(s.db), authCtx.ActiveOrganizationID, in.UserSessionIssuerID, vendor, s.speakeasySigningAvailable)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, s.logger)
 	}
-	return s.liveEMAProviderView(ctx, s.logger, authCtx.ActiveOrganizationID, selection), nil
+	return s.liveEMAProvidersView(ctx, s.logger, authCtx.ActiveOrganizationID, order), nil
 }
 
 func (s *Service) UnlinkEMA(ctx context.Context, p *gen.UnlinkEMAPayload) (*gen.IdentityChainingPreparation, error) {
@@ -116,7 +116,7 @@ func preparationAPIView(r *PreparationResult) *gen.IdentityChainingPreparation {
 		State: r.State, Stage: r.Stage, Remediation: r.Remediation, Retryable: r.Retryable,
 		Generation: r.Generation, ExternalClientID: conv.PtrEmpty(r.ExternalClientID), Issuer: conv.PtrEmpty(r.Issuer),
 		Resource: r.Resource, GrantTypes: r.GrantTypes, Scopes: append([]string{}, r.Scopes...), GrantSource: r.GrantSource,
-		EmaProvider: nil,
+		EmaProviders: nil,
 	}
 	if r.BindingID != uuid.Nil {
 		out.BindingID = conv.PtrEmpty(r.BindingID.String())

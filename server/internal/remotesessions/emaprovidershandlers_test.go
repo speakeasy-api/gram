@@ -69,100 +69,125 @@ func speakeasyInput() *types.EMAProviderInput {
 	return &types.EMAProviderInput{Kind: "speakeasy", RemoteSessionIssuerID: nil}
 }
 
-func setEMAProvider(ctx context.Context, ti *testInstance, vendor uuid.UUID, provider *types.EMAProviderInput) (*types.EMAProviderSelection, error) {
+func setEMAProviders(ctx context.Context, ti *testInstance, vendor uuid.UUID, providers ...*types.EMAProviderInput) (*types.EMAProviderOrder, error) {
+	if providers == nil {
+		providers = []*types.EMAProviderInput{}
+	}
 	//nolint:wrapcheck // Tests assert the service's own error codes.
-	return ti.service.SetEMAProvider(ctx, &orgissuersgen.SetEMAProviderPayload{SessionToken: nil, RemoteSessionIssuerID: vendor.String(), Provider: provider})
+	return ti.service.SetEMAProviders(ctx, &orgissuersgen.SetEMAProvidersPayload{SessionToken: nil, RemoteSessionIssuerID: vendor.String(), Providers: providers})
 }
 
-func TestSetEMAProvider_SavesSelectionAndAudits(t *testing.T) {
+func TestSetEMAProviders_SavesOrderAndAudits(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	f := newEMAProvidersFixture(t, ctx, ti)
-	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProvider)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProviders)
 	require.NoError(t, err)
 
-	selection, err := setEMAProvider(ctx, ti, f.vendor, speakeasyInput())
+	order, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput(), externalInput(f.external))
 	require.NoError(t, err)
-	require.False(t, selection.IsDefault)
-	require.Equal(t, "https://vendor.example.com", selection.VendorIssuer)
-	require.Equal(t, &types.EMAProvider{Kind: "speakeasy", RemoteSessionIssuerID: nil, InternalSessionIssuerID: conv.PtrEmpty(f.internalIssuer.String()), UnavailableReason: conv.PtrEmpty("signing_unavailable")}, selection.Provider)
+	require.False(t, order.IsDefault)
+	require.Equal(t, "https://vendor.example.com", order.VendorIssuer)
+	require.Equal(t, []*types.EMAProvider{
+		{Kind: "speakeasy", RemoteSessionIssuerID: nil, InternalSessionIssuerID: conv.PtrEmpty(f.internalIssuer.String()), UnavailableReason: conv.PtrEmpty("signing_unavailable")},
+		{Kind: "external", RemoteSessionIssuerID: conv.PtrEmpty(f.external.String()), InternalSessionIssuerID: nil, UnavailableReason: nil},
+	}, order.Providers, "the order round-trips as saved")
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProvider)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProviders)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProvider)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProviders)
 	require.NoError(t, err)
 	require.Equal(t, f.vendor.String(), record.SubjectID)
 	snapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
 	require.Equal(t, "https://vendor.example.com", snapshot["vendor_issuer"])
-	provider, ok := snapshot["provider"].(map[string]any)
+	providers, ok := snapshot["providers"].([]any)
 	require.True(t, ok)
-	require.Equal(t, "speakeasy", provider["kind"])
+	require.Len(t, providers, 2)
+	first, ok := providers[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "speakeasy", first["kind"])
 
 	view, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{SessionToken: nil, ApikeyToken: nil, ID: f.vendor.String()})
 	require.NoError(t, err)
-	require.Equal(t, selection, view.EmaProvider, "the issuer view shows the saved selection")
+	require.Equal(t, order, view.EmaProviders, "the issuer view shows the saved order")
 
-	_, err = setEMAProvider(ctx, ti, f.vendor, speakeasyInput())
+	_, err = setEMAProviders(ctx, ti, f.vendor, speakeasyInput(), externalInput(f.external))
 	require.NoError(t, err)
-	unchanged, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProvider)
+	unchanged, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProviders)
 	require.NoError(t, err)
-	require.Equal(t, after, unchanged, "saving the same selection writes no audit entry")
+	require.Equal(t, after, unchanged, "saving the same order writes no audit entry")
 
-	restored, err := setEMAProvider(ctx, ti, f.vendor, nil)
+	reordered, err := setEMAProviders(ctx, ti, f.vendor, externalInput(f.external), speakeasyInput())
+	require.NoError(t, err)
+	require.Equal(t, "external", reordered.Providers[0].Kind, "reordering is a change")
+	require.Equal(t, "speakeasy", reordered.Providers[1].Kind)
+
+	restored, err := setEMAProviders(ctx, ti, f.vendor)
 	require.NoError(t, err)
 	require.True(t, restored.IsDefault)
-	require.Equal(t, &types.EMAProvider{Kind: "external", RemoteSessionIssuerID: nil, InternalSessionIssuerID: nil, UnavailableReason: nil}, restored.Provider, "the default keeps the endpoint's external provider")
-	record, err = audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProvider)
+	require.Equal(t, []*types.EMAProvider{{Kind: "external", RemoteSessionIssuerID: nil, InternalSessionIssuerID: nil, UnavailableReason: nil}}, restored.Providers, "an empty order restores the endpoint's external provider")
+	record, err = audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProviders)
 	require.NoError(t, err)
 	snapshot, err = audittest.DecodeAuditData(record.AfterSnapshot)
 	require.NoError(t, err)
-	require.Nil(t, snapshot["provider"], "clearing records no provider")
+	require.Empty(t, snapshot["providers"], "clearing records no providers")
 }
 
-func TestSetEMAProvider_SameVendorAcrossIssuerSpellings(t *testing.T) {
+func TestSetEMAProviders_SameVendorAcrossIssuerSpellings(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	f := newEMAProvidersFixture(t, ctx, ti)
 	spelled := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGText(f.org), "vendor-port-"+uuid.NewString()[:8], "https://VENDOR.example.com:443/")
 
-	_, err := setEMAProvider(ctx, ti, spelled, externalInput(f.external))
+	_, err := setEMAProviders(ctx, ti, spelled, externalInput(f.external))
 	require.NoError(t, err)
 	view, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{SessionToken: nil, ApikeyToken: nil, ID: f.vendor.String()})
 	require.NoError(t, err)
-	require.False(t, view.EmaProvider.IsDefault, "both spellings name one vendor")
+	require.False(t, view.EmaProviders.IsDefault, "both spellings name one vendor")
 }
 
-func TestSetEMAProvider_RejectsInvalidProviders(t *testing.T) {
+func TestSetEMAProviders_RejectsInvalidProviders(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	f := newEMAProvidersFixture(t, ctx, ti)
 	untrusted := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, f.org, "untrusted-"+uuid.NewString()[:8])
 
-	for name, provider := range map[string]*types.EMAProviderInput{
-		"unknown kind":              {Kind: "okta", RemoteSessionIssuerID: nil},
-		"external without issuer":   {Kind: "external", RemoteSessionIssuerID: nil},
-		"speakeasy with an issuer":  {Kind: "speakeasy", RemoteSessionIssuerID: conv.PtrEmpty(f.external.String())},
-		"untrusted external issuer": externalInput(untrusted),
+	tooMany := make([]*types.EMAProviderInput, 0, 11)
+	for range 11 {
+		tooMany = append(tooMany, externalInput(uuid.New()))
+	}
+	for name, providers := range map[string][]*types.EMAProviderInput{
+		"unknown kind":              {{Kind: "okta", RemoteSessionIssuerID: nil}},
+		"external without issuer":   {{Kind: "external", RemoteSessionIssuerID: nil}},
+		"speakeasy with an issuer":  {{Kind: "speakeasy", RemoteSessionIssuerID: conv.PtrEmpty(f.external.String())}},
+		"untrusted external issuer": {externalInput(f.external), externalInput(untrusted)},
+		"duplicate external":        {externalInput(f.external), speakeasyInput(), externalInput(f.external)},
+		"duplicate speakeasy":       {speakeasyInput(), speakeasyInput()},
+		"null entry":                {speakeasyInput(), nil},
+		"more than ten":             tooMany,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := setEMAProvider(ctx, ti, f.vendor, provider)
+			_, err := setEMAProviders(ctx, ti, f.vendor, providers...)
 			requireOopsCode(t, err, oops.CodeBadRequest)
 		})
 	}
+	rows, err := repo.New(ti.conn).ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: f.org, VendorIssuer: "https://vendor.example.com"})
+	require.NoError(t, err)
+	require.Empty(t, rows, "a rejected order saves nothing")
 }
 
-func TestSetEMAProvider_SpeakeasyNeedsAnInternalSessionIssuer(t *testing.T) {
+func TestSetEMAProviders_SpeakeasyNeedsAnInternalSessionIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	f := newEMAProvidersFixture(t, ctx, ti)
 	_, err := testrepo.New(ti.conn).DisableInternalSessionIssuerFixture(ctx, testrepo.DisableInternalSessionIssuerFixtureParams{OrganizationID: f.org, ID: f.internalIssuer})
 	require.NoError(t, err)
-	selection, err := setEMAProvider(ctx, ti, f.vendor, speakeasyInput())
+	order, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
 	require.NoError(t, err, "a disabled internal session issuer can be named; it reads as unavailable")
-	require.Equal(t, conv.PtrEmpty("disabled"), selection.Provider.UnavailableReason)
+	require.Equal(t, conv.PtrEmpty("disabled"), order.Providers[0].UnavailableReason)
 
 	otherCtx, otherTI := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(otherCtx)
@@ -171,28 +196,28 @@ func TestSetEMAProvider_SpeakeasyNeedsAnInternalSessionIssuer(t *testing.T) {
 	flags.SetFlag(feature.FlagEMAProviders, feature.AnyDistinctID, true)
 	otherTI.service.SetFeatureFlags(flags)
 	vendor := seedRemoteIssuerWithURL(t, otherCtx, otherTI.conn, uuid.NullUUID{}, conv.ToPGText(authCtx.ActiveOrganizationID), "vendor-"+uuid.NewString()[:8], "https://vendor.example.com")
-	_, err = setEMAProvider(otherCtx, otherTI, vendor, speakeasyInput())
+	_, err = setEMAProviders(otherCtx, otherTI, vendor, speakeasyInput())
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestSetEMAProvider_Gating(t *testing.T) {
+func TestSetEMAProviders_Gating(t *testing.T) {
 	t.Parallel()
 
 	t.Run("rollout off", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
 		f := newEMAProvidersFixture(t, ctx, ti)
-		_, err := setEMAProvider(ctx, ti, f.vendor, speakeasyInput())
+		_, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
 		require.NoError(t, err)
 		ti.service.SetFeatureFlags(&feature.InMemory{})
-		_, err = setEMAProvider(ctx, ti, f.vendor, externalInput(f.external))
+		_, err = setEMAProviders(ctx, ti, f.vendor, externalInput(f.external))
 		requireOopsCode(t, err, oops.CodeForbidden)
 		ti.service.SetFeatureFlags(nil)
-		_, err = setEMAProvider(ctx, ti, f.vendor, externalInput(f.external))
+		_, err = setEMAProviders(ctx, ti, f.vendor, externalInput(f.external))
 		requireOopsCode(t, err, oops.CodeForbidden)
 
-		restored, err := setEMAProvider(ctx, ti, f.vendor, nil)
-		require.NoError(t, err, "a saved selection can be cleared with the rollout off")
+		restored, err := setEMAProviders(ctx, ti, f.vendor)
+		require.NoError(t, err, "a saved order can be cleared with the rollout off")
 		require.True(t, restored.IsDefault)
 	})
 
@@ -201,9 +226,9 @@ func TestSetEMAProvider_Gating(t *testing.T) {
 		ctx, ti := newTestService(t)
 		f := newEMAProvidersFixture(t, ctx, ti)
 		readOnly := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, f.org)})
-		_, err := setEMAProvider(readOnly, ti, f.vendor, externalInput(f.external))
+		_, err := setEMAProviders(readOnly, ti, f.vendor, externalInput(f.external))
 		requireOopsCode(t, err, oops.CodeForbidden)
-		_, err = setEMAProvider(readOnly, ti, f.vendor, nil)
+		_, err = setEMAProviders(readOnly, ti, f.vendor)
 		requireOopsCode(t, err, oops.CodeForbidden)
 	})
 
@@ -216,9 +241,9 @@ func TestSetEMAProvider_Gating(t *testing.T) {
 		support := *authCtx
 		support.IsAdmin, support.SupportOrganizationID = true, authCtx.ActiveOrganizationID
 		supportCtx := contextvalues.WithValidatedSupportSession(ctx, &support)
-		_, err := setEMAProvider(supportCtx, ti, f.vendor, externalInput(f.external))
+		_, err := setEMAProviders(supportCtx, ti, f.vendor, externalInput(f.external))
 		requireOopsCode(t, err, oops.CodeForbidden)
-		_, err = setEMAProvider(supportCtx, ti, f.vendor, nil)
+		_, err = setEMAProviders(supportCtx, ti, f.vendor)
 		requireOopsCode(t, err, oops.CodeForbidden)
 	})
 
@@ -229,13 +254,13 @@ func TestSetEMAProvider_Gating(t *testing.T) {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		impersonated := contextvalues.WithValidatedGramSession(ctx, authCtx, true)
-		_, err := setEMAProvider(impersonated, ti, f.vendor, speakeasyInput())
+		_, err := setEMAProviders(impersonated, ti, f.vendor, speakeasyInput())
 		requireOopsCode(t, err, oops.CodeForbidden)
-		_, err = setEMAProvider(impersonated, ti, f.vendor, nil)
+		_, err = setEMAProviders(impersonated, ti, f.vendor)
 		requireOopsCode(t, err, oops.CodeForbidden)
 		view, err := ti.service.GetIssuer(impersonated, &orgissuersgen.GetIssuerPayload{SessionToken: nil, ApikeyToken: nil, ID: f.vendor.String()})
-		require.NoError(t, err, "an impersonated session can still read the selection")
-		require.True(t, view.EmaProvider.IsDefault)
+		require.NoError(t, err, "an impersonated session can still read the order")
+		require.True(t, view.EmaProviders.IsDefault)
 	})
 
 	t.Run("another organization's vendor", func(t *testing.T) {
@@ -245,41 +270,47 @@ func TestSetEMAProvider_Gating(t *testing.T) {
 		otherOrg := "org-" + uuid.NewString()
 		require.NoError(t, testrepo.New(ti.conn).SeedDelegationLoaderOrganizationFixture(ctx, testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: otherOrg, Name: "Other organization", Slug: "other-" + uuid.NewString()[:8]}))
 		foreign := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, pgtype.Text{String: otherOrg, Valid: true}, "foreign-"+uuid.NewString()[:8], "https://vendor.example.com")
-		_, err := setEMAProvider(ctx, ti, foreign, externalInput(f.external))
+		_, err := setEMAProviders(ctx, ti, foreign, externalInput(f.external))
 		requireOopsCode(t, err, oops.CodeNotFound)
 	})
 }
 
-func TestSetEMAProvider_ConcurrentChangesSerialize(t *testing.T) {
+func TestSetEMAProviders_ConcurrentChangesSerialize(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	f := newEMAProvidersFixture(t, ctx, ti)
-	inputs := []*types.EMAProviderInput{speakeasyInput(), externalInput(f.external), nil}
+	inputs := [][]*types.EMAProviderInput{{speakeasyInput(), externalInput(f.external)}, {externalInput(f.external)}, {}}
 
 	var wg sync.WaitGroup
 	errs := make([]error, len(inputs)*3)
-	results := make([]*types.EMAProviderSelection, len(errs))
+	results := make([]*types.EMAProviderOrder, len(errs))
 	for i := range errs {
 		wg.Go(func() {
-			results[i], errs[i] = setEMAProvider(ctx, ti, f.vendor, inputs[i%len(inputs)])
+			results[i], errs[i] = setEMAProviders(ctx, ti, f.vendor, inputs[i%len(inputs)]...)
 		})
 	}
 	wg.Wait()
 	for i, err := range errs {
 		require.NoError(t, err, "changes serialize instead of colliding")
 		submitted := inputs[i%len(inputs)]
-		if submitted == nil {
-			require.True(t, results[i].IsDefault, "each response is its own write's selection")
+		if len(submitted) == 0 {
+			require.True(t, results[i].IsDefault, "each response is its own write's order")
 			continue
 		}
-		require.Equal(t, submitted.Kind, results[i].Provider.Kind, "each response is its own write's selection")
+		require.Len(t, results[i].Providers, len(submitted), "each response is its own write's order")
+		for j, p := range submitted {
+			require.Equal(t, p.Kind, results[i].Providers[j].Kind)
+		}
 	}
 	rows, err := repo.New(ti.conn).ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: f.org, VendorIssuer: "https://vendor.example.com"})
 	require.NoError(t, err)
-	require.LessOrEqual(t, len(rows), 1, "at most one provider is ever saved")
+	require.Contains(t, []int{0, 1, 2}, len(rows), "one write's order is saved whole, never interleaved")
+	for i, row := range rows {
+		require.Equal(t, int32(i), row.Position)
+	}
 }
 
-func TestSetEMAProvider_ReadinessRunsAfterCommitAndNeverFailsIt(t *testing.T) {
+func TestSetEMAProviders_ReadinessRunsAfterCommitAndNeverFailsIt(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{maxDBConns: 1})
 	f := newEMAProvidersFixture(t, ctx, ti)
@@ -300,24 +331,24 @@ func TestSetEMAProvider_ReadinessRunsAfterCommitAndNeverFailsIt(t *testing.T) {
 	defer cancel()
 	for _, want := range []remotesessions.EMAProviderUnavailableReason{"", remotesessions.EMAProviderSignInEnforcement, remotesessions.EMAProviderSigningPaused} {
 		reason = want
-		selection, err := setEMAProvider(ctx, ti, f.vendor, speakeasyInput())
-		require.NoError(t, err, "both changed and unchanged selections release their transaction before readiness")
+		order, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
+		require.NoError(t, err, "both changed and unchanged orders release their transaction before readiness")
 		if want == "" {
-			require.Nil(t, selection.Provider.UnavailableReason)
+			require.Nil(t, order.Providers[0].UnavailableReason)
 		} else {
-			require.Equal(t, string(want), *selection.Provider.UnavailableReason, "the specific reason is kept")
+			require.Equal(t, string(want), *order.Providers[0].UnavailableReason, "the specific reason is kept")
 		}
 	}
 	readinessErr = errors.New("temporary issuer lookup failure")
-	_, err := setEMAProvider(ctx, ti, f.vendor, nil)
+	_, err := setEMAProviders(ctx, ti, f.vendor)
 	require.NoError(t, err)
-	selection, err := setEMAProvider(ctx, ti, f.vendor, speakeasyInput())
+	order, err := setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
 	require.NoError(t, err, "a committed write is never reported as failed")
-	require.Equal(t, "readiness_unknown", *selection.Provider.UnavailableReason)
+	require.Equal(t, "readiness_unknown", *order.Providers[0].UnavailableReason)
 	rows, err := repo.New(ti.conn).ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: f.org, VendorIssuer: "https://vendor.example.com"})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	view, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{SessionToken: nil, ApikeyToken: nil, ID: f.vendor.String()})
 	require.NoError(t, err, "the issuer view reads with readiness unknown")
-	require.Equal(t, "readiness_unknown", *view.EmaProvider.Provider.UnavailableReason)
+	require.Equal(t, "readiness_unknown", *view.EmaProviders.Providers[0].UnavailableReason)
 }

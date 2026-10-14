@@ -3775,18 +3775,25 @@ func DecodeMigrateToGlobalIssuerResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
-// unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection builds
-// a value of type *types.EMAProviderSelection from a value of type
-// *EMAProviderSelectionResponseBody.
-func unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(v *EMAProviderSelectionResponseBody) *types.EMAProviderSelection {
+// unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder builds a value
+// of type *types.EMAProviderOrder from a value of type
+// *EMAProviderOrderResponseBody.
+func unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v *EMAProviderOrderResponseBody) *types.EMAProviderOrder {
 	if v == nil {
 		return nil
 	}
-	res := &types.EMAProviderSelection{
+	res := &types.EMAProviderOrder{
 		VendorIssuer: *v.VendorIssuer,
 		IsDefault:    *v.IsDefault,
 	}
-	res.Provider = unmarshalEMAProviderResponseBodyToTypesEMAProvider(v.Provider)
+	res.Providers = make([]*types.EMAProvider, len(v.Providers))
+	for i, val := range v.Providers {
+		if val == nil {
+			res.Providers[i] = nil
+			continue
+		}
+		res.Providers[i] = unmarshalEMAProviderResponseBodyToTypesEMAProvider(val)
+	}
 
 	return res
 }
@@ -3931,8 +3938,8 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 			res.ScopeOverride[i] = val
 		}
 	}
-	if v.EmaProvider != nil {
-		res.EmaProvider = unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(v.EmaProvider)
+	if v.EmaProviders != nil {
+		res.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v.EmaProviders)
 	}
 
 	return res

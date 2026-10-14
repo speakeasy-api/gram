@@ -9,9 +9,9 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  EMAProviderSelection,
-  EMAProviderSelection$inboundSchema,
-} from "./emaproviderselection.js";
+  EMAProviderOrder,
+  EMAProviderOrder$inboundSchema,
+} from "./emaproviderorder.js";
 
 export const IdentityChainingPreparationStage = {
   Selection: "selection",
@@ -55,9 +55,9 @@ export type IdentityChainingPreparation = {
    */
   clientId?: string | undefined;
   /**
-   * The EMA provider for one vendor authorization server. There is no automatic fallback to another provider.
+   * The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
    */
-  emaProvider?: EMAProviderSelection | undefined;
+  emaProviders?: EMAProviderOrder | undefined;
   /**
    * Public OAuth client identifier, never a secret.
    */
@@ -104,7 +104,7 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
   z.object({
     binding_id: z.optional(z.string()),
     client_id: z.optional(z.string()),
-    ema_provider: z.optional(EMAProviderSelection$inboundSchema),
+    ema_providers: z.optional(EMAProviderOrder$inboundSchema),
     external_client_id: z.optional(z.string()),
     generation: z.int(),
     grant_source: z.string(),
@@ -121,7 +121,7 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "binding_id": "bindingId",
       "client_id": "clientId",
-      "ema_provider": "emaProvider",
+      "ema_providers": "emaProviders",
       "external_client_id": "externalClientId",
       "grant_source": "grantSource",
       "grant_types": "grantTypes",

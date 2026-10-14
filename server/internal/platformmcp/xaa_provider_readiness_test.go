@@ -40,7 +40,7 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	flags.SetFlag(feature.FlagEMAProviders, f.organizationID, true)
 	flags.SetFlag(feature.FlagOktaConnections, f.organizationID, true)
 	speakeasy := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: internal.ID, Unavailable: ""}
-	governor := selectedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, selection: remotesessions.EMAProviderSelection{VendorIssuer: "https://as-a.example.test", IsDefault: false, Provider: speakeasy}, selected: true}
+	governor := orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, order: remotesessions.EMAProviderOrder{VendorIssuer: "https://as-a.example.test", IsDefault: false, Providers: []remotesessions.EMAProvider{speakeasy}}, ordered: true}
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	// The Okta rollout is on but the organization has no Okta connection.
 	okta := &xaaReaderStub{err: oops.C(oops.CodeFailedPrecondition)}
@@ -55,7 +55,7 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	server, ok, err := service.servers.Server(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
 	require.True(t, ok)
-	require.Equal(t, remotesessions.EMAProviderSpeakeasy, server.provider, "the vendor's selection is read through the provider resolver")
+	require.True(t, server.speakeasy, "the vendor's order is read through the provider resolver")
 
 	result, output, err := service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	require.Nil(t, output.OktaSignIn)
 	require.NotNil(t, output.IdentityChaining)
 	require.True(t, output.IdentityChaining.Served)
-	require.Equal(t, string(remotesessions.EMAProviderSpeakeasy), output.IdentityChaining.Provider.Kind)
+	require.Equal(t, string(remotesessions.EMAProviderSpeakeasy), output.IdentityChaining.Providers[0].Kind)
 	require.Len(t, output.IdentityChaining.Bindings, 1)
 	require.Equal(t, 1, okta.calls, "the Okta reader reported no connection before the fallback")
 

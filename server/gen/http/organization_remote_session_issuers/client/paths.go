@@ -57,9 +57,9 @@ func MigrateIssuerOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.migrate"
 }
 
-// SetEMAProviderOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service setEMAProvider HTTP endpoint.
-func SetEMAProviderOrganizationRemoteSessionIssuersPath() string {
-	return "/rpc/organizationRemoteSessionIssuers.setEMAProvider"
+// SetEMAProvidersOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service setEMAProviders HTTP endpoint.
+func SetEMAProvidersOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.setEMAProviders"
 }
 
 // FetchIssuerMetadataOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service fetchIssuerMetadata HTTP endpoint.

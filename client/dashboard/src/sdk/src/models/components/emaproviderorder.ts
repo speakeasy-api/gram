@@ -10,17 +10,17 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { EMAProvider, EMAProvider$inboundSchema } from "./emaprovider.js";
 
 /**
- * The EMA provider for one vendor authorization server. There is no automatic fallback to another provider.
+ * The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
  */
-export type EMAProviderSelection = {
+export type EMAProviderOrder = {
   /**
-   * No selection is saved, so the endpoint uses its configured external issuer.
+   * No order is saved, so the endpoint uses its configured external issuer.
    */
   isDefault: boolean;
   /**
-   * The EMA provider serving a vendor.
+   * The saved providers in order, or the external default.
    */
-  provider: EMAProvider;
+  providers: Array<EMAProvider>;
   /**
    * The vendor authorization server issuer, canonicalized.
    */
@@ -28,13 +28,13 @@ export type EMAProviderSelection = {
 };
 
 /** @internal */
-export const EMAProviderSelection$inboundSchema: z.ZodMiniType<
-  EMAProviderSelection,
+export const EMAProviderOrder$inboundSchema: z.ZodMiniType<
+  EMAProviderOrder,
   unknown
 > = z.pipe(
   z.object({
     is_default: z.boolean(),
-    provider: EMAProvider$inboundSchema,
+    providers: z.array(EMAProvider$inboundSchema),
     vendor_issuer: z.string(),
   }),
   z.transform((v) => {
@@ -45,12 +45,12 @@ export const EMAProviderSelection$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function emaProviderSelectionFromJSON(
+export function emaProviderOrderFromJSON(
   jsonString: string,
-): SafeParseResult<EMAProviderSelection, SDKValidationError> {
+): SafeParseResult<EMAProviderOrder, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => EMAProviderSelection$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'EMAProviderSelection' from JSON`,
+    (x) => EMAProviderOrder$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'EMAProviderOrder' from JSON`,
   );
 }

@@ -83,8 +83,8 @@ func (g *Governor) Governs(ctx context.Context, req Request) bool {
 
 // Serves reports the remote session issuer whose binding identity chaining
 // would use for req. Unlike Governs it requires exactly one ready binding, so
-// an ambiguous configuration is never presented as configured, and a vendor
-// provider that can serve now.
+// an ambiguous configuration is never presented as configured, and a provider
+// in the vendor's order that can serve now.
 func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !req.complete() {
 		return uuid.Nil, false
@@ -93,22 +93,22 @@ func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !outcome.Succeeded() {
 		return uuid.Nil, false
 	}
-	if selection, outcome := g.readyProviderSelection(ctx, req, sel); !outcome.Succeeded() || !selection.Provider.Available() {
+	if order, outcome := g.readyProviderOrder(ctx, req, sel); !outcome.Succeeded() || len(order.Available()) == 0 {
 		return uuid.Nil, false
 	}
 	return sel.remoteIssuerID, true
 }
 
-// ErrProviderSelectionUnavailable means a single ready binding names the
-// upstream but its vendor's EMA provider selection could not be read.
-var ErrProviderSelectionUnavailable = errors.New("identitychaining: ema provider selection unavailable")
+// ErrProviderOrderUnavailable means a single ready binding names the
+// upstream but its vendor's EMA provider order could not be read.
+var ErrProviderOrderUnavailable = errors.New("identitychaining: ema provider order unavailable")
 
-// ProviderSelection is req's vendor EMA provider for this endpoint, flagged
-// when it cannot serve. False when no single ready binding names the
-// upstream; ErrProviderSelectionUnavailable when the binding is ready but its
-// selection cannot be read.
-func (g *Governor) ProviderSelection(ctx context.Context, req Request) (remotesessions.EMAProviderSelection, bool, error) {
-	var none remotesessions.EMAProviderSelection
+// ProviderOrder is req's vendor EMA provider order for this endpoint, each
+// provider flagged when it cannot serve. False when no single ready binding
+// names the upstream; ErrProviderOrderUnavailable when the binding is ready
+// but its order cannot be read.
+func (g *Governor) ProviderOrder(ctx context.Context, req Request) (remotesessions.EMAProviderOrder, bool, error) {
+	var none remotesessions.EMAProviderOrder
 	if !req.complete() {
 		return none, false, nil
 	}
@@ -116,11 +116,11 @@ func (g *Governor) ProviderSelection(ctx context.Context, req Request) (remotese
 	if !outcome.Succeeded() {
 		return none, false, nil
 	}
-	selection, outcome := g.readyProviderSelection(ctx, req, sel)
+	order, outcome := g.readyProviderOrder(ctx, req, sel)
 	if !outcome.Succeeded() {
-		return none, false, ErrProviderSelectionUnavailable
+		return none, false, ErrProviderOrderUnavailable
 	}
-	return selection, true, nil
+	return order, true, nil
 }
 
 // Configured reports whether any binding exists for the user session issuer
@@ -145,7 +145,8 @@ func (g *Governor) Configured(ctx context.Context, organizationID string, projec
 // HasUsableCredential reports whether a stored chained credential for req is
 // usable now under the current binding, trusted registration and the human's
 // latest sign-in, and still decrypts as the runtime requires. Like Acquire it
-// first checks the retained delegation, so a rotated trusted registration
+// accepts a credential from any provider in the order that can serve and
+// first checks that provider's authority, so a rotated trusted registration
 // reads as unusable. Faults read as unusable.
 func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 	if !req.complete() || req.UserID == "" {
@@ -155,10 +156,21 @@ func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 	if !outcome.Succeeded() {
 		return false
 	}
-	p, outcome := g.servingProvider(ctx, g.logger, req, sel)
+	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
 	if !outcome.Succeeded() {
 		return false
 	}
+	for _, p := range order.Available() {
+		if g.hasUsableCredentialFrom(ctx, req, sel, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasUsableCredentialFrom reports whether p's stored credential for req is
+// usable now.
+func (g *Governor) hasUsableCredentialFrom(ctx context.Context, req Request, sel selection, p remotesessions.EMAProvider) bool {
 	current := sel
 	current.provider = p
 	if p.Kind != remotesessions.EMAProviderSpeakeasy {

@@ -57,7 +57,7 @@ const ReadinessEvidenceIdentityChainingActive = "identity_chaining_active"
 type IdentityChainingGovernor interface {
 	Serves(ctx context.Context, req identitychaining.Request) (uuid.UUID, bool)
 	HasUsableCredential(ctx context.Context, req identitychaining.Request) bool
-	ProviderSelection(ctx context.Context, req identitychaining.Request) (remotesessions.EMAProviderSelection, bool, error)
+	ProviderOrder(ctx context.Context, req identitychaining.Request) (remotesessions.EMAProviderOrder, bool, error)
 }
 
 // IdentityChainingReadiness is readiness for a direct remote upstream the

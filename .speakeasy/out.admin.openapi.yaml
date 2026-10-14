@@ -9201,11 +9201,11 @@ components:
             - speakeasy
         remote_session_issuer_id:
           type: string
-          description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default selection with none.
+          description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
           format: uuid
         unavailable_reason:
           type: string
-          description: Why the provider cannot serve now; omitted when it can. An unavailable selection never falls back to another provider. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+          description: Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
           enum:
             - deleted
             - disabled
@@ -9218,25 +9218,28 @@ components:
             - signing_paused
             - sign_in_enforcement_required
             - readiness_unknown
-      description: The EMA provider serving a vendor.
+      description: One EMA provider in a vendor's order.
       required:
         - kind
-    EMAProviderSelection:
+    EMAProviderOrder:
       type: object
       properties:
         is_default:
           type: boolean
-          description: No selection is saved, so the endpoint uses its configured external issuer.
-        provider:
-          $ref: '#/components/schemas/EMAProvider'
+          description: No order is saved, so the endpoint uses its configured external issuer.
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAProvider'
+          description: The saved providers in order, or the external default.
         vendor_issuer:
           type: string
           description: The vendor authorization server issuer, canonicalized.
-      description: The EMA provider for one vendor authorization server. There is no automatic fallback to another provider.
+      description: The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
       required:
         - vendor_issuer
         - is_default
-        - provider
+        - providers
     EnableOrganizationRequestBody:
       type: object
       properties:
@@ -9677,8 +9680,8 @@ components:
         created_at:
           type: string
           format: date-time
-        ema_provider:
-          $ref: '#/components/schemas/EMAProviderSelection'
+        ema_providers:
+          $ref: '#/components/schemas/EMAProviderOrder'
         grant_types_supported:
           type: array
           items:

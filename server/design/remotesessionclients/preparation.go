@@ -25,7 +25,7 @@ var IdentityChainingPreparation = Type("IdentityChainingPreparation", func() {
 	})
 	Attribute("scopes", ArrayOf(String))
 	Attribute("grant_source", String, "Provenance of recorded grants, not provider trust.")
-	Attribute("ema_provider", shared.EMAProviderSelection, "The EMA provider identity chaining uses for this endpoint. Returned by readEMA only.")
+	Attribute("ema_providers", shared.EMAProviderOrder, "EMA providers identity chaining tries for this endpoint, in order, each with whether it can serve now. Returned by readEMA only.")
 	Required("state", "stage", "remediation", "retryable", "generation", "resource", "scopes", "grant_source")
 })
 

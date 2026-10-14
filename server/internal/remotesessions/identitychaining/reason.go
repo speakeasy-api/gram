@@ -31,7 +31,7 @@ const (
 	ReasonTransientFailure         Reason = "transient_failure"
 	ReasonUnknownRejection         Reason = "unknown_rejection"
 
-	// ReasonProviderUnavailable: the vendor's selected EMA provider cannot
+	// ReasonProviderUnavailable: no EMA provider in the vendor's order can
 	// serve the request, so the interactive path applies unchanged.
 	ReasonProviderUnavailable Reason = "provider_unavailable"
 

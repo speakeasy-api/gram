@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	organizationremotesessionissuers "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -565,20 +566,28 @@ func BuildMigrateIssuerPayload(organizationRemoteSessionIssuersMigrateIssuerBody
 	return v, nil
 }
 
-// BuildSetEMAProviderPayload builds the payload for the
-// organizationRemoteSessionIssuers setEMAProvider endpoint from CLI flags.
-func BuildSetEMAProviderPayload(organizationRemoteSessionIssuersSetEMAProviderBody string, organizationRemoteSessionIssuersSetEMAProviderSessionToken string) (*organizationremotesessionissuers.SetEMAProviderPayload, error) {
+// BuildSetEMAProvidersPayload builds the payload for the
+// organizationRemoteSessionIssuers setEMAProviders endpoint from CLI flags.
+func BuildSetEMAProvidersPayload(organizationRemoteSessionIssuersSetEMAProvidersBody string, organizationRemoteSessionIssuersSetEMAProvidersSessionToken string) (*organizationremotesessionissuers.SetEMAProvidersPayload, error) {
 	var err error
-	var body SetEMAProviderRequestBody
+	var body SetEMAProvidersRequestBody
 	{
-		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersSetEMAProviderBody), &body)
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersSetEMAProvidersBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"provider\": {\n         \"kind\": \"speakeasy\",\n         \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n      },\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.Providers == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
-		if body.Provider != nil {
-			if err2 := ValidateEMAProviderInputRequestBody(body.Provider); err2 != nil {
-				err = goa.MergeErrors(err, err2)
+		if len(body.Providers) > 10 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.providers", body.Providers, len(body.Providers), 10, false))
+		}
+		for _, e := range body.Providers {
+			if e != nil {
+				if err2 := ValidateEMAProviderInputRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
 			}
 		}
 		if err != nil {
@@ -587,15 +596,24 @@ func BuildSetEMAProviderPayload(organizationRemoteSessionIssuersSetEMAProviderBo
 	}
 	var sessionToken *string
 	{
-		if organizationRemoteSessionIssuersSetEMAProviderSessionToken != "" {
-			sessionToken = &organizationRemoteSessionIssuersSetEMAProviderSessionToken
+		if organizationRemoteSessionIssuersSetEMAProvidersSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersSetEMAProvidersSessionToken
 		}
 	}
-	v := &organizationremotesessionissuers.SetEMAProviderPayload{
+	v := &organizationremotesessionissuers.SetEMAProvidersPayload{
 		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
 	}
-	if body.Provider != nil {
-		v.Provider = marshalEMAProviderInputRequestBodyToTypesEMAProviderInput(body.Provider)
+	if body.Providers != nil {
+		v.Providers = make([]*types.EMAProviderInput, len(body.Providers))
+		for i, val := range body.Providers {
+			if val == nil {
+				v.Providers[i] = nil
+				continue
+			}
+			v.Providers[i] = marshalEMAProviderInputRequestBodyToTypesEMAProviderInput(val)
+		}
+	} else {
+		v.Providers = []*types.EMAProviderInput{}
 	}
 	v.SessionToken = sessionToken
 

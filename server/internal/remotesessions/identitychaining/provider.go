@@ -21,7 +21,8 @@ type issuedGrant struct {
 	trustedObtainedAt time.Time
 }
 
-// tokenSource is the EMA provider selected to issue an ID-JAG for a vendor.
+// tokenSource is one EMA provider in a vendor's order, able to issue an
+// ID-JAG for it.
 type tokenSource interface {
 	kind() remotesessions.EMAProviderKind
 
@@ -42,11 +43,12 @@ type tokenSource interface {
 	issue(ctx context.Context, logger *slog.Logger, req Request, sel selection, ready func() Outcome) (issuedGrant, Outcome)
 }
 
-// sourceFactory builds the token source for a selected provider.
+// sourceFactory builds the token source for a provider in the order.
 type sourceFactory func(remotesessions.EMAProvider) tokenSource
 
-// providerUnavailable marks a request whose selected provider cannot serve,
-// so the interactive path applies unchanged. No other provider is tried.
+// providerUnavailable marks a provider that cannot serve the request. The
+// next provider in the order is tried; when none can serve, the interactive
+// path applies unchanged.
 var providerUnavailable = newOutcome(StageAuthorization, ReasonProviderUnavailable, ConfidenceVerified, false)
 
 // unavailableBecause is providerUnavailable carrying why, for logs, metrics
@@ -57,26 +59,26 @@ func unavailableBecause(reason remotesessions.EMAProviderUnavailableReason) Outc
 	return outcome
 }
 
-// providerSelection resolves sel's vendor provider for the endpoint. A
-// provider that cannot serve is still returned, flagged, so views and logs
-// can say why.
-func (g *Governor) providerSelection(ctx context.Context, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderSelection, Outcome) {
-	return g.providerSelectionWith(ctx, repo.New(g.db), logger, req, sel)
+// providerOrder resolves sel's vendor provider order for the endpoint.
+// Providers that cannot serve are kept, flagged, so attempts skip them and
+// views and logs can say why.
+func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
+	return g.providerOrderWith(ctx, repo.New(g.db), logger, req, sel)
 }
 
-// readyProviderSelection decorates the selection with live Speakeasy
-// readiness for status views. Acquisition reads the raw selection so
-// transient authority failures keep their retryability.
-func (g *Governor) readyProviderSelection(ctx context.Context, req Request, sel selection) (remotesessions.EMAProviderSelection, Outcome) {
-	selection, outcome := g.providerSelection(ctx, g.logger, req, sel)
+// readyProviderOrder decorates the order with live Speakeasy readiness for
+// status views. Acquisition reads the raw order so transient authority
+// failures keep their retryability.
+func (g *Governor) readyProviderOrder(ctx context.Context, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
+	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
 	if !outcome.Succeeded() {
-		return selection, outcome
+		return order, outcome
 	}
-	selection, err := remotesessions.ApplyEMAProviderReadiness(ctx, req.OrganizationID, selection, g.speakeasyReadiness)
+	order, err := remotesessions.ApplyEMAProviderReadiness(ctx, req.OrganizationID, order, g.speakeasyReadiness)
 	if err != nil {
 		g.logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err))
 	}
-	return selection, success
+	return order, success
 }
 
 // speakeasyReadiness is the status-view readiness of the organization's
@@ -98,57 +100,39 @@ func (g *Governor) speakeasyReadiness(ctx context.Context, organizationID string
 	return remotesessions.EMAProviderSigningUnavailable, nil
 }
 
-// providerSelectionWith reads the saved selection over q, such as a
-// publishing transaction. Live source readiness is checked outside the
-// transaction; the source's publish fence rechecks its issuer and sign-in
-// under lock.
-func (g *Governor) providerSelectionWith(ctx context.Context, q *repo.Queries, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderSelection, Outcome) {
+// providerOrderWith reads the saved order over q, such as a publishing
+// transaction. Live source readiness is checked outside the transaction; the
+// source's publish fence rechecks its issuer and sign-in under lock.
+func (g *Governor) providerOrderWith(ctx context.Context, q *repo.Queries, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
 	vendor, err := remotesessions.NormalizeVendorIssuer(sel.issuer)
 	if err != nil {
-		// No saved selection can name an issuer that does not normalize.
+		// No saved order can name an issuer that does not normalize.
 		vendor = sel.issuer
 	}
-	selection, err := remotesessions.EndpointEMAProvider(ctx, q, req.OrganizationID, req.UserSessionIssuerID, vendor, g.sourceAvailable(remotesessions.EMAProviderSpeakeasy))
+	order, err := remotesessions.EndpointEMAProviders(ctx, q, req.OrganizationID, req.UserSessionIssuerID, vendor, g.sourceAvailable(remotesessions.EMAProviderSpeakeasy))
 	if err != nil {
-		logger.ErrorContext(ctx, "resolve ema provider", attr.SlogError(err))
-		return selection, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
+		logger.ErrorContext(ctx, "resolve ema provider order", attr.SlogError(err))
+		return order, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
 	}
-	return selection, success
+	return order, success
 }
 
-// servingProvider returns the provider that serves sel. A selected provider
-// that cannot serve leaves the interactive path; nothing falls back.
-func (g *Governor) servingProvider(ctx context.Context, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProvider, Outcome) {
-	selection, outcome := g.providerSelection(ctx, logger, req, sel)
-	if !outcome.Succeeded() {
-		return selection.Provider, outcome
-	}
-	if p := selection.Provider; !p.Available() {
-		logger.InfoContext(ctx, "selected ema provider cannot serve",
-			attr.SlogOAuthIssuer(selection.VendorIssuer),
-			attr.SlogIdentityChainingProvider(string(p.Kind)),
-			attr.SlogIdentityChainingUnavailableReason(string(p.Unavailable)),
-		)
-		return p, unavailableBecause(p.Unavailable)
-	}
-	return selection.Provider, success
-}
-
-// stillServes rechecks that sel's provider is still the vendor's available
-// selection before a token it produced is published or released, so an
-// admin's change wins over an attempt already in flight.
+// stillServes rechecks that sel's provider is still in the vendor's order and
+// can serve before a token it produced is published or released, so an
+// admin's change wins over an attempt already in flight. A provider other
+// than the order's first may still serve: the order prefers providers for new
+// credentials and never discards one a provider in it issued.
 func (g *Governor) stillServes(ctx context.Context, logger *slog.Logger, req Request, sel selection) Outcome {
 	return g.stillServesWith(ctx, repo.New(g.db), logger, req, sel)
 }
 
 // stillServesWith is stillServes over q, such as a publishing transaction.
 func (g *Governor) stillServesWith(ctx context.Context, q *repo.Queries, logger *slog.Logger, req Request, sel selection) Outcome {
-	selection, outcome := g.providerSelectionWith(ctx, q, logger, req, sel)
+	order, outcome := g.providerOrderWith(ctx, q, logger, req, sel)
 	if !outcome.Succeeded() {
 		return outcome
 	}
-	p, want := selection.Provider, sel.provider
-	if p.Available() && p.Kind == want.Kind && p.RemoteSessionIssuerID == want.RemoteSessionIssuerID && p.InternalSessionIssuerID == want.InternalSessionIssuerID {
+	if order.Serves(sel.provider) {
 		return success
 	}
 	return newOutcome(StagePersistence, ReasonStaleConfiguration, ConfidenceVerified, true)
@@ -189,7 +173,8 @@ func (s externalSource) authorize(ctx context.Context, logger *slog.Logger, req 
 	}
 	outcome := s.c.authorize(ctx, logger, req, sel)
 	if outcome.Succeeded() && s.issuer != uuid.Nil && sel.trustedIssuerID != s.issuer {
-		// The endpoint's trust moved after the selection was resolved.
+		// The endpoint's trust moved after the order was resolved; this
+		// provider reports stale configuration and the next one is tried.
 		return newOutcome(StageAuthorization, ReasonStaleConfiguration, ConfidenceVerified, true)
 	}
 	return outcome

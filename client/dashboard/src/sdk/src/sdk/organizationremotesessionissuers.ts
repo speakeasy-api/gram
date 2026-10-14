@@ -13,10 +13,10 @@ import { organizationRemoteSessionIssuersList } from "../funcs/organizationRemot
 import { organizationRemoteSessionIssuersMigrate } from "../funcs/organizationRemoteSessionIssuersMigrate.js";
 import { organizationRemoteSessionIssuersMove } from "../funcs/organizationRemoteSessionIssuersMove.js";
 import { organizationRemoteSessionIssuersRefreshMetadata } from "../funcs/organizationRemoteSessionIssuersRefreshMetadata.js";
-import { organizationRemoteSessionIssuersSetEMAProvider } from "../funcs/organizationRemoteSessionIssuersSetEMAProvider.js";
+import { organizationRemoteSessionIssuersSetEMAProviders } from "../funcs/organizationRemoteSessionIssuersSetEMAProviders.js";
 import { organizationRemoteSessionIssuersUpdate } from "../funcs/organizationRemoteSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import { EMAProviderSelection } from "../models/components/emaproviderselection.js";
+import { EMAProviderOrder } from "../models/components/emaproviderorder.js";
 import { MigrateOrganizationRemoteSessionIssuerResult } from "../models/components/migrateorganizationremotesessionissuerresult.js";
 import { OrganizationIssuerDeletePreflight } from "../models/components/organizationissuerdeletepreflight.js";
 import { OrganizationIssuerMigratePreflight } from "../models/components/organizationissuermigratepreflight.js";
@@ -70,9 +70,9 @@ import {
   RefreshOrganizationRemoteSessionIssuerMetadataSecurity,
 } from "../models/operations/refreshorganizationremotesessionissuermetadata.js";
 import {
-  SetOrganizationRemoteSessionIssuerEMAProviderRequest,
-  SetOrganizationRemoteSessionIssuerEMAProviderSecurity,
-} from "../models/operations/setorganizationremotesessionissueremaprovider.js";
+  SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+  SetOrganizationRemoteSessionIssuerEMAProvidersSecurity,
+} from "../models/operations/setorganizationremotesessionissueremaproviders.js";
 import {
   UpdateOrganizationRemoteSessionIssuerRequest,
   UpdateOrganizationRemoteSessionIssuerSecurity,
@@ -310,19 +310,19 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
   }
 
   /**
-   * setEMAProvider organizationRemoteSessionIssuers
+   * setEMAProviders organizationRemoteSessionIssuers
    *
    * @remarks
-   * Select the EMA provider for the vendor authorization server this issuer names, or omit provider to restore the endpoint's configured external issuer. Speakeasy is used only for vendors where it is selected explicitly, and a failing provider never falls back to another one. The selection applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the external issuer only needs org:admin. Not available from support or impersonated sessions.
+   * Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint's configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.
    */
-  async setEMAProvider(
-    request: SetOrganizationRemoteSessionIssuerEMAProviderRequest,
+  async setEMAProviders(
+    request: SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
     security?:
-      | SetOrganizationRemoteSessionIssuerEMAProviderSecurity
+      | SetOrganizationRemoteSessionIssuerEMAProvidersSecurity
       | undefined,
     options?: RequestOptions,
-  ): Promise<EMAProviderSelection> {
-    return unwrapAsync(organizationRemoteSessionIssuersSetEMAProvider(
+  ): Promise<EMAProviderOrder> {
+    return unwrapAsync(organizationRemoteSessionIssuersSetEMAProviders(
       this,
       request,
       security,

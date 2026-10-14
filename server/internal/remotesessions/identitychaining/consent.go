@@ -2,6 +2,7 @@ package identitychaining
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -9,8 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-// CheckConsent preserves external providers' live exchange while checking a
-// Speakeasy sign-in before its MCP grant exists. The latter never signs or
+// CheckConsent tries the vendor's providers in order, as Acquire does: an
+// external provider runs its live exchange, and the Speakeasy provider checks
+// the sign-in before its MCP grant exists. The latter never signs or
 // publishes a token: Acquire still requires the exact authenticated grant JTI.
 func (c *Chainer) CheckConsent(ctx context.Context, req Request, signInID uuid.UUID) Outcome {
 	if !req.complete() || req.UserID == "" {
@@ -22,34 +24,28 @@ func (c *Chainer) CheckConsent(ctx context.Context, req Request, signInID uuid.U
 		return outcome
 	}
 	logger = logger.With(attr.SlogRemoteSessionIssuerID(sel.remoteIssuerID.String()), attr.SlogRemoteSessionClientID(sel.clientID.String()), attr.SlogOAuthResource(sel.resource))
-	provider, outcome := c.servingProvider(ctx, logger, req, sel)
+	order, outcome := c.providerOrder(ctx, logger, req, sel)
 	if !outcome.Succeeded() {
-		if outcome.Reason == ReasonProviderUnavailable {
-			outcome.Provider = provider.Kind
-			c.recordAttempt(ctx, "consent", outcome)
-		}
 		return outcome
 	}
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
-	logger = logger.With(attr.SlogIdentityChainingProvider(string(provider.Kind)))
-	var attempt Outcome
-	if provider.Kind == remotesessions.EMAProviderSpeakeasy {
-		source, ok := c.source(provider).(speakeasySource)
-		if !ok || !source.available() {
-			attempt = unavailableBecause(remotesessions.EMAProviderSigningUnavailable)
-		} else {
-			current := sel
-			current.provider = provider
-			attempt = source.checkConsent(ctx, logger, req, current, signInID)
-			if attempt.Succeeded() {
-				attempt = newOutcome(StageAuthorization, ReasonConsentRequired, ConfidenceVerified, false)
-			}
+	_, attempt := c.tryProviders(ctx, logger, "consent", order, func(ctx context.Context, logger *slog.Logger, p remotesessions.EMAProvider) (Token, Outcome) {
+		var none Token
+		if p.Kind != remotesessions.EMAProviderSpeakeasy {
+			return c.acquireFrom(ctx, logger, req, sel, p)
 		}
-	} else {
-		_, attempt = c.acquireFrom(ctx, logger, req, sel, provider)
-	}
-	attempt.Provider = provider.Kind
-	c.recordAttempt(ctx, "consent", attempt)
+		source, ok := c.source(p).(speakeasySource)
+		if !ok || !source.available() {
+			return none, unavailableBecause(remotesessions.EMAProviderSigningUnavailable)
+		}
+		current := sel
+		current.provider = p
+		outcome := source.checkConsent(ctx, logger, req, current, signInID)
+		if outcome.Succeeded() {
+			outcome = newOutcome(StageAuthorization, ReasonConsentRequired, ConfidenceVerified, false)
+		}
+		return none, outcome
+	})
 	return attempt
 }

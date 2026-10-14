@@ -3444,18 +3444,25 @@ func DecodeDeleteRemoteSessionClientResponse(decoder func(*http.Response) goahtt
 	}
 }
 
-// unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection builds
-// a value of type *types.EMAProviderSelection from a value of type
-// *EMAProviderSelectionResponseBody.
-func unmarshalEMAProviderSelectionResponseBodyToTypesEMAProviderSelection(v *EMAProviderSelectionResponseBody) *types.EMAProviderSelection {
+// unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder builds a value
+// of type *types.EMAProviderOrder from a value of type
+// *EMAProviderOrderResponseBody.
+func unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v *EMAProviderOrderResponseBody) *types.EMAProviderOrder {
 	if v == nil {
 		return nil
 	}
-	res := &types.EMAProviderSelection{
+	res := &types.EMAProviderOrder{
 		VendorIssuer: *v.VendorIssuer,
 		IsDefault:    *v.IsDefault,
 	}
-	res.Provider = unmarshalEMAProviderResponseBodyToTypesEMAProvider(v.Provider)
+	res.Providers = make([]*types.EMAProvider, len(v.Providers))
+	for i, val := range v.Providers {
+		if val == nil {
+			res.Providers[i] = nil
+			continue
+		}
+		res.Providers[i] = unmarshalEMAProviderResponseBodyToTypesEMAProvider(val)
+	}
 
 	return res
 }

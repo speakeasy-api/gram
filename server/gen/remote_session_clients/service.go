@@ -263,9 +263,9 @@ type IdentityChainingPreparation struct {
 	Scopes     []string
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string
-	// The EMA provider identity chaining uses for this endpoint. Returned by
-	// readEMA only.
-	EmaProvider *types.EMAProviderSelection
+	// EMA providers identity chaining tries for this endpoint, in order, each with
+	// whether it can serve now. Returned by readEMA only.
+	EmaProviders *types.EMAProviderOrder
 }
 
 // ListRemoteSessionClientsPayload is the payload type of the

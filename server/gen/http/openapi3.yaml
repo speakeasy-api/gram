@@ -20472,93 +20472,6 @@ paths:
             x-speakeasy-name-override: logout
             x-speakeasy-react-hook:
                 name: Logout
-    /rpc/auth.logoutEverywhere:
-        post:
-            description: 'Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.'
-            operationId: logoutEverywhere
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RevokeSignInsResult'
-                    description: OK response.
-                    headers:
-                        Set-Cookie:
-                            description: Empty string to clear the session
-                            schema:
-                                description: Empty string to clear the session
-                                type: string
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: logoutEverywhere auth
-            tags:
-                - auth
-            x-speakeasy-name-override: logoutEverywhere
-            x-speakeasy-react-hook:
-                name: LogoutEverywhere
     /rpc/auth.register:
         post:
             description: Register a new org for a user with their session information.
@@ -33913,261 +33826,6 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListIntegrations
-    /rpc/internalSessionIssuers.get:
-        get:
-            description: 'Read the organization''s internal session issuer: its state, the issuer URI to register with supported services and its published keys. Requires org:read.'
-            operationId: getInternalSessionIssuer
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/InternalSessionIssuer'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: get internalSessionIssuers
-            tags:
-                - internalSessionIssuers
-            x-speakeasy-name-override: get
-            x-speakeasy-react-hook:
-                name: InternalSessionIssuer
-    /rpc/internalSessionIssuers.rotate:
-        post:
-            description: 'Rotate the issuer''s signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked and withdrawn from the key set first, leaving the issuer keyless; a fresh key is then activated and the revoked keys'' signing material disabled. If either later step fails the issuer stays keyless or reports kms_cleanup_pending, and repeating the call retries it. Repeats naming a key that was already replaced change nothing. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and its revocation is never rate limited.'
-            operationId: rotateInternalSessionIssuer
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RotateRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/InternalSessionIssuer'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: rotate internalSessionIssuers
-            tags:
-                - internalSessionIssuers
-            x-speakeasy-name-override: rotate
-            x-speakeasy-react-hook:
-                name: RotateInternalSessionIssuer
-    /rpc/internalSessionIssuers.setEnabled:
-        post:
-            description: Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin; enabling also needs the organization's single sign-on entitlement and the issuer rollout, while disabling never does.
-            operationId: setInternalSessionIssuerEnabled
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/SetEnabledRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/InternalSessionIssuer'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: setEnabled internalSessionIssuers
-            tags:
-                - internalSessionIssuers
-            x-speakeasy-name-override: setEnabled
-            x-speakeasy-react-hook:
-                name: SetInternalSessionIssuerEnabled
     /rpc/jsonWebKeySets.activateKey:
         post:
             description: Make a published key the set's active signing key, retiring the previously active key in the same operation. The key must be pending or retired; activating the already-active key is a no-op. Requires org:admin.
@@ -45689,10 +45347,10 @@ paths:
             x-speakeasy-name-override: refreshMetadata
             x-speakeasy-react-hook:
                 name: RefreshOrganizationRemoteSessionIssuerMetadata
-    /rpc/organizationRemoteSessionIssuers.setEMAProvider:
+    /rpc/organizationRemoteSessionIssuers.setEMAProviders:
         post:
-            description: Select the EMA provider for the vendor authorization server this issuer names, or omit provider to restore the endpoint's configured external issuer. Speakeasy is used only for vendors where it is selected explicitly, and a failing provider never falls back to another one. The selection applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the external issuer only needs org:admin. Not available from support or impersonated sessions.
-            operationId: setOrganizationRemoteSessionIssuerEMAProvider
+            description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint''s configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
+            operationId: setOrganizationRemoteSessionIssuerEMAProviders
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -45705,14 +45363,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetEMAProviderRequestBody'
+                            $ref: '#/components/schemas/SetEMAProvidersRequestBody'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/EMAProviderSelection'
+                                $ref: '#/components/schemas/EMAProviderOrder'
                     description: OK response.
                 "400":
                     content:
@@ -45770,12 +45428,12 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
-            summary: setEMAProvider organizationRemoteSessionIssuers
+            summary: setEMAProviders organizationRemoteSessionIssuers
             tags:
                 - organizationRemoteSessionIssuers
-            x-speakeasy-name-override: setEMAProvider
+            x-speakeasy-name-override: setEMAProviders
             x-speakeasy-react-hook:
-                name: SetOrganizationRemoteSessionIssuerEMAProvider
+                name: SetOrganizationRemoteSessionIssuerEMAProviders
     /rpc/organizationRemoteSessionIssuers.update:
         post:
             description: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.
@@ -48381,93 +48039,6 @@ paths:
             x-speakeasy-name-override: revokeInvite
             x-speakeasy-react-hook:
                 name: RevokeInvite
-    /rpc/organizations.revokeMemberSignIns:
-        post:
-            description: Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
-            operationId: revokeOrganizationMemberSignIns
-            parameters:
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/RevokeMemberSignInsRequestBody'
-                required: true
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/RevokeSignInsResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - session_header_Gram-Session: []
-            summary: revokeMemberSignIns organizations
-            tags:
-                - organizations
-            x-speakeasy-name-override: revokeMemberSignIns
-            x-speakeasy-react-hook:
-                name: RevokeOrganizationMemberSignIns
     /rpc/organizations.sendEnterpriseAdminOnboardingEmail:
         post:
             description: Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.
@@ -95634,11 +95205,11 @@ components:
                         - speakeasy
                 remote_session_issuer_id:
                     type: string
-                    description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default selection with none.
+                    description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
                     format: uuid
                 unavailable_reason:
                     type: string
-                    description: Why the provider cannot serve now; omitted when it can. An unavailable selection never falls back to another provider. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+                    description: Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
                     enum:
                         - deleted
                         - disabled
@@ -95651,7 +95222,7 @@ components:
                         - signing_paused
                         - sign_in_enforcement_required
                         - readiness_unknown
-            description: The EMA provider serving a vendor.
+            description: One EMA provider in a vendor's order.
             required:
                 - kind
         EMAProviderInput:
@@ -95667,25 +95238,28 @@ components:
                     type: string
                     description: 'Required for external, omitted for speakeasy: an organization-level issuer that an organization user session issuer trusts.'
                     format: uuid
-            description: The EMA provider selected to issue ID-JAGs for a vendor.
+            description: One EMA provider allowed to issue ID-JAGs for a vendor.
             required:
                 - kind
-        EMAProviderSelection:
+        EMAProviderOrder:
             type: object
             properties:
                 is_default:
                     type: boolean
-                    description: No selection is saved, so the endpoint uses its configured external issuer.
-                provider:
-                    $ref: '#/components/schemas/EMAProvider'
+                    description: No order is saved, so the endpoint uses its configured external issuer.
+                providers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EMAProvider'
+                    description: The saved providers in order, or the external default.
                 vendor_issuer:
                     type: string
                     description: The vendor authorization server issuer, canonicalized.
-            description: The EMA provider for one vendor authorization server. There is no automatic fallback to another provider.
+            description: The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
             required:
                 - vendor_issuer
                 - is_default
-                - provider
+                - providers
         EmployeeDataFlowEdge:
             type: object
             properties:
@@ -99258,8 +98832,8 @@ components:
                 client_id:
                     type: string
                     description: Exact selected remote_session_client row ID, when available.
-                ema_provider:
-                    $ref: '#/components/schemas/EMAProviderSelection'
+                ema_providers:
+                    $ref: '#/components/schemas/EMAProviderOrder'
                 external_client_id:
                     type: string
                     description: Public OAuth client identifier, never a secret.
@@ -99882,63 +99456,6 @@ components:
             required:
                 - version
                 - created_at
-        InternalSessionIssuer:
-            type: object
-            properties:
-                can_enable:
-                    type: boolean
-                    description: Whether deployment readiness, rollout and SSO entitlement currently allow enabling this issuer. The caller still needs organization administrator access.
-                issuer:
-                    type: string
-                    description: Issuer URI to register with supported services. It never changes.
-                jwks_uri:
-                    type: string
-                    description: Public verification keys.
-                keys:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/InternalSessionIssuerKey'
-                    description: Published keys.
-                kms_cleanup_pending:
-                    type: integer
-                    description: Revoked keys whose signing material is not yet disabled. Speakeasy retries until it is.
-                    format: int64
-                rotation_ready_at:
-                    type: string
-                    description: When a pending rotation can be activated.
-                    format: date-time
-                state:
-                    type: string
-                    description: 'unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.'
-                    enum:
-                        - unavailable
-                        - entitlement_required
-                        - setup_required
-                        - enabled
-                        - disabled
-                        - signing_paused
-                        - keyless
-            required:
-                - state
-                - can_enable
-                - keys
-                - kms_cleanup_pending
-        InternalSessionIssuerKey:
-            type: object
-            properties:
-                kid:
-                    type: string
-                    description: Key ID.
-                state:
-                    type: string
-                    description: Lifecycle state.
-                    enum:
-                        - pending
-                        - active
-                        - retired
-            required:
-                - kid
-                - state
         InterruptTurnRequestBody:
             type: object
             properties:
@@ -108581,8 +108098,8 @@ components:
                 created_at:
                     type: string
                     format: date-time
-                ema_provider:
-                    $ref: '#/components/schemas/EMAProviderSelection'
+                ema_providers:
+                    $ref: '#/components/schemas/EMAProviderOrder'
                 grant_types_supported:
                     type: array
                     items:
@@ -109560,14 +109077,6 @@ components:
                     format: uuid
             required:
                 - id
-        RevokeMemberSignInsRequestBody:
-            type: object
-            properties:
-                user_id:
-                    type: string
-                    description: Speakeasy user ID of the member.
-            required:
-                - user_id
         RevokeSessionRequestBody:
             type: object
             properties:
@@ -109581,21 +109090,6 @@ components:
             required:
                 - agent_id
                 - session_id
-        RevokeSignInsResult:
-            type: object
-            properties:
-                revoked_sessions:
-                    type: integer
-                    description: Number of MCP grants revoked.
-                    format: int64
-                revoked_sign_ins:
-                    type: integer
-                    description: Number of sign-ins revoked.
-                    format: int64
-            description: What a sign-in revocation revoked.
-            required:
-                - revoked_sign_ins
-                - revoked_sessions
         RiskAnalysisStatusResult:
             type: object
             properties:
@@ -111401,16 +110895,6 @@ components:
                 - previous_keys
                 - previous_keys_retired
                 - marketplace_republished
-        RotateRequestBody:
-            type: object
-            properties:
-                active_kid:
-                    type: string
-                    description: The key ID currently active, as last read. Required unless the issuer has no active key.
-                compromised:
-                    type: boolean
-                    description: Revoke every current key immediately instead of rotating gradually.
-                    default: false
         RotateTunneledMcpServerKeyForm:
             type: object
             properties:
@@ -112764,25 +112248,22 @@ components:
             required:
                 - source_kind
                 - role_urn
-        SetEMAProviderRequestBody:
+        SetEMAProvidersRequestBody:
             type: object
             properties:
-                provider:
-                    $ref: '#/components/schemas/EMAProviderInput'
+                providers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EMAProviderInput'
+                    description: Providers in the order they are tried; each at most once. An empty list restores the external default.
+                    maxItems: 10
                 remote_session_issuer_id:
                     type: string
                     description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.
                     format: uuid
             required:
                 - remote_session_issuer_id
-        SetEnabledRequestBody:
-            type: object
-            properties:
-                enabled:
-                    type: boolean
-                    description: Whether Speakeasy may sign with the issuer.
-            required:
-                - enabled
+                - providers
         SetIdentityProviderConnectionSetupMethodRequestBody:
             type: object
             properties:
@@ -122842,8 +122323,6 @@ tags:
       description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations
       description: Explore third-party tools in Speakeasy.
-    - name: internalSessionIssuers
-      description: 'Manage the organization''s internal session issuer: the permanent issuer URI Speakeasy signs enterprise-managed authorization assertions with, and its signing keys.'
     - name: jsonWebKeySets
       description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
     - name: keys
