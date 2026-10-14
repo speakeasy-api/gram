@@ -114,6 +114,19 @@ func TestGetMemberMCPAccessAdvertisesTableReadyOutput(t *testing.T) {
 	require.Contains(t, string(outputSchema), "can_manage")
 }
 
+func TestGetMemberMCPAccessStubAdvertisesLiveInputSchema(t *testing.T) {
+	t.Parallel()
+
+	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registerAccessReadTools(live, nil)
+	stub := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registerUnavailableAccessReadTools(stub)
+
+	liveSchema := descriptorByName(t, live, "get_member_mcp_access").InputSchema
+	stubSchema := descriptorByName(t, stub, "get_member_mcp_access").InputSchema
+	require.JSONEq(t, string(liveSchema), string(stubSchema))
+}
+
 func TestListAccessMembersStubAdvertisesLiveInputSchema(t *testing.T) {
 	t.Parallel()
 
