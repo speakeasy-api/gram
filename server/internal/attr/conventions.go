@@ -392,6 +392,10 @@ const (
 	// "embedded" for a reviewed skill compiled into the platform toolset.
 	// Never a skill name or identifier.
 	McpSkillOriginKey = attribute.Key("gram.mcp.skill.origin")
+	// McpSkillPinConflictCountKey is how many pinned distributions lost to a
+	// different pinned version when one hosted endpoint resolved a skill
+	// carried by several plugins.
+	McpSkillPinConflictCountKey = attribute.Key("gram.mcp.skill.pin_conflict_count")
 	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
 	// MCP tools/call reached: "hosted" or "private_proxy".
 	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
@@ -2882,6 +2886,11 @@ func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
 func McpSkillOrigin[V ~string](v V) attribute.KeyValue { return McpSkillOriginKey.String(string(v)) }
 func SlogMcpSkillOrigin[V ~string](v V) slog.Attr {
 	return slog.String(string(McpSkillOriginKey), string(v))
+}
+
+func McpSkillPinConflictCount(v int) attribute.KeyValue { return McpSkillPinConflictCountKey.Int(v) }
+func SlogMcpSkillPinConflictCount(v int) slog.Attr {
+	return slog.Int(string(McpSkillPinConflictCountKey), v)
 }
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
