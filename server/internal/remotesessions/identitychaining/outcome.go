@@ -1,5 +1,7 @@
 package identitychaining
 
+import "github.com/speakeasy-api/gram/server/internal/remotesessions"
+
 // Outcome is the typed, credential-free result of one attempt.
 type Outcome struct {
 	// Stage is where the attempt stopped.
@@ -19,6 +21,10 @@ type Outcome struct {
 	// without contacting the provider.
 	Cached bool `json:"cached"`
 
+	// Provider is the identity provider kind that produced the outcome; empty
+	// when the attempt stopped before any provider was tried.
+	Provider remotesessions.EMAProviderKind `json:"provider,omitempty"`
+
 	// providerDescription is the provider's error_description, for logs only.
 	providerDescription string
 }
@@ -26,7 +32,7 @@ type Outcome struct {
 // Applicable reports whether identity chaining owns the upstream. When false,
 // callers keep the interactive behavior they had without chaining.
 func (o Outcome) Applicable() bool {
-	return o.Reason != ReasonNotApplicable && o.Reason != ReasonBindingNotReady
+	return o.Reason != ReasonNotApplicable && o.Reason != ReasonBindingNotReady && o.Reason != ReasonProviderUnavailable
 }
 
 // Succeeded reports whether the attempt yielded a usable token.
@@ -48,7 +54,7 @@ func (o Outcome) cacheable() bool {
 }
 
 func newOutcome(stage Stage, reason Reason, confidence Confidence, retryable bool) Outcome {
-	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false, providerDescription: ""}
+	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false, Provider: "", providerDescription: ""}
 }
 
 var (

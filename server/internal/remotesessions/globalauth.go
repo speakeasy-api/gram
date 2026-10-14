@@ -33,6 +33,7 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 	return &Service{
 		bindingAuthorizer: nil,
+		featureFlags:      nil,
 		auth:              nil,
 		sessions:          nil,
 		authz:             nil,
@@ -44,6 +45,7 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 		refresher:             nil,
 		registrationTelemetry: nil,
 		rotator:               nil,
+		resources:             nil,
 		productFeatures:       nil,
 		logger:                logger,
 		tracer:                tp.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
