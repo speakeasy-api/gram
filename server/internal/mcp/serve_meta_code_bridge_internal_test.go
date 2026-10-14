@@ -33,6 +33,15 @@ func TestCodeBridgeTemporaryFailureIsNotRevocation(t *testing.T) {
 // private bridge without exposing gateway routing state in the production API.
 func NewTestMetaCodeHost(t *testing.T, ctx context.Context, service *Service, gatewayID uuid.UUID, selection *toolfilter.SessionSelection) codemode.Host {
 	t.Helper()
+	host, err := codemode.NewHost(ctx, NewTestMetaCodeBackend(t, ctx, service, gatewayID, selection), uuid.NewString(), nil)
+	require.NoError(t, err)
+	return host
+}
+
+// NewTestMetaCodeBackend builds the private bridge backend over the gateway's
+// current members, binding a selection to those members as consent would.
+func NewTestMetaCodeBackend(t *testing.T, ctx context.Context, service *Service, gatewayID uuid.UUID, selection *toolfilter.SessionSelection) codemode.Backend {
+	t.Helper()
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	// Shared fixtures attach synthetic admin grants; this bridge reloads
@@ -43,7 +52,14 @@ func NewTestMetaCodeHost(t *testing.T, ctx context.Context, service *Service, ga
 	require.NoError(t, err)
 	ctx, members, err := service.resolveMetaMemberSnapshot(ctx, service.logger, gatewayID, *auth.ProjectID)
 	require.NoError(t, err)
-	gate := &metaGateContext{projectID: *auth.ProjectID, metaServerID: gatewayID, organizationID: auth.ActiveOrganizationID, authenticated: true, userID: auth.UserID, sessionID: uuid.NewString(), toolSelection: selection, protocolVersion: mcpversions.Resolution{InEffect: mcpversions.DefaultInEffect}}
+	var selectionMembers map[string]uuid.UUID
+	if selection != nil {
+		selectionMembers = make(map[string]uuid.UUID, len(members))
+		for _, member := range members {
+			selectionMembers[member.slug] = member.serverID
+		}
+	}
+	gate := &metaGateContext{projectID: *auth.ProjectID, metaServerID: gatewayID, organizationID: auth.ActiveOrganizationID, authenticated: true, userID: auth.UserID, sessionID: uuid.NewString(), toolSelection: selection, selectionMembers: selectionMembers, protocolVersion: mcpversions.Resolution{InEffect: mcpversions.DefaultInEffect}}
 	server, err := metamcprepo.New(service.db).GetMetaMCPServerByIDAndProjectID(ctx, metamcprepo.GetMetaMCPServerByIDAndProjectIDParams{ID: gatewayID, ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
 	endpoints, err := endpointrepo.New(service.db).ListMCPEndpointsByMetaMCPServerID(ctx, endpointrepo.ListMCPEndpointsByMetaMCPServerIDParams{ProjectID: *auth.ProjectID, MetaMcpServerID: gatewayID})
@@ -53,9 +69,7 @@ func NewTestMetaCodeHost(t *testing.T, ctx context.Context, service *Service, ga
 		return ctx, gate, nil
 	})
 	require.NoError(t, err)
-	host, err := codemode.NewHost(ctx, backend, uuid.NewString(), nil)
-	require.NoError(t, err)
-	return host
+	return backend
 }
 
 // SetTestCodeExecutor injects the real local transport before serving integration requests.

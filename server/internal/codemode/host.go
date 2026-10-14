@@ -57,7 +57,9 @@ type Backend interface {
 	Members(context.Context) ([]Server, error)
 	// List loads one member's live permitted catalog.
 	List(context.Context, string) (*Catalog, error)
-	// Invoke revalidates the fingerprint at the authoritative dispatcher.
+	// Invoke re-resolves the tool's definition and destination from the
+	// member snapshot it dispatches to and refuses with tool_changed when
+	// their fingerprint differs from the expected one.
 	Invoke(context.Context, string, string, json.RawMessage) (json.RawMessage, error)
 }
 
