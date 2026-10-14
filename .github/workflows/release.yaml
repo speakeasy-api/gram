@@ -113,7 +113,7 @@ jobs:
           minimum_release_age: 1d
           install: true
           install_args: node
-          cache: true
+          cache: false
           cache_key_prefix: mise-github-v1
           env: false
       - name: Generate GitHub App Token for Speakeasy Bot

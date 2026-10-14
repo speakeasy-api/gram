@@ -539,7 +539,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Mise
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        # Caches restored here also feed the image this job publishes. On
+        # main they can only come from main's own runs: GitHub scopes caches
+        # that PR runs write to the PR's ref, so a PR cannot poison them.
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
         with:
           minimum_release_age: 1d
           install: true
@@ -556,7 +559,8 @@ jobs:
           sudo apt-get install -y -qq --no-install-recommends musl-tools
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        # Same cache scoping as Setup Mise above.
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
         with:
           target: ${{ env.RUNNER_TARGET }}
           rust-src-dir: agents/runner
@@ -677,7 +681,10 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        # Caches restored here also feed the image this job publishes. On
+        # main they can only come from main's own runs: GitHub scopes caches
+        # that PR runs write to the PR's ref, so a PR cannot poison them.
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
         with:
           minimum_release_age: 1d
           install: true
@@ -689,7 +696,8 @@ jobs:
         run: mise run github
 
       - name: Cache aube store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # Same cache scoping as Setup Mise above.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         with:
           key: ${{ env.GH_CACHE_AUBE_KEY }}
           restore-keys: |
