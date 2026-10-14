@@ -279,7 +279,7 @@ func TestRemoteSessionsNeedReconnect_SkipsSelfClient(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-reconnect")
 
-	reconnect, err := mgr.RemoteSessionsNeedReconnect(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-reconnect-user"))
+	reconnect, err := mgr.RemoteSessionsNeedReconnect(ctx, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewUserSubject("self-reconnect-user"), uuid.Nil)
 	require.NoError(t, err)
 	require.False(t, reconnect)
 }

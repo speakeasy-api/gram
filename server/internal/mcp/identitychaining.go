@@ -261,15 +261,7 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	if endpoint.MetaMcpServerID.Valid {
 		return s.consentChainedMetaClients(ctx, endpoint, challengeState, clients, routing)
 	}
-	tunneled, tunnelIssuer, ok := s.consentDirectBackend(ctx, endpoint, routing)
-	if !ok {
-		return nil
-	}
-	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
-	if !ok {
-		return nil
-	}
-	issuer, served := s.identityChainer.Serves(ctx, req)
+	req, issuer, served := s.directChainServedIssuer(ctx, endpoint, subject.ID, routing)
 	if !served {
 		return nil
 	}
@@ -280,6 +272,26 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 		}
 	}
 	return requests
+}
+
+// directChainServedIssuer reports the remote session issuer identity chaining
+// serves for userID on a direct endpoint's upstream, judged with the request
+// the runtime builds.
+func (s *Service) directChainServedIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint, userID string, routing consentRouting) (identitychaining.Request, uuid.UUID, bool) {
+	var none identitychaining.Request
+	tunneled, tunnelIssuer, ok := s.consentDirectBackend(ctx, endpoint, routing)
+	if !ok {
+		return none, uuid.Nil, false
+	}
+	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, userID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
+	if !ok {
+		return none, uuid.Nil, false
+	}
+	issuer, served := s.identityChainer.Serves(ctx, req)
+	if !served {
+		return none, uuid.Nil, false
+	}
+	return req, issuer, true
 }
 
 // consentDirectBackend reports whether a direct endpoint's backend is

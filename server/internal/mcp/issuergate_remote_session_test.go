@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -171,6 +173,69 @@ func TestHandleToken_RefreshProceedsWhileUpstreamUnavailable(t *testing.T) {
 	require.NoError(t, refreshed.err)
 	require.Equal(t, http.StatusOK, refreshed.code, refreshed.body)
 	require.Zero(t, upstreamRefreshes.Load(), "the token endpoint must judge upstream sessions from stored state")
+}
+
+// A grant whose only upstream identity chaining serves holds no interactive
+// remote session; refresh must not demand a reconnect the runtime never needs.
+func TestHandleToken_RefreshSkipsReconnectForChainedUpstream(t *testing.T) {
+	t.Parallel()
+
+	const upstream = "https://chained-refresh.example.com/mcp"
+	cases := []struct {
+		name          string
+		served        bool
+		governs       bool
+		otherIssuer   bool
+		wantReconnect bool
+	}{
+		{name: "served by chaining", served: true, governs: true},
+		{name: "not chained", wantReconnect: true},
+		{name: "ambiguous bindings", governs: true, wantReconnect: true},
+		{name: "chaining serves another issuer", served: true, governs: true, otherIssuer: true, wantReconnect: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestMCPService(t)
+			authCtx := requireProjectAuthContext(t, ctx)
+			_, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+			slug := "chained-refresh-" + uuid.NewString()[:8]
+			serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstream)
+			_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+				ProjectID:       *authCtx.ProjectID,
+				CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				McpServerID:     conv.ToNullUUID(serverID),
+				MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				Slug:            slug,
+			})
+			require.NoError(t, err)
+
+			servedIssuer := remoteClient.RemoteSessionIssuerID
+			if tc.otherIssuer {
+				servedIssuer = uuid.New()
+			}
+			g := &consentGovernor{t: t, issuer: servedIssuer, served: map[string]bool{upstream: tc.served}, governs: tc.governs, configured: true, usable: false, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil}
+			ti.service.SetIdentityChainer(g)
+
+			res := performRefreshRequest(ctx, ti, slug, client.ClientID, refreshToken)
+			require.NoError(t, res.err)
+			if tc.wantReconnect {
+				require.Equal(t, http.StatusBadRequest, res.code, res.body)
+				require.Contains(t, res.body, `"error":"invalid_grant"`)
+				require.Contains(t, res.body, reconnectDescription)
+			} else {
+				require.Equal(t, http.StatusOK, res.code, res.body)
+			}
+
+			reqs := g.seen()
+			require.Len(t, reqs, 1)
+			require.Equal(t, upstream, reqs[0].UpstreamResource)
+			require.Equal(t, "refresh-replay-user", reqs[0].UserID)
+			require.Equal(t, issuer.ID, reqs[0].UserSessionIssuerID)
+		})
+	}
 }
 
 // The runtime and the token endpoint must agree: once a refresh the gate ran

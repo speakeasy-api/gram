@@ -677,16 +677,26 @@ func unavailableClientCredential(clientID uuid.UUID, resource string, err error)
 // plain ErrNoValidToken once any refresh has been attempted, which is what
 // lets a caller refuse to extend a session the MCP runtime keeps rejecting
 // without adding upstream latency or side effects of its own.
+//
+// Clients of chainedIssuerID, the remote session issuer identity chaining
+// serves for subject, are skipped: the runtime chains when they hold no usable
+// token. uuid.Nil skips none.
 func (m *ChallengeManager) RemoteSessionsNeedReconnect(
 	ctx context.Context,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
+	chainedIssuerID uuid.UUID,
 ) (bool, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
 		return false, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	if chainedIssuerID != uuid.Nil {
+		clients = slices.DeleteFunc(clients, func(c remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+			return c.RemoteSessionIssuerID == chainedIssuerID
+		})
 	}
 	return m.storedGrantsNeedReconnect(ctx, projectID, organizationID, userSessionIssuerID, clients, subject)
 }

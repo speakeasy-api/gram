@@ -1334,17 +1334,34 @@ func (s *Service) rotateRefreshToken(
 // access token would only hit the same invalid_token from the MCP runtime,
 // while invalid_grant sends the client through the consent page that
 // reconnects the upstream. It fails open (meta MCP endpoints, check errors)
-// because many clients treat any failed refresh as a sign-out.
+// because many clients treat any failed refresh as a sign-out. Clients of the
+// issuer identity chaining serves for the upstream are skipped, as the runtime
+// chains for them.
 func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) bool {
 	if endpoint.MetaMcpServerID.Valid {
 		return false
 	}
-	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, s.refreshChainedIssuer(ctx, endpoint, subject))
 	if err != nil {
 		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
 		return false
 	}
 	return reconnect
+}
+
+// refreshChainedIssuer is the remote session issuer identity chaining serves
+// for subject on the endpoint's upstream, or uuid.Nil when it serves none.
+func (s *Service) refreshChainedIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) uuid.UUID {
+	if s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" ||
+		!s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID) {
+		return uuid.Nil
+	}
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil}
+	_, issuer, served := s.directChainServedIssuer(ctx, endpoint, subject.ID, routing)
+	if !served {
+		return uuid.Nil
+	}
+	return issuer
 }
 
 func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lockOwner string, logger *slog.Logger) {
