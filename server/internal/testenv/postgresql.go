@@ -41,7 +41,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 
 	container, err := postgres.Run(
 		ctx,
-		"pgvector/pgvector:pg17",
+		"pgvector/pgvector:pg18",
 		postgres.WithUsername("gotest"),
 		postgres.WithPassword("gotest"),
 		postgres.WithDatabase("gotestdb"),

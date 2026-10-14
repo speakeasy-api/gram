@@ -935,7 +935,7 @@ jobs:
       pull-requests: write
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_DB: dev
           POSTGRES_PASSWORD: pass
@@ -1047,7 +1047,7 @@ jobs:
       cancel-in-progress: true
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_DB: dev
           POSTGRES_PASSWORD: pass
@@ -1220,7 +1220,7 @@ jobs:
       GOMAXPROCS: 16
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_USER: gram
           POSTGRES_PASSWORD: gram
@@ -1402,7 +1402,7 @@ jobs:
       GOMAXPROCS: 4
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_USER: gram
           POSTGRES_PASSWORD: gram

@@ -13,4 +13,4 @@ fi
 exec atlas migrate diff "${usage_name:?}" \
   --config file://atlas.hcl \
   --to file://database/schema.sql \
-  --dev-url "docker://pgvector/pgvector/pg17/dev?search_path=public"
+  --dev-url "docker://pgvector/pgvector/pg18/dev?search_path=public"

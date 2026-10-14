@@ -66,7 +66,7 @@ async function main() {
   console.log(`Rewinding to migration ID ${chalk.cyanBright(targetId)}`);
 
   const proc =
-    await $`atlas migrate down --to-version ${targetId} --url "$GRAM_DATABASE_URL" --dev-url "docker://pgvector/pgvector/pg17/dev?search_path=public"`.nothrow();
+    await $`atlas migrate down --to-version ${targetId} --url "$GRAM_DATABASE_URL" --dev-url "docker://pgvector/pgvector/pg18/dev?search_path=public"`.nothrow();
   if (proc.exitCode !== 0) {
     console.error(chalk.redBright("Failed to rewind migrations:"));
     console.error(proc.stderr);
