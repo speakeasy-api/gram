@@ -126,8 +126,8 @@ func clearTokenRejected() {
 	_ = os.Remove(tokenRejectedPath())
 }
 
-// tokenPersistFailed is set when a token's token-box record could not be saved.
-// The box is then treated as refused until a record persists.
+// tokenPersistFailed is set when writeTokenAuth fails. The box is then treated
+// as refused until a complete token write succeeds.
 var tokenPersistFailed atomic.Bool
 
 // nowFunc is the relay's clock for token expiry; a var so tests can move it.
@@ -290,7 +290,8 @@ func writeTokenAuth(c creds, argv []string) error {
 }
 
 // recoverTokenRejection is shared by the live send and the drain: one fresh token
-// and one resend in the same project, else record the refusal and forget the bearer.
+// and one resend if the project matches; a failed refresh or rejected resend
+// records the refusal and forgets the bearer.
 func recoverTokenRejection(cfg Config, c creds, res ingestResult, resend func(creds) ingestResult) (ingestResult, creds) {
 	argv, _ := tokenCommandArgv()
 	fresh, ok := resolveTokenAuth(cfg, argv, true)
