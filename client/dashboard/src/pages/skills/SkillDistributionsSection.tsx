@@ -12,12 +12,22 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge } from "@/components/ui/Badge";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import { usePluginServerQueries } from "@/pages/plugins/usePluginServerQueries";
+import {
+  hostedPluginServers,
+  hostedPluginServerToolsetId,
+  type ServingPlugin,
+} from "./mcp-served-skills";
+import { SkillDistributionVersionBadge } from "./skill-badges";
+import {
+  useProjectPluginsWithServers,
+  useSkillsOverMcpEnabled,
+} from "./use-skills-over-mcp";
 
 /**
  * Lists the plugins an individual skill is distributed to and lets writers
@@ -38,6 +48,7 @@ export function SkillDistributionsSection({
     { throwOnError: false },
   );
   const undistribute = useUndistributeSkillMutation();
+  const servedOverMcp = useServedOverMcp();
 
   const distributions = useMemo(
     () =>
@@ -110,9 +121,17 @@ export function SkillDistributionsSection({
                 >
                   Distributed <HumanizeDateTime date={distribution.createdAt} />
                 </Text>
+                {servedOverMcp.enabled && (
+                  <ServedOverMcpLine
+                    pluginId={distribution.pluginId}
+                    served={servedOverMcp}
+                  />
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <VersionTrackingBadge distribution={distribution} />
+                <SkillDistributionVersionBadge
+                  pinnedVersionId={distribution.pinnedVersionId}
+                />
                 <RequirePluginWrite>
                   <Button
                     type="button"
@@ -149,17 +168,106 @@ export function SkillDistributionsSection({
   );
 }
 
-function VersionTrackingBadge({
-  distribution,
+type ServedOverMcp = {
+  enabled: boolean;
+  isLoading: boolean;
+  /** The plugin list failed; the row says nothing rather than waiting. */
+  failed: boolean;
+  pluginsById: Map<string, ServingPlugin> | undefined;
+  toolsetsById: Map<string, { slug: string; name: string }> | undefined;
+};
+
+/**
+ * What each plugin row needs to say which hosted MCP servers serve the skill:
+ * the project's plugins with their servers, and the toolsets those servers
+ * resolve to for names and links. Both stay unfetched while the flag is off.
+ */
+function useServedOverMcp(): ServedOverMcp {
+  const enabled = useSkillsOverMcpEnabled();
+  const { plugins, isLoading, canReadPlugins, error } =
+    useProjectPluginsWithServers(enabled);
+  const { toolsetsQuery, canReadServers } = usePluginServerQueries({
+    enabled,
+  });
+  const pluginsById = useMemo(() => {
+    if (!plugins) return undefined;
+    return new Map(plugins.map((plugin) => [plugin.id, plugin]));
+  }, [plugins]);
+  const toolsetsById = useMemo(() => {
+    const toolsets = toolsetsQuery.data?.toolsets;
+    if (!toolsets) return undefined;
+    return new Map(
+      toolsets.map((toolset) => [
+        toolset.id,
+        { slug: toolset.slug, name: toolset.name },
+      ]),
+    );
+  }, [toolsetsQuery.data?.toolsets]);
+  return {
+    enabled: enabled && canReadPlugins,
+    failed: !!error && !plugins,
+    isLoading:
+      isLoading ||
+      (enabled && canReadServers && !toolsetsById && toolsetsQuery.isLoading),
+    pluginsById,
+    toolsetsById,
+  };
+}
+
+/**
+ * One line under the plugin name naming the hosted MCP servers that serve the
+ * skill to agents, each linked to its server page. A plugin with no hosted
+ * server says so, since adding one is what turns serving on.
+ */
+function ServedOverMcpLine({
+  pluginId,
+  served,
 }: {
-  distribution: PluginSkillDistribution;
-}): JSX.Element {
-  if (distribution.pinnedVersionId) {
+  pluginId: string;
+  served: ServedOverMcp;
+}): JSX.Element | null {
+  const routes = useRoutes();
+  if (served.failed) return null;
+  if (served.isLoading || !served.pluginsById) {
+    return <Skeleton className="mt-1 h-4 w-48" />;
+  }
+  const plugin = served.pluginsById.get(pluginId);
+  if (!plugin) return null;
+  const toolsetIds = served.toolsetsById
+    ? new Set(served.toolsetsById.keys())
+    : undefined;
+  const servers = hostedPluginServers(plugin.servers, toolsetIds);
+  if (servers.length === 0) {
     return (
-      <Badge variant="neutral" title={distribution.pinnedVersionId}>
-        Pinned
-      </Badge>
+      <Text small muted className="block text-xs">
+        Not served over MCP: this plugin includes no hosted MCP server.
+      </Text>
     );
   }
-  return <Badge variant="information">Latest</Badge>;
+  return (
+    <Text small muted className="block text-xs">
+      Served over MCP by{" "}
+      {servers.map((server, index) => {
+        const toolsetId = hostedPluginServerToolsetId(server);
+        const toolset = toolsetId
+          ? served.toolsetsById?.get(toolsetId)
+          : undefined;
+        return (
+          <span key={server.id}>
+            {index > 0 && ", "}
+            {toolset ? (
+              <Link
+                to={routes.mcp.details.href(toolset.slug)}
+                className="text-foreground hover:underline"
+              >
+                {toolset.name}
+              </Link>
+            ) : (
+              <span className="text-foreground">{server.displayName}</span>
+            )}
+          </span>
+        );
+      })}
+    </Text>
+  );
 }

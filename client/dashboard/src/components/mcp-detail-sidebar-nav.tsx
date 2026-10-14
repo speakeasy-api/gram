@@ -10,6 +10,7 @@ import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
+import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import {
   MCPStatusDropdown,
   RenameMCPServerButton,
@@ -32,6 +33,7 @@ import {
   MessageSquareText,
   Plug,
   Settings as SettingsIcon,
+  Sparkles,
   Users,
   Wrench,
 } from "lucide-react";
@@ -60,12 +62,14 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   );
   const oauthRequiredUnconfigured =
     useExternalMcpOAuthConfigStatus(toolsetSlug) === "required-unconfigured";
+  const skillsOverMcp = useSkillsOverMcpEnabled();
 
   if (!toolsetSlug) return null;
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
   const canViewTeamAccess =
     !!toolset && hasScope("org:read") && hasScope("mcp:read", toolset.id);
+  const canViewSkills = skillsOverMcp && hasScope("skill:read");
 
   const items: DetailSidebarNavItem[] = [
     {
@@ -129,6 +133,17 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       href: mcpDetailTabHref(routes, toolsetSlug, "prompts"),
       active: activeTab === "prompts",
     },
+    ...(canViewSkills
+      ? [
+          {
+            key: "skills",
+            title: "Skills",
+            Icon: Sparkles,
+            href: mcpDetailTabHref(routes, toolsetSlug, "skills"),
+            active: activeTab === "skills",
+          },
+        ]
+      : []),
     {
       key: "sessions",
       title: "Clients and Sessions",

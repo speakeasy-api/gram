@@ -108,6 +108,7 @@ import {
 } from "./MCPDetailsRouting";
 import { MCPOverviewTab } from "./overview/MCPOverviewTab";
 import { MCPPerformanceTab } from "./MCPPerformanceTab";
+import { MCPSkillsTabRoute } from "./MCPSkillsTab";
 import { MCPTeamAccessTab } from "./MCPTeamAccessTab";
 import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/NetworkAccessSection";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
@@ -229,6 +230,14 @@ function renderMcpDetailTabContent(
       return <MCPResourcesTab toolset={toolset} />;
     case "prompts":
       return <MCPPromptsTab toolset={toolset} />;
+    case "skills":
+      // Served skills are plugin distributions, which skill readers may list;
+      // adding and removing is gated per control on plugin write.
+      return (
+        <RequireScope scope="skill:read" level="page">
+          <MCPSkillsTabRoute toolset={toolset} />
+        </RequireScope>
+      );
     case "authentication":
       return (
         <RequireScope scope="mcp:write" level="page">

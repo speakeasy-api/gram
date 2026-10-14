@@ -633,6 +633,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Prompts",
             url: "prompts",
           },
+          skills: {
+            title: "MCP Skills",
+            url: "skills",
+          },
           authentication: {
             title: "MCP Authentication",
             url: "authentication",

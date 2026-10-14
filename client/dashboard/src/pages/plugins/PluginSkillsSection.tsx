@@ -21,7 +21,6 @@ import {
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,12 +33,16 @@ import {
   SkillPickerDialog,
   type SkillPickerResult,
 } from "../skills/SkillPickerDialog";
+import { SkillDistributionVersionBadge } from "../skills/skill-badges";
+import { useSkillsOverMcpEnabled } from "../skills/use-skills-over-mcp";
 import { SectionEmptyState } from "./SectionEmptyState";
+import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 
 /**
  * The Skills section of the plugin detail page: lists the skills this plugin
  * carries and lets writers add or remove skill distributions. Distributed
- * skills ship inside the generated plugin package.
+ * skills ship inside the generated plugin package and, when skills over MCP
+ * is on, are also served by the plugin's hosted MCP servers.
  */
 export function PluginSkillsSection({
   pluginId,
@@ -64,6 +67,7 @@ export function PluginSkillsSection({
     project.id,
   );
   const queryClient = useQueryClient();
+  const servedOverMcp = useSkillsOverMcpEnabled();
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
   const [search, setSearch] = useState("");
   // Grid or table, remembered across list pages under one key.
@@ -179,6 +183,7 @@ export function PluginSkillsSection({
           { label: "Name" },
           { label: "Identifier" },
           { label: "Version" },
+          ...(servedOverMcp ? [{ label: "Last loaded over MCP" }] : []),
           { label: "", className: "text-right" },
         ]}
       >
@@ -186,6 +191,7 @@ export function PluginSkillsSection({
           <PluginSkillTableRow
             key={distribution.id}
             distribution={distribution}
+            servedOverMcp={servedOverMcp}
             isRemoving={undistribute.isPending}
             onRemove={() => handleRemoveSkill(distribution)}
           />
@@ -199,6 +205,7 @@ export function PluginSkillsSection({
           <PluginSkillCard
             key={distribution.id}
             distribution={distribution}
+            servedOverMcp={servedOverMcp}
             isRemoving={undistribute.isPending}
             onRemove={() => handleRemoveSkill(distribution)}
           />
@@ -224,6 +231,8 @@ export function PluginSkillsSection({
           <SettingsSection.Description>
             Skills distributed to this plugin ship inside the plugin package and
             reach everyone who installs it.
+            {servedOverMcp &&
+              " Agents connected to the plugin's hosted MCP servers load them over MCP as well."}
           </SettingsSection.Description>
         </SettingsSection.Header>
         <div className="flex items-center gap-2">
@@ -280,10 +289,12 @@ export function PluginSkillsSection({
 
 function PluginSkillCard({
   distribution,
+  servedOverMcp,
   isRemoving,
   onRemove,
 }: {
   distribution: SkillDistribution;
+  servedOverMcp: boolean;
   isRemoving: boolean;
   onRemove: () => void;
 }): JSX.Element {
@@ -305,11 +316,22 @@ function PluginSkillCard({
             {distribution.skillDisplayName}
           </Link>
         </Text>
-        <SkillVersionBadge distribution={distribution} />
+        <SkillDistributionVersionBadge
+          pinnedVersionId={distribution.pinnedVersionId}
+          className="text-xs"
+        />
       </div>
       <Text small muted className="truncate font-mono">
         {distribution.skillName}
       </Text>
+      {servedOverMcp && (
+        <Text small muted className="mt-1 block text-xs">
+          <LastLoadedOverMcp
+            loadedAt={distribution.lastLoadedOverMcpAt}
+            labeled
+          />
+        </Text>
+      )}
 
       <div className="mt-auto flex items-center justify-end gap-2 pt-2">
         <RequirePluginWrite>
@@ -337,10 +359,12 @@ function PluginSkillCard({
 
 function PluginSkillTableRow({
   distribution,
+  servedOverMcp,
   isRemoving,
   onRemove,
 }: {
   distribution: SkillDistribution;
+  servedOverMcp: boolean;
   isRemoving: boolean;
   onRemove: () => void;
 }): JSX.Element {
@@ -369,8 +393,18 @@ function PluginSkillTableRow({
         </Text>
       </td>
       <td className="px-3 py-3">
-        <SkillVersionBadge distribution={distribution} />
+        <SkillDistributionVersionBadge
+          pinnedVersionId={distribution.pinnedVersionId}
+          className="text-xs"
+        />
       </td>
+      {servedOverMcp && (
+        <td className="px-3 py-3">
+          <Text small muted>
+            <LastLoadedOverMcp loadedAt={distribution.lastLoadedOverMcpAt} />
+          </Text>
+        </td>
+      )}
       <td className="px-3 py-3">
         <RequirePluginWrite>
           <div
@@ -396,26 +430,24 @@ function PluginSkillTableRow({
   );
 }
 
-function SkillVersionBadge({
-  distribution,
+/**
+ * When an agent last loaded the skill over a hosted MCP server. The time is
+ * per skill, not per plugin: the same skill shows the same time wherever it is
+ * distributed.
+ */
+function LastLoadedOverMcp({
+  loadedAt,
+  labeled = false,
 }: {
-  distribution: SkillDistribution;
+  loadedAt: Date | undefined;
+  /** Spell the label out, for a card line without a column header. */
+  labeled?: boolean;
 }): JSX.Element {
-  if (distribution.pinnedVersionId) {
-    return (
-      <Badge
-        variant="neutral"
-        className="text-xs"
-        title={distribution.pinnedVersionId}
-      >
-        Pinned
-      </Badge>
-    );
-  }
-
+  if (!loadedAt) return <>{labeled ? "Never loaded over MCP" : "Never"}</>;
   return (
-    <Badge variant="information" className="text-xs">
-      Latest
-    </Badge>
+    <span title={dateTimeFormatters.full.format(loadedAt)}>
+      {labeled && "Last loaded over MCP "}
+      <HumanizeDateTime date={loadedAt} />
+    </span>
   );
 }
