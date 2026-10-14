@@ -331,7 +331,7 @@ func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
 // link opens it, goes straight on to its provider.
 func TestServeConsent_GatewayServerLinkGoesStraightToProvider(t *testing.T) {
 	t.Parallel()
-	ctx, fx, metaID, _, issuerID := metaConsent(t, "rt-link")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "rt-link")
 	const upstream = "https://link.example.com/mcp"
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-link-member", upstream, conv.ToNullUUID(issuerID), 0)
 
@@ -339,6 +339,10 @@ func TestServeConsent_GatewayServerLinkGoesStraightToProvider(t *testing.T) {
 	code, html, _ := render(t, fx)
 	require.Equal(t, http.StatusOK, code, html)
 	require.Contains(t, html, "Connecting is all rt-link-member needs")
+
+	// Its Connect posts the server, which the provider callback returns to.
+	login := postConnectAction(t, fx, clientID)
+	require.Equal(t, "rt-link-member", mintedRemoteLoginState(t, ctx, fx, login.Query().Get("state")).ConsentServer)
 
 	linked := firstPartyConsent(t, ctx, fx)
 	linked.server = ""

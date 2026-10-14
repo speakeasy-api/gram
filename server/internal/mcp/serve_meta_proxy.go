@@ -136,7 +136,7 @@ func memberAuthFailure(member metaMember, dial memberDial) error {
 	case dial.clientCredential:
 		return metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured)
 	case dial.connectURL != "":
-		return &metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential. Ask the user to open %s to reconnect it, then retry", member.slug, dial.connectURL)}
+		return &metaMemberError{message: fmt.Sprintf("server %q rejected the user's credential. Ask the user to open %s to reconnect it, then retry", member.slug, dial.connectURL)}
 	}
 	return &metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential; reconnect it from this gateway's sign-in page", member.slug)}
 }

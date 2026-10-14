@@ -58,15 +58,10 @@ func TestConsentPage_MetaCardWithAnUngovernedMemberIsNotChained(t *testing.T) {
 	fx.server = "aim61-meta-partial-a"
 	setConsentGovernor(t, fx, issuerID, governed)
 
-	code, page, loc := render(t, fx)
+	code, page, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, "a server picked from the gateway's list shows its page")
 	require.NotContains(t, page, consentManagedCopy)
-	if code == http.StatusOK {
-		require.Contains(t, page, "0 of 1 connected")
-		return
-	}
-	require.Equal(t, http.StatusSeeOther, code)
-	require.NotNil(t, loc)
-	require.Equal(t, "aim61-meta-partial-as.example.com", loc.Host, "an unchained sole service auto-connects interactively")
+	require.Contains(t, page, "0 of 1 connected")
 }
 
 func TestConsentPage_MetaUnclaimedProviderIsNotChained(t *testing.T) {

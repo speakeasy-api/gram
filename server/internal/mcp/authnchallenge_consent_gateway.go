@@ -30,8 +30,12 @@ const (
 	// gatewayServerConnected is a server with a usable connection.
 	gatewayServerConnected gatewayServerStatus = "connected"
 	// gatewayServerChained is a server the person's identity provider signs
-	// them in to, without a sign-in of their own.
+	// them in to, without a sign-in of their own, once that exchange is
+	// known to work.
 	gatewayServerChained gatewayServerStatus = "chained"
+	// gatewayServerChainPending is a server the identity provider is set up
+	// to sign the person in to, before the exchange is known to work.
+	gatewayServerChainPending gatewayServerStatus = "chain_pending"
 	// gatewayServerReconnect is a server whose connection must be redone.
 	gatewayServerReconnect gatewayServerStatus = "reconnect"
 	// gatewayServerNotConnected is a server the person has not connected.
@@ -58,7 +62,7 @@ func (g gatewayServer) Ready() bool {
 	switch g.Status {
 	case gatewayServerNoSignIn, gatewayServerConnected, gatewayServerChained:
 		return true
-	case gatewayServerReconnect, gatewayServerNotConnected, gatewayServerNotSetUp:
+	case gatewayServerChainPending, gatewayServerReconnect, gatewayServerNotConnected, gatewayServerNotSetUp:
 		return false
 	}
 	return false
@@ -73,6 +77,8 @@ func (g gatewayServer) StatusLabel() string {
 		return "Connected"
 	case gatewayServerChained:
 		return "Connected through your identity provider"
+	case gatewayServerChainPending:
+		return "Managed by your identity provider"
 	case gatewayServerReconnect:
 		return "Needs reconnecting"
 	case gatewayServerNotConnected:
@@ -190,8 +196,10 @@ func cardStatus(card remoteSessionCard) gatewayServerStatus {
 	switch {
 	case card.Connected && !reconnect:
 		return gatewayServerConnected
-	case card.Chained && card.ChainCheck != chainCheckRejected:
+	case card.Chained && card.ChainCheck == chainCheckConnected:
 		return gatewayServerChained
+	case card.Chained && card.ChainCheck != chainCheckRejected:
+		return gatewayServerChainPending
 	case reconnect:
 		return gatewayServerReconnect
 	default:
@@ -217,6 +225,8 @@ func readiness(status gatewayServerStatus) int {
 		return 4
 	case gatewayServerChained:
 		return 3
+	case gatewayServerChainPending:
+		return 2
 	case gatewayServerReconnect:
 		return 2
 	case gatewayServerNotConnected:
@@ -234,7 +244,7 @@ func statusOrder(status gatewayServerStatus) int {
 		return 0
 	case gatewayServerNotConnected:
 		return 1
-	case gatewayServerNotSetUp:
+	case gatewayServerNotSetUp, gatewayServerChainPending:
 		return 2
 	case gatewayServerChained, gatewayServerConnected:
 		return 3

@@ -736,6 +736,6 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnconnectedMemberLinksItsConnectPa
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
 	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	require.Contains(t, text, "rejected the stored credential")
+	require.Contains(t, text, "rejected the user's credential")
 	require.Contains(t, text, "/mcp/"+metaSlug+"/connect/first-party?server=member")
 }

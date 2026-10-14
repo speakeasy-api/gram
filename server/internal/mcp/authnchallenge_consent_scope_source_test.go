@@ -126,10 +126,10 @@ func TestServeConsent_MultiBindingCardReadsOwnResourceScopes(t *testing.T) {
 	require.Equal(t, "b:read", connectScope(t, fx, shared))
 }
 
-// A gateway client no member claims has no resource row at login, so neither
-// does its consent card: a cached row for the resource the client claims must
-// not offer a reconnect that the login's issuer-override request can never
-// satisfy.
+// A gateway client's login reads the claiming member's resource row, never
+// the resource the client claims, so neither does its consent card: a cached
+// row for the client's claimed resource must not offer a reconnect that the
+// login's issuer-override request can never satisfy.
 func TestServeConsent_GatewayIdentityReconnectFollowsLogin(t *testing.T) {
 	t.Parallel()
 

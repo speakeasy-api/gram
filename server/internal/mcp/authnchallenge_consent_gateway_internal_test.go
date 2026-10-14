@@ -108,6 +108,28 @@ func TestGatewayServersView_MatchesCardsByProject(t *testing.T) {
 	require.Equal(t, gatewayServerNotConnected, serverBySlug(t, view, "second.github").Status)
 }
 
+// A service the identity provider signs in to counts once its exchange is
+// known to work; before that the server is not counted as connected.
+func TestGatewayServersView_ChainedCountsOnceChecked(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	idp := uuid.New()
+	members := []metaMember{gatewayTestMember("wiki", "Wiki", idp, project)}
+	card := gatewayTestCard("wiki-client", idp, uuid.NullUUID{})
+	card.Chained = true
+	card.ChainCheck = chainCheckPending
+
+	view := gatewayServersView(members, []remoteSessionCard{card})
+	require.Equal(t, gatewayServerChainPending, view.Servers[0].Status)
+	require.Equal(t, 0, view.ReadyCount)
+
+	card.ChainCheck = chainCheckConnected
+	view = gatewayServersView(members, []remoteSessionCard{card})
+	require.Equal(t, gatewayServerChained, view.Servers[0].Status)
+	require.Equal(t, 1, view.ReadyCount)
+}
+
 // One usable service is enough: a server routes its calls to whichever of its
 // services holds a credential.
 func TestGatewayServersView_AnyUsableServiceConnects(t *testing.T) {
@@ -192,7 +214,7 @@ func TestMemberAuthFailure_LinksConnectPage(t *testing.T) {
 	require.ErrorContains(t, err, connectURL)
 
 	err = memberAuthFailure(member, memberDial{anonymous: false, connectURL: connectURL})
-	require.ErrorContains(t, err, "rejected the stored credential")
+	require.ErrorContains(t, err, "rejected the user's credential")
 	require.ErrorContains(t, err, connectURL)
 
 	err = memberAuthFailure(member, memberDial{anonymous: true})
