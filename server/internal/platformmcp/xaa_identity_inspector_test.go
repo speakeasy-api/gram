@@ -248,3 +248,26 @@ func TestXAAIdentityInspectorPreservesSnapshotAfterDiscoveryFailure(t *testing.T
 		})
 	}
 }
+
+func TestXAAIdentityInspectorExplainsANonRoutableServer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_inspector_not_routable")
+	require.NoError(t, err)
+	f := seedXAAInspectorFixture(t, ctx, conn, pgtype.Text{})
+
+	inspector := &postgresXAAIdentityInspector{db: conn, governor: &recordingGovernor{issuer: f.issuerA, serves: true}, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
+	for name, call := range map[string]struct {
+		issuer   uuid.UUID
+		resource string
+	}{
+		"no upstream issuer": {issuer: uuid.Nil, resource: "https://upstream.example.test/mcp"},
+		"no resource":        {issuer: f.issuerA, resource: ""},
+	} {
+		chaining, _, err := inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, call.issuer, call.resource)
+		require.NoError(t, err, name)
+		require.False(t, chaining.Served, name)
+		require.NotNil(t, chaining.NotServedReason, name)
+		require.Equal(t, xaaNotRoutable, *chaining.NotServedReason, name)
+	}
+}

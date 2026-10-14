@@ -184,7 +184,7 @@ type GetXAAReadinessOutput struct {
 
 type XAAIdentityChaining struct {
 	Served          bool                         `json:"served" jsonschema:"true when exactly one ready binding serves this server's upstream at runtime and at least one EMA provider in the vendor's order can serve now"`
-	NotServedReason *string                      `json:"not_served_reason,omitempty" jsonschema:"why served is false: binding_not_ready (no single ready binding), provider_order_unavailable (the vendor's EMA provider order could not be read; retry), provider_unavailable (no EMA provider in the order can serve now; each provider's unavailable_reason says why), or resource_unavailable (resource metadata could not be validated; check the endpoint and its protected-resource metadata, then retry); omitted when served or when the server is not routable through identity chaining"`
+	NotServedReason *string                      `json:"not_served_reason,omitempty" jsonschema:"why served is false: binding_not_ready (no single ready binding), provider_order_unavailable (the vendor's EMA provider order could not be read; retry), provider_unavailable (no EMA provider in the order can serve now; each provider's unavailable_reason says why), resource_unavailable (resource metadata could not be validated; check the endpoint and its protected-resource metadata, then retry), or not_routable (identity chaining has no route to this server: it has no sign-in issuer, no upstream authorization server or resource, or is tunneled without its issuer); omitted when served"`
 	Providers       []XAAEMAProvider             `json:"providers,omitempty" jsonschema:"the vendor's EMA providers in the order identity chaining tries them: its trusted external issuer by default, or the administrator's saved order. Providers that cannot serve are skipped; the rest are tried in turn, with short retries for transient failures, until one succeeds. Omitted when no single ready binding serves the upstream"`
 	Bindings        []XAAIdentityChainingBinding `json:"bindings"`
 }
@@ -456,6 +456,11 @@ type identityChainingResourceResolver interface {
 	ResolveResource(context.Context, identitychaining.Request) (protectedresource.EndpointResource, error)
 }
 
+// xaaNotRoutable explains not_ready for a server identity chaining can't
+// route: no sign-in issuer, no upstream issuer or resource, or a tunneled
+// server without its issuer.
+const xaaNotRoutable = "not_routable"
+
 func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organizationID string, projectID, serverID, remoteSessionIssuerID uuid.UUID, resource string) (XAAIdentityChaining, *string, error) {
 	out := XAAIdentityChaining{Served: false, NotServedReason: nil, Providers: nil, Bindings: []XAAIdentityChainingBinding{}}
 	server, err := mcpserversrepo.New(i.db).GetMCPServerByLiveProjectForOrganization(ctx, mcpserversrepo.GetMCPServerByLiveProjectForOrganizationParams{OrganizationID: organizationID, ID: serverID, ProjectID: projectID})
@@ -463,6 +468,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 		return out, nil, fmt.Errorf("load XAA readiness server: %w", err)
 	}
 	if !server.UserSessionIssuerID.Valid {
+		out.NotServedReason = new(xaaNotRoutable)
 		return out, nil, nil
 	}
 	userIssuerID := server.UserSessionIssuerID.UUID
@@ -486,6 +492,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 		}
 	}
 	if remoteSessionIssuerID == uuid.Nil || resource == "" {
+		out.NotServedReason = new(xaaNotRoutable)
 		return out, callback, nil
 	}
 	req, routable := identitychaining.NewUpstreamRequest(organizationID, projectID, userIssuerID, resource, server.TunneledMcpServerID.Valid, server.RemoteSessionIssuerID)
@@ -531,6 +538,9 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 		for _, r := range results {
 			out.Bindings = append(out.Bindings, XAAIdentityChainingBinding{State: r.State, Stage: r.Stage, Remediation: r.Remediation, Retryable: r.Retryable, GrantSource: r.GrantSource, RequestedScopes: append([]string{}, identitychaining.GrantScopes(r.Scopes)...), ConfiguredScopes: append([]string{}, r.Scopes...)})
 		}
+	}
+	if !routable {
+		out.NotServedReason = new(xaaNotRoutable)
 	}
 	if i.governor != nil && routable && !discoveryFailed {
 		// One read of binding and order, so served, providers and the
