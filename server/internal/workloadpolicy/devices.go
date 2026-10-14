@@ -30,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -48,11 +47,6 @@ const (
 	// deviceIssuerName labels the issuer Speakeasy creates for an organization's
 	// enrolled devices.
 	deviceIssuerName = "Speakeasy devices"
-
-	// deviceIssuerPath is where the device issuer lives under the server URL.
-	// The issuer string is never fetched: device assertions verify against the
-	// key registered for each subject.
-	deviceIssuerPath = "/workload/devices/"
 
 	// deviceSubjectPrefix marks a subject Speakeasy minted for an enrolled device.
 	deviceSubjectPrefix = "device:"
@@ -72,15 +66,21 @@ var (
 var deviceAgentScopes = []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest}
 
 // requireDeviceAgentGrants refuses a join token for an agent whose live policy
-// lacks the device-agent scopes, naming each one missing.
-func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID string, agentID uuid.UUID) error {
+// lacks the device-agent scopes, naming each one missing. Hooks are checked for
+// hooksProjectID, the project the device will send them to, so an agent bound
+// to another project is refused here rather than on every send.
+func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID string, agentID uuid.UUID, hooksProjectID uuid.UUID) error {
 	grants, err := runtimepolicy.LoadAgentPolicy(ctx, s.db, organizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading agent policy").LogError(ctx, s.logger)
 	}
 	var missing []string
 	for _, scope := range deviceAgentScopes {
-		if !authz.GrantsSatisfy(grants, authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}) {
+		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}
+		if scope == authz.ScopeOrgHooksIngest {
+			check = authz.HooksIngestCheck(organizationID, hooksProjectID.String())
+		}
+		if !authz.GrantsSatisfy(grants, check) {
 			missing = append(missing, string(scope))
 		}
 	}
@@ -88,28 +88,6 @@ func (s *Service) requireDeviceAgentGrants(ctx context.Context, organizationID s
 		return oops.E(oops.CodeFailedPrecondition, nil, "the agent's policy must grant %s on the organization before a device can enroll under it", strings.Join(missing, " and "))
 	}
 	return nil
-}
-
-// DeviceIssuer is the issuer an organization's enrolled devices sign as.
-func DeviceIssuer(serverURL, organizationID string) string {
-	return strings.TrimRight(serverURL, "/") + deviceIssuerPath + organizationID
-}
-
-// isReservedDeviceIssuer reports whether issuer falls under the device issuer
-// namespace once canonicalized the way issuer lookup canonicalizes it, so a
-// spelling such as an explicit :443 or an uppercase host cannot claim it.
-func isReservedDeviceIssuer(issuer, serverURL string) bool {
-	prefix := strings.TrimRight(serverURL, "/") + strings.TrimRight(deviceIssuerPath, "/")
-	canonicalPrefix, err := issuerurl.Parse(prefix)
-	if err != nil {
-		return strings.HasPrefix(strings.TrimSpace(issuer), prefix)
-	}
-	canonical, err := issuerurl.Parse(issuer)
-	if err != nil {
-		return false
-	}
-	c, p := canonical.String(), canonicalPrefix.String()
-	return c == p || strings.HasPrefix(c, p+"/")
 }
 
 // resolveHooksProject validates the project a workload is bound to for hooks:
@@ -179,12 +157,12 @@ func (s *Service) CreateDeviceJoinToken(ctx context.Context, payload *gen.Create
 		}
 	}
 
-	if err := s.requireDeviceAgentGrants(ctx, t.organizationID, agent.ID); err != nil {
+	hooksProject, err := s.resolveHooksProject(ctx, t.organizationID, payload.HooksProjectID)
+	if err != nil {
 		return nil, err
 	}
 
-	hooksProject, err := s.resolveHooksProject(ctx, t.organizationID, payload.HooksProjectID)
-	if err != nil {
+	if err := s.requireDeviceAgentGrants(ctx, t.organizationID, agent.ID, hooksProject.ID); err != nil {
 		return nil, err
 	}
 
@@ -304,7 +282,7 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	// Re-checked too: grants removed since the token was issued would enroll a
 	// device every request of which is refused. Failing here rolls back the
 	// redemption, so the token is not spent.
-	if err := s.requireDeviceAgentGrants(ctx, org, agent.ID); err != nil {
+	if err := s.requireDeviceAgentGrants(ctx, org, agent.ID, joinToken.HooksProjectID); err != nil {
 		return nil, err
 	}
 
@@ -466,7 +444,7 @@ func (s *Service) deviceIssuer(ctx context.Context, dbtx pgx.Tx, org string, act
 	}
 	created := false
 	if len(issuers) == 0 {
-		issuerURL := DeviceIssuer(s.sharedHosts.ServerURL, org)
+		issuerURL := workloadidentity.DeviceIssuerURL(s.sharedHosts.ServerURL, org)
 		row, err := q.CreateDeviceIssuer(ctx, repo.CreateDeviceIssuerParams{
 			OrganizationID: org,
 			Name:           deviceIssuerName,

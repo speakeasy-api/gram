@@ -43,6 +43,13 @@ func AssistantCheck(scope Scope, resourceID, projectID string) Check {
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
 }
 
+// HooksIngestCheck builds the org:hooks_ingest check for projectID. It always
+// carries the project, because matching skips grant keys a check omits, which
+// would let a project-bounded grant through for any project.
+func HooksIngestCheck(organizationID, projectID string) Check {
+	return Check{Scope: ScopeOrgHooksIngest, ResourceKind: "", ResourceID: organizationID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
+}
+
 func expressionForCheck(check Check) GrantExpression {
 	exclusion, ok := ExclusionScopeFor(check.Scope)
 	if !ok {

@@ -10,7 +10,7 @@ import (
 // --- Service ---
 
 var _ = Service("agent", func() {
-	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.")
+	Description("Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. A headless device enrolled as a workload may call getPlugins with a device-agent token instead. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.")
 	Security(security.ByKey, func() {
 		Scope("agent_user")
 	})
@@ -24,11 +24,16 @@ var _ = Service("agent", func() {
 		// owner and the org derives from the key. An org `agent` install key also
 		// passes (it implies `agent_user`; see auth.Authorize); the MDM profile
 		// then vouches the enrolled user's email via the Gram-User-Email header.
+		//
+		// A headless device presents a device-agent token instead, tried first so a
+		// request without one falls through to the API key and keeps its errors.
+		Security(security.DeviceAgentToken)
 		Security(security.ByKey, func() {
 			Scope("agent_user")
 		})
 
 		Payload(func() {
+			security.DeviceAgentTokenPayload()
 			security.ByKeyPayload()
 			// Authoritative when authenticating with an org install key (`agent`
 			// scope): that key's owner is an admin, not the enrolled developer, so
@@ -85,6 +90,7 @@ var _ = Service("agent", func() {
 
 		HTTP(func() {
 			GET("/rpc/agent.getPlugins")
+			security.DeviceAgentTokenHeader()
 			security.ByKeyHeader()
 			// Headers rather than query params: all three identify a person or
 			// a machine, and the request logger records URLs but not headers.

@@ -92,7 +92,7 @@ func hooksLogsPayload(export *collectorlogsv1.ExportLogsServiceRequest) (*hooksg
 	if err := hookssrv.ValidateLogsRequestBody(&body); err != nil {
 		return nil, fmt.Errorf("validate hooks logs payload: %w", err)
 	}
-	return hookssrv.NewLogsPayload(&body, nil, nil), nil
+	return hookssrv.NewLogsPayload(&body, nil, nil, nil), nil
 }
 
 func hooksMetricsPayload(export *collectormetricsv1.ExportMetricsServiceRequest) (*hooksgen.MetricsPayload, error) {
@@ -103,7 +103,7 @@ func hooksMetricsPayload(export *collectormetricsv1.ExportMetricsServiceRequest)
 	if err := hookssrv.ValidateMetricsRequestBody(&body); err != nil {
 		return nil, fmt.Errorf("validate hooks metrics payload: %w", err)
 	}
-	return hookssrv.NewMetricsPayload(&body, nil, nil), nil
+	return hookssrv.NewMetricsPayload(&body, nil, nil, nil), nil
 }
 
 // transcodeToRequestBody renders the export as OTLP/JSON and decodes it with

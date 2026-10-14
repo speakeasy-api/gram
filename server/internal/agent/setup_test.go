@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -78,6 +80,8 @@ type testInstance struct {
 	// blobs is the same store the service writes handoff documents to, so
 	// tests can assert a burned handoff left nothing behind in it.
 	blobs assets.BlobStore
+	// deviceAgentTokens mints the device-agent tokens the service accepts.
+	deviceAgentTokens *deviceagenttoken.Issuer
 }
 
 // newTestAgentService clones a fresh DB, seeds the mock org + a project (via
@@ -109,7 +113,7 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	// behavior is exercised explicitly via withPerUserKeyAuth.
 	authCtx.APIKeyScopes = []string{"agent", "agent_user"}
 
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential, AdmitWorkloadSession: runtimepolicy.AdmitWorkloadSession})
 
 	features := &stubProductFeatures{sessionPortability: true}
 	blobs := assetstest.NewTestBlobStore(t)
@@ -121,16 +125,18 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	enabled := func(context.Context, string) (bool, error) { return true, nil }
 	telemetryLogger := telemetry.NewLogger(ctx, logger, tracerProvider, testenv.NewMeterProvider(t), chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(logger))
 
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger, nil)
+	deviceAgentTokens := deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), features, testServerURL, blobs, telemetryLogger, nil, deviceAgentTokens)
 
 	return ctx, &testInstance{
-		service:   svc,
-		conn:      conn,
-		chConn:    chConn,
-		orgID:     authCtx.ActiveOrganizationID,
-		projectID: *authCtx.ProjectID,
-		features:  features,
-		blobs:     blobs,
+		service:           svc,
+		conn:              conn,
+		chConn:            chConn,
+		orgID:             authCtx.ActiveOrganizationID,
+		projectID:         *authCtx.ProjectID,
+		features:          features,
+		blobs:             blobs,
+		deviceAgentTokens: deviceAgentTokens,
 	}
 }
 

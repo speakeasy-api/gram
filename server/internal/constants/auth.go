@@ -24,6 +24,9 @@ const (
 	TransferInNonceCookiePrefix        = "__Host-gram_transfer_in_"
 	TransferInNonceCookieMaxAgeSeconds = 90
 
+	DeviceAgentTokenSecurityScheme = "device_agent_token"
+	DeviceAgentTokenHeader         = "Authorization"
+
 	ChatSessionsTokenSecurityScheme = "chat_sessions_token"
 	ChatSessionsTokenHeader         = "Gram-Chat-Session" //nolint:gosec // this is a valid header name
 

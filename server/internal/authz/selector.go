@@ -128,6 +128,12 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	},
 }
 
+// scopeAllowsSelectorKey allows project_id on org:hooks_ingest only: it is the
+// one org scope checked per project, and elsewhere the key would restrict nothing.
+func scopeAllowsSelectorKey(scope Scope, key string) bool {
+	return scope == ScopeOrgHooksIngest && key == SelectorKeyProjectID
+}
+
 // ValidateSelector checks that a selector is well-formed for the given scope.
 // Rules:
 //   - resource_kind and resource_id must both be present
@@ -164,7 +170,7 @@ func ValidateSelector(scope Scope, sel Selector) error {
 		if k == SelectorKeyResourceKind || k == SelectorKeyResourceID {
 			continue
 		}
-		if !allowed[k] {
+		if !allowed[k] && !scopeAllowsSelectorKey(scope, k) {
 			return fmt.Errorf("selector key %q is not allowed for scope %q", k, scope)
 		}
 		if k == SelectorKeyDisposition && !validDispositions[v] {

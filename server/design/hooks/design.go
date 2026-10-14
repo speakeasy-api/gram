@@ -353,12 +353,14 @@ var _ = Service("hooks", func() {
 			Extend(ClaudeHookPayload)
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
+			Attribute("device_agent_token", String, "Optional `Bearer` device-agent token a headless device presents in place of an API key.")
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Speakeasy hook plugin.")
 			Attribute("idempotency_key", String, "Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.")
 		})
 		Result(ClaudeHookResult)
 		HTTP(func() {
 			POST("/rpc/hooks.claude")
+			Header("device_agent_token:Authorization")
 			Header("apikey_token:Gram-Key")
 			Header("project_slug_input:Gram-Project")
 			Header("hook_hostname:X-Gram-Hook-Hostname")
@@ -369,12 +371,17 @@ var _ = Service("hooks", func() {
 	Method("cursor", func() {
 		Description("Endpoint for Cursor hook events. Handles beforeSubmitPrompt, stop, afterAgentResponse, afterAgentThought, preToolUse, postToolUse, postToolUseFailure, beforeMCPExecution, and afterMCPExecution.")
 
+		// A headless device that authenticates as a workload presents a
+		// device-agent token; tried first so a request without one keeps the
+		// API key's errors.
+		Security(security.DeviceAgentToken, security.ProjectSlug)
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")
 		})
 
 		Payload(func() {
 			Extend(CursorHookPayload)
+			security.DeviceAgentTokenPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Speakeasy hook plugin.")
@@ -385,6 +392,7 @@ var _ = Service("hooks", func() {
 
 		HTTP(func() {
 			POST("/rpc/hooks.cursor")
+			security.DeviceAgentTokenHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Header("hook_hostname:X-Gram-Hook-Hostname")
@@ -395,12 +403,17 @@ var _ = Service("hooks", func() {
 	Method("codex", func() {
 		Description("Endpoint for Codex hook events. Handles SessionStart, PreToolUse, PermissionRequest, PostToolUse, UserPromptSubmit, and Stop.")
 
+		// A headless device that authenticates as a workload presents a
+		// device-agent token; tried first so a request without one keeps the
+		// API key's errors.
+		Security(security.DeviceAgentToken, security.ProjectSlug)
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")
 		})
 
 		Payload(func() {
 			Extend(CodexHookPayload)
+			security.DeviceAgentTokenPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("hook_hostname", String, "Optional endpoint hostname supplied by the Speakeasy hook plugin.")
@@ -411,6 +424,7 @@ var _ = Service("hooks", func() {
 
 		HTTP(func() {
 			POST("/rpc/hooks.codex")
+			security.DeviceAgentTokenHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Header("hook_hostname:X-Gram-Hook-Hostname")
@@ -421,6 +435,9 @@ var _ = Service("hooks", func() {
 	Method("ingest", func() {
 		Description("Feature-first unified endpoint for hook events from supported coding assistants.")
 
+		// A headless device sends a device-agent token in Authorization in place
+		// of Gram-Key; it is then required to name its Gram-Project.
+		//
 		// Gram-Key + Gram-Project are OPTIONAL: hook senders must stay
 		// non-blocking for machines that never signed in. A request with no
 		// key is acknowledged without processing (fail open); a request that
@@ -430,6 +447,7 @@ var _ = Service("hooks", func() {
 			Extend(IngestHookPayload)
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
+			Attribute("device_agent_token", String, "Optional `Bearer` device-agent token a headless device presents in place of an API key.")
 			Attribute("replayed", Boolean, "Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.")
 		})
 
@@ -437,6 +455,7 @@ var _ = Service("hooks", func() {
 
 		HTTP(func() {
 			POST("/rpc/hooks.ingest")
+			Header("device_agent_token:Authorization")
 			Header("apikey_token:Gram-Key")
 			Header("project_slug_input:Gram-Project")
 			Header("idempotency_key:Idempotency-Key")
@@ -501,14 +520,19 @@ var _ = Service("hooks", func() {
 	})
 
 	Method("logs", func() {
-		Description("Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication.")
+		Description("Endpoint to receive OTEL logs data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.")
 
+		// A headless device that authenticates as a workload presents a
+		// device-agent token; tried first so a request without one keeps the
+		// API key's errors.
+		Security(security.DeviceAgentToken, security.ProjectSlug)
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")
 		})
 
 		Payload(func() {
 			Extend(OTELLogsPayload)
+			security.DeviceAgentTokenPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
@@ -518,6 +542,7 @@ var _ = Service("hooks", func() {
 		HTTP(func() {
 			// OTLP ingestion path must match OpenTelemetry's /v1/logs convention.
 			POST("/rpc/hooks.otel/v1/logs") //nolint:glint // rpcendpointformat: OTLP ingestion path must match OpenTelemetry conventions
+			security.DeviceAgentTokenHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusAccepted)
@@ -525,14 +550,19 @@ var _ = Service("hooks", func() {
 	})
 
 	Method("metrics", func() {
-		Description("Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication.")
+		Description("Endpoint to receive OTEL metrics data from Claude Code. Requires API key authentication, or a device-agent token from a headless device enrolled as a workload.")
 
+		// A headless device that authenticates as a workload presents a
+		// device-agent token; tried first so a request without one keeps the
+		// API key's errors.
+		Security(security.DeviceAgentToken, security.ProjectSlug)
 		Security(security.ByKey, security.ProjectSlug, func() {
 			Scope("hooks")
 		})
 
 		Payload(func() {
 			Extend(OTELMetricsPayload)
+			security.DeviceAgentTokenPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 		})
@@ -542,6 +572,7 @@ var _ = Service("hooks", func() {
 		HTTP(func() {
 			// OTLP ingestion path must match OpenTelemetry's /v1/metrics convention.
 			POST("/rpc/hooks.otel/v1/metrics") //nolint:glint // rpcendpointformat: OTLP ingestion path must match OpenTelemetry conventions
+			security.DeviceAgentTokenHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusAccepted)
