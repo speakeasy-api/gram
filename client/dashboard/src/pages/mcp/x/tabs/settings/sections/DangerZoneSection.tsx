@@ -252,28 +252,31 @@ export function DangerZoneSection({
                 </RequireScope>
               </ServerControlRow>
 
-              <ServerControlRow
-                title={deleteRow.title}
-                description={deleteRow.description}
-              >
-                <RequireScope
-                  scope="mcp:write"
-                  resourceId={mcpServer.projectId}
-                  level="component"
+              {/* A hosted server's lifecycle stays on the toolset page. */}
+              {hostedWrapper ? null : (
+                <ServerControlRow
+                  title={deleteRow.title}
+                  description={deleteRow.description}
                 >
-                  <Button
-                    variant="destructive-primary"
-                    size="md"
-                    disabled={!deleteReady}
-                    onClick={() => setDeleteDialogOpen(true)}
+                  <RequireScope
+                    scope="mcp:write"
+                    resourceId={mcpServer.projectId}
+                    level="component"
                   >
-                    <Button.LeftIcon>
-                      <Trash2 className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Delete MCP server</Button.Text>
-                  </Button>
-                </RequireScope>
-              </ServerControlRow>
+                    <Button
+                      variant="destructive-primary"
+                      size="md"
+                      disabled={!deleteReady}
+                      onClick={() => setDeleteDialogOpen(true)}
+                    >
+                      <Button.LeftIcon>
+                        <Trash2 className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Delete MCP server</Button.Text>
+                    </Button>
+                  </RequireScope>
+                </ServerControlRow>
+              )}
             </div>
             {linkedQuery.isError && (
               // The delete stays disabled until the sibling list loads, since

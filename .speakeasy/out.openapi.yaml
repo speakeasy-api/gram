@@ -32739,7 +32739,7 @@ paths:
         name: CreateMcpServer
   /rpc/mcpServers.delete:
     delete:
-      description: Delete an MCP server
+      description: Delete an MCP server. A toolset's own hosted server (its id equals the toolset id) is disabled instead, as turning MCP off on the toolset does, and stays listed with visibility disabled. Other servers, including other toolset-backed ones, are deleted.
       operationId: deleteMcpServer
       parameters:
         - allowEmptyValue: true

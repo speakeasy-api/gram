@@ -75,3 +75,37 @@ describe("DangerZoneSection availability", () => {
     ).toHaveProperty("disabled", false);
   });
 });
+
+describe("DangerZoneSection delete", () => {
+  it("offers no delete for a hosted server", () => {
+    renderSection({
+      ...base,
+      id: "hosted-1",
+      toolsetId: "hosted-1",
+    } as McpServer);
+
+    expect(
+      screen.queryByRole("button", { name: /Delete MCP server/ }),
+    ).toBeNull();
+  });
+
+  it("keeps delete for other servers", () => {
+    renderSection({ ...base, id: "server-1" } as McpServer);
+
+    expect(
+      screen.getByRole("button", { name: /Delete MCP server/ }),
+    ).toBeTruthy();
+  });
+
+  it("keeps delete for toolset-backed servers with a different id", () => {
+    renderSection({
+      ...base,
+      id: "server-2",
+      toolsetId: "toolset-1",
+    } as McpServer);
+
+    expect(
+      screen.getByRole("button", { name: /Delete MCP server/ }),
+    ).toBeTruthy();
+  });
+});

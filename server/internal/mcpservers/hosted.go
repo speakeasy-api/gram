@@ -40,9 +40,12 @@ type HostedServerUpdate struct {
 // so the toolset hosting columns and the wrapper stay identical within one transaction.
 type HostedServerWriter interface {
 	UpdateHostedServer(ctx context.Context, update HostedServerUpdate) (repo.McpServer, error)
+
+	// DisableHostedServer disables the hosted server as a toolset MCP disable does, keeping the wrapper live.
+	DisableHostedServer(ctx context.Context, toolsetID uuid.UUID) error
 }
 
-// WithHostedServerWriter lets UpdateMcpServer manage canonical hosted wrappers; without one they are rejected.
+// WithHostedServerWriter lets update and delete manage canonical hosted wrappers; without one they are rejected.
 func (s *Service) WithHostedServerWriter(writer HostedServerWriter) *Service {
 	s.hostedServers = writer
 	return s
@@ -93,4 +96,12 @@ func (s *Service) updateHostedServer(ctx context.Context, logger *slog.Logger, e
 		return nil, err //nolint:wrapcheck // The writer returns oops errors whose codes reach the caller.
 	}
 	return mv.BuildMcpServerView(updated), nil
+}
+
+// deleteHostedServer disables rather than tombstones: the wrapper id is the toolset id and cannot be reused.
+func (s *Service) deleteHostedServer(ctx context.Context, toolsetID uuid.UUID) error {
+	if s.hostedServers == nil {
+		return oops.E(oops.CodeInvalid, nil, "manage hosted MCP servers through the toolset")
+	}
+	return s.hostedServers.DisableHostedServer(ctx, toolsetID) //nolint:wrapcheck // The writer returns oops errors whose codes reach the caller.
 }

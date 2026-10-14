@@ -1059,7 +1059,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return err
 	}
 	if isCanonicalHostedWrapper(preexisting) {
-		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
+		return s.deleteHostedServer(ctx, preexisting.ID)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
