@@ -468,6 +468,8 @@ BEGIN
   DELETE FROM remote_session_ema_bindings
   WHERE organization_id = demo_org
     AND project_id IN (SELECT id FROM projects WHERE organization_id = demo_org);
+  -- EMA provider orders reference issuers without cascading, retired rows too.
+  DELETE FROM remote_session_ema_providers WHERE organization_id = demo_org;
   DELETE FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM remote_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM mcp_servers WHERE project_id = proj_a;
@@ -1642,16 +1644,21 @@ BEGIN
   -- authenticate to it rather than to a member.
   -- session_duration must be a Microseconds-only interval: the user-session
   -- mint rejects Months/Days components (see usersessions/minthandler.go).
+  -- The workforce issuer serves one shared authorization server for its MCP
+  -- servers at /oauth/usi/{id}. It is left unpinned: this script runs against
+  -- every deployment, and an unpinned issuer URL follows the deployment's own
+  -- server URL.
   INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
-                                    authn_challenge_mode, session_duration) VALUES
+                                    authn_challenge_mode, session_duration,
+                                    authorization_server_mode) VALUES
     (demo.det_uuid('gram-demo-issuer-workforce'), NULL, demo_org, 'acme-workforce',
-     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared'),
     (demo.det_uuid('gram-demo-issuer-linear'), proj_a, demo_org, 'linear',
-     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
     (demo.det_uuid('gram-demo-issuer-slack'), proj_a, demo_org, 'slack',
-     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
     (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, demo_org, 'acme-agent-gateway',
-     'interactive', make_interval(secs => 14 * 24 * 60 * 60));
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
   INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                            remote_mcp_server_id, user_session_issuer_id,
@@ -3702,7 +3709,7 @@ Channel context stays in the Raw view.
     AND principal_urn IN (
       'agent:' || demo.det_uuid('gram-demo-managed-agent-1')::text,
       'agent:' || demo.det_uuid('gram-demo-managed-agent-4')::text)
-    AND scope = 'mcp:connect' AND effect IS NULL
+    AND scope = 'mcp:connect'
     AND selectors = jsonb_build_object(
       'resource_kind', 'mcp',
       'resource_id', demo.det_uuid('gram-demo-mcpserver-linear')::text,
@@ -3865,6 +3872,16 @@ Channel context stays in the Raw view.
   WHERE organization_id = demo_org AND project_id IS NULL AND deleted IS FALSE;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 organization user session issuer, found %', stray;
+  END IF;
+
+  -- The workforce issuer shows a shared authorization server.
+  SELECT count(*) INTO stray FROM user_session_issuers
+  WHERE id = demo.det_uuid('gram-demo-issuer-workforce')
+    AND organization_id = demo_org
+    AND authorization_server_mode = 'shared'
+    AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected the workforce user session issuer in shared mode, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_clients

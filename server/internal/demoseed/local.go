@@ -134,6 +134,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
+		{"verify developer email domain", localVerifiedDomainSQL, []any{spec.OrgID, emailDomain(dev.Email)}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
 		{"mcp registry", localMCPRegistrySQL, nil},
@@ -331,10 +332,10 @@ DO UPDATE SET deleted_at = NULL, updated_at = clock_timestamp()
 // chats (owned by the fictional teammates) would otherwise be invisible:
 // without it chatVisibilityScope falls back to own-sessions-only.
 const localSessionVisibilitySQL = `
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, 'user:' || $2, 'chat:read', NULL,
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, 'user:' || $2, 'chat:read',
         jsonb_build_object('resource_kind', 'chat', 'resource_id', '*'))
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
 `
 
 // platform_mcp is the default-on organization entitlement locally; the shared
@@ -351,6 +352,18 @@ const localIdentityFeaturesSQL = `
 INSERT INTO organization_features (organization_id, feature_name)
 VALUES ($1, 'sso'), ($1, 'scim')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// The developer's email domain is verified locally so a dev-idp SSO sign-in
+// passes the SSO identity check end to end.
+const localVerifiedDomainSQL = `
+UPDATE organization_metadata
+SET verified_domains = array_append(COALESCE(verified_domains, '{}'), $2::text)
+WHERE id = $1
+  AND $2::text <> ''
+  AND NOT EXISTS (
+      SELECT 1 FROM unnest(COALESCE(verified_domains, '{}')) AS d WHERE lower(d) = lower($2::text)
+  )
 `
 
 // A key with a well-known hash. The plaintext is never stored, so the row is
@@ -379,3 +392,11 @@ INSERT INTO mcp_registries (name, url)
 VALUES ('Speakeasy Recommended', 'https://api.pulsemcp.com')
 ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING
 `
+
+func emailDomain(email string) string {
+	at := strings.LastIndexByte(email, '@')
+	if at < 0 {
+		return ""
+	}
+	return strings.ToLower(email[at+1:])
+}

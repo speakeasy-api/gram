@@ -77,6 +77,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/lake"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -518,6 +519,8 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
 	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
+	// The issuer kill switch fails closed when unset, so local dev sets it off.
+	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -1326,6 +1329,14 @@ func newLakeStorage(ctx context.Context, logger *slog.Logger, c *cli.Context) (s
 		return store, buckets, func(context.Context) error { return store.Close() }, nil
 	}
 
+	// Preview environments emulate Pub/Sub and map no lake bucket. They have no
+	// persistent disk either, so the lake is disabled rather than faked: a nil
+	// store tells the caller not to start the lake consumer.
+	if buckets["lake"] == "" && c.String("pubsub-emulator-host") != "" {
+		logger.WarnContext(ctx, "lake disabled: Pub/Sub is emulated and no lake bucket is mapped")
+		return nil, buckets, noopShutdown, nil
+	}
+
 	if buckets["lake"] == "" {
 		return nil, nil, noopShutdown, errors.New("storage bucket mapping for lake is required")
 	}
@@ -1705,6 +1716,7 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 		SigningCredentialID:   credentialID,
 		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
 		ServerURL:             serverURL,
+		AllowLoopbackIssuer:   c.String("environment") == "local",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build identity provider connections provisioner: %w", err)
@@ -1772,4 +1784,38 @@ func preserveLegacyLocalSigningKey(sourcePath, targetPath string) error {
 // capacity.
 func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog, replicaDB *pgxpool.Pool, siteURL *url.URL) *growthsignals.Emitter {
 	return growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(replicaDB), siteURL)
+}
+
+// newInternalSessionIssuerGate reports what each organization may do with its
+// issuer, honoring the startup kill switch.
+func newInternalSessionIssuerGate(c *cli.Context, db *pgxpool.Pool, featureFlags feature.Provider, provisioning bool) *internalsessionissuers.Gate {
+	return internalsessionissuers.NewGate(db, featureFlags, internalsessionissuers.GateConfig{
+		Provisioning:  provisioning,
+		SigningPaused: c.Bool(internalSessionIssuerSigningPausedFlag),
+	})
+}
+
+// internalSessionIssuerManager keeps a nil provisioner a nil interface.
+func internalSessionIssuerManager(provisioner *identityproviderconnections.Provisioner) internalsessionissuers.Manager {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
+}
+
+// enableIssuerKeyAutoActivation lets the key sweep finish routine rotations,
+// approving each key with the same checks a signature passes.
+func enableIssuerKeyAutoActivation(provisioner *identityproviderconnections.Provisioner, signer *internalsessionissuers.Signer) {
+	if provisioner == nil {
+		return
+	}
+	provisioner.SetEMAIssuerActivationCheck(signer.CheckActivation)
+}
+
+// issuerKeySweeper keeps a nil provisioner a nil interface.
+func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) background.InternalSessionIssuerKeySweeper {
+	if provisioner == nil {
+		return nil
+	}
+	return provisioner
 }

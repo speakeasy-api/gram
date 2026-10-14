@@ -13,7 +13,7 @@ import {
 } from "./usersessionissuer.js";
 
 /**
- * Result type for listing organization-owned user_session_issuers.
+ * Result type for listing the user_session_issuers in an organization.
  */
 export type ListOrganizationUserSessionIssuersResult = {
   items: Array<UserSessionIssuer>;

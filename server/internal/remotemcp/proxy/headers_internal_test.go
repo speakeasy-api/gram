@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -197,9 +198,10 @@ func TestApplyRequestHeadersRemoteStripsProtectedInboundHeaders(t *testing.T) {
 	for name := range protectedInboundFixture {
 		require.Empty(t, remoteReq.Header.Values(name), "%s must not be copied to a remote upstream", name)
 	}
-	require.Len(t, remoteReq.Header, 2, "only the allowed client headers remain")
+	require.Len(t, remoteReq.Header, 3, "only the allowed client headers and the default User-Agent remain")
 	require.Equal(t, "allowed", remoteReq.Header.Get("X-Client-Trace"))
 	require.Equal(t, "2025-06-18", remoteReq.Header.Get("Mcp-Protocol-Version"))
+	require.Equal(t, constants.UserAgent, remoteReq.Header.Get("User-Agent"))
 }
 
 func TestApplyRequestHeadersTunneledCopyUnchanged(t *testing.T) {
@@ -636,4 +638,28 @@ func TestApplyRequestHeadersRemoteSuppressionClearsUnderscoreSpelling(t *testing
 	for name := range remoteReq.Header {
 		require.NotEqual(t, "x-upstream-token", headerKey(name), "client spelling %q survived", name)
 	}
+}
+
+func TestApplyRequestHeadersForwardsCallerUserAgent(t *testing.T) {
+	t.Parallel()
+
+	userReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://gram.test/mcp", nil)
+	userReq.Header.Set("User-Agent", "claude-code/2.1.0")
+	remoteReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://upstream.test/mcp", nil)
+	p := &Proxy{Logger: testenv.NewLogger(t), Headers: nil, AuthorizationOverride: ""}
+
+	require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+	require.Equal(t, []string{"claude-code/2.1.0"}, remoteReq.Header.Values("User-Agent"))
+}
+
+func TestApplyRequestHeadersDefaultsMissingUserAgent(t *testing.T) {
+	t.Parallel()
+
+	userReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://gram.test/mcp", nil)
+	userReq.Header.Del("User-Agent")
+	remoteReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://upstream.test/mcp", nil)
+	p := &Proxy{Logger: testenv.NewLogger(t), Headers: nil, AuthorizationOverride: ""}
+
+	require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+	require.Equal(t, constants.UserAgent, remoteReq.Header.Get("User-Agent"))
 }

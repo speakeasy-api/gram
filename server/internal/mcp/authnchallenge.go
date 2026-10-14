@@ -158,6 +158,11 @@ type AuthnChallengeState struct {
 	// IDP callback. Impersonated humans may authorize themselves but must never
 	// authorize an agent.
 	AuthorizerImpersonated *bool `json:"authorizer_impersonated,omitempty"`
+	// SignInID is the authorizing user's recorded sign-in; nil leaves the grant unlinked.
+	SignInID *uuid.UUID `json:"sign_in_id,omitempty"`
+	// FreshLoginForced marks a flow already sent back to the identity
+	// provider because its sign-in was revoked, so it never loops.
+	FreshLoginForced bool `json:"fresh_login_forced,omitempty"`
 	// AgentAuthorizationTarget fixes the only policy an agent selection may
 	// authorize. Older in-flight states omit it and remain self-only.
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
@@ -262,7 +267,9 @@ type UserSessionGrant struct {
 	// validated against the endpoint's live tool inventory and resource-bound.
 	// Nil means all tools.
 	ToolSelection *toolfilter.SessionSelection `json:"tool_selection,omitempty"`
-	CreatedAt     time.Time                    `json:"created_at"`
+	// SignInID carries the authorizing user's sign-in to the session row.
+	SignInID  *uuid.UUID `json:"sign_in_id,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -306,20 +313,10 @@ var errIssuerGateCallerProfile = errors.New("resolve caller assertion user profi
 // earned: a bad signature, the wrong audience, an expired or revoked token, a
 // session row that is gone, or a principal whose admission has been withdrawn.
 // It is what makes the invalid_token challenge opt-in. A failure on Speakeasy's side
-// — an unreachable revocation store, a policy read that never returned, a
-// rollout gate that hides the endpoint — leaves it unset, so the client is told
-// to retry rather than to throw a live credential away.
+// — an unreachable revocation store, a policy read that never returned —
+// leaves it unset, so the client is told to retry rather than to throw a live
+// credential away.
 var errCredentialRejected = errors.New("credential rejected")
-
-// errWorkloadRolloutDisabled marks a workload session hidden by the agent
-// authorization rollout rather than by anything wrong with its token. Exchanging
-// a fresh token would hit the same gate, so this must not earn invalid_token.
-var errWorkloadRolloutDisabled = errors.New("workload session hidden by agent authorization rollout")
-
-// errWorkloadRolloutUnavailable marks a workload session refused because the
-// rollout state could not be read at all. The endpoint is hidden either way,
-// but an outage is not a rollout decision and is not reported as one.
-var errWorkloadRolloutUnavailable = errors.New("agent authorization rollout state unavailable")
 
 // errUnsupportedSessionSubject marks a session subject kind that parses but
 // that this path cannot describe as a caller. It is an error rather than a
@@ -344,16 +341,6 @@ const (
 	// Labeled apart from a bad token so an outage does not read as a spike of
 	// bad credentials.
 	issuerGateReasonRevocationUnavailable = "revocation_check_unavailable"
-
-	// issuerGateReasonWorkloadRolloutDisabled: a workload session reached an
-	// endpoint whose organization has agent authorization switched off.
-	issuerGateReasonWorkloadRolloutDisabled = "workload_rollout_disabled"
-
-	// issuerGateReasonWorkloadRolloutUnavailable: the rollout state could not
-	// be read, so the endpoint stayed hidden without the feature being off.
-	// Separate from the line above so an outage cannot be mistaken for
-	// deliberate rollout state.
-	issuerGateReasonWorkloadRolloutUnavailable = "workload_rollout_unavailable"
 
 	// issuerGateReasonInvalidRemoteSession: the bearer token was accepted but
 	// a required upstream remote session for the issuer is missing or
@@ -431,10 +418,6 @@ func issuerGateFailureReason(err error) string {
 		return "workload_admission_load_failed"
 	case errors.Is(err, sessiontokens.ErrRevocationUnavailable):
 		return issuerGateReasonRevocationUnavailable
-	case errors.Is(err, errWorkloadRolloutDisabled):
-		return issuerGateReasonWorkloadRolloutDisabled
-	case errors.Is(err, errWorkloadRolloutUnavailable):
-		return issuerGateReasonWorkloadRolloutUnavailable
 	case errors.Is(err, errWorkloadSessionOutOfReach):
 		return issuerGateReasonWorkloadSessionOutOfReach
 	default:

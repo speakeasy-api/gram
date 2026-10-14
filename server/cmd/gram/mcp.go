@@ -39,7 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -348,6 +348,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
 	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+	issuerGate := newInternalSessionIssuerGate(c, db, featureFlags, false)
+	issuerSigner := internalsessionissuers.NewSigner(logger, tracerProvider, meterProvider, db, issuerGate, gcpIdentity, kmsSigningClients, internalIssuerSignerConfig(c, callbackOrigins.Outbound))
+	issuerGate.SetSigningAuthority(issuerSigner.CheckAuthority)
+	issuerGate.SetEnableAuthority(issuerSigner.CheckEnableAuthority)
 
 	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
 	if err != nil {
@@ -360,7 +364,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	}
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
 		CallerAssertions: callerAssertions,
-		Logger:           logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
+		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
+		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 		Sessions: sessionManager, ChatSessions: chatSessions, Environment: env,
 		Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
@@ -384,18 +389,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		remotesessions.WithRefreshIssuerMetadataRefresher(remoteSessionDeps.Refresher),
 		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
 		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner))
-	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures)
+	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)
 	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
+	remoteSessionsService.SetFeatureFlags(featureFlags)
+	remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())
 	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil {
 			return oops.C(oops.CodeNotFound)
-		}
-		for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
-			evaluation, err := feature.EvaluateFlag(ctx, featureFlags, flag, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
-			if err != nil || evaluation != feature.EvaluationEnabled {
-				return oops.C(oops.CodeNotFound)
-			}
 		}
 		_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
 		if err != nil {
@@ -420,6 +421,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
+	internalsessionissuers.AttachDiscovery(mux, db, logger)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	xmcp.Attach(mux, runtime.XMCP, runtime.Metadata)
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)

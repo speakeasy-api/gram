@@ -65,7 +65,7 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 
 // BuildListIssuersPayload builds the payload for the
 // organizationUserSessionIssuers listIssuers endpoint from CLI flags.
-func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor string, organizationUserSessionIssuersListIssuersLimit string, organizationUserSessionIssuersListIssuersSessionToken string) (*organizationusersessionissuers.ListIssuersPayload, error) {
+func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor string, organizationUserSessionIssuersListIssuersLimit string, organizationUserSessionIssuersListIssuersTier string, organizationUserSessionIssuersListIssuersSessionToken string) (*organizationusersessionissuers.ListIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -89,6 +89,18 @@ func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor str
 			}
 		}
 	}
+	var tier *string
+	{
+		if organizationUserSessionIssuersListIssuersTier != "" {
+			tier = &organizationUserSessionIssuersListIssuersTier
+			if !(*tier == "organization" || *tier == "project") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tier", *tier, []any{"organization", "project"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if organizationUserSessionIssuersListIssuersSessionToken != "" {
@@ -98,6 +110,7 @@ func BuildListIssuersPayload(organizationUserSessionIssuersListIssuersCursor str
 	v := &organizationusersessionissuers.ListIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.Tier = tier
 	v.SessionToken = sessionToken
 
 	return v, nil
@@ -178,6 +191,55 @@ func BuildUpdateIssuerPayload(organizationUserSessionIssuersUpdateIssuerBody str
 		SessionDurationHours:          body.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: body.ClientIDMetadataAdmissionMode,
 	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListMcpServersPayload builds the payload for the
+// organizationUserSessionIssuers listMcpServers endpoint from CLI flags.
+func BuildListMcpServersPayload(organizationUserSessionIssuersListMcpServersUserSessionIssuerID string, organizationUserSessionIssuersListMcpServersCursor string, organizationUserSessionIssuersListMcpServersLimit string, organizationUserSessionIssuersListMcpServersSessionToken string) (*organizationusersessionissuers.ListMcpServersPayload, error) {
+	var err error
+	var userSessionIssuerID string
+	{
+		userSessionIssuerID = organizationUserSessionIssuersListMcpServersUserSessionIssuerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", userSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if organizationUserSessionIssuersListMcpServersCursor != "" {
+			cursor = &organizationUserSessionIssuersListMcpServersCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit *int
+	{
+		if organizationUserSessionIssuersListMcpServersLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(organizationUserSessionIssuersListMcpServersLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersListMcpServersSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersListMcpServersSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.ListMcpServersPayload{}
+	v.UserSessionIssuerID = userSessionIssuerID
+	v.Cursor = cursor
+	v.Limit = limit
 	v.SessionToken = sessionToken
 
 	return v, nil

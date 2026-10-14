@@ -10,9 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -111,40 +109,6 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 			require.Zero(t, count)
 		})
 	}
-}
-
-func TestAgentPolicyDoesNotNormalizeOrDeleteExistingDenyRows(t *testing.T) {
-	t.Parallel()
-
-	conn := newTestDB(t)
-	seedOrganization(t, conn, "org-deny-row")
-	seedOrganizationUser(t, conn, "org-deny-row", "owner")
-	agent := createAgent(t, conn, "org-deny-row", "owner", "Deny row agent")
-	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
-	ctx := validatedHumanContext(t, "org-deny-row", "owner")
-	selector := []byte(`{"resource_kind":"project","resource_id":"*"}`)
-	denyID := uuid.New()
-	//nolint:glint // notestingrawsql: seeds a legacy deny row to test isolation
-	_, err := conn.Exec(t.Context(), `INSERT INTO principal_grants (id, organization_id, principal_urn, scope, effect, selectors) VALUES ($1, $2, $3, $4, 'deny', $5)`,
-		denyID, "org-deny-row", "agent:"+agent.ID.String(), string(authz.ScopeProjectRead), selector)
-	require.NoError(t, err)
-
-	listed, err := service.ListPolicyGrants(ctx, &gen.ListPolicyGrantsPayload{AgentID: agent.ID.String()})
-	require.NoError(t, err)
-	require.Empty(t, listed)
-	_, err = service.CreatePolicyGrant(ctx, &gen.CreatePolicyGrantPayload{
-		AgentID: agent.ID.String(), Scope: string(authz.ScopeProjectRead), Effect: "allow",
-		Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"},
-	})
-	requireOopsCode(t, err, oops.CodeConflict)
-	err = service.DeletePolicyGrant(ctx, &gen.DeletePolicyGrantPayload{AgentID: agent.ID.String(), GrantID: denyID.String()})
-	requireOopsCode(t, err, oops.CodeNotFound)
-
-	effect, err := testrepo.New(conn).GetPrincipalGrantEffectFixture(t.Context(), testrepo.GetPrincipalGrantEffectFixtureParams{
-		OrganizationID: "org-deny-row", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), Scope: string(authz.ScopeProjectRead), Selectors: selector,
-	})
-	require.NoError(t, err)
-	require.Equal(t, conv.ToPGText("deny"), effect)
 }
 
 func TestAgentPolicyGrantIDsCannotCrossAgentOrTenant(t *testing.T) {

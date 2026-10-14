@@ -68,5 +68,6 @@ describe("useMcpServerAuthTarget", () => {
     const { result } = renderHook(() => useMcpServerAuthTarget(server));
 
     expect(result.current.permissionResourceId).toBe("toolset-id");
+    expect(result.current.mcpServerId).toBe("mcp-server-id");
   });
 });

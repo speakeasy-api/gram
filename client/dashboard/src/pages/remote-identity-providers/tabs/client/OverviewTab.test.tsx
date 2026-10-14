@@ -3,6 +3,7 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod as AuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat } from "@gram/client/models/components/updateremotesessionclientform.js";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -14,9 +15,15 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OverviewTab } from "./OverviewTab";
 
-const mutation = vi.hoisted(() => ({ mutate: vi.fn() }));
+const mutation = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  onSuccess: undefined as ((saved: unknown) => Promise<void>) | undefined,
+}));
 const auth = vi.hoisted(() => ({ isPlatformAdmin: false, isOrgAdmin: true }));
 
+vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
+  useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
+}));
 vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ name }: { name: string }) => <span>{name}</span>,
 }));
@@ -66,10 +73,21 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 vi.mock(
   "@gram/client/react-query/updateOrganizationRemoteSessionClient.js",
   () => ({
-    useUpdateOrganizationRemoteSessionClientMutation: () => ({
-      mutate: mutation.mutate,
-      isPending: false,
-    }),
+    useUpdateOrganizationRemoteSessionClientMutation: (options: {
+      onSuccess: (saved: unknown) => Promise<void>;
+    }) => {
+      mutation.onSuccess = options.onSuccess;
+      return { mutate: mutation.mutate, isPending: false };
+    },
+  }),
+);
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionClient.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/organizationRemoteSessionClient.js")
+    >()),
+    invalidateAllOrganizationRemoteSessionClient: vi.fn(),
   }),
 );
 vi.mock("./KeySetField", () => ({ KeySetField: () => <div>key set</div> }));
@@ -222,7 +240,7 @@ function scopesField(): HTMLElement {
 }
 
 function openScopes() {
-  fireEvent.click(screen.getByText("No scopes"));
+  fireEvent.click(screen.getByText("Discovered at sign-in"));
 }
 
 describe("client overview identity provider card", () => {
@@ -322,30 +340,24 @@ describe("client overview scope picker", () => {
     renderTab({ client: client(undefined, { scope: ["openid", "extra"] }) });
     save();
 
-    expect(lastSaved().scope).toEqual(["openid", "extra"]);
+    expect(lastSaved().scope).toBeUndefined();
     expect(screen.getByText("extra")).toBeTruthy();
   });
 
-  it("sends an empty array when no scopes are chosen", () => {
+  it("omits an unset scope on an unrelated save", () => {
     renderTab();
     save();
 
-    expect(lastSaved().scope).toEqual([]);
+    expect(lastSaved().scope).toBeUndefined();
   });
 
-  it("warns about an issuer override only once a scope is selected", () => {
-    renderTab({ issuer: issuer({ scopeOverride: ["read"] }) });
-
-    expect(screen.queryByText(/has a scope override/)).toBeNull();
-    openScopes();
-    fireEvent.click(screen.getByRole("option", { name: /openid/ }));
-    expect(screen.getByText(/has a scope override/)).toBeTruthy();
-  });
-
-  it("does not warn when the issuer has no override", () => {
+  it("sends an empty array when saved scopes are cleared", () => {
     renderTab({ client: client(undefined, { scope: ["openid"] }) });
+    fireEvent.click(scopesField());
+    fireEvent.click(screen.getByRole("option", { name: /openid/ }));
+    save();
 
-    expect(screen.queryByText(/has a scope override/)).toBeNull();
+    expect(lastSaved().scope).toEqual([]);
   });
 });
 
@@ -455,7 +467,7 @@ describe("client overview settings", () => {
     expect(lastSaved().audience).toBe("api://example");
   });
 
-  it("clears the audience when the field is emptied", () => {
+  it("omits an emptied audience and shows the kept one after saving", async () => {
     renderTab({ client: client(undefined, { audience: "old-aud" }) });
 
     fireEvent.change(screen.getByLabelText("Audience"), {
@@ -463,7 +475,21 @@ describe("client overview settings", () => {
     });
     save();
 
-    expect(lastSaved().audience).toBe("");
+    expect(lastSaved().audience).toBeUndefined();
+
+    await act(async () => {
+      await mutation.onSuccess?.({ audience: "old-aud" });
+    });
+    expect((screen.getByLabelText("Audience") as HTMLInputElement).value).toBe(
+      "old-aud",
+    );
+  });
+
+  it("omits an unset audience on an unrelated save", () => {
+    renderTab();
+    save();
+
+    expect(lastSaved().audience).toBeUndefined();
   });
 
   it("hides secret rotation when private_key_jwt is selected", () => {

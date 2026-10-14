@@ -59,8 +59,51 @@ func TestFederatedResponseIssuer(t *testing.T) {
 	require.NoError(t, p.ValidateResponseIssuer(p.issuer.Issuer))
 	require.ErrorIs(t, p.ValidateResponseIssuer(p.issuer.Issuer+"/"), ErrFederatedIdentity)
 	p.metadata.AuthorizationResponseIssParameterSupported = false
-	require.ErrorIs(t, p.ValidateResponseIssuer(""), ErrFederatedIdentity)
+	require.ErrorIs(t, p.ValidateResponseIssuer(""), ErrFederatedIdentity, "ID token issuer stays strict without RFC 9207")
 	require.NoError(t, p.ValidateResponseIssuer(p.issuer.Issuer))
+}
+
+func issQuery(values ...string) url.Values {
+	return url.Values{"iss": values}
+}
+
+func TestFederatedAuthorizationResponseIssuerAdvertised(t *testing.T) {
+	t.Parallel()
+	p := federatedFixture(t)
+	require.True(t, p.AdvertisesResponseIssuer())
+	require.ErrorIs(t, p.ValidateAuthorizationResponseIssuer(url.Values{}), ErrFederatedIdentity, "an advertising provider must return iss")
+	require.ErrorIs(t, p.ValidateAuthorizationResponseIssuer(issQuery("")), ErrFederatedIdentity)
+	require.ErrorIs(t, p.ValidateAuthorizationResponseIssuer(issQuery("https://other.example.test")), ErrFederatedIdentity)
+	require.ErrorIs(t, p.ValidateAuthorizationResponseIssuer(issQuery(p.issuer.Issuer+"/")), ErrFederatedIdentity)
+	require.ErrorIs(t, p.ValidateAuthorizationResponseIssuer(issQuery(p.issuer.Issuer, p.issuer.Issuer)), ErrFederatedIdentity, "iss must not repeat")
+	require.NoError(t, p.ValidateAuthorizationResponseIssuer(issQuery(p.issuer.Issuer)))
+}
+
+func TestFederatedAuthorizationResponseIssuerNotAdvertised(t *testing.T) {
+	t.Parallel()
+	p := federatedFixture(t)
+	p.metadata.AuthorizationResponseIssParameterSupported = false
+	require.False(t, p.AdvertisesResponseIssuer())
+	require.NoError(t, p.ValidateAuthorizationResponseIssuer(url.Values{}), "per-client redirect binds the issuer")
+	require.ErrorIs(t, p.ValidateAuthorizationResponseIssuer(issQuery("")), ErrFederatedIdentity, "a present empty iss is not an omitted one")
+	require.ErrorIs(t, p.ValidateAuthorizationResponseIssuer(issQuery(p.issuer.Issuer, p.issuer.Issuer)), ErrFederatedIdentity, "iss must not repeat")
+	require.NoError(t, p.ValidateAuthorizationResponseIssuer(issQuery(p.issuer.Issuer)))
+	require.ErrorIs(t, p.ValidateAuthorizationResponseIssuer(issQuery("https://other.example.test")), ErrFederatedIdentity, "a present iss must match")
+	var missing *FederatedProvider
+	require.ErrorIs(t, missing.ValidateAuthorizationResponseIssuer(url.Values{}), ErrFederatedIdentity)
+}
+
+func TestFederatedAuthorizationResponseIssuerOperatorRequired(t *testing.T) {
+	t.Parallel()
+	p := federatedFixture(t)
+	p.metadata.AuthorizationResponseIssParameterSupported = false
+	p.issuer.AuthorizationResponseIssParameterSupported = pgtype.Bool{Bool: true, Valid: true}
+	require.True(t, p.AdvertisesResponseIssuer(), "the operator-set column overrides discovery")
+	require.ErrorIs(t, p.ValidateAuthorizationResponseIssuer(url.Values{}), ErrFederatedIdentity, "an operator-required iss cannot be omitted")
+	require.NoError(t, p.ValidateAuthorizationResponseIssuer(issQuery(p.issuer.Issuer)))
+	p.issuer.AuthorizationResponseIssParameterSupported = pgtype.Bool{Bool: false, Valid: true}
+	require.False(t, p.AdvertisesResponseIssuer())
+	require.NoError(t, p.ValidateAuthorizationResponseIssuer(url.Values{}))
 }
 
 func TestFederatedConfiguration(t *testing.T) {
@@ -284,16 +327,16 @@ func TestFederatedExchangeErrorClassification(t *testing.T) {
 	}
 }
 
-// RFC 9207 support gates login only: token exchange and refresh never receive
-// an authorization response, so a provider without it still loads.
-func TestFederatedLoginRequiresResponseIssuer(t *testing.T) {
+// A provider without RFC 9207 support still serves login: the per-client
+// redirect URI identifies the issuer instead.
+func TestFederatedLoginWithoutResponseIssuer(t *testing.T) {
 	t.Parallel()
 	p := federatedFixture(t)
 	p.metadata.AuthorizationResponseIssParameterSupported = false
 	loaded, err := newFederatedProvider(p.organizationID, p.issuer, p.client, p.metadata)
-	require.NoError(t, err, "exchange and refresh do not need response issuer identification")
-	require.ErrorIs(t, loaded.RequireLoginRedirect(), ErrFederatedConfiguration)
-	_, err = loaded.BuildAuthorizationURL("https://gram.example.test/callback", "state", "nonce", strings.Repeat("a", 43))
-	require.ErrorIs(t, err, ErrFederatedConfiguration, "login still refuses a provider without RFC 9207")
-	require.NoError(t, federatedFixture(t).RequireLoginRedirect())
+	require.NoError(t, err)
+	callback := "https://gram.example.test/mcp/idp_callback/" + p.client.ID.String()
+	u, err := loaded.BuildAuthorizationURL(callback, "state", "nonce", strings.Repeat("a", 43))
+	require.NoError(t, err)
+	require.Equal(t, callback, u.Query().Get("redirect_uri"))
 }

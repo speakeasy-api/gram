@@ -103,6 +103,19 @@ type RearmTrialRequestBody struct {
 	Days *int `form:"days,omitempty" json:"days,omitempty" xml:"days,omitempty"`
 }
 
+// RepairInferenceKeyRequestBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP request body.
+type RepairInferenceKeyRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	KeyType        *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	// Unique known disable causes to remove.
+	RemoveCauses []string `form:"remove_causes,omitempty" json:"remove_causes,omitempty" xml:"remove_causes,omitempty"`
+	// Exact staff confirmation: I know what I'm doing
+	Confirmation *string `form:"confirmation,omitempty" json:"confirmation,omitempty" xml:"confirmation,omitempty"`
+	// Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+}
+
 // SetInferenceKeyMonthlyLimitRequestBody is the type of the "admin" service
 // "setInferenceKeyMonthlyLimit" endpoint HTTP request body.
 type SetInferenceKeyMonthlyLimitRequestBody struct {
@@ -1106,6 +1119,13 @@ type GetOrganizationStatsResponseBody struct {
 	DisabledLast7Days int64 `form:"disabled_last_7_days" json:"disabled_last_7_days" xml:"disabled_last_7_days"`
 }
 
+// RepairInferenceKeyResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body.
+type RepairInferenceKeyResponseBody struct {
+	Key                   *AdminInferenceKeyRepairStateResponseBody `form:"key" json:"key" xml:"key"`
+	ReconciliationPending bool                                      `form:"reconciliation_pending" json:"reconciliation_pending" xml:"reconciliation_pending"`
+}
+
 // GetInferenceKeysResponseBody is the type of the "admin" service
 // "getInferenceKeys" endpoint HTTP response body.
 type GetInferenceKeysResponseBody []*AdminInferenceKeyResponse
@@ -1341,9 +1361,12 @@ type CreateGlobalIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetGlobalIssuerDuplicatePreflightResponseBody is the type of the "admin"
@@ -1487,9 +1510,12 @@ type UpdateGlobalIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // FetchGlobalIssuerMetadataResponseBody is the type of the "admin" service
@@ -7131,6 +7157,190 @@ type GetOrganizationStatsUnexpectedResponseBody struct {
 // service "getOrganizationStats" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetOrganizationStatsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyUnauthorizedResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "unauthorized" error.
+type RepairInferenceKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyForbiddenResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "forbidden" error.
+type RepairInferenceKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyBadRequestResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "bad_request" error.
+type RepairInferenceKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyNotFoundResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "not_found" error.
+type RepairInferenceKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyConflictResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "conflict" error.
+type RepairInferenceKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyUnsupportedMediaResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RepairInferenceKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyInvalidResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "invalid" error.
+type RepairInferenceKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyInvariantViolationResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RepairInferenceKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyUnexpectedResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "unexpected" error.
+type RepairInferenceKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RepairInferenceKeyGatewayErrorResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "gateway_error" error.
+type RepairInferenceKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -18394,6 +18604,26 @@ type AdminOrganizationResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// AdminInferenceKeyRepairStateResponseBody is used to define fields on
+// response body types.
+type AdminInferenceKeyRepairStateResponseBody struct {
+	KeyType                 string                                `form:"key_type" json:"key_type" xml:"key_type"`
+	MonthlyCredits          int64                                 `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+	Disabled                bool                                  `form:"disabled" json:"disabled" xml:"disabled"`
+	DisableCauses           []string                              `form:"disable_causes" json:"disable_causes" xml:"disable_causes"`
+	DisableCausesClassified bool                                  `form:"disable_causes_classified" json:"disable_causes_classified" xml:"disable_causes_classified"`
+	CauseDiagnostics        []*AdminInferenceKeyCauseResponseBody `form:"cause_diagnostics" json:"cause_diagnostics" xml:"cause_diagnostics"`
+}
+
+// AdminInferenceKeyCauseResponseBody is used to define fields on response body
+// types.
+type AdminInferenceKeyCauseResponseBody struct {
+	Cause         string  `form:"cause" json:"cause" xml:"cause"`
+	Description   string  `form:"description" json:"description" xml:"description"`
+	Removable     bool    `form:"removable" json:"removable" xml:"removable"`
+	BlockedReason *string `form:"blocked_reason,omitempty" json:"blocked_reason,omitempty" xml:"blocked_reason,omitempty"`
+}
+
 // AdminInferenceKeyResponse is used to define fields on response body types.
 type AdminInferenceKeyResponse struct {
 	KeyType string `form:"key_type" json:"key_type" xml:"key_type"`
@@ -18402,10 +18632,20 @@ type AdminInferenceKeyResponse struct {
 	MonthlyCredits int64   `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 	Disabled       bool    `form:"disabled" json:"disabled" xml:"disabled"`
 	// Active internal disable causes. Omitted for legacy unclassified rows.
-	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
+	DisableCauses    []string                          `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
+	CauseDiagnostics []*AdminInferenceKeyCauseResponse `form:"cause_diagnostics,omitempty" json:"cause_diagnostics,omitempty" xml:"cause_diagnostics,omitempty"`
 	// Whether disable_causes is classified, including an explicitly empty cause
 	// set.
 	DisableCausesClassified bool `form:"disable_causes_classified" json:"disable_causes_classified" xml:"disable_causes_classified"`
+}
+
+// AdminInferenceKeyCauseResponse is used to define fields on response body
+// types.
+type AdminInferenceKeyCauseResponse struct {
+	Cause         string  `form:"cause" json:"cause" xml:"cause"`
+	Description   string  `form:"description" json:"description" xml:"description"`
+	Removable     bool    `form:"removable" json:"removable" xml:"removable"`
+	BlockedReason *string `form:"blocked_reason,omitempty" json:"blocked_reason,omitempty" xml:"blocked_reason,omitempty"`
 }
 
 // AdminInferenceSpendMonthResponse is used to define fields on response body
@@ -18415,6 +18655,33 @@ type AdminInferenceSpendMonthResponse struct {
 	// Exclusive end of the UTC calendar month.
 	PeriodEnd string `form:"period_end" json:"period_end" xml:"period_end"`
 	SpendUsd  string `form:"spend_usd" json:"spend_usd" xml:"spend_usd"`
+}
+
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// No order is saved, so the endpoint uses its configured external issuer.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
+	// The saved providers in order, or the external default.
+	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+}
+
+// EMAProviderResponseBody is used to define fields on response body types.
+type EMAProviderResponseBody struct {
+	// external or speakeasy.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The external provider's remote session issuer. Omitted for speakeasy, and
+	// for the endpoint's trusted issuer in a default order with none.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's internal session issuer, for speakeasy.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's authorization server does not accept this issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -18562,9 +18829,12 @@ type RemoteSessionIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // IssuerConvergenceCandidateResponseBody is used to define fields on response
@@ -18799,6 +19069,13 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to:
+	// one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id}
+	// (shared).
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether a shared authorization server's issuer URL is pinned, so it stays
+	// the same if the deployment's hosts change.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
 	// Set when the issuer trusts an external authorization server's assertions.
 	TrustedRemoteSession *AdminMcpServerHealthTrustedRemoteSessionResponseBody `form:"trusted_remote_session,omitempty" json:"trusted_remote_session,omitempty" xml:"trusted_remote_session,omitempty"`
 	// Other live servers in the project that share this issuer.
@@ -19670,6 +19947,18 @@ func NewGetOrganizationStatsResponseBody(res *admin.AdminOrganizationStats) *Get
 	return body
 }
 
+// NewRepairInferenceKeyResponseBody builds the HTTP response body from the
+// result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyResponseBody(res *admin.AdminInferenceKeyRepairResult) *RepairInferenceKeyResponseBody {
+	body := &RepairInferenceKeyResponseBody{
+		ReconciliationPending: res.ReconciliationPending,
+	}
+	if res.Key != nil {
+		body.Key = marshalAdminAdminInferenceKeyRepairStateToAdminInferenceKeyRepairStateResponseBody(res.Key)
+	}
+	return body
+}
+
 // NewGetInferenceKeysResponseBody builds the HTTP response body from the
 // result of the "getInferenceKeys" endpoint of the "admin" service.
 func NewGetInferenceKeysResponseBody(res []*admin.AdminInferenceKey) GetInferenceKeysResponseBody {
@@ -19922,6 +20211,9 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 			body.ScopeOverride[i] = val
 		}
 	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
+	}
 	return body
 }
 
@@ -20075,6 +20367,9 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 		for i, val := range res.ScopeOverride {
 			body.ScopeOverride[i] = val
 		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
 	}
 	return body
 }
@@ -25071,6 +25366,148 @@ func NewGetOrganizationStatsUnexpectedResponseBody(res *goa.ServiceError) *GetOr
 // service.
 func NewGetOrganizationStatsGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationStatsGatewayErrorResponseBody {
 	body := &GetOrganizationStatsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyUnauthorizedResponseBody(res *goa.ServiceError) *RepairInferenceKeyUnauthorizedResponseBody {
+	body := &RepairInferenceKeyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyForbiddenResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyForbiddenResponseBody(res *goa.ServiceError) *RepairInferenceKeyForbiddenResponseBody {
+	body := &RepairInferenceKeyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyBadRequestResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyBadRequestResponseBody(res *goa.ServiceError) *RepairInferenceKeyBadRequestResponseBody {
+	body := &RepairInferenceKeyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyNotFoundResponseBody builds the HTTP response body from
+// the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyNotFoundResponseBody(res *goa.ServiceError) *RepairInferenceKeyNotFoundResponseBody {
+	body := &RepairInferenceKeyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyConflictResponseBody builds the HTTP response body from
+// the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyConflictResponseBody(res *goa.ServiceError) *RepairInferenceKeyConflictResponseBody {
+	body := &RepairInferenceKeyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "repairInferenceKey" endpoint of the "admin"
+// service.
+func NewRepairInferenceKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *RepairInferenceKeyUnsupportedMediaResponseBody {
+	body := &RepairInferenceKeyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyInvalidResponseBody builds the HTTP response body from
+// the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyInvalidResponseBody(res *goa.ServiceError) *RepairInferenceKeyInvalidResponseBody {
+	body := &RepairInferenceKeyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "repairInferenceKey" endpoint of the "admin"
+// service.
+func NewRepairInferenceKeyInvariantViolationResponseBody(res *goa.ServiceError) *RepairInferenceKeyInvariantViolationResponseBody {
+	body := &RepairInferenceKeyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyUnexpectedResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyUnexpectedResponseBody(res *goa.ServiceError) *RepairInferenceKeyUnexpectedResponseBody {
+	body := &RepairInferenceKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyGatewayErrorResponseBody(res *goa.ServiceError) *RepairInferenceKeyGatewayErrorResponseBody {
+	body := &RepairInferenceKeyGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -34094,6 +34531,24 @@ func NewGetOrganizationStatsPayload(adminSessionToken *string) *admin.GetOrganiz
 	return v
 }
 
+// NewRepairInferenceKeyPayload builds a admin service repairInferenceKey
+// endpoint payload.
+func NewRepairInferenceKeyPayload(body *RepairInferenceKeyRequestBody, adminSessionToken *string) *admin.RepairInferenceKeyPayload {
+	v := &admin.RepairInferenceKeyPayload{
+		OrganizationID: *body.OrganizationID,
+		KeyType:        *body.KeyType,
+		Confirmation:   *body.Confirmation,
+		Reason:         *body.Reason,
+	}
+	v.RemoveCauses = make([]string, len(body.RemoveCauses))
+	for i, val := range body.RemoveCauses {
+		v.RemoveCauses[i] = val
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewGetInferenceKeysPayload builds a admin service getInferenceKeys endpoint
 // payload.
 func NewGetInferenceKeysPayload(organizationID string, adminSessionToken *string) *admin.GetInferenceKeysPayload {
@@ -35115,6 +35570,53 @@ func ValidateRearmTrialRequestBody(body *RearmTrialRequestBody) (err error) {
 	if body.Days != nil {
 		if *body.Days > 365 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", *body.Days, 365, false))
+		}
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyRequestBody runs the validations defined on
+// RepairInferenceKeyRequestBody
+func ValidateRepairInferenceKeyRequestBody(body *RepairInferenceKeyRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.KeyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_type", "body"))
+	}
+	if body.RemoveCauses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remove_causes", "body"))
+	}
+	if body.Confirmation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("confirmation", "body"))
+	}
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.KeyType != nil {
+		if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
+		}
+	}
+	if len(body.RemoveCauses) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 1, true))
+	}
+	if len(body.RemoveCauses) > 3 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 3, false))
+	}
+	for _, e := range body.RemoveCauses {
+		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.remove_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
+		}
+	}
+	if body.Confirmation != nil {
+		if !(*body.Confirmation == "I know what I'm doing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confirmation", *body.Confirmation, []any{"I know what I'm doing"}))
+		}
+	}
+	if body.Reason != nil {
+		if utf8.RuneCountInString(*body.Reason) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1, true))
 		}
 	}
 	return

@@ -742,7 +742,10 @@ func newStreamsCommand() *cli.Command {
 
 			// Start subscription receivers in this block
 			{
-				mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
+				// newLakeStorage returns no store when the lake is disabled.
+				if lakeStore != nil {
+					mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
+				}
 
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 				roleDistributionGuard := admission.NewGuard()

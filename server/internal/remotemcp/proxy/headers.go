@@ -348,6 +348,11 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 		remoteReq.Header.Set("Authorization", "Bearer "+p.AuthorizationOverride)
 	}
 
+	// The caller's User-Agent is forwarded as is; only a missing one gets ours.
+	if remoteReq.Header.Get("User-Agent") == "" {
+		remoteReq.Header.Set("User-Agent", constants.UserAgent)
+	}
+
 	// Strip last so configured headers can't reintroduce Accept-Encoding after
 	// the user-header filter: the Go transport must own content-encoding
 	// negotiation, otherwise a gzipped upstream body reaches readJSONRPCBody

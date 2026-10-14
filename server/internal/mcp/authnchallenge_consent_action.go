@@ -97,6 +97,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
 	case "retry_delegation":
 		return s.retryFederatedDelegation(w, r, endpoint, challengeState)
+	case "identity_chaining_check":
+		return s.serveIdentityChainingCheck(w, r, endpoint, challengeState)
 	}
 
 	bound, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
@@ -253,7 +255,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil
 
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", or "retry_delegation"`).LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", "retry_delegation", or "identity_chaining_check"`).LogError(ctx, logger)
 	}
 }
 
@@ -281,6 +283,7 @@ func (s *Service) buildRemoteConnectURL(
 	var clientResource string
 	var rerr error
 	claimedByMember := false
+	resourceMember := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if endpoint.MetaMcpServerID.Valid {
 		// Member visibility is judged against the consent subject, as the runtime
 		// request the minted session will make will be.
@@ -288,7 +291,7 @@ func (s *Service) buildRemoteConnectURL(
 		if cerr != nil {
 			return "", false, oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 		}
-		clientResource, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
 	}
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 	// decided, and falling back would qualify the credential anyway.
@@ -324,6 +327,7 @@ func (s *Service) buildRemoteConnectURL(
 		RouteBase:           endpoint.RouteBase,
 		McpServerID:         endpoint.McpServerID,
 		MetaMcpServerID:     endpoint.MetaMcpServerID,
+		ResourceMcpServerID: resourceMember,
 		FinalRedirectURI:    "",
 		ConsentURL:          consentURL,
 		Resource:            clientResource,

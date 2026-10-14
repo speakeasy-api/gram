@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -237,6 +238,9 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+	// replayLiveness overrides the refresh-replay session check in unit tests
+	// that run without a database.
+	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool)
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -491,6 +495,7 @@ func NewService(
 	)
 
 	service := &Service{
+		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
 		consentBindings:           nil,
@@ -619,10 +624,10 @@ func (s *Service) outboundOrigin() *url.URL {
 // federatedCallbackOrigin is the origin of the federated IdP callback for a
 // trusted client: its recorded callback_base_url, so it shares a host with
 // the client's remote_login_callback, or outboundOrigin when none is recorded.
-func (s *Service) federatedCallbackOrigin(provider *remotesessions.FederatedProvider) *url.URL {
+func (s *Service) federatedCallbackOrigin(callbackBase pgtype.Text) *url.URL {
 	origins := s.callbackOrigins
 	origins.Outbound = s.outboundOrigin()
-	return origins.ForClient(provider.CallbackBaseURL())
+	return origins.ForClient(callbackBase)
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
@@ -725,6 +730,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 	// Both stops of the remote login browser hop: the bind stop on a remote
 	// client's callback host, and the confirm stop on the IdP callback host.
@@ -1407,7 +1413,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	// Load header display names for remapping
-	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
+	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ProjectID, toolset.ID)
 
 	// Extract user IDs for telemetry
 	var userID, externalUserID, apiKeyID string
@@ -1741,10 +1747,10 @@ func (s *Service) recordToolsetSlugFallback(ctx context.Context, logger *slog.Lo
 
 // loadHeaderDisplayNames loads the header display names mapping from MCP metadata.
 // Returns an empty map if no metadata exists or on error (non-critical operation).
-func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID) map[string]string {
+func (s *Service) loadHeaderDisplayNames(ctx context.Context, projectID, toolsetID uuid.UUID) map[string]string {
 	result := make(map[string]string)
 
-	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
+	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, metadata_repo.GetHeaderDisplayNamesParams{ProjectID: projectID, BackendID: toolsetID})
 	if err != nil {
 		// Not found or error - return empty map, this is non-critical
 		return result

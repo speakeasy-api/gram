@@ -61,3 +61,22 @@ export { ScopeBadge } from "./components/ScopeBadge";
 export { ScopeMultiSelect } from "./components/ScopeMultiSelect";
 export { IssuerLogo } from "./components/IssuerLogo";
 export { ScopeList } from "./components/ScopeList";
+
+export {
+  isOAuthFormat,
+  keySetChoiceReady,
+  oauthFormatOf,
+} from "./model/serviceAccount";
+export type {
+  KeySetChoice,
+  ServiceAccountFormat,
+} from "./model/serviceAccount";
+export { ServiceAccountPanel } from "./components/ServiceAccountPanel";
+export { useServiceAccountClientDraft } from "./drafts/useServiceAccountClientDraft";
+export { useCustomerManagedKeys } from "./queries/useCustomerManagedKeys";
+export { useOrganizationKeySets, useResolveKeySet } from "./queries/useKeySets";
+export { AvailabilityBadge } from "./components/AvailabilityBadge";
+export { ClientKeyRegistration } from "./components/ClientKeyRegistration";
+export { KeySetPicker } from "./components/KeySetPicker";
+export { RadioRows } from "./components/RadioRows";
+export { StepMarker } from "./components/StepMarker";

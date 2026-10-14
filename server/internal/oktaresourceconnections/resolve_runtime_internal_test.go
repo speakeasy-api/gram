@@ -50,15 +50,15 @@ func TestResolveClientRuntimeScopesAndAttachments(t *testing.T) {
 	id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{unrelated, client}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "attached", id)
 	require.Equal(t, ClientBindingSingle, state)
-	require.Equal(t, []string{"read", "openid", "offline_access"}, scopes)
+	require.Equal(t, []string{"read"}, scopes)
 	_, _, state = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{unrelated}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, ClientBindingMissing, state)
 
 	// With discovery on the client's own scope beats the issuer override;
-	// off, the override still wins, as before the rollout flag.
+	// off (no prober), the override still wins.
 	client.IssuerScopeOverride = []string{"pinned"}
 	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{UseDiscovered: true}))
-	require.Equal(t, []string{"read", "openid", "offline_access"}, scopes)
+	require.Equal(t, []string{"read"}, scopes)
 	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, []string{"pinned"}, scopes)
 	client.Scope = nil
@@ -121,7 +121,7 @@ func TestResolveClientAggregatesEffectiveBindingScopes(t *testing.T) {
 		id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, bindings, allClients(remotesessions.ResourceScopes{}))
 		require.Equal(t, "bound", id)
 		require.Equal(t, ClientBindingBound, state)
-		require.Equal(t, []string{"openid", "read", "write"}, scopes)
+		require.Equal(t, []string{"read", "write"}, scopes)
 	}
 }
 

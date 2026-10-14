@@ -2,6 +2,7 @@ package identitychaining
 
 import (
 	"bytes"
+	"net/url"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -24,11 +26,12 @@ import (
 // chainStoreFixture is one tenant with a trusted IdP, a resource client bound
 // to an upstream by a ready binding, and a human with a retained delegation.
 type chainStoreFixture struct {
-	db        *pgxpool.Pool
-	chainer   *Chainer
-	req       Request
-	sel       selection
-	sessionID uuid.UUID
+	db         *pgxpool.Pool
+	chainer    *Chainer
+	req        Request
+	sel        selection
+	sessionID  uuid.UUID
+	configHash string
 }
 
 func newChainStoreFixture(t *testing.T) chainStoreFixture {
@@ -61,21 +64,35 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	resourceIssuer, resourceClient := prepareResourceClient(t, db, enc, org, testResourceIssuer, testResourceIssuer+"/token", testResourceClient, "resource-secret")
 	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://api.resource.example.test"}
 	binding, generation := bindResource(t, db, req, resourceIssuer, resourceClient, testResource, remotesessions.PreparationStateReady)
+	trusted, err := repo.New(db).GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{OrganizationID: org, IssuerID: idpIssuer, ClientID: idpClient})
+	require.NoError(t, err)
+	configHash := remotesessions.FederatedDelegationConfigurationHash(org, trusted.RemoteSessionIssuer, trusted.RemoteSessionClient)
 	session, err := repo.New(db).UpsertTrustedDelegationCredential(ctx, repo.UpsertTrustedDelegationCredentialParams{
 		OrganizationID: org, ClientID: idpClient, IssuerID: idpIssuer, SubjectUrn: urn.NewUserSubject(human).String(), ExpectedGeneration: 0,
-		ObservationStatus: pgtype.Text{String: "assertion_only", Valid: true},
+		CredentialConfigHash: pgtype.Text{String: configHash, Valid: true},
+		ObservationStatus:    pgtype.Text{String: "assertion_only", Valid: true},
 	})
 	require.NoError(t, err)
 
-	chainer := &Chainer{logger: testenv.NewLogger(t), db: db, enc: enc, challenges: nil, delegation: nil, keys: nil, locks: nil, now: time.Now}
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	serverURL, err := url.Parse("https://gram.example.test")
+	require.NoError(t, err)
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, testenv.NewMeterProvider(t), db, enc, policy, nil, nil, serverURL)
+	delegation := remotesessions.NewDelegationService(db, enc, challenges)
+	chainer := &Chainer{Governor: Governor{logger: logger, db: db, enc: enc, delegation: delegation, now: time.Now}, challenges: nil, keys: nil, locks: nil}
 	return chainStoreFixture{
-		db:      db,
-		chainer: chainer,
-		req:     req,
+		db:         db,
+		chainer:    chainer,
+		configHash: configHash,
+		req:        req,
 		sel: selection{
 			bindingID: binding, generation: generation, remoteIssuerID: resourceIssuer, clientID: resourceClient,
 			externalClientID: testResourceClient, issuer: testResourceIssuer, resource: testResource,
 			scopes: []string{"read"}, trustedIssuerID: idpIssuer, trustedClientID: idpClient, audience: testResourceIssuer,
+			provider: remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: idpIssuer, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
 		},
 		sessionID: session.ID,
 	}
@@ -185,7 +202,8 @@ func (f chainStoreFixture) signIn(t *testing.T, at time.Time, status string) {
 	}
 	_, err = q.UpsertTrustedDelegationCredential(t.Context(), repo.UpsertTrustedDelegationCredentialParams{
 		OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: subject, ExpectedGeneration: current.CredentialGeneration.Int64,
-		ObservationStatus: pgtype.Text{String: status, Valid: true}, CredentialObtainedAt: obtained,
+		CredentialConfigHash: pgtype.Text{String: f.configHash, Valid: true},
+		ObservationStatus:    pgtype.Text{String: status, Valid: true}, CredentialObtainedAt: obtained,
 	})
 	require.NoError(t, err)
 }
@@ -193,7 +211,7 @@ func (f chainStoreFixture) signIn(t *testing.T, at time.Time, status string) {
 func TestStore_PublishesEncryptedAndReuses(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("downstream-token")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
 
 	rows := f.credentials(t)
 	require.Len(t, rows, 1)
@@ -204,14 +222,14 @@ func TestStore_PublishesEncryptedAndReuses(t *testing.T) {
 	require.Equal(t, "downstream-token", token.Value())
 	require.Equal(t, "[redacted chained token]", token.String())
 
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("renewed-token")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("renewed-token")))
 	require.Len(t, f.credentials(t), 1, "renewal replaces the live slot instead of adding one")
 }
 
 func TestStore_RebindRetiresAndErasesCredential(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("downstream-token")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
 	f.setBinding(t, remotesessions.PreparationStateReady)
 
 	_, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
@@ -227,7 +245,7 @@ func TestStore_ExpiredCredentialIsNotReused(t *testing.T) {
 	f := newChainStoreFixture(t)
 	cred := f.credential("expiring-token")
 	cred.expiresAt = time.Now().Add(30 * time.Second)
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, cred))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, cred))
 	_, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 	require.False(t, ok, "a credential inside the expiry skew is renewed, never served")
 }
@@ -259,7 +277,7 @@ func TestStore_RejectsStalePublish(t *testing.T) {
 			t.Parallel()
 			f := newChainStoreFixture(t)
 			tc.mutate(t, f)
-			err := f.chainer.publish(t.Context(), f.req, f.sel, f.credential("stale-token"))
+			err := f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("stale-token"))
 			require.ErrorIs(t, err, errStale)
 			require.Empty(t, f.credentials(t), "a stale acquisition installs nothing")
 		})
@@ -284,7 +302,7 @@ func TestStore_RejectsSubstitutedCredentialUse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			f := newChainStoreFixture(t)
-			require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("victim-token")))
+			require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("victim-token")))
 			req, sel := f.req, f.sel
 			tc.mutate(&req, &sel)
 			_, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), req, sel)
@@ -299,7 +317,7 @@ func TestStore_RejectsSubstitutedCredentialUse(t *testing.T) {
 func TestStore_RevokedDelegationMakesCredentialUnusable(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("downstream-token")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
 	f.deleteDelegation(t)
 	_, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 	require.False(t, ok)
@@ -336,7 +354,7 @@ func TestStore_Authorize(t *testing.T) {
 func TestStore_AuthorityRejectsSubstitutedBinding(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	authority := authority{chainer: f.chainer, req: f.req}
+	authority := authority{db: f.db, req: f.req}
 	valid := remotesessions.DelegationBinding{OrganizationID: f.req.OrganizationID, IssuerID: f.sel.trustedIssuerID, ClientID: f.sel.trustedClientID, HumanID: f.req.UserID}
 	require.NoError(t, authority.AuthorizeDelegation(t.Context(), valid))
 	for name, b := range map[string]remotesessions.DelegationBinding{
@@ -416,7 +434,7 @@ func TestStore_BindingFailingReadinessDoesNotGovern(t *testing.T) {
 func TestStore_SignInReplacesEarlierCredential(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("revoked-upstream")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("revoked-upstream")))
 	_, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 	require.True(t, ok)
 
@@ -432,9 +450,9 @@ func TestStore_SignInReplacesEarlierCredential(t *testing.T) {
 func TestStore_RetireSparesConcurrentPublish(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("first-token")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("first-token")))
 	judged := f.credentials(t)[0]
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("fresh-token")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("fresh-token")))
 
 	require.NoError(t, repo.New(f.db).RetireEMACredential(t.Context(), repo.RetireEMACredentialParams{
 		ID: judged.ID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true}, ProjectID: uuid.NullUUID{UUID: f.req.ProjectID, Valid: true}, ExpectedUpdatedAt: judged.UpdatedAt,
@@ -466,7 +484,7 @@ func TestStore_WaitersAdoptHolderOutcome(t *testing.T) {
 		stale := newOutcome(StageExchange, ReasonInvalidTarget, ConfidenceInferred, false)
 		key := cacheKey("identityChainingAttempt", f.req, f.sel)
 		require.NoError(t, f.chainer.locks.Set(t.Context(), key, attemptResult{Outcome: stale, FinishedAt: time.Now().Add(-time.Hour)}, time.Minute))
-		require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("holder-token")))
+		require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("holder-token")))
 		token, outcome := f.chainer.awaitConcurrentAcquisition(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 		require.True(t, outcome.Succeeded(), "an earlier attempt's failure is never adopted")
 		require.Equal(t, "holder-token", token.Value())
@@ -486,7 +504,7 @@ func TestStore_RevocationInvalidatesCachedAndPendingTokens(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	cred := f.credential("downstream-token")
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, cred))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, cred))
 	affected, err := repo.New(f.db).RevokeTrustedDelegationCredential(t.Context(), repo.RevokeTrustedDelegationCredentialParams{
 		OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: urn.NewUserSubject(f.req.UserID).String(),
 	})
@@ -494,7 +512,7 @@ func TestStore_RevocationInvalidatesCachedAndPendingTokens(t *testing.T) {
 	require.EqualValues(t, 1, affected)
 	_, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 	require.False(t, ok, "revocation leaves the session row live but must prevent credential reuse")
-	require.ErrorIs(t, f.chainer.publish(t.Context(), f.req, f.sel, cred), errStale)
+	require.ErrorIs(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, cred), errStale)
 	rows := f.credentials(t)
 	require.Len(t, rows, 1)
 	require.True(t, rows[0].Deleted)
@@ -507,24 +525,24 @@ func TestStore_FreshSignInRejectsPendingToken(t *testing.T) {
 	cred := f.credential("old-sign-in-token")
 	signedIn := time.Now().UTC().Truncate(time.Microsecond)
 	f.signIn(t, signedIn, "assertion_only")
-	require.ErrorIs(t, f.chainer.publish(t.Context(), f.req, f.sel, cred), errStale)
+	require.ErrorIs(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, cred), errStale)
 	require.Empty(t, f.credentials(t))
 	cred.trustedObtainedAt = signedIn
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, cred), "a token acquired under the latest sign-in may publish")
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, cred), "a token acquired under the latest sign-in may publish")
 }
 
 func TestStore_RoutineDelegationWriteKeepsPendingToken(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	f.signIn(t, time.Time{}, "durable_credential_present")
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("pending-token")), "a delegation write without a new sign-in does not discard the exchange")
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("pending-token")), "a delegation write without a new sign-in does not discard the exchange")
 }
 
 func TestStore_DisabledOrganizationRejectsPendingToken(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	require.NoError(t, testrepo.New(f.db).DisableDelegationOrganizationFixture(t.Context(), f.req.OrganizationID))
-	require.ErrorIs(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("stale-token")), errStale)
+	require.ErrorIs(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("stale-token")), errStale)
 	require.Empty(t, f.credentials(t))
 }
 
@@ -532,7 +550,7 @@ func TestStore_RemovedMemberRejectsPendingToken(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	require.NoError(t, testrepo.New(f.db).ForceSoftDeleteOrganizationUserRelationshipsFixture(t.Context(), f.req.OrganizationID))
-	require.ErrorIs(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("stale-token")), errStale)
+	require.ErrorIs(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("stale-token")), errStale)
 	require.Empty(t, f.credentials(t))
 }
 
@@ -549,4 +567,29 @@ func TestStore_SelectBindingRestrictedToTunnelIssuer(t *testing.T) {
 	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), own)
 	require.Equal(t, success, outcome)
 	require.Equal(t, f.sel.bindingID, sel.bindingID)
+}
+
+func TestStore_SwitchingBackToExternalReplacesSpeakeasySlot(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	planted, err := repo.New(f.db).PlantSpeakeasyEMACredentialFixture(t.Context(), repo.PlantSpeakeasyEMACredentialFixtureParams{
+		OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true}, ProjectID: uuid.NullUUID{UUID: f.req.ProjectID, Valid: true},
+		UserSessionIssuerID: uuid.NullUUID{UUID: f.req.UserSessionIssuerID, Valid: true}, RemoteSessionIssuerID: uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true},
+		RemoteSessionClientID: uuid.NullUUID{UUID: f.sel.clientID, Valid: true}, Resource: f.sel.resource, SubjectUrn: urn.NewUserSubject(f.req.UserID).String(),
+		BindingID: uuid.NullUUID{UUID: f.sel.bindingID, Valid: true}, BindingGeneration: pgtype.Int8{Int64: f.sel.generation, Valid: true},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("external-token")), "the legacy subject index must not reject the external publish")
+	var live []repo.ListEMACredentialsFixtureRow
+	for _, row := range f.credentials(t) {
+		if !row.Deleted {
+			live = append(live, row)
+		}
+	}
+	require.Len(t, live, 1)
+	require.Equal(t, planted, live[0].ID, "the external publish takes over the Speakeasy slot")
+	token, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
+	require.True(t, ok, "the slot now holds the external credential")
+	require.Equal(t, "external-token", token.Value())
 }

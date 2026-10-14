@@ -9,6 +9,9 @@ import { ClientCard } from "./ClientCard";
 // Unlike OverviewTab.test, this renders the real Radix select fields, which a
 // disabled fieldset does not stop from opening.
 
+vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
+  useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
+}));
 vi.mock("@/contexts/Auth", () => ({ useIsPlatformAdmin: () => true }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({

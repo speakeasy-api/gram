@@ -1,10 +1,7 @@
 package agentmanagement
 
 import (
-	"bytes"
 	"context"
-	"errors"
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
@@ -16,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -45,7 +41,6 @@ func newDelegableFixture(t *testing.T) delegableFixture {
 	agent := createAgent(t, db, "org-delegable", "owner", "Delegable agent")
 	engine := authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(db, engine)
-	service.features = &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
 	seedGrant(t, t.Context(), db, "org-delegable", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentAuthorize, agent.ID.String())
 	return delegableFixture{db: db, service: service, agentID: agent.ID}
 }
@@ -268,102 +263,16 @@ func TestListDelegableGrantsRejectsCrossOrganizationAndNonhumanContexts(t *testi
 	}
 }
 
-func TestListDelegableGrantsCredentialGateFailsClosed(t *testing.T) {
+func TestListDelegableGrantsAuthenticatesBeforeAnyLookup(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		provider feature.Provider
-	}{
-		{name: "disabled", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}},
-		{name: "indeterminate", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationIndeterminate}},
-		{name: "provider error", provider: &recordingAgentManagementFeatures{err: errors.New("feature provider unavailable")}},
-		{name: "missing provider"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			f := newDelegableFixture(t)
-			f.service.features = tc.provider
-			var logs bytes.Buffer
-			f.service.logger = slog.New(slog.NewTextHandler(&logs, nil))
-			result, err := f.service.ListDelegableGrants(validatedHumanContext(t, "org-delegable", "owner"), &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String()})
-			require.Error(t, err)
-			require.Empty(t, result)
-			requireOopsCode(t, err, oops.CodeNotFound)
-			if tc.name == "provider error" {
-				require.Contains(t, logs.String(), "failed to evaluate agent credential rollout flag")
-				require.Contains(t, logs.String(), "feature provider unavailable")
-			}
-			if provider, ok := tc.provider.(*recordingAgentManagementFeatures); ok {
-				require.Equal(t, feature.FlagAgentIdentityCredentials, provider.flag)
-			}
-		})
-	}
-}
-
-func TestListDelegableGrantsGeneratedEndpointCannotBypassManagementGate(t *testing.T) {
-	t.Parallel()
-	for _, evaluation := range []feature.Evaluation{feature.EvaluationDisabled, feature.EvaluationIndeterminate} {
-		name := "disabled"
-		if evaluation == feature.EvaluationIndeterminate {
-			name = "indeterminate"
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			f := newDelegableFixture(t)
-			ctx := validatedHumanContext(t, "org-delegable", "owner")
-			flags := &recordingAgentManagementFeatures{evaluation: evaluation}
-			f.service.features = flags
-			f.service.auth = staticSessionAuthorizer{authCtx: mustAuthContext(t, ctx)}
-			endpoint := gen.NewListDelegableGrantsEndpoint(f.service, f.service.APIKeyAuth)
-			result, err := endpoint(ctx, &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String()})
-			requireOopsCode(t, err, oops.CodeNotFound)
-			require.Nil(t, result)
-			require.Equal(t, feature.FlagAgentManagement, flags.flag)
-		})
-	}
-}
-
-func TestListDelegableGrantsGatePrecedesAuthorizationPreparation(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name     string
-		provider feature.Provider
-	}{
-		{name: "disabled", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}},
-		{name: "indeterminate", provider: &recordingAgentManagementFeatures{evaluation: feature.EvaluationIndeterminate}},
-		{name: "provider error", provider: &recordingAgentManagementFeatures{err: errors.New("feature provider unavailable")}},
-		{name: "missing provider", provider: nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			// No database or authorization engine: even an unknown agent and caller
-			// must receive the cohort's 404 without opening a transaction or loading grants.
-			service := newTestService(nil, nil)
-			service.features = tc.provider
-			var logs bytes.Buffer
-			service.logger = slog.New(slog.NewTextHandler(&logs, nil))
-			ctx := validatedHumanContext(t, "org-disabled", "unknown-member")
-			for _, agentID := range []string{uuid.NewString(), "invalid-id"} {
-				result, err := service.ListDelegableGrants(ctx, &gen.ListDelegableGrantsPayload{AgentID: agentID})
-				requireOopsCode(t, err, oops.CodeNotFound)
-				require.Nil(t, result)
-			}
-			if tc.name == "provider error" {
-				require.Contains(t, logs.String(), "feature provider unavailable")
-			}
-		})
-	}
-}
-
-func TestListDelegableGrantsAuthenticatesBeforeCredentialGate(t *testing.T) {
-	t.Parallel()
+	// No database or authorization engine: an unauthenticated caller is
+	// refused before a transaction opens or grants load.
 	service := newTestService(nil, nil)
-	flags := &recordingAgentManagementFeatures{evaluation: feature.EvaluationDisabled}
-	service.features = flags
-	result, err := service.ListDelegableGrants(t.Context(), &gen.ListDelegableGrantsPayload{AgentID: uuid.NewString()})
-	requireOopsCode(t, err, oops.CodeUnauthorized)
-	require.Nil(t, result)
-	require.Empty(t, flags.flag, "unauthenticated callers must not evaluate tenant flags")
+	for _, agentID := range []string{uuid.NewString(), "invalid-id"} {
+		result, err := service.ListDelegableGrants(t.Context(), &gen.ListDelegableGrantsPayload{AgentID: agentID})
+		requireOopsCode(t, err, oops.CodeUnauthorized)
+		require.Nil(t, result)
+	}
 }
 
 func (f delegableFixture) toolset(t *testing.T, org, slug string) toolsetsrepo.Toolset {

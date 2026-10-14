@@ -954,6 +954,9 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	Attribute("callback_url", String, "The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients and on clients with credential_owner self, which have no callback.", func() {
 		Format(FormatURI)
 	})
+	Attribute("federated_callback_url", String, "The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.", func() {
+		Format(FormatURI)
+	})
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})

@@ -58,6 +58,10 @@ type Client struct {
 	// migrateIssuer endpoint.
 	MigrateIssuerDoer goahttp.Doer
 
+	// SetEMAProviders Doer is the HTTP client used to make requests to the
+	// setEMAProviders endpoint.
+	SetEMAProvidersDoer goahttp.Doer
+
 	// FetchIssuerMetadata Doer is the HTTP client used to make requests to the
 	// fetchIssuerMetadata endpoint.
 	FetchIssuerMetadataDoer goahttp.Doer
@@ -97,6 +101,7 @@ func NewClient(
 		MoveIssuerDoer:                  doer,
 		GetIssuerMigratePreflightDoer:   doer,
 		MigrateIssuerDoer:               doer,
+		SetEMAProvidersDoer:             doer,
 		FetchIssuerMetadataDoer:         doer,
 		RefreshIssuerMetadataDoer:       doer,
 		RestoreResponseBody:             restoreBody,
@@ -344,6 +349,30 @@ func (c *Client) MigrateIssuer() goa.Endpoint {
 		resp, err := c.MigrateIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetEMAProviders returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service setEMAProviders server.
+func (c *Client) SetEMAProviders() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetEMAProvidersRequest(c.encoder)
+		decodeResponse = DecodeSetEMAProvidersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetEMAProvidersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetEMAProvidersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "setEMAProviders", err)
 		}
 		return decodeResponse(resp)
 	}

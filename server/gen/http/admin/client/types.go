@@ -103,6 +103,19 @@ type RearmTrialRequestBody struct {
 	Days int `form:"days" json:"days" xml:"days"`
 }
 
+// RepairInferenceKeyRequestBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP request body.
+type RepairInferenceKeyRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	KeyType        string `form:"key_type" json:"key_type" xml:"key_type"`
+	// Unique known disable causes to remove.
+	RemoveCauses []string `form:"remove_causes" json:"remove_causes" xml:"remove_causes"`
+	// Exact staff confirmation: I know what I'm doing
+	Confirmation string `form:"confirmation" json:"confirmation" xml:"confirmation"`
+	// Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+	Reason string `form:"reason" json:"reason" xml:"reason"`
+}
+
 // SetInferenceKeyMonthlyLimitRequestBody is the type of the "admin" service
 // "setInferenceKeyMonthlyLimit" endpoint HTTP request body.
 type SetInferenceKeyMonthlyLimitRequestBody struct {
@@ -1106,6 +1119,13 @@ type GetOrganizationStatsResponseBody struct {
 	DisabledLast7Days *int64 `form:"disabled_last_7_days,omitempty" json:"disabled_last_7_days,omitempty" xml:"disabled_last_7_days,omitempty"`
 }
 
+// RepairInferenceKeyResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body.
+type RepairInferenceKeyResponseBody struct {
+	Key                   *AdminInferenceKeyRepairStateResponseBody `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	ReconciliationPending *bool                                     `form:"reconciliation_pending,omitempty" json:"reconciliation_pending,omitempty" xml:"reconciliation_pending,omitempty"`
+}
+
 // SetInferenceKeyMonthlyLimitResponseBody is the type of the "admin" service
 // "setInferenceKeyMonthlyLimit" endpoint HTTP response body.
 type SetInferenceKeyMonthlyLimitResponseBody struct {
@@ -1333,9 +1353,12 @@ type CreateGlobalIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // GetGlobalIssuerDuplicatePreflightResponseBody is the type of the "admin"
@@ -1479,9 +1502,12 @@ type UpdateGlobalIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // FetchGlobalIssuerMetadataResponseBody is the type of the "admin" service
@@ -7123,6 +7149,190 @@ type GetOrganizationStatsUnexpectedResponseBody struct {
 // service "getOrganizationStats" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetOrganizationStatsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyUnauthorizedResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "unauthorized" error.
+type RepairInferenceKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyForbiddenResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "forbidden" error.
+type RepairInferenceKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyBadRequestResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "bad_request" error.
+type RepairInferenceKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyNotFoundResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "not_found" error.
+type RepairInferenceKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyConflictResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "conflict" error.
+type RepairInferenceKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyUnsupportedMediaResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RepairInferenceKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyInvalidResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "invalid" error.
+type RepairInferenceKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyInvariantViolationResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RepairInferenceKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyUnexpectedResponseBody is the type of the "admin" service
+// "repairInferenceKey" endpoint HTTP response body for the "unexpected" error.
+type RepairInferenceKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RepairInferenceKeyGatewayErrorResponseBody is the type of the "admin"
+// service "repairInferenceKey" endpoint HTTP response body for the
+// "gateway_error" error.
+type RepairInferenceKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -18386,6 +18596,26 @@ type AdminOrganizationResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// AdminInferenceKeyRepairStateResponseBody is used to define fields on
+// response body types.
+type AdminInferenceKeyRepairStateResponseBody struct {
+	KeyType                 *string                               `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	MonthlyCredits          *int64                                `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
+	Disabled                *bool                                 `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	DisableCauses           []string                              `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
+	DisableCausesClassified *bool                                 `form:"disable_causes_classified,omitempty" json:"disable_causes_classified,omitempty" xml:"disable_causes_classified,omitempty"`
+	CauseDiagnostics        []*AdminInferenceKeyCauseResponseBody `form:"cause_diagnostics,omitempty" json:"cause_diagnostics,omitempty" xml:"cause_diagnostics,omitempty"`
+}
+
+// AdminInferenceKeyCauseResponseBody is used to define fields on response body
+// types.
+type AdminInferenceKeyCauseResponseBody struct {
+	Cause         *string `form:"cause,omitempty" json:"cause,omitempty" xml:"cause,omitempty"`
+	Description   *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	Removable     *bool   `form:"removable,omitempty" json:"removable,omitempty" xml:"removable,omitempty"`
+	BlockedReason *string `form:"blocked_reason,omitempty" json:"blocked_reason,omitempty" xml:"blocked_reason,omitempty"`
+}
+
 // AdminInferenceKeyResponse is used to define fields on response body types.
 type AdminInferenceKeyResponse struct {
 	KeyType *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
@@ -18394,10 +18624,20 @@ type AdminInferenceKeyResponse struct {
 	MonthlyCredits *int64   `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 	Disabled       *bool    `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
 	// Active internal disable causes. Omitted for legacy unclassified rows.
-	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
+	DisableCauses    []string                          `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
+	CauseDiagnostics []*AdminInferenceKeyCauseResponse `form:"cause_diagnostics,omitempty" json:"cause_diagnostics,omitempty" xml:"cause_diagnostics,omitempty"`
 	// Whether disable_causes is classified, including an explicitly empty cause
 	// set.
 	DisableCausesClassified *bool `form:"disable_causes_classified,omitempty" json:"disable_causes_classified,omitempty" xml:"disable_causes_classified,omitempty"`
+}
+
+// AdminInferenceKeyCauseResponse is used to define fields on response body
+// types.
+type AdminInferenceKeyCauseResponse struct {
+	Cause         *string `form:"cause,omitempty" json:"cause,omitempty" xml:"cause,omitempty"`
+	Description   *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	Removable     *bool   `form:"removable,omitempty" json:"removable,omitempty" xml:"removable,omitempty"`
+	BlockedReason *string `form:"blocked_reason,omitempty" json:"blocked_reason,omitempty" xml:"blocked_reason,omitempty"`
 }
 
 // AdminInferenceSpendMonthResponse is used to define fields on response body
@@ -18407,6 +18647,33 @@ type AdminInferenceSpendMonthResponse struct {
 	// Exclusive end of the UTC calendar month.
 	PeriodEnd *string `form:"period_end,omitempty" json:"period_end,omitempty" xml:"period_end,omitempty"`
 	SpendUsd  *string `form:"spend_usd,omitempty" json:"spend_usd,omitempty" xml:"spend_usd,omitempty"`
+}
+
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer *string `form:"vendor_issuer,omitempty" json:"vendor_issuer,omitempty" xml:"vendor_issuer,omitempty"`
+	// No order is saved, so the endpoint uses its configured external issuer.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	// The saved providers in order, or the external default.
+	Providers []*EMAProviderResponseBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
+}
+
+// EMAProviderResponseBody is used to define fields on response body types.
+type EMAProviderResponseBody struct {
+	// external or speakeasy.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The external provider's remote session issuer. Omitted for speakeasy, and
+	// for the endpoint's trusted issuer in a default order with none.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's internal session issuer, for speakeasy.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's authorization server does not accept this issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
 
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
@@ -18554,9 +18821,12 @@ type RemoteSessionIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool   `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                  *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    *string                       `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt    *string                       `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // IssuerConvergenceCandidateResponseBody is used to define fields on response
@@ -18811,6 +19081,13 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to:
+	// one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id}
+	// (shared).
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether a shared authorization server's issuer URL is pinned, so it stays
+	// the same if the deployment's hosts change.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
 	// Set when the issuer trusts an external authorization server's assertions.
 	TrustedRemoteSession *AdminMcpServerHealthTrustedRemoteSessionResponseBody `form:"trusted_remote_session,omitempty" json:"trusted_remote_session,omitempty" xml:"trusted_remote_session,omitempty"`
 	// Other live servers in the project that share this issuer.
@@ -19265,6 +19542,26 @@ func NewRearmTrialRequestBody(p *admin.RearmTrialPayload) *RearmTrialRequestBody
 	body := &RearmTrialRequestBody{
 		ID:   p.ID,
 		Days: p.Days,
+	}
+	return body
+}
+
+// NewRepairInferenceKeyRequestBody builds the HTTP request body from the
+// payload of the "repairInferenceKey" endpoint of the "admin" service.
+func NewRepairInferenceKeyRequestBody(p *admin.RepairInferenceKeyPayload) *RepairInferenceKeyRequestBody {
+	body := &RepairInferenceKeyRequestBody{
+		OrganizationID: p.OrganizationID,
+		KeyType:        p.KeyType,
+		Confirmation:   p.Confirmation,
+		Reason:         p.Reason,
+	}
+	if p.RemoveCauses != nil {
+		body.RemoveCauses = make([]string, len(p.RemoveCauses))
+		for i, val := range p.RemoveCauses {
+			body.RemoveCauses[i] = val
+		}
+	} else {
+		body.RemoveCauses = []string{}
 	}
 	return body
 }
@@ -24293,6 +24590,167 @@ func NewGetOrganizationStatsGatewayError(body *GetOrganizationStatsGatewayErrorR
 	return v
 }
 
+// NewRepairInferenceKeyAdminInferenceKeyRepairResultOK builds a "admin"
+// service "repairInferenceKey" endpoint result from a HTTP "OK" response.
+func NewRepairInferenceKeyAdminInferenceKeyRepairResultOK(body *RepairInferenceKeyResponseBody) *admin.AdminInferenceKeyRepairResult {
+	v := &admin.AdminInferenceKeyRepairResult{
+		ReconciliationPending: *body.ReconciliationPending,
+	}
+	v.Key = unmarshalAdminInferenceKeyRepairStateResponseBodyToAdminAdminInferenceKeyRepairState(body.Key)
+
+	return v
+}
+
+// NewRepairInferenceKeyUnauthorized builds a admin service repairInferenceKey
+// endpoint unauthorized error.
+func NewRepairInferenceKeyUnauthorized(body *RepairInferenceKeyUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairInferenceKeyForbidden builds a admin service repairInferenceKey
+// endpoint forbidden error.
+func NewRepairInferenceKeyForbidden(body *RepairInferenceKeyForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairInferenceKeyBadRequest builds a admin service repairInferenceKey
+// endpoint bad_request error.
+func NewRepairInferenceKeyBadRequest(body *RepairInferenceKeyBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairInferenceKeyNotFound builds a admin service repairInferenceKey
+// endpoint not_found error.
+func NewRepairInferenceKeyNotFound(body *RepairInferenceKeyNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairInferenceKeyConflict builds a admin service repairInferenceKey
+// endpoint conflict error.
+func NewRepairInferenceKeyConflict(body *RepairInferenceKeyConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairInferenceKeyUnsupportedMedia builds a admin service
+// repairInferenceKey endpoint unsupported_media error.
+func NewRepairInferenceKeyUnsupportedMedia(body *RepairInferenceKeyUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairInferenceKeyInvalid builds a admin service repairInferenceKey
+// endpoint invalid error.
+func NewRepairInferenceKeyInvalid(body *RepairInferenceKeyInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairInferenceKeyInvariantViolation builds a admin service
+// repairInferenceKey endpoint invariant_violation error.
+func NewRepairInferenceKeyInvariantViolation(body *RepairInferenceKeyInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairInferenceKeyUnexpected builds a admin service repairInferenceKey
+// endpoint unexpected error.
+func NewRepairInferenceKeyUnexpected(body *RepairInferenceKeyUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRepairInferenceKeyGatewayError builds a admin service repairInferenceKey
+// endpoint gateway_error error.
+func NewRepairInferenceKeyGatewayError(body *RepairInferenceKeyGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetInferenceKeysAdminInferenceKeyOK builds a "admin" service
 // "getInferenceKeys" endpoint result from a HTTP "OK" response.
 func NewGetInferenceKeysAdminInferenceKeyOK(body []*AdminInferenceKeyResponse) []*admin.AdminInferenceKey {
@@ -26144,6 +26602,9 @@ func NewCreateGlobalIssuerRemoteSessionIssuerOK(body *CreateGlobalIssuerResponse
 			v.ScopeOverride[i] = val
 		}
 	}
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
+	}
 
 	return v
 }
@@ -26951,6 +27412,9 @@ func NewUpdateGlobalIssuerRemoteSessionIssuerOK(body *UpdateGlobalIssuerResponse
 		for i, val := range body.ScopeOverride {
 			v.ScopeOverride[i] = val
 		}
+	}
+	if body.EmaProviders != nil {
+		v.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(body.EmaProviders)
 	}
 
 	return v
@@ -35249,6 +35713,23 @@ func ValidateGetOrganizationStatsResponseBody(body *GetOrganizationStatsResponse
 	return
 }
 
+// ValidateRepairInferenceKeyResponseBody runs the validations defined on
+// RepairInferenceKeyResponseBody
+func ValidateRepairInferenceKeyResponseBody(body *RepairInferenceKeyResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.ReconciliationPending == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reconciliation_pending", "body"))
+	}
+	if body.Key != nil {
+		if err2 := ValidateAdminInferenceKeyRepairStateResponseBody(body.Key); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateSetInferenceKeyMonthlyLimitResponseBody runs the validations defined
 // on SetInferenceKeyMonthlyLimitResponseBody
 func ValidateSetInferenceKeyMonthlyLimitResponseBody(body *SetInferenceKeyMonthlyLimitResponseBody) (err error) {
@@ -35560,6 +36041,11 @@ func ValidateCreateGlobalIssuerResponseBody(body *CreateGlobalIssuerResponseBody
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
 	}
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -35671,6 +36157,11 @@ func ValidateUpdateGlobalIssuerResponseBody(body *UpdateGlobalIssuerResponseBody
 	}
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
+	}
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -43349,6 +43840,246 @@ func ValidateGetOrganizationStatsUnexpectedResponseBody(body *GetOrganizationSta
 // ValidateGetOrganizationStatsGatewayErrorResponseBody runs the validations
 // defined on getOrganizationStats_gateway_error_response_body
 func ValidateGetOrganizationStatsGatewayErrorResponseBody(body *GetOrganizationStatsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyUnauthorizedResponseBody runs the validations
+// defined on repairInferenceKey_unauthorized_response_body
+func ValidateRepairInferenceKeyUnauthorizedResponseBody(body *RepairInferenceKeyUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyForbiddenResponseBody runs the validations defined
+// on repairInferenceKey_forbidden_response_body
+func ValidateRepairInferenceKeyForbiddenResponseBody(body *RepairInferenceKeyForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyBadRequestResponseBody runs the validations
+// defined on repairInferenceKey_bad_request_response_body
+func ValidateRepairInferenceKeyBadRequestResponseBody(body *RepairInferenceKeyBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyNotFoundResponseBody runs the validations defined
+// on repairInferenceKey_not_found_response_body
+func ValidateRepairInferenceKeyNotFoundResponseBody(body *RepairInferenceKeyNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyConflictResponseBody runs the validations defined
+// on repairInferenceKey_conflict_response_body
+func ValidateRepairInferenceKeyConflictResponseBody(body *RepairInferenceKeyConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyUnsupportedMediaResponseBody runs the validations
+// defined on repairInferenceKey_unsupported_media_response_body
+func ValidateRepairInferenceKeyUnsupportedMediaResponseBody(body *RepairInferenceKeyUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyInvalidResponseBody runs the validations defined
+// on repairInferenceKey_invalid_response_body
+func ValidateRepairInferenceKeyInvalidResponseBody(body *RepairInferenceKeyInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyInvariantViolationResponseBody runs the
+// validations defined on repairInferenceKey_invariant_violation_response_body
+func ValidateRepairInferenceKeyInvariantViolationResponseBody(body *RepairInferenceKeyInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyUnexpectedResponseBody runs the validations
+// defined on repairInferenceKey_unexpected_response_body
+func ValidateRepairInferenceKeyUnexpectedResponseBody(body *RepairInferenceKeyUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRepairInferenceKeyGatewayErrorResponseBody runs the validations
+// defined on repairInferenceKey_gateway_error_response_body
+func ValidateRepairInferenceKeyGatewayErrorResponseBody(body *RepairInferenceKeyGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -57978,6 +58709,52 @@ func ValidateAdminOrganizationResponseBody(body *AdminOrganizationResponseBody) 
 	return
 }
 
+// ValidateAdminInferenceKeyRepairStateResponseBody runs the validations
+// defined on AdminInferenceKeyRepairStateResponseBody
+func ValidateAdminInferenceKeyRepairStateResponseBody(body *AdminInferenceKeyRepairStateResponseBody) (err error) {
+	if body.KeyType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key_type", "body"))
+	}
+	if body.MonthlyCredits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))
+	}
+	if body.Disabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
+	}
+	if body.DisableCauses == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disable_causes", "body"))
+	}
+	if body.DisableCausesClassified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disable_causes_classified", "body"))
+	}
+	if body.CauseDiagnostics == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cause_diagnostics", "body"))
+	}
+	for _, e := range body.CauseDiagnostics {
+		if e != nil {
+			if err2 := ValidateAdminInferenceKeyCauseResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminInferenceKeyCauseResponseBody runs the validations defined on
+// AdminInferenceKeyCauseResponseBody
+func ValidateAdminInferenceKeyCauseResponseBody(body *AdminInferenceKeyCauseResponseBody) (err error) {
+	if body.Cause == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cause", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Removable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("removable", "body"))
+	}
+	return
+}
+
 // ValidateAdminInferenceKeyResponse runs the validations defined on
 // AdminInferenceKeyResponse
 func ValidateAdminInferenceKeyResponse(body *AdminInferenceKeyResponse) (err error) {
@@ -57995,6 +58772,28 @@ func ValidateAdminInferenceKeyResponse(body *AdminInferenceKeyResponse) (err err
 	}
 	if body.DisableCausesClassified == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disable_causes_classified", "body"))
+	}
+	for _, e := range body.CauseDiagnostics {
+		if e != nil {
+			if err2 := ValidateAdminInferenceKeyCauseResponse(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminInferenceKeyCauseResponse runs the validations defined on
+// AdminInferenceKeyCauseResponse
+func ValidateAdminInferenceKeyCauseResponse(body *AdminInferenceKeyCauseResponse) (err error) {
+	if body.Cause == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cause", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Removable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("removable", "body"))
 	}
 	return
 }
@@ -58016,6 +58815,53 @@ func ValidateAdminInferenceSpendMonthResponse(body *AdminInferenceSpendMonthResp
 	}
 	if body.PeriodEnd != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.period_end", *body.PeriodEnd, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateEMAProviderOrderResponseBody runs the validations defined on
+// EMAProviderOrderResponseBody
+func ValidateEMAProviderOrderResponseBody(body *EMAProviderOrderResponseBody) (err error) {
+	if body.VendorIssuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("vendor_issuer", "body"))
+	}
+	if body.IsDefault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_default", "body"))
+	}
+	if body.Providers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("providers", "body"))
+	}
+	for _, e := range body.Providers {
+		if e != nil {
+			if err2 := ValidateEMAProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateEMAProviderResponseBody runs the validations defined on
+// EMAProviderResponseBody
+func ValidateEMAProviderResponseBody(body *EMAProviderResponseBody) (err error) {
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "external" || *body.Kind == "speakeasy") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"external", "speakeasy"}))
+		}
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.InternalSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.internal_session_issuer_id", *body.InternalSessionIssuerID, goa.FormatUUID))
+	}
+	if body.UnavailableReason != nil {
+		if !(*body.UnavailableReason == "deleted" || *body.UnavailableReason == "disabled" || *body.UnavailableReason == "not_trusted_by_endpoint" || *body.UnavailableReason == "signing_unavailable" || *body.UnavailableReason == "not_rolled_out" || *body.UnavailableReason == "verified_domain_required" || *body.UnavailableReason == "setup_required" || *body.UnavailableReason == "keyless" || *body.UnavailableReason == "signing_paused" || *body.UnavailableReason == "sign_in_enforcement_required" || *body.UnavailableReason == "readiness_unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.unavailable_reason", *body.UnavailableReason, []any{"deleted", "disabled", "not_trusted_by_endpoint", "signing_unavailable", "not_rolled_out", "verified_domain_required", "setup_required", "keyless", "signing_paused", "sign_in_enforcement_required", "readiness_unknown"}))
+		}
 	}
 	return
 }
@@ -58122,6 +58968,11 @@ func ValidateRemoteSessionIssuerResponseBody(body *RemoteSessionIssuerResponseBo
 	}
 	if body.TunneledMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tunneled_mcp_server_id", *body.TunneledMcpServerID, goa.FormatUUID))
+	}
+	if body.EmaProviders != nil {
+		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -58651,6 +59502,12 @@ func ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body *AdminMcpSer
 	if body.UseAuthenticationHost == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.OtherServersUsingIssuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("other_servers_using_issuer", "body"))
 	}
@@ -58681,6 +59538,11 @@ func ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body *AdminMcpSer
 	if body.ClientIDMetadataAdmissionMode != nil {
 		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
 		}
 	}
 	if body.TrustedRemoteSession != nil {

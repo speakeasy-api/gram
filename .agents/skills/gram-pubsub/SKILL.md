@@ -141,7 +141,7 @@ Key behaviors worth knowing:
   resource paths. Duplicate topic or subscription names, an unknown `topic`
   reference, or a DLQ name colliding with a declared topic all fail generation.
 - **Labels**: every generated resource gets `managed_by:
-proto_pubsub_orchestrator` plus a `proto_message` label carrying the source
+  proto_pubsub_orchestrator` plus a `proto_message` label carrying the source
   message's full name; subscriptions also carry `topic_proto_message`. These
   make resources traceable back to their declaration.
 - **Stable output**: topics and subscriptions are sorted by name so the

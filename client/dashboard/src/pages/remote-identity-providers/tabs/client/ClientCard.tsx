@@ -8,7 +8,11 @@ import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { ScopeMultiSelect } from "@/lib/remote-identity";
+import {
+  ClientKeyRegistration,
+  ScopeMultiSelect,
+  useCustomerManagedKeys,
+} from "@/lib/remote-identity";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -30,7 +34,6 @@ import {
   isPrivateKeyJwtAuthMethod,
   narrowTokenEndpointAuthMethod,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
-import { IssuerScopeOverrideAlert } from "../../clientAlerts";
 import { InfoField, InfoText } from "../../detailFields";
 import { formatTimestamp } from "./formatTimestamp";
 import { KeySetField } from "./KeySetField";
@@ -81,6 +84,9 @@ export function ClientCard({
   const shownScope = canEdit ? scope : (client.scope ?? []);
   const shownAudience = canEdit ? audience : (client.audience ?? "");
   const privateKeyJwtSelected = isPrivateKeyJwtAuthMethod(shownAuthMethod);
+  const serviceAccount = client.credentialOwner === "self";
+  const { entitled: customerManagedKeys } = useCustomerManagedKeys();
+  const issuerName = issuer?.name ?? "the identity provider";
   const privateKeyJwtMissingKeySet =
     privateKeyJwtSelected && client.jsonWebKeySetId == null;
 
@@ -111,10 +117,12 @@ export function ClientCard({
   };
 
   const update = useUpdateOrganizationRemoteSessionClientMutation({
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
       await invalidateAllOrganizationRemoteSessionClient(queryClient, {
         refetchType: "all",
       });
+      // An emptied audience is omitted, so show what was actually kept.
+      setAudience(saved.audience ?? "");
       setClientSecret("");
       setLegacyCallbackMode(undefined);
       toast.success("Client updated");
@@ -126,6 +134,12 @@ export function ClientCard({
     },
   });
 
+  // Unchanged scopes are omitted, so a save never turns an unset scope into [].
+  const savedScope = client.scope ?? [];
+  const scopeChanged =
+    scope.length !== savedScope.length ||
+    scope.some((s, i) => s !== savedScope[i]);
+
   const handleSave = () => {
     update.mutate({
       request: {
@@ -135,8 +149,8 @@ export function ClientCard({
           tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
             ? authAudienceFormat
             : undefined,
-          scope,
-          audience: audience.trim(),
+          scope: scopeChanged ? scope : undefined,
+          audience: audience.trim() || undefined,
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
           legacyCallbackUrl:
             isPlatformAdmin &&
@@ -161,6 +175,16 @@ export function ClientCard({
             <InfoField label="Client issued at">
               <InfoText>{formatTimestamp(client.clientIdIssuedAt)}</InfoText>
             </InfoField>
+            {serviceAccount && (
+              <div className="sm:col-span-2">
+                <InfoField label="Signs in as">
+                  <InfoText>
+                    Itself. Every caller shares the one token this client gets
+                    from {issuerName}. Set when the client was created.
+                  </InfoText>
+                </InfoField>
+              </div>
+            )}
           </div>
 
           <fieldset
@@ -177,22 +201,27 @@ export function ClientCard({
                 options={issuer?.scopesSupported ?? []}
                 value={shownScope}
                 onValueChange={setScope}
-                placeholder="No scopes"
+                placeholder="Discovered at sign-in"
                 disabled={!canEdit}
               />
               <Text small muted>
-                Choose from the scopes this identity provider advertises, or
-                type one to add it.
+                Leave empty to request what the MCP server asks for at each
+                sign-in. Choose from the scopes this identity provider
+                advertises, or type one to add it.
               </Text>
-              {/* Only warn once there are client scopes to be overridden. */}
-              {shownScope.length > 0 && (
-                <IssuerScopeOverrideAlert issuer={issuer} />
-              )}
             </div>
             <TokenEndpointAuthMethodField
               value={shownAuthMethod}
               onChange={handleAuthMethodChange}
               allowPrivateKeyJwt={client.jsonWebKeySetId != null}
+              hideNone={serviceAccount}
+              privateKeyJwtUnavailable={
+                serviceAccount
+                  ? customerManagedKeys
+                    ? "attach a key set first"
+                    : "Requires KMS"
+                  : undefined
+              }
               disabled={!canEdit}
             />
             {privateKeyJwtSelected && (
@@ -216,6 +245,14 @@ export function ClientCard({
                 disabled={!canEdit}
               />
             </RequireScope>
+            {serviceAccount &&
+              isPrivateKeyJwtAuthMethod(persistedAuthMethod) &&
+              client.jsonWebKeySetId != null && (
+                <ClientKeyRegistration
+                  clientRowId={client.id}
+                  keySetId={client.jsonWebKeySetId}
+                />
+              )}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="client-audience">Audience</Label>
               <Input

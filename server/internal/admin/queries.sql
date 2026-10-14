@@ -1023,6 +1023,9 @@ SELECT
     i.attachment_scope,
     i.client_id_metadata_admission_mode,
     i.use_authentication_host,
+    i.authorization_server_mode,
+    -- Matches authserver.IssuerURLPinned: a pin only counts in shared mode.
+    (i.authorization_server_mode = 'shared' AND i.pinned_issuer_url IS NOT NULL AND i.pinned_issuer_url <> '')::boolean AS issuer_url_pinned,
     i.trusted_remote_session_issuer_id,
     i.trusted_remote_session_client_id,
     i.created_at

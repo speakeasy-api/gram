@@ -19,6 +19,7 @@ export type AgentProviderIconKind =
   | "microsoft-copilot"
   | "copilot"
   | "gemini"
+  | "antigravity"
   | "glean"
   | "bedrock"
   | "catchall"
@@ -93,6 +94,7 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   if (normalizedSource?.includes("copilot")) {
     return "copilot";
   }
+  if (normalizedSource?.includes("antigravity")) return "antigravity";
   if (normalizedSource === "google" || normalizedSource?.includes("gemini")) {
     return "gemini";
   }

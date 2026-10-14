@@ -44,14 +44,14 @@ func Parse(raw []byte) (Document, error) {
 	return doc, nil
 }
 
-// FindRSA returns the RSA public key matching `kid`. An empty `kid` matches
-// the first RSA key, which is what a single-key document means in practice.
+// FindRSA returns the RS256 signing key matching `kid`. An empty `kid` matches
+// the first such key, which is what a single-key document means in practice.
 func (d Document) FindRSA(kid string) (*rsa.PublicKey, error) {
 	for _, key := range d.Keys {
 		if kid != "" && key.Kid != kid {
 			continue
 		}
-		if key.Kty != "RSA" {
+		if key.Kty != "RSA" || (key.Use != "" && key.Use != "sig") || (key.Alg != "" && key.Alg != "RS256") {
 			continue
 		}
 		pub, err := key.RSAPublicKey()
@@ -60,7 +60,7 @@ func (d Document) FindRSA(kid string) (*rsa.PublicKey, error) {
 		}
 		return pub, nil
 	}
-	return nil, fmt.Errorf("no RSA key with kid %q", kid)
+	return nil, fmt.Errorf("no RS256 signing key with kid %q", kid)
 }
 
 // RSAPublicKey rebuilds an RSA public key from a JWK's modulus and exponent.
@@ -102,6 +102,12 @@ func ParseIssuerURL(issuer string) (*url.URL, error) {
 	}
 	if parsed.Host == "" {
 		return nil, fmt.Errorf("issuer %q has no host", issuer)
+	}
+	if parsed.User != nil {
+		return nil, fmt.Errorf("issuer %q must not carry userinfo", issuer)
+	}
+	if parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.Contains(issuer, "#") {
+		return nil, fmt.Errorf("issuer %q must not carry a query or fragment", issuer)
 	}
 	return parsed, nil
 }

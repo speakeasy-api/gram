@@ -377,9 +377,12 @@ type CreateGlobalIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // GetGlobalIssuerDuplicatePreflightResponseBody is the type of the
@@ -524,9 +527,12 @@ type UpdateGlobalIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // FetchGlobalIssuerMetadataResponseBody is the type of the
@@ -677,8 +683,14 @@ type CreateGlobalClientResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListGlobalClientsResponseBody is the type of the "adminRemoteSessions"
@@ -750,8 +762,14 @@ type GetGlobalClientResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateGlobalClientResponseBody is the type of the "adminRemoteSessions"
@@ -815,8 +833,14 @@ type UpdateGlobalClientResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListGlobalIssuerConvergenceCandidatesResponseBody is the type of the
@@ -3921,6 +3945,33 @@ type MigrateToGlobalIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// EMAProviderOrderResponseBody is used to define fields on response body types.
+type EMAProviderOrderResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// No order is saved, so the endpoint uses its configured external issuer.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
+	// The saved providers in order, or the external default.
+	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+}
+
+// EMAProviderResponseBody is used to define fields on response body types.
+type EMAProviderResponseBody struct {
+	// external or speakeasy.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The external provider's remote session issuer. Omitted for speakeasy, and
+	// for the endpoint's trusted issuer in a default order with none.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization's internal session issuer, for speakeasy.
+	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's authorization server does not accept this issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+}
+
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
 // response body types.
 type RemoteSessionIssuerDuplicateMatchResponseBody struct {
@@ -4066,9 +4117,12 @@ type RemoteSessionIssuerResponseBody struct {
 	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
-	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
-	CreatedAt                  string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                  string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
+	// The organization's EMA provider order for this issuer's vendor. Returned by
+	// organizationRemoteSessionIssuers.getIssuer only.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
+	CreatedAt    string                        `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt    string                        `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // RemoteSessionClientResponseBody is used to define fields on response body
@@ -4132,8 +4186,14 @@ type RemoteSessionClientResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // IssuerConvergenceCandidateResponseBody is used to define fields on response
@@ -4275,6 +4335,9 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 		for i, val := range res.ScopeOverride {
 			body.ScopeOverride[i] = val
 		}
+	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
 	}
 	return body
 }
@@ -4432,6 +4495,9 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 			body.ScopeOverride[i] = val
 		}
 	}
+	if res.EmaProviders != nil {
+		body.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(res.EmaProviders)
+	}
 	return body
 }
 
@@ -4569,6 +4635,7 @@ func NewCreateGlobalClientResponseBody(res *types.RemoteSessionClient) *CreateGl
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -4637,6 +4704,7 @@ func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalCl
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -4684,6 +4752,7 @@ func NewUpdateGlobalClientResponseBody(res *types.RemoteSessionClient) *UpdateGl
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
