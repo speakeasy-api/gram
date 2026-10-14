@@ -499,6 +499,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
+		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
@@ -805,6 +806,27 @@ func newPlatformMCPProjectLifecycle(config platformMCPConfig, authorizer platfor
 	return service
 }
 
+// newPlatformMCPGateways composes create_gateway and set_gateway_members
+// over the gateway management API's own core. A composition failure leaves
+// the tools registered as stable refusals rather than removing them from the
+// catalogue.
+func newPlatformMCPGateways(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.GatewayService {
+	service, err := platformmcp.NewGatewayService(
+		config.Logger, config.DB, config.AuditLogger, config.Authz, authorizer, config.DistributionAdmission,
+		mcpendpoints.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.TemporalEnv, config.PluginPublisher != nil),
+		config.PublicationRequests, config.PluginPublishSignaler,
+		platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.GatewayMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.GatewayMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.GatewayMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.GatewayMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+	)
+	if err != nil {
+		config.Logger.WarnContext(context.Background(), "Platform MCP gateways unavailable", attr.SlogError(err))
+		return nil
+	}
+	return service
+}
+
 func newPlatformMCPConnectionMutations(config platformMCPConfig) *platformmcp.MCPConnectionMutationService {
 	service, err := platformmcp.NewMCPConnectionMutationService(
 		config.DB,
@@ -1096,6 +1118,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
+		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))

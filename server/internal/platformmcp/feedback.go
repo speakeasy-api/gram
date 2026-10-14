@@ -415,6 +415,8 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	addToolsToMCPToolName:                   {},
 	removeToolsFromMCPToolName:              {},
 	createMCPFromFunctionsToolName:          {},
+	createGatewayToolName:                   {},
+	setGatewayMembersToolName:               {},
 	createProjectToolName:                   {},
 	renameProjectToolName:                   {},
 	"remove_plugin_server":                  {},
