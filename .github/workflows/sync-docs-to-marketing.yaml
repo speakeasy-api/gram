@@ -161,8 +161,10 @@ jobs:
             GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
             GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
             git push --force origin "HEAD:refs/heads/${SYNC_BRANCH}"
-          if gh pr list --repo "$MARKETING_REPO" --head "$SYNC_BRANCH" --state open --json number --jq '.[].number' | grep -q .; then
-            echo "Sync pull request for $SYNC_BRANCH already open; branch updated."
+          existing=$(gh pr list --repo "$MARKETING_REPO" --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "$MARKETING_REPO" --body-file ../PR_BODY.md
+            echo "Sync pull request #$existing already open; branch and body updated."
             exit 0
           fi
           gh pr create \
