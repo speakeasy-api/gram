@@ -79217,113 +79217,6 @@ paths:
             x-speakeasy-name-override: listServers
             x-speakeasy-react-hook:
                 name: UnproxiedMcpServers
-    /rpc/unproxiedMcp.listTools:
-        get:
-            description: Best-effort discovery of the tools available on the vendor's MCP server. Connects live to the server's URL and issues an MCP tools/list call; the result is never cached and the connection is never reused for actual tool execution.
-            operationId: listUnproxiedMcpServerTools
-            parameters:
-                - allowEmptyValue: true
-                  description: The ID of the unproxied MCP server
-                  in: query
-                  name: id
-                  required: true
-                  schema:
-                    description: The ID of the unproxied MCP server
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListUnproxiedMcpServerToolsResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-            summary: listTools unproxiedMcp
-            tags:
-                - unproxiedMcp
-            x-speakeasy-name-override: listTools
-            x-speakeasy-react-hook:
-                name: UnproxiedMcpServerTools
     /rpc/usage.cancelStripeSubscription:
         post:
             description: Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period
@@ -102247,28 +102140,6 @@ components:
             description: A page of terminal skill activations without exact version attribution.
             required:
                 - activations
-        ListUnproxiedMcpServerToolsResult:
-            type: object
-            properties:
-                message:
-                    type: string
-                    description: Human-readable detail, present for non-success statuses
-                status:
-                    type: string
-                    description: Outcome of the discovery attempt
-                    enum:
-                        - success
-                        - auth_required
-                        - unreachable
-                        - error
-                tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/UnproxiedMcpServerTool'
-            description: Result of a live tool-discovery probe against an unproxied MCP server
-            required:
-                - status
-                - tools
         ListUnproxiedMcpServersResult:
             type: object
             properties:
@@ -118126,18 +117997,6 @@ components:
             required:
                 - client
                 - call_count
-        UnproxiedMcpServerTool:
-            type: object
-            properties:
-                description:
-                    type: string
-                    description: Tool description
-                name:
-                    type: string
-                    description: Tool name
-            description: A tool discovered on the vendor's MCP server
-            required:
-                - name
         UnproxiedMcpServerToolUsageRow:
             type: object
             properties:
