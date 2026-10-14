@@ -5,9 +5,7 @@ on:
     paths:
       - "docs/src/content/docs/**"
       - "docs/public/**"
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 concurrency:
   group: gram-to-marketing-pr-sync-${{ github.ref }}
   cancel-in-progress: true
@@ -17,6 +15,8 @@ env:
 jobs:
   sync:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
     steps:
       - name: Checkout Speakeasy repo (source)
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1

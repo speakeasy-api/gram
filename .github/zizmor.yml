@@ -18,8 +18,6 @@ rules:
   # Findings to burn down.
   anonymous-definition:
     disable: true
-  excessive-permissions:
-    disable: true
   template-injection:
     disable: true
   undocumented-permissions:
