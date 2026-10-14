@@ -312,6 +312,7 @@ SELECT
     s.id AS mcp_server_id,
     s.project_id AS project_id,
     s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
     (t.id IS NOT NULL)::boolean AS tunneled
 FROM meta_mcp_server_members m
@@ -346,11 +347,14 @@ ORDER BY m.sort_order, m.created_at, m.id;
 --
 -- project_id narrows the claim to one project's servers, for a client that a
 -- project owns: that client's grant routes only to its own project's members.
--- NULL considers every project, for an organization-level client.
+-- NULL considers every project, for an organization-level client. Callers
+-- apply each server's network access mode for the request's surface, as the
+-- member snapshot does.
 SELECT
     s.id AS mcp_server_id,
     s.project_id AS project_id,
     s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
     (t.id IS NOT NULL)::boolean AS tunneled
 FROM mcp_servers s
@@ -377,8 +381,12 @@ ORDER BY s.project_id, s.slug;
 -- name: ListOrganizationProxiedMCPServerResources :many
 -- The organization gateway's counterpart to ListMetaMCPProxiedMemberResources,
 -- over the servers ListOrganizationMCPServersForRemoteSessionIssuer considers.
+-- Each row carries its server's project and network access mode, which the
+-- caller matches against a card's client and the request's surface.
 SELECT
     s.remote_session_issuer_id,
+    s.project_id AS project_id,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
 FROM mcp_servers s
 JOIN projects p
@@ -407,6 +415,8 @@ ORDER BY s.project_id, s.slug;
 -- read.
 SELECT
     s.remote_session_issuer_id,
+    s.project_id AS project_id,
+    s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
 FROM meta_mcp_server_members m
 JOIN mcp_servers s

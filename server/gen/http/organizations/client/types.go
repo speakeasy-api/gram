@@ -7215,8 +7215,8 @@ func ValidateGetGatewayResponseBody(body *GetGatewayResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("available", "body"))
 	}
 	if body.UnavailableReason != nil {
-		if !(*body.UnavailableReason == "no_organization_issuer" || *body.UnavailableReason == "multiple_organization_issuers") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.unavailable_reason", *body.UnavailableReason, []any{"no_organization_issuer", "multiple_organization_issuers"}))
+		if !(*body.UnavailableReason == "no_organization_issuer" || *body.UnavailableReason == "multiple_organization_issuers" || *body.UnavailableReason == "custom_domain_only" || *body.UnavailableReason == "organization_disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.unavailable_reason", *body.UnavailableReason, []any{"no_organization_issuer", "multiple_organization_issuers", "custom_domain_only", "organization_disabled"}))
 		}
 	}
 	return

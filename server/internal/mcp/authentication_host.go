@@ -154,8 +154,9 @@ func (h *AuthenticationHost) Handle(method, pattern string, handler http.Handler
 	h.router.Method(method, pattern, handler)
 }
 
-// AttachAuthenticationHost mounts the /mcp authorization server routes and the
-// shared authorization server routes the host serves on the authentication
+// AttachAuthenticationHost mounts the /mcp and organization gateway
+// authorization server routes and the shared authorization server routes the
+// host serves on the authentication
 // host, and lets service announce it for issuers that opt in. It is a no-op
 // when the host is disabled.
 //
@@ -189,6 +190,7 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 			handle(route.method, route.path, route.handler)
 		}
 	}
+	attachOrganizationGatewayAuthenticationHost(host, service)
 }
 
 // RecordAuthenticationHost records the authentication host on service without

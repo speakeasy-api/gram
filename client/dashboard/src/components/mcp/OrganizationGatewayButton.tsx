@@ -4,16 +4,14 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
 import { useOrganizationGateway } from "@gram/client/react-query/organizationGateway.js";
 import { Network } from "lucide-react";
-import { useState } from "react";
 
 /**
  * Offers the organization gateway: one URL that connects an AI client to every
  * MCP server in the organization the signed-in person can use, across all
- * projects. Renders nothing until the organization serves one, so it never
- * shifts the page and never points anyone at a URL that would not answer.
+ * projects. Renders nothing unless the organization serves one, so it never
+ * points anyone at a URL that would not answer.
  */
 export function OrganizationGatewayButton(): JSX.Element | null {
-  const [open, setOpen] = useState(false);
   // Discoverability only: a failed read hides the button rather than the page.
   const { data } = useOrganizationGateway(undefined, undefined, {
     throwOnError: false,
@@ -22,13 +20,15 @@ export function OrganizationGatewayButton(): JSX.Element | null {
   if (!url) return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-        <Button.LeftIcon>
-          <Network />
-        </Button.LeftIcon>
-        <Button.Text>Connect all servers</Button.Text>
-      </Button>
+    <Dialog>
+      <Dialog.Trigger asChild>
+        <Button variant="secondary" size="sm">
+          <Button.LeftIcon>
+            <Network />
+          </Button.LeftIcon>
+          <Button.Text>Connect all servers</Button.Text>
+        </Button>
+      </Dialog.Trigger>
       <Dialog.Content className="max-w-xl">
         <Dialog.Header>
           <Dialog.Title>Connect all your servers at once</Dialog.Title>

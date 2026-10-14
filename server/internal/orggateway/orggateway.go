@@ -5,16 +5,23 @@
 //
 // The gateway is not stored. It exists while its organization owns exactly
 // one organization-level user session issuer, so creating, moving, or
-// deleting that issuer is what offers or withdraws it.
+// deleting that issuer is what offers or withdraws it. It is served on the
+// platform host only, so an organization whose custom domain restricts
+// access to an IP allowlist, which the platform host enforces by refusing
+// the organization's requests, is not served one.
 package orggateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -42,7 +49,33 @@ const (
 	// several organization-level issuers, leaving nothing to choose between
 	// them by.
 	UnavailabilityMultipleOrganizationIssuers Unavailability = "multiple_organization_issuers"
+
+	// UnavailabilityCustomDomainOnly means the organization's custom domain
+	// restricts access to an IP allowlist, so the platform host the gateway
+	// is served on refuses the organization's requests.
+	UnavailabilityCustomDomainOnly Unavailability = "custom_domain_only"
+
+	// UnavailabilityOrganizationDisabled means the organization is disabled.
+	UnavailabilityOrganizationDisabled Unavailability = "organization_disabled"
 )
+
+// Availability returns the issuer an organization's gateway signs users in
+// through, or why the organization is not served one. Every surface that
+// offers the gateway asks this, so none offers a URL the gateway refuses.
+func Availability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum) (uuid.UUID, Unavailability, error) {
+	if organization.DisabledAt.Valid {
+		return uuid.Nil, UnavailabilityOrganizationDisabled, nil
+	}
+	domain, err := customdomainsrepo.New(db).GetCustomDomainByOrganization(ctx, organization.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return uuid.Nil, UnavailabilityNone, fmt.Errorf("load custom domain: %w", err)
+	case len(domain.IpAllowlist) > 0:
+		return uuid.Nil, UnavailabilityCustomDomainOnly, nil
+	}
+	return Resolve(ctx, usersessionsrepo.New(db), organization.ID)
+}
 
 // IssuerLister lists an organization's organization-level user session
 // issuers; usersessions/repo.Queries implements it.

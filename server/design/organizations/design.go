@@ -32,7 +32,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("getGateway", func() {
-		Description("Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer. Requires org:read.")
+		Description("Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist. Requires org:read.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -608,7 +608,7 @@ var OrganizationGateway = Type("OrganizationGateway", func() {
 	Attribute("available", Boolean, "Whether the organization is served a gateway.")
 	Attribute("url", String, "The gateway's MCP URL. Set only when available.")
 	Attribute("unavailable_reason", String, "Why the gateway is not served. Set only when not available.", func() {
-		Enum("no_organization_issuer", "multiple_organization_issuers")
+		Enum("no_organization_issuer", "multiple_organization_issuers", "custom_domain_only", "organization_disabled")
 	})
 	Required("available")
 })

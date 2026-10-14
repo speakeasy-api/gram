@@ -205,14 +205,14 @@ func identityChainingError(outcome identitychaining.Outcome) error {
 }
 
 // metaMemberChainer returns the tools/call gate's chaining hook for member,
-// or nil when chaining cannot apply: no gated issuer, or a member outside the
-// gateway's project, whose bindings belong to another project.
+// or nil when chaining cannot apply: no gated issuer, or, on a stored
+// gateway, a member outside the gateway's project, whose bindings belong to
+// another project. An organization gateway chains each member in its own
+// project.
 func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember) func(ctx context.Context, upstreamResource string) (string, error) {
 	if s.identityChainer == nil || gate.userSessionIssuerID == uuid.Nil {
 		return nil
 	}
-	// A stored gateway chains only within its own project. An organization
-	// gateway's members span projects, so each chains in its own.
 	if !gate.organizationGateway && member.projectID != gate.projectID {
 		return nil
 	}

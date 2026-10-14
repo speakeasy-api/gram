@@ -83,7 +83,7 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid client_id").LogError(ctx, logger)
 	}
-	bound, err := s.listEndpointClients(ctx, endpoint)
+	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}

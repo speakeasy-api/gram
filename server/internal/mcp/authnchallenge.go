@@ -541,6 +541,13 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	if acceptedAudience == userSessionAudienceLegacy {
 		s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
 	}
+	// An organization gateway serves the organization's users, each with the
+	// servers their own access reaches; an agent, workload, or anonymous
+	// session has no such access to derive, so it is refused before any of
+	// its session state is read.
+	if endpoint.IsOrganizationGateway() && session.Subject().Kind != urn.SessionSubjectKindUser {
+		return ctx, nil, nil, false, fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
+	}
 
 	// The consent-screen tool selection loads for every subject kind —
 	// including anonymous, which early-returns below before AuthContext is
@@ -996,12 +1003,9 @@ func (s *Service) authenticateIssuerGate(
 	case principalcredential.IsToken(authToken) && !organizationGateway:
 		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
 	case principalcredential.IsToken(authToken):
+		valErr = fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
 	default:
 		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
-		if subject != nil && organizationGateway && subject.Kind != urn.SessionSubjectKindUser {
-			newCtx, subject, toolSelection, refreshable = ctx, nil, nil, false
-			valErr = fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
-		}
 	}
 	refreshableUserSession := subject != nil && refreshable
 	if subject == nil && !organizationGateway {

@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -72,4 +73,30 @@ func TestService_GetGateway_SeveralOrganizationIssuers(t *testing.T) {
 	require.False(t, res.Available)
 	require.NotNil(t, res.UnavailableReason)
 	require.Equal(t, "multiple_organization_issuers", *res.UnavailableReason)
+}
+
+func TestService_GetGateway_CustomDomainOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	createGatewayIssuer(t, ctx, ti, authCtx.ActiveOrganizationID)
+	_, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "mcp-" + uuid.NewString()[:8] + ".example.com",
+		IngressName:     pgtype.Text{},
+		CertSecretName:  pgtype.Text{},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{"203.0.113.0/24"},
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.GetGateway(ctx, &gen.GetGatewayPayload{})
+
+	require.NoError(t, err)
+	require.False(t, res.Available)
+	require.Nil(t, res.URL)
+	require.NotNil(t, res.UnavailableReason)
+	require.Equal(t, "custom_domain_only", *res.UnavailableReason)
 }

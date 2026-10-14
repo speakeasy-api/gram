@@ -606,8 +606,12 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 	if err != nil {
 		return nil, err
 	}
-	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
-		return nil, err
+	// A builder that already ran the issuer check, as the organization
+	// gateway's does, leaves nothing for a second one to find.
+	if !endpoint.issuerStamped {
+		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
+			return nil, err
+		}
 	}
 	if ref.SharedAuthorizationServer {
 		// An issuer switched out of shared mode mid-flow closes the flows its

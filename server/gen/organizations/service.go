@@ -22,7 +22,9 @@ type Service interface {
 	// Get the active organization's gateway: one MCP URL that gives each member
 	// every MCP server in the organization they can reach, signed in through the
 	// organization's own user session issuer. It is served while the organization
-	// owns exactly one organization-level user session issuer. Requires org:read.
+	// owns exactly one organization-level user session issuer, on the platform
+	// host, so not for an organization whose custom domain restricts access to an
+	// IP allowlist. Requires org:read.
 	GetGateway(context.Context, *GetGatewayPayload) (res *OrganizationGateway, err error)
 	// Send a WorkOS invitation for the active organization.
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)

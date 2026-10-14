@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getGateway organizations
  *
  * @remarks
- * Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer. Requires org:read.
+ * Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist.
  */
 export function organizationsGetGateway(
   client: GramCore,

@@ -1348,7 +1348,7 @@ type resourceDisplayOwner struct {
 	load     func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error)
 	loaded   bool
 	// upstreams is each issuer's member resources, keyed by remote_session_issuer_id.
-	upstreams map[uuid.UUID][]string
+	upstreams map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow
 }
 
 func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint) *resourceDisplayOwner {
@@ -1360,9 +1360,12 @@ func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint) *resour
 				if err != nil {
 					return nil, fmt.Errorf("list organization proxied MCP server resources: %w", err)
 				}
+				surface := requestNetworkSurface(ctx)
 				converted := make([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, 0, len(rows))
 				for _, row := range rows {
-					converted = append(converted, metamcprepo.ListMetaMCPProxiedMemberResourcesRow(row))
+					if servableOnSurface(row.McpServerNetworkAccessMode, surface) {
+						converted = append(converted, metamcprepo.ListMetaMCPProxiedMemberResourcesRow(row))
+					}
 				}
 				return converted, nil
 			}
@@ -1388,16 +1391,22 @@ func (o *resourceDisplayOwner) owns(ctx context.Context, c remotesessions.Client
 		if err != nil {
 			return false, fmt.Errorf("list meta MCP member resources for resource display: %w", err)
 		}
-		o.upstreams = make(map[uuid.UUID][]string, len(rows))
+		o.upstreams = make(map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, len(rows))
 		for _, row := range rows {
 			if row.RemoteSessionIssuerID.Valid {
-				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row.UpstreamUrl)
+				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row)
 			}
 		}
 		o.loaded = true
 	}
-	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(upstream string) bool {
-		return wellknown.SameResource(c.ResourceIdentifier, upstream)
+	// A client a project owns routes only to its own project's servers, so
+	// only they can lend it their resource. A stored gateway's members all
+	// share its project.
+	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(row metamcprepo.ListMetaMCPProxiedMemberResourcesRow) bool {
+		if c.ProjectID.Valid && c.ProjectID.UUID != row.ProjectID {
+			return false
+		}
+		return wellknown.SameResource(c.ResourceIdentifier, row.UpstreamUrl)
 	}), nil
 }
 
@@ -1424,7 +1433,7 @@ func (s *Service) buildRemoteSessionCards(
 	challengeState AuthnChallengeState,
 	policy autoRefreshPolicy,
 ) ([]remoteSessionCard, error) {
-	clients, err := s.listEndpointClients(ctx, endpoint)
+	clients, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -1652,7 +1661,7 @@ func (s *Service) maybeAutoConnect(
 		return false, nil
 	}
 
-	bound, err := s.listEndpointClients(ctx, endpoint)
+	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}

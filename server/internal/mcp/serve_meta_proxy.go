@@ -360,9 +360,6 @@ func (s *Service) executeProxiedMemberTool(
 	// A proxied member's tool-call log is written by the remotemcp interceptor,
 	// which never sees the gate, so carry the caller's identity down to it.
 	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
-		// The member's project, not the gate's: an agent gateway's members can
-		// sit in different projects, and this record belongs with the one the
-		// call actually reached.
 		projectID:       member.projectID,
 		sessionID:       gate.sessionID,
 		clientInfoScope: metaClientInfoScope(gate.metaServerID),

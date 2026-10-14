@@ -20,8 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -251,7 +253,15 @@ func TestServeConsentAction_OrganizationGatewayConnectsAnotherProjectsClient(t *
 		Name: "Other project", Slug: "other-" + uuid.NewString()[:8], OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err)
-	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{fx.issuerID})
+	// A public server in that project authenticates through the client, so
+	// the person reaches it and the client is theirs to connect.
+	otherMeta := createMetaMcpEndpoint(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
+	otherSlug := "other-public-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, otherProject.ID, otherMeta.ID, "other public", otherSlug, 0, mcpservers.VisibilityPublic)
+	otherServer, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(otherSlug), ProjectID: otherProject.ID})
+	require.NoError(t, err)
+	client := createConsentRemoteClient(t, ctx, ti.conn, otherProject.ID, authCtx.ActiveOrganizationID, "orggw-"+uuid.NewString()[:8], "", []uuid.UUID{otherServer.UserSessionIssuerID.UUID, fx.issuerID})
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, otherProject.ID, []uuid.UUID{otherServer.UserSessionIssuerID.UUID}))
 
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(t.Context(), testenv.NewLogger(t), fx.organizationSlug, "mcp/gateway")
 	require.NoError(t, err)
@@ -357,4 +367,80 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 	w = postRegistration(t, router, "/mcp/gateway/register")
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 	require.Contains(t, w.Body.String(), `"client_id"`)
+}
+
+// The gateway's consent page lists only the connections behind servers the
+// person can reach: a client whose only servers are hidden from them stays
+// off the page, along with the service behind it.
+func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	serverIssuer := func(slug string) uuid.UUID {
+		server, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(slug), ProjectID: projectID})
+		require.NoError(t, err)
+		return server.UserSessionIssuerID.UUID
+	}
+	grantedIssuer := serverIssuer(fx.granted)
+	deniedIssuer := serverIssuer(fx.denied)
+	reachable := "reachable-" + uuid.NewString()[:8]
+	hidden := "hidden-" + uuid.NewString()[:8]
+	createConsentRemoteClient(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, reachable, "", []uuid.UUID{grantedIssuer, fx.issuerID})
+	createConsentRemoteClient(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, hidden, "", []uuid.UUID{deniedIssuer, fx.issuerID})
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{grantedIssuer, deniedIssuer}))
+
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(t.Context(), testenv.NewLogger(t), fx.organizationSlug, "mcp/gateway")
+	require.NoError(t, err)
+	stateID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(t.Context(), mcp.AuthnChallengeState{
+		ID:                  stateID,
+		UserSessionIssuerID: fx.issuerID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:         endpoint.Slug,
+			RouteBase:       endpoint.RouteBase,
+			MetaMcpServerID: endpoint.MetaMcpServerID,
+			CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
+		RedirectURI:     "http://example.com/cb",
+		CSRFToken:       "csrf-token",
+		Subject:         &fx.subject,
+		CreatedAt:       time.Now(),
+		FirstParty:      true,
+		AutoConnectDone: true,
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/gateway/"+fx.organizationSlug+"/connect?state="+stateID, nil)
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(w, req, endpoint))
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), reachable)
+	require.NotContains(t, w.Body.String(), hidden)
+}
+
+// An organization whose custom domain locks its servers to an IP allowlist is
+// refused on the platform host, so it is not served a gateway there.
+func TestServeOrganizationGateway_CustomDomainLockdownIsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "mcp-" + uuid.NewString()[:8] + ".example.com",
+		IngressName:     pgtype.Text{},
+		CertSecretName:  pgtype.Text{},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{"203.0.113.0/24"},
+	})
+	require.NoError(t, err)
+
+	_, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
+
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

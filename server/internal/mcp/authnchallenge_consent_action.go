@@ -101,7 +101,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return s.serveIdentityChainingCheck(w, r, endpoint, challengeState)
 	}
 
-	bound, err := s.listEndpointClients(ctx, endpoint)
+	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}

@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"slices"
 	"sync"
@@ -33,9 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // OrganizationGatewayRoute is the organization gateway's path, addressed by
@@ -95,13 +92,6 @@ func (s *Service) ServeOrganizationGateway(w http.ResponseWriter, r *http.Reques
 		attr.SlogMetaMcpServerID(gateway.metaServer.ID.String()),
 	)
 
-	// The same lockdown the agent gateway applies at the same scope: an
-	// organization that restricts its servers to an allowlisted custom domain
-	// must not have them reachable here on the platform hostname.
-	if err := s.enforceOrganizationCustomDomainLockdown(ctx, logger, gateway.metaServer.OrganizationID); err != nil {
-		return err
-	}
-
 	membership := metaMembership{agentID: uuid.Nil, organization: true}
 	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, gateway.endpoint, gateway.metaServer, membership, gateway.resolved); err != nil {
 		return fmt.Errorf("serve organization gateway: %w", err)
@@ -138,47 +128,80 @@ func (s *Service) shadowedEndpointHandler(name string, serve func(http.ResponseW
 	}
 }
 
+// organizationGatewayOAuthRoute is one route of the organization gateway's
+// OAuth surface.
+type organizationGatewayOAuthRoute struct {
+	method string
+	path   string
+	serve  func(http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint) error
+
+	// onAuthenticationHost is set for the authorization server routes, which
+	// the authentication host also serves for an issuer that opts in to it.
+	// Protected resource metadata stays with the resource.
+	onAuthenticationHost bool
+}
+
+func (s *Service) organizationGatewayOAuthRoutes() []organizationGatewayOAuthRoute {
+	return []organizationGatewayOAuthRoute{
+		{http.MethodGet, wellknown.OAuthProtectedResourcePath + OrganizationGatewayRoute, s.ServeGetProtectedResource, false},
+		{http.MethodGet, wellknown.OAuthAuthorizationServerPath + OrganizationGatewayRoute, s.ServeGetAuthorizationServer, true},
+		{http.MethodPost, OrganizationGatewayRoute + "/register", s.ServeRegister, true},
+		{http.MethodGet, OrganizationGatewayRoute + "/authorize", s.ServeAuthorize, true},
+		{http.MethodGet, OrganizationGatewayRoute + "/connect", s.ServeConsent, true},
+		{http.MethodPost, OrganizationGatewayRoute + "/connect", s.ServeConsent, true},
+		{http.MethodPost, OrganizationGatewayRoute + "/connect/remote-session", s.ServeConsentAction, true},
+		{http.MethodPost, OrganizationGatewayRoute + "/connect/mcp", s.ServeConsentMCP, true},
+		{http.MethodDelete, OrganizationGatewayRoute + "/connect/mcp", s.ServeConsentMCP, true},
+		{http.MethodGet, OrganizationGatewayRoute + "/connect/first-party", s.ServeFirstPartyConnect, true},
+		{http.MethodPost, OrganizationGatewayRoute + "/token", s.ServeToken, true},
+		{http.MethodPost, OrganizationGatewayRoute + "/revoke", s.ServeRevoke, true},
+	}
+}
+
+// shadowedEndpointRoute is one of an endpoint's own POST routes one segment
+// below its slug. For an endpoint whose slug is "gateway", chi would otherwise
+// match the organization gateway's route first, with the route name in the
+// slug position.
+type shadowedEndpointRoute struct {
+	name  string
+	serve func(http.ResponseWriter, *http.Request) error
+}
+
+func (s *Service) shadowedEndpointRoutes() []shadowedEndpointRoute {
+	return []shadowedEndpointRoute{
+		{"register", s.HandleRegister},
+		{"token", s.HandleToken},
+		{"revoke", s.HandleRevoke},
+		{"connect", s.HandleConsent},
+	}
+}
+
 // attachOrganizationGateway mounts the organization gateway and the OAuth
 // surface under it on the public listener. Each OAuth route resolves the
 // gateway first and hands it to the handler stored endpoints use, so the two
 // cannot drift apart in what they serve.
 func attachOrganizationGateway(mux goahttp.Muxer, service *Service) {
-	o11y.AttachHandler(mux, "POST", OrganizationGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway).ServeHTTP)
-	// An endpoint's own POST routes one segment below its slug. For an
-	// endpoint whose slug is "gateway", chi would otherwise match the
-	// organization gateway's route first, with the route name in the slug
-	// position.
-	for _, route := range []struct {
-		name  string
-		serve func(http.ResponseWriter, *http.Request) error
-	}{
-		{"register", service.HandleRegister},
-		{"token", service.HandleToken},
-		{"revoke", service.HandleRevoke},
-		{"connect", service.HandleConsent},
-	} {
+	o11y.AttachHandler(mux, http.MethodPost, OrganizationGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeOrganizationGateway).ServeHTTP)
+	for _, route := range service.shadowedEndpointRoutes() {
 		o11y.AttachHandler(mux, http.MethodPost, "/"+organizationGatewayRouteBase+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
 	}
-
-	for _, route := range []struct {
-		method string
-		path   string
-		serve  func(http.ResponseWriter, *http.Request, *ResolvedMcpEndpoint) error
-	}{
-		{http.MethodGet, wellknown.OAuthProtectedResourcePath + OrganizationGatewayRoute, service.ServeGetProtectedResource},
-		{http.MethodGet, wellknown.OAuthAuthorizationServerPath + OrganizationGatewayRoute, service.ServeGetAuthorizationServer},
-		{http.MethodPost, OrganizationGatewayRoute + "/register", service.ServeRegister},
-		{http.MethodGet, OrganizationGatewayRoute + "/authorize", service.ServeAuthorize},
-		{http.MethodGet, OrganizationGatewayRoute + "/connect", service.ServeConsent},
-		{http.MethodPost, OrganizationGatewayRoute + "/connect", service.ServeConsent},
-		{http.MethodPost, OrganizationGatewayRoute + "/connect/remote-session", service.ServeConsentAction},
-		{http.MethodPost, OrganizationGatewayRoute + "/connect/mcp", service.ServeConsentMCP},
-		{http.MethodDelete, OrganizationGatewayRoute + "/connect/mcp", service.ServeConsentMCP},
-		{http.MethodGet, OrganizationGatewayRoute + "/connect/first-party", service.ServeFirstPartyConnect},
-		{http.MethodPost, OrganizationGatewayRoute + "/token", service.ServeToken},
-		{http.MethodPost, OrganizationGatewayRoute + "/revoke", service.ServeRevoke},
-	} {
+	for _, route := range service.organizationGatewayOAuthRoutes() {
 		o11y.AttachHandler(mux, route.method, route.path, oops.ErrHandle(service.logger, service.withOrganizationGateway(route.serve)).ServeHTTP)
+	}
+}
+
+// attachOrganizationGatewayAuthenticationHost mounts the organization
+// gateway's authorization server routes on the authentication host, which an
+// organization issuer that opts in to it announces as the gateway's
+// authorization server.
+func attachOrganizationGatewayAuthenticationHost(host *AuthenticationHost, service *Service) {
+	for _, route := range service.shadowedEndpointRoutes() {
+		host.Handle(http.MethodPost, "/"+organizationGatewayRouteBase+"/"+route.name, service.shadowedEndpointHandler(route.name, route.serve))
+	}
+	for _, route := range service.organizationGatewayOAuthRoutes() {
+		if route.onAuthenticationHost {
+			host.Handle(route.method, route.path, oops.ErrHandle(service.logger, service.withOrganizationGateway(route.serve)).ServeHTTP)
+		}
 	}
 }
 
@@ -195,9 +218,10 @@ func (s *Service) withOrganizationGateway(serve func(http.ResponseWriter, *http.
 }
 
 // loadOrganizationGateway resolves an organization slug to its gateway.
-// Every way the gateway can be unavailable reads as not found: an unknown or
-// disabled organization, a request on a custom domain, and an organization
-// orggateway.Resolve serves none. Answering anything else would tell an
+// Every way the gateway can be unavailable reads as not found: an unknown
+// organization, a request on a custom domain, and an organization
+// orggateway.Availability serves none, including one whose custom domain
+// locks its servers to an allowlist. Answering anything else would tell an
 // anonymous caller which organizations exist.
 func (s *Service) loadOrganizationGateway(ctx context.Context, organizationSlug string) (*organizationGateway, error) {
 	if organizationSlug == "" {
@@ -216,12 +240,10 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, organizationSlug 
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load organization").LogError(ctx, s.logger)
-	case organization.DisabledAt.Valid:
-		return nil, oops.C(oops.CodeNotFound)
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(organization.ID))
 
-	issuerID, unavailable, err := orggateway.Resolve(ctx, usersessionsrepo.New(s.db), organization.ID)
+	issuerID, unavailable, err := orggateway.Availability(ctx, s.db, organization)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, logger)
 	}
@@ -258,34 +280,6 @@ func (s *Service) loadOrganizationGateway(ctx context.Context, organizationSlug 
 	}
 
 	return &organizationGateway{metaServer: metaServer, endpoint: endpoint, resolved: resolved}, nil
-}
-
-// enforceOrganizationCustomDomainLockdown 403s a platform-host request to an
-// organization-scoped gateway when the organization has an IP allowlist on
-// its custom domain. The two exemptions are the ones customDomainLockdownApplies
-// makes: a request that arrived through the private ingress is governed by
-// that surface's own admission, and one that arrived on the custom domain
-// already passed the allowlist at the edge.
-//
-// The custom-domain exemption is bound to the owning organization. A domain
-// only proves its own organization's allowlist was applied, so another
-// organization's domain must not excuse this one's lockdown.
-func (s *Service) enforceOrganizationCustomDomainLockdown(ctx context.Context, logger *slog.Logger, organizationID string) error {
-	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
-		return nil
-	}
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil && domainCtx.OrganizationID == organizationID {
-		return nil
-	}
-
-	lockedDown, err := s.organizationCustomDomainLockdown(ctx, logger, organizationID)
-	if err != nil {
-		return err
-	}
-	if lockedDown {
-		return oops.E(oops.CodeForbidden, nil, "this MCP server is only accessible via its custom domain")
-	}
-	return nil
 }
 
 // projectTokenCache resolves a derived gateway's upstream credentials one
@@ -338,30 +332,76 @@ func (s *Service) newOrganizationGatewayTokens(authentication *issuerGateAuthent
 	}
 }
 
-// memberTokens is the upstream token map a member's dispatch routes from.
+// memberTokens is the upstream token map a member's dispatch routes from. A
+// failure to resolve one project's credentials degrades that project's
+// members alone, as any other member failure does; the cache has already
+// logged the cause.
 func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	if g.projectTokens == nil {
 		return g.tokens, nil
 	}
-	return g.projectTokens.get(ctx, member.projectID)
+	tokens, err := g.projectTokens.get(ctx, member.projectID)
+	if err != nil {
+		return nil, &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
+	}
+	return tokens, nil
 }
 
 // listEndpointClients lists the remote session clients an endpoint's consent
-// covers: its project's own, or, for an organization gateway, every project's
-// in the organization.
-func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint) ([]remotesessions.Client, error) {
+// covers: its project's own, or, for an organization gateway, the clients
+// behind the servers the challenge's subject can reach through it.
+//
+// An organization gateway's issuer may carry clients from every project in
+// the organization, and one person reaches only some of them. Listing the
+// rest would show a person connections, and the services behind them, for
+// servers their access does not include.
+func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
 	if endpoint.IsOrganizationGateway() {
 		clients, err := s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 		if err != nil {
 			return nil, fmt.Errorf("list organization remote session clients: %w", err)
 		}
-		return clients, nil
+		if len(clients) == 0 || challengeState.Subject == nil {
+			return nil, nil
+		}
+		// A session id keeps RBAC enforced: a context without one reads as an
+		// internal call.
+		memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+		if err != nil {
+			return nil, fmt.Errorf("stamp consent subject context: %w", err)
+		}
+		_, members, err := s.resolveOrganizationMemberSnapshot(memberCtx, s.logger, endpoint.OrganizationID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve organization gateway members: %w", err)
+		}
+		reachable := make([]remotesessions.Client, 0, len(clients))
+		for _, client := range clients {
+			if clientServesAnyMember(client, members) {
+				reachable = append(reachable, client)
+			}
+		}
+		return reachable, nil
 	}
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
 	return clients, nil
+}
+
+// clientServesAnyMember reports whether a client authenticates for at least
+// one member: one whose authorization server is the client's, in the client's
+// own project when a project owns it.
+func clientServesAnyMember(client remotesessions.Client, members []metaMember) bool {
+	for _, member := range members {
+		if !member.remoteSessionIssuerID.Valid || member.remoteSessionIssuerID.UUID != client.RemoteSessionIssuerID {
+			continue
+		}
+		if !client.ProjectID.Valid || client.ProjectID.UUID == member.projectID {
+			return true
+		}
+	}
+	return false
 }
 
 // endpointRemoteSessionStatuses is the subject's remote session state on
@@ -415,8 +455,12 @@ func (s *Service) clientTokenProjectIDs(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, fmt.Errorf("list organization MCP servers for remote session issuer: %w", err)
 	}
+	surface := requestNetworkSurface(ctx)
 	projectIDs := make([]uuid.UUID, 0, len(rows))
 	for _, row := range rows {
+		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
+			continue
+		}
 		if !slices.Contains(projectIDs, row.ProjectID) {
 			projectIDs = append(projectIDs, row.ProjectID)
 		}

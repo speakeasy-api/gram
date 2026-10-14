@@ -15,6 +15,8 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const OrganizationGatewayUnavailableReason = {
   NoOrganizationIssuer: "no_organization_issuer",
   MultipleOrganizationIssuers: "multiple_organization_issuers",
+  CustomDomainOnly: "custom_domain_only",
+  OrganizationDisabled: "organization_disabled",
 } as const;
 /**
  * Why the gateway is not served. Set only when not available.

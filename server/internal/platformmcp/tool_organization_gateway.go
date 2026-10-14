@@ -13,7 +13,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 const getMyOrganizationGatewayName = "get_my_organization_gateway"
@@ -37,8 +36,9 @@ type GetMyOrganizationGatewayOutput struct {
 	// URL is the gateway's MCP URL, set only when Available.
 	URL string `json:"url,omitempty"`
 
-	// UnavailableReason is no_organization_issuer or
-	// multiple_organization_issuers, set only when not Available.
+	// UnavailableReason is no_organization_issuer,
+	// multiple_organization_issuers, custom_domain_only, or
+	// organization_disabled, set only when not Available.
 	UnavailableReason string `json:"unavailable_reason,omitempty"`
 
 	// NextAction tells the caller what to do with the answer.
@@ -71,7 +71,7 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("load organization: %w", err)
 	}
 
-	_, unavailable, err := orggateway.Resolve(ctx, usersessionsrepo.New(s.db), organization.ID)
+	_, unavailable, err := orggateway.Availability(ctx, s.db, organization)
 	if err != nil {
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("resolve organization gateway: %w", err)
 	}
@@ -84,20 +84,18 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 			NextAction:        "Add url to your MCP client as a remote server and sign in with your organization account when prompted. Then call list_servers through it.",
 		}, nil
 	case orggateway.UnavailabilityNoOrganizationIssuer:
-		return GetMyOrganizationGatewayOutput{
-			Available:         false,
-			URL:               "",
-			UnavailableReason: string(unavailable),
-			NextAction:        "Ask an organization administrator to set up an organization-wide authorization server. Until then, connect to each MCP server's own URL.",
-		}, nil
+		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to set up an organization-wide authorization server."), nil
+	case orggateway.UnavailabilityMultipleOrganizationIssuers:
+		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to consolidate the organization-wide authorization servers into one."), nil
+	case orggateway.UnavailabilityCustomDomainOnly:
+		return unavailableOrganizationGateway(unavailable, "Your organization only allows its MCP servers to be reached through its own custom domain, where the gateway is not offered. Connect to each MCP server's address on that domain."), nil
 	default:
-		return GetMyOrganizationGatewayOutput{
-			Available:         false,
-			URL:               "",
-			UnavailableReason: string(unavailable),
-			NextAction:        "Ask an organization administrator to consolidate the organization-wide authorization servers into one. Until then, connect to each MCP server's own URL.",
-		}, nil
+		return unavailableOrganizationGateway(unavailable, "This organization is disabled. Contact your organization administrator."), nil
 	}
+}
+
+func unavailableOrganizationGateway(reason orggateway.Unavailability, nextAction string) GetMyOrganizationGatewayOutput {
+	return GetMyOrganizationGatewayOutput{Available: false, URL: "", UnavailableReason: string(reason), NextAction: nextAction}
 }
 
 func registerOrganizationGatewayTool(reg *Registrar, service *OrganizationGatewayService) {

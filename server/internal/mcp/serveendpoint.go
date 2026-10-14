@@ -598,6 +598,9 @@ func privateEndpointNamespace(kind string) (mcpendpoints.NamespaceKind, error) {
 //
 // mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
 // URL building on both the primary and fallback paths.
+//
+// mcpRouteBase "mcp/gateway" resolves slug as an organization slug to that
+// organization's gateway instead.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
 	if mcpRouteBase == organizationGatewayRouteBase {
 		gateway, err := s.loadOrganizationGateway(ctx, slug)

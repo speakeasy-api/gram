@@ -1965,7 +1965,8 @@ WHERE c.id = @id;
 -- organization, for a caller that belongs to no project: the organization
 -- gateway, whose members span projects. It applies only to an
 -- organization-level user_session_issuer, so a project's own issuer never
--- reaches another project's clients.
+-- reaches another project's clients. A project's remote issuer is admitted
+-- only alongside a client of that same project.
 SELECT
     c.id                                   AS client_id,
     c.project_id                           AS client_project_id,
@@ -2039,9 +2040,7 @@ WHERE link.user_session_issuer_id = @user_session_issuer_id
   AND (
     i.project_id = @project_id
     OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = @organization_id))
-    OR (@organization_wide::boolean AND usi.project_id IS NULL AND i.project_id IN (
-      SELECT p.id FROM projects AS p WHERE p.organization_id = @organization_id::text AND p.deleted IS FALSE
-    ))
+    OR (@organization_wide::boolean AND usi.project_id IS NULL AND i.project_id = c.project_id)
   )
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE

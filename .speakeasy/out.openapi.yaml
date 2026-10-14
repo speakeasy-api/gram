@@ -41272,7 +41272,7 @@ paths:
         name: Organization
   /rpc/organizations.getGateway:
     get:
-      description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer. It is served while the organization owns exactly one organization-level user session issuer. Requires org:read.'
+      description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist.'
       operationId: getOrganizationGateway
       parameters:
         - allowEmptyValue: true
@@ -96709,6 +96709,8 @@ components:
           enum:
             - no_organization_issuer
             - multiple_organization_issuers
+            - custom_domain_only
+            - organization_disabled
         url:
           type: string
           description: The gateway's MCP URL. Set only when available.

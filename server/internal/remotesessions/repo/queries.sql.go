@@ -8749,9 +8749,7 @@ WHERE link.user_session_issuer_id = $1
   AND (
     i.project_id = $2
     OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = $3))
-    OR ($4::boolean AND usi.project_id IS NULL AND i.project_id IN (
-      SELECT p.id FROM projects AS p WHERE p.organization_id = $3::text AND p.deleted IS FALSE
-    ))
+    OR ($4::boolean AND usi.project_id IS NULL AND i.project_id = c.project_id)
   )
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
@@ -8824,7 +8822,8 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 // organization, for a caller that belongs to no project: the organization
 // gateway, whose members span projects. It applies only to an
 // organization-level user_session_issuer, so a project's own issuer never
-// reaches another project's clients.
+// reaches another project's clients. A project's remote issuer is admitted
+// only alongside a client of that same project.
 func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsForUserSessionIssuerParams) ([]ListRemoteSessionClientsForUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsForUserSessionIssuer,
 		arg.UserSessionIssuerID,

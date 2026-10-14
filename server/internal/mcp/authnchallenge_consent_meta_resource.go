@@ -116,8 +116,13 @@ func (s *Service) claimingMetaMembers(
 		if err != nil {
 			return nil, false, fmt.Errorf("list organization MCP servers for remote session issuer: %w", err)
 		}
+		// Only servers the gateway serves on this surface claim, as only they
+		// are members of it here.
+		surface := requestNetworkSurface(ctx)
 		for _, row := range organizationRows {
-			rows = append(rows, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow(row))
+			if servableOnSurface(row.McpServerNetworkAccessMode, surface) {
+				rows = append(rows, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow(row))
+			}
 		}
 	} else {
 		storedRows, err := metamcprepo.New(s.db).ListMetaMCPMembersForRemoteSessionIssuer(ctx, metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerParams{

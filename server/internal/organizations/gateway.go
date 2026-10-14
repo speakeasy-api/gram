@@ -8,7 +8,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // GetGateway reports the active organization's gateway URL, or why it is not
@@ -27,7 +26,7 @@ func (s *Service) GetGateway(ctx context.Context, _ *gen.GetGatewayPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read organization").LogError(ctx, s.logger)
 	}
-	_, unavailable, err := orggateway.Resolve(ctx, usersessionsrepo.New(s.db), org.ID)
+	_, unavailable, err := orggateway.Availability(ctx, s.db, org)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway").LogError(ctx, s.logger)
 	}
