@@ -26965,6 +26965,264 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: ListIntegrations
+  /rpc/internalSessionIssuers.get:
+    get:
+      description: 'Read the organization''s internal session issuer: its state, the issuer URI to register with supported services and its published keys. Requires org:read.'
+      operationId: getInternalSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: get internalSessionIssuers
+      tags:
+        - internalSessionIssuers
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: InternalSessionIssuer
+  /rpc/internalSessionIssuers.rotate:
+    post:
+      description: 'Rotate the issuer''s signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. The hourly sweep also activates a ready key on its own while the issuer is enabled and not paused, so a later second call may find the rotation already done and change nothing; a paused issuer can still be activated with the second call. With compromised set, every current key is revoked and withdrawn from the key set first, leaving the issuer keyless; the revoked keys'' signing material is then disabled and, while the issuer is rolled out and the organization has a verified email domain, a fresh key activated. If either later step fails the issuer stays keyless or reports kms_cleanup_pending, and repeating the call retries it. Repeats naming a key that a compromised rotation already replaced change nothing; naming a key the sweep revoked after a routine rotation still contains its successor. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and its revocation is never rate limited.'
+      operationId: rotateInternalSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: rotate internalSessionIssuers
+      tags:
+        - internalSessionIssuers
+      x-speakeasy-name-override: rotate
+      x-speakeasy-react-hook:
+        name: RotateInternalSessionIssuer
+  /rpc/internalSessionIssuers.setEnabled:
+    post:
+      description: Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin; enabling also needs a verified email domain and the issuer rollout, while disabling never does.
+      operationId: setInternalSessionIssuerEnabled
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetEnabledRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setEnabled internalSessionIssuers
+      tags:
+        - internalSessionIssuers
+      x-speakeasy-name-override: setEnabled
+      x-speakeasy-react-hook:
+        name: SetInternalSessionIssuerEnabled
   /rpc/jsonWebKeySets.activateKey:
     post:
       description: Make a published key the set's active signing key, retiring the previously active key in the same operation. The key must be pending or retired; activating the already-active key is a no-op. Requires org:admin.
@@ -72868,114 +73126,6 @@ paths:
       x-speakeasy-name-override: listServers
       x-speakeasy-react-hook:
         name: UnproxiedMcpServers
-  /rpc/unproxiedMcp.listTools:
-    get:
-      description: Best-effort discovery of the tools available on the vendor's MCP server. Connects live to the server's URL and issues an MCP tools/list call; the result is never cached and the connection is never reused for actual tool execution.
-      operationId: listUnproxiedMcpServerTools
-      parameters:
-        - allowEmptyValue: true
-          description: The ID of the unproxied MCP server
-          in: query
-          name: id
-          required: true
-          schema:
-            description: The ID of the unproxied MCP server
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListUnproxiedMcpServerToolsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: listTools unproxiedMcp
-      tags:
-        - unproxiedMcp
-      x-speakeasy-name-override: listTools
-      x-speakeasy-react-hook:
-        name: UnproxiedMcpServerTools
   /rpc/usage.cancelStripeSubscription:
     post:
       description: Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period
@@ -79707,7 +79857,7 @@ components:
             - allowed
             - blocked
             - unreviewed
-      description: The enforcement verdict for one detected AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
+      description: The enforcement verdict for one AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
       required:
         - state
         - decision
@@ -80520,6 +80670,8 @@ components:
     AiScanTarget:
       type: object
       properties:
+        access:
+          $ref: '#/components/schemas/AIToolAccessSummary'
         category:
           type: string
           description: 'Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).'
@@ -90680,6 +90832,66 @@ components:
       required:
         - version
         - created_at
+    InternalSessionIssuer:
+      type: object
+      properties:
+        can_enable:
+          type: boolean
+          description: Whether deployment readiness, rollout and a verified email domain currently allow enabling this issuer. The caller still needs organization administrator access.
+        issuer:
+          type: string
+          description: Issuer URI to register with supported services. It never changes.
+        jwks_uri:
+          type: string
+          description: Public verification keys.
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalSessionIssuerKey'
+          description: Published keys.
+        kms_cleanup_pending:
+          type: integer
+          description: Revoked keys whose signing material is not yet disabled. Speakeasy retries until it is.
+          format: int64
+        replacement_error:
+          type: string
+          description: 'Set only by a compromised rotation whose replacement key could not be activated: the keys are contained, the issuer stays keyless, and repeating the call retries the replacement.'
+        rotation_ready_at:
+          type: string
+          description: When a pending rotation can be activated.
+          format: date-time
+        state:
+          type: string
+          description: 'unavailable: not offered to this organization yet. verified_domain_required: needs at least one verified email domain. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.'
+          enum:
+            - unavailable
+            - verified_domain_required
+            - setup_required
+            - enabled
+            - disabled
+            - signing_paused
+            - keyless
+      required:
+        - state
+        - can_enable
+        - keys
+        - kms_cleanup_pending
+    InternalSessionIssuerKey:
+      type: object
+      properties:
+        kid:
+          type: string
+          description: Key ID.
+        state:
+          type: string
+          description: Lifecycle state.
+          enum:
+            - pending
+            - active
+            - retired
+      required:
+        - kid
+        - state
     InterruptTurnRequestBody:
       type: object
       properties:
@@ -93454,28 +93666,6 @@ components:
       description: A page of terminal skill activations without exact version attribution.
       required:
         - activations
-    ListUnproxiedMcpServerToolsResult:
-      type: object
-      properties:
-        message:
-          type: string
-          description: Human-readable detail, present for non-success statuses
-        status:
-          type: string
-          description: Outcome of the discovery attempt
-          enum:
-            - success
-            - auth_required
-            - unreachable
-            - error
-        tools:
-          type: array
-          items:
-            $ref: '#/components/schemas/UnproxiedMcpServerTool'
-      description: Result of a live tool-discovery probe against an unproxied MCP server
-      required:
-        - status
-        - tools
     ListUnproxiedMcpServersResult:
       type: object
       properties:
@@ -101817,6 +102007,16 @@ components:
         - previous_keys
         - previous_keys_retired
         - marketplace_republished
+    RotateRequestBody:
+      type: object
+      properties:
+        active_kid:
+          type: string
+          description: The key ID currently active, as last read. Required unless the issuer has no active key.
+        compromised:
+          type: boolean
+          description: Revoke every current key immediately instead of rotating gradually.
+          default: false
     RotateTunneledMcpServerKeyForm:
       type: object
       properties:
@@ -102998,6 +103198,14 @@ components:
       required:
         - remote_session_issuer_id
         - providers
+    SetEnabledRequestBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether Speakeasy may sign with the issuer.
+      required:
+        - enabled
     SetIdentityProviderConnectionSetupMethodRequestBody:
       type: object
       properties:
@@ -108533,18 +108741,6 @@ components:
       required:
         - client
         - call_count
-    UnproxiedMcpServerTool:
-      type: object
-      properties:
-        description:
-          type: string
-          description: Tool description
-        name:
-          type: string
-          description: Tool name
-      description: A tool discovered on the vendor's MCP server
-      required:
-        - name
     UnproxiedMcpServerToolUsageRow:
       type: object
       properties:
@@ -112238,6 +112434,8 @@ tags:
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
     description: Explore third-party tools in Speakeasy.
+  - name: internalSessionIssuers
+    description: 'Manage the organization''s internal session issuer: the permanent issuer URI Speakeasy signs enterprise-managed authorization assertions with, and its signing keys.'
   - name: jsonWebKeySets
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys

@@ -185,6 +185,16 @@ const (
 	// FlagEMAProviders gates selecting a vendor's EMA provider while the
 	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.
 	FlagEMAProviders Flag = "ema-providers"
+	// FlagInternalSessionIssuer gates an organization's internal session issuer
+	// while it rolls out: enabling it, signing with it and its Platform MCP tool.
+	// Server-evaluated, targeted by the organization group.
+	FlagInternalSessionIssuer Flag = "internal-session-issuer"
+
+	// FlagInternalSessionIssuerSigningPaused pauses every internal session
+	// issuer signature without a redeploy, for incident response. Discovery
+	// keeps serving. Server-evaluated; target everyone to pause the platform,
+	// or an organization group to pause one organization.
+	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

@@ -1,9 +1,4 @@
 name: Public OAS Update
-permissions:
-  checks: write
-  contents: write
-  pull-requests: write
-  statuses: write
 
 "on":
   push:
@@ -13,9 +8,19 @@ permissions:
       - server/gen/http/openapi3.yaml
   workflow_dispatch: {}
 
+# A queued run is replaced by a newer one, which regenerates from a later main.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
 jobs:
   speakeasy-update-public-spec:
+    name: speakeasy-update-public-spec
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1

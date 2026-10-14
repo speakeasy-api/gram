@@ -38,6 +38,7 @@ import { Identity } from "./identity.js";
 import { IdentityProviderConnections } from "./identityproviderconnections.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
+import { InternalSessionIssuers } from "./internalsessionissuers.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
 import { Killswitches } from "./killswitches.js";
@@ -278,6 +279,13 @@ export class Gram extends ClientSDK {
   private _integrations?: Integrations;
   get integrations(): Integrations {
     return (this._integrations ??= new Integrations(this._options));
+  }
+
+  private _internalSessionIssuers?: InternalSessionIssuers;
+  get internalSessionIssuers(): InternalSessionIssuers {
+    return (this._internalSessionIssuers ??= new InternalSessionIssuers(
+      this._options,
+    ));
   }
 
   private _jsonWebKeySets?: JsonWebKeySets;

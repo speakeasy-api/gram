@@ -9,6 +9,7 @@ vi.mock("@/contexts/Sdk", () => ({
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import {
+  ShadowAISectionRedirect,
   ShadowMCPLegacyRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
@@ -89,7 +90,7 @@ describe("project routes", () => {
     expect(screen.getByText("/org/projects/project/guide")).toBeTruthy();
   });
 
-  it("exposes the Shadow AI section with Shadow MCP as one of its tabs", () => {
+  it("keeps the Shadow AI and Shadow MCP section URLs routable", () => {
     render(
       <MemoryRouter initialEntries={["/org/projects/project"]}>
         <ProjectRouteHrefs />
@@ -98,12 +99,12 @@ describe("project routes", () => {
 
     const hrefs = screen.getByTestId("project-route-hrefs").textContent ?? "";
     expect(hrefs).toContain("/org/projects/project/shadow-ai");
-    // The Shadow MCP paths predate the section and are in bookmarks and block
-    // messages, so they stay routable and redirect.
+    // Both sections live in Guardrails now, but their URLs are in tickets,
+    // bookmarks and block messages, so they stay routable and redirect.
     expect(hrefs).toContain("/org/projects/project/shadow-mcp");
   });
 
-  it("nests the tabs and their detail pages under the section", () => {
+  it("nests the detail pages under the old section tabs", () => {
     render(
       <MemoryRouter initialEntries={["/org/projects/project"]}>
         <ShadowAIHrefs />
@@ -135,10 +136,36 @@ describe("project routes", () => {
     ).toBeTruthy();
   });
 
-  // Block messages and bookmarks carry the old paths with a query and a
-  // fragment; both must survive the redirect or the deep link lands at the top.
-  it("redirects the legacy Shadow MCP paths into the section keeping search and hash", async () => {
-    render(
+  // Shadow AI lives in Guardrails: every index page of the old section, and
+  // the older Shadow MCP index, sends a pasted link there.
+  it.each([
+    "shadow-ai",
+    "shadow-ai/harnesses",
+    "shadow-ai/assistants",
+    "shadow-ai/models",
+    "shadow-ai/mcps",
+  ])("redirects /%s to Guardrails", async (path) => {
+    const view = render(
+      <MemoryRouter initialEntries={[`/org/projects/project/${path}`]}>
+        <Routes>
+          <Route
+            path={`/org/projects/project/${path}`}
+            element={<ShadowAISectionRedirect />}
+          />
+          <Route path="*" element={<LocationPath />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await within(view.container).findByText(
+        "/org/projects/project/risk-policies",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("redirects the legacy Shadow MCP index to Guardrails", async () => {
+    const view = render(
       <MemoryRouter
         initialEntries={[
           "/org/projects/project/shadow-mcp?status=blocked#tools",
@@ -155,11 +182,15 @@ describe("project routes", () => {
     );
 
     expect(
-      await screen.findByText(
-        "/org/projects/project/shadow-ai/mcps?status=blocked#tools",
+      await within(view.container).findByText(
+        "/org/projects/project/risk-policies",
       ),
     ).toBeTruthy();
   });
+
+  // Block messages and bookmarks carry the old server paths with a query and
+  // a fragment; both must survive the redirect or the deep link lands at the
+  // top.
 
   it("redirects a legacy Shadow MCP server path to the nested detail", async () => {
     render(

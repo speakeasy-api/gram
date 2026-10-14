@@ -95,6 +95,10 @@ type ParentChallenge struct {
 	RouteBase           string
 	McpServerID         uuid.NullUUID
 	MetaMcpServerID     uuid.NullUUID
+	// ResourceMcpServerID is the gateway member whose protected resource
+	// decides the login's scopes, as McpServerID does for a server login. Set
+	// only once the gateway has qualified the client to that member.
+	ResourceMcpServerID uuid.NullUUID
 	FinalRedirectURI    string
 	// ConsentURL is the consent page the callback returns to when it cannot
 	// be rebuilt from RouteBase and McpSlug, as on a shared authorization
@@ -199,6 +203,8 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
+		// The retry leg reuses the first leg's scopes, so it reads no resource.
+		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
 		BrowserCookieID:     s.BrowserCookieID,
@@ -787,8 +793,9 @@ func (m *ChallengeManager) ResourceAppliesToClients(ctx context.Context, organiz
 
 // loginResourceScopes resolves the protected resource row of the MCP server
 // the login is for, probing it within the login budget, and returns the
-// resource URL it consulted. An organization not enrolled (discover false), a
-// client whose own scope decides, a login with no remote-backed server, or a
+// resource URL it consulted. A gateway login reads the member it qualified the
+// client to. An organization not enrolled (discover false), a client whose own
+// scope decides, a login with no remote-backed server or member, or a
 // server whose resource the selected client's grant is not qualified to has
 // no row.
 func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent ParentChallenge, client Client, discover bool) (ResourceScopes, protectedresource.LoginResolution, string) {
@@ -803,11 +810,16 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 	case len(client.ClientScope) > 0:
 		skipped.Outcome = protectedresource.ProbeOutcomeSkippedClientScope
 		return none, skipped, ""
-	case !parent.McpServerID.Valid:
+	}
+	serverID, viaMember := parent.McpServerID, false
+	if !serverID.Valid && parent.ResourceMcpServerID.Valid {
+		serverID, viaMember = parent.ResourceMcpServerID, true
+	}
+	if !serverID.Valid {
 		return none, skipped, ""
 	}
 	q := remotesessions_repo.New(m.db)
-	resourceURL, err := q.GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: parent.McpServerID.UUID, ProjectID: parent.ProjectID})
+	resourceURL, err := q.GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: serverID.UUID, ProjectID: parent.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, skipped, ""
@@ -816,21 +828,26 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 		skipped.Outcome = protectedresource.ProbeOutcomeDBError
 		return none, skipped, ""
 	}
-	siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
-		UserSessionIssuerID: parent.UserSessionIssuerID,
-		ProjectID:           parent.ProjectID,
-		OrganizationID:      parent.OrganizationID,
-	})
-	if err != nil {
-		m.logger.ErrorContext(ctx, "list sibling clients for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
-		skipped.Outcome = protectedresource.ProbeOutcomeDBError
-		return none, skipped, resourceURL
-	}
-	applies, err := m.ResourceAppliesToClient(ctx, parent.OrganizationID, client.ID, siblingIDs, resourceURL)
-	if err != nil {
-		m.logger.ErrorContext(ctx, "decide resource ownership for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()), attr.SlogRemoteSessionClientID(client.ID.String()))
-		skipped.Outcome = protectedresource.ProbeOutcomeDBError
-		return none, skipped, resourceURL
+	// The gateway qualified the client to its member before the login, so
+	// only the member's URL must still be the resource the grant names.
+	applies := viaMember && sameUpstream(resourceURL, parent.Resource)
+	if !viaMember {
+		siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
+			UserSessionIssuerID: parent.UserSessionIssuerID,
+			ProjectID:           parent.ProjectID,
+			OrganizationID:      parent.OrganizationID,
+		})
+		if err != nil {
+			m.logger.ErrorContext(ctx, "list sibling clients for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
+			skipped.Outcome = protectedresource.ProbeOutcomeDBError
+			return none, skipped, resourceURL
+		}
+		applies, err = m.ResourceAppliesToClient(ctx, parent.OrganizationID, client.ID, siblingIDs, resourceURL)
+		if err != nil {
+			m.logger.ErrorContext(ctx, "decide resource ownership for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()), attr.SlogRemoteSessionClientID(client.ID.String()))
+			skipped.Outcome = protectedresource.ProbeOutcomeDBError
+			return none, skipped, resourceURL
+		}
 	}
 	if !applies {
 		skipped.Outcome = protectedresource.ProbeOutcomeNotOwned
@@ -1280,7 +1297,7 @@ func (m *ChallengeManager) mintAuthorization(
 		if resolved.ProbeDuration > 0 {
 			m.scopeMetrics.RecordProbe(ctx, resolved.Outcome, resolved.ProbeDuration)
 		}
-		m.logger.InfoContext(ctx, "resolved login scope",
+		logAttrs := []any{
 			attr.SlogProjectID(parent.ProjectID.String()),
 			attr.SlogOrganizationID(parent.OrganizationID),
 			attr.SlogOAuthIssuer(client.IssuerURL),
@@ -1290,7 +1307,11 @@ func (m *ChallengeManager) mintAuthorization(
 			attr.SlogOAuthResourceProbeOutcome(resolved.Outcome),
 			attr.SlogOAuthScope(strings.Join(scopes, " ")),
 			attr.SlogOAuthResourceProbeDuration(resolved.ProbeDuration),
-		)
+		}
+		if parent.MetaMcpServerID.Valid {
+			logAttrs = append(logAttrs, attr.SlogMetaMcpServerID(parent.MetaMcpServerID.UUID.String()))
+		}
+		m.logger.InfoContext(ctx, "resolved login scope", logAttrs...)
 	}
 	if len(resolution.Unadvertised) > 0 {
 		m.logger.InfoContext(ctx, "resource scope pin requests scopes the resource does not advertise",
