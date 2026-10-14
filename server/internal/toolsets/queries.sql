@@ -309,6 +309,25 @@ SET
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- name: LockHostedToolsetsByUserSessionIssuer :many
+-- Live toolsets on the issuer that own a live canonical wrapper, locked in id order.
+SELECT toolsets.*
+FROM toolsets
+JOIN projects
+  ON projects.id = toolsets.project_id
+ AND projects.organization_id = @organization_id::text
+ AND projects.deleted IS FALSE
+JOIN mcp_servers
+  ON mcp_servers.id = toolsets.id
+ AND mcp_servers.toolset_id = toolsets.id
+ AND mcp_servers.project_id = toolsets.project_id
+ AND mcp_servers.deleted IS FALSE
+WHERE toolsets.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND toolsets.organization_id = @organization_id::text
+  AND toolsets.deleted IS FALSE
+ORDER BY toolsets.id
+FOR UPDATE OF toolsets;
+
 -- name: UpdateToolsetToolVariationsGroup :one
 UPDATE toolsets
 SET
