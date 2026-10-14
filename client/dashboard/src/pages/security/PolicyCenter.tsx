@@ -1137,7 +1137,8 @@ function PolicyCenterContent() {
     >
       {/* The dock follows the active tab: the Detection Rules tab took over
           the standalone page whose URL used to select these suggestions, and
-          the Shadow AI targets tab mounts its own config from its own data. */}
+          the Shadow AI targets and MCP approvals tabs mount their own config
+          from their own data. */}
       {activeTab === "detection-rules" ? (
         <InsightsConfig
           contextInfo={detectionRulesInsightsContext()}
@@ -1145,7 +1146,8 @@ function PolicyCenterContent() {
           title="Detection rule insights"
           subtitle="Ask about rule activity, noisy rules, and coverage gaps. Match content is redacted before it reaches the assistant."
         />
-      ) : activeTab === "shadow-ai-targets" ? null : (
+      ) : activeTab === "shadow-ai-targets" ||
+        activeTab === "mcp-approvals" ? null : (
         <InsightsConfig
           contextInfo={insightsContext}
           suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MCPApprovalsTab } from "./MCPApprovalsTab";
@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
   goToServer: vi.fn(),
+  refetchPolicies: vi.fn(),
+  insightsConfig: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
@@ -25,6 +27,15 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
 
 vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
+}));
+
+// The dock needs the insights provider; the tab test only checks what it
+// is told.
+vi.mock("@/components/insights-dock", () => ({
+  InsightsConfig: (props: { title: string; contextInfo: string }) => {
+    mocks.insightsConfig(props);
+    return null;
+  },
 }));
 
 vi.mock("@/routes", () => ({
@@ -47,17 +58,22 @@ vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
   ShadowMCPInventoryTable: ({
     members,
     onOpenServer,
+    policiesUnavailable,
     roles,
     shadowMCPPolicies,
     projectID,
   }: {
     members: Array<{ name: string }>;
     onOpenServer?: (server: { serverSlug: string }) => void;
+    policiesUnavailable?: boolean;
     roles: Array<{ name: string }>;
     shadowMCPPolicies: Array<{ id: string }>;
     projectID: string;
   }) => (
-    <div>
+    <div
+      data-testid="inventory-table"
+      data-policies-unavailable={String(policiesUnavailable ?? false)}
+    >
       Shadow MCP inventory for {projectID}
       <span>
         Shadow MCP policies:{" "}
@@ -111,6 +127,7 @@ describe("MCPApprovalsTab", () => {
       data: { policies: [] },
       isError: false,
       isLoading: false,
+      refetch: mocks.refetchPolicies,
     });
     mocks.useMembers.mockReturnValue({
       data: { members: [{ name: "Admin User" }] },
@@ -139,6 +156,29 @@ describe("MCPApprovalsTab", () => {
     ).toBeTruthy();
     expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
     expect(screen.getByText("Shadow MCP policies: none")).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("inventory-table")
+        .getAttribute("data-policies-unavailable"),
+    ).toBe("false");
+    expect(screen.queryByText(/Policy data could not be loaded/)).toBeNull();
+  });
+
+  it("tells the assistant which tab it is on and the policy posture", () => {
+    render(
+      <MemoryRouter>
+        <MCPApprovalsTab />
+      </MemoryRouter>,
+    );
+
+    expect(mocks.insightsConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "MCP approval insights",
+        contextInfo: expect.stringContaining(
+          "Page: Guardrails, MCP approvals tab. Shadow MCP policy posture: none.",
+        ),
+      }),
+    );
   });
 
   it("holds the inventory until the policy, member and role reads settle", () => {
@@ -146,6 +186,7 @@ describe("MCPApprovalsTab", () => {
       data: undefined,
       isError: false,
       isLoading: true,
+      refetch: mocks.refetchPolicies,
     });
 
     render(
@@ -173,6 +214,7 @@ describe("MCPApprovalsTab", () => {
       },
       isError: false,
       isLoading: false,
+      refetch: mocks.refetchPolicies,
     });
 
     render(
@@ -184,7 +226,7 @@ describe("MCPApprovalsTab", () => {
     expect(screen.getByText("Blocking")).toBeTruthy();
     expect(
       screen.getByText(
-        "Block policy is enabled. Servers without allow rules are not allowed.",
+        "Block policy is enabled. Servers without allow rules are blocked for the policy's audience.",
       ),
     ).toBeTruthy();
     expect(
@@ -206,11 +248,12 @@ describe("MCPApprovalsTab", () => {
     expect(mocks.goToServer).toHaveBeenCalledWith("server-slug");
   });
 
-  it("shows the policy status as unavailable when the policy list fails", () => {
+  it("keeps the inventory browsable but pauses deciding when the policy list fails", () => {
     mocks.useRiskListPolicies.mockReturnValue({
       data: undefined,
       isError: true,
       isLoading: false,
+      refetch: mocks.refetchPolicies,
     });
 
     render(
@@ -219,9 +262,19 @@ describe("MCPApprovalsTab", () => {
       </MemoryRouter>,
     );
 
-    // An unavailable policy list renders no status box, but the inventory
-    // still shows: the table disables deciding on its own.
+    // No posture box: the posture is unknown, not "none".
     expect(screen.queryByText("No Policy")).toBeNull();
+    expect(screen.getByText(/Policy data could not be loaded/)).toBeTruthy();
     expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
+    // Deciding writes grants against the policies the sheet can see; with
+    // none loaded the table must not offer it.
+    expect(
+      screen
+        .getByTestId("inventory-table")
+        .getAttribute("data-policies-unavailable"),
+    ).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.refetchPolicies).toHaveBeenCalledTimes(1);
   });
 });

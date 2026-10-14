@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import {
   type DecideAccessTarget,
   DecideAccessSheet,
+  POLICIES_UNAVAILABLE_REASON,
 } from "@/components/mcp-approvals/DecideAccessSheet";
 import {
   ShadowMCPInventoryReviewCell,
@@ -104,6 +105,7 @@ export function ShadowMCPInventoryTable({
   enabled = true,
   members,
   onOpenServer,
+  policiesUnavailable = false,
   projectID,
   roles,
   shadowMCPPolicies,
@@ -112,6 +114,8 @@ export function ShadowMCPInventoryTable({
   enabled?: boolean;
   members: AccessMember[];
   onOpenServer?: (server: ShadowMCPInventoryServer) => void;
+  /** The policy list failed to load: the inventory still shows, deciding waits. */
+  policiesUnavailable?: boolean;
   projectID: string;
   roles: Role[];
   shadowMCPPolicies: ShadowMCPPolicy[];
@@ -132,7 +136,15 @@ export function ShadowMCPInventoryTable({
     : { projectId: projectID, limit: INVENTORY_PAGE_LIMIT };
   const inventoryQuery = useShadowMCPInventory(inventoryRequest, undefined, {
     enabled: enabled && projectID.length > 0,
+    // The dashboard default throws every non-auth failure to the error
+    // boundary; the table has its own failure state and a retry.
+    throwOnError: false,
   });
+  // The row action and the stdio review's button wait while the policy list
+  // is unavailable, the way the server page's button does.
+  const decideDisabledReason = policiesUnavailable
+    ? POLICIES_UNAVAILABLE_REASON
+    : undefined;
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>({
     id: "review",
@@ -406,6 +418,7 @@ export function ShadowMCPInventoryTable({
             approvalRequestId: request.id,
           });
         }}
+        decideDisabledReason={decideDisabledReason}
       />
       <DecideAccessSheet
         target={decideTarget}
@@ -464,6 +477,8 @@ export function ShadowMCPInventoryTable({
                 {
                   label: "Decide access",
                   onClick: () => openDecide(row),
+                  disabled: policiesUnavailable,
+                  description: decideDisabledReason,
                 },
               ]}
             >
