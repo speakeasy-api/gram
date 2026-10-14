@@ -517,10 +517,30 @@
         fallback.removeAttribute("data-connect-fallback");
         fallback.textContent = "Connect";
       }
+      signalChainRejected();
       return;
     }
     status.className = "text-xs text-muted-foreground";
     status.textContent = "Managed by your identity provider";
+  }
+
+  // Tells the tool access island that no chained service can connect, so it
+  // must not keep approval open while waiting for tools.
+  function signalChainRejected() {
+    var chained = document.querySelectorAll("[data-identity-chained]");
+    if (chained.length === 0) {
+      return;
+    }
+    for (var i = 0; i < chained.length; i++) {
+      if (chained[i].getAttribute("data-chain-check") !== "rejected") {
+        return;
+      }
+    }
+    document.documentElement.setAttribute(
+      "data-consent-chain-rejected",
+      "true",
+    );
+    document.dispatchEvent(new CustomEvent("gram:consent-chain-rejected"));
   }
 
   var chainChecks = document.querySelectorAll('[data-chain-check="pending"]');

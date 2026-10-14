@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-import { ConsentToolsApp, type ConsentToolsAppProps } from "./ConsentToolsApp";
+import {
+  CHAIN_REJECTED_EVENT,
+  ConsentToolsApp,
+  type ConsentToolsAppProps,
+} from "./ConsentToolsApp";
 import { parsePrefillBootstrap } from "./prefill";
 
 const listTools = vi.fn();
@@ -95,6 +99,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  document.documentElement.removeAttribute("data-consent-chain-rejected");
   vi.clearAllMocks();
 });
 
@@ -165,9 +170,48 @@ describe("ConsentToolsApp", () => {
     await screen.findByText(/Tools load after you give access/);
     expect(button.disabled).toBe(false);
     expect(button.dataset["consentSelfReady"]).toBe("true");
-    expect(screen.queryByText("Retry")).toBeNull();
+    expect(screen.getByText("Retry")).toBeTruthy();
     expect(formFieldValues("tool_filtering")).toEqual(["off"]);
     expect(formFieldValues("tool_inventory_id")).toEqual([]);
+  });
+
+  it("never defers over a stored narrower selection", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    const { button } = renderApp({
+      inventoryDeferred: true,
+      prefill: { annotations: [], tools: ["get_thing"] },
+    });
+    await screen.findByText("The upstream service is not connected.");
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_filtering")).toEqual([]);
+  });
+
+  it("blocks approval once every chained service is refused", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    const { button } = renderApp({ inventoryDeferred: true });
+    await screen.findByText(/Tools load after you give access/);
+    expect(button.disabled).toBe(false);
+
+    document.documentElement.setAttribute(
+      "data-consent-chain-rejected",
+      "true",
+    );
+    document.dispatchEvent(new CustomEvent(CHAIN_REJECTED_EVENT));
+
+    await screen.findByText(/couldn't connect this service/);
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_filtering")).toEqual([]);
+  });
+
+  it("starts blocked when the refusal settled before the island mounted", async () => {
+    document.documentElement.setAttribute(
+      "data-consent-chain-rejected",
+      "true",
+    );
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    const { button } = renderApp({ inventoryDeferred: true });
+    await screen.findByText(/couldn't connect this service/);
+    expect(button.disabled).toBe(true);
   });
 
   it("keeps a not-connected inventory blocking when nothing is chained", async () => {
