@@ -1,5 +1,11 @@
 name: "CLA Assistant"
-on:
+# Both triggers run with this repository's token: pull_request_target so the
+# bot can comment on and set statuses for PRs from forks, and issue_comment so
+# a contributor's signing comment is recorded. That is safe here because no
+# step checks out or runs PR code: the only step is the CLA action, which
+# reads PR metadata through the API, and it runs only for pull_request_target
+# events and the two exact comment bodies in its `if:`.
+on: # zizmor: ignore[dangerous-triggers]
   issue_comment:
     types: [created]
   pull_request_target:

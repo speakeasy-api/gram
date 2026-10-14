@@ -26,8 +26,6 @@ rules:
     disable: true
   concurrency-limits:
     disable: true
-  dangerous-triggers:
-    disable: true
   excessive-permissions:
     disable: true
   github-app:
