@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   groupServedSkillsByPlugin,
   hostedPluginServers,
+  hostedPluginServerToolsetId,
+  hostedServerIndex,
   pluginServerServesToolset,
   pluginServesToolset,
   servedSkillDigest,
@@ -9,6 +11,51 @@ import {
 } from "./mcp-served-skills";
 
 const toolsetId = "toolset-a";
+
+/** The project's MCP servers: the canonical wrapper, a second wrapper of the
+ * same toolset, a wrapper of another toolset and a remote server. */
+const mcpServers = [
+  { id: toolsetId, toolsetId },
+  { id: "wrapper-2", toolsetId },
+  { id: "wrapper-b", toolsetId: "toolset-b" },
+  { id: "remote-1" },
+];
+
+describe("hostedServerIndex", () => {
+  it("maps every hosted server and toolset id to its toolset", () => {
+    const index = hostedServerIndex(mcpServers, ["toolset-c"]);
+    expect([...index.entries()]).toEqual([
+      ["toolset-c", "toolset-c"],
+      [toolsetId, toolsetId],
+      ["wrapper-2", toolsetId],
+      ["wrapper-b", "toolset-b"],
+    ]);
+  });
+
+  it("is empty without servers or toolsets", () => {
+    expect(hostedServerIndex(undefined).size).toBe(0);
+  });
+});
+
+describe("hostedPluginServerToolsetId", () => {
+  const index = hostedServerIndex(mcpServers);
+
+  it("resolves a wrapper-keyed server through the index", () => {
+    expect(
+      hostedPluginServerToolsetId({ mcpServerId: "wrapper-2" }, index),
+    ).toBe(toolsetId);
+  });
+
+  it("takes an unindexed id as a canonical wrapper", () => {
+    expect(hostedPluginServerToolsetId({ mcpServerId: "toolset-z" })).toBe(
+      "toolset-z",
+    );
+  });
+
+  it("has nothing for a server without either key", () => {
+    expect(hostedPluginServerToolsetId({})).toBeUndefined();
+  });
+});
 
 describe("servedSkillDigest", () => {
   it("renders the sha256 form agents see over MCP, lowercased", () => {
@@ -31,6 +78,19 @@ describe("pluginServerServesToolset", () => {
     expect(
       pluginServerServesToolset({ mcpServerId: toolsetId }, toolsetId),
     ).toBe(true);
+  });
+
+  it("matches a non-canonical wrapper of the toolset through the index", () => {
+    const index = hostedServerIndex(mcpServers);
+    expect(
+      pluginServerServesToolset({ mcpServerId: "wrapper-2" }, toolsetId, index),
+    ).toBe(true);
+    expect(
+      pluginServerServesToolset({ mcpServerId: "wrapper-b" }, toolsetId, index),
+    ).toBe(false);
+    expect(
+      pluginServerServesToolset({ mcpServerId: "wrapper-2" }, toolsetId),
+    ).toBe(false);
   });
 
   it("ignores other servers and empty toolset ids", () => {
@@ -63,6 +123,16 @@ describe("pluginServesToolset", () => {
     expect(pluginServesToolset({}, toolsetId)).toBe(false);
     expect(pluginServesToolset({ servers: [] }, toolsetId)).toBe(false);
   });
+
+  it("is true for a plugin including a non-canonical wrapper", () => {
+    const plugin = {
+      servers: [{ id: "s1", displayName: "Wrapper", mcpServerId: "wrapper-2" }],
+    };
+    expect(
+      pluginServesToolset(plugin, toolsetId, hostedServerIndex(mcpServers)),
+    ).toBe(true);
+    expect(pluginServesToolset(plugin, toolsetId)).toBe(false);
+  });
 });
 
 describe("hostedPluginServers", () => {
@@ -72,16 +142,26 @@ describe("hostedPluginServers", () => {
     { id: "s3", displayName: "Remote", mcpServerId: "remote-1" },
   ];
 
-  it("keeps toolset-keyed servers without a toolset list", () => {
+  it("keeps toolset-keyed servers without an index", () => {
     expect(hostedPluginServers(servers).map((s) => s.id)).toEqual(["s1"]);
   });
 
-  it("also keeps wrapper-keyed servers whose id names a toolset", () => {
+  it("also keeps wrapper-keyed servers the index resolves", () => {
     expect(
-      hostedPluginServers(servers, new Set([toolsetId, "toolset-b"])).map(
-        (s) => s.id,
-      ),
+      hostedPluginServers(
+        servers,
+        hostedServerIndex(undefined, [toolsetId, "toolset-b"]),
+      ).map((s) => s.id),
     ).toEqual(["s1", "s2"]);
+    expect(
+      hostedPluginServers(
+        [
+          ...servers,
+          { id: "s4", displayName: "Wrapper", mcpServerId: "wrapper-2" },
+        ],
+        hostedServerIndex(mcpServers),
+      ).map((s) => s.id),
+    ).toEqual(["s1", "s4"]);
   });
 
   it("returns nothing for an undefined list", () => {

@@ -11,7 +11,13 @@ const state = vi.hoisted(() => ({
     scope: string;
     selectors: Array<Record<string, string>>;
   }>,
+  canReadOrg: true,
   plugins: {
+    data: undefined as unknown,
+    error: null as unknown,
+    isLoading: false,
+  },
+  servers: {
     data: undefined as unknown,
     error: null as unknown,
     isLoading: false,
@@ -49,7 +55,15 @@ vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
   useRBAC: () => ({
     grants: state.grants,
     isLoading: false,
-    hasAnyScope: () => true,
+    hasAnyScope: () => state.canReadOrg,
+  }),
+}));
+vi.mock("@/pages/plugins/usePluginServerQueries", () => ({
+  usePluginServerQueries: () => ({
+    canReadServers: true,
+    serversQuery: state.servers,
+    toolsetsQuery: { data: undefined, error: null, isLoading: false },
+    endpointsQuery: { data: undefined, error: null, isLoading: false },
   }),
 }));
 vi.mock("@/routes", () => ({
@@ -121,6 +135,15 @@ const otherPlugin = {
   assignmentCount: 1,
   servers: [{ id: "ps-3", displayName: "Other", toolsetId: "toolset-z" }],
 };
+/** Includes the toolset through a second, non-canonical wrapper. */
+const secondWrapperPlugin = {
+  id: "plugin-d",
+  name: "Second wrapper",
+  assignmentCount: 1,
+  servers: [
+    { id: "ps-4", displayName: "Billing (team)", mcpServerId: "wrapper-2" },
+  ],
+};
 
 function distribution(
   id: string,
@@ -149,11 +172,22 @@ function renderTab(ui: ReactNode = <MCPSkillsTab toolset={toolset} />) {
 afterEach(cleanup);
 beforeEach(() => {
   state.flag = { status: "enabled" };
+  state.canReadOrg = true;
   state.grants = [
     { scope: "skill:read", selectors: [{ resourceId: "project-a" }] },
   ];
   state.plugins = {
     data: { plugins: [hostedPlugin, wrapperPlugin, otherPlugin] },
+    error: null,
+    isLoading: false,
+  };
+  state.servers = {
+    data: {
+      mcpServers: [
+        { id: "toolset-a", toolsetId: "toolset-a" },
+        { id: "wrapper-2", toolsetId: "toolset-a" },
+      ],
+    },
     error: null,
     isLoading: false,
   };
@@ -195,6 +229,40 @@ describe("MCPSkillsTab", () => {
       undefined,
       { throwOnError: false },
     );
+  });
+
+  it("serves through a non-canonical wrapper of the toolset", () => {
+    state.plugins = {
+      data: { plugins: [secondWrapperPlugin, otherPlugin] },
+      error: null,
+      isLoading: false,
+    };
+    state.distributions.mockReturnValue({
+      data: {
+        pages: [{ result: { distributions: [distribution("4", "plugin-d")] } }],
+      },
+      hasNextPage: false,
+      error: null,
+    });
+    renderTab();
+    expect(screen.getByText("Second wrapper")).toBeDefined();
+    expect(screen.getByText("Skill 4")).toBeDefined();
+  });
+
+  it("waits for the server list before deciding membership", () => {
+    state.servers = { data: undefined, error: null, isLoading: true };
+    renderTab();
+    expect(screen.queryByText("Finance tools")).toBeNull();
+    expect(screen.queryByText("No plugin includes this server yet")).toBeNull();
+  });
+
+  it("explains itself to a reader who cannot list plugins", () => {
+    state.canReadOrg = false;
+    renderTab();
+    expect(
+      screen.getByText("You can't see which plugins include this server"),
+    ).toBeDefined();
+    expect(screen.queryByText("Finance tools")).toBeNull();
   });
 
   it("shows when a skill was last loaded over MCP and warns about unassigned plugins", () => {

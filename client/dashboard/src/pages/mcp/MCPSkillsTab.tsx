@@ -20,8 +20,10 @@ import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { usePluginServerQueries } from "@/pages/plugins/usePluginServerQueries";
 import {
   groupServedSkillsByPlugin,
+  hostedServerIndex,
   pluginServesToolset,
   type ServedSkillGroup,
 } from "@/pages/skills/mcp-served-skills";
@@ -105,12 +107,22 @@ export function MCPSkillsTab({
   const [pickerPluginId, setPickerPluginId] = useState<string | null>(null);
 
   const pluginsQuery = useProjectPluginsWithServers();
+  // A plugin may include this server under any mcp_servers row fronting the
+  // toolset, not only the canonical one, and the backend serves skills
+  // through every such row; the server list resolves those rows.
+  const { serversQuery, canReadServers } = usePluginServerQueries();
+  const isServerIndexLoading =
+    canReadServers && !serversQuery.data && serversQuery.isLoading;
+  const hostedIndex = useMemo(
+    () => hostedServerIndex(serversQuery.data?.mcpServers, [toolset.id]),
+    [serversQuery.data?.mcpServers, toolset.id],
+  );
   const servingPlugins = useMemo(
     () =>
       (pluginsQuery.plugins ?? []).filter((plugin) =>
-        pluginServesToolset(plugin, toolset.id),
+        pluginServesToolset(plugin, toolset.id, hostedIndex),
       ),
-    [pluginsQuery.plugins, toolset.id],
+    [pluginsQuery.plugins, toolset.id, hostedIndex],
   );
 
   // Every distribution in the project, then grouped under the plugins that
@@ -205,7 +217,17 @@ export function MCPSkillsTab({
   });
 
   let body: JSX.Element;
-  if (pluginsQuery.error && !pluginsQuery.plugins) {
+  if (!pluginsQuery.canReadPlugins) {
+    // Skill read opens the tab, but which plugins include the server is a
+    // plugin listing, which needs organization read or plugin write.
+    body = (
+      <InlineEmptyState
+        icon="lock"
+        heading="You can't see which plugins include this server"
+        description="Skills reach agents through plugins. Listing the plugins that include this server needs organization read access."
+      />
+    );
+  } else if (pluginsQuery.error && !pluginsQuery.plugins) {
     body = (
       <InlineEmptyState
         icon="triangle-alert"
@@ -238,6 +260,7 @@ export function MCPSkillsTab({
   } else if (
     pluginsQuery.isLoading ||
     !pluginsQuery.plugins ||
+    isServerIndexLoading ||
     !isMembershipLoaded
   ) {
     body = <SkeletonTable />;

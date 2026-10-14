@@ -19,8 +19,10 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import { usePluginServerQueries } from "@/pages/plugins/usePluginServerQueries";
 import {
+  type HostedServerIndex,
   hostedPluginServers,
   hostedPluginServerToolsetId,
+  hostedServerIndex,
   type ServingPlugin,
 } from "./mcp-served-skills";
 import { SkillDistributionVersionBadge } from "./skill-badges";
@@ -175,20 +177,22 @@ type ServedOverMcp = {
   failed: boolean;
   pluginsById: Map<string, ServingPlugin> | undefined;
   toolsetsById: Map<string, { slug: string; name: string }> | undefined;
+  /** Hosted mcp_servers id to the toolset it fronts, for wrapper-keyed servers. */
+  hostedIndex: HostedServerIndex | undefined;
 };
 
 /**
  * What each plugin row needs to say which hosted MCP servers serve the skill:
- * the project's plugins with their servers, and the toolsets those servers
- * resolve to for names and links. Both stay unfetched while the flag is off.
+ * the project's plugins with their servers, the toolsets those servers
+ * resolve to for names and links, and the MCP server list that resolves a
+ * wrapper-keyed server to its toolset. All stay unfetched while the flag is off.
  */
 function useServedOverMcp(): ServedOverMcp {
   const enabled = useSkillsOverMcpEnabled();
   const { plugins, isLoading, canReadPlugins, error } =
     useProjectPluginsWithServers(enabled);
-  const { toolsetsQuery, canReadServers } = usePluginServerQueries({
-    enabled,
-  });
+  const { toolsetsQuery, serversQuery, canReadServers } =
+    usePluginServerQueries({ enabled });
   const pluginsById = useMemo(() => {
     if (!plugins) return undefined;
     return new Map(plugins.map((plugin) => [plugin.id, plugin]));
@@ -203,14 +207,25 @@ function useServedOverMcp(): ServedOverMcp {
       ]),
     );
   }, [toolsetsQuery.data?.toolsets]);
+  const hostedIndex = useMemo(() => {
+    if (!toolsetsById) return undefined;
+    return hostedServerIndex(
+      serversQuery.data?.mcpServers,
+      toolsetsById.keys(),
+    );
+  }, [serversQuery.data?.mcpServers, toolsetsById]);
   return {
     enabled: enabled && canReadPlugins,
     failed: !!error && !plugins,
     isLoading:
       isLoading ||
-      (enabled && canReadServers && !toolsetsById && toolsetsQuery.isLoading),
+      (enabled &&
+        canReadServers &&
+        ((!toolsetsById && toolsetsQuery.isLoading) ||
+          (!serversQuery.data && serversQuery.isLoading))),
     pluginsById,
     toolsetsById,
+    hostedIndex,
   };
 }
 
@@ -233,10 +248,7 @@ function ServedOverMcpLine({
   }
   const plugin = served.pluginsById.get(pluginId);
   if (!plugin) return null;
-  const toolsetIds = served.toolsetsById
-    ? new Set(served.toolsetsById.keys())
-    : undefined;
-  const servers = hostedPluginServers(plugin.servers, toolsetIds);
+  const servers = hostedPluginServers(plugin.servers, served.hostedIndex);
   if (servers.length === 0) {
     return (
       <Text small muted className="block text-xs">
@@ -248,7 +260,10 @@ function ServedOverMcpLine({
     <Text small muted className="block text-xs">
       Served over MCP by{" "}
       {servers.map((server, index) => {
-        const toolsetId = hostedPluginServerToolsetId(server);
+        const toolsetId = hostedPluginServerToolsetId(
+          server,
+          served.hostedIndex,
+        );
         const toolset = toolsetId
           ? served.toolsetsById?.get(toolsetId)
           : undefined;
