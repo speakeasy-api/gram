@@ -10,7 +10,7 @@ import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import {
   ShadowAISectionRedirect,
-  ShadowMCPLegacyRedirect,
+  ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
 import { orgRoutePaths, useOrgRoutes, useRoutes } from "./routes";
@@ -136,14 +136,13 @@ describe("project routes", () => {
     ).toBeTruthy();
   });
 
-  // Shadow AI lives in Guardrails: every index page of the old section, and
-  // the older Shadow MCP index, sends a pasted link there.
+  // Shadow AI lives in Guardrails: every tool index page of the old section
+  // sends a pasted link there.
   it.each([
     "shadow-ai",
     "shadow-ai/harnesses",
     "shadow-ai/assistants",
     "shadow-ai/models",
-    "shadow-ai/mcps",
   ])("redirects /%s to Guardrails", async (path) => {
     const view = render(
       <MemoryRouter initialEntries={[`/org/projects/project/${path}`]}>
@@ -164,29 +163,35 @@ describe("project routes", () => {
     ).toBeTruthy();
   });
 
-  it("redirects the legacy Shadow MCP index to Guardrails", async () => {
-    const view = render(
-      <MemoryRouter
-        initialEntries={[
-          "/org/projects/project/shadow-mcp?status=blocked#tools",
-        ]}
-      >
-        <Routes>
-          <Route
-            path="/org/projects/project/shadow-mcp"
-            element={<ShadowMCPLegacyRedirect />}
-          />
-          <Route path="*" element={<LocationPath />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  // The MCPs index and the older Shadow MCP index were the approvals queue,
+  // so a pasted link lands on the MCP approvals tab. Their query and fragment
+  // named filters of the old page and are dropped rather than carried over.
+  it.each(["shadow-ai/mcps", "shadow-mcp"])(
+    "redirects /%s to the MCP approvals tab of Guardrails",
+    async (path) => {
+      const view = render(
+        <MemoryRouter
+          initialEntries={[
+            `/org/projects/project/${path}?status=blocked#tools`,
+          ]}
+        >
+          <Routes>
+            <Route
+              path={`/org/projects/project/${path}`}
+              element={<ShadowMCPIndexRedirect />}
+            />
+            <Route path="*" element={<LocationPath />} />
+          </Routes>
+        </MemoryRouter>,
+      );
 
-    expect(
-      await within(view.container).findByText(
-        "/org/projects/project/risk-policies",
-      ),
-    ).toBeTruthy();
-  });
+      expect(
+        await within(view.container).findByText(
+          "/org/projects/project/risk-policies?tab=mcp-approvals",
+        ),
+      ).toBeTruthy();
+    },
+  );
 
   // Block messages and bookmarks carry the old server paths with a query and
   // a fragment; both must survive the redirect or the deep link lands at the

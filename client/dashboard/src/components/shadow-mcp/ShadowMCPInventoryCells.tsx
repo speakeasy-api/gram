@@ -1,3 +1,4 @@
+import { StatusBadge } from "@/components/mcp-approvals/EvidencePanel";
 import { Text } from "@/components/ui/Text";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { Badge } from "@/components/ui/Badge";
@@ -62,6 +63,47 @@ export function ShadowMCPInventoryServerCell({
       >
         {server.canonicalServerUrl}
       </Text>
+    </div>
+  );
+}
+
+/**
+ * The review state a row carries: its status badge plus how many people are
+ * waiting when a decision is pending. A dash for rows the review system has
+ * not touched — observed traffic with no dossier yet.
+ */
+export function ShadowMCPInventoryReviewCell({
+  server,
+}: {
+  server: ShadowMCPInventoryServer;
+}): JSX.Element {
+  const request = server.approvalRequest;
+  // An unreviewed dossier holds evidence but is not a review state: nobody
+  // asked and nothing was decided, so it reads the same as no review.
+  if (!request || request.status === "unreviewed") {
+    return (
+      <Text muted small>
+        —
+      </Text>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <StatusBadge status={request.status} />
+      {request.status === "requested" && request.requesterCount > 0 && (
+        <Text muted small className="text-xs">
+          {countLabel(request.requesterCount, "person", "people")} waiting
+        </Text>
+      )}
+      {request.status === "approved" && request.evidenceChangedAt && (
+        <Badge variant="warning" size="sm" background={false}>
+          <Badge.LeftIcon>
+            <Icon name="shield-alert" />
+          </Badge.LeftIcon>
+          <Badge.Text>Changed since approval</Badge.Text>
+        </Badge>
+      )}
     </div>
   );
 }

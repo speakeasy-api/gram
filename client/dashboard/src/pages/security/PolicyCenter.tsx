@@ -102,9 +102,11 @@ import {
 import { DetectionRulesTab } from "./DetectionRules";
 import {
   POLICY_CENTER_TABS,
+  policyCenterTabLabel,
   policyCenterTabs,
   type PolicyCenterTab,
 } from "./policy-center-tabs";
+import { MCPApprovalsTab } from "./MCPApprovalsTab";
 import { ShadowAITargetsTab } from "./ShadowAITargetsTab";
 import { detectionRulesTabRuleIds } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
@@ -584,6 +586,10 @@ function policyCenterHeaderAction(
     // The targets library carries its own add button in its toolbar.
     case "shadow-ai-targets":
       return null;
+    // Access is decided per server, on the row or the server page; the queue
+    // itself is fed by requests and observed traffic.
+    case "mcp-approvals":
+      return null;
     case "exclusions":
       return { label: "Set up Exclusion Rule", onClick: actions.newExclusion };
     // Quarantines are event-driven; the tab has no creation affordance.
@@ -803,7 +809,7 @@ function PolicyCenterContent() {
   );
 
   const insightsContext = [
-    `Page: Guardrails, ${activeTab === "exclusions" ? "Exclusion Rules" : "Policies"} tab.`,
+    `Page: Guardrails, ${policyCenterTabLabel(activeTab)} tab.`,
     `Total policies: ${policyRows.length}.`,
     `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
     `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
@@ -1155,6 +1161,7 @@ function PolicyCenterContent() {
         />
       )}
       {activeTab === "shadow-ai-targets" && <ShadowAITargetsTab />}
+      {activeTab === "mcp-approvals" && <MCPApprovalsTab />}
       {activeTab === "exclusions" && (
         <ExclusionsTab
           policies={data?.policies ?? []}

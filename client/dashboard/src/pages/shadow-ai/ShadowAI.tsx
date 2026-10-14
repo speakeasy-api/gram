@@ -1,3 +1,4 @@
+import { policyCenterTabSearch } from "@/pages/security/policy-center-tabs";
 import { useRoutes } from "@/routes";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 
@@ -14,11 +15,19 @@ export function ShadowAISectionRedirect(): JSX.Element {
   return <Navigate to={routes.policyCenter.href()} replace />;
 }
 
-// The Shadow MCP paths predate the section and are in block messages, emails
-// and bookmarks, so they redirect permanently rather than 404.
-export function ShadowMCPLegacyRedirect(): JSX.Element {
+// The MCPs index of the section and the older Shadow MCP index were the
+// approvals queue. Block messages, emails and bookmarks carry both paths, so
+// they land on the MCP approvals tab of Guardrails, where the queue lives
+// now, rather than on the policies list. Their query and fragment named
+// filters of the old page, so they are dropped rather than carried over.
+export function ShadowMCPIndexRedirect(): JSX.Element {
   const routes = useRoutes();
-  return <Navigate to={routes.policyCenter.href()} replace />;
+  return (
+    <Navigate
+      to={`${routes.policyCenter.href()}${policyCenterTabSearch("mcp-approvals")}`}
+      replace
+    />
+  );
 }
 
 export function ShadowMCPServerLegacyRedirect(): JSX.Element {
