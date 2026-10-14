@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -51,6 +52,101 @@ type skillsGetResult struct {
 // skillMimeType is the media type resources/read reports for a served
 // SKILL.md, which is Markdown with YAML frontmatter.
 const skillMimeType = "text/markdown"
+
+// parseSkillsListParams decodes the params of skills/list. Absent or null
+// params are an unpaginated request. Every surface answers a listing in one
+// page and issues no cursor, so a non-empty cursor names a page that does not
+// exist and is an invalid param.
+func parseSkillsListParams(ctx context.Context, logger *slog.Logger, req *rawRequest) (skillsListParams, error) {
+	var params skillsListParams
+	if len(req.Params) > 0 && string(req.Params) != "null" {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return params, oops.E(oops.CodeBadRequest, err, "failed to parse skills/list request").LogWarn(ctx, logger)
+		}
+	}
+
+	if params.Cursor != "" {
+		return params, oops.E(oops.CodeInvalid, nil, "unknown cursor").LogWarn(ctx, logger)
+	}
+	return params, nil
+}
+
+// parseSkillsGetParams decodes the params of skills/get, which must name a
+// URI.
+func parseSkillsGetParams(ctx context.Context, logger *slog.Logger, req *rawRequest) (skillsGetParams, error) {
+	var params skillsGetParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return params, oops.E(oops.CodeBadRequest, err, "failed to parse skills/get request").LogWarn(ctx, logger)
+	}
+
+	if params.URI == "" {
+		return params, oops.E(oops.CodeInvalid, nil, "skill URI is required").LogWarn(ctx, logger)
+	}
+	return params, nil
+}
+
+// marshalSkillsList renders a skills/list response holding every entry, in
+// one page, under the given server identity. The listing is private to the
+// caller on every surface: what is served depends on who asks.
+func marshalSkillsList(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, entries []mcpskills.Entry, identity serverInfo) (json.RawMessage, error) {
+	skills := make([]mcpskills.Skill, 0, len(entries))
+	for _, entry := range entries {
+		skills = append(skills, entry.Wire())
+	}
+
+	bs, err := json.Marshal(result[skillsListResult]{
+		ID: id,
+		Result: skillsListResult{
+			Skills:     skills,
+			NextCursor: nil,
+		},
+		serverIdentity: identity,
+		cacheHints:     cacheHintsCallerVarying,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize skills/list response").LogError(ctx, logger)
+	}
+	return bs, nil
+}
+
+// marshalSkillsGet renders a skills/get response for one entry under the
+// given server identity, private to the caller like the listing.
+func marshalSkillsGet(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, entry mcpskills.Entry, identity serverInfo) (json.RawMessage, error) {
+	bs, err := json.Marshal(result[skillsGetResult]{
+		ID:             id,
+		Result:         skillsGetResult{Skill: entry.Wire()},
+		serverIdentity: identity,
+		cacheHints:     cacheHintsCallerVarying,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize skills/get response").LogError(ctx, logger)
+	}
+	return bs, nil
+}
+
+// marshalSkillRead renders a resources/read response carrying an entry's
+// SKILL.md as Markdown text: exactly the bytes the entry's digest covers.
+func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, entry mcpskills.Entry, identity serverInfo) (json.RawMessage, error) {
+	bs, err := json.Marshal(result[resourceReadResult]{
+		ID: id,
+		Result: resourceReadResult{
+			Contents: []resourceContent{{
+				URI:      entry.URI(),
+				Name:     nil,
+				MimeType: new(skillMimeType),
+				Text:     entry.Content,
+				Blob:     "",
+				Meta:     nil,
+			}},
+		},
+		serverIdentity: identity,
+		cacheHints:     cacheHintsCallerVarying,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").LogError(ctx, logger)
+	}
+	return bs, nil
+}
 
 // hostedSkillScope resolves the endpoint and caller a skills request is
 // answered for. The endpoint is the described toolset together with its

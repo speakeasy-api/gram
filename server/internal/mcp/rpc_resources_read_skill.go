@@ -73,26 +73,7 @@ func handleSkillResourceRead(
 	}
 	metrics.RecordSkillRead(ctx, mcpmetrics.SurfaceHosting, mcpmetrics.SkillOriginDistribution)
 
-	bs, err := json.Marshal(result[resourceReadResult]{
-		ID: req.ID,
-		Result: resourceReadResult{
-			Contents: []resourceContent{{
-				URI:      entry.URI(),
-				Name:     nil,
-				MimeType: new(skillMimeType),
-				Text:     entry.Content,
-				Blob:     "",
-				Meta:     nil,
-			}},
-		},
-		serverIdentity: serverInfoHostedToolset,
-		// Whether the URI resolves at all depends on the caller's plugin
-		// assignments, so the content is private to the caller.
-		cacheHints: cacheHintsCallerVarying,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").LogError(ctx, logger)
-	}
-
-	return bs, nil
+	// Whether the URI resolves at all depends on the caller's plugin
+	// assignments, so the content is private to the caller.
+	return marshalSkillRead(ctx, logger, req.ID, *entry, serverInfoHostedToolset)
 }

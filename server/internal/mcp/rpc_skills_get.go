@@ -18,13 +18,9 @@ import (
 // extension requires, so an unassigned skill is indistinguishable from a
 // nonexistent one.
 func handleSkillsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, resolver *mcpskills.Resolver, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
-	var params skillsGetParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to parse skills/get request").LogWarn(ctx, logger)
-	}
-
-	if params.URI == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "skill URI is required").LogWarn(ctx, logger)
+	params, err := parseSkillsGetParams(ctx, logger, req)
+	if err != nil {
+		return nil, err
 	}
 
 	scope, err := hostedSkillScope(ctx, db, payload)
@@ -40,17 +36,7 @@ func handleSkillsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get skill").LogError(ctx, logger)
 	}
 
-	bs, err := json.Marshal(result[skillsGetResult]{
-		ID:             req.ID,
-		Result:         skillsGetResult{Skill: entry.Wire()},
-		serverIdentity: serverInfoHostedToolset,
-		// Whether the URI resolves at all depends on the caller's plugin
-		// assignments, so the entry is private to the caller.
-		cacheHints: cacheHintsCallerVarying,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize skills/get response").LogError(ctx, logger)
-	}
-
-	return bs, nil
+	// Whether the URI resolves at all depends on the caller's plugin
+	// assignments, so the entry is private to the caller.
+	return marshalSkillsGet(ctx, logger, req.ID, *entry, serverInfoHostedToolset)
 }
