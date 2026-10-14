@@ -50,6 +50,9 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // to or redirect back to. Once the user links every card on the consent page,
 // the flow is terminal and the page closes its dashboard-opened tab.
 func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	if s.redirectToAuthorizationServer(w, r, endpoint) {
+		return nil
+	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 

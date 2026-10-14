@@ -305,16 +305,10 @@ func (s *Service) buildRemoteConnectURL(
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
 	}
 
-	// The upstream callback returns to the consent page. Remote sessions
-	// rebuild a per-endpoint consent URL from the slug, so a challenge on a
-	// shared authorization server names its own consent page instead.
-	consentURL := ""
-	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
-		sharedConsentURL, err := shared.consentURL(challengeState.ID)
-		if err != nil {
-			return "", false, oops.E(oops.CodeUnexpected, err, "build shared consent URL").LogError(ctx, logger)
-		}
-		consentURL = sharedConsentURL
+	// The upstream callback returns to the consent page.
+	consentURL, err := s.remoteLoginConsentURL(endpoint, challengeState)
+	if err != nil {
+		return "", false, oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
 	parent := remotesessions.ParentChallenge{
 		ID:                  challengeState.ID,

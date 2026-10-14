@@ -264,12 +264,6 @@ func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds present
 		return tokenGrant{clientAuth: tokenClientAuthRequired, resolveMode: lookupClientOnly, authenticated: s.handleTokenRefreshTokenGrant, clientless: nil}, true
 	case oauthwire.GrantTypeJWTBearer:
 		if !creds.clientless(r) {
-			// Of the jwt-bearer requests, only the clientless branch is
-			// dispatched on the authentication host; the ID-JAG exchange is
-			// refused there.
-			if OnAuthenticationHost(r.Context()) {
-				return tokenGrant{clientAuth: tokenClientAuthUndeclared, resolveMode: "", authenticated: nil, clientless: nil}, false
-			}
 			// An assertion grant starts a new authorization at the token
 			// endpoint, so it applies current CIMD admission and resolves
 			// current client metadata before authenticating the client.
@@ -499,9 +493,12 @@ func (s *Service) handleTokenJWTBearerGrant(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
-	assertionAudience := canonicalResource
-	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
-		assertionAudience = shared.issuer
+	// The assertion is addressed to the issuer the authorization server
+	// metadata announces, which differs from the resource once the
+	// authorization server is shared or on the authentication host.
+	assertionAudience, err := s.issuerURL(endpoint, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build ID-JAG assertion audience").LogError(ctx, logger)
 	}
 	result, err := s.idJAGValidator.Validate(ctx, req.Assertion, idjag.Request{
 		OrganizationID:      endpoint.OrganizationID,

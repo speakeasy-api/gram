@@ -239,6 +239,7 @@ func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error
 // the host the request arrived on.
 func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool, baseURL string) (EndpointRef, error) {
 	isPublic := e.IsPublic
+	useAuthenticationHost := e.useAuthenticationHost
 	if e.sharedResource != nil {
 		origin := e.sharedResource.origin
 		return EndpointRef{
@@ -252,6 +253,7 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 			ToolsetID:                 e.ToolsetID,
 			IsPublic:                  &isPublic,
 			SharedAuthorizationServer: true,
+			UseAuthenticationHost:     &useAuthenticationHost,
 		}, nil
 	}
 	authority := networkingress.FromRequest(ctx, baseURL, e.OrganizationID, e.CustomDomainID)
@@ -277,6 +279,7 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 		ToolsetID:                 e.ToolsetID,
 		IsPublic:                  &isPublic,
 		SharedAuthorizationServer: false,
+		UseAuthenticationHost:     &useAuthenticationHost,
 	}, nil
 }
 
@@ -454,6 +457,12 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if e.sharedResource != nil && ref.BaseURL != e.sharedResource.origin.BaseURL {
 		return errToolsetEndpointMismatch
 	}
+	// An issuer toggling use_authentication_host mid-flow moves its
+	// authorization server, so the flow would resume under an issuer the
+	// client never recorded.
+	if ref.UseAuthenticationHost != nil && e.useAuthenticationHost != *ref.UseAuthenticationHost {
+		return errToolsetEndpointMismatch
+	}
 	return nil
 }
 
@@ -596,6 +605,13 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 // HandleIDPCallback (mounted under both route surfaces) to resume an
 // in-flight challenge against the addressing path it was minted under.
 func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	if ref.SharedAuthorizationServer {
+		// The ref names the resource, which is never on the authentication
+		// host, so it resolves as sharedResourceContext resolves a resource
+		// indicator: whether or not the issuer opts in to
+		// use_authentication_host.
+		ctx = withoutAuthenticationHost(ctx)
+	}
 	endpoint, err := s.buildResolvedMcpEndpointByRef(ctx, ref)
 	if err != nil {
 		return nil, err

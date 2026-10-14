@@ -58,6 +58,9 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 // authorize endpoint, shared by /mcp's HandleAuthorize (toolset-keyed)
 // and /x/mcp's mcp_endpoint-keyed route registration.
 func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	if s.redirectToAuthorizationServer(w, r, endpoint) {
+		return nil
+	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
@@ -278,7 +281,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 
 	// Consent is an authorization server page, so it is served where the
 	// issuer lives.
-	consentURL, err := s.consentURL(endpoint, s.authorizationServerBaseURL(endpoint, baseURL), challengeID)
+	consentURL, err := s.challengeConsentURL(endpoint, challengeState)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
