@@ -1008,6 +1008,13 @@ type SkillDistributionSummary struct {
 	ResolvedVersionID string `json:"resolved_version_id"`
 	CreatedAt         string `json:"created_at"`
 	UpdatedAt         string `json:"updated_at"`
+
+	// LastLoadedOverMcpAt is when an agent last read this skill over one of
+	// the project's hosted MCP servers. It is a per-skill value, so every
+	// distribution of one skill reports the same time, and it says nothing
+	// about which plugin served the read. Absent when the skill was never
+	// loaded over MCP; loads reported by coding-agent hooks do not move it.
+	LastLoadedOverMcpAt *string `json:"last_loaded_over_mcp_at,omitempty" jsonschema:"RFC 3339 time an agent last read this skill over a hosted MCP server; per skill, so every distribution of the same skill carries the same value; absent when never loaded over MCP"`
 }
 
 type ListSkillDistributionsOutput struct {
@@ -1074,11 +1081,12 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 				Slug:      "",
 				IsDefault: false,
 			},
-			PinnedVersionID:   stringOrEmpty(row.PinnedVersionID),
-			FollowsLatest:     row.PinnedVersionID == nil,
-			ResolvedVersionID: row.ResolvedVersionID,
-			CreatedAt:         row.CreatedAt,
-			UpdatedAt:         row.UpdatedAt,
+			PinnedVersionID:     stringOrEmpty(row.PinnedVersionID),
+			FollowsLatest:       row.PinnedVersionID == nil,
+			ResolvedVersionID:   row.ResolvedVersionID,
+			CreatedAt:           row.CreatedAt,
+			UpdatedAt:           row.UpdatedAt,
+			LastLoadedOverMcpAt: row.LastLoadedOverMcpAt,
 		})
 	}
 	return ListSkillDistributionsOutput{
