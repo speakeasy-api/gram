@@ -134,15 +134,15 @@ function ShadowAIScopeStep({
             setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
           />
           <Text small muted>
-            Audience applies to MCP server enforcement. Harness and assistant
-            decisions apply to everyone in the organization.
+            Audience applies to MCP server enforcement. Coding agent and
+            assistant decisions apply to everyone in the organization.
           </Text>
           <ActionMessageField
             action="block"
             userMessage={userMessage}
             setUserMessage={setUserMessage}
             label="Message shown when a server is refused"
-            description="Shown to the user when a call to a denied MCP server is refused. Harness refusals at sign-in use the gateway's own message."
+            description="Shown to the user when a call to a denied MCP server is refused. Coding agent refusals at sign-in use the gateway's own message."
           />
         </Stack>
       </Card>

@@ -241,7 +241,7 @@ describe("AiScanTargetsSection", () => {
     // targets are the short list somebody came here to work on.
     expect(screen.queryByTestId("aider")).toBeNull();
     expect(screen.getByTestId("acme-tool")).toBeDefined();
-    expandBuiltin("Harnesses");
+    expandBuiltin("Coding agents");
 
     // The name alone identifies a row — no id subtitle, no signature summary,
     // and no origin badge: which half of the page a row is on says that now.
@@ -253,11 +253,11 @@ describe("AiScanTargetsSection", () => {
     const acme = within(screen.getByTestId("acme-tool"));
     expect(acme.queryByText("Custom")).toBeNull();
 
-    // Two halves, each with a collapsible row per kind it holds. Harness
+    // Two halves, each with a collapsible row per kind it holds. Coding agents
     // appears on both sides; the kinds only one side has appear once.
     expect(screen.getByText("Custom")).toBeDefined();
     expect(screen.getByText("Built-in")).toBeDefined();
-    expect(screen.getAllByText("Harnesses")).toHaveLength(2);
+    expect(screen.getAllByText("Coding agents")).toHaveLength(2);
     expect(screen.getAllByText("Assistants")).toHaveLength(1);
     expect(screen.getAllByText("Open models")).toHaveLength(1);
     expect(screen.getByText(/Library version 11/)).toBeDefined();
@@ -274,7 +274,9 @@ describe("AiScanTargetsSection", () => {
     });
     expect(screen.getByTestId("aider")).toBeDefined();
 
-    fireEvent.click(within(originSection("Built-in")).getByText("Harnesses"));
+    fireEvent.click(
+      within(originSection("Built-in")).getByText("Coding agents"),
+    );
     expect(screen.queryByTestId("aider")).toBeNull();
   });
 
@@ -293,7 +295,7 @@ describe("AiScanTargetsSection", () => {
   it("offers view and nothing else on a built-in", () => {
     renderPage();
 
-    expandBuiltin("Harnesses");
+    expandBuiltin("Coding agents");
     openRowActions("aider");
     expect(screen.getByRole("menuitem", { name: "View" })).toBeDefined();
     expect(screen.queryByRole("menuitem", { name: "Edit" })).toBeNull();

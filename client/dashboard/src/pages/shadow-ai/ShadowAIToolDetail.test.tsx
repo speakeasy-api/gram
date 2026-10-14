@@ -18,7 +18,7 @@ vi.mock("react-router", () => ({
   // The user column links to the identity page, which reads the location to
   // carry the reader's window across.
   useLocation: () => ({
-    pathname: "/org/projects/project/shadow-ai/harnesses/cursor",
+    pathname: "/org/projects/project/shadow-ai/agents/cursor",
     search: "",
   }),
 }));

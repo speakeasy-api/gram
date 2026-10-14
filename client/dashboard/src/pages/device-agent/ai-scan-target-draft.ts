@@ -15,9 +15,12 @@ export const TARGET_CATEGORIES: ReadonlyArray<{
   description: string;
 }> = [
   {
+    // The stored value stays harness: deployed device agents only probe for
+    // targets whose category they recognize, and every detection row
+    // already carries it. The rename is a label, not a contract change.
     value: "harness",
-    label: "Harness",
-    plural: "Harnesses",
+    label: "Coding agent",
+    plural: "Coding agents",
     description:
       "An agentic coding tool or AI IDE, such as Claude Code or Cursor.",
   },

@@ -3,7 +3,7 @@
 // still walk through the old URL segments. These name those segments.
 export const shadowAIBreadcrumbSubstitutions: Record<string, string> = {
   "shadow-ai": "Shadow AI",
-  harnesses: "Harnesses",
+  agents: "Coding agents",
   assistants: "Assistants",
   models: "Local Models",
   mcps: "MCPs",

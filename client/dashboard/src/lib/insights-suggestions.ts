@@ -891,7 +891,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "Library coverage",
       icon: "shield",
       prompt:
-        "Using the Shadow AI target counts on this page, summarize what device agents probe for by kind (harnesses, assistants, open models) and which targets this organization added itself.",
+        "Using the Shadow AI target counts on this page, summarize what device agents probe for by kind (coding agents, assistants, open models) and which targets this organization added itself.",
     },
     {
       title: "Any unverified MCP activity?",

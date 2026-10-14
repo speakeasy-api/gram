@@ -22,7 +22,7 @@ func registerShadowAITools(reg *Registrar, service *ShadowAIService) {
 	addTool(reg, &mcp.Tool{
 		Name:        operationListShadowAIInventory,
 		Title:       "List Shadow AI Inventory",
-		Description: "List the AI tools enrolled devices in this organization have been detected running, with the organization's gateway access decision for each. Covers coding harnesses, general-purpose assistants, and locally run open models; narrow with category. State is allowed, blocked, or unreviewed — a tool that publishes no client ID metadata document always reads unreviewed, because no decision about it can be enforced, and enforceable says which case a row is.",
+		Description: "List the AI tools enrolled devices in this organization have been detected running, with the organization's gateway access decision for each. Covers coding agents (category value harness), general-purpose assistants (assistant), and locally run open models (local_model); narrow with category. State is allowed, blocked, or unreviewed — a tool that publishes no client ID metadata document always reads unreviewed, because no decision about it can be enforced, and enforceable says which case a row is.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListShadowAIInventoryInput) (*mcp.CallToolResult, ListShadowAIInventoryOutput, error) {
 		return principalToolCall(ctx, shadowAIToolResult, func(principal Principal) (ListShadowAIInventoryOutput, error) {
@@ -59,7 +59,7 @@ func shadowAIToolResult(err error) (*mcp.CallToolResult, bool) {
 	result := featureUnavailableResult{Feature: shadowAIFeature}
 	switch {
 	case errors.Is(err, ErrShadowAIInvalid):
-		result.Code, result.Message = "invalid_request", "That Shadow AI argument is not one this organization's scan library uses. Narrow with harness, assistant or local_model, or omit the category for all three."
+		result.Code, result.Message = "invalid_request", "That Shadow AI argument is not one this organization's scan library uses. Narrow with harness (coding agents), assistant (assistants) or local_model (locally run open models), or omit the category for all three."
 	case errors.Is(err, ErrShadowAIUnavailable):
 		result.Code, result.Message = unavailableCode, "Shadow AI is not enabled or is temporarily unavailable."
 	default:

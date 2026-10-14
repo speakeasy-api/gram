@@ -14,6 +14,22 @@ export function ShadowAISectionRedirect(): JSX.Element {
   return <Navigate to={routes.policyCenter.href()} replace />;
 }
 
+// The coding agents tab was once called Harnesses, and its tool detail paths
+// are in tickets and bookmarks, so they redirect permanently rather than 404.
+export function ShadowAIHarnessDetailLegacyRedirect(): JSX.Element {
+  const routes = useRoutes();
+  const location = useLocation();
+  const { targetId = "" } = useParams<{ targetId: string }>();
+  // useParams decodes the segment and href does not encode, so re-encode it:
+  // ids like acme/agent would otherwise split into two path segments.
+  return (
+    <Navigate
+      to={`${routes.shadowAI.agents.detail.href(encodeURIComponent(targetId))}${location.search}${location.hash}`}
+      replace
+    />
+  );
+}
+
 // The Shadow MCP paths predate the section and are in block messages, emails
 // and bookmarks, so they redirect permanently rather than 404.
 export function ShadowMCPLegacyRedirect(): JSX.Element {
