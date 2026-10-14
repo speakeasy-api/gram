@@ -2328,6 +2328,11 @@ type AiScanTargetResponseBody struct {
 	// For a built-in, whether the organization has recorded an access decision
 	// about it. Always false for organization targets.
 	Customized bool `form:"customized" json:"customized" xml:"customized"`
+	// The organization's access decision for the target, computed with the same
+	// rules the AI detections carry: unreviewed when nothing is recorded, and
+	// never enforceable without a verifiable gateway matcher. Absent only from a
+	// server that predates it; read a missing summary as unreviewed.
+	Access *AIToolAccessSummaryResponseBody `form:"access,omitempty" json:"access,omitempty" xml:"access,omitempty"`
 	// When the organization's row was created; absent for an untouched default.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the organization's row last changed; absent for an untouched default.
@@ -2367,6 +2372,32 @@ type AiScanTargetGatewayClientResponseBody struct {
 	// Names an MCP client reports at initialize. Detection only, never
 	// authorization: the value is self-reported and any client can claim any name.
 	ClientInfoNames []string `form:"client_info_names" json:"client_info_names" xml:"client_info_names"`
+}
+
+// AIToolAccessSummaryResponseBody is used to define fields on response body
+// types.
+type AIToolAccessSummaryResponseBody struct {
+	// The effective decision as a table renders it: allowed and blocked mean an
+	// organization decision is recorded and in force, unreviewed means nothing is
+	// enforced — either because nobody has decided or because the tool is not
+	// enforceable, in which case a stored decision is projected as unreviewed.
+	// Read enforceable to tell the two apart.
+	State string `form:"state" json:"state" xml:"state"`
+	// The effective organization decision behind state, which is not always the
+	// stored one. Absent rows read as unreviewed, so every tool has a value, and a
+	// tool that is not enforceable reads as unreviewed however it was decided —
+	// the stored decision is left untouched and takes effect again if the tool
+	// gains a verifiable gateway matcher.
+	Decision string `form:"decision" json:"decision" xml:"decision"`
+	// Whether a block on this tool would actually reach the gateway. False when
+	// the tool is linked only by a self-reported client name, or by nothing at
+	// all: the decision is recorded honestly and enforces nothing. Surfaced so an
+	// admin is never told a tool is blocked when it is not.
+	Enforceable bool `form:"enforceable" json:"enforceable" xml:"enforceable"`
+	// Why the decision was made, when an admin gave a reason. Who recorded it and
+	// when are in the audit log rather than here, so there is one record of that
+	// and not two.
+	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
 }
 
 // AgentSessionMetaResponseBody is used to define fields on response body types.

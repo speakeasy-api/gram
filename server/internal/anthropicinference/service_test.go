@@ -1,10 +1,12 @@
 package anthropicinference
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,7 +18,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -106,6 +110,32 @@ func exampleFrame() Frame {
 		Source: Source{Application: "claude-ai"}, SessionID: "session-example", Model: "claude-sonnet-4-6",
 		Messages: []Message{{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"EXAMPLE prompt"}]`)}},
 	}
+}
+
+func TestNewServiceTagsLoggerWithComponent(t *testing.T) {
+	t.Parallel()
+	var logs bytes.Buffer
+	logger := slog.New(&o11y.ContextHandler{Handler: slog.NewJSONHandler(&logs, nil)}).With(attr.SlogComponent("server"), attr.SlogOrganizationID("org_example"))
+	service := NewService(logger, testenv.NewMeterProvider(t), nil, nil, nil, nil)
+	store, ok := service.store.(*postgresStore)
+	require.True(t, ok)
+
+	service.logger.WarnContext(t.Context(), "service log")
+	store.logger.WarnContext(t.Context(), "store log")
+	logger.WarnContext(t.Context(), "parent log")
+
+	decoder := json.NewDecoder(&logs)
+	for _, component := range []string{"anthropic-inference", "anthropic-inference", "server"} {
+		var raw json.RawMessage
+		require.NoError(t, decoder.Decode(&raw))
+		require.Equal(t, 1, bytes.Count(raw, []byte(`"`+string(attr.ComponentKey)+`":`)))
+
+		var record map[string]any
+		require.NoError(t, json.Unmarshal(raw, &record))
+		require.Equal(t, component, record[string(attr.ComponentKey)])
+		require.Equal(t, "org_example", record[string(attr.OrganizationIDKey)])
+	}
+	require.False(t, decoder.More())
 }
 
 func TestServicePersistsDeniedConversation(t *testing.T) {

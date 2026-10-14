@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -16,7 +17,18 @@ const mocks = vi.hoisted(() => ({
     name: string;
     email: string;
     roleIds: string[];
+    groups?: string[];
   }[],
+  mappings: {
+    groups: [] as { id: string; name: string; memberCount: number }[],
+    attributes: [] as { key: string; value: string; memberCount: number }[],
+    mappings: [] as {
+      id: string;
+      sourceKind: "group" | "attribute";
+      roleUrn: string;
+      directoryGroupId?: string;
+    }[],
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ projects: [], scimEnabled: mocks.scimEnabled }),
@@ -30,6 +42,14 @@ vi.mock("@gram/client/react-query/agents.js", () => ({
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({ data: { members: mocks.members } }),
   invalidateAllMembers: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
+  useDirectoryRoleMappings: () => ({
+    data: mocks.mappings,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 vi.mock("@gram/client/react-query/listScopes.js", () => ({
   useListScopes: () => ({
@@ -153,13 +173,15 @@ function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
   return render(
     <MemoryRouter>
       <QueryClientProvider client={new QueryClient()}>
-        <CreateRoleDialog
-          open
-          onOpenChange={vi.fn<(open: boolean) => void>()}
-          editingRole={editingRole}
-          confirmAssignmentFor={confirmAssignmentFor}
-          presentation="page"
-        />
+        <TooltipProvider>
+          <CreateRoleDialog
+            open
+            onOpenChange={vi.fn<(open: boolean) => void>()}
+            editingRole={editingRole}
+            confirmAssignmentFor={confirmAssignmentFor}
+            presentation="page"
+          />
+        </TooltipProvider>
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -169,6 +191,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.scimEnabled = false;
   mocks.members = [];
+  mocks.mappings = { groups: [], attributes: [], mappings: [] };
 });
 it("labels the permissions section as a section rather than an action", () => {
   renderEditor();
@@ -272,37 +295,48 @@ describe("agent assignment", () => {
   });
 });
 
-describe("member assignment under directory sync", () => {
+describe("who holds the role under directory sync", () => {
   beforeEach(() => {
     mocks.scimEnabled = true;
-    mocks.members = [
-      {
-        id: "m-1",
-        name: "Enrolled Person",
-        email: "a@example.com",
-        roleIds: [role.id],
-      },
-      { id: "m-2", name: "Other Person", email: "b@example.com", roleIds: [] },
-    ];
+    mocks.mappings = {
+      groups: [{ id: "g-data", name: "Data Analytics", memberCount: 14 }],
+      attributes: [],
+      mappings: [
+        {
+          id: "map-1",
+          sourceKind: "group",
+          roleUrn: role.principalUrn,
+          directoryGroupId: "g-data",
+        },
+      ],
+    };
   });
 
-  it("lists only the members the directory enrolled", () => {
+  it("shows the groups that give out the role in place of a member picker", () => {
     renderEditor(role);
-    fireEvent.click(screen.getByText("Assign Members"));
-    expect(screen.getByText("Enrolled Person")).toBeTruthy();
-    expect(screen.queryByText("Other Person")).toBeNull();
+    expect(screen.getByText("Data Analytics")).toBeTruthy();
+    expect(screen.getByText("14 users")).toBeTruthy();
+    expect(screen.queryByText("Assign Members")).toBeNull();
     expect(
-      screen
-        .getByRole("checkbox", { name: /Enrolled Person/ })
-        .hasAttribute("disabled"),
-    ).toBe(true);
+      screen.getByRole("link", { name: "View mapping →" }).getAttribute("href"),
+    ).toBe("/org/identity");
   });
 
-  it("links to directory sync setup when nobody is enrolled", () => {
+  it("says so when nothing gives out the role", () => {
+    mocks.mappings.mappings = [];
+    renderEditor(role);
+    expect(
+      screen.getByText("No directory group or attribute gives out this role"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Map a group" }).getAttribute("href"),
+    ).toBe("/org/identity");
+  });
+
+  it("points a new role at mapping once it exists", () => {
     renderEditor();
-    const link = screen.getByRole("link", { name: "Configure directory sync" });
-    expect(link.getAttribute("href")).toBe("/org/identity");
-    expect(screen.queryByText("Enrolled Person")).toBeNull();
+    expect(screen.getByRole("link", { name: "IDP and SSO" })).toBeTruthy();
+    expect(screen.queryByText("Assign Members")).toBeNull();
   });
 });
 
