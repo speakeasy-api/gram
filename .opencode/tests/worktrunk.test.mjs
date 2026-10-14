@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import childProcess, { execFile } from "node:child_process";
 import {
   access,
   mkdir,
@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
@@ -180,4 +181,45 @@ pre-remove = "test ! -f fail-cleanup && test -f initialized && echo cleaned > '{
   await assert.rejects(strategy.list(repo, { signal: controller.signal }), {
     name: "AbortError",
   });
+
+  // Abort at the boundary where the real wt process has completed successfully,
+  // before the strategy can start ownership bookkeeping.
+  const completed = new AbortController();
+  const original = childProcess.execFile;
+  childProcess.execFile = Object.assign((...args) => original(...args), {
+    [promisify.custom]: (file, args, options) => {
+      const pending = exec(file, args, options);
+      const result = pending.then((output) => {
+        if (file === "wt" && args.includes("switch")) completed.abort();
+        return output;
+      });
+      result.child = pending.child;
+      return result;
+    },
+  });
+  syncBuiltinESMExports();
+  try {
+    const { makeStrategy: cancelAfterCreate } =
+      await import("../lib/worktrunk.js?cancel-after-create");
+    const canceled = join(root, "canceled-after-create");
+    await cancelAfterCreate({
+      directory: repo,
+      storage,
+      OperationError,
+    }).create(
+      { sourceDirectory: repo, directory: canceled },
+      { signal: completed.signal },
+    );
+    assert.equal(completed.signal.aborted, true);
+    assert.ok(
+      (await reload().list(repo, context)).some(
+        (item) => item.directory === canceled,
+      ),
+    );
+    await reload().remove({ directory: canceled, force: false }, context);
+    await assert.rejects(access(canceled));
+  } finally {
+    childProcess.execFile = original;
+    syncBuiltinESMExports();
+  }
 });

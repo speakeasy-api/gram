@@ -74,10 +74,11 @@ export function makeStrategy({
       }
       // Git removes this private marker with the worktree's administrative
       // directory, so recreating the same path cannot inherit ownership.
+      // Creation has succeeded: finish bookkeeping even if the caller cancels,
+      // so discovery and removal can still manage the new worktree.
       const identity = randomUUID();
-      await writeFile(await identityPath(directory, signal), identity, {
+      await writeFile(await identityPath(directory), identity, {
         flag: "wx",
-        signal,
       });
       await storage.set(key(directory), identity);
       return { directory };

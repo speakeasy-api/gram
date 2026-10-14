@@ -28,7 +28,8 @@ Requires Worktrunk with `switch/remove --format=json` and list JSON schema 2
 The `--yes` flag runs configured Worktrunk hooks non-interactively. Existing
 worktrees keep their original OpenCode strategy; enabling this plugin does not
 transfer ownership. Keep the plugin enabled while it owns worktrees so OpenCode
-can remove them through it. Subprocesses receive OpenCode's cancellation signal.
+can remove them through it. Worktrunk subprocesses receive OpenCode's cancellation
+signal; once creation succeeds, ownership bookkeeping finishes even if canceled.
 
 ## Pause idle stacks
 
