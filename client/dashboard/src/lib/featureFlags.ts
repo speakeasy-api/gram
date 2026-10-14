@@ -25,10 +25,6 @@ export const FEATURE_FLAGS = {
   // to the policy editor mode.
   riskLlmAnalyzer: "gram-risk-llm-analyzer",
   riskWatchdog: "gram-risk-watchdog",
-  // UI-only rollout gate for folding Shadow AI into Security and Policy: the
-  // Shadow AI policy kind in Guardrails, the Watchdog decision tile and the
-  // retired Shadow AI nav entry. Not enforced server-side.
-  shadowAiGuardrails: "gram-shadow-ai-guardrails",
   // Org-targeted, read server-side under the same key: whether hosted MCP
   // servers serve distributed skills to connected agents. Gates the MCP
   // server Skills tab and the served-over-MCP hints on skill and plugin pages.

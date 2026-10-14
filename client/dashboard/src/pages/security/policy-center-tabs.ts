@@ -22,27 +22,10 @@ const TAB_LABEL: Record<PolicyCenterTab, string> = {
   quarantines: "Quarantines",
 };
 
-/** Which tabs the strip shows. The Shadow AI targets tab arrives with the
- *  Shadow AI fold-in flag; without it the page keeps its four tabs. */
-function visibleTabs(shadowAIEnabled: boolean): PolicyCenterTab[] {
-  return POLICY_CENTER_TABS.filter(
-    (tab) => shadowAIEnabled || tab !== "shadow-ai-targets",
-  );
-}
-
-export function policyCenterTabs(shadowAIEnabled: boolean): PageTab[] {
-  return visibleTabs(shadowAIEnabled).map((tab) => ({
+export function policyCenterTabs(): PageTab[] {
+  return POLICY_CENTER_TABS.map((tab) => ({
     value: tab,
     label: TAB_LABEL[tab],
     href: `?tab=${tab}`,
   }));
-}
-
-/** A `?tab=` value the strip does not show falls back to Policies, so a
- *  Shadow AI targets link opened with the flag off still lands somewhere. */
-export function visiblePolicyCenterTab(
-  tab: PolicyCenterTab,
-  shadowAIEnabled: boolean,
-): PolicyCenterTab {
-  return visibleTabs(shadowAIEnabled).includes(tab) ? tab : "policies";
 }

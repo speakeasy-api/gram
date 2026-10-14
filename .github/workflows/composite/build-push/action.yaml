@@ -147,10 +147,6 @@ runs:
 
         echo "Build arguments validated successfully"
 
-    - name: Set GIT_SHA
-      shell: bash
-      run: echo "GIT_SHA=$(echo $GITHUB_SHA)" >> $GITHUB_ENV
-
     - name: Build and push registry Docker image
       # Blacksmith fork of docker/build-push-action, paired with the
       # setup-docker-builder step above: buildkit state lives on a sticky disk
@@ -165,7 +161,7 @@ runs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           ${{ inputs.build-args }}
-          GIT_SHA=${{ env.GIT_SHA }}
+          GIT_SHA=${{ github.sha }}
         secrets: |
           git_auth_token=${{ inputs.git-auth-token }}
 

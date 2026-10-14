@@ -32,8 +32,7 @@ function tileFacts(
   };
 }
 
-/** The Watchdog tile for the Shadow AI backlog. Rendered only while the
- *  Shadow AI fold-in is on, so its reads run only where they are shown. */
+/** The Watchdog tile for the Shadow AI backlog. */
 export function UndecidedToolsTile(): JSX.Element {
   const routes = useRoutes();
   const undecided = useUndecidedToolCount();

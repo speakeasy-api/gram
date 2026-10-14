@@ -10,7 +10,6 @@ import { PolicyStartChooser } from "./PolicyStart";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn<(to: unknown, options?: unknown) => void>(),
   setKind: vi.fn<(kind: string | null) => void>(),
-  flags: {} as Record<string, "enabled" | "disabled" | "loading">,
   policies: {
     data: { policies: [] as RiskPolicy[] } as
       | { policies: RiskPolicy[] }
@@ -28,10 +27,10 @@ vi.mock("nuqs", () => ({
   useQueryState: () => [null, mocks.setKind],
 }));
 
+// The chooser's only flag left is MCP-scoped policies, which these cases
+// do not exercise.
 vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: (flag: string) => ({
-    status: mocks.flags[flag] ?? "disabled",
-  }),
+  useFeatureFlag: () => ({ status: "disabled" }),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -150,13 +149,11 @@ describe("PolicyStartChooser Shadow AI use case", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
-    mocks.flags = {};
     mocks.policies = { data: { policies: [] }, isError: false };
     sessionStorage.clear();
   });
 
   it("presents the use case as Shadow AI and opens the Shadow AI editor", () => {
-    mocks.flags["gram-shadow-ai-guardrails"] = "enabled";
     renderChooser();
 
     expect(screen.queryByText("Unapproved MCP servers")).toBeNull();
@@ -171,7 +168,6 @@ describe("PolicyStartChooser Shadow AI use case", () => {
   });
 
   it("opens the policy already holding the slot instead of a second create", () => {
-    mocks.flags["gram-shadow-ai-guardrails"] = "enabled";
     mocks.policies = {
       data: { policies: [blockingShadowMCPPolicy()] },
       isError: false,
@@ -188,7 +184,6 @@ describe("PolicyStartChooser Shadow AI use case", () => {
   });
 
   it("waits for the policy list before offering the use case", () => {
-    mocks.flags["gram-shadow-ai-guardrails"] = "enabled";
     mocks.policies = { data: undefined, isError: false };
     renderChooser();
 
@@ -202,48 +197,7 @@ describe("PolicyStartChooser Shadow AI use case", () => {
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
-  it("holds the use case until the flag resolves", () => {
-    mocks.flags["gram-shadow-ai-guardrails"] = "loading";
-    renderChooser();
-
-    const row = screen.getByRole("button", { name: /Unapproved MCP servers/ });
-    expect(row.hasAttribute("disabled")).toBe(true);
-    expect(row.textContent).toContain("Checking this project's settings");
-
-    fireEvent.click(row);
-
-    expect(mocks.setKind).not.toHaveBeenCalled();
-    expect(mocks.navigate).not.toHaveBeenCalled();
-  });
-
-  it("keeps the server's wording and the standard editor while the fold-in is off", () => {
-    renderChooser();
-
-    expect(screen.queryByText("Shadow AI")).toBeNull();
-    const row = screen.getByRole("button", {
-      name: /Unapproved MCP servers/,
-    });
-    expect(row.textContent).toContain("Flag");
-
-    fireEvent.click(row);
-
-    expect(mocks.setKind).not.toHaveBeenCalled();
-    expect(mocks.navigate).toHaveBeenCalledWith(
-      { pathname: "/guardrails/new", search: "?kind=standard" },
-      {
-        state: {
-          draft: expect.objectContaining({
-            presetId: "unapproved_mcp_servers",
-            sources: ["shadow_mcp"],
-            action: "flag",
-          }),
-        },
-      },
-    );
-  });
-
   it("leaves the other use cases on the standard editor", () => {
-    mocks.flags["gram-shadow-ai-guardrails"] = "enabled";
     renderChooser();
 
     fireEvent.click(

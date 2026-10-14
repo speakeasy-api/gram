@@ -106,7 +106,6 @@ beforeEach(() => {
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
-    [FEATURE_FLAGS.shadowAiGuardrails]: unavailableFeatureFlag("loading"),
   };
 });
 
@@ -174,27 +173,17 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes.indexOf(routes.playground)).toBeLessThan(
       navRoutes.indexOf(routes.riskOverview),
     );
-    expect(navRoutes.indexOf(routes.shadowAI)).toBeLessThan(
+    expect(navRoutes.indexOf(routes.policyCenter)).toBeLessThan(
       navRoutes.indexOf(routes.costs),
     );
   });
 
-  it("uses Shadow AI as the nav destination, with Shadow MCP folded into it", () => {
-    const { result } = renderHook(() => useProjectNavRoutes());
-
-    const titles = result.current.map((entry) => entry.route.title);
-    expect(titles).toContain("Shadow AI");
-    expect(titles).not.toContain("Shadow MCP");
-  });
-
-  it("folds Shadow AI into Guardrails once the Shadow AI guardrails flag is on", () => {
-    testState.featureFlags[FEATURE_FLAGS.shadowAiGuardrails] = {
-      status: "enabled",
-    };
+  it("leaves Shadow AI and Shadow MCP out of nav; they live in Guardrails", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
     const titles = result.current.map((entry) => entry.route.title);
     expect(titles).not.toContain("Shadow AI");
+    expect(titles).not.toContain("Shadow MCP");
     expect(titles).toContain("Guardrails");
   });
 
@@ -241,7 +230,6 @@ describe("useProjectNavRoutes", () => {
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
-        [FEATURE_FLAGS.shadowAiGuardrails]: unavailableFeatureFlag(status),
       };
 
       const { result } = renderHook(() => useProjectNavRoutes());
@@ -251,9 +239,6 @@ describe("useProjectNavRoutes", () => {
       expect(navRoutes).not.toContain(routes.watchdog);
       expect(navRoutes).not.toContain(routes.explore);
       expect(navRoutes).toContain(routes.deployments);
-      // The fold-in is opt-in too: Shadow AI keeps its entry until the flag
-      // resolves enabled.
-      expect(navRoutes).toContain(routes.shadowAI);
       // Without Watchdog, the legacy risk pages stay in the nav.
       expect(navRoutes).toContain(routes.riskOverview);
       expect(navRoutes).toContain(routes.riskEvents);
@@ -283,7 +268,6 @@ describe("useProjectNavRoutes", () => {
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
       [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
       [FEATURE_FLAGS.explore]: { status: "enabled" },
-      [FEATURE_FLAGS.shadowAiGuardrails]: { status: "enabled" },
     };
 
     const { result } = renderHook(() => useProjectNavRoutes());
@@ -293,7 +277,6 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).toContain(routes.explore);
     expect(navRoutes).not.toContain(routes.deployments);
-    expect(navRoutes).not.toContain(routes.shadowAI);
     // Watchdog supersedes the legacy overview in the nav; Risk Events shows
     // in both modes.
     expect(navRoutes).not.toContain(routes.riskOverview);
