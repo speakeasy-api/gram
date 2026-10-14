@@ -3909,3 +3909,47 @@ WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
   AND m.toolset_id IS NOT NULL;
+
+-- name: ListPlatformMCPRoleDirectorySources :many
+-- Each live directory role mapping in the organization, with how many active
+-- directory users its group or attribute value matches today, counted by
+-- distinct email as the dashboard counts them. Mappings whose group is gone
+-- still list, matching nobody.
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value,
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_user_group_memberships AS m
+        JOIN directory_users AS du
+          ON du.id = m.directory_user_id
+          AND du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+        WHERE m.directory_group_id = dg.id
+          AND m.deleted IS FALSE
+      )
+      ELSE (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::bigint AS member_count
+FROM directory_role_mappings AS drm
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+ORDER BY drm.role_urn, drm.source_kind DESC, dg.name, drm.attribute_key, drm.attribute_value, drm.id;

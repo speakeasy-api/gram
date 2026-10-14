@@ -64,12 +64,25 @@ type MCPConnectSummary struct {
 }
 
 type AccessRole struct {
-	Name        string            `json:"name"`
-	Type        string            `json:"type"`
-	MemberCount SubjectCount      `json:"member_count"`
-	MCPAccess   MCPConnectSummary `json:"mcp_access"`
-	Reference   string            `json:"reference"`
-	Version     string            `json:"version"`
+	Name             string                      `json:"name"`
+	Type             string                      `json:"type"`
+	MemberCount      SubjectCount                `json:"member_count"`
+	MCPAccess        MCPConnectSummary           `json:"mcp_access"`
+	DirectorySources []AccessRoleDirectorySource `json:"directory_sources" jsonschema:"directory groups and attribute values that give this role to everyone they match; empty when nothing in the directory is mapped to the role"`
+	Reference        string                      `json:"reference"`
+	Version          string                      `json:"version"`
+}
+
+// AccessRoleDirectorySource is one directory group or attribute value mapped
+// to a role. Under directory sync it explains where the role's members come
+// from; it is changed on the identity provider page of the dashboard.
+type AccessRoleDirectorySource struct {
+	Kind           string       `json:"kind" jsonschema:"group or attribute"`
+	Group          string       `json:"group,omitempty" jsonschema:"directory group name, for a group source"`
+	AttributeKey   string       `json:"attribute_key,omitempty" jsonschema:"directory attribute, for an attribute source"`
+	AttributeValue string       `json:"attribute_value,omitempty" jsonschema:"directory attribute value, for an attribute source"`
+	Removed        bool         `json:"removed,omitempty" jsonschema:"true when the mapped group was deleted from the directory; it matches nobody and has no name"`
+	MatchedUsers   SubjectCount `json:"matched_users" jsonschema:"directory users the source matches today, signed in or not; small counts are withheld"`
 }
 
 type ListAccessRolesOutput struct {
@@ -199,6 +212,15 @@ func (s *AccessReadService) ListRoles(ctx context.Context, principal Principal) 
 	if err != nil {
 		return ListAccessRolesOutput{}, fmt.Errorf("list platform mcp access roles: %w", err)
 	}
+	sourceRows, err := platformrepo.New(s.db).ListPlatformMCPRoleDirectorySources(ctx, principal.OrganizationID)
+	if err != nil {
+		return ListAccessRolesOutput{}, fmt.Errorf("list platform mcp role directory sources: %w", err)
+	}
+	sourcesByRole := make(map[string][]AccessRoleDirectorySource, len(sourceRows))
+	for _, row := range sourceRows {
+		sourcesByRole[row.RoleUrn] = append(sourcesByRole[row.RoleUrn], accessRoleDirectorySource(row))
+	}
+
 	now := s.now().UTC()
 	output := ListAccessRolesOutput{
 		Roles:     make([]AccessRole, 0, len(roles.Roles)),
@@ -218,11 +240,34 @@ func (s *AccessReadService) ListRoles(ctx context.Context, principal Principal) 
 			Type:        accessRoleType(role),
 			MemberCount: NewSubjectCount(int64(role.MemberCount)),
 			MCPAccess:   summarizeMCPConnect(role.Grants),
-			Reference:   reference,
-			Version:     version,
+			// Never nil, so a role with no mappings says so as an empty list.
+			DirectorySources: append([]AccessRoleDirectorySource{}, sourcesByRole[role.PrincipalUrn]...),
+			Reference:        reference,
+			Version:          version,
 		})
 	}
 	return output, nil
+}
+
+func accessRoleDirectorySource(row platformrepo.ListPlatformMCPRoleDirectorySourcesRow) AccessRoleDirectorySource {
+	source := AccessRoleDirectorySource{
+		Kind:           row.SourceKind,
+		Group:          "",
+		AttributeKey:   "",
+		AttributeValue: "",
+		Removed:        false,
+		MatchedUsers:   NewSubjectCount(row.MemberCount),
+	}
+	if row.SourceKind == "group" {
+		// The mapping outlives a group deleted from the directory; it then
+		// matches nobody and has no name to show.
+		source.Group = conv.FromPGTextOrEmpty[string](row.DirectoryGroupName)
+		source.Removed = !row.DirectoryGroupName.Valid
+		return source
+	}
+	source.AttributeKey = conv.FromPGTextOrEmpty[string](row.AttributeKey)
+	source.AttributeValue = conv.FromPGTextOrEmpty[string](row.AttributeValue)
+	return source
 }
 
 func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal, input ListAccessMembersInput) (ListAccessMembersOutput, error) {
