@@ -4,7 +4,7 @@ import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { AlertTriangle, Check } from "lucide-react";
+import { AlertTriangle, Check, Minus } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 import {
@@ -516,6 +516,8 @@ export function ConsentToolsApp({
     }
     return annGrants.has(id);
   };
+  const navGranted = groupGranted(nav);
+  const navPartial = !navGranted && grouped.some((t) => scope.has(t.name));
 
   // Bulk-select tools by name: the "All tools" and unannotated groups, which
   // have no annotation grant to express them, and a gateway's source sections.
@@ -674,11 +676,11 @@ export function ConsentToolsApp({
               <button
                 type="button"
                 role="checkbox"
-                aria-checked={groupGranted(nav)}
+                aria-checked={bulkChecked(navGranted, navPartial)}
                 onClick={toggleGroupGrant}
                 className="flex cursor-pointer items-center gap-2 text-sm"
               >
-                <SelectionBox checked={groupGranted(nav)} />
+                <SelectionBox checked={navGranted} indeterminate={navPartial} />
                 Select all {grouped.length}
                 {nav !== "all" && (
                   <span className="text-muted-foreground">
@@ -711,19 +713,28 @@ export function ConsentToolsApp({
             <div className="max-h-[19rem] min-h-[11rem] overflow-y-auto">
               {hasSources
                 ? toolsBySource(viewed).map(([source, sectionTools]) => {
-                    const sectionGranted = sectionTools.every((t) =>
+                    const sectionInScope = sectionTools.filter((t) =>
                       scope.has(t.name),
-                    );
+                    ).length;
+                    const sectionGranted =
+                      sectionInScope === sectionTools.length;
+                    const sectionPartial = sectionInScope > 0;
                     return (
                       <div key={source} role="group" aria-label={source}>
                         <button
                           type="button"
                           role="checkbox"
-                          aria-checked={sectionGranted}
+                          aria-checked={bulkChecked(
+                            sectionGranted,
+                            sectionPartial,
+                          )}
                           onClick={() => togglePicks(sectionTools)}
                           className="border-border bg-background hover:bg-accent sticky top-0 flex w-full cursor-pointer items-center gap-2.5 border-b px-3 py-2 text-left"
                         >
-                          <SelectionBox checked={sectionGranted} />
+                          <SelectionBox
+                            checked={sectionGranted}
+                            indeterminate={sectionPartial}
+                          />
                           <span
                             className="min-w-0 flex-1 truncate text-sm font-medium"
                             title={source}
@@ -731,11 +742,7 @@ export function ConsentToolsApp({
                             {source}
                           </span>
                           <span className="text-muted-foreground shrink-0 text-xs">
-                            {
-                              sectionTools.filter((t) => scope.has(t.name))
-                                .length
-                            }{" "}
-                            of {sectionTools.length}
+                            {sectionInScope} of {sectionTools.length}
                           </span>
                         </button>
                         {sectionTools.map(renderTool)}
@@ -791,11 +798,15 @@ export function ConsentToolsApp({
                   .join(", ")}
               </>
             )}
-            {pickedOutsideGrants > 0 && ` · ${pickedOutsideGrants} picked`}
+            {annGrants.size > 0 &&
+              pickedOutsideGrants > 0 &&
+              ` · ${pickedOutsideGrants} picked`}
           </span>
           <span>
             {liveAnnotations.length > 0
-              ? "Live grants include future matching tools"
+              ? hasSources
+                ? "Live grants include future matching tools from the sources shown"
+                : "Live grants include future matching tools"
               : "New tools require approval"}
           </span>
         </div>
@@ -933,18 +944,32 @@ function RoleHiddenNote({ hidden }: { hidden: RoleHiddenTools }): JSX.Element {
   );
 }
 
-function SelectionBox({ checked }: { checked: boolean }): JSX.Element {
+function SelectionBox({
+  checked,
+  indeterminate = false,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+}): JSX.Element {
+  const mixed = indeterminate && !checked;
   return (
     <span
       aria-hidden
       className={cn(
         "border-border flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[3px] border",
-        checked && "bg-foreground border-foreground",
+        (checked || mixed) && "bg-foreground border-foreground",
       )}
     >
       {checked && <Check className="text-background h-2.5 w-2.5" />}
+      {mixed && <Minus className="text-background h-2.5 w-2.5" />}
     </span>
   );
+}
+
+/** The aria-checked value for a bulk checkbox over a set of tools. */
+function bulkChecked(checked: boolean, partial: boolean): boolean | "mixed" {
+  if (checked) return true;
+  return partial ? "mixed" : false;
 }
 
 /**
