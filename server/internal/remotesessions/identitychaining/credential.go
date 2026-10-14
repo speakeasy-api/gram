@@ -81,7 +81,9 @@ type publishedSlot struct {
 // retire withdraws a just-published credential whose authority failed its
 // post-publish recheck; a newer publish into the slot is left alone.
 func (c *Chainer) retire(ctx context.Context, logger *slog.Logger, req Request, slot publishedSlot) {
-	if err := repo.New(c.db).RetireEMACredential(context.WithoutCancel(ctx), repo.RetireEMACredentialParams{
+	retireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	defer cancel()
+	if err := repo.New(c.db).RetireEMACredential(retireCtx, repo.RetireEMACredentialParams{
 		ID: slot.id, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: slot.updatedAt,
 	}); err != nil {
 		logger.WarnContext(ctx, "retire identity chaining credential after a failed recheck", attr.SlogError(err))
