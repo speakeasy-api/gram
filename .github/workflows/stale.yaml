@@ -12,6 +12,7 @@ permissions: {}
 
 jobs:
   stale:
+    name: stale
     runs-on: ubuntu-latest
     permissions:
       actions: write # actions/stale deletes its own state cache between runs

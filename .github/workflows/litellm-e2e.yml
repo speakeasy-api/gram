@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   litellm-e2e:
+    name: litellm-e2e
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 40
     steps:

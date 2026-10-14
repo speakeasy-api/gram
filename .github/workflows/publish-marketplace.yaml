@@ -26,6 +26,7 @@ env:
 
 jobs:
   publish:
+    name: publish
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Speakeasy repo (source)

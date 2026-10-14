@@ -287,6 +287,7 @@ jobs:
           path: ${{ steps.lookup.outputs.path }}
 
   preview-image-tags:
+    name: preview-image-tags
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -401,6 +402,7 @@ jobs:
         run: aube store prune
 
   docker-build-server:
+    name: docker-build-server
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -468,6 +470,7 @@ jobs:
           docker run --rm ${{ steps.build.outputs.image-tag }} version
 
   docker-build-pystreams:
+    name: docker-build-pystreams
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -528,6 +531,7 @@ jobs:
           docker run --rm ${{ steps.build.outputs.image-tag }} --help
 
   assistant-runtime-image:
+    name: assistant-runtime-image
     # TEMPORARY: on GitHub-hosted runners (and so on upstream checkout/buildx/
     # build-push actions) because Blacksmith runners cannot reach the Ubuntu apt
     # mirrors, which breaks the musl toolchain install below. Move back to
@@ -686,6 +690,7 @@ jobs:
           labels: ${{ steps.assistantMetaGcr.outputs.labels }}
 
   otel-collector:
+    name: otel-collector
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.otel-collector == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && !github.event.pull_request.head.repo.fork))
@@ -1170,6 +1175,7 @@ jobs:
   # and the preview environments waiting on its image, do not wait minutes for
   # lint and codegen checks. ci-gate still requires server-checks.
   server-build:
+    name: server-build
     runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
@@ -1219,6 +1225,7 @@ jobs:
           retention-days: 2
 
   server-checks:
+    name: server-checks
     runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
@@ -1401,6 +1408,7 @@ jobs:
         run: uv cache prune --ci
 
   cli-build-lint:
+    name: cli-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.cli == 'true'
@@ -1462,6 +1470,7 @@ jobs:
         run: mise run git:porcelain
 
   hooks-build-test:
+    name: hooks-build-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.hooks == 'true'
@@ -1496,6 +1505,7 @@ jobs:
         run: mise run git:porcelain
 
   glint-test:
+    name: glint-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.glint == 'true'
@@ -1527,6 +1537,7 @@ jobs:
         run: mise run git:porcelain
 
   plog-build-lint:
+    name: plog-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.plog == 'true'
@@ -1652,6 +1663,7 @@ jobs:
   # sharded server-test job skips it; this job is its only runner and reports
   # as its own required check so a failure is immediately attributable.
   demo-seed-safety:
+    name: demo-seed-safety
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.server == 'true'
@@ -1681,6 +1693,7 @@ jobs:
         run: mise run test:server -race -count=1 -tags=demoseed_safety ./internal/demoseed/...
 
   docker-build-client:
+    name: docker-build-client
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -1873,6 +1886,7 @@ jobs:
             cache-control: public, max-age=31536000, immutable
 
   client-build-lint:
+    name: client-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: |
@@ -1940,6 +1954,7 @@ jobs:
         run: aube store prune
 
   client-test:
+    name: client-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: |
@@ -2055,6 +2070,7 @@ jobs:
         run: aube store prune
 
   functions-build-host:
+    name: functions-build-host
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
     if: needs.changes.outputs.functions == 'true'
@@ -2144,6 +2160,7 @@ jobs:
         run: aube store prune
 
   functions-image:
+    name: functions-image
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes, functions-build-host]
     if: needs.changes.outputs.functions == 'true'
@@ -2330,6 +2347,7 @@ jobs:
         run: aube store prune
 
   ts-framework-test:
+    name: ts-framework-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
     if: needs.changes.outputs.tsframework == 'true'
@@ -2560,6 +2578,7 @@ jobs:
         run: gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label preview
 
   dispatch-release:
+    name: dispatch-release
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs:
       [
