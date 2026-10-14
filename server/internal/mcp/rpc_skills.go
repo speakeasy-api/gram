@@ -155,6 +155,13 @@ func marshalSkillRead(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID
 // plugins are assigned to them; a caller who is not an authenticated member
 // of the owning organization, or one the endpoint never resolved a toolset
 // for, has none and so is served no skills.
+//
+// An API key is never a recipient. A legacy key carries its creator's user
+// id in the auth context, but the key is the actor, not that person: serving
+// the creator's personal assignments to every agent holding the key, and
+// recording each read as the creator's activation, would be wrong on both
+// counts. The RBAC engine refuses the same identification (an API key is not
+// a user principal), so the skill scope follows it.
 func hostedSkillScope(ctx context.Context, db *pgxpool.Pool, payload *mcpInputs) (mcpskills.Scope, error) {
 	scope := mcpskills.Scope{
 		ProjectID:     payload.projectID,
@@ -162,7 +169,7 @@ func hostedSkillScope(ctx context.Context, db *pgxpool.Pool, payload *mcpInputs)
 		MCPServerID:   payload.mcpServerID,
 		PrincipalURNs: nil,
 	}
-	if !payload.toolsetID.Valid || !payload.authenticated || payload.userID == "" {
+	if !payload.toolsetID.Valid || !payload.authenticated || payload.userID == "" || payload.apiKeyID != "" {
 		return scope, nil
 	}
 

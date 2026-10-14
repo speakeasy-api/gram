@@ -394,6 +394,52 @@ func TestServePublic_Skills_AnonymousCallerIsServedNothing(t *testing.T) {
 	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
 }
 
+func TestServePublic_Skills_APIKeyCallerIsServedNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newSkillsFixture(t, ctx, ti)
+	// Assigned to everyone: the plugin would reach any caller whose
+	// principals were resolved at all.
+	servedSkill(t, ctx, ti, f, "keyed-out", urn.PrincipalWildcard)
+	uri := mcpskills.SkillURI("keyed-out")
+
+	// A project API key created by the test user. The key authenticates and
+	// carries its creator's user id, but it is not that person.
+	apiKey := ti.createTestAPIKey(ctx, t)
+	keyed := t.Context()
+
+	w, err := servePublicHTTP(t, keyed, ti, f.mcpSlug, makeInitializeBody(), apiKey, nil)
+	require.NoError(t, err)
+	requireSkillsCapability(t, requireRPCResult(t, w)["capabilities"])
+
+	w, err = servePublicHTTP(t, keyed, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), apiKey, nil)
+	require.NoError(t, err)
+	require.JSONEq(t, `[]`, string(requireRPCResult(t, w)["skills"]), "an API key is not served its creator's assignments")
+
+	w, err = servePublicHTTP(t, keyed, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsGet, map[string]any{"uri": uri}), apiKey, nil)
+	require.NoError(t, err)
+	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
+
+	w, err = servePublicHTTP(t, keyed, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodResourcesRead, map[string]any{"uri": uri}), apiKey, nil)
+	require.NoError(t, err)
+	requireRPCErrorCode(t, w, oops.MCPCodeInvalidParams)
+
+	observations, err := mcpskillsrepo.New(ti.conn).ListMCPSkillObservations(ctx, mcpskillsrepo.ListMCPSkillObservationsParams{
+		ProjectID: f.projectID, Provider: mcpskills.ObservationProvider,
+	})
+	require.NoError(t, err)
+	require.Empty(t, observations, "nothing is recorded as the key creator's activation")
+
+	// The same skill is served to the user whose session the key was made
+	// from, so the exclusion is about the credential, not the fixture.
+	w, err = servePublicHTTP(t, ctx, ti, f.mcpSlug, makeMetaRPCBody(t, mcpversions.MethodSkillsList, map[string]any{}), "", nil)
+	require.NoError(t, err)
+	var skills []wireSkill
+	require.NoError(t, json.Unmarshal(requireRPCResult(t, w)["skills"], &skills))
+	require.Len(t, skills, 1)
+}
+
 func TestServePublic_Skills_FlagOffAnswersMethodNotFound(t *testing.T) {
 	t.Parallel()
 

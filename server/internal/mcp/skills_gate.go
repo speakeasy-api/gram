@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -27,24 +28,38 @@ func (s *Service) skillsOverMCPEnabled(ctx context.Context, payload *mcpInputs) 
 // flag for the organization that owns a served toolset. The flag is targeted
 // by organization: the distinct id is the organization id and the PostHog
 // group is its slug, so the slug is loaded for the group and a lookup failure
-// degrades to id-only evaluation. Without a flag provider, or when the
-// provider fails, the extension stays off.
+// degrades to id-only evaluation.
 func (s *Service) skillsOverMCPEnabledForOrganization(ctx context.Context, organizationID string) bool {
 	if s.features == nil || organizationID == "" {
 		return false
 	}
 
-	var groups map[string]string
+	var slug string
 	org, err := s.orgsRepo.GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve organization slug for skills-over-mcp flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 	} else {
-		groups = feature.OrgProjectGroups(org.Slug, "")
+		slug = org.Slug
 	}
 
-	on, err := s.features.IsFlagEnabled(ctx, feature.FlagSkillsOverMCP, organizationID, groups)
+	return evaluateSkillsOverMCPFlag(ctx, s.logger, s.features, organizationID, slug)
+}
+
+// evaluateSkillsOverMCPFlag decides the flag from the provider's locally
+// cached definitions only. The decision sits on every hosted initialize and
+// server/discover, so it must never wait on a remote flag service: the local
+// path answers from the definitions the SDK polls in the background and
+// fails closed (off) when they are unavailable or inconclusive, and a
+// provider without local evaluation configured keeps the extension off
+// everywhere. An empty slug evaluates by organization id alone.
+func evaluateSkillsOverMCPFlag(ctx context.Context, logger *slog.Logger, features feature.Provider, organizationID, organizationSlug string) bool {
+	if features == nil || organizationID == "" {
+		return false
+	}
+
+	on, err := features.IsFlagEnabledLocal(ctx, feature.FlagSkillsOverMCP, organizationID, feature.OrgProjectGroups(organizationSlug, ""), nil)
 	if err != nil {
-		s.logger.WarnContext(ctx, "skills-over-mcp flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		logger.WarnContext(ctx, "skills-over-mcp flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 		return false
 	}
 	return on
