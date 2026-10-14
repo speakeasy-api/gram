@@ -736,7 +736,14 @@
                 </select>
               </dd>
             </div>
-            {{end}} {{if .ShowDiscoveryMode}}
+            {{end}}
+            {{if .GatewayDefaultMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Gateway default</dt>
+              <dd class="mt-1 ml-0 text-sm text-muted-foreground">{{.GatewayDefaultMode}}. Connections without an override follow this setting.</dd>
+            </div>
+            {{end}}
+            {{if .ShowDiscoveryMode}}
             <div data-agent-self-only>
               <dt class="text-eyebrow">Tool discovery</dt>
               <dd class="mt-1 ml-0">
@@ -750,6 +757,7 @@
                   <option value="">Use gateway default</option>
                   <option value="progressive" {{if eq .PrefillDiscoveryMode "progressive"}}selected{{end}}>Progressive</option>
                   <option value="direct" {{if eq .PrefillDiscoveryMode "direct"}}selected{{end}}>Direct</option>
+ {{if .ShowCodeMode}}<option value="code_mode"{{if eq .PrefillDiscoveryMode "code_mode"}} selected{{end}}>Code Mode</option>{{end}}
                 </select>
                 <p
                   id="discovery-mode-help"
@@ -757,7 +765,7 @@
                 >
                   Progressive discovers tools as needed. Direct lists every
                   available tool. Use Direct if your client cannot discover
-                  tools progressively.
+                  tools progressively. {{if .ShowCodeMode}}Code exposes one execute tool to discover and call tools using Python.{{end}}
                 </p>
               </dd>
             </div>

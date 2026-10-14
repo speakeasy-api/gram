@@ -5,6 +5,10 @@ type Flag string
 const (
 	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
 	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
+	// FlagGatewayCodeMode gates new Python discovery selections. Evaluated server-side,
+	// targeted by organization and project group keys, and fails closed. Remove at GA.
+	// Existing code-mode settings and sessions are deliberately not gated.
+	FlagGatewayCodeMode Flag = "gateway-code-mode"
 
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
@@ -209,6 +213,7 @@ const (
 // to VariantAssistantToolsLegacy, which is the pre-rollout behaviour, so a
 // PostHog outage can never strip the managed assistant's tools.
 const (
+
 	// VariantAssistantToolsLegacy serves the managed assistant the
 	// "managed-assistant" platform toolset (logs, chats, users, risk,
 	// deployments, skills, plugins, docs, changelog).
@@ -236,6 +241,7 @@ func AssistantToolsVariant(variant Variant) Variant {
 // pre-rollout behaviour, so a PostHog outage never changes which engine
 // enforces a policy.
 const (
+
 	// VariantRiskLLMOff runs the legacy engines only (gitleaks, Presidio,
 	// prompt-injection, destructive-tool, CLI-destructive).
 	VariantRiskLLMOff Variant = "off"

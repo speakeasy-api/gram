@@ -357,6 +357,9 @@ func (c *memberToolResult) InterceptToolsCallResponse(_ context.Context, call *p
 // callMemberTool lets the SDK validate the response and correlate the call,
 // then returns the accepted raw result without a lossy typed round trip.
 func callMemberTool(ctx context.Context, session *mcp.ClientSession, params *mcp.CallToolParams) (json.RawMessage, error) {
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		invocation.dispatched = true
+	}
 	capture := &memberToolResult{mu: sync.Mutex{}, raw: nil}
 	_, err := session.CallTool(context.WithValue(ctx, memberToolResultKey{}, capture), params)
 	if err != nil {

@@ -63,20 +63,42 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 }
 
 // Shutdown stops admitting automatic verifications and the keepalive
-// re-check, drains the probes in flight, then closes the tool call logger.
-// Run it after the HTTP servers have drained and before the database and
-// cache close: the probes detach from their requests and still write
-// verdicts and close upstream sessions.
+// re-check, drains the probes in flight and releases code runtimes, then
+// closes the tool call logger. Run it after the HTTP servers have drained and
+// before the database and cache close: the probes detach from their requests
+// and still write verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
-	// Close both admission gates before waiting for either group to drain.
+	// Close both admission gates before waiting for any group to drain. The
+	// drains run concurrently and every failure is reported.
 	s.autoVerifications.closeAdmission()
-	var errs []error
-	if err := s.remoteSessionRecheck.shutdown(ctx); err != nil {
-		errs = append(errs, fmt.Errorf("drain remote session re-checks: %w", err))
+	drains := []func() error{
+		func() error {
+			if err := s.remoteSessionRecheck.shutdown(ctx); err != nil {
+				return fmt.Errorf("drain remote session re-checks: %w", err)
+			}
+			return nil
+		},
+		func() error {
+			if err := s.autoVerifications.shutdown(ctx); err != nil {
+				return fmt.Errorf("drain automatic verifications: %w", err)
+			}
+			return nil
+		},
 	}
-	if err := s.autoVerifications.shutdown(ctx); err != nil {
-		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
+	if runtime, ok := s.codeExecutor.(interface{ Shutdown(context.Context) error }); ok {
+		drains = append(drains, func() error {
+			if err := runtime.Shutdown(ctx); err != nil {
+				return fmt.Errorf("shutdown code runtime: %w", err)
+			}
+			return nil
+		})
 	}
+	errs := make([]error, len(drains))
+	var wg sync.WaitGroup
+	for i, drain := range drains {
+		wg.Go(func() { errs[i] = drain() })
+	}
+	wg.Wait()
 	s.toolCallLogger.Close()
 	return errors.Join(errs...)
 }

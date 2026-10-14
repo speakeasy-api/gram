@@ -2,11 +2,14 @@ package authz
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 type contextKey string
+
+type admissionBoundaryKey struct{}
 
 const (
 	grantsContextKey contextKey = "authz_grants"
@@ -34,6 +37,44 @@ func GrantsFromContext(ctx context.Context) ([]Grant, bool) {
 	return grants, ok
 }
 
+// RefreshContext reloads authorization for a new operation within a long-lived
+// request. Immutable credential constraints remain attached to the context.
+func (e *Engine) RefreshContext(ctx context.Context) (context.Context, error) {
+	ctx = context.WithValue(ctx, grantsContextKey, struct{}{})
+	ctx = context.WithValue(ctx, admittedPoliciesContextKey, struct{}{})
+	return e.PrepareContext(ctx)
+}
+
+// AdmissionBoundary retains only authorization policies for an admitted job.
+// A newly granted permission cannot expand the running job's authority.
+type AdmissionBoundary struct {
+	policies grantAuthorization
+	valid    bool
+}
+
+// CaptureAdmissionBoundary captures prepared policies without retaining a request.
+func (e *Engine) CaptureAdmissionBoundary(ctx context.Context) (AdmissionBoundary, error) {
+	policies, valid := grantAuthorizationFromContext(ctx)
+	if !valid {
+		enforce, err := e.ShouldEnforce(ctx)
+		if err != nil {
+			return AdmissionBoundary{policies: policies, valid: false}, fmt.Errorf("check admission enforcement: %w", err)
+		}
+		if enforce {
+			return AdmissionBoundary{policies: policies, valid: false}, fmt.Errorf("admission requires prepared authorization")
+		}
+	}
+	return AdmissionBoundary{policies: policies, valid: valid}, nil
+}
+
+// Apply intersects all later grant refreshes with the original admission.
+func (b AdmissionBoundary) Apply(ctx context.Context) context.Context {
+	if !b.valid {
+		return ctx
+	}
+	return context.WithValue(ctx, admissionBoundaryKey{}, b.policies)
+}
+
 func admittedPoliciesToContext(ctx context.Context, sets ...[]Grant) context.Context {
 	policies := grantAuthorization{policies: make([][]Grant, 0, len(sets))}
 	for _, set := range sets {
@@ -43,6 +84,20 @@ func admittedPoliciesToContext(ctx context.Context, sets ...[]Grant) context.Con
 }
 
 func grantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
+	current, ok := currentGrantAuthorizationFromContext(ctx)
+	if !ok {
+		return current, false
+	}
+	if boundary, bounded := ctx.Value(admissionBoundaryKey{}).(grantAuthorization); bounded {
+		policies := make([][]Grant, 0, len(current.policies)+len(boundary.policies))
+		policies = append(policies, current.policies...)
+		policies = append(policies, boundary.policies...)
+		return grantAuthorization{policies: policies}, true
+	}
+	return current, true
+}
+
+func currentGrantAuthorizationFromContext(ctx context.Context) (grantAuthorization, bool) {
 	if policies, ok := ctx.Value(admittedPoliciesContextKey).(grantAuthorization); ok {
 		return policies, true
 	}

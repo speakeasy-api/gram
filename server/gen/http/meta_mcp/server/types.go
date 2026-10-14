@@ -97,6 +97,10 @@ type CreateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this project can select Code Mode: discovery settings, rollout, and
+	// runtime must be available. Existing connections retain their mode when
+	// rollout is disabled.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
@@ -130,6 +134,10 @@ type GetMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this project can select Code Mode: discovery settings, rollout, and
+	// runtime must be available. Existing connections retain their mode when
+	// rollout is disabled.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
@@ -169,6 +177,10 @@ type UpdateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this project can select Code Mode: discovery settings, rollout, and
+	// runtime must be available. Existing connections retain their mode when
+	// rollout is disabled.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
@@ -1912,6 +1924,10 @@ type MetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether this project can select Code Mode: discovery settings, rollout, and
+	// runtime must be available. Existing connections retain their mode when
+	// rollout is disabled.
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
@@ -1949,6 +1965,7 @@ func NewCreateMetaMcpServerResponseBody(res *types.MetaMcpServer) *CreateMetaMcp
 		Visibility:          string(res.Visibility),
 		NetworkAccessMode:   string(res.NetworkAccessMode),
 		Instructions:        res.Instructions,
+		CodeModeEnabled:     res.CodeModeEnabled,
 		DiscoveryMode:       res.DiscoveryMode,
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
@@ -1969,6 +1986,7 @@ func NewGetMetaMcpServerResponseBody(res *types.MetaMcpServer) *GetMetaMcpServer
 		Visibility:          string(res.Visibility),
 		NetworkAccessMode:   string(res.NetworkAccessMode),
 		Instructions:        res.Instructions,
+		CodeModeEnabled:     res.CodeModeEnabled,
 		DiscoveryMode:       res.DiscoveryMode,
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
@@ -2008,6 +2026,7 @@ func NewUpdateMetaMcpServerResponseBody(res *types.MetaMcpServer) *UpdateMetaMcp
 		Visibility:          string(res.Visibility),
 		NetworkAccessMode:   string(res.NetworkAccessMode),
 		Instructions:        res.Instructions,
+		CodeModeEnabled:     res.CodeModeEnabled,
 		DiscoveryMode:       res.DiscoveryMode,
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
@@ -3587,8 +3606,8 @@ func ValidateUpdateMetaMcpServerRequestBody(body *UpdateMetaMcpServerRequestBody
 		}
 	}
 	if body.DiscoveryMode != nil {
-		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
+		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct" || *body.DiscoveryMode == "code_mode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct", "code_mode"}))
 		}
 	}
 	return

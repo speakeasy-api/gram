@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -49,6 +50,7 @@ import (
 
 type Service struct {
 	tracerProvider           trace.TracerProvider
+	codeModeSelection        codemode.SelectionGate
 	tracer                   trace.Tracer
 	logger                   *slog.Logger
 	db                       *pgxpool.Pool
@@ -74,11 +76,13 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	networkAccessEligibility networkaccess.EligibilityChecker,
+	codeModeSelection codemode.SelectionGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
 		tracerProvider:           tracerProvider,
+		codeModeSelection:        codeModeSelection,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
 		logger:                   logger,
 		db:                       db,
@@ -212,7 +216,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildMetaMcpServerView(created), nil
+	return s.withGatewayCapabilities(ctx, mv.BuildMetaMcpServerView(created)), nil
 }
 
 func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -242,7 +246,7 @@ func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpS
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildMetaMcpServerView(row), nil
+	return s.withGatewayCapabilities(ctx, mv.BuildMetaMcpServerView(row)), nil
 }
 
 func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaMcpServersPayload) (*gen.ListMetaMcpServersResult, error) {
@@ -263,7 +267,14 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp servers").LogError(ctx, s.logger)
 	}
 
-	return &gen.ListMetaMcpServersResult{MetaMcpServers: mv.BuildMetaMcpServerListView(rows)}, nil
+	views := mv.BuildMetaMcpServerListView(rows)
+	if len(views) > 0 {
+		s.withGatewayCapabilities(ctx, views[0])
+		for _, view := range views[1:] {
+			view.CodeModeEnabled = views[0].CodeModeEnabled
+		}
+	}
+	return &gen.ListMetaMcpServersResult{MetaMcpServers: views}, nil
 }
 
 func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -308,6 +319,13 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, logger)
 	}
+	preflightDiscovery := gatewaymcp.ResolveDiscoveryMode(unlocked.DiscoveryMode.String)
+	// Evaluate external gates before taking project/row locks or a transaction connection.
+	if payload.DiscoveryMode != nil && *payload.DiscoveryMode != string(preflightDiscovery) &&
+		*payload.DiscoveryMode == string(gatewaymcp.DiscoveryModeCode) && !s.codeModeSelection.Allows(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID) {
+		return nil, oops.E(oops.CodeForbidden, nil, "gateway code mode is not available")
+	}
+
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
 	if err != nil {
 		if payload.NetworkAccessMode == nil {
@@ -343,6 +361,11 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 			return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
+	}
+
+	// Reject a changed baseline instead of using a gate evaluated for another mode.
+	if payload.DiscoveryMode != nil && gatewaymcp.ResolveDiscoveryMode(existing.DiscoveryMode.String) != preflightDiscovery {
+		return nil, oops.E(oops.CodeConflict, nil, "gateway discovery mode changed concurrently; retry the update")
 	}
 
 	// Defensive issuer wiring, mirroring create: an omitted issuer preserves
@@ -467,7 +490,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
-	return afterView, nil
+	return s.withGatewayCapabilities(ctx, afterView), nil
 }
 
 // UpdateMetaMCPServerNetworkAccessModeInTransaction changes only an existing
