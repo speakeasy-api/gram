@@ -383,6 +383,10 @@ func (s *Service) executeProxiedMemberTool(
 			Version: clientIdentity.Version,
 		})
 	}
+	memberSelection, err := gate.memberToolSelection(member)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "scope meta MCP member tool selection").LogError(ctx, logger)
+	}
 	// Only a tool call may acquire a downstream token by identity chaining.
 	callGate := *gate
 	callGate.chainUpstream = s.metaMemberChainer(gate, member)
@@ -405,6 +409,14 @@ func (s *Service) executeProxiedMemberTool(
 		return marshalMetaToolError(ctx, logger, req.ID, memberClientFailure(ctx, logger, rt, dial, member, err).Error())
 	}
 	defer o11y.LogDefer(ctx, logger, "close member session", session.Close)
+	// Live grants authorize proxied calls by the calling session's own
+	// listing witness, and a stateful member opens a new session per
+	// connection, so list within this session first.
+	if memberSelection != nil && !memberSelection.AllowsName(toolName) && len(memberSelection.LiveAnnotations()) > 0 {
+		if _, err := listMemberSessionTools(ctx, logger, session, rt, dial, member); err != nil {
+			return marshalMetaToolError(ctx, logger, req.ID, err.Error())
+		}
+	}
 	upstreamResult, err := callMemberTool(ctx, session, &mcp.CallToolParams{
 		Name: toolName, Arguments: arguments, Meta: nil, InputResponses: nil, RequestState: "",
 	})
@@ -458,6 +470,13 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 	}
 	defer o11y.LogDefer(ctx, logger, "close member session", session.Close)
 
+	return listMemberSessionTools(ctx, logger, session, rt, dial, member)
+}
+
+// listMemberSessionTools pages tools/list within one member session, so the
+// proxy's interceptors filter each page and record the session's listing
+// witness. Pagination is bounded by maxProxiedListPages.
+func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *mcp.ClientSession, rt *memberRoundTripper, dial memberDial, member metaMember) (*memberCatalog, error) {
 	entries := []*toolListEntry{}
 	byName := map[string]*toolListEntry{}
 	incomplete := false
