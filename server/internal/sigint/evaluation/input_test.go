@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -15,7 +14,6 @@ import (
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
-	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -51,15 +49,13 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	deps.On("IsFeatureEnabled", mock.Anything, in.event.OrganizationID, productfeatures.FeatureSignalsIntelligence).Return(true, nil).Times(3)
 	deps.On("Load", mock.Anything, in.event.OrganizationID, project, "mcp.tool_call").Return(partialSensors()[1:], nil).Twice()
 	deps.On("Load", mock.Anything, in.event.OrganizationID, project, "custom.audit_event").Return(partialSensors()[1:], nil).Once()
-	c := classifiertest.NewMock(t)
-	c.On("Classify", mock.Anything, mock.MatchedBy(func(req *classifier.Request) bool {
-		return reflect.DeepEqual(req.Input, data) && len(req.Questions) == 1
-	})).Return(partialResult(false)).Times(3)
+	c, requests := newRecordingClassifier(t)
 	var pub capturePublisher
 
 	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, &pub, c)
 	require.NoError(t, err)
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
+	requireGoldenJSON(t, "requests/independent-event", requests.snapshot(t))
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
 	require.Len(t, pub.readings, 2)
 

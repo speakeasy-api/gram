@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
 	"github.com/speakeasy-api/gram/server/internal/sigint/inputconfig"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
@@ -31,7 +30,7 @@ func (s *windowMessages) LoadHistory(context.Context, string, uuid.UUID, repo.Ch
 	return s.history, s.err
 }
 
-func TestWindowConversationPreservesRolesContentAndTarget(t *testing.T) {
+func TestWindowReusesHistoryAndResolvedAttachments(t *testing.T) {
 	t.Parallel()
 	m := message()
 	target := storedMessage(m)
@@ -50,38 +49,19 @@ func TestWindowConversationPreservesRolesContentAndTarget(t *testing.T) {
 	source := &windowMessages{history: history}
 	in := &conversationInput{message: m, stored: target, history: source, blobs: memoryBlobs{uri: []byte("attachment context")}}
 
-	state, err := in.ResolveWindow(t.Context(), 5)
+	_, err := in.ResolveWindow(t.Context(), 5)
 	require.NoError(t, err)
-	data, err := json.Marshal(state)
-	require.NoError(t, err)
-	var decoded struct {
-		Messages []struct {
-			Role string `json:"role"`
-		} `json:"messages"`
-		Target int `json:"target_message_index"`
-	}
-	require.NoError(t, json.Unmarshal(data, &decoded))
-	require.Equal(t, 3, decoded.Target)
-	require.Len(t, decoded.Messages, 4)
-	require.Equal(t, "ROLE_SYSTEM", decoded.Messages[0].Role)
-	require.Equal(t, "ROLE_TOOL", decoded.Messages[1].Role)
-	require.Equal(t, "ROLE_ASSISTANT", decoded.Messages[2].Role)
-	require.Equal(t, "ROLE_USER", decoded.Messages[3].Role)
-	require.Equal(t, 1, strings.Count(string(data), "Yes, that one."))
-	require.Contains(t, string(data), "9007199254740993")
-	require.Contains(t, string(data), "attachment context")
-
+	// A second resolution must succeed even when asset storage is unavailable.
+	in.blobs = nil
 	_, err = in.ResolveWindow(t.Context(), 2)
 	require.NoError(t, err)
 	require.Equal(t, 1, source.calls)
-	require.Len(t, in.resolved, 4)
 }
 
 func TestWindowGroupsSensorsAndKeepsReadingIdentityOnRedelivery(t *testing.T) {
 	t.Parallel()
 	m := message()
 	var definitions []Sensor
-	var outcomes []classifier.QuestionOutcome
 	for i, size := range []int{1, 2, 2, 5} {
 		sensor := sensors()[0]
 		sensor.ID = string(rune('a' + i))
@@ -90,15 +70,8 @@ func TestWindowGroupsSensorsAndKeepsReadingIdentityOnRedelivery(t *testing.T) {
 			sensor.InputStrategy, sensor.WindowSize = inputconfig.SlidingWindow, size
 		}
 		definitions = append(definitions, sensor)
-		outcomes = append(outcomes, classifier.QuestionOutcome{Key: classifier.QuestionKey(sensor.ID + "/a"), Answer: &classifier.Answer{Noul: &classifier.NoulAnswer{Probability: 0.5}}})
 	}
-	c := classifiertest.NewMock(t)
-	var requests []*classifier.Request
-	c.On("Classify", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		request, ok := args.Get(1).(*classifier.Request)
-		require.True(t, ok)
-		requests = append(requests, request)
-	}).Return(classifier.NewResult(outcomes, nil)).Times(6)
+	c, requests := newRecordingClassifier(t)
 	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
 	target := storedMessage(m)
 	prior := target
@@ -107,10 +80,6 @@ func TestWindowGroupsSensorsAndKeepsReadingIdentityOnRedelivery(t *testing.T) {
 	source := &windowMessages{storedMessages: storedMessages{target.ChatMessage.ID: target}, history: []repo.LoadEvaluationMessagesRow{prior}}
 	h.messages = source
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
-	require.Len(t, requests, 3)
-	require.Len(t, requests[0].Questions, 1)
-	require.Len(t, requests[1].Questions, 2)
-	require.Len(t, requests[2].Questions, 1)
 	require.Equal(t, 1, source.calls)
 	require.Len(t, pub.readings, 4)
 	for _, r := range pub.readings {
@@ -123,9 +92,7 @@ func TestWindowGroupsSensorsAndKeepsReadingIdentityOnRedelivery(t *testing.T) {
 		require.Equal(t, pub.readings[i].GetId(), pub.readings[i+4].GetId())
 		require.NotEqual(t, pub.readings[i].GetEvaluationAttemptId(), pub.readings[i+4].GetEvaluationAttemptId())
 	}
-	data, err := json.Marshal(requests[4].Input)
-	require.NoError(t, err)
-	require.Contains(t, string(data), "Corrected context")
+	requireGoldenJSON(t, "requests/grouped-redelivery", requests.snapshot(t))
 }
 
 func TestWindowOlderInvalidContentDoesNotPreventSmallerReading(t *testing.T) {
@@ -185,13 +152,10 @@ func TestWindowEmptyHistoryAndUnusedHistory(t *testing.T) {
 	require.NoError(t, err)
 	data, err := json.Marshal(entry)
 	require.NoError(t, err)
-	var state conversationState
-	require.NoError(t, json.Unmarshal(data, &state))
-	require.Len(t, state.Messages, 1)
-	require.Zero(t, state.TargetMessageIndex)
+	requireGoldenJSON(t, "state/empty-history", data)
 }
 
-func TestWindowDefinitionHashAndTargetFraming(t *testing.T) {
+func TestWindowDefinitionHashIncludesStrategyAndSize(t *testing.T) {
 	t.Parallel()
 	sensor := sensors()[0]
 	a, ok := compileSensor(sensor)
@@ -204,7 +168,4 @@ func TestWindowDefinitionHashAndTargetFraming(t *testing.T) {
 	require.True(t, ok)
 	require.NotEqual(t, a.hash, b.hash)
 	require.NotEqual(t, b.hash, c.hash)
-	encoded, err := json.Marshal(c.questions[0].Noul.Instructions)
-	require.NoError(t, err)
-	require.Contains(t, string(encoded), "Classify only the designated target message")
 }

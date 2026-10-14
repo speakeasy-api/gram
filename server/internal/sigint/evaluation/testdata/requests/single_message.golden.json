@@ -1,0 +1,44 @@
+[
+  {
+    "model": "jev-latest",
+    "state": {
+      "role": "ROLE_ASSISTANT",
+      "content": {
+        "text": "I will check whether the payment retry succeeded.",
+        "reference": 9007199254740993
+      },
+      "parts": [
+        {
+          "tool_call": {
+            "id": "call-check",
+            "name": "check_payment",
+            "arguments": "{\"invoice\":\"example-invoice\"}"
+          }
+        },
+        { "text": "Payment attempts are failing for the entire team." }
+      ]
+    },
+    "questions": {
+      "0": {
+        "type": "noul",
+        "instructions": "Identify the services mentioned by the target.",
+        "criteria": { "true": "Billing", "false": "" }
+      },
+      "1": {
+        "type": "noul",
+        "instructions": "Identify the services mentioned by the target.",
+        "criteria": { "true": "Authentication", "false": "" }
+      },
+      "2": {
+        "type": "choice",
+        "instructions": "Choose the main service discussed by the target.",
+        "criteria": { "0": "Billing", "1": "Authentication" }
+      },
+      "3": {
+        "type": "score",
+        "instructions": "Rate the target's customer impact from low to high.",
+        "criteria": ["Low impact", "High impact"]
+      }
+    }
+  }
+]

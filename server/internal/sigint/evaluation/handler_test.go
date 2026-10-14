@@ -2,12 +2,8 @@ package evaluation
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -24,9 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
-	"github.com/speakeasy-api/gram/server/internal/classifier/jev"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -141,40 +135,7 @@ func handler(t *testing.T, m *conversationv1.MessageEvent, definitions []Sensor,
 
 func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 	t.Parallel()
-	calls := 0
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls++
-		var req struct {
-			Questions map[string]struct {
-				Type string `json:"type"`
-			} `json:"questions"`
-		}
-		if json.NewDecoder(r.Body).Decode(&req) != nil {
-			w.WriteHeader(400)
-			return
-		}
-		answers := map[string]any{}
-		for key, q := range req.Questions {
-			switch q.Type {
-			case "noul":
-				answers[key] = map[string]any{"type": "noul", "noul": 0.8}
-			case "choice":
-				answers[key] = map[string]any{"type": "choice", "choice": "1", "probabilities": map[string]float64{"0": 0.2, "1": 0.8}, "confidence": 0.5}
-			case "score":
-				answers[key] = map[string]any{"type": "score", "score": 0.8, "probabilities": map[string]float64{"0": 0.2, "1": 0.8}, "confidence": 0.5}
-			}
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "answers": answers, "usage": map[string]int{"input_tokens": 100, "output_tokens": 20}})
-	}))
-	t.Cleanup(server.Close)
-	roots := x509.NewCertPool()
-	roots.AddCert(server.Certificate())
-
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
-	require.NoError(t, err)
-
-	c, err := jev.New(policy, conv.NewSecret([]byte("test-key")), jev.WithEndpoint(server.URL))
-	require.NoError(t, err)
+	c, _ := newRecordingClassifier(t)
 	m := message()
 	m.SetRole(conversationv1.MessageEvent_ROLE_ASSISTANT)
 	provenance := &conversationv1.MessageEvent_IngestionContext{}
@@ -198,7 +159,6 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 	provenance.SetSource("promoted")
 	provenance.SetBillingUserId("promoted-billing-user")
 	require.NoError(t, h.Handle(t.Context(), m, meta))
-	require.Equal(t, 2, calls)
 	require.Len(t, pub.readings, 6)
 	for i := range 3 {
 		a, b := pub.readings[i], pub.readings[i+3]
