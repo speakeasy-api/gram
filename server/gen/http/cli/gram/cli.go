@@ -51,6 +51,7 @@ import (
 	identityproviderconnectionsc "github.com/speakeasy-api/gram/server/gen/http/identity_provider_connections/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
+	internalsessionissuersc "github.com/speakeasy-api/gram/server/gen/http/internal_session_issuers/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
 	killswitchesc "github.com/speakeasy-api/gram/server/gen/http/killswitches/client"
@@ -150,6 +151,7 @@ func UsageCommands() []string {
 		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"instances get-instance",
 		"integrations (get|list)",
+		"internal-session-issuers (get|set-enabled|rotate)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|rotate-key|list-keys|revoke-key|verify-key)",
 		"launcher judge",
@@ -1619,6 +1621,19 @@ func ParseEndpoint(
 		integrationsListKeywordsFlag         = integrationsListFlags.String("keywords", "", "")
 		integrationsListSessionTokenFlag     = integrationsListFlags.String("session-token", "", "")
 		integrationsListProjectSlugInputFlag = integrationsListFlags.String("project-slug-input", "", "")
+
+		internalSessionIssuersFlags = flag.NewFlagSet("internal-session-issuers", flag.ContinueOnError)
+
+		internalSessionIssuersGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
+		internalSessionIssuersGetSessionTokenFlag = internalSessionIssuersGetFlags.String("session-token", "", "")
+
+		internalSessionIssuersSetEnabledFlags            = flag.NewFlagSet("set-enabled", flag.ExitOnError)
+		internalSessionIssuersSetEnabledBodyFlag         = internalSessionIssuersSetEnabledFlags.String("body", "REQUIRED", "")
+		internalSessionIssuersSetEnabledSessionTokenFlag = internalSessionIssuersSetEnabledFlags.String("session-token", "", "")
+
+		internalSessionIssuersRotateFlags            = flag.NewFlagSet("rotate", flag.ExitOnError)
+		internalSessionIssuersRotateBodyFlag         = internalSessionIssuersRotateFlags.String("body", "REQUIRED", "")
+		internalSessionIssuersRotateSessionTokenFlag = internalSessionIssuersRotateFlags.String("session-token", "", "")
 
 		jsonWebKeySetsFlags = flag.NewFlagSet("json-web-key-sets", flag.ContinueOnError)
 
@@ -5322,6 +5337,11 @@ func ParseEndpoint(
 	integrationsGetFlags.Usage = integrationsGetUsage
 	integrationsListFlags.Usage = integrationsListUsage
 
+	internalSessionIssuersFlags.Usage = internalSessionIssuersUsage
+	internalSessionIssuersGetFlags.Usage = internalSessionIssuersGetUsage
+	internalSessionIssuersSetEnabledFlags.Usage = internalSessionIssuersSetEnabledUsage
+	internalSessionIssuersRotateFlags.Usage = internalSessionIssuersRotateUsage
+
 	jsonWebKeySetsFlags.Usage = jsonWebKeySetsUsage
 	jsonWebKeySetsCreateSetFlags.Usage = jsonWebKeySetsCreateSetUsage
 	jsonWebKeySetsUpdateSetFlags.Usage = jsonWebKeySetsUpdateSetUsage
@@ -6137,6 +6157,8 @@ func ParseEndpoint(
 			svcf = instancesFlags
 		case "integrations":
 			svcf = integrationsFlags
+		case "internal-session-issuers":
+			svcf = internalSessionIssuersFlags
 		case "json-web-key-sets":
 			svcf = jsonWebKeySetsFlags
 		case "keys":
@@ -7182,6 +7204,19 @@ func ParseEndpoint(
 
 			case "list":
 				epf = integrationsListFlags
+
+			}
+
+		case "internal-session-issuers":
+			switch epn {
+			case "get":
+				epf = internalSessionIssuersGetFlags
+
+			case "set-enabled":
+				epf = internalSessionIssuersSetEnabledFlags
+
+			case "rotate":
+				epf = internalSessionIssuersRotateFlags
 
 			}
 
@@ -10210,6 +10245,19 @@ func ParseEndpoint(
 			case "list":
 				endpoint = c.List()
 				data, err = integrationsc.BuildListPayload(*integrationsListKeywordsFlag, *integrationsListSessionTokenFlag, *integrationsListProjectSlugInputFlag)
+			}
+		case "internal-session-issuers":
+			c := internalsessionissuersc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get":
+				endpoint = c.Get()
+				data, err = internalsessionissuersc.BuildGetPayload(*internalSessionIssuersGetSessionTokenFlag)
+			case "set-enabled":
+				endpoint = c.SetEnabled()
+				data, err = internalsessionissuersc.BuildSetEnabledPayload(*internalSessionIssuersSetEnabledBodyFlag, *internalSessionIssuersSetEnabledSessionTokenFlag)
+			case "rotate":
+				endpoint = c.Rotate()
+				data, err = internalsessionissuersc.BuildRotatePayload(*internalSessionIssuersRotateBodyFlag, *internalSessionIssuersRotateSessionTokenFlag)
 			}
 		case "json-web-key-sets":
 			c := jsonwebkeysetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18641,6 +18689,77 @@ func integrationsListUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "integrations list --keywords '[\n      \"aaa\",\n      \"aaa\",\n      \"aaa\"\n   ]' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// internalSessionIssuersUsage displays the usage of the
+// internal-session-issuers command and its subcommands.
+func internalSessionIssuersUsage() {
+	fmt.Fprintln(os.Stderr, `Manage the organization's internal session issuer: the permanent issuer URI Speakeasy signs enterprise-managed authorization assertions with, and its signing keys.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] internal-session-issuers COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get: Read the organization's internal session issuer: its state, the issuer URI to register with supported services and its published keys. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    set-enabled: Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin; enabling also needs a verified email domain and the issuer rollout, while disabling never does.`)
+	fmt.Fprintln(os.Stderr, `    rotate: Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. The hourly sweep also activates a ready key on its own while the issuer is enabled and not paused, so a later second call may find the rotation already done and change nothing; a paused issuer can still be activated with the second call. With compromised set, every current key is revoked and withdrawn from the key set first, leaving the issuer keyless; the revoked keys' signing material is then disabled and, while the issuer is rolled out and the organization has a verified email domain, a fresh key activated. If either later step fails the issuer stays keyless or reports kms_cleanup_pending, and repeating the call retries it. Repeats naming a key that a compromised rotation already replaced change nothing; naming a key the sweep revoked after a routine rotation still contains its successor. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and its revocation is never rate limited.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s internal-session-issuers COMMAND --help\n", os.Args[0])
+}
+func internalSessionIssuersGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] internal-session-issuers get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the organization's internal session issuer: its state, the issuer URI to register with supported services and its published keys. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "internal-session-issuers get --session-token \"abc123\"")
+}
+
+func internalSessionIssuersSetEnabledUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] internal-session-issuers set-enabled", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin; enabling also needs a verified email domain and the issuer rollout, while disabling never does.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "internal-session-issuers set-enabled --body '{\n      \"enabled\": false\n   }' --session-token \"abc123\"")
+}
+
+func internalSessionIssuersRotateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] internal-session-issuers rotate", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. The hourly sweep also activates a ready key on its own while the issuer is enabled and not paused, so a later second call may find the rotation already done and change nothing; a paused issuer can still be activated with the second call. With compromised set, every current key is revoked and withdrawn from the key set first, leaving the issuer keyless; the revoked keys' signing material is then disabled and, while the issuer is rolled out and the organization has a verified email domain, a fresh key activated. If either later step fails the issuer stays keyless or reports kms_cleanup_pending, and repeating the call retries it. Repeats naming a key that a compromised rotation already replaced change nothing; naming a key the sweep revoked after a routine rotation still contains its successor. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and its revocation is never rate limited.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "internal-session-issuers rotate --body '{\n      \"active_kid\": \"abc123\",\n      \"compromised\": false\n   }' --session-token \"abc123\"")
 }
 
 // jsonWebKeySetsUsage displays the usage of the json-web-key-sets command and
