@@ -84,7 +84,7 @@ describe("roleDirectorySources", () => {
     const sources = roleDirectorySources(
       {
         ...data,
-        groups: [],
+        groups: [{ id: "g-new", name: "Old Team", memberCount: 3 }],
         mappings: [
           mapping({
             id: "m-old",

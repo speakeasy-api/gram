@@ -262,7 +262,7 @@ func accessRoleDirectorySource(row platformrepo.ListPlatformMCPRoleDirectorySour
 		// The mapping outlives a group deleted from the directory; it then
 		// matches nobody and has no name to show.
 		source.Group = conv.FromPGTextOrEmpty[string](row.DirectoryGroupName)
-		source.Removed = source.Group == ""
+		source.Removed = !row.DirectoryGroupName.Valid
 		return source
 	}
 	source.AttributeKey = conv.FromPGTextOrEmpty[string](row.AttributeKey)
