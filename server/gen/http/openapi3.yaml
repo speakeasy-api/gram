@@ -86923,7 +86923,7 @@ components:
                     description: Display name for the server. Defaults to the backing server name when omitted.
                 mcp_server_id:
                     type: string
-                    description: Speakeasy MCP server ID. Provide exactly one backend ID.
+                    description: Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.
                     format: uuid
                 meta_mcp_server_id:
                     type: string
@@ -86944,7 +86944,7 @@ components:
                     format: int32
                 toolset_id:
                     type: string
-                    description: Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
+                    description: Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.
                     format: uuid
             required:
                 - plugin_id
@@ -103763,17 +103763,17 @@ components:
                     format: uuid
                 mcp_server_id:
                     type: string
-                    description: The MCP server associated with this install page metadata. Mutually exclusive with toolset_id.
+                    description: The MCP server associated with this install page metadata. Also set with toolset_id, to the same id, for a hosted MCP server with a live canonical MCP server.
                     format: uuid
                 toolset_id:
                     type: string
-                    description: The toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
+                    description: The toolset associated with this install page metadata. Also set with mcp_server_id, to the same id, for a hosted MCP server with a live canonical MCP server.
                     format: uuid
                 updated_at:
                     type: string
                     description: When the metadata entry was last updated
                     format: date-time
-            description: Metadata used to configure the MCP install page. Exactly one of toolset_id or mcp_server_id identifies which backend the metadata belongs to.
+            description: Metadata used to configure the MCP install page. toolset_id or mcp_server_id identifies which backend the metadata belongs to; a hosted MCP server with a live canonical MCP server carries both, set to the same id.
             required:
                 - id
                 - created_at
@@ -106695,11 +106695,11 @@ components:
                     format: uuid
                 mcp_server_id:
                     type: string
-                    description: Speakeasy MCP server ID. Exactly one backend ID is set.
+                    description: Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.
                     format: uuid
                 meta_mcp_server_id:
                     type: string
-                    description: MCP gateway ID. Exactly one backend ID is set.
+                    description: MCP gateway ID. When set, no other backend ID is set.
                     format: uuid
                 policy:
                     type: string
@@ -106713,7 +106713,7 @@ components:
                     format: int32
                 toolset_id:
                     type: string
-                    description: Speakeasy toolset ID. Exactly one backend ID is set.
+                    description: Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.
                     format: uuid
             required:
                 - id

@@ -116,13 +116,11 @@ func TestSetMcpMetadata_NewRowsKeepTheRequestedKey(t *testing.T) {
 	createCanonicalWrapper(t, ctx, ti, byServer)
 
 	slugRow := setBySlug(t, ctx, ti, bySlug, &gen.SetMcpMetadataPayload{Instructions: new("hello")})
-	require.Equal(t, bySlug.ID.String(), *slugRow.ToolsetID)
-	require.Nil(t, slugRow.McpServerID)
+	requireHostedIDs(t, ctx, ti, slugRow, bySlug.ID, false)
 
 	serverRow, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{McpServerID: new(byServer.ID.String())})
 	require.NoError(t, err)
-	require.Equal(t, byServer.ID.String(), *serverRow.McpServerID)
-	require.Nil(t, serverRow.ToolsetID)
+	requireHostedIDs(t, ctx, ti, serverRow, byServer.ID, true)
 }
 
 func TestSetMcpMetadata_ToolsetKeyedRowUpdatesInPlace(t *testing.T) {
@@ -165,8 +163,7 @@ func TestSetMcpMetadata_ToolsetKeyedRowUpdatesInPlace(t *testing.T) {
 		DefaultEnvironmentID: new(env.ID.String()),
 	})
 	require.Equal(t, original.ID, updated.ID)
-	require.Equal(t, toolset.ID.String(), *updated.ToolsetID)
-	require.Nil(t, updated.McpServerID)
+	requireHostedIDs(t, ctx, ti, updated, toolset.ID, false)
 	require.Len(t, updated.EnvironmentConfigs, 1)
 	require.Equal(t, original.EnvironmentConfigs[0].ID, updated.EnvironmentConfigs[0].ID)
 
@@ -215,7 +212,7 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 		got, err := ti.service.GetMcpMetadata(ctx, payload)
 		require.NoError(t, err)
 		require.Equal(t, original.ID, got.Metadata.ID)
-		require.Nil(t, got.Metadata.ToolsetID)
+		requireHostedIDs(t, ctx, ti, got.Metadata, toolset.ID, true)
 		require.Len(t, got.Metadata.EnvironmentConfigs, 1)
 		require.Equal(t, original.EnvironmentConfigs[0].ID, got.Metadata.EnvironmentConfigs[0].ID)
 	}
@@ -238,15 +235,14 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, original.ID, viaServer.ID)
-	require.Nil(t, viaServer.ToolsetID)
+	requireHostedIDs(t, ctx, ti, viaServer, toolset.ID, true)
 	require.Len(t, viaServer.EnvironmentConfigs, 1)
 	requireSingleMetadataRow(t, ctx, ti, toolset.ID)
 
 	// A toolset_slug write stays toolset-keyed so pods that read only toolset_id still see it.
 	viaSlug := setBySlug(t, ctx, ti, toolset, &gen.SetMcpMetadataPayload{Instructions: new("after")})
 	require.NotEqual(t, original.ID, viaSlug.ID)
-	require.Equal(t, toolset.ID.String(), *viaSlug.ToolsetID)
-	require.Nil(t, viaSlug.McpServerID)
+	requireHostedIDs(t, ctx, ti, viaSlug, toolset.ID, false)
 	require.Len(t, viaSlug.EnvironmentConfigs, 1)
 	require.Equal(t, "API_KEY", viaSlug.EnvironmentConfigs[0].VariableName)
 	require.Equal(t, "user", viaSlug.EnvironmentConfigs[0].ProvidedBy)
