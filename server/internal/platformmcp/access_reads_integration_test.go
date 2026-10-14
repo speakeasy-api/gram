@@ -15,6 +15,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -159,4 +160,73 @@ func seedAccessRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organ
 	principal, err := urn.ParsePrincipal(row.RoleUrn)
 	require.NoError(t, err)
 	return principal
+}
+
+func TestListRolesNamesDirectorySourcesAndWithholdsSmallCounts(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_role_sources")
+	require.NoError(t, err)
+	principal, _ := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	analysts := seedAccessRole(t, ctx, conn, principal.OrganizationID, "analysts", "Analysts")
+	seedAccessRole(t, ctx, conn, principal.OrganizationID, "operators", "Operators")
+	org := principal.OrganizationID
+
+	now := conv.ToPGTimestamptz(time.Now().UTC())
+	directory := directoryrepo.New(conn)
+	groupID, err := directory.UpsertDirectoryGroup(ctx, directoryrepo.UpsertDirectoryGroupParams{
+		OrganizationID: org, WorkosDirectoryGroupID: "grp-data", Name: "Data Analytics", Attributes: []byte("{}"),
+		WorkosCreatedAt: now, WorkosUpdatedAt: now, WorkosLastEventID: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	// Six people in the group, two of them in Research: the group's count is
+	// shown, the attribute's is withheld as a small cohort.
+	for i := range 6 {
+		department := "Finance"
+		if i < 2 {
+			department = "Research"
+		}
+		workosUserID := fmt.Sprintf("dir-user-%d", i)
+		userID, err := directory.UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+			OrganizationID: org, UserID: pgtype.Text{}, WorkosDirectoryUserID: workosUserID,
+			Email:           conv.ToPGText(fmt.Sprintf("person%d@example.test", i)),
+			Attributes:      fmt.Appendf(nil, `{"department_name": %q}`, department),
+			WorkosCreatedAt: now, WorkosUpdatedAt: now, WorkosLastEventID: pgtype.Text{}, RestoreDeleted: false,
+		})
+		require.NoError(t, err)
+		_, err = directory.OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
+			DirectoryUserID: userID, DirectoryGroupID: groupID,
+			WorkosDirectoryUserID: workosUserID, WorkosDirectoryGroupID: "grp-data", WorkosCreatedAt: now,
+		})
+		require.NoError(t, err)
+	}
+	mappings := accessrepo.New(conn)
+	_, err = mappings.UpsertDirectoryGroupRoleMapping(ctx, accessrepo.UpsertDirectoryGroupRoleMappingParams{
+		OrganizationID: org, DirectoryGroupID: uuid.NullUUID{UUID: groupID, Valid: true}, RoleUrn: analysts.String(),
+	})
+	require.NoError(t, err)
+	_, err = mappings.UpsertDirectoryAttributeRoleMapping(ctx, accessrepo.UpsertDirectoryAttributeRoleMappingParams{
+		OrganizationID: org, AttributeKey: conv.ToPGText("department_name"), AttributeValue: conv.ToPGText("Research"), RoleUrn: analysts.String(),
+	})
+	require.NoError(t, err)
+
+	roles, err := service.ListRoles(ctx, principal)
+	require.NoError(t, err)
+	byName := map[string]AccessRole{}
+	for _, role := range roles.Roles {
+		byName[role.Name] = role
+	}
+
+	require.Equal(t, []AccessRoleDirectorySource{
+		{Kind: "group", Group: "Data Analytics", AttributeKey: "", AttributeValue: "", MatchedUsers: NewSubjectCount(6)},
+		{Kind: "attribute", Group: "", AttributeKey: "department_name", AttributeValue: "Research", MatchedUsers: NewSubjectCount(2)},
+	}, byName["Analysts"].DirectorySources)
+	require.True(t, byName["Analysts"].DirectorySources[1].MatchedUsers.Suppressed())
+
+	// A role nothing is mapped to says so with an empty list, not a missing one.
+	require.NotNil(t, byName["Operators"].DirectorySources)
+	require.Empty(t, byName["Operators"].DirectorySources)
 }
