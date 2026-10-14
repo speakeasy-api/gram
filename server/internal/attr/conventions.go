@@ -531,8 +531,9 @@ const (
 	// IdentityChainingRetriesKey counts transient-failure retries against one
 	// provider within an attempt.
 	IdentityChainingRetriesKey = attribute.Key("gram.identity_chaining.retries")
-	// IdentityChainingFailuresKey lists each provider's failure when every
-	// provider in the order failed, as provider:reason pairs.
+	// IdentityChainingFailuresKey lists the failures of the providers tried
+	// or skipped so far, as provider:reason pairs: every provider's when the
+	// order is exhausted, the earlier ones' when a fallback serves.
 	IdentityChainingFailuresKey   = attribute.Key("gram.identity_chaining.failures")
 	OAuthRedirectURICountKey      = attribute.Key("gram.oauth.redirect_uri.count")
 	OAuthRedirectURIFullKey       = attribute.Key("gram.oauth.redirect_uri.full")

@@ -80,23 +80,29 @@ func TestSpeakeasyConfigurationReadiness(t *testing.T) {
 		})
 	}
 	for _, tc := range []struct {
-		name      string
-		status    internalsessionissuers.Status
-		gateErr   error
-		signerErr error
+		name        string
+		status      internalsessionissuers.Status
+		gateErr     error
+		signerErr   error
+		reason      Reason
+		unavailable remotesessions.EMAProviderUnavailableReason
+		retryable   bool
 	}{
-		{name: "missing issuer", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, ActiveKey: new(jwksrepo.JsonWebKey)}},
-		{name: "missing key", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, Issuer: &jwksrepo.InternalSessionIssuer{ID: issuerID}}},
-		{name: "replaced issuer", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, Issuer: &jwksrepo.InternalSessionIssuer{ID: uuid.New()}, ActiveKey: new(jwksrepo.JsonWebKey)}},
-		{name: "status failure", gateErr: errors.New("lookup failed")},
-		{name: "foreign deployment", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, Issuer: &jwksrepo.InternalSessionIssuer{ID: issuerID}, ActiveKey: new(jwksrepo.JsonWebKey)}, signerErr: internalsessionissuers.ErrMisconfigured},
-		{name: "authority failure", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, Issuer: &jwksrepo.InternalSessionIssuer{ID: issuerID}, ActiveKey: new(jwksrepo.JsonWebKey)}, signerErr: errors.New("authority lookup failed")},
+		{name: "missing issuer", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, ActiveKey: new(jwksrepo.JsonWebKey)}, reason: ReasonProviderUnavailable, unavailable: remotesessions.EMAProviderSigningUnavailable},
+		{name: "missing key", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, Issuer: &jwksrepo.InternalSessionIssuer{ID: issuerID}}, reason: ReasonProviderUnavailable, unavailable: remotesessions.EMAProviderSigningUnavailable},
+		{name: "replaced issuer", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, Issuer: &jwksrepo.InternalSessionIssuer{ID: uuid.New()}, ActiveKey: new(jwksrepo.JsonWebKey)}, reason: ReasonProviderUnavailable, unavailable: remotesessions.EMAProviderDeleted},
+		{name: "status failure", gateErr: errors.New("lookup failed"), reason: ReasonTransientFailure, retryable: true},
+		{name: "foreign deployment", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, Issuer: &jwksrepo.InternalSessionIssuer{ID: issuerID}, ActiveKey: new(jwksrepo.JsonWebKey)}, signerErr: internalsessionissuers.ErrMisconfigured, reason: ReasonConfigurationRequired},
+		{name: "authority failure", status: internalsessionissuers.Status{State: internalsessionissuers.StateEnabled, Issuer: &jwksrepo.InternalSessionIssuer{ID: issuerID}, ActiveKey: new(jwksrepo.JsonWebKey)}, signerErr: errors.New("authority lookup failed"), reason: ReasonTransientFailure, retryable: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			source := speakeasySource{g: new(Governor), issuerID: issuerID, signer: readinessSigner{err: tc.signerErr}, flags: enforcedFlags("org-test"), gate: readinessGate{status: tc.status, err: tc.gateErr}}
 			_, outcome := source.configuration(t.Context(), testenv.NewLogger(t), "org-test")
 			require.False(t, outcome.Succeeded())
+			require.Equal(t, tc.reason, outcome.Reason)
+			require.Equal(t, tc.unavailable, outcome.Unavailable)
+			require.Equal(t, tc.retryable, outcome.Retryable)
 		})
 	}
 }
