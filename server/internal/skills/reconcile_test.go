@@ -16,8 +16,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func insertSkillObservation(t *testing.T, ti *testInstance, name, source, sourceLevel, rawSHA256 string, seenAt time.Time) {
@@ -150,6 +152,37 @@ func TestPendingSkillSessionVersionsAreProjectScopedAndExcludeIneligibleObservat
 	})
 	require.NoError(t, err)
 	require.Empty(t, projects)
+
+	// A read over a hosted MCP server arrives reconciled with the MCP session
+	// id. That session is neither a dev nor an assistant one, so the read is
+	// not a session mapping for the metrics sync and not an efficacy
+	// candidate, however complete the row is.
+	resolver := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn)
+	written, err := resolver.RecordRead(ctx, mcpskills.Read{
+		ProjectID: ti.projectID,
+		Entry: mcpskills.Entry{
+			SkillID: version.SkillID, VersionID: version.SkillVersionID, PluginID: uuid.Nil,
+			Name: "mapped-skill", Content: content, RawSHA256: contentSHA256(content), Frontmatter: nil, Pinned: false,
+		},
+		UserID: ti.authContext.UserID, SessionID: "mcp-session-1", SeenAt: seenAt.Add(time.Minute),
+	})
+	require.NoError(t, err)
+	require.True(t, written)
+	rows, err = ti.repo.ListPendingSkillSessionVersions(ctx, repo.ListPendingSkillSessionVersionsParams{
+		ProjectID: ti.projectID,
+		BatchSize: 10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows, "an MCP read is not synced as a dev-surface sighting")
+	candidates, err := ti.repo.ListPendingSkillObservations(ctx, repo.ListPendingSkillObservationsParams{
+		ProjectID:   ti.projectID,
+		AfterSeenAt: pgtype.Timestamptz{},
+		AfterID:     uuid.NullUUID{},
+		BatchSize:   10,
+	})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1, "the hook-reported activation is still a candidate; the MCP read is not")
+	require.Equal(t, "session-1", candidates[0].SessionID)
 }
 
 func TestReconcileSkillObservations_NormalizesAndAggregatesMetadataOnlySightings(t *testing.T) {
