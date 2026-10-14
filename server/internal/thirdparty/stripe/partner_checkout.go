@@ -10,20 +10,21 @@ import (
 
 // CheckoutPartnerState is server-retrieved evidence, never a client claim.
 type CheckoutPartnerState struct {
-	PromotionCodeID string
-	GatewayEligible bool
-	PaymentMethodID string
-	Monthly         bool
-	TrialEnd        time.Time
+	PromotionCodeID  string
+	CouponID         string
+	GatewayProductID string
+	PaymentMethodID  string
+	Monthly          bool
+	TrialEnd         time.Time
 }
 
-func (c *client) checkoutPartnerState(ctx context.Context, sub *stripesdk.Subscription) (*CheckoutPartnerState, error) {
-	state := &CheckoutPartnerState{PromotionCodeID: "", GatewayEligible: false, PaymentMethodID: "", Monthly: false, TrialEnd: unixTime(sub.TrialEnd)}
+func (c *client) checkoutPartnerState(sub *stripesdk.Subscription) *CheckoutPartnerState {
+	state := &CheckoutPartnerState{PromotionCodeID: "", CouponID: "", GatewayProductID: "", PaymentMethodID: "", Monthly: false, TrialEnd: unixTime(sub.TrialEnd)}
 	if sub.DefaultPaymentMethod != nil {
 		state.PaymentMethodID = sub.DefaultPaymentMethod.ID
 	}
 	if sub.Items == nil || len(sub.Items.Data) == 0 {
-		return state, nil
+		return state
 	}
 	state.Monthly = true
 	gatewayProduct := ""
@@ -37,23 +38,33 @@ func (c *client) checkoutPartnerState(ctx context.Context, sub *stripesdk.Subscr
 		}
 	}
 	if len(sub.Discounts) != 1 {
-		return state, nil
+		return state
 	}
 	d := sub.Discounts[0]
 	if d == nil || d.Deleted || d.PromotionCode == nil || d.PromotionCode.ID == "" || d.Source == nil || d.Source.Coupon == nil || d.Source.Coupon.ID == "" || d.SubscriptionItem != "" || (d.Subscription != "" && d.Subscription != sub.ID) {
-		return state, nil
+		return state
 	}
 	state.PromotionCodeID = d.PromotionCode.ID
+	state.CouponID = d.Source.Coupon.ID
+	state.GatewayProductID = gatewayProduct
+	return state
+}
+
+// VerifyCheckoutGatewayScope is called only after an enabled offer matches the
+// server-retrieved applied ID. Unrelated discounts never depend on this lookup.
+func (c *client) VerifyCheckoutGatewayScope(ctx context.Context, state *CheckoutPartnerState) (bool, error) {
+	if state == nil || state.CouponID == "" || state.GatewayProductID == "" {
+		return false, nil
+	}
 	params := new(stripesdk.CouponRetrieveParams)
 	params.AddExpand("applies_to")
-	coupon, err := c.api.retrieveCoupon(ctx, d.Source.Coupon.ID, params)
+	coupon, err := c.api.retrieveCoupon(ctx, state.CouponID, params)
 	if err != nil {
-		return nil, fmt.Errorf("retrieve applied Checkout coupon scope: %w", err)
+		return false, fmt.Errorf("retrieve applied Checkout coupon scope: %w", err)
 	}
 	// Applied discounts remain valid evidence after redemption limits are reached.
 	// Eligibility here concerns scope, not permission to redeem the coupon again.
-	state.GatewayEligible = coupon != nil && coupon.ID == d.Source.Coupon.ID && coupon.AppliesTo != nil && len(coupon.AppliesTo.Products) == 1 && gatewayProduct != "" && coupon.AppliesTo.Products[0] == gatewayProduct
-	return state, nil
+	return coupon != nil && coupon.ID == state.CouponID && coupon.AppliesTo != nil && len(coupon.AppliesTo.Products) == 1 && coupon.AppliesTo.Products[0] == state.GatewayProductID, nil
 }
 
 // EndPartnerCheckoutTrial ends only an already accepted partner Checkout trial.

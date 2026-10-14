@@ -19,8 +19,14 @@ import (
 )
 
 type manualPartnerStripe struct {
+	scopeError    error
+	scopeEligible bool
 	*fakeStripeWebhookClient
 	mock.Mock
+}
+
+func (c *manualPartnerStripe) VerifyCheckoutGatewayScope(_ context.Context, _ *stripeclient.CheckoutPartnerState) (bool, error) {
+	return c.scopeEligible, c.scopeError
 }
 
 func (c *manualPartnerStripe) EndPartnerCheckoutTrial(ctx context.Context, subscriptionID, key string) error {
@@ -33,11 +39,11 @@ func newManualPartnerCheckout(t *testing.T, enabled bool) (*Service, *pgxpool.Po
 	configurePaygCheckout(t, s, "event_manual_partner", "subscription_partner", "trialing")
 	base, ok := s.stripeClient.(*fakeStripeWebhookClient)
 	require.True(t, ok)
-	client := &manualPartnerStripe{fakeStripeWebhookClient: base}
+	client := &manualPartnerStripe{fakeStripeWebhookClient: base, scopeEligible: true}
 	client.Test(t)
 	t.Cleanup(func() { client.AssertExpectations(t) })
 	s.stripeClient = client
-	base.checkout.Partner = &stripeclient.CheckoutPartnerState{PromotionCodeID: "promo_manual", GatewayEligible: true, PaymentMethodID: "pm_synthetic", Monthly: true, TrialEnd: time.Now().UTC().Add(7 * 24 * time.Hour)}
+	base.checkout.Partner = &stripeclient.CheckoutPartnerState{PromotionCodeID: "promo_manual", CouponID: "coupon_manual", GatewayProductID: "prod_gateway", PaymentMethodID: "pm_synthetic", Monthly: true, TrialEnd: time.Now().UTC().Add(7 * 24 * time.Hour)}
 	q := adminrepo.New(db)
 	offer, err := q.CreateSignupOffer(t.Context(), adminrepo.CreateSignupOfferParams{Name: "Synthetic partner offer", StripePromotionCodeID: "promo_manual", SignupFlow: "tailscale_partner_gateway"})
 	require.NoError(t, err)
@@ -130,6 +136,7 @@ func TestManualPartnerCheckoutRecoversLostTrialEndResponseAfterOfferDisabled(t *
 	require.Zero(t, stripeWebhookReceiptCount(t, db))
 	_, err = adminrepo.New(db).UpdateSignupOffer(t.Context(), adminrepo.UpdateSignupOfferParams{ID: offer.ID, Name: offer.Name, StripePromotionCodeID: offer.StripePromotionCodeID, SignupFlow: offer.SignupFlow, Enabled: false})
 	require.NoError(t, err)
+	client.scopeError = errors.New("coupon scope unavailable after acceptance")
 	require.Equal(t, http.StatusOK, serveStripeWebhook(s, "retry").Code)
 	require.Equal(t, http.StatusOK, serveStripeWebhook(s, "duplicate").Code)
 	application, err = orgrepo.New(db).GetOrganizationPromotionApplication(t.Context(), stripeWebhookOrganizationID)
@@ -158,7 +165,7 @@ func TestManualPartnerDisabledOfferLeavesOrdinaryStripeTrial(t *testing.T) {
 func TestManualPartnerUnsupportedScopeLeavesOrdinaryStripeTrial(t *testing.T) {
 	t.Parallel()
 	s, db, client, _ := newManualPartnerCheckout(t, true)
-	client.checkout.Partner.GatewayEligible = false
+	client.scopeEligible = false
 	require.Equal(t, http.StatusOK, serveStripeWebhook(s, "ordinary discount").Code)
 	require.Equal(t, "trialing", client.checkout.SubscriptionStatus)
 	_, err := orgrepo.New(db).GetOrganizationPromotionApplication(t.Context(), stripeWebhookOrganizationID)
@@ -219,6 +226,9 @@ func TestManualPartnerCancellationRetainsPendingBindingWithoutRedemption(t *test
 	client.On("EndPartnerCheckoutTrial", mock.Anything, "subscription_partner", "partner-trial-end:"+client.checkout.ID).Return(errors.New("Stripe unavailable")).Once()
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(s, "first").Code)
 	client.checkout.SubscriptionStatus = "canceled"
+	client.verify = func([]byte, string) (*stripeclient.WebhookEvent, error) {
+		return &stripeclient.WebhookEvent{ID: "event_partner_deleted", Type: "customer.subscription.deleted", Created: time.Now().UTC(), ObjectID: "subscription_partner", CustomerID: "customer_placeholder", SubscriptionID: "subscription_partner"}, nil
+	}
 	require.Equal(t, http.StatusOK, serveStripeWebhook(s, "canceled").Code)
 	app, err := orgrepo.New(db).GetOrganizationPromotionApplication(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)

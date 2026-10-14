@@ -14,6 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
+type partnerScopeVerifier interface {
+	VerifyCheckoutGatewayScope(context.Context, *stripeclient.CheckoutPartnerState) (bool, error)
+}
+
 type partnerTrialEnder interface {
 	EndPartnerCheckoutTrial(context.Context, string, string) error
 }
@@ -62,9 +66,6 @@ func (s *Service) acceptManualPartnerCheckout(ctx context.Context, event *stripe
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("prepare accepted partner Checkout: %w", err)
 	}
-	if !checkout.Partner.GatewayEligible {
-		return nil
-	} // Ordinary discount, not partner rights.
 	_, err = organizations.GetEnabledSignupOffer(ctx, checkout.Partner.PromotionCodeID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -75,7 +76,7 @@ func (s *Service) acceptManualPartnerCheckout(ctx context.Context, event *stripe
 	if state.StripeSubscriptionID.Valid {
 		return errors.New("manual partner offer requires a first Checkout subscription")
 	}
-	prior, err := q.HasCompletedStripeCheckout(ctx, org)
+	prior, err := q.HasActivatedPaygSubscription(ctx, org)
 	if err != nil {
 		return fmt.Errorf("prepare accepted partner Checkout: %w", err)
 	}
@@ -89,7 +90,23 @@ func (s *Service) acceptManualPartnerCheckout(ctx context.Context, event *stripe
 	if err != nil {
 		return fmt.Errorf("prepare accepted partner Checkout: %w", err)
 	}
-	if !eligible || live.Partner == nil || live.Partner.PromotionCodeID != checkout.Partner.PromotionCodeID || !live.Partner.GatewayEligible || !live.Partner.Monthly || live.Partner.PaymentMethodID == "" {
+	if !eligible || live.Partner == nil || live.Partner.PromotionCodeID != checkout.Partner.PromotionCodeID {
+		return errors.New("manual partner Checkout identity changed")
+	}
+	verifier, ok := s.stripeClient.(partnerScopeVerifier)
+	if !ok {
+		return errors.New("partner coupon scope verification is unavailable")
+	}
+	scopeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	gatewayEligible, err := verifier.VerifyCheckoutGatewayScope(scopeCtx, live.Partner)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("verify first partner coupon scope: %w", err)
+	}
+	if !gatewayEligible {
+		return nil
+	} // Unsupported scopes remain ordinary discounts.
+	if !live.Partner.Monthly || live.Partner.PaymentMethodID == "" {
 		return errors.New("manual partner Checkout is not eligible for paid conversion")
 	}
 	rows, err := organizations.AttributePartnerSignup(ctx, orgrepo.AttributePartnerSignupParams{OrganizationID: pgtype.Text{String: org, Valid: true}, StripePromotionCodeID: live.Partner.PromotionCodeID})

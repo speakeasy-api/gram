@@ -17,7 +17,9 @@ func TestPartnerCheckoutWireAppliedPromotionAndTrialEnding(t *testing.T) {
 	state, err := c.GetCheckoutSession(t.Context(), "cs_test")
 	require.NoError(t, err)
 	require.Equal(t, "promo_applied", state.Partner.PromotionCodeID)
-	require.True(t, state.Partner.GatewayEligible)
+	eligible, err := c.VerifyCheckoutGatewayScope(t.Context(), state.Partner)
+	require.NoError(t, err)
+	require.True(t, eligible)
 	require.True(t, state.Partner.Monthly)
 	require.Equal(t, "pm_collected", state.Partner.PaymentMethodID)
 	require.Equal(t, "sub_test", state.SubscriptionID)
@@ -30,7 +32,9 @@ func TestPartnerCheckoutWireRejectsUnrelatedCouponScope(t *testing.T) {
 	state, err := c.GetCheckoutSession(t.Context(), "cs_test")
 	require.NoError(t, err)
 	require.Equal(t, "promo_applied", state.Partner.PromotionCodeID)
-	require.False(t, state.Partner.GatewayEligible)
+	eligible, err := c.VerifyCheckoutGatewayScope(t.Context(), state.Partner)
+	require.NoError(t, err)
+	require.False(t, eligible)
 }
 
 func partnerWireClient(t *testing.T, products []string) *client {
@@ -49,6 +53,11 @@ func partnerWireClient(t *testing.T, products []string) *client {
 		case "GET /v1/checkout/sessions/cs_test":
 			_, _ = w.Write([]byte(`{"id":"cs_test","status":"complete","customer":"cus_test","subscription":{"id":"sub_test","customer":"cus_test","status":"trialing","billing_cycle_anchor":1906502400,"trial_end":1906502400,"default_payment_method":"pm_collected","discounts":[{"id":"di_test","subscription":"sub_test","promotion_code":"promo_applied","source":{"type":"coupon","coupon":"coupon_gateway"}}],"items":{"data":[{"id":"si_gateway","price":{"id":"price_gateway","product":"prod_gateway","recurring":{"interval":"month","interval_count":1,"usage_type":"metered"}}}]}}}`))
 		case "GET /v1/coupons/coupon_gateway":
+			if products == nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte(`{"error":{"type":"api_error","message":"coupon scope unavailable"}}`))
+				return
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": "coupon_gateway", "valid": false, "max_redemptions": 1, "times_redeemed": 1, "applies_to": map[string]any{"products": products}})
 		case "POST /v1/subscriptions/sub_test":
 			_, _ = w.Write([]byte(`{"id":"sub_test","status":"active"}`))
@@ -80,4 +89,16 @@ func partnerWireClient(t *testing.T, products []string) *client {
 	})
 	backend := stripesdk.GetBackendWithConfig(stripesdk.APIBackend, &stripesdk.BackendConfig{URL: stripesdk.String(server.URL), HTTPClient: server.Client()})
 	return &client{api: &sdkAPI{client: stripesdk.NewClient("sk_test_placeholder", stripesdk.WithBackends(&stripesdk.Backends{API: backend}))}, catalog: Catalog{PriceIDMCPEgress: "price_gateway"}}
+}
+
+func TestCheckoutIdentityReadSurvivesCouponScopeOutage(t *testing.T) {
+	t.Parallel()
+	c := partnerWireClient(t, nil)
+	state, err := c.GetCheckoutSession(t.Context(), "cs_test")
+	require.NoError(t, err)
+	require.Equal(t, "promo_applied", state.Partner.PromotionCodeID)
+	require.Equal(t, "coupon_gateway", state.Partner.CouponID)
+	eligible, err := c.VerifyCheckoutGatewayScope(t.Context(), state.Partner)
+	require.ErrorContains(t, err, "coupon scope unavailable")
+	require.False(t, eligible)
 }

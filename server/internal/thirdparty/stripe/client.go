@@ -858,11 +858,7 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 		state.CustomerID = session.Customer.ID
 	}
 	if session.Subscription != nil {
-		partner, err := c.checkoutPartnerState(ctx, session.Subscription)
-		if err != nil {
-			return nil, err
-		}
-		state.Partner = partner
+		state.Partner = c.checkoutPartnerState(session.Subscription)
 		state.SubscriptionID = session.Subscription.ID
 		state.SubscriptionStatus = string(session.Subscription.Status)
 		if session.Subscription.Customer != nil {

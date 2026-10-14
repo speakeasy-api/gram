@@ -648,12 +648,14 @@ func (q *Queries) GetStripeWebhookReceipt(ctx context.Context, stripeEventID str
 	return i, err
 }
 
-const hasCompletedStripeCheckout = `-- name: HasCompletedStripeCheckout :one
-SELECT EXISTS (SELECT 1 FROM stripe_webhook_receipts WHERE organization_id = $1 AND event_type = 'checkout.session.completed')
+const hasActivatedPaygSubscription = `-- name: HasActivatedPaygSubscription :one
+SELECT EXISTS (SELECT 1 FROM audit_logs WHERE organization_id = $1 AND action = 'organization:payg_activated')
 `
 
-func (q *Queries) HasCompletedStripeCheckout(ctx context.Context, organizationID string) (bool, error) {
-	row := q.db.QueryRow(ctx, hasCompletedStripeCheckout, organizationID)
+// Completion receipts also record ignored terminal failures. Activation's audit
+// is committed atomically with PAYG activation and survives cancellation.
+func (q *Queries) HasActivatedPaygSubscription(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActivatedPaygSubscription, organizationID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

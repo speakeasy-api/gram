@@ -642,8 +642,10 @@ ORDER BY redeemed_at, id;
 INSERT INTO organization_promotion_applications (organization_id, stripe_promotion_code_id, stripe_subscription_id, redeemed_at)
 VALUES (sqlc.narg(organization_id), @stripe_promotion_code_id, sqlc.narg(stripe_subscription_id), sqlc.narg(redeemed_at));
 
--- name: HasCompletedStripeCheckout :one
-SELECT EXISTS (SELECT 1 FROM stripe_webhook_receipts WHERE organization_id = @organization_id AND event_type = 'checkout.session.completed');
+-- name: HasActivatedPaygSubscription :one
+-- Completion receipts also record ignored terminal failures. Activation's audit
+-- is committed atomically with PAYG activation and survives cancellation.
+SELECT EXISTS (SELECT 1 FROM audit_logs WHERE organization_id = @organization_id AND action = 'organization:payg_activated');
 
 -- name: IsRedeemedPartnerSubscription :one
 SELECT EXISTS (SELECT 1 FROM organization_promotion_applications

@@ -62,6 +62,7 @@ type checkoutStripeClient struct {
 	expiredCheckoutIDs       []string
 	checkoutState            *stripeclient.CheckoutSessionState
 	checkoutGetErr           error
+	beforeCheckoutRead       func() error
 	subscriptionState        *stripeclient.SubscriptionState
 	subscriptionReadError    error
 	subscriptionUpdateError  error
@@ -162,6 +163,11 @@ func (c *checkoutStripeClient) ExpireCheckoutSession(_ context.Context, id strin
 }
 
 func (c *checkoutStripeClient) GetCheckoutSession(_ context.Context, id string) (*stripeclient.CheckoutSessionState, error) {
+	if c.beforeCheckoutRead != nil {
+		if err := c.beforeCheckoutRead(); err != nil {
+			return nil, err
+		}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

@@ -45,6 +45,9 @@ func TestPartnerDailyAllocationsWaiveInitialDayAndPreserveTwoMonthlyCycles(t *te
 		require.NotEqual(t, "2027-12-31:chat", row.SourceKey)
 		require.False(t, seen[row.SourceKey])
 		seen[row.SourceKey] = true
+		if row.SourceKey == "2028-01-31:chat" {
+			require.Equal(t, "in_partner_second", row.OriginalInvoiceID.String)
+		}
 	}
 	require.True(t, seen["2028-01-01:chat"])
 	require.True(t, seen["2028-01-31:chat"])
