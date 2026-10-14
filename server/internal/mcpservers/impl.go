@@ -274,7 +274,9 @@ func (s *Service) ScheduleDefaultRemoteServerIcon(ctx context.Context, projectID
 // transaction commits. It uses a detached bounded context so the request can
 // complete without waiting for a vendor favicon.
 func (s *Service) scheduleDefaultServerIcon(ctx context.Context, projectID, mcpServerID uuid.UUID, ids serverIDs) {
-	if !ids.UnproxiedMcpServerID.Valid && !ids.RemoteMcpServerID.Valid {
+	// Unproxied servers are skipped: Speakeasy never connects to them, and
+	// their host is often reachable only from the client's network.
+	if !ids.RemoteMcpServerID.Valid {
 		return
 	}
 	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
@@ -292,16 +294,6 @@ func (s *Service) scheduleDefaultServerIcon(ctx context.Context, projectID, mcpS
 func (s *Service) setDefaultServerIcon(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, mcpServerID uuid.UUID, ids serverIDs) {
 	var sourceURL string
 	switch {
-	case ids.UnproxiedMcpServerID.Valid:
-		source, err := unproxiedmcprepo.New(s.db).GetServerByID(ctx, unproxiedmcprepo.GetServerByIDParams{
-			ID:        ids.UnproxiedMcpServerID.UUID,
-			ProjectID: projectID,
-		})
-		if err != nil {
-			logger.ErrorContext(ctx, "load unproxied mcp server for default icon", attr.SlogError(err))
-			return
-		}
-		sourceURL = source.Url
 	case ids.RemoteMcpServerID.Valid:
 		source, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
 			ID:        ids.RemoteMcpServerID.UUID,

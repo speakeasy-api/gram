@@ -1413,7 +1413,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	// Load header display names for remapping
-	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
+	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ProjectID, toolset.ID)
 
 	// Extract user IDs for telemetry
 	var userID, externalUserID, apiKeyID string
@@ -1747,10 +1747,10 @@ func (s *Service) recordToolsetSlugFallback(ctx context.Context, logger *slog.Lo
 
 // loadHeaderDisplayNames loads the header display names mapping from MCP metadata.
 // Returns an empty map if no metadata exists or on error (non-critical operation).
-func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID) map[string]string {
+func (s *Service) loadHeaderDisplayNames(ctx context.Context, projectID, toolsetID uuid.UUID) map[string]string {
 	result := make(map[string]string)
 
-	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
+	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, metadata_repo.GetHeaderDisplayNamesParams{ProjectID: projectID, BackendID: toolsetID})
 	if err != nil {
 		// Not found or error - return empty map, this is non-critical
 		return result

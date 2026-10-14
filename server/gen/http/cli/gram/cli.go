@@ -136,7 +136,7 @@ func UsageCommands() []string {
 		"cli-auth (authorize|redeem)",
 		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|duplicate-built-in-dashboard|delete-dashboard)",
 		"data-exports (list-destinations|list-for-org|create-destination|update-destination|delete-destination|list-routes|create-route|update-route|delete-route)",
-		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
+		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs|evaluate-open-ap-iv3|get-deployment-evaluation)",
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
 		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|check-health|delete-domain|list-mcp-endpoints)",
 		"environments (create-environment|list-environments|update-environment|clone-environment|delete-environment|set-source-environment-link|delete-source-environment-link|get-source-environment|set-toolset-environment-link|delete-toolset-environment-link|get-toolset-environment)",
@@ -198,7 +198,7 @@ func UsageCommands() []string {
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
-		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
+		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
 		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
@@ -1176,6 +1176,18 @@ func ParseEndpoint(
 		deploymentsGetDeploymentLogsApikeyTokenFlag      = deploymentsGetDeploymentLogsFlags.String("apikey-token", "", "")
 		deploymentsGetDeploymentLogsSessionTokenFlag     = deploymentsGetDeploymentLogsFlags.String("session-token", "", "")
 		deploymentsGetDeploymentLogsProjectSlugInputFlag = deploymentsGetDeploymentLogsFlags.String("project-slug-input", "", "")
+
+		deploymentsEvaluateOpenAPIv3Flags                = flag.NewFlagSet("evaluate-open-ap-iv3", flag.ExitOnError)
+		deploymentsEvaluateOpenAPIv3BodyFlag             = deploymentsEvaluateOpenAPIv3Flags.String("body", "REQUIRED", "")
+		deploymentsEvaluateOpenAPIv3ApikeyTokenFlag      = deploymentsEvaluateOpenAPIv3Flags.String("apikey-token", "", "")
+		deploymentsEvaluateOpenAPIv3SessionTokenFlag     = deploymentsEvaluateOpenAPIv3Flags.String("session-token", "", "")
+		deploymentsEvaluateOpenAPIv3ProjectSlugInputFlag = deploymentsEvaluateOpenAPIv3Flags.String("project-slug-input", "", "")
+
+		deploymentsGetDeploymentEvaluationFlags                = flag.NewFlagSet("get-deployment-evaluation", flag.ExitOnError)
+		deploymentsGetDeploymentEvaluationDeploymentIDFlag     = deploymentsGetDeploymentEvaluationFlags.String("deployment-id", "REQUIRED", "")
+		deploymentsGetDeploymentEvaluationApikeyTokenFlag      = deploymentsGetDeploymentEvaluationFlags.String("apikey-token", "", "")
+		deploymentsGetDeploymentEvaluationSessionTokenFlag     = deploymentsGetDeploymentEvaluationFlags.String("session-token", "", "")
+		deploymentsGetDeploymentEvaluationProjectSlugInputFlag = deploymentsGetDeploymentEvaluationFlags.String("project-slug-input", "", "")
 
 		deviceIntegrationsFlags = flag.NewFlagSet("device-integrations", flag.ContinueOnError)
 
@@ -4214,12 +4226,6 @@ func ParseEndpoint(
 		unproxiedMcpGetServerApikeyTokenFlag      = unproxiedMcpGetServerFlags.String("apikey-token", "", "")
 		unproxiedMcpGetServerProjectSlugInputFlag = unproxiedMcpGetServerFlags.String("project-slug-input", "", "")
 
-		unproxiedMcpListToolsFlags                = flag.NewFlagSet("list-tools", flag.ExitOnError)
-		unproxiedMcpListToolsIDFlag               = unproxiedMcpListToolsFlags.String("id", "REQUIRED", "")
-		unproxiedMcpListToolsSessionTokenFlag     = unproxiedMcpListToolsFlags.String("session-token", "", "")
-		unproxiedMcpListToolsApikeyTokenFlag      = unproxiedMcpListToolsFlags.String("apikey-token", "", "")
-		unproxiedMcpListToolsProjectSlugInputFlag = unproxiedMcpListToolsFlags.String("project-slug-input", "", "")
-
 		unproxiedMcpDeleteServerFlags                = flag.NewFlagSet("delete-server", flag.ExitOnError)
 		unproxiedMcpDeleteServerIDFlag               = unproxiedMcpDeleteServerFlags.String("id", "REQUIRED", "")
 		unproxiedMcpDeleteServerSessionTokenFlag     = unproxiedMcpDeleteServerFlags.String("session-token", "", "")
@@ -5208,6 +5214,8 @@ func ParseEndpoint(
 	deploymentsRedeployFlags.Usage = deploymentsRedeployUsage
 	deploymentsListDeploymentsFlags.Usage = deploymentsListDeploymentsUsage
 	deploymentsGetDeploymentLogsFlags.Usage = deploymentsGetDeploymentLogsUsage
+	deploymentsEvaluateOpenAPIv3Flags.Usage = deploymentsEvaluateOpenAPIv3Usage
+	deploymentsGetDeploymentEvaluationFlags.Usage = deploymentsGetDeploymentEvaluationUsage
 
 	deviceIntegrationsFlags.Usage = deviceIntegrationsUsage
 	deviceIntegrationsListProvidersFlags.Usage = deviceIntegrationsListProvidersUsage
@@ -5872,7 +5880,6 @@ func ParseEndpoint(
 	unproxiedMcpCreateServerFlags.Usage = unproxiedMcpCreateServerUsage
 	unproxiedMcpListServersFlags.Usage = unproxiedMcpListServersUsage
 	unproxiedMcpGetServerFlags.Usage = unproxiedMcpGetServerUsage
-	unproxiedMcpListToolsFlags.Usage = unproxiedMcpListToolsUsage
 	unproxiedMcpDeleteServerFlags.Usage = unproxiedMcpDeleteServerUsage
 
 	usageFlags.Usage = usageUsage
@@ -6868,6 +6875,12 @@ func ParseEndpoint(
 
 			case "get-deployment-logs":
 				epf = deploymentsGetDeploymentLogsFlags
+
+			case "evaluate-open-ap-iv3":
+				epf = deploymentsEvaluateOpenAPIv3Flags
+
+			case "get-deployment-evaluation":
+				epf = deploymentsGetDeploymentEvaluationFlags
 
 			}
 
@@ -8737,9 +8750,6 @@ func ParseEndpoint(
 			case "get-server":
 				epf = unproxiedMcpGetServerFlags
 
-			case "list-tools":
-				epf = unproxiedMcpListToolsFlags
-
 			case "delete-server":
 				epf = unproxiedMcpDeleteServerFlags
 
@@ -9899,6 +9909,12 @@ func ParseEndpoint(
 			case "get-deployment-logs":
 				endpoint = c.GetDeploymentLogs()
 				data, err = deploymentsc.BuildGetDeploymentLogsPayload(*deploymentsGetDeploymentLogsDeploymentIDFlag, *deploymentsGetDeploymentLogsCursorFlag, *deploymentsGetDeploymentLogsApikeyTokenFlag, *deploymentsGetDeploymentLogsSessionTokenFlag, *deploymentsGetDeploymentLogsProjectSlugInputFlag)
+			case "evaluate-open-ap-iv3":
+				endpoint = c.EvaluateOpenAPIv3()
+				data, err = deploymentsc.BuildEvaluateOpenAPIv3Payload(*deploymentsEvaluateOpenAPIv3BodyFlag, *deploymentsEvaluateOpenAPIv3ApikeyTokenFlag, *deploymentsEvaluateOpenAPIv3SessionTokenFlag, *deploymentsEvaluateOpenAPIv3ProjectSlugInputFlag)
+			case "get-deployment-evaluation":
+				endpoint = c.GetDeploymentEvaluation()
+				data, err = deploymentsc.BuildGetDeploymentEvaluationPayload(*deploymentsGetDeploymentEvaluationDeploymentIDFlag, *deploymentsGetDeploymentEvaluationApikeyTokenFlag, *deploymentsGetDeploymentEvaluationSessionTokenFlag, *deploymentsGetDeploymentEvaluationProjectSlugInputFlag)
 			}
 		case "device-integrations":
 			c := deviceintegrationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11779,9 +11795,6 @@ func ParseEndpoint(
 			case "get-server":
 				endpoint = c.GetServer()
 				data, err = unproxiedmcpc.BuildGetServerPayload(*unproxiedMcpGetServerIDFlag, *unproxiedMcpGetServerSlugFlag, *unproxiedMcpGetServerSessionTokenFlag, *unproxiedMcpGetServerApikeyTokenFlag, *unproxiedMcpGetServerProjectSlugInputFlag)
-			case "list-tools":
-				endpoint = c.ListTools()
-				data, err = unproxiedmcpc.BuildListToolsPayload(*unproxiedMcpListToolsIDFlag, *unproxiedMcpListToolsSessionTokenFlag, *unproxiedMcpListToolsApikeyTokenFlag, *unproxiedMcpListToolsProjectSlugInputFlag)
 			case "delete-server":
 				endpoint = c.DeleteServer()
 				data, err = unproxiedmcpc.BuildDeleteServerPayload(*unproxiedMcpDeleteServerIDFlag, *unproxiedMcpDeleteServerSessionTokenFlag, *unproxiedMcpDeleteServerApikeyTokenFlag, *unproxiedMcpDeleteServerProjectSlugInputFlag)
@@ -16350,6 +16363,8 @@ func deploymentsUsage() {
 	fmt.Fprintln(os.Stderr, `    redeploy: Redeploys an existing deployment.`)
 	fmt.Fprintln(os.Stderr, `    list-deployments: List all deployments in descending order of creation.`)
 	fmt.Fprintln(os.Stderr, `    get-deployment-logs: Get logs for a deployment.`)
+	fmt.Fprintln(os.Stderr, `    evaluate-open-ap-iv3: Compare an uploaded OpenAPI document with the version of the same source in the active deployment. Reports changes to tools, inputs and security without deploying anything.`)
+	fmt.Fprintln(os.Stderr, `    get-deployment-evaluation: Compare the OpenAPI documents in a deployment with the deployment it was created from.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s deployments COMMAND --help\n", os.Args[0])
@@ -16544,6 +16559,54 @@ func deploymentsGetDeploymentLogsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments get-deployment-logs --deployment-id \"abc123\" --cursor \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func deploymentsEvaluateOpenAPIv3Usage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] deployments evaluate-open-ap-iv3", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Compare an uploaded OpenAPI document with the version of the same source in the active deployment. Reports changes to tools, inputs and security without deploying anything.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evaluate-open-ap-iv3 --body '{\n      \"asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func deploymentsGetDeploymentEvaluationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] deployments get-deployment-evaluation", os.Args[0])
+	fmt.Fprint(os.Stderr, " -deployment-id STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Compare the OpenAPI documents in a deployment with the deployment it was created from.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -deployment-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments get-deployment-evaluation --deployment-id \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // deviceIntegrationsUsage displays the usage of the device-integrations
@@ -19538,7 +19601,7 @@ func mcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-mcp-metadata: Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.`)
 	fmt.Fprintln(os.Stderr, `    set-mcp-metadata: Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.`)
-	fmt.Fprintln(os.Stderr, `    export-mcp-metadata: Export MCP server details as JSON for documentation and integration purposes.`)
+	fmt.Fprintln(os.Stderr, `    export-mcp-metadata: Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-metadata COMMAND --help\n", os.Args[0])
@@ -19604,7 +19667,7 @@ func mcpMetadataExportMcpMetadataUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Export MCP server details as JSON for documentation and integration purposes.`)
+	fmt.Fprintln(os.Stderr, `Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -19614,7 +19677,7 @@ func mcpMetadataExportMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // registryDiscoveryUsage displays the usage of the registry-discovery command
@@ -29954,7 +30017,6 @@ func unproxiedMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    create-server: Create a new unproxied MCP server. Restricted to callers whose email is on the speakeasy.com or speakeasyapi.dev domain.`)
 	fmt.Fprintln(os.Stderr, `    list-servers: List all unproxied MCP servers for a project`)
 	fmt.Fprintln(os.Stderr, `    get-server: Get an unproxied MCP server by ID or slug. Exactly one of id or slug must be provided.`)
-	fmt.Fprintln(os.Stderr, `    list-tools: Best-effort discovery of the tools available on the vendor's MCP server. Connects live to the server's URL and issues an MCP tools/list call; the result is never cached and the connection is never reused for actual tool execution.`)
 	fmt.Fprintln(os.Stderr, `    delete-server: Delete an unproxied MCP server`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -30030,30 +30092,6 @@ func unproxiedMcpGetServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "unproxied-mcp get-server --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func unproxiedMcpListToolsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] unproxied-mcp list-tools", os.Args[0])
-	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Best-effort discovery of the tools available on the vendor's MCP server. Connects live to the server's URL and issues an MCP tools/list call; the result is never cached and the connection is never reused for actual tool execution.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "unproxied-mcp list-tools --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func unproxiedMcpDeleteServerUsage() {

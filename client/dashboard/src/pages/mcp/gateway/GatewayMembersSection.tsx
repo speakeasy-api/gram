@@ -771,6 +771,27 @@ export function AddServersSheet({
   const selectedValues = selectedCandidates.map((candidate) =>
     candidateKey(candidate, wrappers),
   );
+  const selectableValues = visibleOptions
+    .filter((option) => !option.disabled)
+    .map((option) => option.value);
+  const allSelected =
+    selectableValues.length > 0 &&
+    selectableValues.every((value) => selectedValues.includes(value));
+  const canSelectAll =
+    !isLoading &&
+    !loadFailed &&
+    !toolsetsLoading &&
+    selectableValues.length > 0;
+  const toggleSelectAll = () =>
+    setSelected((previous) => {
+      const rest = previous.filter(
+        (value) => !selectableValues.includes(value),
+      );
+      const everySelected = selectableValues.every((value) =>
+        previous.includes(value),
+      );
+      return everySelected ? rest : [...rest, ...selectableValues];
+    });
   const submit = async () => {
     if (
       submittingRef.current ||
@@ -1012,9 +1033,23 @@ export function AddServersSheet({
             aria-labelledby="add-existing-server"
             className="space-y-4 border-t pt-4"
           >
-            <Text as="h3" id="add-existing-server" variant="subheading">
-              Add existing servers
-            </Text>
+            <div className="flex items-center justify-between gap-3">
+              <Text as="h3" id="add-existing-server" variant="subheading">
+                Add existing servers
+              </Text>
+              {canSelectAll && (
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  disabled={busy}
+                  onClick={toggleSelectAll}
+                >
+                  <Button.Text>
+                    {allSelected ? "Clear selection" : "Select all"}
+                  </Button.Text>
+                </Button>
+              )}
+            </div>
             <label ref={searchContainerRef} className="block">
               <span className="sr-only">Search existing servers</span>
               <SearchBar

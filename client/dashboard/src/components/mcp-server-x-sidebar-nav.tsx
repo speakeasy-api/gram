@@ -87,7 +87,7 @@ function remoteIdentityLabel(mode: IdentityMode): string {
     case "agent":
       return "Service Account";
     case "none":
-      return "None";
+      return "Manual";
   }
 }
 

@@ -18489,6 +18489,218 @@ paths:
       x-speakeasy-name-override: create
       x-speakeasy-react-hook:
         name: CreateDeployment
+  /rpc/deployments.evaluateOpenAPIv3:
+    post:
+      description: Compare an uploaded OpenAPI document with the version of the same source in the active deployment. Reports changes to tools, inputs and security without deploying anything.
+      operationId: evaluateOpenAPIv3
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluateOpenAPIv3Form'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenAPIv3Evaluation'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: evaluateOpenAPIv3 deployments
+      tags:
+        - deployments
+      x-speakeasy-name-override: evaluateOpenAPIv3
+      x-speakeasy-react-hook:
+        name: EvaluateOpenAPIv3
+  /rpc/deployments.evaluation:
+    get:
+      description: Compare the OpenAPI documents in a deployment with the deployment it was created from.
+      operationId: getDeploymentEvaluation
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the deployment to evaluate.
+          in: query
+          name: deployment_id
+          required: true
+          schema:
+            description: The ID of the deployment to evaluate.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDeploymentEvaluationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getDeploymentEvaluation deployments
+      tags:
+        - deployments
+      x-speakeasy-name-override: evaluation
+      x-speakeasy-react-hook:
+        name: DeploymentEvaluation
   /rpc/deployments.evolve:
     post:
       description: Create a new deployment with additional or updated tool sources.
@@ -31170,7 +31382,7 @@ paths:
         name: UpdateMcpEndpoint
   /rpc/mcpMetadata.export:
     post:
-      description: Export MCP server details as JSON for documentation and integration purposes.
+      description: Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.
       operationId: exportMcpMetadata
       parameters:
         - allowEmptyValue: true
@@ -72744,114 +72956,6 @@ paths:
       x-speakeasy-name-override: listServers
       x-speakeasy-react-hook:
         name: UnproxiedMcpServers
-  /rpc/unproxiedMcp.listTools:
-    get:
-      description: Best-effort discovery of the tools available on the vendor's MCP server. Connects live to the server's URL and issues an MCP tools/list call; the result is never cached and the connection is never reused for actual tool execution.
-      operationId: listUnproxiedMcpServerTools
-      parameters:
-        - allowEmptyValue: true
-          description: The ID of the unproxied MCP server
-          in: query
-          name: id
-          required: true
-          schema:
-            description: The ID of the unproxied MCP server
-            format: uuid
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListUnproxiedMcpServerToolsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: listTools unproxiedMcp
-      tags:
-        - unproxiedMcp
-      x-speakeasy-name-override: listTools
-      x-speakeasy-react-hook:
-        name: UnproxiedMcpServerTools
   /rpc/usage.cancelStripeSubscription:
     post:
       description: Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period
@@ -79583,7 +79687,7 @@ components:
             - allowed
             - blocked
             - unreviewed
-      description: The enforcement verdict for one detected AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
+      description: The enforcement verdict for one AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
       required:
         - state
         - decision
@@ -80396,6 +80500,8 @@ components:
     AiScanTarget:
       type: object
       properties:
+        access:
+          $ref: '#/components/schemas/AIToolAccessSummary'
         category:
           type: string
           description: 'Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).'
@@ -81134,7 +81240,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantMCPServerRef'
-          description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+          description: MCP servers attached to the assistant that are not hosted (toolset-backed); hosted servers are listed under toolsets.
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -81160,7 +81266,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantToolsetRef'
-          description: Toolsets available to the assistant.
+          description: Hosted (toolset-backed) MCP servers attached to the assistant, by toolset slug.
         updated_at:
           type: string
           description: Last update timestamp.
@@ -81194,7 +81300,7 @@ components:
           description: Optional environment slug used when connecting to the MCP server.
         mcp_server_slug:
           type: string
-          description: The MCP server slug exposed to the assistant. Covers remote- and tunnelled-backed MCP servers, which have no toolset to attach.
+          description: The MCP server slug exposed to the assistant. Covers every backend, including hosted (toolset-backed) servers.
       required:
         - mcp_server_slug
     AssistantMemory:
@@ -83228,7 +83334,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantMCPServerRef'
-          description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+          description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -83245,7 +83351,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantToolsetRef'
-          description: Toolsets available to the assistant.
+          description: Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.
         warm_ttl_seconds:
           type: integer
           description: Optional warm runtime TTL in seconds.
@@ -86654,6 +86760,21 @@ components:
         - timeout
         - fault
       x-speakeasy-name-override: ServiceError
+    EvaluateOpenAPIv3Form:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          description: The ID of the uploaded OpenAPI document asset to evaluate.
+        name:
+          type: string
+          description: The display name of the source. Defaults to the deployed name or the slug.
+        slug:
+          type: string
+          description: The slug of the OpenAPI source the document will replace. A slug that is not in the active deployment is evaluated as a new source.
+      required:
+        - asset_id
+        - slug
     EvaluatePromptGuardrailRequestBody:
       type: object
       properties:
@@ -87035,13 +87156,15 @@ components:
     ExportMcpMetadataRequestBody:
       type: object
       properties:
+        mcp_server_id:
+          type: string
+          description: The ID of a toolset-backed MCP server. Mutually exclusive with mcp_slug.
+          format: uuid
         mcp_slug:
           type: string
-          description: The MCP server slug (from the install URL)
+          description: The MCP server slug (from the install URL). Mutually exclusive with mcp_server_id.
           pattern: ^[a-z0-9_-]{1,128}$
           maxLength: 40
-      required:
-        - mcp_slug
     ExprCompileResult:
       type: object
       properties:
@@ -87989,6 +88112,23 @@ components:
       properties:
         deployment:
           $ref: '#/components/schemas/Deployment'
+    GetDeploymentEvaluationResult:
+      type: object
+      properties:
+        base_deployment_id:
+          type: string
+          description: The ID of the deployment it is compared with. Absent for the first deployment in a project.
+        deployment_id:
+          type: string
+          description: The ID of the evaluated deployment.
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenAPIv3Evaluation'
+          description: One evaluation per OpenAPI source that was added, changed or removed.
+      required:
+        - deployment_id
+        - documents
     GetDeploymentLogsResult:
       type: object
       properties:
@@ -93224,28 +93364,6 @@ components:
       description: A page of terminal skill activations without exact version attribution.
       required:
         - activations
-    ListUnproxiedMcpServerToolsResult:
-      type: object
-      properties:
-        message:
-          type: string
-          description: Human-readable detail, present for non-success statuses
-        status:
-          type: string
-          description: Outcome of the discovery attempt
-          enum:
-            - success
-            - auth_required
-            - unreachable
-            - error
-        tools:
-          type: array
-          items:
-            $ref: '#/components/schemas/UnproxiedMcpServerTool'
-      description: Result of a live tool-discovery probe against an unproxied MCP server
-      required:
-        - status
-        - tools
     ListUnproxiedMcpServersResult:
       type: object
       properties:
@@ -95544,6 +95662,43 @@ components:
         - dsync_configured
         - domain_verified
         - verified_domains
+    OpenAPIv3AffectedToolset:
+      type: object
+      properties:
+        affected_tool_count:
+          type: integer
+          description: The number of those tools with breaking changes or changes that need attention.
+          format: int64
+        id:
+          type: string
+          description: The ID of the toolset.
+        mcp_enabled:
+          type: boolean
+          description: Whether the toolset is served as an MCP server.
+        mcp_slug:
+          type: string
+          description: The MCP slug of the toolset, when it is served as an MCP server.
+        name:
+          type: string
+          description: The name of the toolset.
+        oauth_configured:
+          type: boolean
+          description: Whether the MCP server has OAuth configured.
+        slug:
+          type: string
+          description: The slug of the toolset.
+        tool_count:
+          type: integer
+          description: The number of tools from this source in the toolset.
+          format: int64
+      required:
+        - id
+        - name
+        - slug
+        - mcp_enabled
+        - oauth_configured
+        - tool_count
+        - affected_tool_count
     OpenAPIv3DeploymentAsset:
       type: object
       properties:
@@ -95566,6 +95721,148 @@ components:
         - asset_id
         - name
         - slug
+    OpenAPIv3DocumentSnapshot:
+      type: object
+      properties:
+        default_security:
+          type: string
+          description: The document-level security requirement.
+        security_schemes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenAPIv3SecuritySchemeSummary'
+          description: The security schemes tools can use.
+        server_url:
+          type: string
+          description: The default server URL tools call.
+        skipped_operation_count:
+          type: integer
+          description: The number of operations that cannot be turned into tools.
+          format: int64
+        tool_count:
+          type: integer
+          description: The number of tools the document produces.
+          format: int64
+      required:
+        - tool_count
+        - skipped_operation_count
+        - security_schemes
+        - default_security
+    OpenAPIv3Evaluation:
+      type: object
+      properties:
+        affected_toolsets:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenAPIv3AffectedToolset'
+          description: Toolsets (MCP servers) that include tools from this source.
+        asset_id:
+          type: string
+          description: The asset ID of the evaluated document. Absent when the source was removed.
+        base:
+          $ref: '#/components/schemas/OpenAPIv3DocumentSnapshot'
+        base_asset_id:
+          type: string
+          description: The asset ID of the deployed document. Absent for a new source.
+        breaking_count:
+          type: integer
+          description: The number of breaking changes.
+          format: int64
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenAPIv3EvaluationChange'
+          description: Every change found, most severe first.
+        info_count:
+          type: integer
+          description: The number of informational changes.
+          format: int64
+        name:
+          type: string
+          description: The display name of the OpenAPI source.
+        next:
+          $ref: '#/components/schemas/OpenAPIv3DocumentSnapshot'
+        slug:
+          type: string
+          description: The slug of the OpenAPI source.
+        status:
+          type: string
+          description: Whether the source is new, changed, unchanged or removed.
+          enum:
+            - new
+            - changed
+            - unchanged
+            - removed
+        warning_count:
+          type: integer
+          description: The number of changes that need attention.
+          format: int64
+      description: The changes an OpenAPI document introduces compared with the deployed version of the same source.
+      required:
+        - slug
+        - name
+        - status
+        - changes
+        - breaking_count
+        - warning_count
+        - info_count
+        - affected_toolsets
+    OpenAPIv3EvaluationChange:
+      type: object
+      properties:
+        code:
+          type: string
+          description: A stable identifier for the kind of change.
+        details:
+          type: array
+          items:
+            type: string
+          description: Supporting lines, such as before and after values.
+        title:
+          type: string
+          description: A one-line summary of the change.
+        tools:
+          type: array
+          items:
+            type: string
+          description: The names of the tools the change affects.
+        severity:
+          allOf:
+            - $ref: "#/components/schemas/OpenAPIv3EvaluationSeverity"
+          description: How likely the change is to break existing MCP servers.
+        category:
+          allOf:
+            - $ref: "#/components/schemas/OpenAPIv3EvaluationCategory"
+          description: The part of the MCP the change affects.
+      required:
+        - severity
+        - category
+        - code
+        - title
+        - details
+        - tools
+    OpenAPIv3SecuritySchemeSummary:
+      type: object
+      properties:
+        env_variables:
+          type: array
+          items:
+            type: string
+          description: The environment variables that supply credentials for the scheme.
+        key:
+          type: string
+          description: The name of the scheme under components.securitySchemes.
+        summary:
+          type: string
+          description: A short description of the scheme.
+        type:
+          type: string
+          description: The OpenAPI security scheme type.
+      required:
+        - key
+        - type
+        - summary
+        - env_variables
     Organization:
       type: object
       properties:
@@ -108129,18 +108426,6 @@ components:
       required:
         - client
         - call_count
-    UnproxiedMcpServerTool:
-      type: object
-      properties:
-        description:
-          type: string
-          description: Tool description
-        name:
-          type: string
-          description: Tool name
-      description: A tool discovered on the vendor's MCP server
-      required:
-        - name
     UnproxiedMcpServerToolUsageRow:
       type: object
       properties:
@@ -108278,7 +108563,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantMCPServerRef'
-          description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+          description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -108295,7 +108580,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantToolsetRef'
-          description: Toolsets available to the assistant.
+          description: Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.
         warm_ttl_seconds:
           type: integer
           description: Warm runtime TTL in seconds.
@@ -111669,6 +111954,14 @@ components:
     KillswitchOverlapStatus: {type: string, enum: [active, scheduled]}
     KillswitchConflictName: {type: string, enum: [operation_conflict, version_conflict]}
     AnalyticsFilterOperator: {type: string, enum: [equals, in]}
+    OpenAPIv3EvaluationSeverity:
+      type: string
+      description: How likely an OpenAPI change is to break existing MCP servers.
+      enum: [breaking, warning, info]
+    OpenAPIv3EvaluationCategory:
+      type: string
+      description: The part of the MCP an OpenAPI change affects.
+      enum: [security, tools, server]
     KillswitchScopeAllServersType: {type: string, enum: [all_servers]}
     KillswitchScopeSelectedServersType: {type: string, enum: [selected_servers]}
     KillswitchScheduleStartNow: {type: string, enum: [now]}
