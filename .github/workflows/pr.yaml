@@ -935,7 +935,7 @@ jobs:
       pull-requests: write
     services:
       postgres:
-        image: pgvector/pgvector:pg18
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
         env:
           POSTGRES_DB: dev
           POSTGRES_PASSWORD: pass
@@ -1047,7 +1047,7 @@ jobs:
       cancel-in-progress: true
     services:
       postgres:
-        image: pgvector/pgvector:pg18
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
         env:
           POSTGRES_DB: dev
           POSTGRES_PASSWORD: pass
@@ -1220,7 +1220,7 @@ jobs:
       GOMAXPROCS: 16
     services:
       postgres:
-        image: pgvector/pgvector:pg18
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
         env:
           POSTGRES_USER: gram
           POSTGRES_PASSWORD: gram
@@ -1402,7 +1402,7 @@ jobs:
       GOMAXPROCS: 4
     services:
       postgres:
-        image: pgvector/pgvector:pg18
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
         env:
           POSTGRES_USER: gram
           POSTGRES_PASSWORD: gram
