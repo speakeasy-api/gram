@@ -29,7 +29,7 @@ const DECISION_OPTIONS: { value: "approved" | "blocked"; label: string }[] = [
 const INVENTORY_ONLY_REASON =
   "This tool never identifies itself to the MCP gateway, so a decision about it would have nothing to enforce. It is listed for inventory.";
 
-// Harnesses and assistants open: they are what the policy is about. Open
+// Coding agents and assistants open: they are what the policy is about. Open
 // models are inventory only, so twenty of them would bury the decisions.
 const DEFAULT_EXPANDED: Record<string, boolean> = {
   harness: true,
@@ -176,9 +176,9 @@ function PostureNote({
     <Alert variant="info" alignTop>
       <AlertDescription>
         Unreviewed MCP servers are blocked by this policy's default, so allow
-        the ones your teams need on the Shadow MCP inventory. Unreviewed
-        harnesses and assistants still connect until you deny them. Decisions
-        apply when the policy is saved.
+        the ones your teams need on the Shadow MCP inventory. Unreviewed coding
+        agents and assistants still connect until you deny them. Decisions apply
+        when the policy is saved.
       </AlertDescription>
     </Alert>
   );

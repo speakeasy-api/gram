@@ -7,7 +7,7 @@ import {
 } from "../shadow-ai/use-undecided-tool-count";
 
 const UNDECIDED_TOOLS_TOOLTIP =
-  "Harnesses and assistants the device agent found, and MCP servers seen in agent traffic, that nobody has approved or disallowed yet. Decide in the Shadow AI policy under Guardrails.";
+  "Coding agents and assistants the device agent found, and MCP servers seen in agent traffic, that nobody has approved or disallowed yet. Decide in the Shadow AI policy under Guardrails.";
 
 /** What the tile shows for a count: a dash when a read failed (unknown is
  *  not zero), a floor when the inventory has more pages, the number

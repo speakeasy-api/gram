@@ -144,6 +144,7 @@ import SecurityOverview, {
 import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import {
+  ShadowAIHarnessDetailLegacyRedirect,
   ShadowAIRoot,
   ShadowAISectionRedirect,
   ShadowMCPLegacyRedirect,
@@ -971,9 +972,9 @@ const ROUTE_STRUCTURE = {
     subPages: {
       // A tool's detail is nested under its category, as the server detail
       // is under MCPs, so the breadcrumb says which kind a pasted link is.
-      harnesses: {
-        title: "Harnesses",
-        url: "harnesses",
+      agents: {
+        title: "Coding agents",
+        url: "agents",
         component: ShadowAIRoot,
         indexComponent: ShadowAISectionRedirect,
         subPages: {
@@ -981,6 +982,22 @@ const ROUTE_STRUCTURE = {
             title: "Shadow AI Tool",
             url: ":targetId",
             component: ShadowAIToolDetail,
+          },
+        },
+      },
+      // The coding agents tab was once called Harnesses. Its paths sit in
+      // tickets and bookmarks, so they redirect rather than 404.
+      harnessesLegacy: {
+        title: "Coding agents",
+        url: "harnesses",
+        legacyRedirect: true,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAISectionRedirect,
+        subPages: {
+          detail: {
+            title: "Coding agents",
+            url: ":targetId",
+            component: ShadowAIHarnessDetailLegacyRedirect,
           },
         },
       },

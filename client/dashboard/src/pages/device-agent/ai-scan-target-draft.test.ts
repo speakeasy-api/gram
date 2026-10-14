@@ -301,7 +301,7 @@ describe("draftFromTarget", () => {
 
 describe("categoryLabel", () => {
   it("labels every category the editor offers", () => {
-    expect(categoryLabel("harness")).toBe("Harness");
+    expect(categoryLabel("harness")).toBe("Coding agent");
     expect(categoryLabel("assistant")).toBe("Assistant");
     expect(categoryLabel("local_model")).toBe("Open model");
   });

@@ -282,7 +282,7 @@ describe("ShadowAIPolicyEditor", () => {
     expect(
       screen.getByText("Message shown when a server is refused"),
     ).toBeTruthy();
-    expect(screen.getByText(/Harness refusals at sign-in/)).toBeTruthy();
+    expect(screen.getByText(/Coding agent refusals at sign-in/)).toBeTruthy();
     expect(screen.queryByText("Deny the request")).toBeNull();
     expect(screen.getByText("Severity")).toBeTruthy();
   });

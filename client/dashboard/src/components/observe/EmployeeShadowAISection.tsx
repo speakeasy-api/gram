@@ -30,7 +30,7 @@ const COLUMNS: Column<AIDetection>[] = [
     width: "0.75fr",
     // categoryLabel is the scan-target editor's own label table, so a
     // category added there is rendered here without a second edit. The
-    // ternary this replaced showed every assistant detection as "Harness".
+    // ternary this replaced showed every assistant detection as a harness.
     render: (detection) => (
       <Text small>{categoryLabel(detection.category)}</Text>
     ),
@@ -80,7 +80,7 @@ export function EmployeeShadowAISection({
       <InlineEmptyState
         icon="radar"
         heading="No detected AI tools"
-        description="No AI harnesses or open models have been detected for this identity."
+        description="No coding agents, assistants, or open models have been detected for this identity."
         orientation="horizontal"
       />
     );

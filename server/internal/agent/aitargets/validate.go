@@ -170,7 +170,7 @@ func validateGatewayClient(category Category, gateway GatewayClient, fail func(s
 	// name a caller. An open model run locally is software on a laptop and
 	// nothing else, so a matcher on one would name a caller that cannot exist.
 	if !CallsGateway(category) && !gateway.IsZero() {
-		return fail("only a harness or assistant can carry gateway client matchers; %q never calls the MCP gateway", category)
+		return fail("only a coding agent or assistant can carry gateway client matchers; %q never calls the MCP gateway", category)
 	}
 	for _, list := range [][]string{gateway.CIMDVendorKeys, gateway.OAuthClientIDs, gateway.ClientInfoNames} {
 		if len(list) > MaxGatewayClientEntries {

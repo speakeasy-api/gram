@@ -10,6 +10,7 @@ import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import {
   ShadowAISectionRedirect,
+  ShadowAIHarnessDetailLegacyRedirect,
   ShadowMCPLegacyRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
@@ -36,8 +37,8 @@ function ShadowAIHrefs(): JSX.Element {
   return (
     <output data-testid="shadow-ai-hrefs">
       {[
-        routes.shadowAI.harnesses.href(),
-        routes.shadowAI.harnesses.detail.href("cursor"),
+        routes.shadowAI.agents.href(),
+        routes.shadowAI.agents.detail.href("cursor"),
         routes.shadowAI.mcps.href(),
         routes.shadowAI.mcps.detail.href("server-slug"),
       ].join("\n")}
@@ -114,8 +115,8 @@ describe("project routes", () => {
     expect(
       (screen.getByTestId("shadow-ai-hrefs").textContent ?? "").split("\n"),
     ).toEqual([
-      "/org/projects/project/shadow-ai/harnesses",
-      "/org/projects/project/shadow-ai/harnesses/cursor",
+      "/org/projects/project/shadow-ai/agents",
+      "/org/projects/project/shadow-ai/agents/cursor",
       "/org/projects/project/shadow-ai/mcps",
       "/org/projects/project/shadow-ai/mcps/server-slug",
     ]);
@@ -140,6 +141,7 @@ describe("project routes", () => {
   // the older Shadow MCP index, sends a pasted link there.
   it.each([
     "shadow-ai",
+    "shadow-ai/agents",
     "shadow-ai/harnesses",
     "shadow-ai/assistants",
     "shadow-ai/models",
@@ -212,6 +214,30 @@ describe("project routes", () => {
     expect(
       await screen.findByText(
         "/org/projects/project/shadow-ai/mcps/server-slug?tab=users#top",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("redirects a legacy harness tool path to the coding agent's page", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/org/projects/project/shadow-ai/harnesses/cursor?tab=people#top",
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/org/projects/project/shadow-ai/harnesses/:targetId"
+            element={<ShadowAIHarnessDetailLegacyRedirect />}
+          />
+          <Route path="*" element={<LocationPath />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText(
+        "/org/projects/project/shadow-ai/agents/cursor?tab=people#top",
       ),
     ).toBeTruthy();
   });
