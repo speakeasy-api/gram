@@ -13,6 +13,11 @@ permissions:
       - server/gen/http/openapi3.yaml
   workflow_dispatch: {}
 
+# A queued run is replaced by a newer one, which regenerates from a later main.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   speakeasy-update-public-spec:
     runs-on: blacksmith-4vcpu-ubuntu-2404

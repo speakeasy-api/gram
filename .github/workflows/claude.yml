@@ -1,6 +1,9 @@
 name: Claude Code
 
-on:
+# No concurrency group: every comment and review triggers this workflow, and
+# GitHub replaces a group's pending run with the next one, so an unrelated
+# comment could drop a queued @claude request.
+on: # zizmor: ignore[concurrency-limits]
   issue_comment:
     types: [created]
   pull_request_review_comment:
