@@ -247,7 +247,10 @@ func TestUpdateMcpServerHostedWrapperRejectsPublicFlipWithExternalOAuth(t *testi
 	require.True(t, toolset.ExternalOauthServerID.Valid, "the external OAuth server is not silently detached")
 
 	_, err = f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("disabled"), nil))
-	require.NoError(t, err, "disabling leaves the public flag alone")
+	require.NoError(t, err)
+	toolset, _ = f.requireProjected(t, ctx)
+	require.False(t, toolset.McpEnabled)
+	require.True(t, toolset.McpIsPublic, "disabling leaves the public flag alone")
 }
 
 func TestUpdateMcpServerHostedWrapperRejectsNameOverToolsetLimit(t *testing.T) {

@@ -126,6 +126,10 @@ func render(t *testing.T, fx consentActionFixture) (int, string, *url.URL) {
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+fx.endpoint.Slug+"/connect?state="+url.QueryEscape(fx.stateID), nil)
 	w := httptest.NewRecorder()
 	require.NoError(t, fx.ti.service.ServeConsent(w, req, fx.endpoint))
+	if w.Code == http.StatusOK {
+		require.Equal(t, "frame-ancestors 'none'", w.Header().Get("Content-Security-Policy"))
+		require.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
+	}
 	var loc *url.URL
 	if l := w.Header().Get("Location"); l != "" {
 		var err error
