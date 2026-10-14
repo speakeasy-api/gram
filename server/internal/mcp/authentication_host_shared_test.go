@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -185,14 +186,15 @@ func TestAuthenticationHostSharedAuthorizationServer_OtherIssuersNotFound(t *tes
 // shared authorization server serves on the authentication host that names
 // its endpoints and grants.
 type authenticationHostSharedMetadata struct {
-	Issuer                string   `json:"issuer"`
-	AuthorizationEndpoint string   `json:"authorization_endpoint"`
-	TokenEndpoint         string   `json:"token_endpoint"`
-	RegistrationEndpoint  string   `json:"registration_endpoint"`
-	RevocationEndpoint    string   `json:"revocation_endpoint"`
-	ResponseTypes         []string `json:"response_types_supported"`
-	GrantTypes            []string `json:"grant_types_supported"`
-	GrantProfiles         []string `json:"authorization_grant_profiles_supported"`
+	Issuer                   string   `json:"issuer"`
+	AuthorizationEndpoint    string   `json:"authorization_endpoint"`
+	TokenEndpoint            string   `json:"token_endpoint"`
+	RegistrationEndpoint     string   `json:"registration_endpoint"`
+	RevocationEndpoint       string   `json:"revocation_endpoint"`
+	TokenEndpointAuthMethods []string `json:"token_endpoint_auth_methods_supported"`
+	ResponseTypes            []string `json:"response_types_supported"`
+	GrantTypes               []string `json:"grant_types_supported"`
+	GrantProfiles            []string `json:"authorization_grant_profiles_supported"`
 }
 
 // On the authentication host, metadata advertises browser sign-in alongside
@@ -223,14 +225,15 @@ func TestAuthenticationHostSharedAuthorizationServer_MetadataAdvertisesBrowserSi
 			var metadata authenticationHostSharedMetadata
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
 			require.Equal(t, authenticationHostSharedMetadata{
-				Issuer:                issuerURL,
-				AuthorizationEndpoint: issuerURL + "/authorize",
-				TokenEndpoint:         issuerURL + "/token",
-				RegistrationEndpoint:  issuerURL + "/register",
-				RevocationEndpoint:    issuerURL + "/revoke",
-				ResponseTypes:         []string{"code"},
-				GrantTypes:            []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer},
-				GrantProfiles:         []string{oauthwire.GrantProfileIDJAG},
+				Issuer:                   issuerURL,
+				AuthorizationEndpoint:    issuerURL + "/authorize",
+				TokenEndpoint:            issuerURL + "/token",
+				RegistrationEndpoint:     issuerURL + "/register",
+				RevocationEndpoint:       issuerURL + "/revoke",
+				TokenEndpointAuthMethods: usersessions.SupportedAuthMethods,
+				ResponseTypes:            []string{"code"},
+				GrantTypes:               []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer},
+				GrantProfiles:            []string{oauthwire.GrantProfileIDJAG},
 			}, metadata)
 		})
 	}
