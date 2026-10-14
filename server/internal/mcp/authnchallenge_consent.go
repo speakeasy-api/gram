@@ -579,7 +579,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	connectedCardCount := 0
 	chainedCardCount := 0
-	linkedOrChainedCardCount := 0
+	// Cards that can only reach their upstream by chaining after approval.
+	chainOnlyCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
@@ -592,8 +593,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		if c.Chained {
 			chainedCardCount++
 		}
-		if c.Connected || c.Chained {
-			linkedOrChainedCardCount++
+		if c.Chained && !c.Connected && c.ChainCheck != chainCheckRejected {
+			chainOnlyCardCount++
 		}
 		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
@@ -603,9 +604,6 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	// Chained cards enable access too: the runtime chains when no interactive token exists.
 	consentEnabled := len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
-	// Chained upstreams have no token before the grant exists, so their tools
-	// cannot be listed until after approval.
-	inventoryDeferred := chainedCardCount > 0 && linkedOrChainedCardCount == len(cards)
 
 	agentSelectionEnabled := false
 	agentSetupURL := ""
@@ -688,6 +686,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			s.consentToolSelectionPrefill(ctx, endpoint, *challengeState.Subject, clientRowID),
 		)
 	}
+	// A chain-only page has no upstream token before the grant exists, so its
+	// tools load only after approval. A stored restrictive selection keeps
+	// blocking instead: deferring would replace it with all tools.
+	inventoryDeferred := len(cards) > 0 && chainOnlyCardCount == len(cards) && prefillAttr == ""
 
 	data := consentTemplateData{
 		ClientName:              clientName,
