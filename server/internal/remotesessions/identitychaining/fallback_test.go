@@ -192,6 +192,26 @@ func TestExhausted_PrefersAnAttemptedProvider(t *testing.T) {
 	require.False(t, only.Applicable())
 }
 
+func TestExhausted_PrefersReauthentication(t *testing.T) {
+	t.Parallel()
+	denied := newOutcome(StageExchange, ReasonAccessDenied, ConfidenceInferred, false)
+	denied.Provider = remotesessions.EMAProviderExternal
+	reauth := newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
+	reauth.Provider = remotesessions.EMAProviderSpeakeasy
+
+	got := exhausted([]Outcome{denied, reauth})
+	require.Equal(t, ReasonReauthenticationRequired, got.Reason, "a reconnect challenge beats an earlier denial")
+	require.Equal(t, remotesessions.EMAProviderSpeakeasy, got.Provider)
+	require.Equal(t, []ProviderFailure{
+		{Provider: remotesessions.EMAProviderExternal, Reason: ReasonAccessDenied, Unavailable: ""},
+		{Provider: remotesessions.EMAProviderSpeakeasy, Reason: ReasonReauthenticationRequired, Unavailable: ""},
+	}, got.Failures, "every provider's reason is kept")
+
+	invalid := newOutcome(StageRedemption, ReasonInvalidGrant, ConfidenceUnknown, false)
+	invalid.Provider = remotesessions.EMAProviderSpeakeasy
+	require.Equal(t, ReasonAccessDenied, exhausted([]Outcome{denied, invalid}).Reason, "without a reauthentication the first attempted provider explains it")
+}
+
 func TestTryProviders_SubmittedTransientFailureIsNotRepeated(t *testing.T) {
 	t.Parallel()
 	c, _ := meteredChainer(t)

@@ -291,6 +291,25 @@ func TestProviders_AllProvidersFailReportsEachReason(t *testing.T) {
 	require.Equal(t, 1, src.issued)
 }
 
+func TestProviders_AllProvidersFailPrefersReauthentication(t *testing.T) {
+	t.Parallel()
+	f := newDevIDPFixture(t, devIDPOptions{unassigned: true})
+	reauth := newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
+	src := &failingSource{authorizeOutcome: reauth, reuseOutcome: reauth, issueOutcome: success, issued: 0}
+	useSpeakeasySource(f, src)
+	setPolicy(t, f, f.req.OrganizationID, external(f.trustedIssuerID), speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
+
+	token, outcome := f.chainer.Acquire(t.Context(), f.req)
+	require.Empty(t, token.Value())
+	require.Equal(t, ReasonReauthenticationRequired, outcome.Reason, "the later reconnect challenge beats the earlier denial")
+	require.Equal(t, remotesessions.EMAProviderSpeakeasy, outcome.Provider)
+	require.Equal(t, []ProviderFailure{
+		{Provider: remotesessions.EMAProviderExternal, Reason: ReasonAccessDenied, Unavailable: ""},
+		{Provider: remotesessions.EMAProviderSpeakeasy, Reason: ReasonReauthenticationRequired, Unavailable: ""},
+	}, outcome.Failures, "every provider's reason is reported")
+	require.Zero(t, src.issued)
+}
+
 // publishedKeySource is a failingSource whose signing key was published at
 // publishedAt.
 type publishedKeySource struct {

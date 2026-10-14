@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -163,10 +164,12 @@ func providerBudget(ctx context.Context, providersLeft int) time.Duration {
 	return left
 }
 
-// exhausted reports an order where no provider succeeded. The first provider
-// that was actually tried explains the failure best; when none could serve,
-// the result is provider_unavailable, so the interactive path applies
-// unchanged. Every provider's failure is attached.
+// exhausted reports an order where no provider succeeded. A provider asking
+// for reauthentication wins, since reconnecting is the one step the user can
+// take. Otherwise the first provider that was actually tried explains the
+// failure best; when none could serve, the result is provider_unavailable,
+// so the interactive path applies unchanged. Every provider's failure is
+// attached.
 func exhausted(failures []Outcome) Outcome {
 	if len(failures) == 0 {
 		return providerUnavailable
@@ -177,6 +180,9 @@ func exhausted(failures []Outcome) Outcome {
 			outcome = f
 			break
 		}
+	}
+	if i := slices.IndexFunc(failures, func(f Outcome) bool { return f.Reason == ReasonReauthenticationRequired }); i >= 0 {
+		outcome = failures[i]
 	}
 	if len(failures) > 1 {
 		outcome.Failures = make([]ProviderFailure, 0, len(failures))
