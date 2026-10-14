@@ -153,6 +153,31 @@ func BuildRemoveUserPayload(organizationsRemoveUserUserID string, organizationsR
 	return v, nil
 }
 
+// BuildRevokeMemberSignInsPayload builds the payload for the organizations
+// revokeMemberSignIns endpoint from CLI flags.
+func BuildRevokeMemberSignInsPayload(organizationsRevokeMemberSignInsBody string, organizationsRevokeMemberSignInsSessionToken string) (*organizations.RevokeMemberSignInsPayload, error) {
+	var err error
+	var body RevokeMemberSignInsRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsRevokeMemberSignInsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"user_id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsRevokeMemberSignInsSessionToken != "" {
+			sessionToken = &organizationsRevokeMemberSignInsSessionToken
+		}
+	}
+	v := &organizations.RevokeMemberSignInsPayload{
+		UserID: body.UserID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildEnableWebhooksPayload builds the payload for the organizations
 // enableWebhooks endpoint from CLI flags.
 func BuildEnableWebhooksPayload(organizationsEnableWebhooksSessionToken string) (*organizations.EnableWebhooksPayload, error) {

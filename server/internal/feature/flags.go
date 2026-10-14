@@ -174,9 +174,19 @@ const (
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
 
+	// FlagSignInEnforcement turns on, per organization (keyed by its id),
+	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
+	// everywhere, member sign-in revocation and revocation on deprovisioning.
+	// Enable it only once every pod runs the code that honours it. It is
+	// evaluated with the organization id as the distinct id and no groups, so
+	// the PostHog flag must be person-aggregated and match distinct_id in a
+	// list of organization ids; a group-aggregated flag never matches.
+	FlagSignInEnforcement Flag = "sign-in-enforcement"
+
 	// FlagEMAProviders gates changing a vendor's EMA provider order while the
 	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.
 	FlagEMAProviders Flag = "ema-providers"
+
 	// FlagInternalSessionIssuer gates an organization's internal session issuer
 	// while it rolls out: enabling it, signing with it and its Platform MCP tool.
 	// Server-evaluated, targeted by the organization group.

@@ -752,6 +752,7 @@ func newWorkerCommand() *cli.Command {
 			)
 
 			sessionManager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, identityResolver)
+			sessionManager.SetFlags(featureFlags)
 
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link

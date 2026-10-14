@@ -180,6 +180,34 @@ var _ = Service("auth", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Logout"}`)
 	})
 
+	Method("logoutEverywhere", func() {
+		Description("Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.")
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(func() {
+			Attribute("session_cookie", String, "Empty string to clear the session")
+			Attribute("revoked_sign_ins", Int, "Number of sign-ins revoked.")
+			Attribute("revoked_sessions", Int, "Number of MCP grants revoked.")
+			Required("session_cookie", "revoked_sign_ins", "revoked_sessions")
+		})
+
+		HTTP(func() {
+			POST("/rpc/auth.logoutEverywhere")
+			security.SessionHeader()
+
+			Response(StatusOK, func() {
+				security.DeleteSessionCookie()
+			})
+		})
+
+		Meta("openapi:operationId", "logoutEverywhere")
+		Meta("openapi:extension:x-speakeasy-name-override", "logoutEverywhere")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LogoutEverywhere"}`)
+	})
+
 	Method("register", func() {
 		Description("Register a new org for a user with their session information.")
 

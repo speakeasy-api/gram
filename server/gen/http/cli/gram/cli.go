@@ -130,7 +130,7 @@ func UsageCommands() []string {
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|upgrade-assistant-identity|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
-		"auth (callback|login|switch-scopes|enter-demo|logout|register|info|transfer-out|transfer-in)",
+		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
@@ -166,7 +166,7 @@ func UsageCommands() []string {
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
 		"okta-resource-connections (list|confirm|reset)",
 		"okta-server-suggestions (list|dismiss|restore)",
-		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task|submit-onboarding-survey)",
+		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|revoke-member-sign-ins|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task|submit-onboarding-survey)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -207,7 +207,7 @@ func UsageCommands() []string {
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
-		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
+		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject)",
@@ -851,6 +851,9 @@ func ParseEndpoint(
 
 		authLogoutFlags            = flag.NewFlagSet("logout", flag.ExitOnError)
 		authLogoutSessionTokenFlag = authLogoutFlags.String("session-token", "", "")
+
+		authLogoutEverywhereFlags            = flag.NewFlagSet("logout-everywhere", flag.ExitOnError)
+		authLogoutEverywhereSessionTokenFlag = authLogoutEverywhereFlags.String("session-token", "", "")
 
 		authRegisterFlags            = flag.NewFlagSet("register", flag.ExitOnError)
 		authRegisterBodyFlag         = authRegisterFlags.String("body", "REQUIRED", "")
@@ -2123,6 +2126,10 @@ func ParseEndpoint(
 		organizationsRemoveUserFlags            = flag.NewFlagSet("remove-user", flag.ExitOnError)
 		organizationsRemoveUserUserIDFlag       = organizationsRemoveUserFlags.String("user-id", "REQUIRED", "")
 		organizationsRemoveUserSessionTokenFlag = organizationsRemoveUserFlags.String("session-token", "", "")
+
+		organizationsRevokeMemberSignInsFlags            = flag.NewFlagSet("revoke-member-sign-ins", flag.ExitOnError)
+		organizationsRevokeMemberSignInsBodyFlag         = organizationsRevokeMemberSignInsFlags.String("body", "REQUIRED", "")
+		organizationsRevokeMemberSignInsSessionTokenFlag = organizationsRevokeMemberSignInsFlags.String("session-token", "", "")
 
 		organizationsEnableWebhooksFlags            = flag.NewFlagSet("enable-webhooks", flag.ExitOnError)
 		organizationsEnableWebhooksSessionTokenFlag = organizationsEnableWebhooksFlags.String("session-token", "", "")
@@ -4818,6 +4825,7 @@ func ParseEndpoint(
 		organizationUserSessionIssuersListIssuersFlags            = flag.NewFlagSet("list-issuers", flag.ExitOnError)
 		organizationUserSessionIssuersListIssuersCursorFlag       = organizationUserSessionIssuersListIssuersFlags.String("cursor", "", "")
 		organizationUserSessionIssuersListIssuersLimitFlag        = organizationUserSessionIssuersListIssuersFlags.String("limit", "", "")
+		organizationUserSessionIssuersListIssuersTierFlag         = organizationUserSessionIssuersListIssuersFlags.String("tier", "", "")
 		organizationUserSessionIssuersListIssuersSessionTokenFlag = organizationUserSessionIssuersListIssuersFlags.String("session-token", "", "")
 
 		organizationUserSessionIssuersGetIssuerFlags            = flag.NewFlagSet("get-issuer", flag.ExitOnError)
@@ -4827,6 +4835,12 @@ func ParseEndpoint(
 		organizationUserSessionIssuersUpdateIssuerFlags            = flag.NewFlagSet("update-issuer", flag.ExitOnError)
 		organizationUserSessionIssuersUpdateIssuerBodyFlag         = organizationUserSessionIssuersUpdateIssuerFlags.String("body", "REQUIRED", "")
 		organizationUserSessionIssuersUpdateIssuerSessionTokenFlag = organizationUserSessionIssuersUpdateIssuerFlags.String("session-token", "", "")
+
+		organizationUserSessionIssuersListMcpServersFlags                   = flag.NewFlagSet("list-mcp-servers", flag.ExitOnError)
+		organizationUserSessionIssuersListMcpServersUserSessionIssuerIDFlag = organizationUserSessionIssuersListMcpServersFlags.String("user-session-issuer-id", "REQUIRED", "")
+		organizationUserSessionIssuersListMcpServersCursorFlag              = organizationUserSessionIssuersListMcpServersFlags.String("cursor", "", "")
+		organizationUserSessionIssuersListMcpServersLimitFlag               = organizationUserSessionIssuersListMcpServersFlags.String("limit", "", "")
+		organizationUserSessionIssuersListMcpServersSessionTokenFlag        = organizationUserSessionIssuersListMcpServersFlags.String("session-token", "", "")
 
 		organizationUserSessionIssuersGetIssuerDeletePreflightFlags            = flag.NewFlagSet("get-issuer-delete-preflight", flag.ExitOnError)
 		organizationUserSessionIssuersGetIssuerDeletePreflightIDFlag           = organizationUserSessionIssuersGetIssuerDeletePreflightFlags.String("id", "REQUIRED", "")
@@ -5158,6 +5172,7 @@ func ParseEndpoint(
 	authSwitchScopesFlags.Usage = authSwitchScopesUsage
 	authEnterDemoFlags.Usage = authEnterDemoUsage
 	authLogoutFlags.Usage = authLogoutUsage
+	authLogoutEverywhereFlags.Usage = authLogoutEverywhereUsage
 	authRegisterFlags.Usage = authRegisterUsage
 	authInfoFlags.Usage = authInfoUsage
 	authTransferOutFlags.Usage = authTransferOutUsage
@@ -5463,6 +5478,7 @@ func ParseEndpoint(
 	organizationsListInvitesFlags.Usage = organizationsListInvitesUsage
 	organizationsListUsersFlags.Usage = organizationsListUsersUsage
 	organizationsRemoveUserFlags.Usage = organizationsRemoveUserUsage
+	organizationsRevokeMemberSignInsFlags.Usage = organizationsRevokeMemberSignInsUsage
 	organizationsEnableWebhooksFlags.Usage = organizationsEnableWebhooksUsage
 	organizationsDisableWebhooksFlags.Usage = organizationsDisableWebhooksUsage
 	organizationsCreatePortalSessionFlags.Usage = organizationsCreatePortalSessionUsage
@@ -6036,6 +6052,7 @@ func ParseEndpoint(
 	organizationUserSessionIssuersListIssuersFlags.Usage = organizationUserSessionIssuersListIssuersUsage
 	organizationUserSessionIssuersGetIssuerFlags.Usage = organizationUserSessionIssuersGetIssuerUsage
 	organizationUserSessionIssuersUpdateIssuerFlags.Usage = organizationUserSessionIssuersUpdateIssuerUsage
+	organizationUserSessionIssuersListMcpServersFlags.Usage = organizationUserSessionIssuersListMcpServersUsage
 	organizationUserSessionIssuersGetIssuerDeletePreflightFlags.Usage = organizationUserSessionIssuersGetIssuerDeletePreflightUsage
 	organizationUserSessionIssuersDeleteIssuerFlags.Usage = organizationUserSessionIssuersDeleteIssuerUsage
 	organizationUserSessionIssuersMoveIssuerFlags.Usage = organizationUserSessionIssuersMoveIssuerUsage
@@ -6703,6 +6720,9 @@ func ParseEndpoint(
 
 			case "logout":
 				epf = authLogoutFlags
+
+			case "logout-everywhere":
+				epf = authLogoutEverywhereFlags
 
 			case "register":
 				epf = authRegisterFlags
@@ -7546,6 +7566,9 @@ func ParseEndpoint(
 
 			case "remove-user":
 				epf = organizationsRemoveUserFlags
+
+			case "revoke-member-sign-ins":
+				epf = organizationsRevokeMemberSignInsFlags
 
 			case "enable-webhooks":
 				epf = organizationsEnableWebhooksFlags
@@ -9184,6 +9207,9 @@ func ParseEndpoint(
 			case "update-issuer":
 				epf = organizationUserSessionIssuersUpdateIssuerFlags
 
+			case "list-mcp-servers":
+				epf = organizationUserSessionIssuersListMcpServersFlags
+
 			case "get-issuer-delete-preflight":
 				epf = organizationUserSessionIssuersGetIssuerDeletePreflightFlags
 
@@ -9747,6 +9773,9 @@ func ParseEndpoint(
 			case "logout":
 				endpoint = c.Logout()
 				data, err = authc.BuildLogoutPayload(*authLogoutSessionTokenFlag)
+			case "logout-everywhere":
+				endpoint = c.LogoutEverywhere()
+				data, err = authc.BuildLogoutEverywherePayload(*authLogoutEverywhereSessionTokenFlag)
 			case "register":
 				endpoint = c.Register()
 				data, err = authc.BuildRegisterPayload(*authRegisterBodyFlag, *authRegisterSessionTokenFlag)
@@ -10590,6 +10619,9 @@ func ParseEndpoint(
 			case "remove-user":
 				endpoint = c.RemoveUser()
 				data, err = organizationsc.BuildRemoveUserPayload(*organizationsRemoveUserUserIDFlag, *organizationsRemoveUserSessionTokenFlag)
+			case "revoke-member-sign-ins":
+				endpoint = c.RevokeMemberSignIns()
+				data, err = organizationsc.BuildRevokeMemberSignInsPayload(*organizationsRevokeMemberSignInsBodyFlag, *organizationsRevokeMemberSignInsSessionTokenFlag)
 			case "enable-webhooks":
 				endpoint = c.EnableWebhooks()
 				data, err = organizationsc.BuildEnableWebhooksPayload(*organizationsEnableWebhooksSessionTokenFlag)
@@ -12234,13 +12266,16 @@ func ParseEndpoint(
 				data, err = organizationusersessionissuersc.BuildCreateIssuerPayload(*organizationUserSessionIssuersCreateIssuerBodyFlag, *organizationUserSessionIssuersCreateIssuerSessionTokenFlag)
 			case "list-issuers":
 				endpoint = c.ListIssuers()
-				data, err = organizationusersessionissuersc.BuildListIssuersPayload(*organizationUserSessionIssuersListIssuersCursorFlag, *organizationUserSessionIssuersListIssuersLimitFlag, *organizationUserSessionIssuersListIssuersSessionTokenFlag)
+				data, err = organizationusersessionissuersc.BuildListIssuersPayload(*organizationUserSessionIssuersListIssuersCursorFlag, *organizationUserSessionIssuersListIssuersLimitFlag, *organizationUserSessionIssuersListIssuersTierFlag, *organizationUserSessionIssuersListIssuersSessionTokenFlag)
 			case "get-issuer":
 				endpoint = c.GetIssuer()
 				data, err = organizationusersessionissuersc.BuildGetIssuerPayload(*organizationUserSessionIssuersGetIssuerIDFlag, *organizationUserSessionIssuersGetIssuerSessionTokenFlag)
 			case "update-issuer":
 				endpoint = c.UpdateIssuer()
 				data, err = organizationusersessionissuersc.BuildUpdateIssuerPayload(*organizationUserSessionIssuersUpdateIssuerBodyFlag, *organizationUserSessionIssuersUpdateIssuerSessionTokenFlag)
+			case "list-mcp-servers":
+				endpoint = c.ListMcpServers()
+				data, err = organizationusersessionissuersc.BuildListMcpServersPayload(*organizationUserSessionIssuersListMcpServersUserSessionIssuerIDFlag, *organizationUserSessionIssuersListMcpServersCursorFlag, *organizationUserSessionIssuersListMcpServersLimitFlag, *organizationUserSessionIssuersListMcpServersSessionTokenFlag)
 			case "get-issuer-delete-preflight":
 				endpoint = c.GetIssuerDeletePreflight()
 				data, err = organizationusersessionissuersc.BuildGetIssuerDeletePreflightPayload(*organizationUserSessionIssuersGetIssuerDeletePreflightIDFlag, *organizationUserSessionIssuersGetIssuerDeletePreflightSessionTokenFlag)
@@ -15095,6 +15130,7 @@ func authUsage() {
 	fmt.Fprintln(os.Stderr, `    switch-scopes: Switches the authentication scope to a different organization.`)
 	fmt.Fprintln(os.Stderr, `    enter-demo: Switches the current session into the shared read-only demo organization.`)
 	fmt.Fprintln(os.Stderr, `    logout: Logs out the current user by clearing their session.`)
+	fmt.Fprintln(os.Stderr, `    logout-everywhere: Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.`)
 	fmt.Fprintln(os.Stderr, `    register: Register a new org for a user with their session information.`)
 	fmt.Fprintln(os.Stderr, `    info: Provides information about the current authentication status.`)
 	fmt.Fprintln(os.Stderr, `    transfer-out: Step 2/3 (authorize) of a cross-domain session transfer, on the source platform host. Reached from Step 1/3, transferIn's start mode on the target host; redirects to Step 3/3, transferIn's callback mode there. Authenticates the session from the session cookie or header, checks that its active organization's default host is the target, and stores a one-time transfer code bound to the browser's nonce. Only an ordinary session whose organization lives on the target host can transfer. On any failure the browser is sent to a login page with a signin_error code instead of an error. See the flow diagram in server/internal/auth/transfer.go.`)
@@ -15203,6 +15239,24 @@ func authLogoutUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth logout --session-token \"abc123\"")
+}
+
+func authLogoutEverywhereUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth logout-everywhere", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth logout-everywhere --session-token \"abc123\"")
 }
 
 func authRegisterUsage() {
@@ -20843,6 +20897,7 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    list-invites: List pending WorkOS invitations for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    list-users: List users in the active organization from Speakeasy organization_user_relationships.`)
 	fmt.Fprintln(os.Stderr, `    remove-user: Remove a user from the active organization in Speakeasy and delete their WorkOS organization membership.`)
+	fmt.Fprintln(os.Stderr, `    revoke-member-sign-ins: Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.`)
 	fmt.Fprintln(os.Stderr, `    enable-webhooks: Enable  webhooks for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    disable-webhooks: Disable  webhooks for the active organization.`)
 	fmt.Fprintln(os.Stderr, `    create-portal-session: Create a webhook portal session.`)
@@ -20989,6 +21044,26 @@ func organizationsRemoveUserUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations remove-user --user-id \"abc123\" --session-token \"abc123\"")
+}
+
+func organizationsRevokeMemberSignInsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations revoke-member-sign-ins", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations revoke-member-sign-ins --body '{\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationsEnableWebhooksUsage() {
@@ -32960,9 +33035,10 @@ func organizationUserSessionIssuersUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organization-user-session-issuers COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-issuer: Create an organization-owned user_session_issuer. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    list-issuers: List organization-owned user_session_issuers. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    get-issuer: Get an organization-owned user_session_issuer by id. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    list-issuers: List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    get-issuer: Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Update an organization-owned user_session_issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-delete-preflight: Report the clients, live sessions, MCP servers, and toolsets affected by deleting an organization-owned user_session_issuer. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuer: Soft-delete an organization-owned user_session_issuer. Refuses while a live MCP server or toolset references it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a user_session_issuer in the caller's organization. Provide a project_id to make it project-specific, or omit it to make it organization-owned. Existing clients and sessions move with the issuer. Requires org:admin.`)
@@ -33001,21 +33077,23 @@ func organizationUserSessionIssuersListIssuersUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] organization-user-session-issuers list-issuers", os.Args[0])
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -tier STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List organization-owned user_session_issuers. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -tier STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers list-issuers --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers list-issuers --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --tier \"project\" --session-token \"abc123\"")
 }
 
 func organizationUserSessionIssuersGetIssuerUsage() {
@@ -33027,7 +33105,7 @@ func organizationUserSessionIssuersGetIssuerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get an organization-owned user_session_issuer by id. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -33056,6 +33134,30 @@ func organizationUserSessionIssuersUpdateIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers update-issuer --body '{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 2,\n      \"slug\": \"abc123\",\n      \"trusted_remote_session_client_id\": \"abc123\",\n      \"trusted_remote_session_issuer_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func organizationUserSessionIssuersListMcpServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-user-session-issuers list-mcp-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-user-session-issuers list-mcp-servers --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 1 --session-token \"abc123\"")
 }
 
 func organizationUserSessionIssuersGetIssuerDeletePreflightUsage() {

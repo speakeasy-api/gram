@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	activitiespkg "github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
@@ -61,6 +62,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -532,6 +534,7 @@ func NewTemporalWorker(
 		remoteSessionEnricher,
 		opts.RemoteSessionAssertionSigner,
 		opts.StartupSeeds,
+		signInEpochs(opts.RedisClient),
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -614,6 +617,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CancelAssistantsSubscription)
 	// WorkOS sync activities
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
+	temporalWorker.RegisterActivity(activities.SweepSignInRevocations)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSUserEvents)
 	// Killswitch maintenance activities
@@ -763,6 +767,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PlatformMCPReceiptGCWorkflow)
+	temporalWorker.RegisterWorkflow(SignInRevocationSweepWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflowDebounced)
@@ -944,6 +949,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 		logger.ErrorContext(ctx, "failed to add platform mcp receipt gc schedule", attr.SlogError(err))
 	}
 
+	if err := AddSignInRevocationSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add sign-in revocation sweep schedule", attr.SlogError(err))
+	}
+
 	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
@@ -1095,4 +1104,12 @@ func (w *Workers) Stop() {
 		wg.Go(stop)
 	}
 	wg.Wait()
+}
+
+// signInEpochs lets the revocation sweep retry sign-out-everywhere epochs.
+func signInEpochs(redisClient *redis.Client) signins.EpochRaiser {
+	if redisClient == nil {
+		return nil
+	}
+	return sessions.NewEpochStore(redisClient)
 }

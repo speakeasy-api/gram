@@ -33,6 +33,10 @@ type Service interface {
 	// Remove a user from the active organization in Speakeasy and delete their
 	// WorkOS organization membership.
 	RemoveUser(context.Context, *RemoveUserPayload) (err error)
+	// Revoke a member's sign-ins in the active organization, end their identity
+	// provider sessions, and revoke every MCP grant made from those sign-ins.
+	// Requires organization admin.
+	RevokeMemberSignIns(context.Context, *RevokeMemberSignInsPayload) (res *types.RevokeSignInsResult, err error)
 	// Enable  webhooks for the active organization.
 	EnableWebhooks(context.Context, *EnableWebhooksPayload) (err error)
 	// Disable  webhooks for the active organization.
@@ -85,7 +89,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
+var MethodNames = [18]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "revokeMemberSignIns", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -305,6 +309,14 @@ type RemoveUserPayload struct {
 type RevokeInvitePayload struct {
 	// WorkOS invitation ID.
 	InvitationID string
+	SessionToken *string
+}
+
+// RevokeMemberSignInsPayload is the payload type of the organizations service
+// revokeMemberSignIns method.
+type RevokeMemberSignInsPayload struct {
+	// Speakeasy user ID of the member.
+	UserID       string
 	SessionToken *string
 }
 
