@@ -27,7 +27,8 @@ type MessageSource interface {
 	LoadMessages(context.Context, string, uuid.UUID, []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error)
 }
 
-// HistorySource resolves predecessors of a persisted target snapshot, newest first.
+// HistorySource resolves non-system predecessors of a persisted target snapshot,
+// newest first. System messages do not consume the history limit.
 type HistorySource interface {
 	LoadHistory(context.Context, string, uuid.UUID, repo.ChatMessage, int) ([]repo.LoadEvaluationMessagesRow, error)
 }
@@ -48,7 +49,7 @@ func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.U
 	return ordered, nil
 }
 
-// LoadMessages reads current message state and attachment locators together.
+// LoadMessages reads non-system message state and attachment locators together.
 func (r *Repository) LoadMessages(ctx context.Context, org string, project uuid.UUID, ids []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error) {
 	rows, err := repo.New(r.db).LoadEvaluationMessages(ctx, repo.LoadEvaluationMessagesParams{OrganizationID: org, ProjectID: project, MessageIds: ids})
 	if err != nil {

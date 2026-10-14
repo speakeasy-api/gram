@@ -357,11 +357,13 @@ ORDER BY sensor.id;
 
 -- name: LoadEvaluationMessages :many
 -- One tenant-pinned read resolves the batch and its current attachment locators.
+-- System messages are excluded for every input strategy.
 SELECT sqlc.embed(m), c.user_account_id,
        COALESCE(m.origin = 'anthropic-inference' AND (
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling
            WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.role <> 'system'
              AND sibling.external_message_id = m.external_message_id || '/block:0'
          )
        ), false)::boolean AS row_local_content,
@@ -374,15 +376,18 @@ JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = m.project_id
 WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
   AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.role <> 'system'
   AND m.id = ANY(@message_ids::uuid[]);
 
 -- name: LoadEvaluationHistory :many
 -- Anchor to the target snapshot, never to the latest message in the conversation.
+-- Filter system messages before LIMIT so they do not consume window capacity.
 SELECT sqlc.embed(m), c.user_account_id,
        COALESCE(m.origin = 'anthropic-inference' AND (
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling
            WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.role <> 'system'
              AND sibling.external_message_id = m.external_message_id || '/block:0'
          )
        ), false)::boolean AS row_local_content,
@@ -395,6 +400,7 @@ JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = m.project_id
 WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
   AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.role <> 'system'
   AND m.chat_id = @chat_id AND m.generation = @generation
   AND m.id <> @target_id
   AND (m.created_at, m.seq) < (@target_created_at::timestamptz, @target_seq::bigint)

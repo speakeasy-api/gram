@@ -73,7 +73,7 @@ type previewSensorMatchOutput struct {
 func signalManifest(name, title, description string, read bool) *mcp.Tool {
 	destructive := name == "update_sensor" || name == "update_signal"
 	if name == "create_sensor" || name == "update_sensor" || name == "get_sensor" || name == "find_sensors" {
-		description += " Sensor input_strategy is single_message (default) or sliding_window. window_size is 2–10 total messages including the target, default 5. Sliding windows supply all stored roles as preceding timestamp-ordered context within the target's conversation generation; only the target message is classified and matched. Short histories use available messages. Omitted update fields preserve settings."
+		description += " Sensor input_strategy is single_message (default) or sliding_window. window_size is 2–10 total messages including the target, default 5. System messages are excluded for every strategy and do not count toward window size. Sliding windows supply preceding non-system messages in timestamp order within the target's conversation generation; only the target message is classified and matched. Short histories use available messages. Omitted update fields preserve settings."
 	}
 	return &mcp.Tool{Meta: nil, Name: name, Title: title, Description: description, InputSchema: nil, OutputSchema: nil, Icons: nil, Annotations: &mcp.ToolAnnotations{Title: "", ReadOnlyHint: read, DestructiveHint: new(destructive), IdempotentHint: true, OpenWorldHint: new(false)}}
 }

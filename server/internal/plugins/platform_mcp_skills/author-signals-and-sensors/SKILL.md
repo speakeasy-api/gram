@@ -34,8 +34,9 @@ scores. Sensors perform classification; they do not enforce access policies.
    Agree message context separately from classification mode:
    `proposal.input_strategy` is `single_message` by default, or `sliding_window`.
    `proposal.window_size` is 2–10 total messages, default 5, including the target.
-   Sliding context includes all stored roles in timestamp order within the target's
-   conversation generation. Only the target is classified; preceding messages
+   System messages are excluded for every strategy and do not count toward window
+   size. Sliding context includes non-system roles in timestamp order within the
+   target's conversation generation. Only the target is classified; preceding messages
    provide context. Short histories use available messages. Omitted update fields
    preserve settings, including window size when switching strategies.
 5. Agree the matching expression. Omission on creation defaults to

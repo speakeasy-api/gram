@@ -1,10 +1,10 @@
 - model: jev-latest
   state:
     messages:
-      - role: ROLE_SYSTEM
+      - role: ROLE_USER
         content: null
         parts:
-          - text: Help the user resolve their support issue.
+          - text: The first failed charge was this morning.
       - role: ROLE_USER
         content: null
         parts:

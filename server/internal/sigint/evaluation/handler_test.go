@@ -387,6 +387,8 @@ func TestHandlerSkipsDisabledAndOtherRoles(t *testing.T) {
 	require.NoError(t, h.Handle(t.Context(), m, meta))
 	m.SetRole(conversationv1.MessageEvent_ROLE_TOOL)
 	require.NoError(t, h.Handle(t.Context(), m, meta))
+	m.SetRole(conversationv1.MessageEvent_ROLE_SYSTEM)
+	require.NoError(t, h.Handle(t.Context(), m, meta))
 }
 
 func TestHandlerEntitlementFailureNacks(t *testing.T) {

@@ -757,6 +757,7 @@ SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling
            WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.role <> 'system'
              AND sibling.external_message_id = m.external_message_id || '/block:0'
          )
        ), false)::boolean AS row_local_content,
@@ -769,6 +770,7 @@ JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = m.project_id
 WHERE m.project_id = $1::uuid AND p.organization_id = $2
   AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.role <> 'system'
   AND m.chat_id = $3 AND m.generation = $4
   AND m.id <> $5
   AND (m.created_at, m.seq) < ($6::timestamptz, $7::bigint)
@@ -795,6 +797,7 @@ type LoadEvaluationHistoryRow struct {
 }
 
 // Anchor to the target snapshot, never to the latest message in the conversation.
+// Filter system messages before LIMIT so they do not consume window capacity.
 func (q *Queries) LoadEvaluationHistory(ctx context.Context, arg LoadEvaluationHistoryParams) ([]LoadEvaluationHistoryRow, error) {
 	rows, err := q.db.Query(ctx, loadEvaluationHistory,
 		arg.ProjectID,
@@ -867,6 +870,7 @@ SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling
            WHERE sibling.project_id = m.project_id AND sibling.chat_id = m.chat_id
+             AND sibling.role <> 'system'
              AND sibling.external_message_id = m.external_message_id || '/block:0'
          )
        ), false)::boolean AS row_local_content,
@@ -879,6 +883,7 @@ JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
 JOIN projects p ON p.id = m.project_id
 WHERE m.project_id = $1::uuid AND p.organization_id = $2
   AND p.deleted IS FALSE AND c.deleted IS FALSE
+  AND m.role <> 'system'
   AND m.id = ANY($3::uuid[])
 `
 
@@ -896,6 +901,7 @@ type LoadEvaluationMessagesRow struct {
 }
 
 // One tenant-pinned read resolves the batch and its current attachment locators.
+// System messages are excluded for every input strategy.
 func (q *Queries) LoadEvaluationMessages(ctx context.Context, arg LoadEvaluationMessagesParams) ([]LoadEvaluationMessagesRow, error) {
 	rows, err := q.db.Query(ctx, loadEvaluationMessages, arg.ProjectID, arg.OrganizationID, arg.MessageIds)
 	if err != nil {

@@ -96,7 +96,7 @@ func TestEvaluationHistoryTimestampOrderingAndIsolation(t *testing.T) {
 		chat       uuid.UUID
 	}{
 		{"assistant", 3, 0, chat}, // Ingested before an older user message.
-		{"system", 1, 0, chat},
+		{"system", 4, 0, chat},    // Newest predecessor must not consume the limit.
 		{"user", 2, 0, chat},
 		{"tool", 3, 0, chat},      // Equal timestamp follows assistant by sequence.
 		{"user", 4, 0, chat},      // Target.
@@ -104,26 +104,35 @@ func TestEvaluationHistoryTimestampOrderingAndIsolation(t *testing.T) {
 		{"user", 5, 0, chat},
 		{"user", 3, 1, chat},
 		{"user", 3, 0, otherChat},
+		{"user", 1, 0, chat}, // Older non-system content fills the window.
 	} {
 		id, err := queries.CreateExternalChatMessage(ctx, chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: tc.chat, ProjectID: project, Role: tc.role, Content: tc.role, Generation: tc.generation, CreatedAt: conv.ToPGTimestamptz(base.Add(time.Duration(tc.minute) * time.Minute))})
 		require.NoError(t, err)
 		ids = append(ids, id)
 	}
 	source := evaluation.NewRepository(ti.conn)
-	rows, err := source.LoadMessages(ctx, auth.ActiveOrganizationID, project, []uuid.UUID{ids[4]})
+	rows, err := source.LoadMessages(ctx, auth.ActiveOrganizationID, project, []uuid.UUID{ids[1]})
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
+	require.Empty(t, rows, "system content is excluded even when requested directly")
+	rows, err = source.LoadMessages(ctx, auth.ActiveOrganizationID, project, []uuid.UUID{ids[1], ids[4]})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "batch loading also excludes system content")
+	require.Equal(t, ids[4], rows[0].ChatMessage.ID)
 	target := rows[0].ChatMessage
 	history, err := source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 9)
 	require.NoError(t, err)
 	require.Len(t, history, 4)
-	for i, want := range []uuid.UUID{ids[3], ids[0], ids[2], ids[1]} {
+	for i, want := range []uuid.UUID{ids[3], ids[0], ids[2], ids[9]} {
 		require.Equal(t, want, history[i].ChatMessage.ID)
 	}
 	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 1)
 	require.NoError(t, err)
 	require.Len(t, history, 1)
 	require.Equal(t, ids[3], history[0].ChatMessage.ID)
+	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 4)
+	require.NoError(t, err)
+	require.Len(t, history, 4, "system messages are filtered before the window limit")
+	require.Equal(t, ids[9], history[3].ChatMessage.ID)
 	history, err = source.LoadHistory(ctx, "another-org", project, target, 9)
 	require.NoError(t, err)
 	require.Empty(t, history)

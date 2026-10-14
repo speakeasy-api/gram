@@ -68,8 +68,10 @@ Sensors select `input_strategy`: `single_message` (default) or `sliding_window`.
 `window_size` accepts 2–10 total messages including the target, default 5.
 Omitted update fields preserve settings; switching strategies retains window size.
 
-Sliding windows classify the target using up to N−1 preceding messages of every
-stored role in its project, conversation and generation. History follows
+System messages are excluded from both target and history lookups for every
+strategy. They do not consume window capacity. Sliding windows classify the
+target using up to N−1 preceding non-system messages in its project, conversation
+and generation. History follows
 `(created_at, seq)` order: sequence only breaks timestamp ties. The target snapshot
 anchors the query, so later messages cannot enter the window. Short histories
 evaluate immediately. Late imports and timestamp corrections affect subsequent
@@ -79,7 +81,8 @@ State is `{messages: [{role, content, parts}, ...], target_message_index: N-1}`,
 where N is the actual message count. Messages run oldest to newest with the target
 last. Every question explicitly instructs the classifier to classify only that
 target and use the preceding messages as evidence. Target eligibility and matching
-use the incoming user/assistant message; context roles are not filtered.
+use the incoming user/assistant message; non-system context roles do not need to
+match the target's sensor predicate.
 
 The evaluator groups sensors by effective input strategy and size. Compatible
 sensors share one request. History is fetched lazily once per target, and resolved

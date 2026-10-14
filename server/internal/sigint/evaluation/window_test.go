@@ -36,7 +36,7 @@ func TestWindowReusesHistoryAndResolvedAttachments(t *testing.T) {
 	target := storedMessage(m)
 	target.ChatMessage.Content = "Yes, that one."
 	var history []repo.LoadEvaluationMessagesRow
-	for _, role := range []string{"assistant", "tool", "system"} {
+	for _, role := range []string{"assistant", "tool", "user"} {
 		row := storedMessage(m)
 		row.ChatMessage.ID = uuid.New()
 		row.ChatMessage.Role = role

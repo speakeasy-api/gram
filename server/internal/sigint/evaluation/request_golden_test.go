@@ -54,14 +54,15 @@ func assertConversationModelRequest(t *testing.T, strategy string) {
 		attachmentURI: []byte("Payment attempts are failing for the entire team."),
 	}
 
-	// Stored history is newest first. The oldest row is deliberately outside the
-	// five-message window; target-role matching must not filter context roles.
+	// HistorySource supplies non-system history newest first. The oldest row is
+	// deliberately outside the five-message window. Other context roles need not
+	// match the target's sensor predicate.
 	var history []repo.LoadEvaluationMessagesRow
 	for _, item := range []struct{ role, content string }{
 		{"tool", "Payment declined: retry required."},
 		{"assistant", "Checking the invoice."},
 		{"user", "Our billing payments are failing. Sign-in still works."},
-		{"system", "Help the user resolve their support issue."},
+		{"user", "The first failed charge was this morning."},
 		{"user", "This older message is outside the window."},
 	} {
 		row := storedMessage(m)
