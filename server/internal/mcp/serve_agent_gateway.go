@@ -1,6 +1,6 @@
 // The agent gateway MCP surface: one URL per agent, whose members are derived
 // from the agent's own grants rather than from stored membership rows. It
-// reuses the meta-server runtime wholesale — same four-tool contract, same
+// reuses the meta-server runtime wholesale — same tool contract, same
 // member dispatch — so the only thing particular to it is how the request is
 // authenticated and how membership is resolved.
 
