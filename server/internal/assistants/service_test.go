@@ -859,7 +859,7 @@ func TestServiceCoreReapStuckRuntimesExpiresUnwatchedIdleRuntime(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, result.IdleRuntimesStopped)
 	require.EqualValues(t, 1, stopCalls.Load())
-	require.Empty(t, result.AffectedAssistantIDs, "an idle runtime has no pending work to re-admit")
+	require.Equal(t, []uuid.UUID{idleAssistantID}, result.AffectedAssistantIDs, "the coordinator must re-admit any pending work left on a swept runtime")
 
 	idle, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
 		ID:        idleRuntimeID,

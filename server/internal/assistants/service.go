@@ -649,15 +649,13 @@ type ReapStuckRuntimesResult struct {
 	StaleRuntimesStopped int64
 	StaleEventsRequeued  int64
 
-	// IdleRuntimesStopped counts runtimes the idle sweep expired. These
-	// assistants have no pending work, so they are not in
-	// AffectedAssistantIDs.
+	// IdleRuntimesStopped counts runtimes the idle sweep expired.
 	IdleRuntimesStopped int64
 
 	// AffectedAssistantIDs lists distinct assistants whose events were
-	// requeued or whose runtimes were stopped. The singleton reaper uses
-	// these to kick the per-assistant coordinators so admit re-runs
-	// promptly instead of waiting for organic traffic.
+	// requeued or whose runtimes were stopped, including by the idle sweep.
+	// The singleton reaper uses these to kick the per-assistant coordinators
+	// so admit re-runs promptly instead of waiting for organic traffic.
 	AffectedAssistantIDs []uuid.UUID
 }
 
@@ -769,13 +767,6 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 		out.StaleEventsRequeued++
 	}
 
-	if len(affected) > 0 {
-		out.AffectedAssistantIDs = make([]uuid.UUID, 0, len(affected))
-		for id := range affected {
-			out.AffectedAssistantIDs = append(out.AffectedAssistantIDs, id)
-		}
-	}
-
 	// 3. Expire idle runtimes no thread workflow is watching: workflows that
 	// exited without expiring, or died before their warm timer fired.
 	idleRows, err := queries.ListIdleAssistantRuntimes(ctx, assistantrepo.ListIdleAssistantRuntimesParams{
@@ -823,7 +814,17 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 			continue
 		}
 		if result.Stopped {
+			// A sweep candidate has no live thread workflow, so pending events
+			// on it would otherwise wait for organic traffic to re-admit.
+			affected[row.AssistantID] = struct{}{}
 			out.IdleRuntimesStopped++
+		}
+	}
+
+	if len(affected) > 0 {
+		out.AffectedAssistantIDs = make([]uuid.UUID, 0, len(affected))
+		for id := range affected {
+			out.AffectedAssistantIDs = append(out.AffectedAssistantIDs, id)
 		}
 	}
 
