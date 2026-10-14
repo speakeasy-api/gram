@@ -188,7 +188,7 @@ func TestMemberAuthFailure_LinksConnectPage(t *testing.T) {
 	connectURL := "https://app.example.com/mcp/tools/connect/first-party?server=github"
 
 	err := memberAuthFailure(member, memberDial{anonymous: true, connectURL: connectURL})
-	require.ErrorContains(t, err, `server "github" needs you to connect it before it can be used`)
+	require.ErrorContains(t, err, `server "github" is not connected for this user`)
 	require.ErrorContains(t, err, connectURL)
 
 	err = memberAuthFailure(member, memberDial{anonymous: false, connectURL: connectURL})

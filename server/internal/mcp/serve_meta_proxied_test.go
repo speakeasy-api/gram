@@ -729,7 +729,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnconnectedMemberLinksItsConnectPa
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	require.Contains(t, text, `server "member" needs you to connect it before it can be used`)
+	require.Contains(t, text, `server "member" is not connected for this user`)
 	require.Contains(t, text, "/mcp/"+metaSlug+"/connect/first-party?server=member")
 
 	// A refused credential links the same page, to reconnect it.

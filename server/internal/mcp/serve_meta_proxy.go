@@ -129,12 +129,12 @@ type memberDial struct {
 // that page's URL to open; an agent shows it to them rather than retrying.
 func memberAuthFailure(member metaMember, dial memberDial) error {
 	switch {
-	case dial.clientCredential:
-		return metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured)
 	case dial.anonymous && dial.connectURL != "":
-		return &metaMemberError{message: fmt.Sprintf("server %q needs you to connect it before it can be used. Ask the user to open %s to connect it, then retry", member.slug, dial.connectURL)}
+		return &metaMemberError{message: fmt.Sprintf("server %q is not connected for this user. Ask the user to open %s to connect it, then retry", member.slug, dial.connectURL)}
 	case dial.anonymous:
 		return &metaMemberError{message: fmt.Sprintf("server %q requires authentication and this gateway holds no credential that routes to it; connect it from this gateway's sign-in page", member.slug)}
+	case dial.clientCredential:
+		return metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured)
 	case dial.connectURL != "":
 		return &metaMemberError{message: fmt.Sprintf("server %q rejected the stored credential. Ask the user to open %s to reconnect it, then retry", member.slug, dial.connectURL)}
 	}
