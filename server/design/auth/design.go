@@ -258,6 +258,7 @@ var _ = Service("auth", func() {
 			})
 			Attribute("gram_account_type", String)
 			Attribute("has_active_subscription", Boolean, "Whether the organization has an active billing subscription")
+			Attribute("accepted_signup_offer_flow", String, "Display-only signup offer variant for an accepted promotion; not billing eligibility")
 			Attribute("whitelisted", Boolean, "Whether the organization is whitelisted to access the platform")
 			Attribute("trial", Trial, func() {
 				Meta("struct:tag:json", "trial")

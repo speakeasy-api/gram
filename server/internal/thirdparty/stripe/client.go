@@ -263,6 +263,10 @@ type CheckoutSessionState struct {
 
 // SubscriptionState is the live Stripe subscription data needed by billing callers.
 type SubscriptionState struct {
+	DiscountDescription     *string
+	DiscountEndsAt          time.Time
+	GatewayPromotionApplied bool
+
 	// ID is Stripe's stable subscription identifier.
 	ID string
 
@@ -717,7 +721,9 @@ func (c *client) validateGatewayCoupon(ctx context.Context, couponID string) err
 	if !IsConfigured(couponID) {
 		return ErrInvalidGatewayCoupon
 	}
-	coupon, err := c.api.retrieveCoupon(ctx, couponID, new(stripesdk.CouponRetrieveParams))
+	params := new(stripesdk.CouponRetrieveParams)
+	params.AddExpand("applies_to")
+	coupon, err := c.api.retrieveCoupon(ctx, couponID, params)
 	if err != nil {
 		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok && stripeErr.Code == stripesdk.ErrorCodeResourceMissing {
 			return fmt.Errorf("%w: %w", ErrInvalidGatewayCoupon, err)
@@ -869,6 +875,7 @@ func (c *client) GetSubscription(ctx context.Context, id string) (*SubscriptionS
 
 	params := new(stripesdk.SubscriptionRetrieveParams)
 	params.AddExpand("latest_invoice")
+	params.AddExpand("discounts.source.coupon.applies_to")
 	subscription, err := c.api.retrieveSubscription(ctx, id, params)
 	if err != nil {
 		if stripeErr, ok := errors.AsType[*stripesdk.Error](err); ok && stripeErr.Code == stripesdk.ErrorCodeResourceMissing {
@@ -887,6 +894,7 @@ func (c *client) SetSubscriptionCancelAtPeriodEnd(ctx context.Context, input Set
 	params := new(stripesdk.SubscriptionUpdateParams)
 	params.CancelAtPeriodEnd = new(input.CancelAtPeriodEnd)
 	params.AddExpand("latest_invoice")
+	params.AddExpand("discounts.source.coupon.applies_to")
 	subscription, err := c.api.updateSubscription(ctx, input.SubscriptionID, params)
 	if err != nil {
 		return nil, fmt.Errorf("update Stripe subscription cancellation: %w", err)
@@ -954,7 +962,11 @@ func (c *client) subscriptionState(subscription *stripesdk.Subscription) (*Subsc
 	status := string(subscription.Status)
 	paymentFailed := status == "past_due" && latestInvoiceStatus == "open" && latestInvoiceAmountRemaining > 0
 
+	description, endsAt, gatewayPromotion := c.subscriptionDiscount(subscription, time.Now())
 	return &SubscriptionState{
+		DiscountDescription:          description,
+		DiscountEndsAt:               endsAt,
+		GatewayPromotionApplied:      gatewayPromotion,
 		ID:                           subscription.ID,
 		CustomerID:                   customerID,
 		Status:                       status,

@@ -1434,3 +1434,13 @@ SELECT id FROM signup_offers
 WHERE stripe_promotion_code_id = @stripe_promotion_code_id
   AND signup_flow = 'tailscale_partner_gateway' AND enabled
 FOR SHARE;
+
+-- name: GetAcceptedSignupOfferFlow :one
+-- Display-only lookup: disabled offers still describe accepted promotions.
+SELECT signup_flow FROM signup_offers
+WHERE stripe_promotion_code_id = (
+  SELECT stripe_promotion_code_id FROM organization_promotion_applications
+  WHERE organization_id = @organization_id::text
+  ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+  LIMIT 1
+);

@@ -468,38 +468,45 @@ func testPartnerSignupLaterLoginDoesNotArmTrial(t *testing.T, redeemed bool) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-func TestPartnerSignupRejectsIneligibleOffers(t *testing.T) {
+func TestPartnerSignupRejectsUnmappedOffer(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name, promotionID, flow string
-		enabled                 bool
-	}{
-		{"unmapped", "", "", false},
-		{"disabled", "promo_fixture", "tailscale_partner_gateway", false},
-		{"different exact ID", "promo_FIXTURE", "tailscale_partner_gateway", true},
-		{"unsupported flow", "promo_fixture", "unsupported", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			user := defaultMockUserInfo()
-			user.Organizations = nil
-			resolver := newSignupPromotionCodeResolver(t)
-			resolver.On("ResolveGatewayPromotionCode", mock.Anything, "fixture").Return("promo_fixture", nil).Once()
-			ctx, inst := newTestAuthServiceForOrganizationProvisioning(t, user, partnerSignupConfiguration(t, resolver))
-			if tc.promotionID != "" {
-				seedPartnerOffer(t, ctx, inst)
-				changePartnerOffer(t, ctx, inst, tc.promotionID, tc.flow, tc.enabled)
-			}
-			ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", "fixture", "")
-			result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
-			require.NoError(t, err)
-			require.Contains(t, result.Location, "signin_error=")
-			_, err = orgRepo.New(inst.conn).GetOrganizationMetadataBySlug(ctx, "fixture-company")
-			require.ErrorIs(t, err, pgx.ErrNoRows)
-			count, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionOrganizationPartnerSignupAttributed)
-			require.NoError(t, err)
-			require.Zero(t, count)
-			require.Empty(t, inst.trialNotifier.trialStarted)
-		})
+	testPartnerSignupRejectsIneligibleOffer(t, "", "", false)
+}
+
+func TestPartnerSignupRejectsDisabledOffer(t *testing.T) {
+	t.Parallel()
+	testPartnerSignupRejectsIneligibleOffer(t, "promo_fixture", "tailscale_partner_gateway", false)
+}
+
+func TestPartnerSignupRejectsDifferentExactIDOffer(t *testing.T) {
+	t.Parallel()
+	testPartnerSignupRejectsIneligibleOffer(t, "promo_FIXTURE", "tailscale_partner_gateway", true)
+}
+
+func TestPartnerSignupRejectsUnsupportedFlowOffer(t *testing.T) {
+	t.Parallel()
+	testPartnerSignupRejectsIneligibleOffer(t, "promo_fixture", "unsupported", true)
+}
+
+func testPartnerSignupRejectsIneligibleOffer(t *testing.T, promotionID, flow string, enabled bool) {
+	t.Helper()
+	user := defaultMockUserInfo()
+	user.Organizations = nil
+	resolver := newSignupPromotionCodeResolver(t)
+	resolver.On("ResolveGatewayPromotionCode", mock.Anything, "fixture").Return("promo_fixture", nil).Once()
+	ctx, inst := newTestAuthServiceForOrganizationProvisioning(t, user, partnerSignupConfiguration(t, resolver))
+	if promotionID != "" {
+		seedPartnerOffer(t, ctx, inst)
+		changePartnerOffer(t, ctx, inst, promotionID, flow, enabled)
 	}
+	ctx, state := partnerSignupLogin(t, ctx, inst, "Fixture Company", "fixture", "")
+	result, err := inst.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
+	require.NoError(t, err)
+	require.Contains(t, result.Location, "signin_error=")
+	_, err = orgRepo.New(inst.conn).GetOrganizationMetadataBySlug(ctx, "fixture-company")
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	count, err := audittest.AuditLogCountByAction(ctx, inst.conn, audit.ActionOrganizationPartnerSignupAttributed)
+	require.NoError(t, err)
+	require.Zero(t, count)
+	require.Empty(t, inst.trialNotifier.trialStarted)
 }

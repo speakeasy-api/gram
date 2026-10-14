@@ -1280,6 +1280,15 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		}
 	}
 
+	// Offer metadata is optional presentation context, never billing authorization.
+	// Missing or edited offers must not prevent accepted promotions being used.
+	var acceptedSignupOfferFlow *string
+	if flow, err := s.orgRepo.GetAcceptedSignupOfferFlow(ctx, authCtx.ActiveOrganizationID); err == nil {
+		acceptedSignupOfferFlow = &flow
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		s.logger.WarnContext(ctx, "error loading signup offer display context", attr.SlogError(err))
+	}
+
 	return &gen.InfoResult{
 		SessionToken:                   *authCtx.SessionID,
 		SessionCookie:                  *authCtx.SessionID,
@@ -1287,6 +1296,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		ActiveOrganizationDashboardURL: dashboardURL,
 		GramAccountType:                authCtx.AccountType,
 		HasActiveSubscription:          authCtx.HasActiveSubscription,
+		AcceptedSignupOfferFlow:        acceptedSignupOfferFlow,
 		Whitelisted:                    authCtx.Whitelisted,
 		Trial:                          trial,
 		UserID:                         userInfo.UserID,

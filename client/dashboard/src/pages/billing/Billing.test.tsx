@@ -338,6 +338,49 @@ describe("Billing", () => {
     ).toBeTruthy();
   });
 
+  it.each([undefined, "tailscale_partner_gateway"])(
+    "offers Free/Base payment setup without a trial (%s)",
+    (flow) => {
+      mocks.productTier.mockReturnValue("base");
+      mocks.session.mockReturnValue({
+        trial: null,
+        rawGramAccountType: "free",
+        hasActiveSubscription: false,
+        acceptedSignupOfferFlow: flow,
+      });
+      mocks.subscription.mockReturnValue({
+        data: undefined,
+        error: { statusCode: 404 },
+        isError: true,
+        isFetching: false,
+      });
+      renderBilling();
+      expect(paymentSection()).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Add payment method" }),
+      ).toBeTruthy();
+      expect(
+        Boolean(screen.queryByText(/accepted Tailscale partner promotion/)),
+      ).toBe(flow === "tailscale_partner_gateway");
+      expect(screen.queryByText(/when your trial ends/)).toBeNull();
+    },
+  );
+
+  it("does not offer Free/Base setup while subscription status is unknown", () => {
+    mocks.session.mockReturnValue({
+      trial: null,
+      rawGramAccountType: "free",
+      hasActiveSubscription: false,
+    });
+    mocks.subscription.mockReturnValue({
+      isError: true,
+      error: new Error("unavailable"),
+      isFetching: false,
+    });
+    renderBilling();
+    expect(paymentSection()).toBeNull();
+  });
+
   // Billing notifications are a pay-as-you-go concern: enterprise orgs are
   // billed through their contract, and the pre-checkout tiers have no bill.
   it("offers billing notification settings on the pay as you go view", () => {

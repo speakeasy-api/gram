@@ -69,8 +69,13 @@ function BillingInner() {
     productTier === "payg" ? "unsubscribed-payg" : "active-trial",
   );
   const activeTrial = trialLifecycle === "active";
+  const { eligible: canStartBaseCheckout } =
+    usePaygCheckoutAccess("unsubscribed-base");
   const subscription = useStripeSubscription({
-    enabled: productTier === "payg" && !activeTrial,
+    enabled:
+      !activeTrial &&
+      (productTier === "payg" ||
+        (productTier === "base" && canStartBaseCheckout)),
   });
 
   let paymentRequired = activeTrial && canStartCheckout;
@@ -86,7 +91,18 @@ function BillingInner() {
     }
   }
 
-  const paymentGroup = (activeTrial || productTier === "payg") && (
+  if (productTier === "base" && !activeTrial) {
+    paymentRequired =
+      canStartBaseCheckout &&
+      !subscription.isFetching &&
+      !subscription.data &&
+      subscription.isError &&
+      isNotFoundError(subscription.error);
+  }
+
+  const paymentGroup = (activeTrial ||
+    productTier === "payg" ||
+    paymentRequired) && (
     <div
       key="payment"
       className={cn(

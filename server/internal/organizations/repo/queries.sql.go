@@ -730,6 +730,24 @@ func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg Filte
 	return items, nil
 }
 
+const getAcceptedSignupOfferFlow = `-- name: GetAcceptedSignupOfferFlow :one
+SELECT signup_flow FROM signup_offers
+WHERE stripe_promotion_code_id = (
+  SELECT stripe_promotion_code_id FROM organization_promotion_applications
+  WHERE organization_id = $1::text
+  ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
+  LIMIT 1
+)
+`
+
+// Display-only lookup: disabled offers still describe accepted promotions.
+func (q *Queries) GetAcceptedSignupOfferFlow(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getAcceptedSignupOfferFlow, organizationID)
+	var signup_flow string
+	err := row.Scan(&signup_flow)
+	return signup_flow, err
+}
+
 const getEnabledSignupOffer = `-- name: GetEnabledSignupOffer :one
 SELECT id FROM signup_offers
 WHERE stripe_promotion_code_id = $1

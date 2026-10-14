@@ -54,11 +54,21 @@ func testPartnerPrivateNetworkingActivation(t *testing.T, partner, staffDisabled
 	enabled, err := features.IsFeatureEnabled(t.Context(), stripeWebhookOrganizationID, productfeatures.FeatureNetworkIngress)
 	require.NoError(t, err)
 	require.False(t, enabled, "attribution alone must not grant private networking before checkout")
+	assertNetworkingDisabled := func() {
+		t.Helper()
+		enabled, err := features.IsFeatureEnabled(t.Context(), stripeWebhookOrganizationID, productfeatures.FeatureNetworkIngress)
+		require.NoError(t, err)
+		require.False(t, enabled, "rejected checkout must not grant private networking")
+		count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationProductFeatureEnabled)
+		require.NoError(t, err)
+		require.Zero(t, count, "rejected checkout must not emit a feature enable audit")
+	}
 	if partner {
 		preparedAt := time.Now().UTC()
 		prepared, err := service.prepareStripeCheckoutIntent(t.Context(), stripeWebhookOrganizationID, "customer_placeholder", preparedAt, newStripeCheckoutIntent(stripeWebhookOrganizationID, preparedAt, nil), pgtype.Text{}, pgtype.Text{})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "before finalization").Code)
+		assertNetworkingDisabled()
 		pending, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
 		require.NoError(t, err)
 		require.False(t, pending.StripeSubscriptionID.Valid)
@@ -75,6 +85,7 @@ func testPartnerPrivateNetworkingActivation(t *testing.T, partner, staffDisabled
 		// An unrelated persisted session must fail closed too.
 		require.NoError(t, repo.New(db).SetStripeCheckoutSessionFixture(t.Context(), repo.SetStripeCheckoutSessionFixtureParams{OrganizationID: stripeWebhookOrganizationID, StripeCheckoutSessionID: pgtype.Text{String: "unrelated_checkout", Valid: true}}))
 		require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "unmatched session").Code)
+		assertNetworkingDisabled()
 		pending, err = repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
 		require.NoError(t, err)
 		require.False(t, pending.StripeSubscriptionID.Valid)
@@ -95,6 +106,11 @@ func testPartnerPrivateNetworkingActivation(t *testing.T, partner, staffDisabled
 			StripeCheckoutTrialEnd: optionalTimestamptz(prepared.trialEnd), StripeCheckoutExpiresAt: finiteTimestamptz(prepared.expiresAt),
 		})
 		require.NoError(t, err)
+		// A matching session still cannot grant networking before payment succeeds.
+		checkout.SubscriptionStatus = "incomplete"
+		require.Equal(t, http.StatusServiceUnavailable, serveStripeWebhook(service, "payment incomplete").Code)
+		assertNetworkingDisabled()
+		checkout.SubscriptionStatus = "active"
 	}
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "activation").Code)
 	redemptions, err := repo.New(db).ListOrganizationPromotionRedemptions(t.Context(), pgtype.Text{String: stripeWebhookOrganizationID, Valid: true})

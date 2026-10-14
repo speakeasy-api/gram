@@ -14,16 +14,18 @@ import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-c
 import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { useSession } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
 import { isNotFoundError } from "@/lib/route-errors";
 import type { ReactNode } from "react";
 
 /**
- * Offers checkout during an active trial or when PAYG has no Stripe subscription.
+ * Offers checkout during an active trial or when Free/Base or PAYG has no subscription.
  * Starting checkout leaves the trial unchanged until Stripe confirms completion.
  * Unsubscribed PAYG organizations retain a way to finish billing setup.
  * Attached subscriptions expose their live state and management controls.
@@ -37,12 +39,10 @@ export function PaygPlanSection(): JSX.Element | null {
     // anything to offer; a section whose only content is an action the viewer
     // cannot take would just be announcing a dead end.
     if (!eligible) return null;
-    return (
-      <PaymentSection description="Add a payment method to start pay as you go when your trial ends.">
-        <StartPaygCheckoutCTA label="Add payment method" />
-      </PaymentSection>
-    );
+    return <AddPaymentMethodSection activeTrial />;
   }
+
+  if (productTier === "base") return <BasePaymentSection />;
 
   if (productTier !== "payg") return null;
 
@@ -51,6 +51,47 @@ export function PaygPlanSection(): JSX.Element | null {
       <PaygPlanBody />
     </PaymentSection>
   );
+}
+
+// Copy variants are code-owned; an offer only selects presentation, never access.
+function AddPaymentMethodSection({
+  activeTrial = false,
+}: {
+  activeTrial?: boolean;
+}): JSX.Element {
+  const { acceptedSignupOfferFlow } = useSession();
+  const generic = activeTrial
+    ? "Add a payment method to start pay as you go when your trial ends."
+    : "Add a payment method to start pay as you go.";
+  return (
+    <PaymentSection description={generic}>
+      <Stack gap={4}>
+        {acceptedSignupOfferFlow === "tailscale_partner_gateway" && (
+          <Alert variant="info">
+            Your accepted Tailscale partner promotion will be applied at
+            checkout.
+          </Alert>
+        )}
+        <StartPaygCheckoutCTA
+          label="Add payment method"
+          eligibility={activeTrial ? "active-trial" : "unsubscribed-base"}
+        />
+      </Stack>
+    </PaymentSection>
+  );
+}
+
+function BasePaymentSection(): JSX.Element | null {
+  const { eligible } = usePaygCheckoutAccess("unsubscribed-base");
+  return eligible ? <UnsubscribedBasePaymentSection /> : null;
+}
+
+function UnsubscribedBasePaymentSection(): JSX.Element | null {
+  const { data, error, isError, isFetching } = useStripeSubscription();
+  // Only confirmed absence offers checkout. Redirects and lookup failures are
+  // not proof of activation or of an absent subscription.
+  if (isFetching || data || !isError || !isNotFoundError(error)) return null;
+  return <AddPaymentMethodSection />;
 }
 
 function PaymentSection({
@@ -70,8 +111,7 @@ function PaymentSection({
   );
 }
 
-// The query lives below the tier gate so it never fires for an organization
-// that has no self-serve subscription to report on.
+// Keep the existing PAYG subscription management and checkout recovery path.
 function PaygPlanBody(): JSX.Element {
   const { data, error, isError, isFetching, refetch } = useStripeSubscription();
   const { eligible: canStartCheckout } =
@@ -172,6 +212,7 @@ function PaygPlanDetails({
           {copy.detail}
         </Text>
       </Stack>
+      <AppliedDiscount subscription={subscription} />
       {/* A failed payment is reported by the banner heading this page, where it
           can't be scrolled past — not by a line of body text down here. */}
       {/* A member reads the state above but gets no controls: every action
@@ -258,4 +299,39 @@ function planCopy(state: PaygPlanState): { headline: string; detail: string } {
           "Stripe hasn't started billing this subscription. Open the billing portal to finish setting up your payment method.",
       };
   }
+}
+
+// Attribution is not proof of a discount: only the live subscription supplies
+// these verified terms. Recheck expiration to avoid showing an expired cache entry.
+function AppliedDiscount({
+  subscription,
+}: {
+  subscription: StripeSubscriptionLike;
+}) {
+  const { discountDescription, discountEndsAt, gatewayPromotionApplied } =
+    subscription;
+  if (
+    !discountDescription ||
+    !["active", "past_due"].includes(subscription.status) ||
+    (discountEndsAt &&
+      (!Number.isFinite(discountEndsAt.getTime()) ||
+        discountEndsAt.getTime() <= Date.now()))
+  )
+    return null;
+  const end = formatBillingDate(discountEndsAt);
+  return (
+    <Alert variant="info">
+      <Stack>
+        <Text variant="subheading">
+          {gatewayPromotionApplied
+            ? "Partner promotion applied"
+            : "Discount applied"}
+        </Text>
+        <Text variant="small">
+          {discountDescription}
+          {end ? ` Discount ends ${end}.` : ""}
+        </Text>
+      </Stack>
+    </Alert>
+  );
 }

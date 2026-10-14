@@ -428,7 +428,8 @@ func TestGetSubscriptionReturnsLiveLifecycleState(t *testing.T) {
 	require.Equal(t, "in_test", state.LatestInvoiceID)
 	require.Equal(t, "open", state.LatestInvoiceStatus)
 	require.EqualValues(t, 4200, state.LatestInvoiceAmountRemaining)
-	require.Len(t, api.subscriptionRetrieveParams.Expand, 1)
+	require.Len(t, api.subscriptionRetrieveParams.Expand, 2)
+	require.Equal(t, "discounts.source.coupon.applies_to", stripesdk.StringValue(api.subscriptionRetrieveParams.Expand[1]))
 	require.Equal(t, "latest_invoice", stripesdk.StringValue(api.subscriptionRetrieveParams.Expand[0]))
 }
 
@@ -1556,7 +1557,10 @@ func TestGatewayPromotionStripeHTTPContract(t *testing.T) {
 		case "/v1/promotion_codes":
 			response = `{"object":"list","has_more":false,"data":[{"id":"promo_test","code":"GATEWAY-OFFER","active":true,"promotion":{"type":"coupon","coupon":"coupon_test"}}]}`
 		case "/v1/coupons/coupon_test":
-			response = `{"id":"coupon_test","valid":true,"percent_off":25,"duration":"once","applies_to":{"products":["prod_gateway"]}}`
+			response = `{"id":"coupon_test","valid":true,"percent_off":25,"duration":"once"}`
+			if r.Form.Get("expand[0]") == "applies_to" {
+				response = `{"id":"coupon_test","valid":true,"percent_off":25,"duration":"once","applies_to":{"products":["prod_gateway"]}}`
+			}
 		case "/v1/prices/price_gateway":
 			response = `{"id":"price_gateway","product":"prod_gateway"}`
 		case "/v1/checkout/sessions":

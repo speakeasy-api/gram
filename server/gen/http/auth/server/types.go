@@ -56,6 +56,9 @@ type InfoResponseBody struct {
 	GramAccountType                string  `form:"gram_account_type" json:"gram_account_type" xml:"gram_account_type"`
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
+	// Display-only signup offer variant for an accepted promotion; not billing
+	// eligibility
+	AcceptedSignupOfferFlow *string `form:"accepted_signup_offer_flow,omitempty" json:"accepted_signup_offer_flow,omitempty" xml:"accepted_signup_offer_flow,omitempty"`
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted   bool                             `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
 	Trial         *TrialResponseBody               `json:"trial"`
@@ -1924,6 +1927,7 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		ActiveOrganizationDashboardURL: res.ActiveOrganizationDashboardURL,
 		GramAccountType:                res.GramAccountType,
 		HasActiveSubscription:          res.HasActiveSubscription,
+		AcceptedSignupOfferFlow:        res.AcceptedSignupOfferFlow,
 		Whitelisted:                    res.Whitelisted,
 	}
 	if res.Trial != nil {

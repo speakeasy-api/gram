@@ -1,4 +1,3 @@
-import { PartnerCodeField } from "./partner-code-field";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { safeSameOriginUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
@@ -26,7 +25,7 @@ export function RegisterPanel({
   partnerCode?: string;
 }): JSX.Element {
   const telemetry = useTelemetry();
-  const [partnerCode, setPartnerCode] = useState(initialPartnerCode);
+  const [partnerCode] = useState(initialPartnerCode);
   const [companyName, setCompanyName] = useState("");
   const [validationError, setValidationError] = useState("");
   const sdk = useGramContext();
@@ -83,11 +82,17 @@ export function RegisterPanel({
       return;
     }
 
+    const submittedPartnerCode = partnerCode.trim();
+    telemetry.capture("onboarding_event", {
+      action: "signup_started",
+      ...(submittedPartnerCode ? { partner_code: submittedPartnerCode } : {}),
+    });
+
     registerMutation.mutate({
       request: {
         registerRequestBody: {
           orgName: normalizeOrgName(companyName),
-          partnerCode: partnerCode.trim() || undefined,
+          partnerCode: submittedPartnerCode || undefined,
         },
       },
     });
@@ -129,11 +134,11 @@ export function RegisterPanel({
           </p>
         </div>
 
-        <PartnerCodeField
-          value={partnerCode}
-          onChange={setPartnerCode}
-          disabled={registerMutation.isPending}
-        />
+        {partnerCode.length > 80 && (
+          <AuthErrorText>
+            Partner code must be 80 characters or fewer.
+          </AuthErrorText>
+        )}
 
         {(validationError || registerMutation.error) && (
           <AuthErrorText>

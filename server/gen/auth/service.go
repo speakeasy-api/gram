@@ -140,6 +140,9 @@ type InfoResult struct {
 	GramAccountType                string
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool
+	// Display-only signup offer variant for an accepted promotion; not billing
+	// eligibility
+	AcceptedSignupOfferFlow *string
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted   bool
 	Trial         *Trial `json:"trial"`

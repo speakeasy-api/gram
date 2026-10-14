@@ -4,10 +4,9 @@ import { authPageHref } from "@/lib/safe-external-url";
 import { buildLoginRedirectURL, cn } from "@/lib/utils";
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
-import { PartnerCodeField } from "./partner-code-field";
 import { Link } from "react-router";
 import { AUTH_BUTTON_CLASSES, AUTH_PILLARS } from "./auth-constants";
-import { SigninErrorNotice } from "./auth-errors";
+import { AuthErrorText, SigninErrorNotice } from "./auth-errors";
 import { normalizeOrgName, validateOrgName } from "./org-name";
 
 // Mirrors the server's validateSignupEmail. WorkOS verifies the address and
@@ -47,11 +46,12 @@ export function SignUpPanel({
   partnerCode?: string;
 }): JSX.Element {
   const telemetry = useTelemetry();
-  const [partnerCode, setPartnerCode] = useState(initialPartnerCode);
+  const [partnerCode] = useState(initialPartnerCode);
   const form = useForm({
     defaultValues: { email: "", companyName: "", acceptedTerms: false },
     onSubmit: ({ value }) => {
       if (partnerCode.length > 80) return;
+      const submittedPartnerCode = partnerCode.trim();
       // The server has no identity until the identity provider answers, so it
       // can't count this attempt — only the client sees it. Firing here joins
       // signup_started to the server's new_org_created for a real conversion rate.
@@ -59,6 +59,7 @@ export function SignUpPanel({
         action: "signup_started",
         created_via: "signup",
         accepted_terms: value.acceptedTerms,
+        ...(submittedPartnerCode ? { partner_code: submittedPartnerCode } : {}),
       });
 
       // The org itself is created server-side during the auth callback. The
@@ -72,7 +73,7 @@ export function SignUpPanel({
           redirectTo ?? null,
           normalizeOrgName(value.companyName),
           value.email.trim(),
-          partnerCode,
+          submittedPartnerCode,
         ),
       );
     },
@@ -109,14 +110,18 @@ export function SignUpPanel({
       >
         <div className="flex flex-col gap-1">
           <p className="auth-mono text-[16px] tracking-[0.06em]">Sign up</p>
-          <p className="auth-mono-text text-[12px] text-(--muted-strong)">
-            {partnerCode.trim()
-              ? "Valid partner codes use pay-as-you-go billing, without a trial."
-              : "Get a 14-day trial of the full control plane."}
-          </p>
+          {!partnerCode.trim() && (
+            <p className="auth-mono-text text-[12px] text-(--muted-strong)">
+              Get a 14-day trial of the full control plane.
+            </p>
+          )}
         </div>
 
-        <PartnerCodeField value={partnerCode} onChange={setPartnerCode} />
+        {partnerCode.length > 80 && (
+          <AuthErrorText>
+            Partner code must be 80 characters or fewer.
+          </AuthErrorText>
+        )}
 
         {/* Field and CTA share one subscription: `form.state` is a plain getter
             onto the store, so only `Subscribe` (and `field.state` inside
