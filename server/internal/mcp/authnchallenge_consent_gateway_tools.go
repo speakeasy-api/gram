@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -109,20 +108,11 @@ func (s *Service) enumerateGatewayConsentInventory(w http.ResponseWriter, r *htt
 		return nil, nil, oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
 
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	// Members route credentials by resource, so a provider the subject has
+	// not connected leaves only its own member unavailable.
+	tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
-		switch {
-		case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
-			return nil, nil, remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
-		case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
-			return nil, nil, clientCredentialMisconfiguredError(err).LogWarn(ctx, logger)
-		case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
-			return nil, nil, oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
-		case errors.Is(err, remotesessions.ErrNoValidToken):
-			return nil, nil, oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
-		default:
-			return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
-		}
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
 
 	sessionID := "consent:" + challengeState.ID
