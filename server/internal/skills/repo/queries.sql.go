@@ -3679,7 +3679,9 @@ WHERE so.project_id = $1
   AND so.session_id IS NOT NULL
   AND so.skill_version_id IS NOT NULL
   -- Reads over a hosted MCP server carry the MCP session id, which names no
-  -- chat transcript to score, so they are not efficacy candidates.
+  -- chat transcript to score, so they are not efficacy candidates. Belt and
+  -- braces: InsertMCPSkillObservation already stamps efficacy_enqueued_at, so
+  -- such a row never reaches this predicate.
   AND so.provider <> 'mcp'
   AND (
     $2::timestamptz IS NULL
@@ -3789,6 +3791,8 @@ WHERE so.project_id = $1
   -- A read over a hosted MCP server arrives reconciled with the MCP session
   -- id, which is neither a dev nor an assistant session: it belongs to no
   -- surface the attribution join knows, so it never becomes a mapping.
+  -- Belt and braces: InsertMCPSkillObservation already stamps
+  -- metrics_synced_at, so such a row never reaches this predicate.
   AND so.provider <> 'mcp'
 ORDER BY so.seen_at, so.id
 LIMIT $2
