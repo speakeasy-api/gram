@@ -178,6 +178,10 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
+	// ConsentToolsDeferred tells the island that a "not connected" inventory
+	// answer only means identity chaining has not run yet, so approval
+	// proceeds with the unrestricted default.
+	ConsentToolsDeferred bool
 	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
 	ValidationDeadlineMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked or
@@ -677,6 +681,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			s.consentToolSelectionPrefill(ctx, endpoint, *challengeState.Subject, clientRowID),
 		)
 	}
+	inventoryDeferred := consentInventoryDeferred(cards, prefillAttr != "")
 
 	data := consentTemplateData{
 		ClientName:              clientName,
@@ -702,6 +707,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
+		ConsentToolsDeferred:    inventoryDeferred,
 		ValidationDeadlineMS:    validationDeadlineMS,
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,

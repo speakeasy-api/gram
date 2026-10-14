@@ -517,10 +517,25 @@
         fallback.removeAttribute("data-connect-fallback");
         fallback.textContent = "Connect";
       }
+      signalChainRejected();
       return;
     }
     status.className = "text-xs text-muted-foreground";
     status.textContent = "Managed by your identity provider";
+  }
+
+  // Tells the tool access island that a chained service was refused. The
+  // island defers its inventory only when every service is chain-only, and
+  // on such a page each chained card serves the upstream the inventory
+  // needs, so one refusal means the tools can't load after approval either.
+  // Signing in separately reloads the page with that service connected,
+  // which the server no longer renders as deferred.
+  function signalChainRejected() {
+    document.documentElement.setAttribute(
+      "data-consent-chain-rejected",
+      "true",
+    );
+    document.dispatchEvent(new CustomEvent("gram:consent-chain-rejected"));
   }
 
   var chainChecks = document.querySelectorAll('[data-chain-check="pending"]');
