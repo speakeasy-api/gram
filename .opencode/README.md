@@ -34,8 +34,9 @@ signal; once creation succeeds, ownership bookkeeping finishes even if canceled.
 ## Pause idle stacks
 
 OpenCode V2 automatically loads `plugins/pause-stack.js`, but it is opt-in.
-At setup, the plugin reads `mise set GRAM_OPENCODE_PLUGINS` in its location's
-directory. It activates only when that colon-separated value contains the exact
+At setup, both plugins read `GRAM_OPENCODE_PLUGINS` from `mise env --json` in
+their location's directory, resolving config overrides and templates. The pause
+plugin activates only when that colon-separated value contains the exact
 ID `speakeasy.pause-stack` (surrounding whitespace is ignored). An unset variable
 or failed lookup leaves it disabled.
 
@@ -43,17 +44,13 @@ Enable it locally by appending the ID to `GRAM_OPENCODE_PLUGINS` in
 `mise.local.toml`, preserving any plugins already enabled:
 
 ```sh
-if plugins="$(mise set GRAM_OPENCODE_PLUGINS)"; then
+if resolved="$(mise env --json)" && plugins="$(printf '%s' "$resolved" | jq -r '.GRAM_OPENCODE_PLUGINS // ""')"; then
   mise set --file mise.local.toml "GRAM_OPENCODE_PLUGINS=${plugins:+$plugins:}speakeasy.pause-stack"
 fi
 ```
 
-The append runs only after a successful read. For first-time setup, if mise
-reports `Environment variable GRAM_OPENCODE_PLUGINS not found`, initialize it:
-
-```sh
-mise set --file mise.local.toml GRAM_OPENCODE_PLUGINS=speakeasy.pause-stack
-```
+The append runs only after a successful read and JSON parse. An unset variable
+is treated as an empty list, so the same command works for first-time setup.
 
 After changing the variable, reload the plugin with
 `touch .opencode/plugins/pause-stack.js`, or restart OpenCode's server.
