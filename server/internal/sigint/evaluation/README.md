@@ -67,6 +67,21 @@ Adapters wrap `ErrInvalidInput` for permanent content failures. Conversation ass
 validation also returns terminal failures; other resolution errors retry.
 Resolved JSON must be non-null and at most 16 MiB, including the complete window.
 
+### Future improvement: conditional content projection
+
+Defer selecting only the content representation the resolver uses:
+
+- Split transcript rows use row-local `content` and ignore `content_raw` and its asset.
+- Other rows prefer inline `content_raw`, then `content_asset_url`, then fallback `content`.
+
+Conditional SQL projections could avoid transferring unused or duplicated content
+while preserving tool calls and attachments. Preserve the current size accounting:
+fallback `content` bytes count toward the input budget even when original content
+is used. Returning `octet_length(content)` instead of unused text may preserve that
+accounting. Compare serialized output size and execution time on representative
+messages, and retain the request goldens and content-limit coverage when pursuing
+this optimization. The current queries intentionally fetch all content representations.
+
 ## Message context
 
 Sensors select `input_strategy`: `single_message` (default) or `sliding_window`.
