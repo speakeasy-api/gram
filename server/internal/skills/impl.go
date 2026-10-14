@@ -1713,6 +1713,11 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 		resolvedVersionID = version
 	}
 
+	lastLoadedOverMCPAt, err := queries.GetSkillLastLoadedOverMCPAt(ctx, repo.GetSkillLastLoadedOverMCPAtParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve last skill load over mcp").LogError(ctx, logger)
+	}
+
 	existing, err := queries.GetActiveSkillDistributionRecord(ctx, repo.GetActiveSkillDistributionRecordParams{
 		ProjectID: *authCtx.ProjectID, SkillID: skill.ID, PluginID: target.pluginID,
 		AssistantID: target.assistantID, Channel: target.channel,
@@ -1723,7 +1728,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 			if err := dbtx.Commit(ctx); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "commit unchanged skill distribution transaction").LogError(ctx, logger)
 			}
-			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+			return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 		}
 
 		beforeSnapshot := buildSkillDistributionAuditSnapshot(distribution, existing.ResolvedVersionID)
@@ -1758,7 +1763,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 
 		s.signalPluginPublish(ctx, target, authCtx)
 
-		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+		return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get active skill distribution").LogError(ctx, logger)
@@ -1795,7 +1800,7 @@ func (s *Service) Distribute(ctx context.Context, payload *gen.DistributePayload
 
 	s.signalPluginPublish(ctx, target, authCtx)
 
-	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID), nil
+	return mv.BuildSkillDistributionView(distribution, skill.Name, skill.DisplayName, pluginName, assistantName, resolvedVersionID, lastLoadedOverMCPAt), nil
 }
 
 func (s *Service) Undistribute(ctx context.Context, payload *gen.UndistributePayload) error {

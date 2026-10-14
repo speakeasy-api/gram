@@ -1164,6 +1164,7 @@ var SkillDistribution = Type("SkillDistribution", func() {
 	Attribute("created_by_user_id", String, "The user that created the distribution.")
 	Attribute("created_at", String, "When the distribution was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the distribution configuration last changed.", func() { Format(FormatDateTime) })
+	Attribute("last_loaded_over_mcp_at", String, "When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Loads are counted per skill, not per distribution.", func() { Format(FormatDateTime) })
 
 	Required("id", "project_id", "skill_id", "skill_name", "skill_display_name", "resolved_version_id", "channel", "created_by_user_id", "created_at", "updated_at")
 })
@@ -1185,6 +1186,7 @@ var PluginSkillDistribution = Type("PluginSkillDistribution", func() {
 	Attribute("created_by_user_id", String, "The user that created the distribution.")
 	Attribute("created_at", String, "When the distribution was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the distribution configuration last changed.", func() { Format(FormatDateTime) })
+	Attribute("last_loaded_over_mcp_at", String, "When an agent last loaded the skill over MCP from a Speakeasy-hosted server, absent when it never has. Loads are counted per skill, not per distribution.", func() { Format(FormatDateTime) })
 
 	Required("id", "project_id", "skill_id", "skill_name", "skill_display_name", "plugin_id", "plugin_name", "resolved_version_id", "channel", "created_by_user_id", "created_at", "updated_at")
 })

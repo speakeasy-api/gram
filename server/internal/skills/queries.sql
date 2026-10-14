@@ -1746,12 +1746,18 @@ WHERE sd.project_id = @project_id
 FOR UPDATE OF sd;
 
 -- name: ListActiveSkillDistributions :many
+-- last_loaded_over_mcp_at is the newest activation a Speakeasy-hosted MCP
+-- server recorded for the skill (provider 'mcp', the mcpskills resolver's
+-- ObservationProvider). Those rows arrive reconciled with skill_id set, so the
+-- provider filter alone tells MCP loads from hook-reported ones, and the
+-- partial index on (project_id, skill_id, seen_at DESC) serves the MAX.
 SELECT
   sqlc.embed(sd),
   s.name AS skill_name,
   s.display_name AS skill_display_name,
   pl.name AS plugin_name,
-  resolved.id AS resolved_version_id
+  resolved.id AS resolved_version_id,
+  mcp_loads.last_loaded_over_mcp_at
 FROM skill_distributions sd
 JOIN plugins pl
   ON pl.id = sd.plugin_id
@@ -1774,6 +1780,13 @@ JOIN LATERAL (
   ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
+LEFT JOIN LATERAL (
+  SELECT MAX(so.seen_at)::timestamptz AS last_loaded_over_mcp_at
+  FROM skill_observations so
+  WHERE so.project_id = sd.project_id
+    AND so.skill_id = sd.skill_id
+    AND so.provider = 'mcp'
+) mcp_loads ON TRUE
 WHERE sd.project_id = @project_id
   AND sd.channel = 'plugin'
   AND sd.plugin_id IS NOT NULL
@@ -1790,6 +1803,16 @@ WHERE sd.project_id = @project_id
   )
 ORDER BY sd.created_at ASC, sd.id ASC
 LIMIT @page_limit;
+
+-- name: GetSkillLastLoadedOverMCPAt :one
+-- The newest activation a Speakeasy-hosted MCP server recorded for one skill,
+-- NULL when agents never loaded it over MCP. Same filter as the mcp_loads
+-- lateral in ListActiveSkillDistributions.
+SELECT MAX(so.seen_at)::timestamptz AS last_loaded_over_mcp_at
+FROM skill_observations so
+WHERE so.project_id = @project_id
+  AND so.skill_id = @skill_id::uuid
+  AND so.provider = 'mcp';
 
 -- name: CreateSkillDistribution :one
 INSERT INTO skill_distributions (
