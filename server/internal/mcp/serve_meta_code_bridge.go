@@ -201,14 +201,26 @@ func (b *metaCodeBackend) Invoke(ctx context.Context, path, fingerprint string, 
 		}
 		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
 	}
-	slug, _, err := metamcp.SplitQualifiedName(path)
+	slug, name, err := metamcp.SplitQualifiedName(path)
 	if err != nil {
 		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
 	}
-	if _, ok := findMetaMember(members, slug); !ok {
+	member, ok := findMetaMember(members, slug)
+	if !ok {
 		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
 	}
-	if fingerprint == "" {
+	// Re-resolve the definition from the member snapshot this call dispatches
+	// to, so a changed definition or backend is refused rather than called.
+	catalog, err := b.service.describeMetaMember(ctx, b.service.logger, gate, member)
+	if err != nil {
+		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
+	}
+	entry, ok := catalog.byName[name]
+	if !ok {
+		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
+	}
+	definition, err := json.Marshal(entry)
+	if err != nil || fingerprint == "" || codeToolFingerprint(member, definition) != fingerprint {
 		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_changed"}
 	}
 	callGate := *gate
@@ -245,9 +257,21 @@ func (i *metaCodeInvocation) failure() error {
 	return &codemode.DispatchError{BeforeInvoke: false, Code: "tool_call_outcome_unknown"}
 }
 
-// codeToolFingerprint binds a member tool's complete definition to its
-// member, so a run detects a definition that changes between catalog reads.
+// codeToolFingerprint binds a member tool's complete definition to its member
+// and dispatch destination, so a run detects a definition or backend that
+// changes between catalog reads.
 func codeToolFingerprint(member metaMember, definition json.RawMessage) string {
-	sum := sha256.Sum256(append([]byte(member.serverID.String()+"\x00"), definition...))
+	destination, _ := json.Marshal([]any{
+		member.serverID,
+		member.projectID,
+		int(member.backend),
+		member.toolsetID,
+		member.remoteServerID,
+		member.tunneledServerID,
+		member.tunneledResourceIdentifier,
+		member.environmentID,
+		member.toolVariationsGroupID,
+	})
+	sum := sha256.Sum256(append(append(destination, 0), definition...))
 	return hex.EncodeToString(sum[:])
 }

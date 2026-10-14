@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,8 @@ import (
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	serverrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -194,4 +197,53 @@ func TestCodeBridgeHonorsToolSelection(t *testing.T) {
 	require.Equal(t, "approved--ping", page.Items[0].Path)
 	_, err = host.Call(ctx, "new--ping", json.RawMessage(`{}`))
 	require.Error(t, err, "a callback cannot reach a tool outside the selection")
+}
+
+// TestCodeBridgeRefusesChangedDefinitionOrDestination pins the fingerprint
+// check at dispatch: a definition that changed since the catalog read, or a
+// member now served by a different backend, is refused before any call.
+func TestCodeBridgeRefusesChangedDefinitionOrDestination(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-"+uuid.NewString(), issuer)
+	original := newRecordingUpstream(t, "ping")
+	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, original.url)
+	backend := mcp.NewTestMetaCodeBackend(t, ctx, ti.service, gateway.ID, nil)
+	toolCalls := func(u *recordingUpstream) int {
+		count := 0
+		for _, req := range u.journal() {
+			if req.rpcMethod == "tools/call" {
+				count++
+			}
+		}
+		return count
+	}
+
+	catalog, err := backend.List(ctx, "remote")
+	require.NoError(t, err)
+	require.Len(t, catalog.Tools, 1)
+	pinned := catalog.Tools[0].Fingerprint
+
+	_, err = backend.Invoke(ctx, "remote--ping", pinned+"0", json.RawMessage(`{}`))
+	dispatch, ok := errors.AsType[*codemode.DispatchError](err)
+	require.True(t, ok, "%v", err)
+	require.True(t, dispatch.BeforeInvoke)
+	require.Equal(t, "tool_changed", dispatch.Code)
+	require.Zero(t, toolCalls(original), "a changed definition must not dispatch")
+
+	replacement := newRecordingUpstream(t, "ping")
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: *auth.ProjectID, TransportType: "streamable-http", Url: replacement.url})
+	row, err := serverrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, serverrepo.GetMCPServerByIDAndProjectIDParams{ID: memberID, ProjectID: *auth.ProjectID})
+	require.NoError(t, err)
+	_, err = serverrepo.New(ti.conn).UpdateMCPServer(ctx, serverrepo.UpdateMCPServerParams{Name: row.Name, Slug: row.Slug, EnvironmentID: row.EnvironmentID, UserSessionIssuerID: row.UserSessionIssuerID, RemoteMcpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, TunneledMcpServerID: row.TunneledMcpServerID, ToolsetID: row.ToolsetID, UnproxiedMcpServerID: row.UnproxiedMcpServerID, ToolVariationsGroupID: row.ToolVariationsGroupID, Visibility: row.Visibility, ID: row.ID, ProjectID: row.ProjectID})
+	require.NoError(t, err)
+
+	_, err = backend.Invoke(ctx, "remote--ping", pinned, json.RawMessage(`{}`))
+	dispatch, ok = errors.AsType[*codemode.DispatchError](err)
+	require.True(t, ok, "%v", err)
+	require.Equal(t, "tool_changed", dispatch.Code)
+	require.Zero(t, toolCalls(original))
+	require.Zero(t, toolCalls(replacement), "a swapped backend must not receive the call")
 }
