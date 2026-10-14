@@ -178,6 +178,10 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
+	// ConsentToolsDeferred tells the island that a "not connected" inventory
+	// answer only means identity chaining has not run yet, so approval
+	// proceeds with the unrestricted default.
+	ConsentToolsDeferred bool
 	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
 	ValidationDeadlineMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked or
@@ -575,6 +579,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	connectedCardCount := 0
 	chainedCardCount := 0
+	linkedOrChainedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
@@ -587,6 +592,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		if c.Chained {
 			chainedCardCount++
 		}
+		if c.Connected || c.Chained {
+			linkedOrChainedCardCount++
+		}
 		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
 		}
@@ -595,6 +603,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	// Chained cards enable access too: the runtime chains when no interactive token exists.
 	consentEnabled := len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
+	// Chained upstreams have no token before the grant exists, so their tools
+	// cannot be listed until after approval.
+	inventoryDeferred := chainedCardCount > 0 && linkedOrChainedCardCount == len(cards)
 
 	agentSelectionEnabled := false
 	agentSetupURL := ""
@@ -702,6 +713,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         endpoint.consentPath() + "/mcp",
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
+		ConsentToolsDeferred:    inventoryDeferred,
 		ValidationDeadlineMS:    validationDeadlineMS,
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,

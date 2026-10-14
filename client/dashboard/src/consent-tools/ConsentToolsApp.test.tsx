@@ -2,6 +2,8 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+
 import { ConsentToolsApp, type ConsentToolsAppProps } from "./ConsentToolsApp";
 import { parsePrefillBootstrap } from "./prefill";
 
@@ -51,6 +53,7 @@ function renderApp(
     formId: "consent-approve-form",
     approveButtonId: "approve-btn",
     consentEnabled: true,
+    inventoryDeferred: false,
     serverName: "example",
     prefill: null,
     ...overrides,
@@ -152,6 +155,32 @@ describe("ConsentToolsApp", () => {
   it("keeps approval disabled and offers retry on failure", async () => {
     listTools.mockRejectedValue(new Error("boom"));
     const { button } = renderApp();
+    await screen.findByText("Retry");
+    expect(button.disabled).toBe(true);
+  });
+
+  it("gives access with all tools when a chained service defers the inventory", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    const { button } = renderApp({ inventoryDeferred: true });
+    await screen.findByText(/Tools load after you give access/);
+    expect(button.disabled).toBe(false);
+    expect(button.dataset["consentSelfReady"]).toBe("true");
+    expect(screen.queryByText("Retry")).toBeNull();
+    expect(formFieldValues("tool_filtering")).toEqual(["off"]);
+    expect(formFieldValues("tool_inventory_id")).toEqual([]);
+  });
+
+  it("keeps a not-connected inventory blocking when nothing is chained", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(409, "not connected"));
+    const { button } = renderApp();
+    await screen.findByText("The upstream service is not connected.");
+    expect(button.disabled).toBe(true);
+    expect(formFieldValues("tool_filtering")).toEqual([]);
+  });
+
+  it("keeps other failures blocking even when the inventory may be deferred", async () => {
+    connect.mockRejectedValue(new StreamableHTTPError(503, "unavailable"));
+    const { button } = renderApp({ inventoryDeferred: true });
     await screen.findByText("Retry");
     expect(button.disabled).toBe(true);
   });

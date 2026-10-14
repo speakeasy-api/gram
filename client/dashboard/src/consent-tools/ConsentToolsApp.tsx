@@ -22,6 +22,12 @@ export interface ConsentToolsAppProps {
   formId: string;
   approveButtonId: string;
   consentEnabled: boolean;
+  /**
+   * Set by the server when every service is linked or reached through
+   * identity chaining: a "not connected" inventory then only means chaining
+   * runs after approval, so access is given with all tools.
+   */
+  inventoryDeferred: boolean;
   serverName: string;
   prefill: ConsentSelection;
 }
@@ -46,6 +52,7 @@ interface ConsentInventory {
 type ConsentPhase =
   | { name: "loading" }
   | { name: "error"; conflict: boolean; message: string }
+  | { name: "deferred" }
   | { name: "ready"; inventory: ConsentInventory };
 
 /**
@@ -163,8 +170,11 @@ function annotationsFromHints(value: unknown): ToolAnnotation[] {
   );
 }
 
-function errorPhase(err: unknown): ConsentPhase {
+function errorPhase(err: unknown, inventoryDeferred: boolean): ConsentPhase {
   const status = err instanceof StreamableHTTPError ? err.code : undefined;
+  if (status === 409 && inventoryDeferred) {
+    return { name: "deferred" };
+  }
   if (status === 409) {
     return {
       name: "error",
@@ -194,6 +204,7 @@ export function ConsentToolsApp({
   formId,
   approveButtonId,
   consentEnabled,
+  inventoryDeferred,
   serverName,
   prefill,
 }: ConsentToolsAppProps): JSX.Element {
@@ -256,17 +267,18 @@ export function ConsentToolsApp({
       setPhase({ name: "ready", inventory });
     };
     load().catch((err: unknown) => {
-      if (!cancelled) setPhase(errorPhase(err));
+      if (!cancelled) setPhase(errorPhase(err, inventoryDeferred));
     });
     return () => {
       cancelled = true;
     };
-  }, [attemptID, toolsUrl, state, csrfToken, prefill]);
+  }, [attemptID, toolsUrl, state, csrfToken, prefill, inventoryDeferred]);
 
   // Approval is gated on both a successfully loaded inventory and the
   // server-rendered remote-session readiness flag; anything else (loading,
   // error, retry, malformed response) keeps the button disabled.
-  const approveReady = phase.name === "ready" && consentEnabled;
+  const approveReady =
+    (phase.name === "ready" || phase.name === "deferred") && consentEnabled;
   useEffect(() => {
     const button = document.getElementById(approveButtonId);
     if (button instanceof HTMLButtonElement) {
@@ -313,6 +325,21 @@ export function ConsentToolsApp({
         className="border-border text-muted-foreground border px-3 py-3 text-sm"
       >
         Loading available tools…
+      </div>
+    );
+  }
+
+  if (phase.name === "deferred") {
+    return (
+      <div
+        role="status"
+        className="border-border text-muted-foreground space-y-1 border px-3 py-3 text-sm"
+      >
+        <p>
+          Tools load after you give access. This connection starts with every
+          tool your role allows.
+        </p>
+        <input type="hidden" name="tool_filtering" value="off" form={formId} />
       </div>
     );
   }
