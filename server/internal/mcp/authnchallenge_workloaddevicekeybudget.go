@@ -14,10 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
-// workloadDeviceKeyLookupRate bounds how many device key lookups one device
-// issuer drives into the database. The lookup runs before the assertion is
-// verified, keyed on its unverified sub, so without a bound every forged
-// assertion would cost a query.
+// workloadDeviceKeyLookupRate bounds device key lookups per issuer. The lookup
+// runs on the unverified sub, so unbounded, every forged assertion costs a query.
 var workloadDeviceKeyLookupRate = ratelimit.PerMinute(120).WithBurst(30)
 
 // errWorkloadDeviceKeyLookupRateLimited reports a device key lookup refused
@@ -52,10 +50,8 @@ func newWorkloadDeviceKeyLookupBudget(redisClient *redis.Client, meterProvider m
 	return limiter.Allow
 }
 
-// budgetedDeviceKeyLookup charges every lookup against the device issuer's
-// budget before it reaches the store. The scope is the issuer row the iss
-// resolved to, never anything the caller controls, so varying sub cannot mint
-// a fresh budget.
+// budgetedDeviceKeyLookup charges each lookup to the resolved issuer row, which
+// the caller cannot vary, so changing sub never mints a fresh budget.
 func budgetedDeviceKeyLookup(lookup workloadDeviceKeyLookup, charge workloadIssuerBudget) workloadDeviceKeyLookup {
 	return func(ctx context.Context, organizationID string, issuerID uuid.UUID, subject string) (workloadidentity.DeviceKey, error) {
 		if charge == nil {

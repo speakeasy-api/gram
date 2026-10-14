@@ -276,13 +276,9 @@ VALUES (@organization_id, @token_hash, @agent_id, @hooks_project_id, @created_by
 RETURNING *;
 
 -- name: ConsumeWorkloadDeviceJoinToken :one
--- Redeems a join token for the device subject it enrolls. Single use and
--- atomic: the row is claimed on the same statement that reads it, so a replay
--- or a racing second redemption updates nothing.
---
--- Keyed by hash alone because the organization is what this lookup discovers:
--- the token is the only thing an unauthenticated device presents. The hash is
--- unique across organizations, which is what makes that safe.
+-- Claims the token in the statement that reads it, so a replay or racing
+-- redemption updates nothing. Keyed by hash alone: the organization is what it
+-- discovers, and the hash is unique across organizations.
 UPDATE workload_device_join_tokens
 SET consumed_at = clock_timestamp(), consumed_by_subject = @subject, updated_at = clock_timestamp()
 WHERE token_hash = @token_hash
@@ -292,10 +288,8 @@ WHERE token_hash = @token_hash
 RETURNING *;
 
 -- name: GetReplayedDeviceRegistration :one
--- The enrollment a spent join token already produced, when the same key asks
--- again: a device that crashed after registering but before saving the result
--- retries with its token and key. Only within the token's original lifetime,
--- and only while that device is still enrolled under the token's agent.
+-- The enrollment a spent token produced, for the same key retrying after a crash.
+-- Only within the token's lifetime, while the device is still enrolled under its agent.
 SELECT t.organization_id, t.agent_id, t.consumed_by_subject AS subject, i.issuer, t.hooks_project_id, p.slug AS hooks_project_slug
 FROM workload_device_join_tokens t
 JOIN projects p

@@ -312,15 +312,9 @@ func admitWorkloadAssertion(
 	return presented, nil
 }
 
-// assertionKeySource returns the keys an assertion from issuer must verify
-// against. A device issuer's assertion verifies against the one key registered
-// for its own subject, so a key enrolled for one device can never sign as
-// another; every other issuer's verifies against its remote key set.
-//
-// The subject and kid are read unverified here, which is safe: they only select
-// the key, and Verify then requires the signed sub to equal the subject. The
-// kid must name the registered key's thumbprint, so a device that rotates its
-// key cannot keep signing with the old one.
+// assertionKeySource returns the keys an assertion must verify against: the one
+// key registered for a device subject, or the issuer's remote key set. The
+// unverified sub and kid only select the key; Verify checks the signed sub.
 func (grant *workloadGrant) assertionKeySource(ctx context.Context, tenancy workloadTenancy, issuer *workloadidentity_repo.WorkloadIssuer, subject, keyID string) (jwks.Source, error) {
 	// Any key_source other than none or device_keys fails closed rather than
 	// quietly falling back to the remote key set.

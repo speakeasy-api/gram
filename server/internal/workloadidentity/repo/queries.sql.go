@@ -31,12 +31,8 @@ type GetWorkloadDeviceKeyRow struct {
 	Thumbprint string
 }
 
-// The one public key registered for a device subject under a Speakeasy device
-// issuer. An assertion from such an issuer verifies against this key alone, so
-// a key enrolled for one device can never sign as another.
-//
-// Scoped by organization and issuer row as well as subject, so a lookup can
-// only ever answer for the issuer the assertion already resolved to.
+// The one key registered for a device subject, which alone verifies its
+// assertions. Scoped to the issuer row the assertion already resolved to.
 func (q *Queries) GetWorkloadDeviceKey(ctx context.Context, arg GetWorkloadDeviceKeyParams) (GetWorkloadDeviceKeyRow, error) {
 	row := q.db.QueryRow(ctx, getWorkloadDeviceKey, arg.OrganizationID, arg.WorkloadIssuerID, arg.Subject)
 	var i GetWorkloadDeviceKeyRow

@@ -27,13 +27,9 @@ type ConsumeWorkloadDeviceJoinTokenParams struct {
 	TokenHash string
 }
 
-// Redeems a join token for the device subject it enrolls. Single use and
-// atomic: the row is claimed on the same statement that reads it, so a replay
-// or a racing second redemption updates nothing.
-//
-// Keyed by hash alone because the organization is what this lookup discovers:
-// the token is the only thing an unauthenticated device presents. The hash is
-// unique across organizations, which is what makes that safe.
+// Claims the token in the statement that reads it, so a replay or racing
+// redemption updates nothing. Keyed by hash alone: the organization is what it
+// discovers, and the hash is unique across organizations.
 func (q *Queries) ConsumeWorkloadDeviceJoinToken(ctx context.Context, arg ConsumeWorkloadDeviceJoinTokenParams) (WorkloadDeviceJoinToken, error) {
 	row := q.db.QueryRow(ctx, consumeWorkloadDeviceJoinToken, arg.Subject, arg.TokenHash)
 	var i WorkloadDeviceJoinToken
@@ -573,10 +569,8 @@ type GetReplayedDeviceRegistrationRow struct {
 	HooksProjectSlug string
 }
 
-// The enrollment a spent join token already produced, when the same key asks
-// again: a device that crashed after registering but before saving the result
-// retries with its token and key. Only within the token's original lifetime,
-// and only while that device is still enrolled under the token's agent.
+// The enrollment a spent token produced, for the same key retrying after a crash.
+// Only within the token's lifetime, while the device is still enrolled under its agent.
 func (q *Queries) GetReplayedDeviceRegistration(ctx context.Context, arg GetReplayedDeviceRegistrationParams) (GetReplayedDeviceRegistrationRow, error) {
 	row := q.db.QueryRow(ctx, getReplayedDeviceRegistration, arg.TokenHash, arg.Thumbprint)
 	var i GetReplayedDeviceRegistrationRow

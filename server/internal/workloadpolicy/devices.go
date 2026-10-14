@@ -58,11 +58,9 @@ const (
 	deviceSubjectPrefix = "device:"
 )
 
-// registerDeviceRate is a fleet-wide ceiling that protects the database. Join
-// tokens are 256-bit random values, so no rate protects the tokens themselves;
-// the ceiling sits well above real enrollment so a probe flood is what it
-// stops, while registerDeviceTokenRate keeps one token's retries to its own
-// bucket.
+// registerDeviceRate protects the database from probe floods; tokens are 256-bit
+// random, so no rate is needed to protect them. registerDeviceTokenRate keeps one
+// token's retries to its own bucket.
 var (
 	registerDeviceRate      = ratelimit.PerMinute(600).WithBurst(120)
 	registerDeviceTokenRate = ratelimit.PerMinute(20).WithBurst(10)
@@ -418,12 +416,9 @@ func (s *Service) RegisterDevice(ctx context.Context, payload *gen.RegisterDevic
 	}, nil
 }
 
-// replayedDeviceRegistration answers a join token that is already spent. The
-// one replay it accepts is the device that spent it presenting the same key
-// again, within the token's lifetime and while still enrolled: a device that
-// crashed between registering and saving the result would otherwise need a new
-// token. Unknown, expired, and spent-by-another-key tokens stay
-// indistinguishable to the caller.
+// replayedDeviceRegistration accepts a spent token only from the device that
+// spent it, with the same key, inside the token's lifetime, so a crash before
+// saving needs no new token. Every other spent token looks unknown.
 func (s *Service) replayedDeviceRegistration(ctx context.Context, q *repo.Queries, joinToken string, thumbprint string) (*gen.WorkloadDeviceRegistration, error) {
 	replay, err := q.GetReplayedDeviceRegistration(ctx, repo.GetReplayedDeviceRegistrationParams{
 		TokenHash:  hashDeviceJoinToken(joinToken),
