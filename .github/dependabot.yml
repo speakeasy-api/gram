@@ -11,6 +11,8 @@ updates:
       - "/.github/workflows/composite/build-push"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       artifacts:
         patterns:
@@ -21,6 +23,8 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     ignore:
       # Bumped on release by speakeasy-api/mcp-setup-docs (go-module-consumer-bump).
       - dependency-name: "github.com/speakeasy-api/mcp-setup-docs/go"
@@ -150,6 +154,8 @@ updates:
       - "/pystreams"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
   - package-ecosystem: "uv"
     directory: "/"
     schedule:

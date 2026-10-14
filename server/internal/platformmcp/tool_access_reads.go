@@ -20,7 +20,7 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_access_roles",
 		Title:       "List MCP Access Roles",
-		Description: "List the organization's roles and summarize the MCP access each role carries. Member counts are withheld for small groups, and each role is represented by a short-lived opaque reference rather than a role ID or principal.",
+		Description: "List the organization's roles and summarize the MCP access each role carries. Each role also lists the directory groups and attribute values mapped to it, which under directory sync give the role to everyone they match; an empty list means nothing in the directory gives the role out, and mappings are changed on the dashboard's identity provider page. Member counts are withheld for small groups, and each role is represented by a short-lived opaque reference rather than a role ID or principal.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, ListAccessRolesOutput, error) {
 		return principalToolCall(ctx, accessReadToolResult, func(principal Principal) (ListAccessRolesOutput, error) {
