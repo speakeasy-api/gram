@@ -7629,7 +7629,7 @@ func NewSetAIToolDecisionResponseBody(res *access.SetAIToolDecisionResult) *SetA
 		TargetID: res.TargetID,
 	}
 	if res.Access != nil {
-		body.Access = marshalAccessAIToolAccessSummaryToAIToolAccessSummaryResponseBody(res.Access)
+		body.Access = marshalTypesAIToolAccessSummaryToAIToolAccessSummaryResponseBody(res.Access)
 	}
 	return body
 }

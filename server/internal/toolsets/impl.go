@@ -443,6 +443,9 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, candidate.ID.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
+	if fields := deprecatedHostingFields(payload); len(fields) > 0 {
+		logDeprecatedHostingUse(ctx, logger, authCtx, fields)
+	}
 
 	var requestedMode *networkaccess.Mode
 	var finalizeNetworkAccess networkaccess.AdmissionFinalizer
@@ -1097,6 +1100,11 @@ func (s *Service) CheckMCPSlugAvailability(ctx context.Context, payload *gen.Che
 	if !ok || authCtx == nil {
 		return false, oops.C(oops.CodeUnauthorized)
 	}
+	logger := s.logger
+	if authCtx.ProjectID != nil {
+		logger = logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+	}
+	logDeprecatedHostingUse(ctx, logger, authCtx, nil)
 
 	// Inverted wire contract: true means TAKEN, in any scope, matching the
 	// pre-unification semantics this deprecated inline check always had.

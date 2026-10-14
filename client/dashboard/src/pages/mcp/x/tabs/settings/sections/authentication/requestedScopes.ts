@@ -4,7 +4,7 @@ import type { RemoteMcpServerScopes } from "@gram/client/models/components/remot
 
 type ScopeSource = RemoteMcpServerClientScopes["scopeSource"];
 
-// Identity scopes every login asks for; they say nothing about the server's access.
+// Identity scopes; they say nothing about the server's access.
 const FEATURE_SCOPES = new Set([
   "openid",
   "email",

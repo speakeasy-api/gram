@@ -312,3 +312,7 @@ actions:
   - target: $.paths.*[?(@.operationId=='approveAllSkillSuggestions')].requestBody
     update:
       required: false
+  # Goa cannot emit deprecated: true on properties; derive it from x-speakeasy-deprecation-message.
+  - target: $.components.schemas.*.properties[?@['x-speakeasy-deprecation-message']]
+    update:
+      deprecated: true

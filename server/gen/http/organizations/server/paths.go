@@ -42,6 +42,11 @@ func RemoveUserOrganizationsPath() string {
 	return "/rpc/organizations.removeUser"
 }
 
+// RevokeMemberSignInsOrganizationsPath returns the URL path to the organizations service revokeMemberSignIns HTTP endpoint.
+func RevokeMemberSignInsOrganizationsPath() string {
+	return "/rpc/organizations.revokeMemberSignIns"
+}
+
 // EnableWebhooksOrganizationsPath returns the URL path to the organizations service enableWebhooks HTTP endpoint.
 func EnableWebhooksOrganizationsPath() string {
 	return "/rpc/organizations.enableWebhooks"

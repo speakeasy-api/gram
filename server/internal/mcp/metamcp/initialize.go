@@ -10,7 +10,7 @@ import "strings"
 // list_servers, and disclose members a caller cannot reach. It teaches the
 // drill-down and the two rules agents get wrong; the inventory itself belongs
 // to list_servers alone.
-const Instructions = `This endpoint fronts a set of MCP servers as one, exposing four tools instead of every member's full catalog.
+const Instructions = `This endpoint fronts a set of MCP servers as one, exposing a handful of tools instead of every member's full catalog.
 
 Work from the outside in:
 
@@ -21,7 +21,9 @@ Work from the outside in:
 
 Never execute a name you have not described: arguments guessed from a tool name will fail validation.
 
-If a call fails, re-check list_servers before retrying. "unknown" means unobserved, not broken — such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.`
+If a call fails, re-check list_servers before retrying. "unknown" means unobserved, not broken — such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.
+
+If a member says it needs authentication, call connection_status: it shows which members you are signed in to and, when this gateway has a sign-in page, links to it. Call it again after signing in to refresh.`
 
 // ResolveInstructions returns custom instructions verbatim when nonblank,
 // otherwise falling back to the built-in gateway instructions.

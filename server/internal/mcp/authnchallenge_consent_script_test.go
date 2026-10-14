@@ -79,7 +79,7 @@ const element = (attrs = {}) => ({
 });
 const fallbackClass = 'text-muted-foreground interact:text-foreground';
 const cards = {};
-const statuses = ['connected', 'rejected', 'error', 'offline'].map((id) => {
+const statuses = ['connected', 'rejected', 'ready', 'error', 'offline'].map((id) => {
   const status = element({ 'data-chain-check': 'pending' });
   const fallback = element({ 'data-connect-fallback': '' });
   fallback.className = fallbackClass;
@@ -105,7 +105,7 @@ vm.runInNewContext(source, {
     const id = body.get('client_id');
     if (id === 'offline') return Promise.reject(new Error('offline'));
     if (id === 'error') return Promise.resolve({ ok: false, json: () => Promise.reject(new Error('no body')) });
-    const result = id === 'connected' ? { status: 'connected', message: 'ignored' } : { status: 'rejected', message: 'Example refused.' };
+    const result = id === 'connected' ? { status: 'connected', message: 'ignored' } : id === 'ready' ? { status: 'ready', message: 'ignored' } : { status: 'rejected', message: 'Example refused.' };
     return Promise.resolve({ ok: true, json: () => Promise.resolve(result) });
   },
   document: {
@@ -126,7 +126,7 @@ for (const status of statuses) {
   assert.equal(status.children.length, 2, 'checking shows a spinner and label');
   assert.equal(status.children[1].text, 'Connecting through your identity provider…');
 }
-assert.deepEqual(posts.map((p) => p.body), ['connected', 'rejected', 'error', 'offline'].map((id) => ({
+assert.deepEqual(posts.map((p) => p.body), ['connected', 'rejected', 'ready', 'error', 'offline'].map((id) => ({
   state: 'state-1', csrf_token: 'csrf-1', action: 'identity_chaining_check', client_id: id,
 })));
 assert.ok(posts.every((p) => p.url === '/mcp/x/connect/remote-session' && p.method === 'POST'));
@@ -138,6 +138,12 @@ setTimeout(() => {
   assert.equal(ok.status.textContent, 'Connected through your identity provider');
   assert.equal(ok.fallback.className, fallbackClass, 'connected keeps the quiet fallback');
   assert.equal(summary.textContent, '2 of 5 connected');
+
+  const ready = cards.ready;
+  assert.equal(ready.status.getAttribute('data-chain-check'), 'ready');
+  assert.equal(ready.status.textContent, 'Ready to connect after authorization');
+  assert.equal(ready.fallback.className, fallbackClass, 'readiness keeps separate OAuth optional');
+  assert.equal(summary.textContent, '2 of 5 connected', 'readiness does not claim a downstream token');
 
   const no = cards.rejected;
   assert.equal(no.status.getAttribute('data-chain-check'), 'rejected');

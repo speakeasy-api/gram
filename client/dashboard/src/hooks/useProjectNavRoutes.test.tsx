@@ -173,17 +173,18 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes.indexOf(routes.playground)).toBeLessThan(
       navRoutes.indexOf(routes.riskOverview),
     );
-    expect(navRoutes.indexOf(routes.shadowAI)).toBeLessThan(
+    expect(navRoutes.indexOf(routes.policyCenter)).toBeLessThan(
       navRoutes.indexOf(routes.costs),
     );
   });
 
-  it("uses Shadow AI as the nav destination, with Shadow MCP folded into it", () => {
+  it("leaves Shadow AI and Shadow MCP out of nav; they live in Guardrails", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
     const titles = result.current.map((entry) => entry.route.title);
-    expect(titles).toContain("Shadow AI");
+    expect(titles).not.toContain("Shadow AI");
     expect(titles).not.toContain("Shadow MCP");
+    expect(titles).toContain("Guardrails");
   });
 
   it("leaves Approval Requests out of nav", () => {

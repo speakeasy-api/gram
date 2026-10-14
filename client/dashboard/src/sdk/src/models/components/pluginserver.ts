@@ -32,11 +32,11 @@ export type PluginServer = {
    */
   id: string;
   /**
-   * Speakeasy MCP server ID. Exactly one backend ID is set.
+   * Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.
    */
   mcpServerId?: string | undefined;
   /**
-   * MCP gateway ID. Exactly one backend ID is set.
+   * MCP gateway ID. When set, no other backend ID is set.
    */
   metaMcpServerId?: string | undefined;
   /**
@@ -48,7 +48,7 @@ export type PluginServer = {
    */
   sortOrder: number;
   /**
-   * Speakeasy toolset ID. Exactly one backend ID is set.
+   * Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.
    */
   toolsetId?: string | undefined;
 };

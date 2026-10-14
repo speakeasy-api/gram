@@ -224,6 +224,31 @@ func (s *Service) UpdateGcpIamPlatformCredential(ctx context.Context, payload *a
 		// A concurrent delete between the load above and the lock.
 		return nil, oops.E(oops.CodeNotFound, nil, "platform gcp iam credential not found")
 	}
+	// Issuer keys sign as this credential's account, and their cleanup removes
+	// the grant from it, so it can't change while any issuer key holds a grant.
+	// Renames and other changes stay allowed.
+	// Re-read under the lock: the earlier read may predate a concurrent change.
+	locked, err := q.GetGcpIamCredential(ctx, repo.GetGcpIamCredentialParams{ID: id, OrganizationID: platformOrganizationID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "platform gcp iam credential not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error loading platform gcp iam credential").LogError(ctx, logger)
+	}
+	// Issuer keys sign through this exact identity: the account they were
+	// granted to and how Speakeasy reaches it. Renames stay allowed.
+	stored := locked.GcpIamCredential
+	identityChanged := strings.ToLower(strings.TrimSpace(stored.ImpersonateServiceAccount.String)) != cols.ImpersonateServiceAccount.String ||
+		stored.WifPoolID != cols.WifPoolID || stored.WifProviderID != cols.WifProviderID || stored.WifProjectNumber != cols.WifProjectNumber
+	if identityChanged {
+		granted, err := q.CountIssuerKeysGrantedByCredential(ctx, repo.CountIssuerKeysGrantedByCredentialParams{ExternalCredentialID: id, IncludePendingCleanup: true})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error counting issuer signing keys").LogError(ctx, logger)
+		}
+		if granted > 0 {
+			return nil, oops.E(oops.CodeConflict, nil, "credential holds signer grants on %d issuer keys; create a new credential and switch to it instead", granted)
+		}
+	}
 
 	ec, err := q.UpdateExternalCredential(ctx, repo.UpdateExternalCredentialParams{
 		Name:           name,
@@ -393,6 +418,15 @@ func (s *Service) DeleteGcpIamPlatformCredential(ctx context.Context, payload *a
 	}
 	if !found {
 		return nil
+	}
+	// Live issuer keys sign through this credential. Revoked ones don't block:
+	// their cleanup reads the deleted credential's account.
+	live, err := repo.New(dbtx).CountIssuerKeysGrantedByCredential(ctx, repo.CountIssuerKeysGrantedByCredentialParams{ExternalCredentialID: id, IncludePendingCleanup: false})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error counting issuer signing keys").LogError(ctx, logger)
+	}
+	if live > 0 {
+		return oops.E(oops.CodeConflict, nil, "credential backs %d live issuer keys; replace them first", live)
 	}
 
 	deleted, err := repo.New(dbtx).SoftDeleteExternalCredential(ctx, repo.SoftDeleteExternalCredentialParams{

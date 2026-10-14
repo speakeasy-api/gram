@@ -12,6 +12,7 @@ import { organizationUserSessionIssuersGetDeletePreflight } from "../funcs/organ
 import { organizationUserSessionIssuersGetMigratePreflight } from "../funcs/organizationUserSessionIssuersGetMigratePreflight.js";
 import { organizationUserSessionIssuersList } from "../funcs/organizationUserSessionIssuersList.js";
 import { organizationUserSessionIssuersListCimdClients } from "../funcs/organizationUserSessionIssuersListCimdClients.js";
+import { organizationUserSessionIssuersListMcpServers } from "../funcs/organizationUserSessionIssuersListMcpServers.js";
 import { organizationUserSessionIssuersMigrate } from "../funcs/organizationUserSessionIssuersMigrate.js";
 import { organizationUserSessionIssuersMove } from "../funcs/organizationUserSessionIssuersMove.js";
 import { organizationUserSessionIssuersUpdate } from "../funcs/organizationUserSessionIssuersUpdate.js";
@@ -59,6 +60,11 @@ import {
   ListOrganizationUserSessionIssuerCimdClientsResponse,
   ListOrganizationUserSessionIssuerCimdClientsSecurity,
 } from "../models/operations/listorganizationusersessionissuercimdclients.js";
+import {
+  ListOrganizationUserSessionIssuerMcpServersRequest,
+  ListOrganizationUserSessionIssuerMcpServersResponse,
+  ListOrganizationUserSessionIssuerMcpServersSecurity,
+} from "../models/operations/listorganizationusersessionissuermcpservers.js";
 import {
   ListOrganizationUserSessionIssuersRequest,
   ListOrganizationUserSessionIssuersResponse,
@@ -164,7 +170,7 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
    * getIssuer organizationUserSessionIssuers
    *
    * @remarks
-   * Get an organization-owned user_session_issuer by id. Requires org:read.
+   * Get any user_session_issuer in the caller's organization, organization-owned or project-specific, by id. Requires org:read.
    */
   async get(
     request: GetOrganizationUserSessionIssuerRequest,
@@ -244,7 +250,7 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
    * listIssuers organizationUserSessionIssuers
    *
    * @remarks
-   * List organization-owned user_session_issuers. Requires org:read.
+   * List the user_session_issuers in the caller's organization: organization-owned and project-specific, each project-specific issuer with its owning project name. Requires org:read.
    */
   async list(
     request?: ListOrganizationUserSessionIssuersRequest | undefined,
@@ -278,6 +284,30 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
     >
   > {
     return unwrapResultIterator(organizationUserSessionIssuersListCimdClients(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listMcpServers organizationUserSessionIssuers
+   *
+   * @remarks
+   * List the live MCP servers, toolsets, and meta MCP servers attached to a user_session_issuer in the caller's organization, organization-owned or project-specific. A toolset served through an MCP server is listed once, as that server. Requires org:read.
+   */
+  async listMcpServers(
+    request: ListOrganizationUserSessionIssuerMcpServersRequest,
+    security?: ListOrganizationUserSessionIssuerMcpServersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<
+    PageIterator<
+      ListOrganizationUserSessionIssuerMcpServersResponse,
+      { cursor: string }
+    >
+  > {
+    return unwrapResultIterator(organizationUserSessionIssuersListMcpServers(
       this,
       request,
       security,

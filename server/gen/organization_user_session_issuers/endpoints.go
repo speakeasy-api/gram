@@ -20,6 +20,7 @@ type Endpoints struct {
 	ListIssuers               goa.Endpoint
 	GetIssuer                 goa.Endpoint
 	UpdateIssuer              goa.Endpoint
+	ListMcpServers            goa.Endpoint
 	GetIssuerDeletePreflight  goa.Endpoint
 	DeleteIssuer              goa.Endpoint
 	MoveIssuer                goa.Endpoint
@@ -41,6 +42,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListIssuers:               NewListIssuersEndpoint(s, a.APIKeyAuth),
 		GetIssuer:                 NewGetIssuerEndpoint(s, a.APIKeyAuth),
 		UpdateIssuer:              NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
+		ListMcpServers:            NewListMcpServersEndpoint(s, a.APIKeyAuth),
 		GetIssuerDeletePreflight:  NewGetIssuerDeletePreflightEndpoint(s, a.APIKeyAuth),
 		DeleteIssuer:              NewDeleteIssuerEndpoint(s, a.APIKeyAuth),
 		MoveIssuer:                NewMoveIssuerEndpoint(s, a.APIKeyAuth),
@@ -60,6 +62,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListIssuers = m(e.ListIssuers)
 	e.GetIssuer = m(e.GetIssuer)
 	e.UpdateIssuer = m(e.UpdateIssuer)
+	e.ListMcpServers = m(e.ListMcpServers)
 	e.GetIssuerDeletePreflight = m(e.GetIssuerDeletePreflight)
 	e.DeleteIssuer = m(e.DeleteIssuer)
 	e.MoveIssuer = m(e.MoveIssuer)
@@ -160,6 +163,29 @@ func NewUpdateIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.UpdateIssuer(ctx, p)
+	}
+}
+
+// NewListMcpServersEndpoint returns an endpoint function that calls the method
+// "listMcpServers" of service "organizationUserSessionIssuers".
+func NewListMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListMcpServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListMcpServers(ctx, p)
 	}
 }
 
