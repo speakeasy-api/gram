@@ -295,7 +295,7 @@ describe("who holds the role under directory sync", () => {
 });
 
 describe("the access grid", () => {
-  /** Projects start collapsed; open the one the servers sit in. */
+  /** The default project, which the servers sit in, starts open. */
   function show(editingRole: Parameters<typeof renderEditor>[0]) {
     renderEditor(editingRole);
   }
@@ -369,6 +369,70 @@ describe("the access grid", () => {
     expect(form.removeGrants).toEqual([
       { scope: "mcp:connect", selectors: linear },
     ]);
+  });
+
+  it("saves an untouched grid without changing any grant", () => {
+    show({
+      ...role,
+      grants: [
+        { scope: "mcp:connect" },
+        {
+          scope: "mcp:read",
+          selectors: [{ resourceKind: "mcp", resourceId: "*", tool: "search" }],
+        },
+        {
+          scope: "mcp:blocked_write",
+          selectors: [{ resourceKind: "mcp", resourceId: "server-b" }],
+        },
+        { scope: "org:read" },
+      ],
+    });
+    fireEvent.change(screen.getByDisplayValue("Original description"), {
+      target: { value: "New description" },
+    });
+    const form = savedForm();
+    expect(form.addGrants ?? []).toEqual([]);
+    expect(form.removeGrants ?? []).toEqual([]);
+  });
+
+  it("shows a block on a project on each of its servers", () => {
+    show({
+      ...role,
+      grants: [
+        {
+          scope: "mcp:blocked_connect",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
+          ],
+        },
+      ],
+    });
+    expect(
+      screen
+        .getByRole("button", { name: "Connect GitHub, blocked" })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+  });
+
+  it("keeps a server's own grant clickable under a blocked project", () => {
+    show({
+      ...role,
+      grants: [
+        {
+          scope: "mcp:blocked_connect",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
+          ],
+        },
+        {
+          scope: "mcp:connect",
+          selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
+        },
+      ],
+    });
+    const use = screen.getByRole("button", { name: "Connect GitHub" });
+    expect(use.getAttribute("aria-pressed")).toBe("true");
+    expect(use.getAttribute("aria-disabled")).toBe("false");
   });
 
   it("marks what a project row passes down to its servers", () => {

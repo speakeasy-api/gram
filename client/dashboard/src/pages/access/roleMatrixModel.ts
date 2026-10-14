@@ -168,6 +168,24 @@ function isToolLimitSelector(s: Selector, row: McpRow): boolean {
   return row.kind === "all" && !!s.disposition;
 }
 
+/**
+ * Use on a server limited both to tools and to annotations, which the tool
+ * sheet cannot show at once. The tools are the cell; the annotation rows stay
+ * as stored and are listed as other rules.
+ */
+function isHiddenAnnotationLimit(
+  allow: Selector[],
+  s: Selector,
+  row: McpRow,
+): boolean {
+  return (
+    row.kind === "server" &&
+    !!s.disposition &&
+    isToolLimitSelector(s, row) &&
+    allow.some((t) => !!t.tool && isToolLimitSelector(t, row))
+  );
+}
+
 function cellSelectors(row: McpRow, level: Level): (s: Selector) => boolean {
   return (s) =>
     isPlainRowSelector(s, row) ||
@@ -283,7 +301,9 @@ export function setMcpToolLimit(
   limit: ToolLimit,
 ): Record<string, RoleGrant> {
   return editFlat(grants, MCP_LEVEL_SCOPE.use, (flat) => {
-    const matches = cellSelectors(row, "use");
+    const inCell = cellSelectors(row, "use");
+    const matches = (s: Selector) =>
+      inCell(s) && !isHiddenAnnotationLimit(flat.allow, s, row);
     const allow = flat.allow.filter((s) => !matches(s));
     const base = rowSelector(row);
     switch (limit.kind) {
@@ -382,6 +402,26 @@ export function splitMcpToolLimit(
   return setMcpToolLimit(next, target, limit);
 }
 
+/**
+ * Limit Use on a row. A server that also gets Use from a row above splits
+ * that row, whether or not it has Use of its own; otherwise the broader Use
+ * would still reach every tool.
+ */
+export function limitMcpUse(
+  grants: Record<string, RoleGrant>,
+  row: McpRow,
+  limit: ToolLimit,
+  servers: (McpRow & { kind: "server" })[],
+): Record<string, RoleGrant> {
+  if (row.kind !== "server") return setMcpToolLimit(grants, row, limit);
+  const inherited =
+    mcpAllows(grants, { kind: "all" }, "use") ||
+    mcpAllows(grants, { kind: "project", projectId: row.projectId }, "use");
+  return inherited
+    ? splitMcpToolLimit(grants, row, limit, servers)
+    : setMcpToolLimit(grants, row, limit);
+}
+
 /** Take back every MCP grant and block, including other rules. */
 export function clearMcp(
   grants: Record<string, RoleGrant>,
@@ -414,7 +454,10 @@ export function otherMcpRules(
     const flat = flatten(grants[MCP_LEVEL_SCOPE[level]]);
     const shown = (s: Selector, blocked: boolean) =>
       rows.some((row) =>
-        blocked ? isPlainRowSelector(s, row) : cellSelectors(row, level)(s),
+        blocked
+          ? isPlainRowSelector(s, row)
+          : cellSelectors(row, level)(s) &&
+            !isHiddenAnnotationLimit(flat.allow, s, row),
       );
     for (const [blocked, list] of [
       [false, flat.allow],
@@ -620,10 +663,29 @@ export function platformBlock(
   return denies.length > 0 ? "some" : null;
 }
 
+const isBlockEverywhere = (rule: ScopeRule) =>
+  rule.effect === "deny" && rule.selectors === null;
+
+/** Take back a block everywhere on one permission. Narrower blocks stay. */
+export function unblockPlatformScope(
+  grants: Record<string, RoleGrant>,
+  scope: Scope,
+): Record<string, RoleGrant> {
+  const rules = (grants[scope]?.rules ?? []).filter(
+    (r) => !isBlockEverywhere(r),
+  );
+  return withGrant(
+    grants,
+    scope,
+    rules.length > 0 ? { scope, rules } : undefined,
+  );
+}
+
 /**
  * The Blocked column for a platform row. A block on View also blocks Manage
- * (scopeExpansions), so blocking stores on View alone; unblocking clears both,
- * and blocking takes back what the row grants.
+ * (scopeExpansions), so blocking stores on View alone and takes back what the
+ * row grants; unblocking takes back the blocks everywhere on both. Blocks on
+ * some projects stay either way.
  */
 export function setPlatformBlocked(
   grants: Record<string, RoleGrant>,
@@ -634,9 +696,9 @@ export function setPlatformBlocked(
   for (const def of [area.view, area.manage]) {
     if (!def) continue;
     const scope = def.slug as Scope;
-    const rules = on
-      ? []
-      : (next[scope]?.rules ?? []).filter((r) => r.effect === "allow");
+    next = unblockPlatformScope(next, scope);
+    if (!on) continue;
+    const rules = (next[scope]?.rules ?? []).filter((r) => r.effect === "deny");
     next = withGrant(
       next,
       scope,
@@ -647,7 +709,10 @@ export function setPlatformBlocked(
   if (on && target) {
     next = withGrant(next, target, {
       scope: target,
-      rules: [{ id: crypto.randomUUID(), effect: "deny", selectors: null }],
+      rules: [
+        ...(next[target]?.rules ?? []),
+        { id: crypto.randomUUID(), effect: "deny", selectors: null },
+      ],
     });
   }
   return next;

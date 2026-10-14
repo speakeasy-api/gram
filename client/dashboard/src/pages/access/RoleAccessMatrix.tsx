@@ -56,10 +56,10 @@ import {
   setMcpAllow,
   setMcpBlock,
   setMcpRowBlocked,
-  setMcpToolLimit,
   setPlatformAllow,
   setPlatformBlocked,
-  splitMcpToolLimit,
+  limitMcpUse,
+  unblockPlatformScope,
   clearMcp,
   clearPlatform,
   extraCopy,
@@ -558,13 +558,21 @@ function McpMatrix({
     const blockedAbove = ancestors(row).find((up) =>
       mcpBlocks(grants, up.row, level),
     );
+    // A row's own grant stays clickable, so it can still be taken back.
+    if (mcpAllows(grants, row, level)) {
+      return blockedAbove
+        ? {
+            state: "on",
+            reason: `Blocked on ${rowName(blockedAbove)}, so this has no effect`,
+          }
+        : { state: "on" };
+    }
     if (blockedAbove) {
       return {
         state: "inherited-blocked",
         reason: `Blocked on ${rowName(blockedAbove)}`,
       };
     }
-    if (mcpAllows(grants, row, level)) return { state: "on" };
     const higher = LEVELS.find(
       (other) =>
         levelRank(other) > levelRank(level) && mcpAllows(grants, row, other),
@@ -876,11 +884,7 @@ function McpMatrix({
           if (!sheet) return;
           const { row } = sheet;
           setSheet({ ...sheet, limit });
-          onChange((prev) =>
-            row.kind === "server" && !mcpAllows(prev, row, "use")
-              ? splitMcpToolLimit(prev, row, limit, serverRows)
-              : setMcpToolLimit(prev, row, limit),
-          );
+          onChange((prev) => limitMcpUse(prev, row, limit, serverRows));
         }}
         onClose={() => setSheet(null)}
       />
@@ -1125,7 +1129,7 @@ function PlatformMatrix({
                           onToggle={() =>
                             onChange((prev) =>
                               cell.state === "blocked"
-                                ? setPlatformBlocked(prev, area, false)
+                                ? unblockPlatformScope(prev, def.slug as Scope)
                                 : setPlatformAllow(
                                     prev,
                                     def.slug as Scope,
@@ -1176,6 +1180,7 @@ function PlatformMatrix({
           })}
         {extras.map(({ area, scope }) => {
           const checked = platformAllows(grants, scope.slug);
+          const blockedEverywhere = platformBlock(grants, scope.slug) === "all";
           const copy = extraCopy(scope);
           return (
             <tr key={scope.slug}>
@@ -1194,11 +1199,13 @@ function PlatformMatrix({
               </th>
               <td className={TD}>
                 <Cell
-                  state={checked ? "on" : "off"}
+                  state={blockedEverywhere ? "blocked" : checked ? "on" : "off"}
                   label={copy.label}
                   onToggle={() =>
                     onChange((prev) =>
-                      setPlatformAllow(prev, scope.slug as Scope, !checked),
+                      blockedEverywhere
+                        ? unblockPlatformScope(prev, scope.slug as Scope)
+                        : setPlatformAllow(prev, scope.slug as Scope, !checked),
                     )
                   }
                 />

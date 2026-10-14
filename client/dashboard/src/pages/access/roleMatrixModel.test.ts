@@ -22,6 +22,8 @@ import {
   splitMcpToolLimit,
   clearMcp,
   clearPlatform,
+  limitMcpUse,
+  unblockPlatformScope,
 } from "./roleMatrixModel";
 import type { RoleGrant } from "./types";
 
@@ -230,8 +232,10 @@ describe("MCP cells", () => {
       ["use", false, mcp("gh", { tool: "x", disposition: "read_only" })],
       ["use", true, mcp("gh", { tool: "rm" })],
     ]);
-    const after = removeOtherMcpRule(grants, other[1]!);
-    expect(otherMcpRules(after, [all, project, github])).toHaveLength(3);
+    const after = removeOtherMcpRule(grants, other[3]!);
+    expect(
+      otherMcpRules(after, [all, project, github]).map((r) => r.blocked),
+    ).toEqual([false, false, false]);
     expect(mcpAllows(after, github, "use")).toBe(true);
   });
 });
@@ -308,5 +312,82 @@ describe("clearing a table", () => {
     expect(
       save(clearPlatform(grants, platformAreas(scopes))).map((g) => g.scope),
     ).toEqual(["mcp:connect"]);
+  });
+});
+
+describe("editing without losing rules", () => {
+  const scoped = { resourceKind: "project", resourceId: "p2" } as Selector;
+
+  it("keeps annotation limits beside tool limits on one server", () => {
+    const grants = load([
+      {
+        scope: "mcp:connect",
+        selectors: [
+          mcp("gh", { tool: "a" }),
+          mcp("gh", { disposition: "read_only" }),
+        ],
+      },
+    ]);
+    expect(mcpToolLimit(grants, github)).toEqual({
+      kind: "tools",
+      tools: ["a"],
+    });
+    expect(otherMcpRules(grants, [all, project, github])).toHaveLength(1);
+    const after = setMcpToolLimit(grants, github, {
+      kind: "tools",
+      tools: ["b"],
+    });
+    expect(save(after)).toEqual([
+      {
+        scope: "mcp:connect",
+        selectors: [
+          mcp("gh", { disposition: "read_only" }),
+          mcp("gh", { tool: "b" }),
+        ],
+      },
+    ]);
+  });
+
+  it("splits a broader Use even when the server has its own", () => {
+    const grants = load([
+      {
+        scope: "mcp:connect",
+        selectors: [mcp("*", { projectId: "p1" }), mcp("gh")],
+      },
+    ]);
+    const after = limitMcpUse(grants, github, { kind: "tools", tools: ["a"] }, [
+      github,
+      linear,
+    ]);
+    expect(mcpAllows(after, project, "use")).toBe(false);
+    expect(mcpAllows(after, linear, "use")).toBe(true);
+    expect(mcpToolLimit(after, github)).toEqual({
+      kind: "tools",
+      tools: ["a"],
+    });
+  });
+
+  it("keeps blocks on some projects through the Blocked column", () => {
+    const projects = platformAreas(scopes).find(
+      (a) => a.resourceType === "project",
+    )!;
+    const grants = load([
+      { scope: "project:read" },
+      { scope: "project:blocked_read", selectors: [scoped] },
+    ]);
+    const blocked = setPlatformBlocked(grants, projects, true);
+    expect(platformBlock(blocked, "project:read")).toBe("all");
+    const unblocked = setPlatformBlocked(blocked, projects, false);
+    expect(platformBlock(unblocked, "project:read")).toBe("some");
+  });
+
+  it("unblocks one level without touching the other", () => {
+    const grants = load([
+      { scope: "project:blocked_read", selectors: [scoped] },
+      { scope: "project:blocked_write" },
+    ]);
+    const after = unblockPlatformScope(grants, "project:write" as Scope);
+    expect(platformBlock(after, "project:write")).toBeNull();
+    expect(platformBlock(after, "project:read")).toBe("some");
   });
 });
