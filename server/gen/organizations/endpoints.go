@@ -23,6 +23,7 @@ type Endpoints struct {
 	ListInvites                        goa.Endpoint
 	ListUsers                          goa.Endpoint
 	RemoveUser                         goa.Endpoint
+	RevokeMemberSignIns                goa.Endpoint
 	EnableWebhooks                     goa.Endpoint
 	DisableWebhooks                    goa.Endpoint
 	CreatePortalSession                goa.Endpoint
@@ -47,6 +48,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListInvites:                        NewListInvitesEndpoint(s, a.APIKeyAuth),
 		ListUsers:                          NewListUsersEndpoint(s, a.APIKeyAuth),
 		RemoveUser:                         NewRemoveUserEndpoint(s, a.APIKeyAuth),
+		RevokeMemberSignIns:                NewRevokeMemberSignInsEndpoint(s, a.APIKeyAuth),
 		EnableWebhooks:                     NewEnableWebhooksEndpoint(s, a.APIKeyAuth),
 		DisableWebhooks:                    NewDisableWebhooksEndpoint(s, a.APIKeyAuth),
 		CreatePortalSession:                NewCreatePortalSessionEndpoint(s, a.APIKeyAuth),
@@ -70,6 +72,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListInvites = m(e.ListInvites)
 	e.ListUsers = m(e.ListUsers)
 	e.RemoveUser = m(e.RemoveUser)
+	e.RevokeMemberSignIns = m(e.RevokeMemberSignIns)
 	e.EnableWebhooks = m(e.EnableWebhooks)
 	e.DisableWebhooks = m(e.DisableWebhooks)
 	e.CreatePortalSession = m(e.CreatePortalSession)
@@ -240,6 +243,29 @@ func NewRemoveUserEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return nil, s.RemoveUser(ctx, p)
+	}
+}
+
+// NewRevokeMemberSignInsEndpoint returns an endpoint function that calls the
+// method "revokeMemberSignIns" of service "organizations".
+func NewRevokeMemberSignInsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RevokeMemberSignInsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RevokeMemberSignIns(ctx, p)
 	}
 }
 

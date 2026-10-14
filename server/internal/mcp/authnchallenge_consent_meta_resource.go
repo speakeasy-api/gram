@@ -19,11 +19,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // resolveMetaMemberResource returns the upstream resource (remote server URL
 // or tunneled resource identifier) of the meta MCP member whose upstream
-// authenticates against remoteSessionIssuerID.
+// authenticates against remoteSessionIssuerID, and the mcp_servers id of the
+// member whose spelling of that URL was chosen.
 //
 // Tri-state: ("", true) means members claimed the issuer but no single member
 // wins, and the caller must not fall back to a weaker derivation; ("", false)
@@ -35,16 +37,18 @@ func (s *Service) resolveMetaMemberResource(
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	remoteSessionIssuerID uuid.UUID,
-) (string, bool, error) {
+) (string, uuid.NullUUID, bool, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	candidates, claimed, err := s.claimingMetaMembers(ctx, endpoint, remoteSessionIssuerID)
 	if err != nil || !claimed {
-		return "", false, err
+		return "", none, false, err
 	}
 
 	// The resource is sent upstream verbatim: a provider may match it exactly
 	// against its RFC 9728 resource, trailing slash included. Trailing slashes
 	// are ignored only to decide whether members share a destination.
 	resource := ""
+	member := none
 	for _, row := range candidates {
 		upstream := row.UpstreamUrl
 		trimmed := strings.TrimRight(upstream, "/")
@@ -56,10 +60,10 @@ func (s *Service) resolveMetaMemberResource(
 		// shortest, so the result does not depend on member order.
 		case resource != "" && trimmed == strings.TrimRight(resource, "/"):
 			if len(upstream) < len(resource) {
-				resource = upstream
+				resource, member = upstream, uuid.NullUUID{UUID: row.McpServerID, Valid: true}
 			}
 		case resource == "":
-			resource = upstream
+			resource, member = upstream, uuid.NullUUID{UUID: row.McpServerID, Valid: true}
 		default:
 			// One authorization server, two members: a grant records one resource per
 			// (subject, client), so nothing routes both.
@@ -68,10 +72,10 @@ func (s *Service) resolveMetaMemberResource(
 				attr.SlogRemoteSessionIssuerID(remoteSessionIssuerID.String()),
 				attr.SlogMcpServerID(row.McpServerID.String()),
 			)
-			return "", true, nil
+			return "", none, true, nil
 		}
 	}
-	return resource, true, nil
+	return resource, member, true, nil
 }
 
 // claimingMetaMembers lists the proxied members authenticating against
@@ -145,4 +149,68 @@ func (s *Service) authorizedMetaMembers(
 		authorized = append(authorized, row)
 	}
 	return authorized, nil
+}
+
+var quietLogger = slog.New(slog.DiscardHandler)
+
+// gatewayMemberResourceScopes reads, for each card on a gateway, the cached
+// resource row of the member a login through that client would read, so the
+// card requests what the login will. A client no single member claims has no
+// entry; a lookup fault logs and leaves the card on its issuer's scopes.
+func (s *Service) gatewayMemberResourceScopes(
+	ctx context.Context,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	clients []remotesessions.Client,
+	discover bool,
+) map[uuid.UUID]remotesessions.ResourceScopes {
+	if !discover || !endpoint.MetaMcpServerID.Valid || challengeState.Subject == nil || len(clients) == 0 {
+		return nil
+	}
+	memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "stamp consent subject for gateway member scopes", attr.SlogError(err))
+		return nil
+	}
+	// Clients on one authorization server resolve to the same member, so each
+	// server is resolved once per render.
+	byIssuer := make(map[uuid.UUID]memberScopes, len(clients))
+	out := make(map[uuid.UUID]remotesessions.ResourceScopes, len(clients))
+	for _, c := range clients {
+		resolved, seen := byIssuer[c.RemoteSessionIssuerID]
+		if !seen {
+			resolved = s.gatewayMemberScopes(ctx, memberCtx, endpoint, c)
+			byIssuer[c.RemoteSessionIssuerID] = resolved
+		}
+		if resolved.ok {
+			out[c.ID] = resolved.scopes
+		}
+	}
+	return out
+}
+
+// memberScopes is one authorization server's gateway member row, if any.
+type memberScopes struct {
+	scopes remotesessions.ResourceScopes
+	ok     bool
+}
+
+// gatewayMemberScopes reads the cached resource row of the member a login
+// through c would read. A lookup fault logs and reports none.
+func (s *Service) gatewayMemberScopes(ctx, memberCtx context.Context, endpoint *ResolvedMcpEndpoint, c remotesessions.Client) memberScopes {
+	none := memberScopes{scopes: remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: false}, ok: false}
+	// The connect logs a shared authorization server; every render need not.
+	resource, member, _, err := s.resolveMetaMemberResource(memberCtx, quietLogger, endpoint, c.RemoteSessionIssuerID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve gateway member for consent card", attr.SlogError(err), attr.SlogRemoteSessionClientID(c.ID.String()))
+		return none
+	}
+	if !member.Valid {
+		return none
+	}
+	scopes, resourceURL, ok := s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, member, true)
+	if !ok || strings.TrimRight(resourceURL, "/") != strings.TrimRight(resource, "/") {
+		return none
+	}
+	return memberScopes{scopes: scopes, ok: true}
 }

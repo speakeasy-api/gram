@@ -46,7 +46,9 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { pluralize } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { attributeMemberCount } from "@/pages/access/directorySourcesForRole";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
@@ -93,8 +95,9 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function memberLabel(count: number): string {
-  return `${count} ${count === 1 ? "user" : "users"}`;
+/** Undefined means the count is not known. */
+function memberLabel(count: number | undefined): string {
+  return count === undefined ? "—" : pluralize(count, "user");
 }
 
 function groupRows(
@@ -139,13 +142,10 @@ function attributeMappingRows(
     .map((mapping): SourceRow => {
       const key = mapping.attributeKey ?? "";
       const value = mapping.attributeValue ?? "";
-      const option = data.attributes.find(
-        (a) => a.key === key && a.value === value,
-      );
       return {
         key: mapping.id,
         label: `${key} = ${value}`,
-        detail: memberLabel(option?.memberCount ?? 0),
+        detail: memberLabel(attributeMemberCount(data, key, value)),
         form: {
           sourceKind: "attribute",
           attributeKey: key,

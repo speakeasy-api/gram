@@ -199,7 +199,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
 		require.Empty(t, result.SessionCookie)
-		require.Contains(t, result.Location, "support login intent does not match login nonce")
+		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 
 		for _, orgID := range []string{supportTarget.ID, staleTarget.ID} {
 			membership, err := orgRepo.New(instance.conn).HasOrganizationUserRelationship(ctx, orgRepo.HasOrganizationUserRelationshipParams{
@@ -229,7 +229,7 @@ func TestService_Callback(t *testing.T) {
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
-		require.Contains(t, result.Location, "support login intent does not match login nonce")
+		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 	})
 
 	t.Run("empty expected support intent fails closed", func(t *testing.T) {
@@ -253,7 +253,7 @@ func TestService_Callback(t *testing.T) {
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
-		require.Contains(t, result.Location, "support login intent is missing an organization")
+		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 	})
 
 	t.Run("disabled support target is rejected at callback", func(t *testing.T) {
@@ -290,7 +290,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, result.SessionToken)
 		require.Empty(t, result.SessionCookie)
-		require.Contains(t, result.Location, "organization support target is disabled")
+		require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 	})
 
 	t.Run("state param takes priority over IDP org selection", func(t *testing.T) {
@@ -722,7 +722,7 @@ func TestService_CallbackSupportRequiresCurrentPlatformAdmin(t *testing.T) {
 	result, err := instance.service.Callback(ctx, &gen.CallbackPayload{Code: "mock_code", State: &state})
 	require.NoError(t, err)
 	require.Empty(t, result.SessionToken)
-	require.Contains(t, result.Location, "organization support access requires a platform admin")
+	require.Equal(t, instance.authConfigs.SignInRedirectURL+"?signin_error=init_error", result.Location)
 }
 
 func TestService_CallbackAllowsWorkOSImpersonationWithoutState(t *testing.T) {

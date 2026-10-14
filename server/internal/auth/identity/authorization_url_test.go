@@ -46,6 +46,7 @@ func TestBuildAuthorizationURL_WorkOS(t *testing.T) {
 		ScopesSupported: nil,
 		LoginHint:       "someone@example.com",
 		ScreenHint:      "sign-up",
+		Prompt:          "",
 	})
 	require.NoError(t, err)
 
@@ -77,6 +78,7 @@ func TestBuildAuthorizationURL_WorkOSOmitsEmptyHints(t *testing.T) {
 		ScopesSupported: nil,
 		LoginHint:       "",
 		ScreenHint:      "",
+		Prompt:          "",
 	})
 	require.NoError(t, err)
 
@@ -98,6 +100,7 @@ func TestBuildAuthorizationURL_DevIDP(t *testing.T) {
 		ScopesSupported: nil,
 		LoginHint:       "someone@example.com",
 		ScreenHint:      "sign-up",
+		Prompt:          "",
 	})
 	require.NoError(t, err)
 

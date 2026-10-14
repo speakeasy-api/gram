@@ -129,6 +129,21 @@ func BuildLogoutPayload(authLogoutSessionToken string) (*auth.LogoutPayload, err
 	return v, nil
 }
 
+// BuildLogoutEverywherePayload builds the payload for the auth
+// logoutEverywhere endpoint from CLI flags.
+func BuildLogoutEverywherePayload(authLogoutEverywhereSessionToken string) (*auth.LogoutEverywherePayload, error) {
+	var sessionToken *string
+	{
+		if authLogoutEverywhereSessionToken != "" {
+			sessionToken = &authLogoutEverywhereSessionToken
+		}
+	}
+	v := &auth.LogoutEverywherePayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildRegisterPayload builds the payload for the auth register endpoint from
 // CLI flags.
 func BuildRegisterPayload(authRegisterBody string, authRegisterSessionToken string) (*auth.RegisterPayload, error) {

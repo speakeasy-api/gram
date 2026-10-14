@@ -2,7 +2,8 @@
 // /mcp/{slug} endpoints. This surface answers MCP 2026-07-28 — including the
 // sessionless server/discover method and per-request protocol-version
 // declarations — and exposes the fixed meta MCP tool contract (list_servers,
-// describe_server, describe_tools, execute_tool). Hosted (toolset-backed)
+// describe_server, describe_tools, execute_tool, connection_status) plus the
+// one MCP Apps resource connection_status renders with. Hosted (toolset-backed)
 // members serve the full drill-down through the in-process tool dispatch;
 // proxied (remote/tunneled) members through their own upstream sessions.
 
@@ -69,6 +70,8 @@ type metaGateContext struct {
 	externalUserID  string
 	apiKeyID        string
 	protocolVersion mcpversions.Resolution
+	// connectURL is the gateway's browser connect page; empty when ungated.
+	connectURL string
 }
 
 func shouldRecordMetaMCPNetworkRequest(agentID uuid.UUID) bool {
@@ -147,7 +150,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateToolSelection *toolfilter.SessionSelection
+	var connectURL string
 	if metaServer.UserSessionIssuerID.Valid {
+		connectURL = s.BaseURLForRequest(r) + "/mcp/" + mcpEndpoint.Slug + "/connect/first-party"
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")
 		if err != nil {
 			return err
@@ -188,6 +193,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		// Member dispatch carries this InEffect verbatim; nothing on the
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion: resolution,
+		connectURL:      connectURL,
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
 	// identity-auth ladder, so ungated meta endpoints serve anonymously —
@@ -281,6 +287,10 @@ func (s *Service) handleMetaMCPRequest(
 		return s.listMetaServerTools(ctx, logger, req)
 	case mcpversions.MethodToolsCall:
 		return s.callMetaServerTool(ctx, logger, mcpEndpoint, metaServer, gate, req)
+	case mcpversions.MethodResourcesList:
+		return handleMetaResourcesList(ctx, logger, req)
+	case mcpversions.MethodResourcesRead:
+		return handleMetaResourcesRead(ctx, logger, req)
 	default:
 		return nil, unavailableMethod(req)
 	}
@@ -404,6 +414,12 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 			Annotations: nil,
 			Meta:        nil,
 		})
+		if tool.Name == metamcp.ToolConnectionStatus {
+			tools[len(tools)-1].Meta = map[string]any{
+				"ui":             map[string]any{"resourceUri": metamcp.ConnectionStatusResourceURI},
+				"ui/resourceUri": metamcp.ConnectionStatusResourceURI,
+			}
+		}
 	}
 
 	bs, err := json.Marshal(&result[toolsListResultTools]{
@@ -411,7 +427,7 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 		Result:         toolsListResultTools{Tools: tools},
 		serverIdentity: serverInfoMetaServer,
 		// The gateway tool contract is fixed and consults neither the endpoint
-		// nor the meta server, so every caller receives the same four tools.
+		// nor the meta server, so every caller receives the same tools.
 		cacheHints: cacheHintsCallerUniform,
 	})
 	if err != nil {
@@ -437,7 +453,7 @@ func (s *Service) callMetaServerTool(
 	}
 
 	switch params.Name {
-	case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool:
+	case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool, metamcp.ToolConnectionStatus:
 	default:
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
 	}
@@ -473,6 +489,8 @@ func (s *Service) callMetaServerTool(
 		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolDescribeTools:
 		body, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
+	case metamcp.ToolConnectionStatus:
+		body, err = s.handleMetaConnectionStatusCall(ctx, logger, gate, members, req)
 	default:
 		// execute_tool is deliberately not logged here: the member dispatch
 		// writes the single tool_call row, stamped with this gateway's id.

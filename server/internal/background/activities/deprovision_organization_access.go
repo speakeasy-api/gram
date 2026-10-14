@@ -9,10 +9,33 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/signins"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
+
+var deprovisionActor = signins.Actor{Principal: urn.NewSystemPrincipal("workos-deprovision"), DisplayName: nil}
+
+// revokeDeprovisionedSignIns revokes the deprovisioned user's sign-ins and
+// grants in the event's transaction when enforcement is on. Lock order: the
+// membership rows above, then the user's sign-in locks, as in RevokeUser.
+func revokeDeprovisionedSignIns(ctx context.Context, dbtx pgx.Tx, r signInRevocation, effects *postCommitEffects) error {
+	organizationIDs := []string{r.organizationID}
+	revoked, err := signins.RevokeUser(ctx, dbtx, organizationIDs, r.userID, signins.RevokeReasonDeprovisioned)
+	if err != nil {
+		return fmt.Errorf("revoke sign-ins for user %q: %w", r.userID, err)
+	}
+	if err := signins.AuditRevocation(ctx, dbtx, audit.NewLogger(), deprovisionActor, r.userID, "", signins.RevokeReasonDeprovisioned, organizationIDs, revoked); err != nil {
+		return fmt.Errorf("audit sign-in revocation for user %q: %w", r.userID, err)
+	}
+	effects.revokedSignIns = revoked.SignIns()
+	effects.revocationOrganizationID = r.organizationID
+	effects.revocationDeliveries = revoked.DeliveryIDs
+	return nil
+}
 
 // deprovisionOrganizationAccessParams identifies whose organization access to
 // revoke and the WorkOS event driving the change. Callers own the
@@ -93,6 +116,10 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx pgx.Tx, p deprovisi
 		}); err != nil {
 			return effects, fmt.Errorf("mark role assignments deleted for workos user %q: %w", workosUserID, err)
 		}
+	}
+
+	if p.gramUserID != "" {
+		effects.revokeSignIns = &signInRevocation{organizationID: p.organizationID, userID: p.gramUserID}
 	}
 
 	effects.invalidateUserInfoCacheUserID = p.gramUserID
