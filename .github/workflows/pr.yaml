@@ -13,7 +13,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  id-token: write
   contents: read
 
 env:
@@ -289,6 +288,9 @@ jobs:
 
   preview-image-tags:
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      id-token: write
     needs: changes
     # Preview environments deploy images tagged pr-<number>-<8-char head sha>
     # for every PR head commit. Components with changes get that tag from
@@ -400,6 +402,9 @@ jobs:
 
   docker-build-server:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      id-token: write
     needs: [changes, server-build]
     if: needs.changes.outputs.server == 'true'
     env:
@@ -464,6 +469,9 @@ jobs:
 
   docker-build-pystreams:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      id-token: write
     needs: [changes]
     if: needs.changes.outputs.pystreams == 'true'
     steps:
@@ -526,6 +534,9 @@ jobs:
     # blacksmith-4vcpu-ubuntu-2404 (and the useblacksmith/* actions) once their
     # egress is fixed, or once the musl toolchain no longer comes from apt.
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
     needs: [changes]
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
     env:
@@ -1672,6 +1683,9 @@ jobs:
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      id-token: write
     needs: [changes]
     # Build the dashboard and admin docker images when server OR client changes
     # exist (the dashboard image is needed for preview environments)
@@ -1802,6 +1816,9 @@ jobs:
   upload-dashboard-assets:
     name: Upload dashboard assets to CDN bucket (${{ matrix.environment }})
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      id-token: write
     needs: [docker-build-client]
     # Syncs the dist/assets the dashboard image was built from (via artifact,
     # not a rebuild) into the private GCS buckets that will become the CDN

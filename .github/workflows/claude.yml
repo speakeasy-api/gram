@@ -13,6 +13,8 @@ on: # zizmor: ignore[concurrency-limits]
   pull_request_review:
     types: [submitted]
 
+permissions: {}
+
 jobs:
   claude:
     if: |
