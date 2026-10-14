@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -18,7 +20,7 @@ func gatewayDiscoveryOptionsOffered(endpoint *ResolvedMcpEndpoint) bool {
 // consentGatewayPolicy combines a gateway connection's discovery mode and
 // tool selection into its versioned policy. Non-gateway selections keep the
 // legacy document, so this returns nil for them.
-func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, selectedAgentID, modeValue string, selection *toolfilter.SessionSelection) (*toolfilter.SessionPolicy, error) {
+func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, selectedAgentID, modeValue string, selection *toolfilter.SessionSelection, inventory *consentToolInventory) (*toolfilter.SessionPolicy, error) {
 	if !endpoint.MetaMcpServerID.Valid {
 		selection = nil
 	}
@@ -33,10 +35,15 @@ func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMc
 		}
 		discoveryMode = &mode
 	}
+	var members map[string]uuid.UUID
+	if selection != nil && inventory != nil && len(inventory.Members) > 0 {
+		members = inventory.Members
+	}
 	policy := &toolfilter.SessionPolicy{
 		Resource:  endpointToolSelectionResource(endpoint),
 		Selection: selection,
 		Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: discoveryMode},
+		Members:   members,
 	}
 	if _, err := json.Marshal(policy); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid gateway connection options")

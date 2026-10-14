@@ -306,6 +306,7 @@ func (s *Service) metaValidationTarget(
 		connectRoot:         "",
 		chainUpstream:       nil,
 		toolSelection:       nil,
+		selectionMembers:    nil,
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
 		sessionID:           sessionID,
 		chatID:              "",

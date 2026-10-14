@@ -392,15 +392,23 @@ const gatewayResourceKind = "meta_mcp_server"
 
 // ForGatewayMember projects a gateway selection onto one member server so the
 // member's own catalogs, dispatch, and proxies enforce it with member-local
-// tool names. Live annotation grants carry over unchanged; named grants keep
-// only the member's tools. The member gets its own resource and a grant id
-// derived from the gateway grant, keeping per-session caches member-scoped.
-func (s *SessionSelection) ForGatewayMember(memberSlug string, memberServerID uuid.UUID) (*SessionSelection, error) {
+// tool names. consentedMembers maps each member slug shown at consent to the
+// server it named then; a member absent from it, or now served by a different
+// server, gets no grants, so neither named nor live grants reach a server the
+// user never saw. Otherwise live annotation grants carry over unchanged and
+// named grants keep only the member's tools. The member gets its own resource
+// and a grant id derived from the gateway grant, keeping per-session caches
+// member-scoped.
+func (s *SessionSelection) ForGatewayMember(memberSlug string, memberServerID uuid.UUID, consentedMembers map[string]uuid.UUID) (*SessionSelection, error) {
 	if s == nil {
 		return nil, nil
 	}
 	if kind, _, _ := strings.Cut(s.Resource, ":"); kind != gatewayResourceKind {
 		return nil, fmt.Errorf("tool selection is not bound to a gateway")
+	}
+	grantID := uuid.NewSHA1(s.GrantID, []byte(memberServerID.String()))
+	if consented, ok := consentedMembers[memberSlug]; !ok || consented != memberServerID {
+		return NewSessionSelection("mcp_server:"+memberServerID.String(), grantID, []AllowEntry{})
 	}
 	prefix := memberSlug + metamcp.QualifiedNameSeparator
 	local := func(names []string) []string {
@@ -428,6 +436,5 @@ func (s *SessionSelection) ForGatewayMember(memberSlug string, memberServerID uu
 			entries = append(entries, projected)
 		}
 	}
-	grantID := uuid.NewSHA1(s.GrantID, []byte(memberServerID.String()))
 	return NewSessionSelection("mcp_server:"+memberServerID.String(), grantID, entries)
 }
