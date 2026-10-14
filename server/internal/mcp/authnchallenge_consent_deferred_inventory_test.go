@@ -71,6 +71,19 @@ func TestConsentPage_LinkedServiceDoesNotDeferToolInventory(t *testing.T) {
 	require.Contains(t, renderToolsIsland(t, fx), inventoryNotDeferredAttr)
 }
 
+func TestConsentPage_UnconnectedUnchainedServicesDoNotDefer(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, issuer := seedChainedConsentEndpoint(t, "aim524-unchained-page")
+	setConsentGovernor(t, fx, issuer)
+	// A second unlinked card keeps the page from auto-connecting the first.
+	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim524-unchained-page-b", "", []uuid.UUID{fx.shared})
+
+	page := renderToolsIsland(t, fx)
+	require.NotContains(t, page, consentManagedCopy)
+	require.Contains(t, page, inventoryNotDeferredAttr, "an unlinked, unchained service's 409 keeps blocking approval")
+}
+
 func TestConsentPage_ConnectedCardBesideChainedCardDoesNotDefer(t *testing.T) {
 	t.Parallel()
 
