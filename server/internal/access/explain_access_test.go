@@ -162,6 +162,15 @@ func TestEvaluateEffectiveMCPAccessMatchesDashboardDecisions(t *testing.T) {
 			held(role, narrowed(authz.ScopeMCPBlockedConnect, serverID, "delete_task")),
 			held(user, narrowed(authz.ScopeMCPConnect, serverID, "delete_task")),
 		}, want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessAll}},
+		{name: "probe tool collision does not hide disposition block", grants: func() []authz.Grant {
+			block := authz.NewSelector(authz.ScopeMCPBlockedConnect, serverID)
+			block[authz.SelectorKeyDisposition] = authz.DispositionDestructive
+			return []authz.Grant{
+				held(role, authz.NewGrant(authz.ScopeMCPConnect, serverID)),
+				held(role, authz.NewGrantWithSelector(authz.ScopeMCPBlockedConnect, block)),
+				held(user, narrowed(authz.ScopeMCPConnect, serverID, explainedProbeTool)),
+			}
+		}(), want: EffectiveMCPAccess{CanConnect: true, ToolAccess: explainedToolAccessSome}},
 		{name: "view and manage", grants: []authz.Grant{
 			held(role, authz.NewGrant(authz.ScopeMCPRead, serverID)),
 			held(role, authz.NewGrant(authz.ScopeMCPWrite, serverID)),

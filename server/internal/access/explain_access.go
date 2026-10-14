@@ -115,13 +115,14 @@ func effectiveToolAccess(grants []authz.Grant, check authz.Check, explanation au
 	}
 
 	seen := make(map[string]struct{})
+	otherTool := unusedProbeTool(grants)
 	for _, grant := range grants {
 		if grant.Scope != authz.ScopeMCPBlockedConnect || !isNarrowedGrant(grant) || !selectorReachesMCP(grant.Selector, check) {
 			continue
 		}
 		tool := grant.Selector[authz.SelectorKeyTool]
 		if tool == "" || tool == authz.WildcardResource {
-			tool = explainedProbeTool
+			tool = otherTool
 		}
 		disposition := grant.Selector[authz.SelectorKeyDisposition]
 		if disposition == authz.WildcardResource {
@@ -147,8 +148,9 @@ func effectiveToolAccess(grants []authz.Grant, check authz.Check, explanation au
 
 func selectorReachesMCP(selector authz.Selector, check authz.Check) bool {
 	for key, want := range map[string]string{
-		authz.SelectorKeyResourceID: check.ResourceID,
-		authz.SelectorKeyProjectID:  check.Dimensions[authz.SelectorKeyProjectID],
+		authz.SelectorKeyResourceKind: authz.ResourceKindForScope(check.Scope),
+		authz.SelectorKeyResourceID:   check.ResourceID,
+		authz.SelectorKeyProjectID:    check.Dimensions[authz.SelectorKeyProjectID],
 	} {
 		if value := selector[key]; value != "" && value != authz.WildcardResource && value != want {
 			return false
@@ -385,19 +387,7 @@ func explainAccessLevel(grants []authz.Grant, level string, check authz.Check, d
 // narrowing among grants. A rule naming only an annotation is probed with a
 // tool name no rule names, standing for any other tool carrying it.
 func toolProbes(grants []authz.Grant, check authz.Check) []authz.Check {
-	named := make(map[string]struct{})
-	for _, grant := range grants {
-		if tool := grant.Selector[authz.SelectorKeyTool]; tool != "" {
-			named[tool] = struct{}{}
-		}
-	}
-	otherTool := explainedProbeTool
-	for {
-		if _, ok := named[otherTool]; !ok {
-			break
-		}
-		otherTool += "'"
-	}
+	otherTool := unusedProbeTool(grants)
 
 	type probeKey struct {
 		tool        string
@@ -438,6 +428,22 @@ func toolProbes(grants []authz.Grant, check authz.Check) []authz.Check {
 		}
 	}
 	return probes
+}
+
+func unusedProbeTool(grants []authz.Grant) string {
+	named := make(map[string]struct{})
+	for _, grant := range grants {
+		if tool := grant.Selector[authz.SelectorKeyTool]; tool != "" {
+			named[tool] = struct{}{}
+		}
+	}
+	tool := explainedProbeTool
+	for {
+		if _, ok := named[tool]; !ok {
+			return tool
+		}
+		tool += "'"
+	}
 }
 
 // isNarrowedGrant reports whether grant covers only some of a resource's tools.
