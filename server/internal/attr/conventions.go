@@ -43,6 +43,8 @@ const (
 
 	WideEventKey = attribute.Key("gram.wide_event")
 
+	DeprecatedFieldsKey = attribute.Key("gram.deprecated.fields")
+
 	ErrorIDKey                       = attribute.Key("error.id")
 	ErrorMessageKey                  = attribute.Key("error.message")
 	ErrorStackKey                    = attribute.Key("error.stack")
@@ -1455,6 +1457,9 @@ func SlogAPIKeyID(v string) slog.Attr      { return slog.String(string(APIKeyIDK
 
 func Actual(v any) attribute.KeyValue { return ActualKey.String(fmt.Sprintf("%v", v)) }
 func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
+
+func DeprecatedFields(v []string) attribute.KeyValue { return DeprecatedFieldsKey.StringSlice(v) }
+func SlogDeprecatedFields(v []string) slog.Attr      { return slog.Any(string(DeprecatedFieldsKey), v) }
 
 func Event(v string) attribute.KeyValue { return EventKey.String(v) }
 func SlogEvent(v string) slog.Attr      { return slog.String(string(EventKey), v) }
