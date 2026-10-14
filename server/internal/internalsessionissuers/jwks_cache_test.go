@@ -15,6 +15,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/internal_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // jwksReader serves the organization's JWKS from a fresh discovery mux and
@@ -75,8 +76,9 @@ func TestDiscoveryNoticesAKeyChangeThatKeepsUpdatedAt(t *testing.T) {
 
 	// Withdraw the active key without moving any row's updated_at, so a
 	// count-and-latest-timestamp fingerprint would not change.
-	_, err = ti.conn.Exec(ctx, "UPDATE json_web_keys SET deleted_at = updated_at WHERE organization_id = $1 AND kid = $2", ti.orgID, active)
+	withdrawn, err := testrepo.New(ti.conn).WithdrawJsonWebKeyKeepingUpdatedAtFixture(ctx, testrepo.WithdrawJsonWebKeyKeepingUpdatedAtFixtureParams{OrganizationID: ti.orgID, Kid: active})
 	require.NoError(t, err)
+	require.EqualValues(t, 1, withdrawn)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, kids := read()
 		assert.NotContains(c, kids, active)
@@ -92,8 +94,7 @@ func TestDiscoveryStopsServingADisabledOrganizationsKeys(t *testing.T) {
 	code, _ := read()
 	require.Equal(t, http.StatusOK, code)
 
-	_, err := ti.conn.Exec(ctx, "UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1", ti.orgID)
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(ti.conn).DisableDelegationOrganizationFixture(ctx, ti.orgID))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		code, _ := read()
 		assert.Equal(c, http.StatusNotFound, code)

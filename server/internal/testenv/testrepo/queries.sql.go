@@ -6561,3 +6561,24 @@ func (q *Queries) UpdateRiskResultCreatedAt(ctx context.Context, arg UpdateRiskR
 	_, err := q.db.Exec(ctx, updateRiskResultCreatedAt, arg.CreatedAt, arg.ID)
 	return err
 }
+
+const withdrawJsonWebKeyKeepingUpdatedAtFixture = `-- name: WithdrawJsonWebKeyKeepingUpdatedAtFixture :execrows
+UPDATE json_web_keys
+SET deleted_at = updated_at
+WHERE organization_id = $1 AND kid = $2 AND deleted IS FALSE
+`
+
+type WithdrawJsonWebKeyKeepingUpdatedAtFixtureParams struct {
+	OrganizationID string
+	Kid            string
+}
+
+// Soft-deletes one key without moving its updated_at, so a test can show a
+// cache notices a key change that leaves every timestamp unchanged.
+func (q *Queries) WithdrawJsonWebKeyKeepingUpdatedAtFixture(ctx context.Context, arg WithdrawJsonWebKeyKeepingUpdatedAtFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, withdrawJsonWebKeyKeepingUpdatedAtFixture, arg.OrganizationID, arg.Kid)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
