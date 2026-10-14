@@ -297,6 +297,7 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 		tools = append(tools, consentInventoryTool{
 			Name:        base.Name,
 			Annotations: values,
+			Source:      "",
 		})
 	}
 	return tools, roleHidden, nil

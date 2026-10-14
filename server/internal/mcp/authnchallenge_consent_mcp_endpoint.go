@@ -570,6 +570,7 @@ func (i *consentInventoryCaptureInterceptor) InterceptToolsListResponse(ctx cont
 		pageTools = append(pageTools, consentInventoryTool{
 			Name:        tool.Name,
 			Annotations: consentAnnotationsFromSDK(tool.Annotations),
+			Source:      "",
 		})
 	}
 	updated, err := i.service.appendConsentInventoryPage(ctx, *i.draft, requestCursor, pageTools, list.Result.NextCursor)
