@@ -158,7 +158,7 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	// Register both wrappers together so their order is reviewable: readiness is
 	// outside catalogue aggregation and therefore observes one completed external
 	// tools/list call, never the SDK pages the catalogue middleware reads inside.
-	middlewares := []mcp.Middleware{capabilityCatalogueMiddleware(registrar)}
+	middlewares := []mcp.Middleware{clientToolAllowlistMiddleware(registrar), capabilityCatalogueMiddleware(registrar)}
 	if readiness != nil {
 		middlewares = append([]mcp.Middleware{readinessMiddleware(runtime, logger)}, middlewares...)
 	}
@@ -180,6 +180,39 @@ func readinessMiddleware(runtime *Runtime, logger *slog.Logger) mcp.Middleware {
 				}
 			}
 			return result, err
+		}
+	}
+}
+
+// clientToolAllowlistMiddleware makes a client with a tool allowlist meet a
+// server that has only those tools. tools/list is narrowed by
+// FilterExternalTools; this covers the rest. A call to a tool outside the list
+// gets the same unknown-tool error the SDK returns for a name that was never
+// registered, and the server instructions drop every paragraph that points at
+// such a tool, so the client never meets a tool it was not shown.
+func clientToolAllowlistMiddleware(registrar *Registrar) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			clientID := mustPrincipal(ctx).ClientID
+			if method == "tools/call" {
+				if callReq, ok := req.(*mcp.CallToolRequest); ok && callReq.Params != nil && !toolAllowedForClient(clientID, callReq.Params.Name) {
+					return nil, &jsonrpc.Error{Code: jsonrpc.CodeInvalidParams, Message: fmt.Sprintf("unknown tool %q", callReq.Params.Name)}
+				}
+			}
+			result, err := next(ctx, method, req)
+			if err != nil {
+				return result, err
+			}
+			switch typed := result.(type) {
+			case *mcp.InitializeResult:
+				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+			case *mcp.DiscoverResult:
+				typed.Instructions = registrar.instructionsForClient(clientID, typed.Instructions)
+				// The instructions now depend on the caller, so no shared cache
+				// may hand one client's answer to another.
+				typed.CacheScope = "private"
+			}
+			return result, nil
 		}
 	}
 }
