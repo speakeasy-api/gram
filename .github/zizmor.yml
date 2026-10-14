@@ -38,8 +38,6 @@ rules:
     disable: true
   self-repository:
     disable: true
-  superfluous-actions:
-    disable: true
   template-injection:
     disable: true
   undocumented-permissions:
