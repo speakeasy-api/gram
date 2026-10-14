@@ -1,6 +1,7 @@
 package externalcredentials_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extkeysrepo "github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	ipcrepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -76,6 +79,99 @@ func TestGcpIamPlatformCredential_RefusesMutationWhileManagedKeysLive(t *testing
 
 	_, err = extkeysrepo.New(ti.conn).SoftDeleteExternalKey(ctx, extkeysrepo.SoftDeleteExternalKeyParams{ID: key.ID, OrganizationID: conv.ToPGText(ti.orgID), Provider: "gcp_kms"})
 	require.NoError(t, err)
+	require.NoError(t, ti.service.DeleteGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{ID: cred.ID, SessionToken: nil}))
+}
+
+// Issuer keys sign as the credential's account and their cleanup removes the
+// grant from it: the account can't change while any issuer key holds a grant,
+// and the credential can't be deleted while a live issuer key signs through it.
+func TestGcpIamPlatformCredential_GuardsIssuerKeyGrants(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	signer := provisiontest.SigningServiceAccount()
+	cred, err := ti.service.CreateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.CreateGcpIamPlatformCredentialPayload{
+		SessionToken: nil, Name: "platform-issuer", ImpersonateServiceAccount: conv.PtrEmpty(signer),
+		WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
+	})
+	require.NoError(t, err)
+	credID, err := uuid.Parse(cred.ID)
+	require.NoError(t, err)
+	backing, err := extkeysrepo.New(ti.conn).CreateExternalKey(ctx, extkeysrepo.CreateExternalKeyParams{
+		OrganizationID:               conv.ToPGText(ti.orgID),
+		ExternalCredentialID:         credID,
+		Provider:                     "gcp_kms",
+		Algorithm:                    "RS256",
+		Name:                         "issuer",
+		CustomerGrantReference:       pgtype.Text{String: "", Valid: false},
+		IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	jq := jwksrepo.New(ti.conn)
+	set, err := jq.CreateJsonWebKeySet(ctx, jwksrepo.CreateJsonWebKeySetParams{OrganizationID: ti.orgID, ExternalKeyID: backing.ID, Name: "issuer", IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	require.NoError(t, err)
+	_, err = jq.CreateInternalSessionIssuer(ctx, jwksrepo.CreateInternalSessionIssuerParams{OrganizationID: ti.orgID, JsonWebKeySetID: set.ID, Issuer: "https://app.example.com/oauth/idp/org/" + ti.orgID})
+	require.NoError(t, err)
+	key, err := jq.CreateJsonWebKey(ctx, jwksrepo.CreateJsonWebKeyParams{OrganizationID: ti.orgID, JsonWebKeySetID: set.ID, ExternalKeyID: backing.ID, State: "active", Kid: "kid-1", PublicJwk: []byte(`{"kty":"EC"}`)})
+	require.NoError(t, err)
+
+	update := func(name, account string) error {
+		_, err := ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+			ID: cred.ID, SessionToken: nil, Name: name, ImpersonateServiceAccount: conv.PtrEmpty(account), WifPoolID: nil, WifProviderID: nil, WifProjectNumber: nil,
+		})
+		return err //nolint:wrapcheck // Test helper.
+	}
+	remove := func() error {
+		return ti.service.DeleteGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{ID: cred.ID, SessionToken: nil})
+	}
+
+	require.NoError(t, update("renamed", signer), "a rename keeps the account")
+	require.NoError(t, update("renamed", strings.ToUpper(signer)), "the account is stored lowercased, so a case-only change is no change")
+	requireOopsCode(t, update("renamed", "other-"+signer), oops.CodeConflict)
+	_, err = ti.service.UpdateGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.UpdateGcpIamPlatformCredentialPayload{
+		ID: cred.ID, SessionToken: nil, Name: "renamed", ImpersonateServiceAccount: conv.PtrEmpty(signer), WifPoolID: conv.PtrEmpty("pool"), WifProviderID: conv.PtrEmpty("provider"), WifProjectNumber: conv.PtrEmpty("123456"),
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	requireOopsCode(t, remove(), oops.CodeConflict)
+
+	_, err = jq.RevokeJsonWebKey(ctx, jwksrepo.RevokeJsonWebKeyParams{ID: key.ID, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	// A revoked key still awaiting cleanup keeps its grant.
+	requireOopsCode(t, update("renamed", "other-"+signer), oops.CodeConflict)
+
+	require.NoError(t, jq.MarkJsonWebKeyKMSDisabled(ctx, jwksrepo.MarkJsonWebKeyKMSDisabledParams{ID: key.ID, OrganizationID: ti.orgID}))
+	require.NoError(t, update("renamed", "other-"+signer))
+}
+
+// Only revoked issuer keys reference the credential: deleting it is allowed,
+// since their cleanup reads the deleted credential's account.
+func TestDeleteGcpIamPlatformCredential_AllowsOnlyRevokedIssuerKeys(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	cred := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-issuer-revoked")
+	credID, err := uuid.Parse(cred.ID)
+	require.NoError(t, err)
+	backing, err := extkeysrepo.New(ti.conn).CreateExternalKey(ctx, extkeysrepo.CreateExternalKeyParams{
+		OrganizationID:               conv.ToPGText(ti.orgID),
+		ExternalCredentialID:         credID,
+		Provider:                     "gcp_kms",
+		Algorithm:                    "RS256",
+		Name:                         "issuer",
+		CustomerGrantReference:       pgtype.Text{String: "", Valid: false},
+		IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	jq := jwksrepo.New(ti.conn)
+	set, err := jq.CreateJsonWebKeySet(ctx, jwksrepo.CreateJsonWebKeySetParams{OrganizationID: ti.orgID, ExternalKeyID: backing.ID, Name: "issuer", IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	require.NoError(t, err)
+	_, err = jq.CreateInternalSessionIssuer(ctx, jwksrepo.CreateInternalSessionIssuerParams{OrganizationID: ti.orgID, JsonWebKeySetID: set.ID, Issuer: "https://app.example.com/oauth/idp/org/" + ti.orgID})
+	require.NoError(t, err)
+	key, err := jq.CreateJsonWebKey(ctx, jwksrepo.CreateJsonWebKeyParams{OrganizationID: ti.orgID, JsonWebKeySetID: set.ID, ExternalKeyID: backing.ID, State: "active", Kid: "kid-1", PublicJwk: []byte(`{"kty":"EC"}`)})
+	require.NoError(t, err)
+	_, err = jq.RevokeJsonWebKey(ctx, jwksrepo.RevokeJsonWebKeyParams{ID: key.ID, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+
 	require.NoError(t, ti.service.DeleteGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.DeleteGcpIamPlatformCredentialPayload{ID: cred.ID, SessionToken: nil}))
 }
 

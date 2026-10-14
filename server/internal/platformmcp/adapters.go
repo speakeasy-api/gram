@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -353,6 +354,7 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 
 type PostgresReader struct {
 	xaaReadiness              *xaaReadinessService
+	issuerGate                *internalsessionissuers.Gate
 	logger                    *slog.Logger
 	db                        *pgxpool.Pool
 	reader                    *readmodel.Reader
@@ -408,6 +410,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		eventFeed:                 nil,
 		networkIngress:            nil,
 		xaaReadiness:              nil,
+		issuerGate:                nil,
 		authz:                     nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,

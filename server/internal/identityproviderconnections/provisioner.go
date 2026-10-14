@@ -101,6 +101,10 @@ type Config struct {
 	// pinned outbound callback origin: counterparties register the JWKS URL, so
 	// it must not move when the server URL does.
 	ServerURL *url.URL
+
+	// AllowLoopbackIssuer admits a plain-HTTP loopback issuer origin; set
+	// only in local development.
+	AllowLoopbackIssuer bool
 }
 
 // Provisioner creates, rotates, and revokes the managed rows behind a connection.
@@ -111,6 +115,15 @@ type Provisioner struct {
 	kmsClients  gcpkms.ProvisioningClientFactory
 	audit       *audit.Logger
 	cfg         Config
+	// emaActivationCheck approves the sweep activating a ready pending issuer
+	// key; without one the sweep never activates.
+	emaActivationCheck EMAIssuerActivationCheck
+	// sweepPage is how many organizations one sweep query returns.
+	sweepPage int32
+	// issuerKeyCleanupTimeout bounds each revoked issuer key's KMS cleanup.
+	issuerKeyCleanupTimeout time.Duration
+	// sweepOrganizationTimeout bounds one organization's share of a sweep.
+	sweepOrganizationTimeout time.Duration
 }
 
 // NewProvisioner wires a provisioner over the shared identity resolver, KMS
@@ -134,12 +147,17 @@ func NewProvisioner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.
 	}
 
 	return &Provisioner{
-		logger:      logger.With(attr.SlogComponent("identityproviderconnections")),
-		db:          db,
-		gcpIdentity: gcpIdentity,
-		kmsClients:  kmsClients,
-		audit:       auditLogger,
-		cfg:         cfg,
+		logger:             logger.With(attr.SlogComponent("identityproviderconnections")),
+		db:                 db,
+		gcpIdentity:        gcpIdentity,
+		kmsClients:         kmsClients,
+		audit:              auditLogger,
+		cfg:                cfg,
+		emaActivationCheck: nil,
+		sweepPage:          sweepOrganizationPage,
+
+		issuerKeyCleanupTimeout:  keyCleanupTimeout,
+		sweepOrganizationTimeout: sweepOrganizationTimeout,
 	}, nil
 }
 
@@ -476,13 +494,14 @@ func (p *Provisioner) provisionRows(ctx context.Context, params ProvisionClientP
 	}
 
 	if err := p.audit.LogJsonWebKeySetCreate(ctx, dbtx, audit.LogJsonWebKeySetCreateEvent{
-		OrganizationID:   params.OrganizationID,
-		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Actor:            systemActor(),
-		ActorDisplayName: systemActorDisplayName(),
-		ActorSlug:        nil,
-		SetURN:           urn.NewJsonWebKeySet(set.ID),
-		SetName:          set.Name,
+		OrganizationID:        params.OrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Actor:                 systemActor(),
+		ActorDisplayName:      systemActorDisplayName(),
+		ActorSlug:             nil,
+		SetURN:                urn.NewJsonWebKeySet(set.ID),
+		SetName:               set.Name,
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, fmt.Errorf("record managed key set creation: %w", err)
 	}
@@ -661,15 +680,16 @@ func (p *Provisioner) rotateRows(ctx context.Context, params RotateClientParams)
 		return fmt.Errorf("re-point managed key set: %w", err)
 	}
 	if err := p.audit.LogJsonWebKeySetUpdate(ctx, dbtx, audit.LogJsonWebKeySetUpdateEvent{
-		OrganizationID:    params.OrganizationID,
-		ProjectID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Actor:             systemActor(),
-		ActorDisplayName:  systemActorDisplayName(),
-		ActorSlug:         nil,
-		SetURN:            urn.NewJsonWebKeySet(set.ID),
-		SetName:           updated.Name,
-		SetSnapshotBefore: &audit.JsonWebKeySetSnapshot{Name: set.Name, ExternalKeyID: set.ExternalKeyID.String()},
-		SetSnapshotAfter:  &audit.JsonWebKeySetSnapshot{Name: updated.Name, ExternalKeyID: updated.ExternalKeyID.String()},
+		OrganizationID:        params.OrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Actor:                 systemActor(),
+		ActorDisplayName:      systemActorDisplayName(),
+		ActorSlug:             nil,
+		SetURN:                urn.NewJsonWebKeySet(set.ID),
+		SetName:               updated.Name,
+		SetSnapshotBefore:     &audit.JsonWebKeySetSnapshot{Name: set.Name, ExternalKeyID: set.ExternalKeyID.String()},
+		SetSnapshotAfter:      &audit.JsonWebKeySetSnapshot{Name: updated.Name, ExternalKeyID: updated.ExternalKeyID.String()},
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return fmt.Errorf("record managed key set update: %w", err)
 	}
@@ -1466,13 +1486,14 @@ func (p *Provisioner) switchToKeySetRows(ctx context.Context, params SwitchAuthM
 	}
 
 	if err := p.audit.LogJsonWebKeySetCreate(ctx, dbtx, audit.LogJsonWebKeySetCreateEvent{
-		OrganizationID:   params.OrganizationID,
-		ProjectID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Actor:            params.Actor,
-		ActorDisplayName: params.ActorDisplayName,
-		ActorSlug:        nil,
-		SetURN:           urn.NewJsonWebKeySet(set.ID),
-		SetName:          set.Name,
+		OrganizationID:        params.OrganizationID,
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Actor:                 params.Actor,
+		ActorDisplayName:      params.ActorDisplayName,
+		ActorSlug:             nil,
+		SetURN:                urn.NewJsonWebKeySet(set.ID),
+		SetName:               set.Name,
+		InternalSessionIssuer: false,
 	}); err != nil {
 		return nil, fmt.Errorf("record managed key set creation: %w", err)
 	}
@@ -1672,10 +1693,9 @@ func (p *Provisioner) retireKeyMaterial(ctx context.Context, logger *slog.Logger
 	}
 	defer o11y.LogDefer(ctx, logger, "failed to close gcp kms client", func() error { return kms.Close() })
 
-	eq := extkeysrepo.New(p.db)
 	q := repo.New(p.db)
 	for _, key := range revoked {
-		row, err := eq.GetGcpKmsKey(cleanupCtx, extkeysrepo.GetGcpKmsKeyParams{
+		row, err := q.GetManagedKeyResource(cleanupCtx, repo.GetManagedKeyResourceParams{
 			ID:             key.ExternalKeyID,
 			OrganizationID: conv.ToPGText(organizationID),
 		})
@@ -1683,19 +1703,19 @@ func (p *Provisioner) retireKeyMaterial(ctx context.Context, logger *slog.Logger
 			logger.ErrorContext(ctx, "failed to load revoked key resource; disable its kms version by hand", attr.SlogError(err))
 			continue
 		}
-		attrs := []any{attr.SlogGcpKmsKeyVersion(row.GcpKmsKey.ResourceName)}
+		attrs := []any{attr.SlogGcpKmsKeyVersion(row.ResourceName)}
 
-		if err := kms.DisableKeyVersion(cleanupCtx, row.GcpKmsKey.ResourceName); err != nil {
+		if err := kms.DisableKeyVersion(cleanupCtx, row.ResourceName); err != nil {
 			logger.ErrorContext(ctx, "failed to disable revoked kms key version; disable it by hand", append(attrs, attr.SlogError(err))...)
 		}
 
-		keyName, err := gcpkms.KeyNameForVersion(row.GcpKmsKey.ResourceName)
+		keyName, err := gcpkms.KeyNameForVersion(row.ResourceName)
 		if err != nil {
 			logger.ErrorContext(ctx, "failed to derive revoked kms key name; remove the signer grant by hand", append(attrs, attr.SlogError(err))...)
 			continue
 		}
 		// The signer is the platform credential the key was minted under.
-		signer, err := q.GetPlatformGcpIamCredentialForProvisioning(cleanupCtx, row.ExternalKey.ExternalCredentialID)
+		signer, err := q.GetPlatformGcpIamCredentialForProvisioning(cleanupCtx, row.ExternalCredentialID)
 		if err != nil || signer.GcpIamCredential.ImpersonateServiceAccount.String == "" {
 			logger.ErrorContext(ctx, "revoked key has no live signing credential; remove the signer grant by hand", append(attrs, attr.SlogError(err))...)
 			continue
@@ -2043,6 +2063,9 @@ func reconcilePublication(ctx context.Context, check func(context.Context) (bool
 }
 
 func (p *Provisioner) publicationAbsent(ctx context.Context, organizationID string, connectionID uuid.UUID, resourceName string) (bool, error) {
+	if connectionID == uuid.Nil {
+		return p.emaPublicationAbsent(ctx, organizationID, resourceName)
+	}
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin publication reconciliation: %w", err)
@@ -2054,7 +2077,7 @@ func (p *Provisioner) publicationAbsent(ctx context.Context, organizationID stri
 	if _, err := q.LockIdentityProviderConnectionForProvisioning(ctx, repo.LockIdentityProviderConnectionForProvisioningParams{ID: connectionID, OrganizationID: organizationID}); err != nil {
 		return false, fmt.Errorf("lock connection for publication reconciliation: %w", err)
 	}
-	referenced, err := q.ManagedKeyResourceExists(ctx, resourceName)
+	referenced, err := q.ManagedKeyResourceExists(ctx, repo.ManagedKeyResourceExistsParams{ResourceName: resourceName, OrganizationID: organizationID})
 	if err != nil {
 		return false, fmt.Errorf("lookup published key resource: %w", err)
 	}
@@ -2126,5 +2149,7 @@ func keyEvent(organizationID string, key jwksrepo.JsonWebKey, before, after *aud
 		SetURN:            urn.NewJsonWebKeySet(key.JsonWebKeySetID),
 		KeySnapshotBefore: before,
 		KeySnapshotAfter:  after,
+
+		InternalSessionIssuer: false,
 	}
 }

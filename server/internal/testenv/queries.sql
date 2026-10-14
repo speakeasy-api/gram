@@ -1627,6 +1627,29 @@ UPDATE user_session_issuers SET trusted_remote_session_issuer_id = @issuer_id WH
 UPDATE organization_metadata SET disabled_at = clock_timestamp()
 WHERE id = @organization_id::text;
 
+-- name: TombstoneInternalSessionIssuerFixture :exec
+-- Test-only tombstone of an organization's internal session issuer.
+UPDATE internal_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id::text;
+
+-- name: SoftDeleteExternalCredentialFixture :exec
+-- Test-only soft delete of an external credential in its tier: a NULL
+-- organization_id names the platform tier.
+UPDATE external_credentials SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND project_id IS NULL;
+
+-- name: SetGcpIamCredentialServiceAccountFixture :exec
+-- Test-only re-point of a credential's impersonated account in its tier,
+-- tombstones included: a NULL organization_id names the platform tier.
+UPDATE gcp_iam_credentials AS gic SET impersonate_service_account = sqlc.narg(impersonate_service_account)::text
+FROM external_credentials AS ec
+WHERE gic.external_credential_id = @external_credential_id
+  AND ec.id = gic.external_credential_id
+  AND ec.organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text
+  AND ec.project_id IS NULL;
+
 -- name: RevokeDelegationUserIssuersFixture :exec
 -- Test-only revocation of organization-scoped delegation authority.
 UPDATE user_session_issuers SET deleted_at = clock_timestamp()
@@ -1918,6 +1941,11 @@ SET omit_scope_fallback = @omit_scope_fallback
 WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;
+
+-- name: SetOrganizationVerifiedDomainsFixture :exec
+UPDATE organization_metadata
+SET verified_domains = @verified_domains::text[]
+WHERE id = @id;
 
 -- name: CountMcpMetadataForBackendIDFixture :one
 SELECT count(*)
