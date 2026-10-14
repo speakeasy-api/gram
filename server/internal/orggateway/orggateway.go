@@ -80,16 +80,18 @@ func Availability(ctx context.Context, db usersessionsrepo.DBTX, organization or
 // IssuerLister lists an organization's organization-level user session
 // issuers; usersessions/repo.Queries implements it.
 type IssuerLister interface {
-	ListOrganizationUserSessionIssuers(ctx context.Context, arg usersessionsrepo.ListOrganizationUserSessionIssuersParams) ([]usersessionsrepo.UserSessionIssuer, error)
+	ListOrganizationUserSessionIssuers(ctx context.Context, arg usersessionsrepo.ListOrganizationUserSessionIssuersParams) ([]usersessionsrepo.ListOrganizationUserSessionIssuersRow, error)
 }
 
 // Resolve returns the issuer an organization's gateway signs users in
 // through, or why the organization is not served one.
 func Resolve(ctx context.Context, issuers IssuerLister, organizationID string) (uuid.UUID, Unavailability, error) {
 	rows, err := issuers.ListOrganizationUserSessionIssuers(ctx, usersessionsrepo.ListOrganizationUserSessionIssuersParams{
-		OrganizationID: organizationID,
-		Cursor:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		LimitValue:     issuerProbe,
+		IncludeOrganizational:  true,
+		OrganizationID:         organizationID,
+		IncludeProjectSpecific: false,
+		Cursor:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		LimitValue:             issuerProbe,
 	})
 	if err != nil {
 		return uuid.Nil, UnavailabilityNone, fmt.Errorf("list organization user session issuers: %w", err)
@@ -98,7 +100,7 @@ func Resolve(ctx context.Context, issuers IssuerLister, organizationID string) (
 	case 0:
 		return uuid.Nil, UnavailabilityNoOrganizationIssuer, nil
 	case 1:
-		return rows[0].ID, UnavailabilityNone, nil
+		return rows[0].UserSessionIssuer.ID, UnavailabilityNone, nil
 	default:
 		return uuid.Nil, UnavailabilityMultipleOrganizationIssuers, nil
 	}
