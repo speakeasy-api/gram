@@ -145,22 +145,37 @@ func testSubscriptionDiscount(t *testing.T, change func(*stripesdk.Subscription)
 func TestSubscriptionDiscountStripeTransport(t *testing.T) {
 	t.Parallel()
 	sub := discountSubscription(t)
+	type handlerResult struct {
+		request   *http.Request
+		parseErr  error
+		encodeErr error
+	}
+	results := make(chan handlerResult, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/v1/subscriptions/sub_test", r.URL.Path)
-		require.NoError(t, r.ParseForm())
-		require.ElementsMatch(t, []string{"latest_invoice", "discounts.source.coupon.applies_to"}, []string{r.Form.Get("expand[0]"), r.Form.Get("expand[1]")})
+		result := handlerResult{request: r, parseErr: r.ParseForm(), encodeErr: nil}
 		w.Header().Set("Content-Type", "application/json")
-		require.NoError(t, json.NewEncoder(w).Encode(sub))
+		result.encodeErr = json.NewEncoder(w).Encode(sub)
+		results <- result
 	}))
+	assertRequest := func() {
+		t.Helper()
+		result := <-results
+		require.NoError(t, result.parseErr)
+		require.NoError(t, result.encodeErr)
+		require.Equal(t, "/v1/subscriptions/sub_test", result.request.URL.Path)
+		require.ElementsMatch(t, []string{"latest_invoice", "discounts.source.coupon.applies_to"}, []string{result.request.Form.Get("expand[0]"), result.request.Form.Get("expand[1]")})
+	}
 	defer server.Close()
 	backend := stripesdk.GetBackendWithConfig(stripesdk.APIBackend, &stripesdk.BackendConfig{URL: stripesdk.String(server.URL), HTTPClient: server.Client()})
 	c := &client{api: &sdkAPI{client: stripesdk.NewClient("sk_test_placeholder", stripesdk.WithBackends(&stripesdk.Backends{API: backend}))}, catalog: Catalog{PriceIDTUM: "price_tum", PriceIDMCPEgress: "price_gateway"}}
 	state, err := c.GetSubscription(t.Context(), "sub_test")
 	require.NoError(t, err)
+	assertRequest()
 	require.Equal(t, "5 GiB of gateway usage free each month ($100 discount).", *state.DiscountDescription)
 	require.True(t, state.GatewayPromotionApplied)
 	require.Equal(t, time.Unix(4102444800, 0).UTC(), state.DiscountEndsAt)
 	state, err = c.SetSubscriptionCancelAtPeriodEnd(t.Context(), SetSubscriptionCancelAtPeriodEndInput{SubscriptionID: "sub_test", CancelAtPeriodEnd: true})
 	require.NoError(t, err)
+	assertRequest()
 	require.True(t, state.GatewayPromotionApplied)
 }
