@@ -17,7 +17,6 @@ import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
-import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
@@ -55,6 +54,8 @@ import { RequestedScopesSummary } from "./RequestedScopesSummary";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
 import { IdentityChainingField } from "./IdentityChainingField";
+import { identityChainingProviders } from "./identityChainingGate";
+import { useEnterpriseIssuer } from "@/pages/org/identity-provider/useEnterpriseIssuer";
 import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -126,10 +127,13 @@ export function RemoteMcpIdentitySectionBody({
     ? clients.find((linked) => linked.projectId === "")
     : undefined;
   const chainingFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
-  const chainingIssuer =
-    chainingFlag.status === "enabled"
-      ? identityChainingIssuer(userSessionIssuer)
-      : undefined;
+  const emaProvidersFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
+  const speakeasyIssuer = useEnterpriseIssuer();
+  const chainingProviders = identityChainingProviders(userSessionIssuer, {
+    externalRollout: chainingFlag.status === "enabled",
+    speakeasyRollout: emaProvidersFlag.status === "enabled",
+    speakeasyIssuer: speakeasyIssuer.data,
+  });
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -845,9 +849,14 @@ export function RemoteMcpIdentitySectionBody({
             </div>
           ) : null}
 
-          {identityResolved && chainingIssuer && sourceQuery.data?.url ? (
+          {identityResolved &&
+          userSessionIssuer &&
+          chainingProviders &&
+          sourceQuery.data?.url ? (
             <IdentityChainingField
-              userSessionIssuer={chainingIssuer}
+              userSessionIssuer={userSessionIssuer}
+              providers={chainingProviders}
+              speakeasyIssuerUrl={speakeasyIssuer.data?.issuer}
               linkedClients={clients}
               resource={sourceQuery.data.url}
               remoteMcpServerId={remoteMcpServerId}
@@ -1049,16 +1058,6 @@ export function RemoteMcpIdentitySectionBody({
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
-}
-
-/** Identity chaining needs an organization issuer that trusts an identity provider sign-in client. */
-function identityChainingIssuer(
-  issuer: UserSessionIssuer | undefined,
-): UserSessionIssuer | undefined {
-  if (issuer?.projectId !== "") return undefined;
-  if (!issuer.trustedRemoteSessionIssuerId) return undefined;
-  if (!issuer.trustedRemoteSessionClientId) return undefined;
-  return issuer;
 }
 
 const UNLINK_PROVIDER_CONSEQUENCE =

@@ -97,6 +97,10 @@ vi.mock("@/contexts/Sdk", () => ({
   }),
 }));
 
+vi.mock("@/pages/org/identity-provider/useEnterpriseIssuer", () => ({
+  useEnterpriseIssuer: () => ({ data: undefined }),
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => mocks.rbac(),
 }));

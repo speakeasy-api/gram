@@ -33,6 +33,8 @@ import { buildRemoteSessionClientsReadEMAMutation } from "@gram/client/react-que
 import { useRemoteSessionClientsUnlinkEMAMutation } from "@gram/client/react-query/remoteSessionClientsUnlinkEMA.js";
 
 import { AuthRow } from "./AuthRow";
+import { EmaProviderOrderControl } from "./EmaProviderOrderControl";
+import type { ChainingProviders } from "./identityChainingGate";
 import { IdentityChainingScopesField } from "./IdentityChainingScopesField";
 import {
   chainingBound,
@@ -111,14 +113,27 @@ function ClientPicker({
   );
 }
 
-/** Rendered only for an organization issuer that trusts an identity provider sign-in client. */
+function chainingHint(providers: ChainingProviders): string {
+  if (!providers.speakeasy)
+    return "Exchange the person’s identity provider sign-in for a token to this server, without a separate consent.";
+  if (!providers.external)
+    return "Speakeasy vouches for the person’s Speakeasy sign-in to get a token to this server, without a separate consent.";
+  return "Exchange the person’s identity provider sign-in, or have Speakeasy vouch for their Speakeasy sign-in, for a token to this server without a separate consent.";
+}
+
+/** Rendered only for an organization issuer that an identity provider or Speakeasy can vouch for. */
 export function IdentityChainingField({
   userSessionIssuer,
+  providers,
+  speakeasyIssuerUrl,
   linkedClients,
   resource,
   remoteMcpServerId,
 }: {
   userSessionIssuer: UserSessionIssuer;
+  providers: ChainingProviders;
+  /** Speakeasy's issuer URL, which vendors trust for Speakeasy-signed grants. */
+  speakeasyIssuerUrl?: string;
   linkedClients: RemoteSessionClient[];
   /** The remote MCP server URL; the executor matches it exactly. */
   resource: string;
@@ -127,8 +142,12 @@ export function IdentityChainingField({
 }): JSX.Element {
   const core = useGramContext();
   const gramProject = useProjectSlugForRequests();
+  // The identity provider's own sign-in client is never a chaining target.
+  const trustedClientId = providers.external
+    ? userSessionIssuer.trustedRemoteSessionClientId
+    : undefined;
   const candidates = linkedClients.filter(
-    (client) => client.id !== userSessionIssuer.trustedRemoteSessionClientId,
+    (client) => !trustedClientId || client.id !== trustedClientId,
   );
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   // A prepare that returned a blocker; kept until the next action.
@@ -205,7 +224,8 @@ export function IdentityChainingField({
     { id: userSessionIssuer.trustedRemoteSessionIssuerId ?? "" },
     undefined,
     {
-      enabled: !!userSessionIssuer.trustedRemoteSessionIssuerId,
+      enabled:
+        providers.external && !!userSessionIssuer.trustedRemoteSessionIssuerId,
       throwOnError: false,
       retry: false,
     },
@@ -312,10 +332,7 @@ export function IdentityChainingField({
 
   return (
     <>
-      <AuthRow
-        label="Identity chaining"
-        hint="Exchange the person’s identity provider sign-in for a token to this server, without a separate consent."
-      >
+      <AuthRow label="Identity chaining" hint={chainingHint(providers)}>
         {candidates.length === 0 ? (
           <Text muted small>
             Link a client for this server’s identity provider first.
@@ -442,7 +459,12 @@ export function IdentityChainingField({
               )}
             {!ready && (
               <VendorEmaTrustNotice
-                issuerUrl={trustedIssuerQuery.data?.issuer}
+                issuerUrl={
+                  providers.external
+                    ? trustedIssuerQuery.data?.issuer
+                    : speakeasyIssuerUrl
+                }
+                speakeasy={!providers.external}
               />
             )}
             {prepareOutcome?.remediation ? (
@@ -457,6 +479,13 @@ export function IdentityChainingField({
                   {read.data.remediation}
                 </Text>
               )
+            )}
+            {providers.speakeasy && picked && read.data?.emaProviders && (
+              <EmaProviderOrderControl
+                order={read.data.emaProviders}
+                vendorRemoteSessionIssuerId={picked.remoteSessionIssuerId}
+                onSaved={onSettled}
+              />
             )}
             <ApiErrorAlert
               error={read.error ?? prepare.error ?? unlink.error}
