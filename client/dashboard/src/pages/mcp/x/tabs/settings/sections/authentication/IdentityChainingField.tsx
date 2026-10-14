@@ -143,9 +143,7 @@ export function IdentityChainingField({
   const core = useGramContext();
   const gramProject = useProjectSlugForRequests();
   // The identity provider's own sign-in client is never a chaining target.
-  const trustedClientId = providers.external
-    ? userSessionIssuer.trustedRemoteSessionClientId
-    : undefined;
+  const trustedClientId = userSessionIssuer.trustedRemoteSessionClientId;
   const candidates = linkedClients.filter(
     (client) => !trustedClientId || client.id !== trustedClientId,
   );
@@ -457,16 +455,19 @@ export function IdentityChainingField({
                   )}
                 </RequireScope>
               )}
-            {!ready && (
+            {!ready && providers.external && (
               <VendorEmaTrustNotice
-                issuerUrl={
-                  providers.external
-                    ? trustedIssuerQuery.data?.issuer
-                    : speakeasyIssuerUrl
-                }
-                speakeasy={!providers.external}
+                issuerUrl={trustedIssuerQuery.data?.issuer}
               />
             )}
+            {!ready &&
+              providers.speakeasy &&
+              !(picked && read.data?.emaProviders) && (
+                <VendorEmaTrustNotice
+                  issuerUrl={speakeasyIssuerUrl}
+                  speakeasy
+                />
+              )}
             {prepareOutcome?.remediation ? (
               <Alert variant="warning" dismissible={false}>
                 {prepareOutcome.remediation}
@@ -484,6 +485,8 @@ export function IdentityChainingField({
               <EmaProviderOrderControl
                 order={read.data.emaProviders}
                 vendorRemoteSessionIssuerId={picked.remoteSessionIssuerId}
+                speakeasyIssuerUrl={speakeasyIssuerUrl}
+                chainingReady={ready}
                 onSaved={onSettled}
               />
             )}

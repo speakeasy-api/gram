@@ -4,12 +4,16 @@ import { ApiErrorAlert } from "@/components/api-error-alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
+import { VendorEmaTrustNotice } from "@/components/vendor-ema-trust-notice";
 import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import type { EMAProvider } from "@gram/client/models/components/emaprovider.js";
 import type { EMAProviderInput } from "@gram/client/models/components/emaproviderinput.js";
 import type { EMAProviderOrder } from "@gram/client/models/components/emaproviderorder.js";
 import { useSetOrganizationRemoteSessionIssuerEMAProvidersMutation } from "@gram/client/react-query/setOrganizationRemoteSessionIssuerEMAProviders.js";
+
+// The API rejects longer orders.
+const MAX_EMA_PROVIDERS = 10;
 
 function providerLabel(provider: EMAProvider): string {
   return provider.kind === "speakeasy" ? "Speakeasy" : "Identity provider";
@@ -37,10 +41,14 @@ function toggledSpeakeasyOrder(
 export function EmaProviderOrderControl({
   order,
   vendorRemoteSessionIssuerId,
+  speakeasyIssuerUrl,
+  chainingReady,
   onSaved,
 }: {
   order: EMAProviderOrder;
   vendorRemoteSessionIssuerId: string;
+  speakeasyIssuerUrl?: string;
+  chainingReady: boolean;
   onSaved: () => void;
 }): JSX.Element {
   const organization = useOrganization();
@@ -57,6 +65,9 @@ export function EmaProviderOrderControl({
       provider.kind === "speakeasy" || provider.remoteSessionIssuerId,
   );
   const usesSpeakeasy = shown.some((provider) => provider.kind === "speakeasy");
+  const full =
+    !usesSpeakeasy &&
+    toggledSpeakeasyOrder(order, true).length > MAX_EMA_PROVIDERS;
   const setSpeakeasy = (next: boolean) =>
     save.mutate({
       request: {
@@ -93,7 +104,7 @@ export function EmaProviderOrderControl({
           <Button
             variant="secondary"
             size="sm"
-            disabled={save.isPending}
+            disabled={save.isPending || full}
             onClick={() => setSpeakeasy(!usesSpeakeasy)}
           >
             {usesSpeakeasy ? "Stop using Speakeasy" : "Use Speakeasy sign-in"}
@@ -106,6 +117,15 @@ export function EmaProviderOrderControl({
           : "Speakeasy vouches only for vendors whose provider order names it."}{" "}
         The order applies to every server using {order.vendorIssuer}.
       </Text>
+      {full && (
+        <Text muted small className="block">
+          This order already has the maximum of {MAX_EMA_PROVIDERS} providers.
+          Remove one before adding Speakeasy.
+        </Text>
+      )}
+      {(!usesSpeakeasy || !chainingReady) && (
+        <VendorEmaTrustNotice issuerUrl={speakeasyIssuerUrl} speakeasy />
+      )}
       <ApiErrorAlert error={save.error} />
     </div>
   );

@@ -39,7 +39,17 @@ vi.mock("@/components/require-scope", () => ({
   },
 }));
 vi.mock("@/components/vendor-ema-trust-notice", () => ({
-  VendorEmaTrustNotice: () => null,
+  VendorEmaTrustNotice: ({
+    issuerUrl,
+    speakeasy,
+  }: {
+    issuerUrl?: string;
+    speakeasy?: boolean;
+  }) => (
+    <div data-testid="trust-notice">
+      {speakeasy ? "speakeasy" : "idp"}:{issuerUrl ?? ""}
+    </div>
+  ),
 }));
 vi.mock("./IdentityChainingScopesField", () => ({
   IdentityChainingScopesField: () => null,
@@ -229,5 +239,64 @@ describe("identity chaining vouched for by Speakeasy", () => {
         },
       },
     });
+  });
+
+  it("keeps the trusted sign-in client out even when only Speakeasy applies", () => {
+    const trusting = {
+      id: "session-issuer",
+      trustedRemoteSessionIssuerId: "idp",
+      trustedRemoteSessionClientId: "second",
+    } as UserSessionIssuer;
+    render(field(speakeasyOnly, trusting));
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("keeps the Speakeasy trust notice while Speakeasy can still be added", () => {
+    read.data = {
+      ...bound("first"),
+      emaProviders: {
+        isDefault: true,
+        vendorIssuer: "https://vendor.example.com",
+        providers: [{ kind: "external", remoteSessionIssuerId: "idp" }],
+      },
+    };
+    render(
+      <IdentityChainingField
+        userSessionIssuer={
+          {
+            id: "session-issuer",
+            trustedRemoteSessionIssuerId: "idp",
+            trustedRemoteSessionClientId: "idp-client",
+          } as UserSessionIssuer
+        }
+        providers={{ external: true, speakeasy: true }}
+        speakeasyIssuerUrl="https://speakeasy.example.com/issuer"
+        linkedClients={clients}
+        resource="https://example.com/mcp"
+      />,
+    );
+    expect(
+      screen.getAllByTestId("trust-notice").map((notice) => notice.textContent),
+    ).toEqual(["speakeasy:https://speakeasy.example.com/issuer"]);
+  });
+
+  it("does not add Speakeasy to a full order", () => {
+    read.data = {
+      ...unlinked,
+      emaProviders: {
+        isDefault: false,
+        vendorIssuer: "https://vendor.example.com",
+        providers: Array.from({ length: 10 }, (_, index) => ({
+          kind: "external",
+          remoteSessionIssuerId: `idp-${index}`,
+        })),
+      },
+    };
+    render(field(speakeasyOnly, plainIssuer));
+    const add = screen.getByText("Use Speakeasy sign-in").closest("button");
+    expect(add?.disabled).toBe(true);
+    expect(screen.getByText(/maximum of 10 providers/)).toBeTruthy();
+    fireEvent.click(add!);
+    expect(setProviders).not.toHaveBeenCalled();
   });
 });
