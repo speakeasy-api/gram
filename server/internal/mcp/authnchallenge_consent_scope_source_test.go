@@ -126,9 +126,10 @@ func TestServeConsent_MultiBindingCardReadsOwnResourceScopes(t *testing.T) {
 	require.Equal(t, "b:read", connectScope(t, fx, shared))
 }
 
-// A gateway's login consults no resource row, so neither does its consent
-// card: a cached row for the resource the client claims must not offer a
-// reconnect that the login's issuer-override request can never satisfy.
+// A gateway client no member claims has no resource row at login, so neither
+// does its consent card: a cached row for the resource the client claims must
+// not offer a reconnect that the login's issuer-override request can never
+// satisfy.
 func TestServeConsent_GatewayIdentityReconnectFollowsLogin(t *testing.T) {
 	t.Parallel()
 
@@ -170,4 +171,24 @@ func TestServeConsent_RemoteEndpointIdentityReconnectFollowsLogin(t *testing.T) 
 	loc := postConnectAction(t, fx, clientID)
 	require.Equal(t, "read", loc.Query().Get("scope"))
 	require.Equal(t, upstream.URL, loc.Query().Get("resource"), "the login is for the server's own resource")
+}
+
+// A gateway login reads the resource of the member it qualifies the client
+// to, ahead of the issuer override, and the card offers what that login
+// requests.
+func TestServeConsent_GatewayMemberResourceDecidesScopes(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "scope-gw-member")
+	const member = "https://member.example.com/mcp"
+	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "scope-gw-member-m", member, conv.ToNullUUID(issuerID), 0)
+	cacheResourceScopes(t, ctx, fx, member, []string{"m:read", "openid"})
+	advertise(t, ctx, fx, issuerID, []string{"admin", "openid"})
+	overrideIssuerScopes(t, ctx, fx, issuerID, []string{"admin"})
+	grantScopedTo(t, ctx, fx, clientID, []string{"m:read"}, member)
+
+	expectIdentityHint(t, fx, true)
+	loc := postConnectAction(t, fx, clientID)
+	require.Equal(t, "m:read openid", loc.Query().Get("scope"))
+	require.Equal(t, member, loc.Query().Get("resource"))
 }

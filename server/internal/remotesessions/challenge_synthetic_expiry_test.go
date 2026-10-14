@@ -265,6 +265,9 @@ type syntheticLoginOptions struct {
 	// remoteServerURL, when set, seeds a remote-backed MCP server at that URL
 	// and makes the login for it, so scope resolution consults its resource row.
 	remoteServerURL string
+	// gatewayMember logs in as a gateway would: the seeded server is the
+	// qualified member, not the login's own server.
+	gatewayMember bool
 	// protectedResource, when set, seeds the resource row for remoteServerURL.
 	protectedResource *protectedResourceSeed
 	// prober wires a fresh protected resource prober into the manager.
@@ -339,6 +342,10 @@ func withResourceIndicatorSupported(supported bool) syntheticLoginOption {
 	return func(o *syntheticLoginOptions) {
 		o.resourceIndicatorSupported = pgtype.Bool{Bool: supported, Valid: true}
 	}
+}
+
+func withGatewayMember() syntheticLoginOption {
+	return func(o *syntheticLoginOptions) { o.gatewayMember = true }
 }
 
 func withResource(resource string) syntheticLoginOption {
@@ -617,7 +624,7 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	// BuildAuthorizationUrl mints + stores the RemoteLoginState; the returned
 	// URL carries the opaque state id the callback exchanges against.
 	subject := urn.NewUserSubject("synthetic-subject-" + slugSuffix)
-	authURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+	parent := remotesessions.ParentChallenge{
 		ID:                  uuid.NewString(),
 		ProjectID:           *authCtx.ProjectID,
 		OrganizationID:      authCtx.ActiveOrganizationID,
@@ -627,7 +634,11 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		McpServerID:         mcpServerID,
 		FinalRedirectURI:    "",
 		Resource:            options.resource,
-	}, clients[0])
+	}
+	if options.gatewayMember {
+		parent.McpServerID, parent.ResourceMcpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}, mcpServerID
+	}
+	authURL, err := mgr.BuildAuthorizationUrl(ctx, parent, clients[0])
 	require.NoError(t, err)
 
 	parsed, err := url.Parse(authURL)

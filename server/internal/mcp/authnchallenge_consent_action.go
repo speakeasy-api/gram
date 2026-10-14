@@ -283,6 +283,7 @@ func (s *Service) buildRemoteConnectURL(
 	var clientResource string
 	var rerr error
 	claimedByMember := false
+	resourceMember := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if endpoint.MetaMcpServerID.Valid {
 		// Member visibility is judged against the consent subject, as the runtime
 		// request the minted session will make will be.
@@ -290,7 +291,7 @@ func (s *Service) buildRemoteConnectURL(
 		if cerr != nil {
 			return "", false, oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 		}
-		clientResource, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
 	}
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 	// decided, and falling back would qualify the credential anyway.
@@ -326,6 +327,7 @@ func (s *Service) buildRemoteConnectURL(
 		RouteBase:           endpoint.RouteBase,
 		McpServerID:         endpoint.McpServerID,
 		MetaMcpServerID:     endpoint.MetaMcpServerID,
+		ResourceMcpServerID: resourceMember,
 		FinalRedirectURI:    "",
 		ConsentURL:          consentURL,
 		Resource:            clientResource,
