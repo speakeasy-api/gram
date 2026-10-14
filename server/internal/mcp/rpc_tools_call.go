@@ -398,7 +398,7 @@ func handleToolsCall(
 	callerID, callerEmail := toolCallCaller(ctx, payload, descriptor.OrganizationID, gramEmail)
 
 	// One id names the call on its telemetry_logs row and its agent_events rows.
-	events := newToolCallEvents(toolCallLogger, logger, toolCallTenant{
+	events := newToolCallEvents(toolCallLogger, logger, metrics, toolCallTenant{
 		organizationID: descriptor.OrganizationID,
 		projectID:      descriptor.ProjectID,
 	}, toolCallIdentity{

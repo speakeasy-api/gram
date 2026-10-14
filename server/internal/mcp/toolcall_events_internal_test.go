@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,12 +12,16 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
@@ -28,6 +33,7 @@ type toolCallEventsFixture struct {
 	published *[]*otelv1.InboundLogRecord
 	warnings  *bytes.Buffer
 	at        *time.Time
+	metrics   *sdkmetric.ManualReader
 }
 
 func newToolCallEventsFixture(t *testing.T, result gcp.PublishResult, identity toolCallIdentity) toolCallEventsFixture {
@@ -42,10 +48,41 @@ func newToolCallEventsFixture(t *testing.T, result gcp.PublishResult, identity t
 	}).Return(result).Maybe()
 
 	var warnings bytes.Buffer
+	slogger := slog.New(slog.NewTextHandler(&warnings, nil))
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
 	records := otelpub.NewLogger(publisher, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GramGatewayLogScope)
 	at := time.Unix(1_700_000_000, 0)
-	events := newToolCallEvents(records, slog.New(slog.NewTextHandler(&warnings, nil)), toolCallTenant{organizationID: "org-1", projectID: "project-1"}, identity, func() time.Time { return at })
-	return toolCallEventsFixture{events: events, published: &published, warnings: &warnings, at: &at}
+	events := newToolCallEvents(records, slogger, mcpmetrics.NewMetrics(meterProvider.Meter("test"), slogger), toolCallTenant{organizationID: "org-1", projectID: "project-1"}, identity, func() time.Time { return at })
+	return toolCallEventsFixture{events: events, published: &published, warnings: &warnings, at: &at, metrics: reader}
+}
+
+// publishCounts reads the record publish counter as event name → outcome → count.
+func (f toolCallEventsFixture) publishCounts(t *testing.T) map[string]map[string]int64 {
+	t.Helper()
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, f.metrics.Collect(t.Context(), &rm))
+	counts := map[string]map[string]int64{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, observed := range scope.Metrics {
+			if observed.Name != mcpmetrics.InstrumentMCPToolCallRecordPublish {
+				continue
+			}
+			sum, ok := observed.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				event, _ := point.Attributes.Value(attr.EventKey)
+				outcome, _ := point.Attributes.Value(attr.OutcomeKey)
+				if counts[event.AsString()] == nil {
+					counts[event.AsString()] = map[string]int64{}
+				}
+				counts[event.AsString()][outcome.AsString()] += point.Value
+			}
+		}
+	}
+	return counts
 }
 
 func recordStringAttribute(record *otelv1.InboundLogRecord, key string) string {
@@ -117,6 +154,10 @@ func TestToolCallEventsPairStartedAndCompletedByTheCallID(t *testing.T) {
 		}
 	}
 	require.True(t, recordHasAttribute(completed, "gram.tool_call.duration"))
+	require.Equal(t, map[string]map[string]int64{
+		dialect.GramToolCallStartedEvent:   {"success": 1},
+		dialect.GramToolCallCompletedEvent: {"success": 1},
+	}, fixture.publishCounts(t), "each acked record is counted under its own name")
 }
 
 func TestToolCallEventsCompletedCarriesTheGatewaysOwnFailure(t *testing.T) {
@@ -145,6 +186,10 @@ func TestToolCallEventsNeverFailTheCall(t *testing.T) {
 	require.Equal(t, 2, strings.Count(fixture.warnings.String(), "tool call record was not published"))
 	require.Contains(t, fixture.warnings.String(), "pubsub unavailable")
 	require.Contains(t, fixture.warnings.String(), "call-3")
+	require.Equal(t, map[string]map[string]int64{
+		dialect.GramToolCallStartedEvent:   {"failure": 1},
+		dialect.GramToolCallCompletedEvent: {"failure": 1},
+	}, fixture.publishCounts(t), "a lost record is counted, not only logged")
 }
 
 func TestToolCallEventsCompletedFollowsAPassthroughResultsOwnVerdict(t *testing.T) {

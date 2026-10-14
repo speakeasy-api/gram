@@ -11,6 +11,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
@@ -67,30 +69,33 @@ func (id toolCallIdentity) attributes() []attribute.KeyValue {
 // toolCallEvents emits the started and completed records of one tool call,
 // both under the call id so they pair up in agent_events.
 type toolCallEvents struct {
-	logger *otelpub.Logger
-	log    *slog.Logger
-	tenant toolCallTenant
-	callID string
-	base   []log.KeyValue
-	start  time.Time
-	now    func() time.Time
+	logger  *otelpub.Logger
+	log     *slog.Logger
+	metrics *mcpmetrics.Metrics
+	tenant  toolCallTenant
+	callID  string
+	base    []log.KeyValue
+	start   time.Time
+	now     func() time.Time
 }
 
 func newToolCallEvents(
 	logger *otelpub.Logger,
 	slogger *slog.Logger,
+	metrics *mcpmetrics.Metrics,
 	tenant toolCallTenant,
 	identity toolCallIdentity,
 	now func() time.Time,
 ) *toolCallEvents {
 	return &toolCallEvents{
-		logger: logger,
-		log:    slogger,
-		tenant: tenant,
-		callID: identity.callID,
-		base:   logAttributes(identity.attributes()...),
-		start:  now(),
-		now:    now,
+		logger:  logger,
+		log:     slogger,
+		metrics: metrics,
+		tenant:  tenant,
+		callID:  identity.callID,
+		base:    logAttributes(identity.attributes()...),
+		start:   now(),
+		now:     now,
 	}
 }
 
@@ -114,11 +119,13 @@ func (e *toolCallEvents) completed(ctx context.Context, statusCode int, resultIs
 	e.emit(ctx, record)
 }
 
-// emit never fails the call: a lost record is only logged.
+// emit never fails the call: a lost record is logged and counted.
 func (e *toolCallEvents) emit(ctx context.Context, record log.Record) {
-	if err := e.logger.Log(otelpub.WithRecordID(otelpub.WithTenant(ctx, e.tenant.organizationID, e.tenant.projectID), e.callID), record); err != nil {
+	err := e.logger.Log(otelpub.WithRecordID(otelpub.WithTenant(ctx, e.tenant.organizationID, e.tenant.projectID), e.callID), record)
+	if err != nil {
 		e.log.WarnContext(ctx, "tool call record was not published", attr.SlogToolCallID(e.callID), attr.SlogError(err))
 	}
+	e.metrics.RecordToolCallRecordPublish(ctx, record.EventName(), o11y.OutcomeFromError(err))
 }
 
 func toolCallCompletedAttributes(statusCode int, resultIsError bool, duration time.Duration, failure *oops.ShareableError) []attribute.KeyValue {

@@ -11,13 +11,43 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+// toolCallRecordPublishCounts reads the record publish counter as event name → outcome → count.
+func toolCallRecordPublishCounts(t *testing.T, reader *sdkmetric.ManualReader) map[string]map[string]int64 {
+	t.Helper()
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	counts := map[string]map[string]int64{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, observed := range scope.Metrics {
+			if observed.Name != mcpmetrics.InstrumentMCPToolCallRecordPublish {
+				continue
+			}
+			sum, ok := observed.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				event, _ := point.Attributes.Value(attr.EventKey)
+				outcome, _ := point.Attributes.Value(attr.OutcomeKey)
+				if counts[event.AsString()] == nil {
+					counts[event.AsString()] = map[string]int64{}
+				}
+				counts[event.AsString()][outcome.AsString()] += point.Value
+			}
+		}
+	}
+	return counts
+}
 
 // hostedToolFixture is a public hosted MCP server with one HTTP tool.
 type hostedToolFixture struct {
@@ -97,7 +127,8 @@ func toolCallRecordAttribute(record *otelv1.InboundLogRecord, key string) *otelv
 func TestToolsCall_EmitsAStartedAndACompletedRecordForTheCall(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	fixture := seedHostedTool(t, ctx, ti, "list_repos")
@@ -129,6 +160,10 @@ func TestToolsCall_EmitsAStartedAndACompletedRecordForTheCall(t *testing.T) {
 	require.Equal(t, int64(http.StatusOK), toolCallRecordAttribute(completed, "http.response.status_code").GetIntValue())
 	require.Positive(t, toolCallRecordAttribute(completed, "gram.tool_call.duration").GetDoubleValue())
 	require.GreaterOrEqual(t, completed.GetTimeUnixNano(), started.GetTimeUnixNano())
+	require.Equal(t, map[string]map[string]int64{
+		dialect.GramToolCallStartedEvent:   {"success": 1},
+		dialect.GramToolCallCompletedEvent: {"success": 1},
+	}, toolCallRecordPublishCounts(t, reader))
 }
 
 func TestToolsCall_CompletedRecordSaysTheToolFailed(t *testing.T) {
@@ -171,10 +206,15 @@ func TestToolsCall_CompletedRecordCarriesAFailureAfterTheToolRan(t *testing.T) {
 func TestToolsCall_SucceedsWhenItsRecordsCannotBePublished(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	fixture := seedHostedTool(t, ctx, ti, "list_repos")
 	ti.toolCallRecords.failWith(errors.New("pubsub unavailable"))
 
 	require.False(t, fixture.call(t, ctx, ti, "list_repos"))
 	require.Empty(t, ti.toolCallRecords.all())
+	require.Equal(t, map[string]map[string]int64{
+		dialect.GramToolCallStartedEvent:   {"failure": 1},
+		dialect.GramToolCallCompletedEvent: {"failure": 1},
+	}, toolCallRecordPublishCounts(t, reader), "each lost record is counted while the call succeeds")
 }
