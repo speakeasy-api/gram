@@ -468,6 +468,8 @@ BEGIN
   DELETE FROM remote_session_ema_bindings
   WHERE organization_id = demo_org
     AND project_id IN (SELECT id FROM projects WHERE organization_id = demo_org);
+  -- EMA provider orders reference issuers without cascading, retired rows too.
+  DELETE FROM remote_session_ema_providers WHERE organization_id = demo_org;
   DELETE FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM remote_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM mcp_servers WHERE project_id = proj_a;

@@ -174,6 +174,9 @@ const (
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
 
+	// FlagEMAProviders gates changing a vendor's EMA provider order while the
+	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.
+	FlagEMAProviders Flag = "ema-providers"
 	// FlagInternalSessionIssuer gates an organization's internal session issuer
 	// while it rolls out: enabling it, signing with it and its Platform MCP tool.
 	// Server-evaluated, targeted by the organization group.

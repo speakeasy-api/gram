@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,13 +28,24 @@ type Governor struct {
 	enc        *encryption.Client
 	delegation *remotesessions.DelegationService
 	now        func() time.Time
+
+	// sources builds each EMA provider kind's token source.
+	sources map[remotesessions.EMAProviderKind]sourceFactory
 }
 
 // NewGovernor builds a database-only governor; enc verifies stored credentials
 // and delegation checks the human's retained delegation against the current
 // trusted registration.
 func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, delegation *remotesessions.DelegationService) *Governor {
-	return &Governor{logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, delegation: delegation, now: time.Now}
+	return &Governor{
+		logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, delegation: delegation, now: time.Now,
+		sources: map[remotesessions.EMAProviderKind]sourceFactory{
+			remotesessions.EMAProviderExternal: func(p remotesessions.EMAProvider) tokenSource {
+				return externalSource{c: nil, issuer: p.RemoteSessionIssuerID}
+			},
+			remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return speakeasySource{} },
+		},
+	}
 }
 
 // Governs reports whether identity chaining owns the request's upstream: a
@@ -49,7 +61,8 @@ func (g *Governor) Governs(ctx context.Context, req Request) bool {
 
 // Serves reports the remote session issuer whose binding identity chaining
 // would use for req. Unlike Governs it requires exactly one ready binding, so
-// an ambiguous configuration is never presented as configured.
+// an ambiguous configuration is never presented as configured, and at least
+// one EMA provider for the vendor that can serve now.
 func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !req.complete() {
 		return uuid.Nil, false
@@ -58,7 +71,29 @@ func (g *Governor) Serves(ctx context.Context, req Request) (uuid.UUID, bool) {
 	if !outcome.Succeeded() {
 		return uuid.Nil, false
 	}
+	if _, outcome := g.servingProviders(ctx, g.logger, req, sel); !outcome.Succeeded() {
+		return uuid.Nil, false
+	}
 	return sel.remoteIssuerID, true
+}
+
+// ProviderOrder is req's vendor EMA provider order for this endpoint,
+// including providers that cannot serve. False when no single ready binding
+// names the upstream or the order cannot be read.
+func (g *Governor) ProviderOrder(ctx context.Context, req Request) (remotesessions.EMAProviderOrder, bool) {
+	none := remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: nil}
+	if !req.complete() {
+		return none, false
+	}
+	sel, outcome := g.selectBinding(ctx, g.logger, req)
+	if !outcome.Succeeded() {
+		return none, false
+	}
+	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
+	if !outcome.Succeeded() {
+		return none, false
+	}
+	return order, true
 }
 
 // Configured reports whether any binding exists for the user session issuer
@@ -91,6 +126,13 @@ func (g *Governor) HasUsableCredential(ctx context.Context, req Request) bool {
 	}
 	sel, outcome := g.selectBinding(ctx, g.logger, req)
 	if !outcome.Succeeded() {
+		return false
+	}
+	// Stored credentials come from the endpoint's trusted issuer, so one is
+	// usable only while an available external provider names it.
+	// TODO(AIM-523): record provider provenance on the credential instead.
+	providers, outcome := g.servingProviders(ctx, g.logger, req, sel)
+	if !outcome.Succeeded() || !slices.ContainsFunc(providers, func(p remotesessions.EMAProvider) bool { return p.Kind == remotesessions.EMAProviderExternal }) {
 		return false
 	}
 	q := repo.New(g.db)
