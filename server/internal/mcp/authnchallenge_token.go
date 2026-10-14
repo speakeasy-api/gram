@@ -1760,9 +1760,7 @@ func (s *Service) issueSession(
 ) (*mintedSession, error) {
 	now := time.Now()
 	if issuance.AuthorizationExpiresAt == nil {
-		// Resolve the issuer's session_duration — the maximum absolute
-		// authorization lifetime. Days count as 24 hours; Months have no fixed
-		// length, so an interval carrying them fails rather than approximates.
+		// The issuer's session_duration is the maximum absolute authorization lifetime.
 		issuer, err := queries.GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 			ID:             issuance.UserSessionIssuerID,
 			ProjectID:      issuance.ProjectID,
