@@ -245,8 +245,8 @@ type SetEMAProvidersRequestBody struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// Providers in the order they are tried; each at most once. An empty list
-	// restores the external default.
+	// Providers in the order they are tried, at most 10; each at most once. An
+	// empty list restores the external default.
 	Providers []*EMAProviderInputRequestBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
@@ -6609,9 +6609,6 @@ func ValidateSetEMAProvidersRequestBody(body *SetEMAProvidersRequestBody) (err e
 	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
-	}
-	if len(body.Providers) > 10 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.providers", body.Providers, len(body.Providers), 10, false))
 	}
 	for _, e := range body.Providers {
 		if e != nil {

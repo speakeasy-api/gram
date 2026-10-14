@@ -163,7 +163,7 @@ func (s *Service) requireEMAProviders(ctx context.Context, logger *slog.Logger, 
 	return nil
 }
 
-// maxEMAProviders matches the API's limit on an order's length.
+// maxEMAProviders bounds an order's length; the API documents it.
 const maxEMAProviders = 10
 
 // parseEMAProviders validates an order's shape: a remote session issuer

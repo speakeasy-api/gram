@@ -432,8 +432,8 @@ type SetEMAProvidersPayload struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID string
-	// Providers in the order they are tried; each at most once. An empty list
-	// restores the external default.
+	// Providers in the order they are tried, at most 10; each at most once. An
+	// empty list restores the external default.
 	Providers    []*types.EMAProviderInput
 	SessionToken *string
 }

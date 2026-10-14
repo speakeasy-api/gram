@@ -112798,8 +112798,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/EMAProviderInput'
-                    description: Providers in the order they are tried; each at most once. An empty list restores the external default.
-                    maxItems: 10
+                    description: Providers in the order they are tried, at most 10; each at most once. An empty list restores the external default.
                 remote_session_issuer_id:
                     type: string
                     description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.

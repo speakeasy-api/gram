@@ -554,9 +554,9 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 			Attribute("remote_session_issuer_id", String, "Any remote_session_issuer in the caller's organization that names the vendor authorization server.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("providers", ArrayOf(shared.EMAProviderInput), "Providers in the order they are tried; each at most once. An empty list restores the external default.", func() {
-				MaxLength(10)
-			})
+			// The handler enforces the 10-provider limit; Goa's length error
+			// would print the decoded entries as Go pointers.
+			Attribute("providers", ArrayOf(shared.EMAProviderInput), "Providers in the order they are tried, at most 10; each at most once. An empty list restores the external default.")
 			Required("remote_session_issuer_id", "providers")
 			security.SessionPayload()
 		})

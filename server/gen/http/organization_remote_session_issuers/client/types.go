@@ -245,8 +245,8 @@ type SetEMAProvidersRequestBody struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID string `form:"remote_session_issuer_id" json:"remote_session_issuer_id" xml:"remote_session_issuer_id"`
-	// Providers in the order they are tried; each at most once. An empty list
-	// restores the external default.
+	// Providers in the order they are tried, at most 10; each at most once. An
+	// empty list restores the external default.
 	Providers []*EMAProviderInputRequestBody `form:"providers" json:"providers" xml:"providers"`
 }
 

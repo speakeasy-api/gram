@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +14,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
+	orgissuerssrv "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/server"
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -180,6 +185,26 @@ func TestSetEMAProviders_RejectsInvalidProviders(t *testing.T) {
 			requireOopsCode(t, err, oops.CodeBadRequest)
 		})
 	}
+}
+
+func TestSetEMAProviders_TooManyHasAReadableMessage(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	f := newEMAProvidersFixture(t, ctx, ti)
+
+	entries := make([]string, 0, 11)
+	for range 11 {
+		entries = append(entries, fmt.Sprintf(`{"kind":"external","remote_session_issuer_id":%q}`, uuid.NewString()))
+	}
+	body := fmt.Sprintf(`{"remote_session_issuer_id":%q,"providers":[%s]}`, f.vendor, strings.Join(entries, ","))
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/rpc/organizationRemoteSessionIssuers.setEMAProviders", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	payload, err := orgissuerssrv.DecodeSetEMAProvidersRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(req)
+	require.NoError(t, err, "the request decoder leaves the length check to the handler")
+
+	_, err = ti.service.SetEMAProviders(ctx, payload)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Equal(t, "an EMA provider order has at most 10 providers", err.Error())
 }
 
 func TestSetEMAProviders_SpeakeasyNeedsAnInternalSessionIssuer(t *testing.T) {
