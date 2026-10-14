@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -34,9 +35,10 @@ const (
 	AccessReadQueriesPerConnectionPerMinute   = 30
 	AccessReadQueriesPerOrganizationPerMinute = 300
 
-	maxAccessMembers     = 50
-	maxAccessTools       = 100
-	minAccessQueryLength = 3
+	maxAccessMembers          = 50
+	maxAccessTools            = 100
+	maxMemberMCPAccessServers = 1000
+	minAccessQueryLength      = 3
 )
 
 const (
@@ -96,6 +98,30 @@ type ListAccessMembersOutput struct {
 	Suppressed   bool           `json:"suppressed"`
 	Truncated    bool           `json:"truncated"`
 	ExpiresAt    string         `json:"expires_at,omitempty"`
+}
+
+type GetMemberMCPAccessInput struct {
+	MemberReference string `json:"member_reference" jsonschema:"opaque member reference returned by list_access_members"`
+}
+
+type MemberMCPAccessRow struct {
+	ProjectID         string `json:"project_id"`
+	ProjectName       string `json:"project_name"`
+	MCPID             string `json:"mcp_id"`
+	MCPName           string `json:"mcp_name"`
+	Backend           string `json:"backend"`
+	Visibility        string `json:"visibility"`
+	AuthorizationMode string `json:"authorization_mode"`
+	ConnectionAccess  string `json:"connection_access" jsonschema:"effective connection result: public, disabled, not_served, all_tools, some_tools, or none"`
+	CanConnect        bool   `json:"can_connect"`
+	ToolAccess        string `json:"tool_access" jsonschema:"effective tool coverage: all, some, or none"`
+	CanView           bool   `json:"can_view"`
+	CanManage         bool   `json:"can_manage"`
+}
+
+type GetMemberMCPAccessOutput struct {
+	Servers   []MemberMCPAccessRow `json:"servers"`
+	Truncated bool                 `json:"truncated"`
 }
 
 type MCPAccessTool struct {
@@ -311,6 +337,93 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 			Version:        version,
 		})
 	}
+	return output, nil
+}
+
+func (s *AccessReadService) GetMemberMCPAccess(ctx context.Context, principal Principal, input GetMemberMCPAccessInput) (GetMemberMCPAccessOutput, error) {
+	if !s.valid() {
+		return GetMemberMCPAccessOutput{}, ErrUnavailable
+	}
+	memberID, err := s.references.Decode(input.MemberReference, principal, subjectKindAccessMember, s.now())
+	if err != nil {
+		return GetMemberMCPAccessOutput{}, ErrAccessReferenceNotFound
+	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return GetMemberMCPAccessOutput{}, err
+	}
+	isMember, err := organizationsrepo.New(s.db).HasActiveOrganizationUser(ctx, organizationsrepo.HasActiveOrganizationUserParams{
+		UserID: memberID, OrganizationID: principal.OrganizationID,
+	})
+	if err != nil {
+		return GetMemberMCPAccessOutput{}, fmt.Errorf("check platform mcp access member: %w", err)
+	}
+	if !isMember {
+		return GetMemberMCPAccessOutput{}, ErrAccessReferenceNotFound
+	}
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, principal.OrganizationID, memberID)
+	if err != nil {
+		return GetMemberMCPAccessOutput{}, fmt.Errorf("resolve platform mcp access member principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, s.db, principal.OrganizationID, principals)
+	if err != nil {
+		return GetMemberMCPAccessOutput{}, fmt.Errorf("load platform mcp access member grants: %w", err)
+	}
+	//nolint:exhaustruct // Optional inventory filters intentionally stay unset.
+	rows, err := platformrepo.New(s.db).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: principal.OrganizationID, SkipAuthorizationFilter: true, LimitValue: maxMemberMCPAccessServers + 1,
+	})
+	if err != nil {
+		return GetMemberMCPAccessOutput{}, fmt.Errorf("list platform mcp access inventory: %w", err)
+	}
+	truncated := len(rows) > maxMemberMCPAccessServers
+	if truncated {
+		rows = rows[:maxMemberMCPAccessServers]
+	}
+	output := GetMemberMCPAccessOutput{Servers: make([]MemberMCPAccessRow, 0, len(rows)), Truncated: truncated}
+	for _, row := range rows {
+		name := conv.Default(row.McpName.String, row.McpSlug.String)
+		if name == "" {
+			name = row.McpServerID.String()
+		}
+		effective, err := access.EvaluateEffectiveMCPAccess(grants, row.McpServerID.String(), row.ProjectID.String())
+		if err != nil {
+			return GetMemberMCPAccessOutput{}, fmt.Errorf("evaluate member access to MCP %q: %w", name, err)
+		}
+		//nolint:exhaustruct // Access mode helpers only consume endpoint-kind fields.
+		item := platformrepo.GetPlatformMCPInventoryItemRow{
+			Visibility: row.Visibility, RemoteMcpServerID: row.RemoteMcpServerID, TunneledMcpServerID: row.TunneledMcpServerID,
+			ToolsetID: row.ToolsetID, UnproxiedMcpServerID: row.UnproxiedMcpServerID,
+		}
+		mode := accessAuthorizationMode(item)
+		canConnect, toolAccess, connectionAccess := effective.CanConnect, effective.ToolAccess, effective.ToolAccess+"_tools"
+		switch mode {
+		case "public_bypass":
+			canConnect, toolAccess, connectionAccess = true, "all", "public"
+		case "disabled":
+			canConnect, toolAccess, connectionAccess = false, "none", "disabled"
+		case "not_served":
+			canConnect, toolAccess, connectionAccess = false, "none", "not_served"
+		case "rbac":
+			if !canConnect {
+				toolAccess, connectionAccess = "none", "none"
+			}
+		}
+		output.Servers = append(output.Servers, MemberMCPAccessRow{
+			ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName, MCPID: row.McpServerID.String(), MCPName: name,
+			Backend: accessBackend(item), Visibility: row.Visibility, AuthorizationMode: mode, ConnectionAccess: connectionAccess,
+			CanConnect: canConnect, ToolAccess: toolAccess, CanView: effective.CanView, CanManage: effective.CanManage,
+		})
+	}
+	sort.Slice(output.Servers, func(i, j int) bool {
+		left, right := output.Servers[i], output.Servers[j]
+		if left.ProjectName != right.ProjectName {
+			return left.ProjectName < right.ProjectName
+		}
+		if left.MCPName != right.MCPName {
+			return left.MCPName < right.MCPName
+		}
+		return left.MCPID < right.MCPID
+	})
 	return output, nil
 }
 

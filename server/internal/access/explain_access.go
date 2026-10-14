@@ -58,6 +58,41 @@ var explainedAccessLevels = []struct {
 	{level: audienceLevelManage, scope: authz.ScopeMCPWrite},
 }
 
+// EffectiveMCPAccess is the compact form of the same use, view, and manage
+// decisions returned by ExplainResourceAccess. It omits the rule narrative so
+// callers can summarize many servers without exposing principals or selectors.
+type EffectiveMCPAccess struct {
+	CanConnect bool
+	ToolAccess string
+	CanView    bool
+	CanManage  bool
+}
+
+// EvaluateEffectiveMCPAccess evaluates one member's grants with the same checks
+// and tool-narrowing rules as the dashboard access explanation.
+func EvaluateEffectiveMCPAccess(grants []authz.Grant, resourceID, projectID string) (EffectiveMCPAccess, error) {
+	describe := explainedRuleDescriber{resourceID: resourceID, projectID: projectID, names: nil, sources: nil}
+	var result EffectiveMCPAccess
+	for _, level := range explainedAccessLevels {
+		explained, err := explainAccessLevel(grants, level.level, authz.MCPCheck(level.scope, resourceID, projectID), describe)
+		if err != nil {
+			return EffectiveMCPAccess{}, err
+		}
+		switch level.level {
+		case audienceLevelUse:
+			result.CanConnect = explained.Allowed
+			if explained.ToolAccess != nil {
+				result.ToolAccess = *explained.ToolAccess
+			}
+		case audienceLevelView:
+			result.CanView = explained.Allowed
+		case audienceLevelManage:
+			result.CanManage = explained.Allowed
+		}
+	}
+	return result, nil
+}
+
 // Deciding rules first: what proves or takes away the access, then what only
 // narrows it, then what lost.
 var explainedEffectOrder = []string{

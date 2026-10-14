@@ -137,6 +137,71 @@ func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {
 	require.Equal(t, []string{"list_tasks"}, output.Roles[0].AllowedKnownTools)
 }
 
+func TestGetMemberMCPAccessEvaluatesLiveRoleGrantsAcrossInventory(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_access")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: principal.OrganizationID, SkipAuthorizationFilter: true, ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	target := rows[0]
+
+	memberID := "member-access-table"
+	seedAccessMember(t, ctx, conn, principal.OrganizationID, memberID, "member-access@example.test")
+	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "table-readers", "Table readers")
+	_, err = accessrepo.New(conn).UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID: principal.OrganizationID, WorkosUserID: "workos-" + memberID, UserID: conv.ToPGText(memberID),
+		WorkosMembershipID: conv.ToPGText("membership-" + memberID), WorkosUpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID: conv.ToPGTextEmpty(""), WorkosRoleSlug: "table-readers",
+	})
+	require.NoError(t, err)
+
+	connect := authz.NewSelector(authz.ScopeMCPConnect, target.McpServerID.String())
+	connect[authz.SelectorKeyTool] = "list_tasks"
+	connectJSON, err := connect.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: role, Scope: string(authz.ScopeMCPConnect), Selectors: connectJSON,
+	})
+	require.NoError(t, err)
+	viewJSON, err := authz.NewSelector(authz.ScopeMCPRead, target.McpServerID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: role, Scope: string(authz.ScopeMCPRead), Selectors: viewJSON,
+	})
+	require.NoError(t, err)
+
+	reference, err := service.references.Encode(principal, subjectKindAccessMember, memberID, service.now())
+	require.NoError(t, err)
+	output, err := service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: reference})
+	require.NoError(t, err)
+	require.False(t, output.Truncated)
+	var actual *MemberMCPAccessRow
+	for i := range output.Servers {
+		if output.Servers[i].MCPID == target.McpServerID.String() {
+			actual = &output.Servers[i]
+		}
+	}
+	require.NotNil(t, actual)
+	require.Equal(t, project.ID.String(), actual.ProjectID)
+	require.Equal(t, "rbac", actual.AuthorizationMode)
+	require.Equal(t, "some_tools", actual.ConnectionAccess)
+	require.True(t, actual.CanConnect)
+	require.Equal(t, "some", actual.ToolAccess)
+	require.True(t, actual.CanView)
+	require.False(t, actual.CanManage)
+
+	_, err = service.GetMemberMCPAccess(ctx, principal, GetMemberMCPAccessInput{MemberReference: "not-a-reference"})
+	require.ErrorIs(t, err, ErrAccessReferenceNotFound)
+}
+
 func seedAccessMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, email string) {
 	t.Helper()
 	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{ID: userID, Email: email, DisplayName: userID, PhotoUrl: pgtype.Text{}, Admin: false})
