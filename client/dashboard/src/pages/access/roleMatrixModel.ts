@@ -507,6 +507,46 @@ const PLATFORM_AREAS: {
   },
 ];
 
+/**
+ * Names for the single permissions listed after the areas, in the same
+ * name-plus-summary shape as the area rows. Unknown ones fall back to the
+ * server's description.
+ */
+const EXTRA_COPY: Record<string, { label: string; description: string }> = {
+  "org:device_agent_sync": {
+    label: "Device agent sync",
+    description: "Agents fetch the plugins assigned to them",
+  },
+  "org:hooks_ingest": {
+    label: "Hook events",
+    description: "Agents send AI-tool hook events and telemetry",
+  },
+  "plugin:write": {
+    label: "Plugins",
+    description: "Edit and publish plugins in a project",
+  },
+  "agent:authorize": {
+    label: "Agent credentials",
+    description: "Authorize agents and manage their credentials",
+  },
+  "agent:transfer": {
+    label: "Agent ownership",
+    description: "Hand an agent to another owner",
+  },
+};
+
+export function extraCopy(scope: ScopeDefinition): {
+  label: string;
+  description: string;
+} {
+  return (
+    EXTRA_COPY[scope.slug] ?? {
+      label: scope.description ?? scope.slug,
+      description: "",
+    }
+  );
+}
+
 const VIEW_ACTIONS = new Set(["read"]);
 const MANAGE_ACTIONS = new Set(["write", "admin"]);
 
@@ -613,14 +653,14 @@ export function setPlatformBlocked(
   return next;
 }
 
-/** Take back every View and Manage grant and block; extras stay. */
+/** Take back every platform grant and block, extras included. */
 export function clearPlatform(
   grants: Record<string, RoleGrant>,
   areas: PlatformArea[],
 ): Record<string, RoleGrant> {
   let next = grants;
   for (const area of areas) {
-    for (const def of [area.view, area.manage]) {
+    for (const def of [area.view, area.manage, ...area.extras]) {
       if (def) next = withGrant(next, def.slug as Scope, undefined);
     }
   }

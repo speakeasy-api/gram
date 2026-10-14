@@ -298,7 +298,7 @@ describe("clearing a table", () => {
     ]);
   });
 
-  it("empties the platform grid and keeps extras", () => {
+  it("empties the platform grid, extras included", () => {
     const grants = load([
       { scope: "project:read" },
       { scope: "org:blocked_read" },
@@ -307,6 +307,6 @@ describe("clearing a table", () => {
     ]);
     expect(
       save(clearPlatform(grants, platformAreas(scopes))).map((g) => g.scope),
-    ).toEqual(["org:hooks_ingest", "mcp:connect"]);
+    ).toEqual(["mcp:connect"]);
   });
 });

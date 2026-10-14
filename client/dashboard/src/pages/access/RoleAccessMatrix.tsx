@@ -1,10 +1,15 @@
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Checkbox } from "@/components/ui/Checkbox";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -14,8 +19,8 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Eraser,
   Info,
+  RotateCcw,
   X,
 } from "lucide-react";
 import { useMemo, useState, type JSX, type ReactNode } from "react";
@@ -57,6 +62,7 @@ import {
   splitMcpToolLimit,
   clearMcp,
   clearPlatform,
+  extraCopy,
 } from "./roleMatrixModel";
 import { ToolAccessSheet, type ToolAccessTarget } from "./ToolAccessSheet";
 import type { RoleGrant } from "./types";
@@ -64,7 +70,7 @@ import { isProjectScopedResourceType } from "./types";
 import type { OrgMcpServers } from "./useOrgMcpServers";
 
 type Grants = Record<string, RoleGrant>;
-type ProjectRef = { id: string; name: string };
+type ProjectRef = { id: string; name: string; slug?: string };
 
 /** Where each MCP level is stored in the form's grants. */
 const MCP_SCOPE_KEYS: Record<Level, string> = {
@@ -109,29 +115,41 @@ export function RoleAccessMatrix({
   onRemoveRule: (scope: Scope, ruleIndex: number) => void;
 }): JSX.Element {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <Legend />
-      {loading ? (
-        <MatrixSkeleton />
-      ) : (
-        <>
-          <McpMatrix
-            grants={grants}
-            onChange={onChange}
-            projects={projects}
-            inventory={inventory}
-          />
-          <PlatformMatrix
-            grants={grants}
-            onChange={onChange}
-            scopes={scopes}
-            projects={projects}
-            markAgentIneligible={markAgentIneligible}
-            onEditRule={onEditRule}
-            onRemoveRule={onRemoveRule}
-          />
-        </>
-      )}
+      <Tabs defaultValue="mcp" className="border-border gap-0 border">
+        <PageTabsList className="bg-muted/40 border-border w-full border-b px-4">
+          <PageTabsTrigger value="mcp">MCP servers</PageTabsTrigger>
+          <PageTabsTrigger value="platform">Platform access</PageTabsTrigger>
+        </PageTabsList>
+        <TabsContent value="mcp" className="bg-card mt-0">
+          {loading ? (
+            <MatrixSkeleton />
+          ) : (
+            <McpMatrix
+              grants={grants}
+              onChange={onChange}
+              projects={projects}
+              inventory={inventory}
+            />
+          )}
+        </TabsContent>
+        <TabsContent value="platform" className="bg-card mt-0">
+          {loading ? (
+            <MatrixSkeleton />
+          ) : (
+            <PlatformMatrix
+              grants={grants}
+              onChange={onChange}
+              scopes={scopes}
+              projects={projects}
+              markAgentIneligible={markAgentIneligible}
+              onEditRule={onEditRule}
+              onRemoveRule={onRemoveRule}
+            />
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -151,15 +169,15 @@ const CELL_BASE =
 
 const CELL_STYLE: Record<CellState, string> = {
   // Emerald rather than the design system's olive success green, which reads
-  // as disabled at this size.
-  on: "bg-emerald-800 border-emerald-800 text-white dark:bg-emerald-600 dark:border-emerald-600",
-  inherited: "border-foreground border-dashed text-foreground bg-background",
-  blocked: "border-destructive text-destructive bg-background",
+  // as disabled at this size. Outline only, so a full grid stays calm.
+  on: "border-emerald-700 text-emerald-700 bg-card dark:border-emerald-500 dark:text-emerald-500",
+  inherited: "border-foreground border-dashed text-foreground bg-card",
+  blocked: "border-destructive text-destructive bg-card",
   "inherited-blocked":
-    "border-destructive/40 border-dashed text-destructive/70 bg-background",
+    "border-destructive/40 border-dashed text-destructive/70 bg-card",
   // The Blocked column itself, once the whole row is blocked.
   "row-blocked": "bg-destructive border-destructive text-white",
-  off: "border-border hover:border-foreground/40 bg-background",
+  off: "border-border hover:border-foreground/40 bg-card",
 };
 
 function CellGlyph({ state }: { state: CellState }): JSX.Element | null {
@@ -296,19 +314,22 @@ function MatrixTable({
   title,
   columns,
   trailing,
-  onClear,
+  onReset,
+  hideTitle = false,
   children,
 }: {
   title: string;
+  /** The tab above already names the table; keep the name for screen readers. */
+  hideTitle?: boolean;
   /** One per level slot; null leaves the slot empty. */
   columns: ({ label: string; hint: string } | null)[];
   trailing: string;
   /** Empties every cell in the table; disabled when there is nothing. */
-  onClear?: () => void;
+  onReset?: () => void;
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div className="border-border overflow-x-auto border">
+    <div className="bg-card overflow-x-auto">
       <table className="w-full min-w-[44rem] table-fixed border-collapse text-sm">
         <colgroup>
           {/* Proportional, so no column soaks up the spare width: names
@@ -322,7 +343,7 @@ function MatrixTable({
         <thead>
           <tr className="border-border border-b">
             <th scope="col" className={cn(TH, "pl-4 text-left")}>
-              {title}
+              <span className={cn(hideTitle && "sr-only")}>{title}</span>
             </th>
             {columns.map((column, index) =>
               column ? (
@@ -348,14 +369,14 @@ function MatrixTable({
                 <Button
                   variant="secondary"
                   size="xs"
-                  onClick={onClear}
-                  disabled={!onClear}
+                  onClick={onReset}
+                  disabled={!onReset}
                   className="bg-background normal-case"
                 >
                   <Button.LeftIcon>
-                    <Eraser className="size-3.5" />
+                    <RotateCcw className="size-3.5" />
                   </Button.LeftIcon>
-                  <Button.Text>Clear table</Button.Text>
+                  <Button.Text>Reset</Button.Text>
                 </Button>
               </span>
             </th>
@@ -371,7 +392,6 @@ function MatrixSkeleton(): JSX.Element {
   return (
     <Skeleton>
       <div className="h-64 w-full" />
-      <div className="mt-6 h-48 w-full" />
     </Skeleton>
   );
 }
@@ -429,8 +449,12 @@ function McpMatrix({
      */
     limit: ToolLimit;
   } | null>(null);
-  // Projects start collapsed; a search opens them all.
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  // The default project starts open and the rest collapsed; a search opens
+  // them all.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(
+    () =>
+      new Set(projects.filter((p) => p.slug === "default").map((p) => p.id)),
+  );
 
   const serverIndex = useMemo(
     () => indexServers(inventory.groups),
@@ -680,18 +704,20 @@ function McpMatrix({
   const sheetLimit = sheet?.limit ?? null;
 
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col">
       {serverCount > SEARCH_THRESHOLD && (
-        <SearchBar
-          value={query}
-          onChange={setQuery}
-          placeholder="Search servers"
-          className="w-full sm:w-64"
-        />
+        <div className="border-border border-b px-4 py-3">
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            placeholder="Search servers"
+            className="w-full sm:w-64"
+          />
+        </div>
       )}
 
       {inventory.isError && (
-        <Alert variant="error" alignTop className="text-sm">
+        <Alert variant="error" alignTop className="m-4 text-sm">
           <span className="flex flex-wrap items-center gap-2">
             Could not load this organization&rsquo;s MCP servers.
             <Button variant="tertiary" size="xs" onClick={inventory.refetch}>
@@ -703,6 +729,7 @@ function McpMatrix({
 
       <MatrixTable
         title="MCP servers"
+        hideTitle
         columns={[
           {
             label: "Connect",
@@ -722,7 +749,7 @@ function McpMatrix({
           },
         ]}
         trailing="Tools"
-        onClear={
+        onReset={
           LEVELS.some((level) => grants[MCP_SCOPE_KEYS[level]])
             ? () => onChange(clearMcp)
             : undefined
@@ -940,7 +967,7 @@ function OtherMcpRules({
   onRemove: (rule: OtherMcpRule) => void;
 }): JSX.Element {
   return (
-    <div className="border-border w-full border">
+    <div className="border-border w-full border-t">
       <div className="border-border border-b px-4 py-3">
         <div className="text-eyebrow text-muted-foreground">Other rules</div>
         <Text muted small>
@@ -1034,7 +1061,7 @@ function PlatformMatrix({
     markAgentIneligible && defs.some((d) => d?.agentEligible === false);
 
   return (
-    <section className="flex flex-col gap-3">
+    <section className="flex flex-col">
       <MatrixTable
         title="Platform feature"
         columns={[
@@ -1050,9 +1077,11 @@ function PlatformMatrix({
           null,
         ]}
         trailing="Applies to"
-        onClear={
+        onReset={
           areas.some((area) =>
-            [area.view, area.manage].some((def) => def && grants[def.slug]),
+            [area.view, area.manage, ...area.extras].some(
+              (def) => def && grants[def.slug],
+            ),
           )
             ? () => onChange((prev) => clearPlatform(prev, areas))
             : undefined
@@ -1145,65 +1174,50 @@ function PlatformMatrix({
               </tr>
             );
           })}
-      </MatrixTable>
-
-      {extras.length > 0 && (
-        <div className="border-border w-full border">
-          <div className="text-eyebrow text-muted-foreground border-border border-b px-4 py-3">
-            Also allow
-          </div>
-          <ul className="divide-border divide-y">
-            {extras.map(({ area, scope }) => {
-              const checked = platformAllows(grants, scope.slug);
-              const id = `extra-${scope.slug}`;
-              return (
-                <li
-                  key={scope.slug}
-                  className="flex items-start gap-3 px-4 py-3"
-                >
-                  <Checkbox
-                    id={id}
-                    checked={checked}
-                    onCheckedChange={(next) =>
-                      onChange((prev) =>
-                        setPlatformAllow(
-                          prev,
-                          scope.slug as Scope,
-                          next === true,
-                        ),
-                      )
-                    }
-                    className="mt-0.5"
-                  />
-                  <label htmlFor={id} className="min-w-0 flex-1 text-sm">
-                    <span className="flex flex-wrap items-center gap-2">
-                      {scope.description}
-                      {ineligible([scope]) && (
-                        <Badge variant="neutral" size="sm">
-                          Not available to agents
-                        </Badge>
-                      )}
-                    </span>
-                    <span className="text-muted-foreground text-xs">
-                      {area.label}
-                    </span>
-                  </label>
-                  {checked && (
-                    <AppliesTo
-                      grants={grants}
-                      defs={[scope]}
-                      resourceType={area.resourceType}
-                      projects={projects}
-                      onEditRule={onEditRule}
-                      onRemoveRule={onRemoveRule}
-                    />
+        {extras.map(({ area, scope }) => {
+          const checked = platformAllows(grants, scope.slug);
+          const copy = extraCopy(scope);
+          return (
+            <tr key={scope.slug}>
+              <th scope="row" className="py-2 pr-2 pl-4 text-left font-normal">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>{copy.label}</span>
+                  {ineligible([scope]) && (
+                    <Badge variant="neutral" size="sm">
+                      Not available to agents
+                    </Badge>
                   )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+                </div>
+                <div className="text-muted-foreground truncate text-xs">
+                  {copy.description}
+                </div>
+              </th>
+              <td className={TD}>
+                <Cell
+                  state={checked ? "on" : "off"}
+                  label={copy.label}
+                  onToggle={() =>
+                    onChange((prev) =>
+                      setPlatformAllow(prev, scope.slug as Scope, !checked),
+                    )
+                  }
+                />
+              </td>
+              <td colSpan={3} aria-hidden="true" />
+              <td className="py-2 pr-4 pl-2 text-left">
+                <AppliesTo
+                  grants={grants}
+                  defs={[scope]}
+                  resourceType={area.resourceType}
+                  projects={projects}
+                  onEditRule={onEditRule}
+                  onRemoveRule={onRemoveRule}
+                />
+              </td>
+            </tr>
+          );
+        })}
+      </MatrixTable>
     </section>
   );
 }

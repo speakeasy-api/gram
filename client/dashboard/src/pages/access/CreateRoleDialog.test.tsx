@@ -29,7 +29,10 @@ vi.mock("@/contexts/Telemetry", () => ({
   }),
 }));
 vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ projects: [], scimEnabled: mocks.scimEnabled }),
+  useOrganization: () => ({
+    projects: [{ id: "project-a", name: "Default", slug: "default" }],
+    scimEnabled: mocks.scimEnabled,
+  }),
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
@@ -139,6 +142,10 @@ function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
     </MemoryRouter>,
   );
 }
+// Radix tabs switch on mouse down, not click.
+function openPlatformTab() {
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "Platform access" }));
+}
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
@@ -167,6 +174,7 @@ describe("role assignment confirmation", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Reader" },
     });
+    openPlatformTab();
     fireEvent.click(screen.getByRole("button", { name: "View organization" }));
 
     const confirmation = confirmAssignment();
@@ -180,6 +188,7 @@ describe("role assignment confirmation", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Reader" },
     });
+    openPlatformTab();
     fireEvent.click(screen.getByRole("button", { name: "View projects" }));
 
     const confirmation = confirmAssignment();
@@ -236,6 +245,7 @@ describe("agent management rollout", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Test role" },
     });
+    openPlatformTab();
     fireEvent.click(screen.getByRole("button", { name: "View organization" }));
     fireEvent.click(screen.getByRole("button", { name: "Create Role" }));
     expect(mocks.create).toHaveBeenCalledOnce();
@@ -283,7 +293,6 @@ describe("the access grid", () => {
   /** Projects start collapsed; open the one the servers sit in. */
   function show(editingRole: Parameters<typeof renderEditor>[0]) {
     renderEditor(editingRole);
-    fireEvent.click(screen.getByRole("button", { name: /^Default/ }));
   }
 
   function savedForm() {

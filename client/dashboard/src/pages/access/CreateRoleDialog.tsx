@@ -236,7 +236,12 @@ export function CreateRoleDialog({
   const mcpInventory = useOrgMcpServers(open);
 
   const projectList = useMemo(
-    () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
+    () =>
+      organization.projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+      })),
     [organization.projects],
   );
 
