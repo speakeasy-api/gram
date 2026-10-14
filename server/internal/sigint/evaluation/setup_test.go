@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 
 	"github.com/speakeasy-api/gram/server/internal/classifier/jev"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -83,9 +84,12 @@ func newRecordingClassifier(t *testing.T) (*jev.Classifier, *modelRequests) {
 	return c, requests
 }
 
-func requireGoldenJSON(t *testing.T, name string, actual []byte) {
+func requireGolden(t *testing.T, name string, actual []byte) {
 	t.Helper()
-	expected, err := os.ReadFile(filepath.Join("testdata", name+".golden.json"))
+	fixture, err := os.ReadFile(filepath.Join("testdata", name+".golden.yaml"))
+	require.NoError(t, err)
+	// Parse YAML strictly, then compare with the actual JSON without losing integers.
+	expected, err := yaml.YAMLToJSONStrict(fixture)
 	require.NoError(t, err)
 	decode := func(data []byte) any {
 		t.Helper()

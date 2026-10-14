@@ -80,5 +80,5 @@ func assertConversationModelRequest(t *testing.T, strategy string) {
 	h.blobs = blobs
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Len(t, pub.readings, 3)
-	requireGoldenJSON(t, "requests/"+strategy, requests.snapshot(t))
+	requireGolden(t, "requests/"+strategy, requests.snapshot(t))
 }

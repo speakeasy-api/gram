@@ -52,7 +52,7 @@ func TestInputResolvesFilesystemWriterLocator(t *testing.T) {
 	require.NoError(t, err)
 	encoded, err := json.Marshal(got)
 	require.NoError(t, err)
-	requireGoldenJSON(t, "state/filesystem-content", encoded)
+	requireGolden(t, "state/filesystem-content", encoded)
 
 	for _, uri := range []string{"file:another-project/content.json", "file:" + m.GetProjectId() + "/../content.json", "file:" + m.GetProjectId() + "/%2e%2e/content.json"} {
 		row.ChatMessage.ContentAssetUrl = conv.ToPGText(uri)

@@ -41,7 +41,7 @@ func TestSensorMatchingIsolatesInvalidPredicates(t *testing.T) {
 	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Len(t, pub.readings, 1)
-	requireGoldenJSON(t, "requests/matching-user", requests.snapshot(t))
+	requireGolden(t, "requests/matching-user", requests.snapshot(t))
 }
 
 func TestMatchingExpressionChangesDefinitionNotReadingIdentity(t *testing.T) {
@@ -71,7 +71,7 @@ func TestAssistantSensorMatchesPersistedRole(t *testing.T) {
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Len(t, pub.readings, 1)
 	require.Equal(t, "other", pub.readings[0].GetSensorId())
-	requireGoldenJSON(t, "requests/matching-assistant", requests.snapshot(t))
+	requireGolden(t, "requests/matching-assistant", requests.snapshot(t))
 }
 
 func TestMatchingCancellationAfterDefinitionLoadRetries(t *testing.T) {
@@ -113,7 +113,7 @@ func TestMatchingFailureReasons(t *testing.T) {
 			h, pub := handler(t, m, definitions, c, meters)
 			require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 			require.Len(t, pub.readings, 1)
-			requireGoldenJSON(t, "requests/matching-user", requests.snapshot(t))
+			requireGolden(t, "requests/matching-user", requests.snapshot(t))
 			var data metricdata.ResourceMetrics
 			require.NoError(t, reader.Collect(t.Context(), &data))
 			found := false

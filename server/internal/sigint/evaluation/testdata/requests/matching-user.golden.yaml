@@ -1,0 +1,13 @@
+- model: jev-latest
+  state:
+    role: ROLE_USER
+    content: null
+    parts:
+      - text: Please help with a failed payment
+  questions:
+    "0":
+      type: noul
+      instructions: Evaluate the message
+      criteria:
+        "true": first
+        "false": ""
