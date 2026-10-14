@@ -53,7 +53,8 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 	cred.trustedSessionID = grant.trustedSessionID
 	cred.trustedObtainedAt = grant.trustedObtainedAt
 
-	switch err := c.publish(ctx, logger, req, sel, cred); {
+	slot, err := c.publishSlot(ctx, logger, req, sel, cred)
+	switch {
 	case errors.Is(err, errStale):
 		return none, newOutcome(StagePersistence, ReasonStaleConfiguration, ConfidenceVerified, true), true
 	case err != nil:
@@ -63,10 +64,14 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 		outcome.Submitted = true
 		return none, outcome, true
 	}
+	// The delegation check can't join the publish transaction, so a
+	// credential whose authority changed meanwhile is withdrawn at once.
 	if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
+		c.retire(ctx, logger, req, slot)
 		return none, outcome, true
 	}
 	if outcome := c.stillServes(ctx, logger, req, sel); !outcome.Succeeded() {
+		c.retire(ctx, logger, req, slot)
 		return none, outcome, true
 	}
 	return Token{value: cred.accessToken, expiresAt: cred.expiresAt.Add(-accessExpirySkew)}, success, true

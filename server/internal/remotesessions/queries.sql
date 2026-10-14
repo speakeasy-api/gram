@@ -5117,7 +5117,7 @@ DO UPDATE SET
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,
   updated_at = clock_timestamp()
-RETURNING id;
+RETURNING id, updated_at;
 
 -- name: RetireEMACredential :exec
 -- Soft deletes one credential slot and erases its ciphertext in the same write.
@@ -5481,7 +5481,7 @@ DO UPDATE SET
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,
   updated_at = clock_timestamp()
-RETURNING id;
+RETURNING id, updated_at;
 
 -- name: GetSpeakeasyEMAIssuerVersion :one
 -- Used through the publishing transaction, never via a second pool connection.

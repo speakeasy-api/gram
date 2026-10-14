@@ -548,3 +548,39 @@ func TestPublish_SerializesWithUnlink(t *testing.T) {
 	require.ErrorIs(t, <-published, errStale, "a publish that waited on an unlink sees the unlinked binding")
 	require.Empty(t, f.credentials(t), "no credential is stored for an unlinked binding")
 }
+
+// revokedAfterPublishSource wraps a source whose authority holds for the
+// pre-exchange check and fails every check after it.
+type revokedAfterPublishSource struct {
+	tokenSource
+	checks *int
+}
+
+func (s revokedAfterPublishSource) checkReuse(ctx context.Context, req Request, sel selection) Outcome {
+	*s.checks++
+	if *s.checks > 1 {
+		return newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
+	}
+	return s.tokenSource.checkReuse(ctx, req, sel)
+}
+
+func TestProviders_CredentialIsRetiredWhenItsAuthorityFailsAfterPublish(t *testing.T) {
+	t.Parallel()
+	f := newDevIDPFixture(t, devIDPOptions{})
+	checks := 0
+	external := f.chainer.sources[remotesessions.EMAProviderExternal]
+	f.chainer.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
+		return revokedAfterPublishSource{tokenSource: external(p), checks: &checks}
+	}
+
+	token, outcome := f.chainer.Acquire(t.Context(), f.req)
+	require.Empty(t, token.Value())
+	require.Equal(t, ReasonReauthenticationRequired, outcome.Reason)
+	require.Equal(t, 2, checks, "the delegation is rechecked after the publish")
+
+	rows, err := repo.New(f.db).ListEMACredentialsFixture(t.Context(), uuid.NullUUID{UUID: f.req.ProjectID, Valid: true})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.True(t, rows[0].Deleted, "the credential published under revoked authority is retired")
+	require.False(t, rows[0].AccessTokenEncrypted.Valid, "its ciphertext is erased")
+}

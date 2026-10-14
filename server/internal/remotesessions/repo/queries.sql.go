@@ -14892,7 +14892,7 @@ DO UPDATE SET
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,
   updated_at = clock_timestamp()
-RETURNING id
+RETURNING id, updated_at
 `
 
 type UpsertEMACredentialParams struct {
@@ -14914,13 +14914,18 @@ type UpsertEMACredentialParams struct {
 	TrustedCredentialObtainedAt    pgtype.Timestamptz
 }
 
+type UpsertEMACredentialRow struct {
+	ID        uuid.UUID
+	UpdatedAt pgtype.Timestamptz
+}
+
 // Publishes a chained credential only while the binding generation, the
 // human's latest sign-in, and the delegation and endpoint authority it was
 // acquired under still hold, so a sign-in, revocation, unlink, rebind or
 // deletion during the exchange cannot install a usable stale credential. A
 // routine refresh of the delegation does not invalidate the result. No row
 // means the result must be discarded.
-func (q *Queries) UpsertEMACredential(ctx context.Context, arg UpsertEMACredentialParams) (uuid.UUID, error) {
+func (q *Queries) UpsertEMACredential(ctx context.Context, arg UpsertEMACredentialParams) (UpsertEMACredentialRow, error) {
 	row := q.db.QueryRow(ctx, upsertEMACredential,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -14939,9 +14944,9 @@ func (q *Queries) UpsertEMACredential(ctx context.Context, arg UpsertEMACredenti
 		arg.DownstreamRefreshTokenObserved,
 		arg.TrustedCredentialObtainedAt,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i UpsertEMACredentialRow
+	err := row.Scan(&i.ID, &i.UpdatedAt)
+	return i, err
 }
 
 const upsertRemoteSession = `-- name: UpsertRemoteSession :one
@@ -15131,7 +15136,7 @@ DO UPDATE SET
   downstream_refresh_token_observed = EXCLUDED.downstream_refresh_token_observed,
   last_used_at = EXCLUDED.last_used_at,
   updated_at = clock_timestamp()
-RETURNING id
+RETURNING id, updated_at
 `
 
 type UpsertSpeakeasyEMACredentialParams struct {
@@ -15156,10 +15161,15 @@ type UpsertSpeakeasyEMACredentialParams struct {
 	DownstreamRefreshTokenObserved bool
 }
 
+type UpsertSpeakeasyEMACredentialRow struct {
+	ID        uuid.UUID
+	UpdatedAt pgtype.Timestamptz
+}
+
 // The caller locks the binding, sign-in and issuer and checks the exact
 // grant before this statement. Client changes during redemption still fence
 // publication. Each authenticated MCP grant keeps its own slot.
-func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSpeakeasyEMACredentialParams) (uuid.UUID, error) {
+func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSpeakeasyEMACredentialParams) (UpsertSpeakeasyEMACredentialRow, error) {
 	row := q.db.QueryRow(ctx, upsertSpeakeasyEMACredential,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -15181,9 +15191,9 @@ func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSp
 		arg.AccessExpiresAt,
 		arg.DownstreamRefreshTokenObserved,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i UpsertSpeakeasyEMACredentialRow
+	err := row.Scan(&i.ID, &i.UpdatedAt)
+	return i, err
 }
 
 const upsertTrustedDelegationCredential = `-- name: UpsertTrustedDelegationCredential :one

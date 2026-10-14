@@ -71,44 +71,69 @@ func (c *Chainer) cachedToken(ctx context.Context, logger *slog.Logger, req Requ
 	return Token{value: value, expiresAt: row.AccessExpiresAt.Time.Add(-accessExpirySkew)}, true
 }
 
+// publishedSlot is the credential row a publish wrote, so a failed recheck
+// can retire exactly that version.
+type publishedSlot struct {
+	id        uuid.UUID
+	updatedAt pgtype.Timestamptz
+}
+
+// retire withdraws a just-published credential whose authority failed its
+// post-publish recheck; a newer publish into the slot is left alone.
+func (c *Chainer) retire(ctx context.Context, logger *slog.Logger, req Request, slot publishedSlot) {
+	if err := repo.New(c.db).RetireEMACredential(context.WithoutCancel(ctx), repo.RetireEMACredentialParams{
+		ID: slot.id, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: slot.updatedAt,
+	}); err != nil {
+		logger.WarnContext(ctx, "retire identity chaining credential after a failed recheck", attr.SlogError(err))
+	}
+}
+
 // publish stores the credential only if the provenance it was acquired under
 // still holds, including its provider's place in the vendor's EMA order and
 // the binding's ready generation; errStale means the result must be
 // discarded. Shared locks keep an order change, unlink or rebind from
 // committing between those checks and the write.
 func (c *Chainer) publish(ctx context.Context, logger *slog.Logger, req Request, sel selection, cred credential) error {
+	_, err := c.publishSlot(ctx, logger, req, sel, cred)
+	return err
+}
+
+// publishSlot is publish, reporting the row it wrote.
+func (c *Chainer) publishSlot(ctx context.Context, logger *slog.Logger, req Request, sel selection, cred credential) (publishedSlot, error) {
+	var none publishedSlot
+	var slot publishedSlot
 	encrypted, err := c.enc.Encrypt([]byte(cred.accessToken))
 	if err != nil {
-		return fmt.Errorf("encrypt chained access token: %w", err)
+		return none, fmt.Errorf("encrypt chained access token: %w", err)
 	}
 	tx, err := c.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin chained credential publish: %w", err)
+		return none, fmt.Errorf("begin chained credential publish: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	q := repo.New(tx)
 	if err := q.LockEMAProvidersShared(ctx, req.OrganizationID); err != nil {
-		return fmt.Errorf("lock ema provider order: %w", err)
+		return none, fmt.Errorf("lock ema provider order: %w", err)
 	}
 	if outcome := c.stillServesWith(ctx, q, logger, req, sel); !outcome.Succeeded() {
 		if outcome.Reason == ReasonStaleConfiguration {
-			return errStale
+			return none, errStale
 		}
-		return fmt.Errorf("check ema provider order: %s", outcome.Reason)
+		return none, fmt.Errorf("check ema provider order: %s", outcome.Reason)
 	}
 	// Preparation locks the binding row before changing it; sharing that
 	// lock here means the publish either sees the change or finishes first.
 	if _, err := q.LockEMABindingForPublish(ctx, repo.LockEMABindingForPublishParams{ID: sel.bindingID, OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, Generation: sel.generation}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return errStale
+			return none, errStale
 		}
-		return fmt.Errorf("lock ema binding: %w", err)
+		return none, fmt.Errorf("lock ema binding: %w", err)
 	}
 	if sel.provider.Kind == remotesessions.EMAProviderSpeakeasy {
 		if err := c.checkSpeakeasyPublish(ctx, tx, req, sel); err != nil {
-			return err
+			return none, err
 		}
-		err = upsertSpeakeasyCredential(ctx, tx, repo.UpsertSpeakeasyEMACredentialParams{
+		slot, err = upsertSpeakeasyCredential(ctx, tx, repo.UpsertSpeakeasyEMACredentialParams{
 			OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, UserSessionIssuerID: req.UserSessionIssuerID,
 			RemoteSessionIssuerID: sel.remoteIssuerID, RemoteSessionClientID: sel.clientID, Resource: sel.resource,
 			SubjectUrn: urn.NewUserSubject(req.UserID).String(), BindingID: sel.bindingID, BindingGeneration: sel.generation,
@@ -118,7 +143,8 @@ func (c *Chainer) publish(ctx context.Context, logger *slog.Logger, req Request,
 			AccessExpiresAt: conv.ToPGTimestamptz(cred.expiresAt), DownstreamRefreshTokenObserved: cred.refreshObserved,
 		})
 	} else {
-		_, err = q.UpsertEMACredential(ctx, repo.UpsertEMACredentialParams{
+		var row repo.UpsertEMACredentialRow
+		row, err = q.UpsertEMACredential(ctx, repo.UpsertEMACredentialParams{
 			OrganizationID:                 req.OrganizationID,
 			ProjectID:                      req.ProjectID,
 			UserSessionIssuerID:            req.UserSessionIssuerID,
@@ -136,17 +162,18 @@ func (c *Chainer) publish(ctx context.Context, logger *slog.Logger, req Request,
 			AccessExpiresAt:                pgtype.Timestamptz{Time: cred.expiresAt, Valid: true, InfinityModifier: pgtype.Finite},
 			DownstreamRefreshTokenObserved: cred.refreshObserved,
 		})
+		slot = publishedSlot{id: row.ID, updatedAt: row.UpdatedAt}
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		return errStale
+		return none, errStale
 	}
 	if err != nil {
-		return fmt.Errorf("publish chained credential: %w", err)
+		return none, fmt.Errorf("publish chained credential: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit chained credential: %w", err)
+		return none, fmt.Errorf("commit chained credential: %w", err)
 	}
-	return nil
+	return slot, nil
 }
 
 // legacySubjectKey allows one live credential per subject regardless of
@@ -156,36 +183,38 @@ const legacySubjectKey = "remote_session_ema_credentials_subject_key"
 // upsertSpeakeasyCredential writes the grant's own slot. While the legacy
 // index exists, another grant's or provider's live row blocks that slot, so it
 // is retired and the write retried, matching the old replace-on-publish.
-func upsertSpeakeasyCredential(ctx context.Context, tx pgx.Tx, params repo.UpsertSpeakeasyEMACredentialParams) error {
+func upsertSpeakeasyCredential(ctx context.Context, tx pgx.Tx, params repo.UpsertSpeakeasyEMACredentialParams) (publishedSlot, error) {
+	var none publishedSlot
 	sp, err := tx.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin Speakeasy credential savepoint: %w", err)
+		return none, fmt.Errorf("begin Speakeasy credential savepoint: %w", err)
 	}
-	_, err = repo.New(sp).UpsertSpeakeasyEMACredential(ctx, params)
+	row, err := repo.New(sp).UpsertSpeakeasyEMACredential(ctx, params)
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation || pgErr.ConstraintName != legacySubjectKey {
 		if err != nil {
-			return errors.Join(err, sp.Rollback(ctx))
+			return none, errors.Join(err, sp.Rollback(ctx))
 		}
 		if err := sp.Commit(ctx); err != nil {
-			return fmt.Errorf("release Speakeasy credential savepoint: %w", err)
+			return none, fmt.Errorf("release Speakeasy credential savepoint: %w", err)
 		}
-		return nil
+		return publishedSlot{id: row.ID, updatedAt: row.UpdatedAt}, nil
 	}
 	if err := sp.Rollback(ctx); err != nil {
-		return fmt.Errorf("roll back Speakeasy credential savepoint: %w", err)
+		return none, fmt.Errorf("roll back Speakeasy credential savepoint: %w", err)
 	}
 	q := repo.New(tx)
 	if err := q.RetireLegacyEMACredentialSlot(ctx, repo.RetireLegacyEMACredentialSlotParams{
 		OrganizationID: params.OrganizationID, ProjectID: params.ProjectID, UserSessionIssuerID: params.UserSessionIssuerID,
 		RemoteSessionClientID: params.RemoteSessionClientID, Resource: params.Resource, SubjectUrn: params.SubjectUrn,
 	}); err != nil {
-		return fmt.Errorf("retire legacy EMA credential slot: %w", err)
+		return none, fmt.Errorf("retire legacy EMA credential slot: %w", err)
 	}
-	if _, err := q.UpsertSpeakeasyEMACredential(ctx, params); err != nil {
-		return fmt.Errorf("publish Speakeasy EMA credential after retiring legacy slot: %w", err)
+	row, err = q.UpsertSpeakeasyEMACredential(ctx, params)
+	if err != nil {
+		return none, fmt.Errorf("publish Speakeasy EMA credential after retiring legacy slot: %w", err)
 	}
-	return nil
+	return publishedSlot{id: row.ID, updatedAt: row.UpdatedAt}, nil
 }
 
 // storedScopes keeps NOT NULL array columns non-NULL for empty scope sets.
