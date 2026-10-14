@@ -32,10 +32,6 @@ rules:
     disable: true
   github-app:
     disable: true
-  obfuscation:
-    disable: true
-  overprovisioned-secrets:
-    disable: true
   self-repository:
     disable: true
   template-injection:
