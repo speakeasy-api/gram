@@ -1,7 +1,6 @@
 package mcp_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -177,20 +176,4 @@ func TestGatewayLiveAnnotationGrantCallsStatefulMember(t *testing.T) {
 	}
 	require.Contains(t, execute(memberSlug+"--read_docs"), "read ok")
 	require.NotContains(t, execute(memberSlug+"--delete_docs"), "delete ok")
-}
-
-// mintGatewayTestSession stores a gateway session with an explicit discovery
-// mode and an optional tool selection bound to members, returning its bearer
-// token.
-func mintGatewayTestSession(t *testing.T, ctx context.Context, ti *testInstance, gatewayID, issuerID uuid.UUID, slug string, mode metamcp.DiscoveryMode, selection *toolfilter.SessionSelection, members map[string]uuid.UUID) string {
-	t.Helper()
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	policy, err := json.Marshal(&toolfilter.SessionPolicy{Resource: "meta_mcp_server:" + gatewayID.String(), Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: &mode}, Members: members})
-	require.NoError(t, err)
-	subject := urn.NewUserSubject(authCtx.UserID)
-	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(issuerID).String(), Issuer: ti.serverURL.JoinPath("mcp", slug).String(), Lifetime: time.Hour})
-	require.NoError(t, err)
-	_, err = usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{UserSessionIssuerID: issuerID, SubjectUrn: subject, Jti: jti, RefreshTokenHash: conv.ToPGText(uuid.NewString()), RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ToolSelection: policy})
-	require.NoError(t, err)
-	return token
 }
