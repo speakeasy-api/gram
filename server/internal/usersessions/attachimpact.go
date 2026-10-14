@@ -18,7 +18,6 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -56,7 +55,7 @@ func (s *Service) GetAttachImpact(ctx context.Context, payload *gen.GetAttachImp
 		CurrentIssuer:              current,
 		CandidateIssuer:            candidate,
 		ReauthorizationRequired:    currentID.Valid && currentID != candidateID,
-		AuthorizationServerChanges: advertisedAuthorizationServer(current) != advertisedAuthorizationServer(candidate),
+		AuthorizationServerChanges: s.advertisedAuthorizationServer(current) != s.advertisedAuthorizationServer(candidate),
 	}, nil
 }
 
@@ -103,7 +102,7 @@ func (s *Service) attachTargetIssuer(ctx context.Context, logger *slog.Logger, p
 		if err != nil {
 			return none, attachTargetLoadError(ctx, logger, err, "toolset")
 		}
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: toolset.ID.String(), Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolset.ID.String(), projectID.String())); err != nil {
 			return none, err
 		}
 		return toolset.UserSessionIssuerID, nil
@@ -153,14 +152,15 @@ func (s *Service) attachImpactIssuer(ctx context.Context, logger *slog.Logger, i
 // advertisedAuthorizationServer names the authorization server an MCP server
 // attached to issuer advertises to clients: none without an issuer, the
 // issuer's shared authorization server when it is served, and otherwise the
-// server's own, which every per-server issuer roots at the same URL.
-func advertisedAuthorizationServer(issuer *types.UserSessionIssuer) string {
+// server's own, announced on the authentication host or the server URL by
+// the issuer's setting.
+func (s *Service) advertisedAuthorizationServer(issuer *types.UserSessionIssuer) string {
 	switch {
 	case issuer == nil:
 		return ""
 	case issuer.IssuerURL != nil:
 		return *issuer.IssuerURL
 	default:
-		return string(authserver.ModeEndpoint)
+		return s.sharedHosts.PerServerOrigin(issuer.UseAuthenticationHost)
 	}
 }
