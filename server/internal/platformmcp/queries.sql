@@ -3912,8 +3912,9 @@ WHERE m.id = @mcp_server_id
 
 -- name: ListPlatformMCPRoleDirectorySources :many
 -- Each live directory role mapping in the organization, with how many active
--- directory users its group or attribute value matches today. Mappings whose
--- group is gone still list, matching nobody.
+-- directory users its group or attribute value matches today, counted by
+-- distinct email as the dashboard counts them. Mappings whose group is gone
+-- still list, matching nobody.
 SELECT
   drm.role_urn::text AS role_urn,
   drm.source_kind,
@@ -3923,17 +3924,18 @@ SELECT
   (
     CASE
       WHEN drm.source_kind = 'group' THEN (
-        SELECT COUNT(DISTINCT du.id)
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
         FROM directory_user_group_memberships AS m
         JOIN directory_users AS du
           ON du.id = m.directory_user_id
+          AND du.organization_id = drm.organization_id
           AND du.deleted IS FALSE
           AND du.workos_deleted IS FALSE
         WHERE m.directory_group_id = dg.id
           AND m.deleted IS FALSE
       )
       ELSE (
-        SELECT COUNT(*)
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
         FROM directory_users AS du
         WHERE du.organization_id = drm.organization_id
           AND du.deleted IS FALSE

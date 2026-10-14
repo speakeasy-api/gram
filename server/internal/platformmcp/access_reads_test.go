@@ -20,12 +20,13 @@ func TestAccessReadOutputsOnlyAllowlistedFields(t *testing.T) {
 		Name: "Operators", Type: "custom", MemberCount: NewSubjectCount(7),
 		MCPAccess: MCPConnectSummary{AllServers: false, ProjectRules: 1, ServerRules: 1, ToolRules: 1, DispositionRules: []string{"read_only"}, BlockedServers: false, BlockedProjectRules: 1, BlockedServerRules: 1, BlockedToolRules: 0, BlockedDispositionRules: []string{}},
 		DirectorySources: []AccessRoleDirectorySource{
-			{Kind: "group", Group: "Data Analytics", AttributeKey: "", AttributeValue: "", MatchedUsers: NewSubjectCount(6)},
-			{Kind: "attribute", Group: "", AttributeKey: "department_name", AttributeValue: "Research", MatchedUsers: NewSubjectCount(2)},
+			{Kind: "group", Group: "Data Analytics", AttributeKey: "", AttributeValue: "", Removed: false, MatchedUsers: NewSubjectCount(6)},
+			{Kind: "attribute", Group: "", AttributeKey: "department_name", AttributeValue: "Research", Removed: false, MatchedUsers: NewSubjectCount(2)},
+			{Kind: "group", Group: "", AttributeKey: "", AttributeValue: "", Removed: true, MatchedUsers: NewSubjectCount(0)},
 		},
 		Reference: "opaque-role", Version: "opaque-version",
 	}}, ExpiresAt: "2026-09-04T12:10:00Z"}
-	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "directory_sources", "kind", "kind", "group", "attribute_key", "attribute_value", "matched_users", "matched_users", "reference", "version", "expires_at"}, decodeKeys(t, roles))
+	require.ElementsMatch(t, []string{"roles", "name", "type", "member_count", "mcp_access", "all_servers", "project_rules", "server_rules", "tool_rules", "disposition_rules", "blocked_servers", "blocked_project_rules", "blocked_server_rules", "blocked_tool_rules", "blocked_disposition_rules", "directory_sources", "kind", "kind", "kind", "group", "attribute_key", "attribute_value", "removed", "matched_users", "matched_users", "matched_users", "reference", "version", "expires_at"}, decodeKeys(t, roles))
 
 	members := ListAccessMembersOutput{
 		Members:      []AccessMember{{MaskedIdentity: "a***@e***", Roles: []string{"Operators"}, Reference: "opaque-member", Version: "opaque-version"}},

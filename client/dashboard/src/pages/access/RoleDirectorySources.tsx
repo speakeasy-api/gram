@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { pluralize } from "@/lib/format";
 import { useOrgRoutes } from "@/routes";
 import { useDirectoryRoleMappings } from "@gram/client/react-query/directoryRoleMappings.js";
 import { useMembers } from "@gram/client/react-query/members.js";
@@ -15,8 +16,9 @@ import {
   roleDirectorySources,
 } from "./directorySourcesForRole";
 
-function userCount(count: number): string {
-  return `${count} ${count === 1 ? "user" : "users"}`;
+/** Undefined means the count is not known. */
+function userCount(count: number | undefined): string {
+  return count === undefined ? "—" : pluralize(count, "user");
 }
 
 const linkClassName =
@@ -65,12 +67,12 @@ export function RoleDirectorySources({
         <SourcesForRole role={role} mappingsHref={mappingsHref} />
       ) : (
         <Text muted small>
-          Once the role is created, map a directory group or attribute value to
-          it on{" "}
+          Once the role is created, you can map a directory group or attribute
+          value to it on{" "}
           <Link to={mappingsHref} className={linkClassName}>
             IDP and SSO
-          </Link>{" "}
-          to give it out.
+          </Link>
+          .
         </Text>
       )}
     </section>
@@ -140,14 +142,18 @@ function SourcesForRole({
       key: "members",
       header: "Members",
       width: "220px",
-      render: (source) =>
-        source.members.length > 0 ? (
-          <MemberFacepile members={source.members} maxFaces={5} />
-        ) : (
-          <Text muted small>
+      // Faces show who has signed in; the count covers everyone the source
+      // matches, so a large group with few signed-in members still reads large.
+      render: (source) => (
+        <div className="flex items-center gap-2">
+          {source.members.length > 0 && (
+            <MemberFacepile members={source.members} maxFaces={4} />
+          )}
+          <Text muted small className="whitespace-nowrap">
             {userCount(source.memberCount)}
           </Text>
-        ),
+        </div>
+      ),
     },
     {
       key: "key",
@@ -169,7 +175,7 @@ function SourcesForRole({
     <InlineEmptyState
       icon="users"
       heading="No directory group or attribute gives out this role"
-      description={`Nobody gets ${role.name} from your directory yet. Map a group or an attribute value to it to give it out.`}
+      description={`No directory group or attribute is mapped to ${role.name} yet. Map one to give it out.`}
       action={
         <Button asChild size="sm" variant="secondary">
           <Link to={mappingsHref}>Map a group</Link>

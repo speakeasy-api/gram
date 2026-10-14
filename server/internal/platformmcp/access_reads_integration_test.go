@@ -221,8 +221,8 @@ func TestListRolesNamesDirectorySourcesAndWithholdsSmallCounts(t *testing.T) {
 	}
 
 	require.Equal(t, []AccessRoleDirectorySource{
-		{Kind: "group", Group: "Data Analytics", AttributeKey: "", AttributeValue: "", MatchedUsers: NewSubjectCount(6)},
-		{Kind: "attribute", Group: "", AttributeKey: "department_name", AttributeValue: "Research", MatchedUsers: NewSubjectCount(2)},
+		{Kind: "group", Group: "Data Analytics", AttributeKey: "", AttributeValue: "", Removed: false, MatchedUsers: NewSubjectCount(6)},
+		{Kind: "attribute", Group: "", AttributeKey: "department_name", AttributeValue: "Research", Removed: false, MatchedUsers: NewSubjectCount(2)},
 	}, byName["Analysts"].DirectorySources)
 	require.True(t, byName["Analysts"].DirectorySources[1].MatchedUsers.Suppressed())
 

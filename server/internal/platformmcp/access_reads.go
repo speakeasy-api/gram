@@ -81,6 +81,7 @@ type AccessRoleDirectorySource struct {
 	Group          string       `json:"group,omitempty" jsonschema:"directory group name, for a group source"`
 	AttributeKey   string       `json:"attribute_key,omitempty" jsonschema:"directory attribute, for an attribute source"`
 	AttributeValue string       `json:"attribute_value,omitempty" jsonschema:"directory attribute value, for an attribute source"`
+	Removed        bool         `json:"removed,omitempty" jsonschema:"true when the mapped group was deleted from the directory; it matches nobody and has no name"`
 	MatchedUsers   SubjectCount `json:"matched_users" jsonschema:"directory users the source matches today, signed in or not; small counts are withheld"`
 }
 
@@ -254,12 +255,14 @@ func accessRoleDirectorySource(row platformrepo.ListPlatformMCPRoleDirectorySour
 		Group:          "",
 		AttributeKey:   "",
 		AttributeValue: "",
+		Removed:        false,
 		MatchedUsers:   NewSubjectCount(row.MemberCount),
 	}
 	if row.SourceKind == "group" {
 		// The mapping outlives a group deleted from the directory; it then
 		// matches nobody and has no name to show.
-		source.Group = conv.Default(conv.FromPGTextOrEmpty[string](row.DirectoryGroupName), "Removed group")
+		source.Group = conv.FromPGTextOrEmpty[string](row.DirectoryGroupName)
+		source.Removed = source.Group == ""
 		return source
 	}
 	source.AttributeKey = conv.FromPGTextOrEmpty[string](row.AttributeKey)

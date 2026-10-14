@@ -80,7 +80,7 @@ describe("roleDirectorySources", () => {
     expect(sources[1]?.members).toEqual([]);
   });
 
-  it("falls back to the mapping's group name when the group is gone", () => {
+  it("marks a deleted group removed, even if a live group reuses its name", () => {
     const sources = roleDirectorySources(
       {
         ...data,
@@ -94,9 +94,59 @@ describe("roleDirectorySources", () => {
           }),
         ],
       },
+      [member({ id: "ava", name: "Ava", groups: ["Old Team"] })],
+      analyst,
+    );
+    expect(sources).toMatchObject([
+      { label: "Old Team (removed)", memberCount: 0, members: [] },
+    ]);
+  });
+
+  it("counts nobody for a value its listed key no longer holds", () => {
+    const sources = roleDirectorySources(
+      {
+        ...data,
+        mappings: [
+          mapping({
+            id: "m-gone",
+            sourceKind: "attribute",
+            attributeKey: "department",
+            attributeValue: "Legal",
+          }),
+        ],
+      },
       [],
       analyst,
     );
-    expect(sources).toMatchObject([{ label: "Old Team", memberCount: 0 }]);
+    expect(sources).toEqual([
+      expect.objectContaining({
+        label: "department = Legal",
+        memberCount: 0,
+      }),
+    ]);
+  });
+
+  it("leaves the count unknown when the attribute key is not listed", () => {
+    const sources = roleDirectorySources(
+      {
+        ...data,
+        mappings: [
+          mapping({
+            id: "m-unlisted",
+            sourceKind: "attribute",
+            attributeKey: "employee_id",
+            attributeValue: "1234",
+          }),
+        ],
+      },
+      [],
+      analyst,
+    );
+    expect(sources).toEqual([
+      expect.objectContaining({
+        label: "employee_id = 1234",
+        memberCount: undefined,
+      }),
+    ]);
   });
 });

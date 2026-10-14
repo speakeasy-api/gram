@@ -7,8 +7,11 @@ export type RoleDirectorySource = {
   key: string;
   kind: "group" | "attribute";
   label: string;
-  /** Directory users the source matches, signed in or not. */
-  memberCount: number;
+  /**
+   * Directory users the source matches, signed in or not. Undefined when the
+   * count is not known (see attributeMemberCount).
+   */
+  memberCount: number | undefined;
   /** Speakeasy members in the group. Attributes are not matched to members. */
   members: FacepileMember[];
 };
@@ -20,6 +23,21 @@ function facepileMember(member: AccessMember): FacepileMember {
     email: member.email,
     photoUrl: member.photoUrl,
   };
+}
+
+/**
+ * Directory users holding an attribute value, or undefined when not known. A
+ * listed key lists every value its users hold, so a value missing from it
+ * matches nobody; a key with too many values is left out whole.
+ */
+export function attributeMemberCount(
+  data: ListDirectoryRoleMappingsResult,
+  key: string,
+  value: string,
+): number | undefined {
+  const options = data.attributes.filter((a) => a.key === key);
+  if (options.length === 0) return undefined;
+  return options.find((a) => a.value === value)?.memberCount ?? 0;
 }
 
 /** The directory groups and attribute values mapped to one role. */
@@ -35,31 +53,39 @@ export function roleDirectorySources(
       .map((mapping): RoleDirectorySource => {
         if (mapping.sourceKind === "group") {
           const group = groups.get(mapping.directoryGroupId ?? "");
-          const name = group?.name ?? mapping.directoryGroupName ?? "";
+          if (!group) {
+            // The group was deleted from the directory: the mapping matches
+            // nobody, and a live group reusing its name is not it.
+            const name = mapping.directoryGroupName;
+            return {
+              key: mapping.id,
+              kind: "group",
+              label: name ? `${name} (removed)` : "Removed group",
+              memberCount: 0,
+              members: [],
+            };
+          }
           return {
             key: mapping.id,
             kind: "group",
-            label: name || "Unnamed group",
-            memberCount: group?.memberCount ?? 0,
+            label: group.name || "Unnamed group",
+            memberCount: group.memberCount,
             // Members name their directory groups, not group ids, so match on
             // the name, as the mappings table does.
-            members: name
+            members: group.name
               ? members
-                  .filter((member) => member.groups?.includes(name))
+                  .filter((member) => member.groups?.includes(group.name))
                   .map(facepileMember)
               : [],
           };
         }
         const key = mapping.attributeKey ?? "";
         const value = mapping.attributeValue ?? "";
-        const option = data.attributes.find(
-          (a) => a.key === key && a.value === value,
-        );
         return {
           key: mapping.id,
           kind: "attribute",
           label: `${key} = ${value}`,
-          memberCount: option?.memberCount ?? 0,
+          memberCount: attributeMemberCount(data, key, value),
           members: [],
         };
       })
