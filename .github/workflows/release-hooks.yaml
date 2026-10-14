@@ -119,8 +119,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          # Kept: this job pushes the hooks@ release tag with it.
-          persist-credentials: true
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: "go.mod"
@@ -173,10 +172,16 @@ jobs:
       - name: Create release tag
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          PUSH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git tag "hooks@${VERSION}"
-          git push origin "hooks@${VERSION}"
+          # Checkout credentials are not persisted, so only this push sees a
+          # token, through git's environment config rather than its argv.
+          GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)" \
+            git push origin "hooks@${VERSION}"
       - name: goreleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -218,12 +223,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The job pushes the pin branch, so the persisted credential has to
-          # be the bot's — the workflow token is read-only here, and pushes
-          # made with it would not trigger the pin PR's own checks anyway.
-          token: ${{ steps.bot-token.outputs.token }}
-          # Kept: this job pushes the pin branch with it.
-          persist-credentials: true
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: "go.mod"
@@ -270,7 +270,13 @@ jobs:
           git commit -m "chore(hooks): serve the ${VERSION} hooks binary"
           # Force so a rerun of this workflow for the same version replaces its
           # own earlier branch instead of failing.
-          git push --force origin "$branch"
+          # Pushed with the bot token rather than the workflow token, which is
+          # read-only here and whose pushes would not trigger the pin PR's own
+          # checks. It goes through git's environment config, not argv.
+          GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            git push --force origin "$branch"
 
           if gh pr list --head "$branch" --state open --json number --jq '.[].number' | grep -q .; then
             echo "Pin pull request for $branch already open; branch updated."

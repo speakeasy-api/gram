@@ -31,9 +31,9 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # changesets pushes with its own github-token, not checkout's.
         with:
-          # Kept: changesets pushes the version branch with it.
-          persist-credentials: true
+          persist-credentials: false
 
       # No caches in this job: it publishes to npm, so nothing it installs
       # may come from a restored cache.
