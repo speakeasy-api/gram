@@ -146,7 +146,7 @@ import RiskEventsPage from "./pages/security/RiskEventsPage";
 import {
   ShadowAIRoot,
   ShadowAISectionRedirect,
-  ShadowMCPLegacyRedirect,
+  ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
@@ -1014,7 +1014,9 @@ const ROUTE_STRUCTURE = {
         title: "MCPs",
         url: "mcps",
         component: ShadowAIRoot,
-        indexComponent: ShadowAISectionRedirect,
+        // The MCPs index was the approvals queue; it lands on the MCP
+        // approvals tab of Guardrails rather than the policies list.
+        indexComponent: ShadowMCPIndexRedirect,
         subPages: {
           detail: {
             title: "Shadow MCP Server",
@@ -1034,7 +1036,7 @@ const ROUTE_STRUCTURE = {
     title: "Shadow MCP",
     url: "shadow-mcp",
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPLegacyRedirect,
+    indexComponent: ShadowMCPIndexRedirect,
     subPages: {
       detail: {
         title: "Shadow MCP Server",

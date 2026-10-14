@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { policyCenterTabs } from "./policy-center-tabs";
+import { policyCenterTabs, policyCenterTabSearch } from "./policy-center-tabs";
 
 describe("policyCenterTabs", () => {
-  it("shows the Shadow AI targets tab after Detection Rules", () => {
+  it("shows the Shadow AI targets and MCP approvals tabs after Detection Rules", () => {
     const tabs = policyCenterTabs();
     expect(tabs.map((tab) => tab.value)).toEqual([
       "policies",
       "detection-rules",
       "shadow-ai-targets",
+      "mcp-approvals",
       "exclusions",
       "quarantines",
     ]);
@@ -17,5 +18,13 @@ describe("policyCenterTabs", () => {
         href: "?tab=shadow-ai-targets",
       },
     );
+    expect(tabs.find((tab) => tab.value === "mcp-approvals")).toMatchObject({
+      label: "MCP approvals",
+      href: "?tab=mcp-approvals",
+    });
+  });
+
+  it("builds the search string a link lands on a tab with", () => {
+    expect(policyCenterTabSearch("mcp-approvals")).toBe("?tab=mcp-approvals");
   });
 });
