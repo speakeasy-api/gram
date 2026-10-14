@@ -67,12 +67,9 @@ func ResolveAssignedAgent(ctx context.Context, db repo.DBTX, params AssignmentPa
 	return agentID, true, nil
 }
 
-// ResolveHooksProject returns the project the workload addressed by params may
-// send hooks to, from its organization-tier admission, or an invalid
-// uuid.NullUUID when it may send none: no admission names a project, the
-// project was deleted, or nothing admits the workload at all.
-//
-// An error is the absence of an answer, never "no project".
+// ResolveHooksProject returns the workload's hooks project from its org-tier
+// admission, or an invalid NullUUID when it may send none. An error is no
+// answer, never "no project".
 func ResolveHooksProject(ctx context.Context, db repo.DBTX, params AssignmentParams) (uuid.NullUUID, error) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	switch {

@@ -35,10 +35,8 @@ func clearAgentAccountIdentity(meta *SessionMetadata) {
 	meta.ObservedUserEmail = ""
 }
 
-// isAgentActor reports whether the request acts for an agent: an agent key, or
-// a headless device's workload acting for its assigned agent. Self-reported
-// emails and cached session identity then never re-attribute its events to a
-// human.
+// isAgentActor reports whether the request acts for an agent, directly or as a
+// workload, so self-reported identity never re-attributes its events to a human.
 func isAgentActor(ctx context.Context) bool {
 	_, ok := deviceagenttoken.EffectiveAgent(ctx)
 	return ok
@@ -66,10 +64,8 @@ var spoofableAttributionKeys = []string{
 	string(attr.WorkloadSubjectKey),
 }
 
-// requireAgentHooksIngest admits an agent actor, or a workload acting for one,
-// only when it holds org:hooks_ingest for the project the request targets.
-// The project is part of the check, so a grant bounded to one project admits
-// hooks for that project alone. Other callers pass unchanged.
+// requireAgentHooksIngest requires org:hooks_ingest on the target project from
+// an agent or workload actor. Other callers pass unchanged.
 func (s *Service) requireAgentHooksIngest(ctx context.Context) error {
 	if !isAgentActor(ctx) {
 		return nil
@@ -387,10 +383,8 @@ func withAgentActor(ctx context.Context, attrs map[attr.Key]any) map[attr.Key]an
 	return attrs
 }
 
-// attributionAttrs are the trusted attribution attributes for a request that
-// acts for an agent. The actor attributes name the agent, which telemetry views
-// attribute agent activity by; a headless device adds its workload issuer and
-// subject, so its events also say which device sent them.
+// attributionAttrs name the agent as actor, which telemetry views attribute by,
+// plus a headless device's workload issuer and subject.
 func attributionAttrs(ctx context.Context) map[attr.Key]string {
 	agent, ok := deviceagenttoken.EffectiveAgent(ctx)
 	if !ok {

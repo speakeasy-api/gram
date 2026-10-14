@@ -733,13 +733,9 @@ func pluginDeviceAgentToken(authorization *string) string {
 	return token
 }
 
-// authorizeWorkloadPluginRequest authenticates a headless device's
-// device-agent token on the optional-auth hook endpoints (claude, ingest) and
-// binds the request to the Gram-Project it names, through the same admission
-// and project-filtered hooks grant the other hooks methods enforce. The
-// workload stays the actor. Refusals keep their code: an admission refusal is
-// CodeUnauthorized so the device exchanges again, a grant refusal is
-// CodeForbidden.
+// authorizeWorkloadPluginRequest admits a device-agent token on the claude and
+// ingest endpoints and binds the request's Gram-Project, like the other hooks
+// methods. Admission refusals are CodeUnauthorized, grant refusals CodeForbidden.
 func (s *Service) authorizeWorkloadPluginRequest(ctx context.Context, token, projectSlug string) (context.Context, error) {
 	if s.deviceAgentTokens == nil {
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "this deployment does not accept device-agent tokens")

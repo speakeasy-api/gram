@@ -19,10 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
-// The agent a workload acts as is the agent whose policy admission granted
-// it. Reassigning the workload after admission must not pair the admitted
-// agent's grants with a different agent's identity, so nothing on the request
-// path resolves the assignment a second time.
+// Reassigning a workload after admission must not pair the admitted agent's
+// grants with another agent's identity.
 func TestDeviceAgentToken_ActsAsTheAgentAdmissionGranted(t *testing.T) {
 	t.Parallel()
 

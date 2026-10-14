@@ -6,10 +6,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 )
 
-// deviceIssuerPath is the path under the server URL that names an
-// organization's Speakeasy device issuer. The organization ID is its final
-// segment, which is what lets a token endpoint serving every organization
-// read the tenant from an assertion's iss.
+// deviceIssuerPath names an organization's device issuer under the server URL,
+// with the organization ID as its final segment.
 const deviceIssuerPath = "/workload/devices/"
 
 // DeviceIssuerURL is the issuer string of an organization's Speakeasy device
@@ -19,14 +17,9 @@ func DeviceIssuerURL(serverURL, organizationID string) string {
 	return strings.TrimSuffix(serverURL, "/") + deviceIssuerPath + organizationID
 }
 
-// IsUnderDeviceIssuerPrefix reports whether issuerURL falls anywhere under
-// serverURL's device issuer prefix. The whole prefix is reserved: an operator
-// issuer there would verify against a key set of its choosing instead of the
-// keys devices registered.
-//
-// Both sides are compared in the canonical form issuer lookup uses, so a
-// spelling such as an explicit default port or an uppercase host cannot claim
-// the namespace.
+// IsUnderDeviceIssuerPrefix reports whether issuerURL is under the reserved
+// device issuer prefix, compared in canonical form so no alternate spelling
+// (default port, uppercase host) can claim it.
 func IsUnderDeviceIssuerPrefix(serverURL, issuerURL string) bool {
 	prefix, ok := canonicalDeviceIssuerPrefix(serverURL)
 	if !ok {
@@ -50,13 +43,9 @@ func canonicalDeviceIssuerPrefix(serverURL string) (string, bool) {
 	return canonical.String(), true
 }
 
-// DeviceIssuerOrganization returns the organization a Speakeasy device issuer
-// URL names, and whether issuerURL is one on this server at all.
-//
-// It reads the URL only. The caller still resolves the issuer row in that
-// organization, so an organization that registers another's device issuer URL
-// as its own issuer gains nothing: the row looked up is always the named
-// organization's.
+// DeviceIssuerOrganization returns the organization a device issuer URL on this
+// server names. Callers resolve the issuer row within it, so registering another
+// organization's URL gains nothing.
 func DeviceIssuerOrganization(serverURL, issuerURL string) (string, bool) {
 	prefix, ok := canonicalDeviceIssuerPrefix(serverURL)
 	if !ok {

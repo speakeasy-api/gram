@@ -30,11 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
-// deviceAgentAuthorizationServerNamespace derives the identifier each
-// organization's device-agent token endpoint charges its issuer lookups, key
-// fetches, and replay records to. One endpoint serves every organization, so
-// keying those budgets on it alone would let one organization's traffic spend
-// another's.
+// deviceAgentAuthorizationServerNamespace keys lookup, key-fetch and replay
+// budgets per organization, so one tenant's traffic cannot spend another's.
 var deviceAgentAuthorizationServerNamespace = uuid.MustParse("6f1c2b8e-4a3d-4e5f-9b7a-1d2c3e4f5a6b")
 
 // deviceAgentAuthorizationServerID is the identifier the device-agent token
@@ -65,21 +62,9 @@ type deviceAgentTokenResponse struct {
 	ExpiresIn int `json:"expires_in"`
 }
 
-// HandleDeviceAgentToken exchanges a workload's identity assertion for a
-// device-agent token (RFC 7523 §2.1, clientless).
-//
-// Each organization has its own endpoint, and the tenant is the organization
-// its path names: the issuer and the admission are resolved in that
-// organization alone, and the assertion's audience must be that exact URL. A
-// platform issuer's URL names no organization, so taking the tenant from the
-// path is what lets one organization admit a platform subject without any
-// other organization deciding where its assertions land. A Speakeasy device
-// issuer does name its organization, and it must be the path's.
-//
-// Past that, the assertion is verified and its subject admitted exactly as at
-// an MCP token endpoint, and the workload must have a live assigned agent.
-// Refusals, an unknown organization among them, all read the same on the
-// wire.
+// HandleDeviceAgentToken exchanges a workload assertion for a device-agent token
+// (RFC 7523 §2.1). The tenant is the path's organization, so no other tenant can
+// capture a platform subject; every refusal reads the same on the wire.
 func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	logger := s.logger

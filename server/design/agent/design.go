@@ -25,9 +25,8 @@ var _ = Service("agent", func() {
 		// passes (it implies `agent_user`; see auth.Authorize); the MDM profile
 		// then vouches the enrolled user's email via the Gram-User-Email header.
 		//
-		// A headless device that authenticates as a workload presents a
-		// device-agent token instead. It is tried first so a request without
-		// one falls through to the API key and keeps that key's errors.
+		// A headless device presents a device-agent token instead, tried first so a
+		// request without one falls through to the API key and keeps its errors.
 		Security(security.DeviceAgentToken)
 		Security(security.ByKey, func() {
 			Scope("agent_user")

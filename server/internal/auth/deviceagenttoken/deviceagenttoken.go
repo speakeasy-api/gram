@@ -1,15 +1,6 @@
-// Package deviceagenttoken issues and authenticates the bearer tokens a
-// headless device agent uses on the device-agent API: polling its plugin
-// policy and sending hooks. A workload exchanges an identity assertion for one
-// at the device-agent token endpoint, and presents it instead of an agent API
-// key.
-//
-// A token names the workload principal and its organization, and nothing
-// else. It is not a session: there is no row to revoke. Every request admits
-// the workload afresh, through its assigned agent's live policy, so
-// withdrawing the admission or the assignment, or suspending the agent, takes
-// effect on the next request; the token's own lifetime only bounds a leaked
-// copy.
+// Package deviceagenttoken issues and authenticates the bearer tokens headless
+// devices use on the device-agent API. A token is not a session: every request
+// re-admits the workload, so revocation applies on the next request.
 package deviceagenttoken
 
 import (
@@ -49,10 +40,8 @@ const (
 	// on the same cadence.
 	Lifetime = 15 * time.Minute
 
-	// TokenPathPattern is the route of the device-agent token endpoint,
-	// relative to the server URL. Each organization has its own, so the tenant
-	// comes from the path rather than from an assertion's issuer: a platform
-	// issuer's URL names no organization.
+	// TokenPathPattern is the per-organization token endpoint route. The tenant
+	// comes from the path because a platform issuer's URL names no organization.
 	TokenPathPattern = tokenPathPrefix + "{" + TokenPathOrganizationParam + "}" + tokenPathSuffix
 
 	// TokenPathOrganizationParam names the route segment holding the
@@ -106,16 +95,9 @@ func TokenURL(serverURL, organizationID string) string {
 	return strings.TrimSuffix(serverURL, "/") + TokenPath(organizationID)
 }
 
-// Ceiling is the immutable policy a device-agent token acts under in
-// organizationID: polling the device policy and reading projects, plus sending
-// hooks when its admission names a hooks project. Admission intersects it with
-// the assigned agent's live policy, so it grants nothing the agent lacks.
-//
-// The hooks grant is bounded to hooksProjectID. A workload has no Speakeasy
-// permission of its own to inherit a project from, so its admission names one,
-// and hooks ingest checks the requested project against this bound and against
-// the agent's live policy (authz.HooksIngestCheck). No hooks project, no hooks
-// grant.
+// Ceiling is the most a device-agent token may do: poll policy, read projects,
+// and send hooks to hooksProjectID only, with no hooks grant when it's unset.
+// Admission intersects it with the agent's live policy.
 func Ceiling(organizationID string, hooksProjectID uuid.NullUUID) []authz.Grant {
 	grants := []authz.Grant{
 		authz.NewGrant(authz.ScopeOrgDeviceAgentSync, organizationID),
@@ -181,11 +163,8 @@ func IsToken(raw string) bool {
 	return (present && !isString) || typ == TokenType
 }
 
-// Authenticate verifies raw and returns a context authenticated as its
-// workload, carrying the token's ceiling as its credential policy. The
-// organization must still exist and not be disabled. Admission is the
-// caller's: authz.PrepareContext routes a workload actor to workload
-// admission, which resolves its assigned agent's live policy.
+// Authenticate verifies raw and returns a context authenticated as its workload,
+// carrying the token's ceiling. Admission is left to authz.PrepareContext.
 func (i *Issuer) Authenticate(ctx context.Context, raw string) (context.Context, error) {
 	if !IsToken(raw) {
 		return ctx, ErrNotToken
@@ -264,11 +243,8 @@ type AssignedAgent struct {
 	Agent agentsrepo.Agent
 }
 
-// admittedAgent returns the agent whose policy admission granted the workload
-// in ctx. It reads the agent admission recorded rather than resolving the
-// assignment again, so an assignment that changes mid-request cannot pair one
-// agent's grants with another agent's identity. The row is loaded only for the
-// agent's name.
+// admittedAgent returns the agent admission recorded, never re-resolving the
+// assignment, so a mid-request reassignment cannot mix two agents.
 func (i *Issuer) admittedAgent(ctx context.Context) (AssignedAgent, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || !IsWorkloadActor(ctx) {
@@ -288,14 +264,9 @@ func (i *Issuer) admittedAgent(ctx context.Context) (AssignedAgent, error) {
 	return AssignedAgent{Principal: principal, Agent: agent}, nil
 }
 
-// Admit authenticates raw, admits its workload through engine, and resolves
-// the agent the workload is assigned to. The returned context carries the
-// workload as actor and its admitted policy, and records the assigned agent
-// for AssignedAgentFromContext.
-//
-// A malformed, forged, or expired token, a disabled organization, and a
-// workload that admission refuses are all CodeUnauthorized, so the device
-// exchanges again; a failure that reached no decision is CodeUnexpected.
+// Admit authenticates raw and admits its workload, keeping the workload as actor
+// and recording its agent. Refusals are CodeUnauthorized so the device exchanges
+// again; a failure that reached no decision is CodeUnexpected.
 func (i *Issuer) Admit(ctx context.Context, raw string, engine *authz.Engine) (_ context.Context, _ AssignedAgent, err error) {
 	defer func() {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeUnauthorized {
@@ -336,10 +307,8 @@ func AssignedAgentFromContext(ctx context.Context) (AssignedAgent, bool) {
 	return agent, ok
 }
 
-// EffectiveAgent returns the agent a request acts for: the actor itself when an
-// agent key authenticated it, or the agent Admit resolved when a workload did.
-// The workload stays the authenticated actor, so audit and logs name the device;
-// the agent supplies policy, plugin selection, attribution and spend.
+// EffectiveAgent returns the agent a request acts for: an agent actor itself, or
+// the agent Admit recorded for a workload, which stays the authenticated actor.
 func EffectiveAgent(ctx context.Context) (urn.Principal, bool) {
 	return contextvalues.EffectiveAgent(ctx)
 }
@@ -352,10 +321,8 @@ func IsWorkloadActor(ctx context.Context) bool {
 
 type authFailureKey struct{}
 
-// WithAuthFailure records why a device-agent token was refused. Goa tries a
-// method's security requirements in order and hands each the context the last
-// one returned, so a later API-key requirement seeing no key can report this
-// instead of a missing key.
+// WithAuthFailure records why a device-agent token was refused, so the API-key
+// scheme Goa tries next can report it instead of a missing key.
 func WithAuthFailure(ctx context.Context, err error) context.Context {
 	return context.WithValue(ctx, authFailureKey{}, err)
 }
@@ -366,14 +333,9 @@ func AuthFailure(ctx context.Context) error {
 	return err
 }
 
-// BearerChallenge adds `WWW-Authenticate: Bearer` to a 401 answering a request
-// that presented a device-agent token (RFC 6750 §3). The challenge carries
-// `error="invalid_token"`, telling the device agent to exchange for a fresh
-// token, only when Admit refused the token itself; a 401 for any other reason,
-// such as a deployment that accepts no device-agent tokens, gets a plain
-// Bearer challenge. Requests presenting anything else are answered unchanged.
-//
-// Wrap only the handlers that accept device-agent tokens.
+// BearerChallenge adds `WWW-Authenticate: Bearer` to 401s for device-agent
+// tokens (RFC 6750 §3), with `error="invalid_token"` only when Admit refused the
+// token, which tells the device to exchange again.
 func BearerChallenge(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Any bearer presented here is meant for this route, so a refusal of a

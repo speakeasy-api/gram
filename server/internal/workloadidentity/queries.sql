@@ -169,18 +169,9 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: ResolveWorkloadHooksProject :one
--- The project a workload may send hooks to: the hooks_project_id on its
--- organization-tier admission. Organization tier only, because the
--- device-agent token endpoint admits workloads at that tier.
---
--- More than one admission can match a subject, so the row is chosen exactly as
--- ResolveWorkloadAgentAssignment chooses an agent: exact before wildcard, then
--- the longer stem. The same live-issuer and wildcard-permission predicates as
--- WorkloadIdentityIsAdmitted apply, so disabled wildcard admission also
--- prevents wildcard rules from binding a project.
---
--- hooks_project_live is false when the project was deleted, which binds the
--- workload to no project rather than to one that no longer exists.
+-- The workload's hooks project from its org-tier admission, choosing among
+-- matches as ResolveWorkloadAgentAssignment does. hooks_project_live is false
+-- for a deleted project, which binds the workload to none.
 SELECT a.hooks_project_id, (p.id IS NOT NULL)::boolean AS hooks_project_live
 FROM workload_identity_admissions a
 JOIN workload_issuers i

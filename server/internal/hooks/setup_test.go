@@ -283,10 +283,8 @@ func seedHookUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organiz
 	require.NoError(t, err)
 }
 
-// sharedDeviceAgentSigner is generated once for the package: a fresh 2048-bit
-// RSA key per fixture made every hooks test pay for key generation. Tests that
-// need a different signer, such as forged tokens, still call
-// mcpauthztest.NewIssuer.
+// sharedDeviceAgentSigner is generated once per package to avoid RSA keygen per
+// fixture. Forged-token tests still use mcpauthztest.NewIssuer.
 var sharedDeviceAgentSigner struct {
 	once   sync.Once
 	issuer *mcpauthz.Issuer

@@ -362,13 +362,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return ctx, nil
 }
 
-// JWTAuth authenticates a headless device's device-agent token on the
-// ingestion methods. The workload is admitted through its assigned agent's
-// live policy; the project step that follows binds the request to a project.
-// The workload stays the actor throughout.
-//
-// A request with no device-agent token returns unchanged for the API key
-// requirement Goa tries next.
+// JWTAuth admits a device-agent token on the ingestion methods; the project step
+// that follows binds the request. Without a token the context passes to the API
+// key scheme.
 func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
@@ -395,11 +391,8 @@ func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTSche
 	return admitted, nil
 }
 
-// authorizeWorkloadProject binds a workload's hooks to the Gram-Project the
-// request names. Nothing is inferred: whether the workload may send hooks
-// there is decided by requireAgentHooksIngest, against the hooks grant its
-// admission bounds to one project and against its agent's live policy. The
-// workload stays the actor and acts for the agent.
+// authorizeWorkloadProject binds a workload's hooks to the Gram-Project named;
+// requireAgentHooksIngest decides whether it may send there.
 func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	if _, ok := deviceagenttoken.AssignedAgentFromContext(ctx); !ok {
 		return ctx, oops.C(oops.CodeUnauthorized)

@@ -153,13 +153,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return ctx, nil
 }
 
-// JWTAuth authenticates a headless device's device-agent token. The workload
-// is admitted through its assigned agent's live policy, must hold the
-// device-sync grant as an agent key must, and then acts as that agent, so the
-// poll resolves the agent's plugins.
-//
-// A request with no device-agent token returns unchanged for the API key
-// requirement Goa tries next.
+// JWTAuth authenticates a headless device's device-agent token, admitting the
+// workload through its agent's live policy; like an agent key it needs the
+// device-sync grant. Without a token the context passes to the API key scheme.
 func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)

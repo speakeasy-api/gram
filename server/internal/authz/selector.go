@@ -128,11 +128,8 @@ var allowedSelectorKeys = map[string]map[string]bool{
 	},
 }
 
-// scopeAllowsSelectorKey extends allowedSelectorKeys for a single scope whose
-// checks carry a dimension the rest of its family does not. org:hooks_ingest
-// is checked per target project (HooksIngestCheck), so a grant may bound it to
-// one project; no other org scope is checked by project, and a project_id
-// there would read as a restriction nothing enforces.
+// scopeAllowsSelectorKey allows project_id on org:hooks_ingest only: it is the
+// one org scope checked per project, and elsewhere the key would restrict nothing.
 func scopeAllowsSelectorKey(scope Scope, key string) bool {
 	return scope == ScopeOrgHooksIngest && key == SelectorKeyProjectID
 }
