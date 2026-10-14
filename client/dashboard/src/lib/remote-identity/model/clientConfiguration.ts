@@ -1,25 +1,12 @@
 import type { ServerIdentityClientConfigurationTokenEndpointAuthMethod } from "@gram/client/models/components/serveridentityclientconfiguration.js";
 
 /**
- * The scopes a new client should request.
+ * Every scope on offer: the protected resource's first, then the issuer's.
  *
- * The protected resource's RFC 9728 `scopes_supported` wins because it names
- * what this one server needs. The issuer's list is a fallback only: it names
- * everything the provider can grant, and requesting all of it is what broke
- * Salesforce logins. Every surface that registers a client must go through
- * here so a client does not come out different depending on who created it.
+ * Options for the manual scope picker only. An automatically created client
+ * stores no scope: the server discovers what to request at each sign-in, so a
+ * copied list cannot go stale or pose as an operator's choice.
  */
-export function preferredScopes(
-  protectedResourceScopes: string[] | undefined | null,
-  authorizationServerScopes: string[] | undefined | null,
-): string[] {
-  const resourceScopes = nonEmptyStrings(protectedResourceScopes);
-  return resourceScopes.length > 0
-    ? resourceScopes
-    : nonEmptyStrings(authorizationServerScopes);
-}
-
-/** Every scope on offer: the protected resource's first, then the issuer's. */
 export function advertisedScopes(
   protectedResourceScopes: string[] | undefined | null,
   authorizationServerScopes: string[] | undefined | null,
