@@ -4440,13 +4440,9 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- absent from the registration UI.
   allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
-  -- Where the verification path finds the keys that sign this issuer's
-  -- assertions. NULL is the issuer's remote jwks_uri, which is every issuer an
-  -- operator registers. 'device_keys' marks the issuer Speakeasy creates for
-  -- devices with no platform identity: each assertion is verified against the
-  -- one key registered for its own subject in workload_device_keys, never a
-  -- shared key set, so one enrolled device cannot sign as another. Nullable so
-  -- adding it touches no existing row; values are validated in application code.
+  -- Where assertions' signing keys come from. NULL is the remote jwks_uri;
+  -- 'device_keys' verifies each assertion against the key registered for its
+  -- own subject in workload_device_keys, so one device cannot sign as another.
   key_source TEXT,
 
   -- The last discovery document captured for this issuer, verbatim. The typed
@@ -7481,13 +7477,11 @@ CREATE TABLE IF NOT EXISTS workload_device_join_tokens (
   -- The agent the enrolled device inherits its policy from.
   agent_id uuid NOT NULL,
 
-  -- The project the enrolled device may send hooks to, copied to its
-  -- admission. A device has no Speakeasy permission of its own to inherit a
-  -- project from, so the administrator names one here.
+  -- The project the device may send hooks to, copied to its admission. A
+  -- device has no permission of its own to inherit one from.
   hooks_project_id uuid NOT NULL,
 
-  -- The administrator who created the token, recorded as the actor of the
-  -- enrollment it later authorizes.
+  -- Recorded as the actor of the enrollment this token authorizes.
   created_by_user_id TEXT NOT NULL,
 
   expires_at timestamptz NOT NULL,
