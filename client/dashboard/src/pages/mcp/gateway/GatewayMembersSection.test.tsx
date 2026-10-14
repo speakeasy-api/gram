@@ -337,6 +337,36 @@ describe("Add servers sheet", () => {
     },
   );
 
+  it("selects all addable visible servers, skipping blocked ones, then clears", async () => {
+    const { onAdd } = setup({
+      servers: [
+        ...servers,
+        {
+          id: "direct",
+          name: "Direct",
+          slug: "direct",
+          unproxiedMcpServerId: "direct-id",
+        } as McpServer,
+      ],
+    });
+    const checked = (name: string) =>
+      screen.getByRole("checkbox", { name }).getAttribute("aria-checked");
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    expect([checked("Alpha"), checked("Beta"), checked("Direct")]).toEqual([
+      "true",
+      "true",
+      "false",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+    expect([checked("Alpha"), checked("Beta")]).toEqual(["false", "false"]);
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add selected servers" }),
+    );
+    await waitFor(() => expect(onAdd).toHaveBeenCalledOnce());
+    expect(onAdd.mock.calls[0]![0]).toHaveLength(2);
+  });
+
   it("selects existing wrappers sharing a toolset independently", async () => {
     const { onAdd } = setup({
       servers: servers.map((server) => ({ ...server, toolsetId: "shared" })),
