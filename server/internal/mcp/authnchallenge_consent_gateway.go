@@ -236,14 +236,18 @@ func strongerStatus(current, next gatewayServerStatus) gatewayServerStatus {
 	return current
 }
 
+// readiness ranks how close a service brings its server to working, with no
+// ties, so a server's status does not depend on the order of its services. A
+// pending identity-provider sign-in outranks a lapsed connection: with no
+// usable token the gateway signs in through the identity provider.
 func readiness(status gatewayServerStatus) int {
 	switch status {
 	case gatewayServerConnected:
-		return 4
+		return 5
 	case gatewayServerChained:
-		return 3
+		return 4
 	case gatewayServerChainPending:
-		return 2
+		return 3
 	case gatewayServerReconnect:
 		return 2
 	case gatewayServerNotConnected:

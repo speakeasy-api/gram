@@ -331,3 +331,35 @@ func TestConsentTemplate_GatewayListOpenState(t *testing.T) {
 	view.ListOpen = false
 	require.NotContains(t, renderGatewayConsent(t, gatewayTemplateData(view, nil)), `data-state="state-id" open`)
 }
+
+// A server's status does not depend on the order of its services: a pending
+// identity-provider sign-in outranks a lapsed connection either way round.
+func TestGatewayServersView_StatusIgnoresServiceOrder(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	idp := uuid.New()
+	members := []metaMember{gatewayTestMember("wiki", "Wiki", idp, project)}
+	pending := gatewayTestCard("chained-client", idp, uuid.NullUUID{})
+	pending.Chained = true
+	pending.ChainCheck = chainCheckPending
+	expired := gatewayTestCard("expired-client", idp, uuid.NullUUID{UUID: project, Valid: true})
+	expired.Expired = true
+
+	require.Equal(t, gatewayServerChainPending, gatewayServersView(members, []remoteSessionCard{pending, expired}).Servers[0].Status)
+	require.Equal(t, gatewayServerChainPending, gatewayServersView(members, []remoteSessionCard{expired, pending}).Servers[0].Status)
+}
+
+// A server whose sign-in is not set up links to its page, which says what an
+// administrator must do; one needing no sign-in has nothing to open.
+func TestConsentTemplate_GatewayListLinksNotSetUpServer(t *testing.T) {
+	t.Parallel()
+
+	view := gatewayServersView([]metaMember{
+		gatewayTestMember("eng.jira", "Jira", uuid.New(), uuid.New()),
+		gatewayTestMember("docs", "Docs", uuid.Nil, uuid.New()),
+	}, nil)
+	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+	require.Contains(t, page, `server=eng.jira" class="text-muted-foreground interact:text-foreground shrink-0 text-xs" data-gateway-server-page >View`)
+	require.NotContains(t, page, "server=docs")
+}

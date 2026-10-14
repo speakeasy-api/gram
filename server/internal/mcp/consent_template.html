@@ -292,6 +292,13 @@
                     data-gateway-server-page
                     >{{if .Ready}}Manage{{else}}Connect{{end}} &rsaquo;</a
                   >
+                  {{else if .NotSetUp}}
+                  <a
+                    href="{{$.ConsentPath}}?state={{$.State}}&server={{.Slug}}"
+                    class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+                    data-gateway-server-page
+                    >View &rsaquo;</a
+                  >
                   {{end}}
                 </li>
                 {{end}}
