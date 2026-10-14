@@ -19079,6 +19079,13 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to:
+	// one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id}
+	// (shared).
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether a shared authorization server's issuer URL is pinned, so it stays
+	// the same if the deployment's hosts change.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
 	// Set when the issuer trusts an external authorization server's assertions.
 	TrustedRemoteSession *AdminMcpServerHealthTrustedRemoteSessionResponseBody `form:"trusted_remote_session,omitempty" json:"trusted_remote_session,omitempty" xml:"trusted_remote_session,omitempty"`
 	// Other live servers in the project that share this issuer.
@@ -59493,6 +59500,12 @@ func ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body *AdminMcpSer
 	if body.UseAuthenticationHost == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.OtherServersUsingIssuer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("other_servers_using_issuer", "body"))
 	}
@@ -59523,6 +59536,11 @@ func ValidateAdminMcpServerHealthUserSessionIssuerResponseBody(body *AdminMcpSer
 	if body.ClientIDMetadataAdmissionMode != nil {
 		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
 		}
 	}
 	if body.TrustedRemoteSession != nil {

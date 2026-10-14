@@ -12,10 +12,10 @@ import { remoteSessionIssuersList } from "../funcs/remoteSessionIssuersList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
+  ListRemoteSessionIssuersQueryParamTier,
   ListRemoteSessionIssuersRequest,
   ListRemoteSessionIssuersResponse,
   ListRemoteSessionIssuersSecurity,
-  QueryParamTier,
 } from "../models/operations/listremotesessionissuers.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -175,7 +175,7 @@ export function queryKeyRemoteSessionIssuers(
     limit?: number | undefined;
     search?: string | undefined;
     upstreamHost?: string | undefined;
-    tier?: QueryParamTier | undefined;
+    tier?: ListRemoteSessionIssuersQueryParamTier | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;
@@ -190,7 +190,7 @@ export function queryKeyRemoteSessionIssuersInfinite(
     limit?: number | undefined;
     search?: string | undefined;
     upstreamHost?: string | undefined;
-    tier?: QueryParamTier | undefined;
+    tier?: ListRemoteSessionIssuersQueryParamTier | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

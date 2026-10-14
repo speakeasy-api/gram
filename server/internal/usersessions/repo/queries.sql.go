@@ -1447,6 +1447,59 @@ func (q *Queries) GetOrganizationManagedUserSessionIssuerByIDForUpdate(ctx conte
 	return i, err
 }
 
+const getOrganizationManagedUserSessionIssuerWithProjectByID = `-- name: GetOrganizationManagedUserSessionIssuerWithProjectByID :one
+SELECT
+    issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted,
+    COALESCE(project.name, '')::text AS project_name
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = $1
+  AND issuer.deleted IS FALSE
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+  )
+`
+
+type GetOrganizationManagedUserSessionIssuerWithProjectByIDParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetOrganizationManagedUserSessionIssuerWithProjectByIDRow struct {
+	UserSessionIssuer UserSessionIssuer
+	ProjectName       string
+}
+
+// GetOrganizationManagedUserSessionIssuerByID with the owning project's name,
+// empty for organization-owned issuers, for showing the issuer.
+func (q *Queries) GetOrganizationManagedUserSessionIssuerWithProjectByID(ctx context.Context, arg GetOrganizationManagedUserSessionIssuerWithProjectByIDParams) (GetOrganizationManagedUserSessionIssuerWithProjectByIDRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationManagedUserSessionIssuerWithProjectByID, arg.ID, arg.OrganizationID)
+	var i GetOrganizationManagedUserSessionIssuerWithProjectByIDRow
+	err := row.Scan(
+		&i.UserSessionIssuer.ID,
+		&i.UserSessionIssuer.ProjectID,
+		&i.UserSessionIssuer.OrganizationID,
+		&i.UserSessionIssuer.AttachmentScope,
+		&i.UserSessionIssuer.Slug,
+		&i.UserSessionIssuer.AuthnChallengeMode,
+		&i.UserSessionIssuer.SessionDuration,
+		&i.UserSessionIssuer.Classification,
+		&i.UserSessionIssuer.ClientIDMetadataAdmissionMode,
+		&i.UserSessionIssuer.TrustedRemoteSessionIssuerID,
+		&i.UserSessionIssuer.TrustedRemoteSessionClientID,
+		&i.UserSessionIssuer.UseAuthenticationHost,
+		&i.UserSessionIssuer.AuthorizationServerMode,
+		&i.UserSessionIssuer.PinnedIssuerUrl,
+		&i.UserSessionIssuer.CreatedAt,
+		&i.UserSessionIssuer.UpdatedAt,
+		&i.UserSessionIssuer.DeletedAt,
+		&i.UserSessionIssuer.Deleted,
+		&i.ProjectName,
+	)
+	return i, err
+}
+
 const getOrganizationUserSessionIssuerByID = `-- name: GetOrganizationUserSessionIssuerByID :one
 SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, use_authentication_host, authorization_server_mode, pinned_issuer_url, created_at, updated_at, deleted_at, deleted
 FROM user_session_issuers
@@ -2226,6 +2279,124 @@ func (q *Queries) ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx conte
 	return items, nil
 }
 
+const listOrganizationManagedUserSessionIssuerMCPServers = `-- name: ListOrganizationManagedUserSessionIssuerMCPServers :many
+SELECT
+    attachment.kind,
+    attachment.id,
+    attachment.name,
+    attachment.slug,
+    attachment.project_id,
+    attachment.project_name
+FROM (
+    SELECT
+        'mcp_server'::text AS kind,
+        server.id,
+        COALESCE(server.name, server.slug, server.id::text)::text AS name,
+        COALESCE(server.slug, '')::text AS slug,
+        project.id AS project_id,
+        project.name AS project_name
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id
+    WHERE server.user_session_issuer_id = $1::uuid
+      AND server.deleted IS FALSE
+      AND project.organization_id = $2::text
+      AND project.deleted IS FALSE
+    UNION ALL
+    SELECT
+        'toolset'::text,
+        toolset.id,
+        toolset.name,
+        toolset.slug,
+        project.id,
+        project.name
+    FROM toolsets AS toolset
+    JOIN projects AS project ON project.id = toolset.project_id
+    WHERE toolset.user_session_issuer_id = $1::uuid
+      AND toolset.deleted IS FALSE
+      AND project.organization_id = $2::text
+      AND project.deleted IS FALSE
+      AND NOT EXISTS (
+          SELECT 1
+          FROM mcp_servers AS server
+          WHERE server.toolset_id = toolset.id
+            AND server.project_id = toolset.project_id
+            AND server.deleted IS FALSE
+      )
+    UNION ALL
+    SELECT
+        'meta_mcp_server'::text,
+        meta_server.id,
+        meta_server.name,
+        ''::text,
+        project.id,
+        project.name
+    FROM meta_mcp_servers AS meta_server
+    JOIN projects AS project ON project.id = meta_server.project_id
+    WHERE meta_server.user_session_issuer_id = $1::uuid
+      AND meta_server.deleted IS FALSE
+      AND project.organization_id = $2::text
+      AND project.deleted IS FALSE
+) AS attachment
+WHERE $3::uuid IS NULL OR attachment.id < $3::uuid
+ORDER BY attachment.id DESC
+LIMIT $4
+`
+
+type ListOrganizationManagedUserSessionIssuerMCPServersParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+	Cursor              uuid.NullUUID
+	LimitValue          int32
+}
+
+type ListOrganizationManagedUserSessionIssuerMCPServersRow struct {
+	Kind        string
+	ID          uuid.UUID
+	Name        string
+	Slug        string
+	ProjectID   uuid.UUID
+	ProjectName string
+}
+
+// The live MCP servers, toolsets, and meta MCP servers attached to an issuer,
+// each read through its own live project in the organization. A toolset
+// wrapped by a live MCP server is listed once, as that server, because clients
+// reach it through the server's endpoints. Pages by id across the three kinds.
+// A wrapper MCP server can share its toolset's id, so the cursor relies on that
+// exclusion: without it the two rows would share a cursor position and a page
+// boundary between them would skip one.
+func (q *Queries) ListOrganizationManagedUserSessionIssuerMCPServers(ctx context.Context, arg ListOrganizationManagedUserSessionIssuerMCPServersParams) ([]ListOrganizationManagedUserSessionIssuerMCPServersRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationManagedUserSessionIssuerMCPServers,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.Cursor,
+		arg.LimitValue,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationManagedUserSessionIssuerMCPServersRow
+	for rows.Next() {
+		var i ListOrganizationManagedUserSessionIssuerMCPServersRow
+		if err := rows.Scan(
+			&i.Kind,
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.ProjectID,
+			&i.ProjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationUserSessionIssuerCimdClientsByIssuerID = `-- name: ListOrganizationUserSessionIssuerCimdClientsByIssuerID :many
 SELECT cimd.id, cimd.project_id, cimd.organization_id, cimd.user_session_issuer_id, cimd.client_id_metadata_uri, cimd.created_at, cimd.updated_at, cimd.deleted_at, cimd.deleted
 FROM user_session_issuer_cimd_clients AS cimd
@@ -2393,50 +2564,74 @@ func (q *Queries) ListOrganizationUserSessionIssuerToolsets(ctx context.Context,
 }
 
 const listOrganizationUserSessionIssuers = `-- name: ListOrganizationUserSessionIssuers :many
-SELECT id, project_id, organization_id, attachment_scope, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, trusted_remote_session_issuer_id, trusted_remote_session_client_id, use_authentication_host, authorization_server_mode, pinned_issuer_url, created_at, updated_at, deleted_at, deleted
-FROM user_session_issuers
-WHERE project_id IS NULL
-  AND organization_id = $1::text
-  AND deleted IS FALSE
-  AND ($2::uuid IS NULL OR id < $2::uuid)
-ORDER BY id DESC
-LIMIT $3
+SELECT
+    issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted,
+    COALESCE(project.name, '')::text AS project_name
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE (
+    ($1::boolean AND issuer.project_id IS NULL AND issuer.organization_id = $2::text)
+    OR ($3::boolean AND issuer.project_id IS NOT NULL AND project.organization_id = $2::text AND project.deleted IS FALSE)
+  )
+  AND issuer.deleted IS FALSE
+  AND ($4::uuid IS NULL OR issuer.id < $4::uuid)
+ORDER BY issuer.id DESC
+LIMIT $5
 `
 
 type ListOrganizationUserSessionIssuersParams struct {
-	OrganizationID string
-	Cursor         uuid.NullUUID
-	LimitValue     int32
+	IncludeOrganizational  bool
+	OrganizationID         string
+	IncludeProjectSpecific bool
+	Cursor                 uuid.NullUUID
+	LimitValue             int32
 }
 
-func (q *Queries) ListOrganizationUserSessionIssuers(ctx context.Context, arg ListOrganizationUserSessionIssuersParams) ([]UserSessionIssuer, error) {
-	rows, err := q.db.Query(ctx, listOrganizationUserSessionIssuers, arg.OrganizationID, arg.Cursor, arg.LimitValue)
+type ListOrganizationUserSessionIssuersRow struct {
+	UserSessionIssuer UserSessionIssuer
+	ProjectName       string
+}
+
+// Issuers an organization administers: organization-owned
+// (include_organizational) and project-specific (include_project_specific),
+// each tier gated by its own boolean. A project-specific issuer's tenancy is
+// read through its live project alone, as GetOrganizationManagedUserSessionIssuerByID
+// reads it. project_name is empty for organization-owned issuers.
+func (q *Queries) ListOrganizationUserSessionIssuers(ctx context.Context, arg ListOrganizationUserSessionIssuersParams) ([]ListOrganizationUserSessionIssuersRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationUserSessionIssuers,
+		arg.IncludeOrganizational,
+		arg.OrganizationID,
+		arg.IncludeProjectSpecific,
+		arg.Cursor,
+		arg.LimitValue,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []UserSessionIssuer
+	var items []ListOrganizationUserSessionIssuersRow
 	for rows.Next() {
-		var i UserSessionIssuer
+		var i ListOrganizationUserSessionIssuersRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.OrganizationID,
-			&i.AttachmentScope,
-			&i.Slug,
-			&i.AuthnChallengeMode,
-			&i.SessionDuration,
-			&i.Classification,
-			&i.ClientIDMetadataAdmissionMode,
-			&i.TrustedRemoteSessionIssuerID,
-			&i.TrustedRemoteSessionClientID,
-			&i.UseAuthenticationHost,
-			&i.AuthorizationServerMode,
-			&i.PinnedIssuerUrl,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
+			&i.UserSessionIssuer.ID,
+			&i.UserSessionIssuer.ProjectID,
+			&i.UserSessionIssuer.OrganizationID,
+			&i.UserSessionIssuer.AttachmentScope,
+			&i.UserSessionIssuer.Slug,
+			&i.UserSessionIssuer.AuthnChallengeMode,
+			&i.UserSessionIssuer.SessionDuration,
+			&i.UserSessionIssuer.Classification,
+			&i.UserSessionIssuer.ClientIDMetadataAdmissionMode,
+			&i.UserSessionIssuer.TrustedRemoteSessionIssuerID,
+			&i.UserSessionIssuer.TrustedRemoteSessionClientID,
+			&i.UserSessionIssuer.UseAuthenticationHost,
+			&i.UserSessionIssuer.AuthorizationServerMode,
+			&i.UserSessionIssuer.PinnedIssuerUrl,
+			&i.UserSessionIssuer.CreatedAt,
+			&i.UserSessionIssuer.UpdatedAt,
+			&i.UserSessionIssuer.DeletedAt,
+			&i.UserSessionIssuer.Deleted,
+			&i.ProjectName,
 		); err != nil {
 			return nil, err
 		}

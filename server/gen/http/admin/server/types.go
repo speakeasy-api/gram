@@ -19067,6 +19067,13 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 	// Whether the issuer announces the authentication host as its origin.
 	UseAuthenticationHost bool `form:"use_authentication_host" json:"use_authentication_host" xml:"use_authentication_host"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to:
+	// one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id}
+	// (shared).
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// Whether a shared authorization server's issuer URL is pinned, so it stays
+	// the same if the deployment's hosts change.
+	IssuerURLPinned bool `form:"issuer_url_pinned" json:"issuer_url_pinned" xml:"issuer_url_pinned"`
 	// Set when the issuer trusts an external authorization server's assertions.
 	TrustedRemoteSession *AdminMcpServerHealthTrustedRemoteSessionResponseBody `form:"trusted_remote_session,omitempty" json:"trusted_remote_session,omitempty" xml:"trusted_remote_session,omitempty"`
 	// Other live servers in the project that share this issuer.

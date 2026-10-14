@@ -445,6 +445,7 @@ trackedFiles:
   src/funcs/organizationUserSessionIssuersGetMigratePreflight.ts: {}
   src/funcs/organizationUserSessionIssuersList.ts: {}
   src/funcs/organizationUserSessionIssuersListCimdClients.ts: {}
+  src/funcs/organizationUserSessionIssuersListMcpServers.ts: {}
   src/funcs/organizationUserSessionIssuersMigrate.ts: {}
   src/funcs/organizationUserSessionIssuersMove.ts: {}
   src/funcs/organizationUserSessionIssuersUpdate.ts: {}
@@ -1420,6 +1421,7 @@ trackedFiles:
   src/models/components/listusersessionconsentsresult.ts: {}
   src/models/components/listusersessionfacetsresult.ts: {}
   src/models/components/listusersessionissuercimdclientsresult.ts: {}
+  src/models/components/listusersessionissuermcpserversresult.ts: {}
   src/models/components/listusersessionissuersresult.ts: {}
   src/models/components/listusersessionsresult.ts: {}
   src/models/components/listusersresult.ts: {}
@@ -1995,6 +1997,7 @@ trackedFiles:
   src/models/components/usersessionissuer.ts: {}
   src/models/components/usersessionissuercimdclient.ts: {}
   src/models/components/usersessionissuerfieldmismatch.ts: {}
+  src/models/components/usersessionissuermcpserver.ts: {}
   src/models/components/usersessionupstream.ts: {}
   src/models/components/usersessionworkload.ts: {}
   src/models/components/usersessionworkloadadmission.ts: {}
@@ -2494,6 +2497,7 @@ trackedFiles:
   src/models/operations/listorganizationremotesessionissuers.ts: {}
   src/models/operations/listorganizationusers.ts: {}
   src/models/operations/listorganizationusersessionissuercimdclients.ts: {}
+  src/models/operations/listorganizationusersessionissuermcpservers.ts: {}
   src/models/operations/listorganizationusersessionissuers.ts: {}
   src/models/operations/listpackages.ts: {}
   src/models/operations/listplatformexternalcredentials.ts: {}
@@ -3472,6 +3476,8 @@ trackedFiles:
   src/react-query/organizationUserSessionIssuerCimdClients.ts: {}
   src/react-query/organizationUserSessionIssuerDeletePreflight.core.ts: {}
   src/react-query/organizationUserSessionIssuerDeletePreflight.ts: {}
+  src/react-query/organizationUserSessionIssuerMcpServers.core.ts: {}
+  src/react-query/organizationUserSessionIssuerMcpServers.ts: {}
   src/react-query/organizationUserSessionIssuerMigratePreflight.core.ts: {}
   src/react-query/organizationUserSessionIssuerMigratePreflight.ts: {}
   src/react-query/organizationUserSessionIssuers.core.ts: {}
@@ -5056,7 +5062,7 @@ examples:
         application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 499598, "slug": "<value>"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "presets", "created_at": "2024-06-20T22:02:10.421Z", "id": "0c256f1c-5d81-493b-ba3e-4ab2399908f6", "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 357767, "slug": "<value>", "updated_at": "2025-01-11T19:31:48.102Z"}
+          application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "presets", "created_at": "2024-06-20T22:02:10.421Z", "id": "0c256f1c-5d81-493b-ba3e-4ab2399908f6", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 357767, "slug": "<value>", "updated_at": "2025-01-11T19:31:48.102Z", "use_authentication_host": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5411,7 +5417,7 @@ examples:
         application/json: {"authn_challenge_mode": "chain", "session_duration_hours": 781659, "slug": "<value>"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "presets", "created_at": "2025-05-29T23:01:32.237Z", "id": "97212a9f-79fe-45b4-98c8-19febc817858", "organization_id": "<id>", "project_id": "6111c8e2-ed9c-4ca7-8b34-30333d4acfad", "session_duration_hours": 80015, "slug": "<value>", "updated_at": "2024-11-04T03:29:29.080Z"}
+          application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "presets", "created_at": "2025-05-29T23:01:32.237Z", "id": "97212a9f-79fe-45b4-98c8-19febc817858", "issuer_url_pinned": false, "organization_id": "<id>", "project_id": "6111c8e2-ed9c-4ca7-8b34-30333d4acfad", "session_duration_hours": 80015, "slug": "<value>", "updated_at": "2024-11-04T03:29:29.080Z", "use_authentication_host": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -7511,7 +7517,7 @@ examples:
           id: "3676e5cc-47e3-4fe4-9222-5b85cc1ad668"
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "presets", "created_at": "2025-11-23T15:24:10.537Z", "id": "18f86ff2-e8fe-4a9f-bd21-6d9cf2a60785", "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 493358, "slug": "<value>", "updated_at": "2024-10-30T16:48:15.187Z"}
+          application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "presets", "created_at": "2025-11-23T15:24:10.537Z", "id": "18f86ff2-e8fe-4a9f-bd21-6d9cf2a60785", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 493358, "slug": "<value>", "updated_at": "2024-10-30T16:48:15.187Z", "use_authentication_host": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -8338,7 +8344,7 @@ examples:
     speakeasy-default-get-user-session-issuer:
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "presets", "created_at": "2024-12-02T02:00:23.894Z", "id": "1eed0621-72c9-4036-8a06-daa8a040be48", "organization_id": "<id>", "project_id": "57ff9343-9875-4960-9ee5-7e4aa2e06a70", "session_duration_hours": 225656, "slug": "<value>", "updated_at": "2024-05-16T13:18:14.737Z"}
+          application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "presets", "created_at": "2024-12-02T02:00:23.894Z", "id": "1eed0621-72c9-4036-8a06-daa8a040be48", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "57ff9343-9875-4960-9ee5-7e4aa2e06a70", "session_duration_hours": 225656, "slug": "<value>", "updated_at": "2024-05-16T13:18:14.737Z", "use_authentication_host": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -9641,11 +9647,23 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listOrganizationUserSessionIssuerMcpServers:
+    speakeasy-default-list-organization-user-session-issuer-mcp-servers:
+      parameters:
+        query:
+          user_session_issuer_id: "f4ac1282-2a41-49b6-85f4-c3494e4d7e9a"
+      responses:
+        "200":
+          application/json: {"items": [{"id": "29425528-378f-4cbf-811e-804a1aaa8520", "kind": "mcp_server", "name": "<value>", "project_id": "93fc37e4-335a-44ce-9386-20009b881094", "project_name": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listOrganizationUserSessionIssuers:
     speakeasy-default-list-organization-user-session-issuers:
       responses:
         "200":
-          application/json: {"items": [{"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "reporting", "created_at": "2026-10-05T14:08:35.857Z", "id": "7b989cad-75db-4c8c-bf46-91e875b43dc0", "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 416907, "slug": "<value>", "updated_at": "2024-01-29T04:15:08.984Z"}]}
+          application/json: {"items": [{"authn_challenge_mode": "<value>", "authorization_server_mode": "shared", "client_id_metadata_admission_mode": "reporting", "created_at": "2026-10-05T14:08:35.857Z", "id": "7b989cad-75db-4c8c-bf46-91e875b43dc0", "issuer_url_pinned": false, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 416907, "slug": "<value>", "updated_at": "2024-01-29T04:15:08.984Z", "use_authentication_host": false}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -10601,7 +10619,7 @@ examples:
         application/json: {"source_id": "e6e798ef-b3af-41cf-963e-c799cc6df56c", "target_id": "052b3241-8b56-44dc-aaa7-ec7ee1fab372"}
       responses:
         "200":
-          application/json: {"cimd_clients_migrated": 436711, "clients_migrated": 717791, "consents_migrated": 36514, "issuer": {"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "reporting", "created_at": "2025-12-10T22:14:34.707Z", "id": "1c313d20-a4cc-4899-ae06-4992f3d9fcbb", "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 104789, "slug": "<value>", "updated_at": "2026-10-27T16:05:32.217Z"}, "remote_sessions_migrated": 501217, "sessions_migrated": 924699, "source_deleted": true}
+          application/json: {"cimd_clients_migrated": 436711, "clients_migrated": 717791, "consents_migrated": 36514, "issuer": {"authn_challenge_mode": "<value>", "authorization_server_mode": "shared", "client_id_metadata_admission_mode": "reporting", "created_at": "2025-12-10T22:14:34.707Z", "id": "1c313d20-a4cc-4899-ae06-4992f3d9fcbb", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 104789, "slug": "<value>", "updated_at": "2026-10-27T16:05:32.217Z", "use_authentication_host": false}, "remote_sessions_migrated": 501217, "sessions_migrated": 924699, "source_deleted": true}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -10656,7 +10674,7 @@ examples:
         application/json: {"id": "a22ecd04-bf4f-4b8f-b117-2f29f8e1d7b7"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "reporting", "created_at": "2024-09-08T19:56:35.390Z", "id": "d478c26f-3291-486c-88f3-a4c0986e44c3", "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 178620, "slug": "<value>", "updated_at": "2024-04-28T10:36:50.791Z"}
+          application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "shared", "client_id_metadata_admission_mode": "reporting", "created_at": "2024-09-08T19:56:35.390Z", "id": "d478c26f-3291-486c-88f3-a4c0986e44c3", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 178620, "slug": "<value>", "updated_at": "2024-04-28T10:36:50.791Z", "use_authentication_host": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -12931,7 +12949,7 @@ examples:
         application/json: {"id": "24c28f8b-9ed7-4b19-bbd9-544bb4d7bd80"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "presets", "created_at": "2024-01-09T04:47:56.336Z", "id": "cbc54770-9e9d-4aee-a6eb-e67a1ea0d7bb", "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 878882, "slug": "<value>", "updated_at": "2026-04-07T12:27:20.446Z"}
+          application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "endpoint", "client_id_metadata_admission_mode": "presets", "created_at": "2024-01-09T04:47:56.336Z", "id": "cbc54770-9e9d-4aee-a6eb-e67a1ea0d7bb", "issuer_url_pinned": true, "organization_id": "<id>", "project_id": "<id>", "session_duration_hours": 878882, "slug": "<value>", "updated_at": "2026-04-07T12:27:20.446Z", "use_authentication_host": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -13212,7 +13230,7 @@ examples:
         application/json: {"id": "dad21314-e682-4be0-b8cf-097f268dafb1"}
       responses:
         "200":
-          application/json: {"authn_challenge_mode": "<value>", "client_id_metadata_admission_mode": "open", "created_at": "2024-11-25T09:16:20.983Z", "id": "ae2557ad-d034-4496-9cc1-323f5e93e0d3", "organization_id": "<id>", "project_id": "c159fbc4-0e4f-4bee-a37b-46aba130899e", "session_duration_hours": 654564, "slug": "<value>", "updated_at": "2025-06-11T18:23:27.676Z"}
+          application/json: {"authn_challenge_mode": "<value>", "authorization_server_mode": "shared", "client_id_metadata_admission_mode": "open", "created_at": "2024-11-25T09:16:20.983Z", "id": "ae2557ad-d034-4496-9cc1-323f5e93e0d3", "issuer_url_pinned": false, "organization_id": "<id>", "project_id": "c159fbc4-0e4f-4bee-a37b-46aba130899e", "session_duration_hours": 654564, "slug": "<value>", "updated_at": "2025-06-11T18:23:27.676Z", "use_authentication_host": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
