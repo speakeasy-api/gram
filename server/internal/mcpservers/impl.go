@@ -79,6 +79,7 @@ type Service struct {
 	networkAccessEligibility networkaccess.EligibilityChecker
 	distributionAdmission    *admission.Guard
 	publicationRequests      plugins.PublicationRequests
+	hostedServers            HostedServerWriter
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -116,6 +117,7 @@ func NewService(
 		networkAccessEligibility: networkAccessEligibility,
 		distributionAdmission:    admission.NewGuard(),
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
+		hostedServers:            nil,
 	}
 }
 
@@ -687,7 +689,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, err
 	}
-	if isCanonicalHostedWrapper(unlocked) || (ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID) {
+	if isCanonicalHostedWrapper(unlocked) {
+		return s.updateHostedServer(ctx, logger, unlocked, payload, ids)
+	}
+	if ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID {
 		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
 	}
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)

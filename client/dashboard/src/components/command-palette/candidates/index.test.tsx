@@ -488,6 +488,30 @@ describe("useMcpServerCandidates", () => {
     );
   });
 
+  it("sends hosted server enables to the toolset page", async () => {
+    mocks.scopes = ["mcp:write"];
+    mocks.toolsets = [
+      { id: "toolset-1", name: "Hosted", slug: "hosted", mcpIsPublic: true },
+    ];
+    mocks.mcpServers = [
+      {
+        ...HOSTED_ROW,
+        id: "toolset-1",
+        environmentId: undefined,
+        visibility: "disabled",
+      },
+    ];
+    mocks.updateMcpServer.mockResolvedValue({});
+    const { result } = renderCandidates();
+    const [hosted] = byKind(result.current, "mcp_server");
+
+    await act(async () => {
+      await hosted?.run("enable");
+    });
+    expect(mocks.updateMcpServer).not.toHaveBeenCalled();
+    expect(mocks.goToToolsetDetails).toHaveBeenCalledWith("hosted");
+  });
+
   // A hosted server is granted under its toolset id (the server resolves the
   // grant the same way), so a grant naming the toolset attaches the verbs and
   // one naming an unrelated server does not.
