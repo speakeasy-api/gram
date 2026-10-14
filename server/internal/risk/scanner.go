@@ -1786,11 +1786,18 @@ func (s *Scanner) recordShadowComparison(ctx context.Context, policy repo.RiskPo
 	if compared == 0 {
 		return
 	}
+	legacy := in.legacy
+	// A restricted comparison reads the policy verdict only when the compared
+	// engine produced it. A verdict from another source (the lane's own
+	// finding or sentinel for an enforced source) means that engine never
+	// ran, so there is nothing to compare.
+	if in.sources != nil && legacy != nil && !slices.Contains(in.sources, legacy.Source) {
+		return
+	}
 	// The sentinel is detected on the lane's raw findings, not per source:
 	// the lane answers for every covered source at once, so its outage is
 	// the same whichever sources the policy compares.
 	llmUnavailable := in.llmFindings == nil || slices.ContainsFunc(in.llmFindings, llmanalyzer.IsDeadLetter)
-	legacy := in.legacy
 	legacyUnavailable := in.legacyUnavailable || (legacy != nil && legacy.DeadLetterReason != "")
 	legacyMatched := legacy != nil && legacy.DeadLetterReason == "" && legacy.Source != ra.SourceCustom
 
@@ -1823,6 +1830,11 @@ func (s *Scanner) recordShadowComparison(ctx context.Context, policy repo.RiskPo
 			attr.RiskScanMode(llmanalyzer.ScanModeSync),
 			attr.Outcome(comparison),
 		))
+	}
+	// A policy that also enforces from the lane already counted its
+	// evaluation in scanPolicy.
+	if in.sources != nil && llmanalyzer.EnforcesAnySource(policy.Sources) {
+		return
 	}
 	s.recordLLMPolicyEvaluation(ctx, policy, llmOutcome, duration)
 }

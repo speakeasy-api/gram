@@ -134,9 +134,9 @@ func EnforcedRuleID(ruleID string) bool {
 	return false
 }
 
-// RiskKeyForSource maps a policy source to the model risk key that covers it.
-// ok is false for sources the analyzer does not replace (custom, shadow_mcp,
-// account_identity, ...).
+// RiskKeyForSource maps a policy source to the model risk key that scores it,
+// enforced or compared. ok is false for sources the model does not score
+// (custom, shadow_mcp, account_identity, ...).
 func RiskKeyForSource(source string) (key string, ok bool) {
 	key, ok = riskKeysBySource[source]
 	return key, ok
@@ -170,8 +170,8 @@ func AllRuleIDs() []string {
 	return append(out, RuleDeadLetter)
 }
 
-// CoversAnySource reports whether at least one of the policy sources is
-// replaced by the analyzer.
+// CoversAnySource reports whether the model scores at least one of the policy
+// sources, enforced or compared; see Enforces for enforcement.
 func CoversAnySource(sources []string) bool {
 	for _, source := range sources {
 		if _, ok := riskKeysBySource[source]; ok {

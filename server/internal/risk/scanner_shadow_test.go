@@ -537,4 +537,29 @@ func TestScanner_LLMModeMixedPolicyComparesOnlyPromptInjection(t *testing.T) {
 	require.Equal(t, int32(1), engine.calls.Load())
 	require.Equal(t, int32(1), dispatcher.calls.Load(), "one lane serves both the enforced and the compared source")
 	require.Equal(t, map[string]int64{"agree_match": 1}, outcomeCounts(t, reader, "risk.llm.shadow_comparison", policyID.String()), "only prompt injection is compared; the enforced source has no legacy verdict")
+	require.Equal(t, map[string]int64{"clean": 1}, outcomeCounts(t, reader, "risk.llm.policy_evaluations", policyID.String()), "the lane's evaluation is counted once, by the enforcing path")
+}
+
+// When the lane's enforced finding settles the policy before the cascade
+// runs, nothing is compared: the cascade produced no verdict.
+func TestScanner_LLMModeEnforcedMatchSkipsPromptInjectionComparison(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	policyID := insertRealtimeEnforcingPolicy(t, ti, ctx, "everything", []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePromptInjection}, nil, "block")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+
+	dispatcher := perLaneDispatcher(nil, func(lane enforcereply.Lane) *riskv1.EnforcementReply {
+		return okReply(lane, llmReplyFinding(llmanalyzer.RuleSecret, "secrets", "An AWS access key id appears in the message."))
+	})
+	engine := &recordingPIEngine{}
+	scanner, reader := newMeteredScanner(t, ti, &instrumentedPIIScanner{}, engine, llmEnforcementFlags(ctx), dispatcher)
+
+	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, shadowScanText, message.User, ""))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, llmanalyzer.Source, result.Source)
+	require.Equal(t, llmanalyzer.RuleSecret, result.RuleID)
+	require.Equal(t, int32(0), engine.calls.Load(), "the enforced match returns before the cascade runs")
+	require.Empty(t, outcomeCounts(t, reader, "risk.llm.shadow_comparison", policyID.String()), "no cascade verdict, nothing compared")
+	require.Equal(t, map[string]int64{"matched": 1}, outcomeCounts(t, reader, "risk.llm.policy_evaluations", policyID.String()))
 }

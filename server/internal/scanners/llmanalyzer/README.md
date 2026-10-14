@@ -17,13 +17,13 @@ this package and its call sites, not the plan.
 
 ## Scope
 
-| Policy source      | Model risk key          | Rule id emitted        | Category           |
-| ------------------ | ----------------------- | ---------------------- | ------------------ |
-| `gitleaks`         | `secrets_leak`          | `secret.llm`           | `secrets`          |
-| `presidio`         | `personal_data_leak`    | `pii.llm`              | `pii`              |
-| `prompt_injection` | `prompt_injection`      | `prompt_injection.llm` | `prompt_injection` | compared only: always published `shadow = 1`, never enforced |
-| `destructive_tool` | `destructive_tool_call` | `destructive_tool.llm` | `destructive_tool` |
-| `cli_destructive`  | `destructive_tool_call` | `cli_destructive.llm`  | `cli_destructive`  |
+| Policy source      | Model risk key          | Rule id emitted        | Category                                                               |
+| ------------------ | ----------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| `gitleaks`         | `secrets_leak`          | `secret.llm`           | `secrets`                                                              |
+| `presidio`         | `personal_data_leak`    | `pii.llm`              | `pii`                                                                  |
+| `prompt_injection` | `prompt_injection`      | `prompt_injection.llm` | `prompt_injection` (compared only; batch findings marked `shadow = 1`) |
+| `destructive_tool` | `destructive_tool_call` | `destructive_tool.llm` | `destructive_tool`                                                     |
+| `cli_destructive`  | `destructive_tool_call` | `cli_destructive.llm`  | `cli_destructive`                                                      |
 
 One model call scores each risk key once; fan-out (`FindingsForSources`)
 re-labels the finding per policy source, so a single `destructive_tool_call`
