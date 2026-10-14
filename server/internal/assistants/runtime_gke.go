@@ -16,10 +16,10 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/sandbox"
 )
 
 const runtimeBackendGKE = "gke"
@@ -47,21 +47,6 @@ const (
 	// converges. Past the bound the stale pod is kept — availability over
 	// freshness — and a later admission retries.
 	gkeImageDrainAttempts = 3
-
-	gkeSandboxReadyConditionType = "Ready"
-
-	// gkeClaimUIDLabel is injected by the SandboxClaim controller onto the pod,
-	// carrying the owning claim's UID. We resolve the runner pod (for its IP) by
-	// this label.
-	gkeClaimUIDLabel = "agents.x-k8s.io/claim-uid"
-)
-
-var (
-	// GKE's managed Agent Sandbox addon serves v1alpha1 (upstream main is on
-	// v1beta1, but the GKE-shipped feature is v1alpha1).
-	gkeSandboxClaimGVR = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxclaims"}
-	gkeSandboxGVR      = schema.GroupVersionResource{Group: "agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxes"}
-	gkePodGVR          = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 )
 
 // GKERuntimeConfig configures the GKE Agent Sandbox runtime backend. The dynamic
@@ -170,7 +155,7 @@ func (g *GKERuntimeBackend) claimName(runtime assistantRuntimeRecord) string {
 }
 
 func (g *GKERuntimeBackend) claims() dynamic.ResourceInterface {
-	return g.config.Dynamic.Resource(gkeSandboxClaimGVR).Namespace(g.config.Namespace)
+	return g.config.Dynamic.Resource(sandbox.Claims).Namespace(g.config.Namespace)
 }
 
 func (g *GKERuntimeBackend) Ensure(ctx context.Context, runtime assistantRuntimeRecord) (result RuntimeBackendEnsureResult, err error) {
@@ -336,7 +321,7 @@ func (g *GKERuntimeBackend) buildClaim(name string, runtime assistantRuntimeReco
 		runtimeLabelRole:        runtimeLabelRoleAssistantRuntime,
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": gkeSandboxClaimGVR.Group + "/" + gkeSandboxClaimGVR.Version,
+		"apiVersion": sandbox.Claims.Group + "/" + sandbox.Claims.Version,
 		"kind":       "SandboxClaim",
 		"metadata": map[string]any{
 			"name":      name,
@@ -359,19 +344,19 @@ func (g *GKERuntimeBackend) buildClaim(name string, runtime assistantRuntimeReco
 // waitForSandbox polls the claim until it names an assigned Sandbox, then polls
 // that Sandbox until it reports Ready and its runner pod has an IP.
 func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string, deadline time.Time) (gkeRuntimeMetadata, error) {
-	sandboxes := g.config.Dynamic.Resource(gkeSandboxGVR).Namespace(g.config.Namespace)
+	sandboxes := g.config.Dynamic.Resource(sandbox.Sandboxes).Namespace(g.config.Namespace)
 	for {
 		claim, err := g.claims().Get(ctx, claimName, metav1.GetOptions{})
 		if err != nil {
 			return gkeRuntimeMetadata{}, fmt.Errorf("get sandbox claim %s: %w", claimName, err)
 		}
-		sandboxName, _, _ := unstructured.NestedString(claim.Object, "status", "sandbox", "Name")
+		sandboxName := sandbox.AssignedName(claim)
 		if sandboxName != "" {
-			sandbox, err := sandboxes.Get(ctx, sandboxName, metav1.GetOptions{})
+			resource, err := sandboxes.Get(ctx, sandboxName, metav1.GetOptions{})
 			if err != nil && !k8serrors.IsNotFound(err) {
 				return gkeRuntimeMetadata{}, fmt.Errorf("get sandbox %s: %w", sandboxName, err)
 			}
-			if err == nil && sandboxReady(sandbox) {
+			if err == nil && sandbox.Ready(resource) {
 				podIP, image, err := g.resolveRunnerPod(ctx, string(claim.GetUID()))
 				if err != nil {
 					return gkeRuntimeMetadata{}, err
@@ -398,42 +383,23 @@ func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string
 	}
 }
 
-// sandboxReady reports whether the Sandbox's Ready condition is true.
-func sandboxReady(sandbox *unstructured.Unstructured) bool {
-	conditions, _, _ := unstructured.NestedSlice(sandbox.Object, "status", "conditions")
-	for _, raw := range conditions {
-		cond, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		condType, _, _ := unstructured.NestedString(cond, "type")
-		condStatus, _, _ := unstructured.NestedString(cond, "status")
-		if condType == gkeSandboxReadyConditionType {
-			return condStatus == string(metav1.ConditionTrue)
-		}
-	}
-	return false
-}
-
 // resolveRunnerPod finds the runner pod for a claim (by the controller-injected
 // claim-uid label) and returns its IP and container image once the pod is
 // Running. An empty IP means the pod is not scheduled/running yet, so the
 // caller keeps polling.
 func (g *GKERuntimeBackend) resolveRunnerPod(ctx context.Context, claimUID string) (podIP string, image string, err error) {
-	pods, err := g.config.Dynamic.Resource(gkePodGVR).Namespace(g.config.Namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: gkeClaimUIDLabel + "=" + claimUID,
-	})
+	pods, err := sandbox.RunningPods(ctx, g.config.Dynamic, g.config.Namespace, claimUID)
 	if err != nil {
 		return "", "", fmt.Errorf("list runner pods for claim %s: %w", claimUID, err)
 	}
-	for i := range pods.Items {
-		phase, _, _ := unstructured.NestedString(pods.Items[i].Object, "status", "phase")
-		ip, _, _ := unstructured.NestedString(pods.Items[i].Object, "status", "podIP")
+	for i := range pods {
+		phase, _, _ := unstructured.NestedString(pods[i].Object, "status", "phase")
+		ip, _, _ := unstructured.NestedString(pods[i].Object, "status", "podIP")
 		if phase != "Running" || ip == "" {
 			continue
 		}
 		img := ""
-		containers, _, _ := unstructured.NestedSlice(pods.Items[i].Object, "spec", "containers")
+		containers, _, _ := unstructured.NestedSlice(pods[i].Object, "spec", "containers")
 		if len(containers) > 0 {
 			if container, ok := containers[0].(map[string]any); ok {
 				img, _, _ = unstructured.NestedString(container, "image")

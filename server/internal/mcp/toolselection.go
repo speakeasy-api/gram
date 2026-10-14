@@ -99,6 +99,9 @@ func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resourc
 	return endpoint.McpServerID.Valid && endpoint.ToolsetID.Valid && resource == "toolset:"+endpoint.ToolsetID.UUID.String()
 }
 
+// liveSessionPolicyKey bypasses the short-lived HTTP policy cache during code callbacks.
+type liveSessionPolicyKey struct{}
+
 // loadSessionPolicy resolves tool selection and refreshability for a validated
 // session JTI. The selection is nil for an all-tools session. Any error means the request
 // must be rejected: missing row (a live jti always has one — refresh
@@ -109,10 +112,16 @@ func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEn
 
 	var raw []byte
 	var refreshable bool
-	if cached, err := s.sessionPolicyCache.Get(ctx, sessionPolicyCacheKey(issuerID, jti)); err == nil {
-		raw = cached.Selection
-		refreshable = cached.Refreshable
-	} else {
+	live, _ := ctx.Value(liveSessionPolicyKey{}).(bool)
+	cachedPolicy := false
+	if !live {
+		if cached, err := s.sessionPolicyCache.Get(ctx, sessionPolicyCacheKey(issuerID, jti)); err == nil {
+			raw = cached.Selection
+			refreshable = cached.Refreshable
+			cachedPolicy = true
+		}
+	}
+	if !cachedPolicy {
 		row, derr := usersessions_repo.New(s.db).GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
 			Jti:                 jti,
@@ -125,13 +134,15 @@ func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEn
 		}
 		raw = row.ToolSelection
 		refreshable = row.Refreshable
-		if cerr := s.sessionPolicyCache.Store(ctx, sessionPolicyEntry{
-			IssuerID:    issuerID,
-			JTI:         jti,
-			Selection:   raw,
-			Refreshable: refreshable,
-		}); cerr != nil {
-			s.logger.WarnContext(ctx, "cache session policy", attr.SlogError(cerr))
+		if !live {
+			if cerr := s.sessionPolicyCache.Store(ctx, sessionPolicyEntry{
+				IssuerID:    issuerID,
+				JTI:         jti,
+				Selection:   raw,
+				Refreshable: refreshable,
+			}); cerr != nil {
+				s.logger.WarnContext(ctx, "cache session policy", attr.SlogError(cerr))
+			}
 		}
 	}
 

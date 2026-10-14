@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/sandbox"
 	"github.com/stretchr/testify/require"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,9 +30,9 @@ import (
 func newGKEFakeDynamic() *dynamicfake.FakeDynamicClient {
 	scheme := runtime.NewScheme()
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		gkeSandboxClaimGVR: "SandboxClaimList",
-		gkeSandboxGVR:      "SandboxList",
-		gkePodGVR:          "PodList",
+		sandbox.Claims:    "SandboxClaimList",
+		sandbox.Sandboxes: "SandboxList",
+		sandbox.Pods:      "PodList",
 	})
 }
 
@@ -109,14 +110,14 @@ func TestSandboxReady(t *testing.T) {
 			},
 		},
 	}}
-	require.True(t, sandboxReady(ready))
+	require.True(t, sandbox.Ready(ready))
 
 	notReady := &unstructured.Unstructured{Object: map[string]any{
 		"status": map[string]any{
 			"conditions": []any{map[string]any{"type": "Ready", "status": "False"}},
 		},
 	}}
-	require.False(t, sandboxReady(notReady))
+	require.False(t, sandbox.Ready(notReady))
 }
 
 func TestGKERunTurnPostsToRunner(t *testing.T) {
@@ -216,13 +217,13 @@ func TestGKEEnsureWaitsForReadySandbox(t *testing.T) {
 
 	claimName := "gram-asst-" + assistantID.String()
 	claim := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": gkeSandboxClaimGVR.Group + "/" + gkeSandboxClaimGVR.Version,
+		"apiVersion": sandbox.Claims.Group + "/" + sandbox.Claims.Version,
 		"kind":       "SandboxClaim",
 		"metadata":   map[string]any{"name": claimName, "namespace": "gram-test", "uid": "claim-uid-1"},
 		"status":     map[string]any{"sandbox": map[string]any{"Name": "sb-1"}},
 	}}
-	sandbox := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": gkeSandboxGVR.Group + "/" + gkeSandboxGVR.Version,
+	resource := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": sandbox.Sandboxes.Group + "/" + sandbox.Sandboxes.Version,
 		"kind":       "Sandbox",
 		"metadata":   map[string]any{"name": "sb-1", "namespace": "gram-test"},
 		"status": map[string]any{
@@ -237,15 +238,15 @@ func TestGKEEnsureWaitsForReadySandbox(t *testing.T) {
 		"metadata": map[string]any{
 			"name":      "sb-1-pod",
 			"namespace": "gram-test",
-			"labels":    map[string]any{gkeClaimUIDLabel: "claim-uid-1"},
+			"labels":    map[string]any{sandbox.ClaimUIDLabel: "claim-uid-1"},
 		},
 		"status": map[string]any{"phase": "Running", "podIP": host},
 	}}
 
 	dyn := newGKEFakeDynamic()
-	seedUnstructured(t, dyn, gkeSandboxClaimGVR, claim)
-	seedUnstructured(t, dyn, gkeSandboxGVR, sandbox)
-	seedUnstructured(t, dyn, gkePodGVR, pod)
+	seedUnstructured(t, dyn, sandbox.Claims, claim)
+	seedUnstructured(t, dyn, sandbox.Sandboxes, resource)
+	seedUnstructured(t, dyn, sandbox.Pods, pod)
 	backend := newTestGKEBackend(t, dyn, doer, port)
 	result, err := backend.Ensure(t.Context(), assistantRuntimeRecord{
 		ID:                  uuid.New(),
@@ -270,21 +271,21 @@ func TestGKEEnsureWaitsForReadySandbox(t *testing.T) {
 // with the claim uid — the controller-written state a claim adoption ends in.
 func seedSandboxWithPod(t *testing.T, dyn dynamic.Interface, claimUID, sandboxName, podIP, image string) {
 	t.Helper()
-	seedUnstructured(t, dyn, gkeSandboxGVR, &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": gkeSandboxGVR.Group + "/" + gkeSandboxGVR.Version,
+	seedUnstructured(t, dyn, sandbox.Sandboxes, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": sandbox.Sandboxes.Group + "/" + sandbox.Sandboxes.Version,
 		"kind":       "Sandbox",
 		"metadata":   map[string]any{"name": sandboxName, "namespace": "gram-test"},
 		"status": map[string]any{
 			"conditions": []any{map[string]any{"type": "Ready", "status": "True"}},
 		},
 	}})
-	seedUnstructured(t, dyn, gkePodGVR, &unstructured.Unstructured{Object: map[string]any{
+	seedUnstructured(t, dyn, sandbox.Pods, &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Pod",
 		"metadata": map[string]any{
 			"name":      sandboxName + "-pod",
 			"namespace": "gram-test",
-			"labels":    map[string]any{gkeClaimUIDLabel: claimUID},
+			"labels":    map[string]any{sandbox.ClaimUIDLabel: claimUID},
 		},
 		"spec":   map[string]any{"containers": []any{map[string]any{"name": "runner", "image": image}}},
 		"status": map[string]any{"phase": "Running", "podIP": podIP},
@@ -296,8 +297,8 @@ func seedSandboxWithPod(t *testing.T, dyn dynamic.Interface, claimUID, sandboxNa
 // backend reads in production.
 func seedClaimedSandbox(t *testing.T, dyn dynamic.Interface, claimName, claimUID, sandboxName, podIP, image string) {
 	t.Helper()
-	seedUnstructured(t, dyn, gkeSandboxClaimGVR, &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": gkeSandboxClaimGVR.Group + "/" + gkeSandboxClaimGVR.Version,
+	seedUnstructured(t, dyn, sandbox.Claims, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": sandbox.Claims.Group + "/" + sandbox.Claims.Version,
 		"kind":       "SandboxClaim",
 		"metadata":   map[string]any{"name": claimName, "namespace": "gram-test", "uid": claimUID},
 		"status":     map[string]any{"sandbox": map[string]any{"Name": sandboxName}},
@@ -437,18 +438,18 @@ func TestGKEReapDeletesClaimIdempotently(t *testing.T) {
 	assistantID := uuid.New()
 	claimName := "gram-asst-" + assistantID.String()
 	claim := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": gkeSandboxClaimGVR.Group + "/" + gkeSandboxClaimGVR.Version,
+		"apiVersion": sandbox.Claims.Group + "/" + sandbox.Claims.Version,
 		"kind":       "SandboxClaim",
 		"metadata":   map[string]any{"name": claimName, "namespace": "gram-test"},
 	}}
 	dyn := newGKEFakeDynamic()
-	seedUnstructured(t, dyn, gkeSandboxClaimGVR, claim)
+	seedUnstructured(t, dyn, sandbox.Claims, claim)
 	// No runner doer: Reap only deletes the SandboxClaim, no HTTP to the pod.
 	backend := newTestGKEBackend(t, dyn, nil, 8081)
 	record := gkeRecord(t, backend, assistantID, "127.0.0.1")
 
 	require.NoError(t, backend.Reap(t.Context(), record))
-	_, err := dyn.Resource(gkeSandboxClaimGVR).Namespace("gram-test").Get(t.Context(), claimName, metav1.GetOptions{})
+	_, err := dyn.Resource(sandbox.Claims).Namespace("gram-test").Get(t.Context(), claimName, metav1.GetOptions{})
 	require.True(t, k8serrors.IsNotFound(err))
 
 	// Idempotent: reaping an already-gone claim succeeds.
