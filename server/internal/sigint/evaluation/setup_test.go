@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"sigs.k8s.io/yaml"
+	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/internal/classifier/jev"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -26,6 +26,12 @@ import (
 type modelRequests struct {
 	mu     sync.Mutex
 	bodies []json.RawMessage
+}
+
+func (r *modelRequests) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.bodies)
 }
 
 func (r *modelRequests) snapshot(t *testing.T) []byte {
@@ -88,8 +94,13 @@ func requireGolden(t *testing.T, name string, actual []byte) {
 	t.Helper()
 	fixture, err := os.ReadFile(filepath.Join("testdata", name+".golden.yaml"))
 	require.NoError(t, err)
-	// Parse YAML strictly, then compare with the actual JSON without losing integers.
-	expected, err := yaml.YAMLToJSONStrict(fixture)
+	// Decode exactly one YAML document; converting directly could silently ignore
+	// trailing documents. Encoding integers as JSON preserves their full precision.
+	fixtureDecoder := yaml.NewDecoder(bytes.NewReader(fixture))
+	var expectedValue any
+	require.NoError(t, fixtureDecoder.Decode(&expectedValue))
+	require.ErrorIs(t, fixtureDecoder.Decode(new(any)), io.EOF)
+	expected, err := json.Marshal(expectedValue)
 	require.NoError(t, err)
 	decode := func(data []byte) any {
 		t.Helper()
@@ -98,6 +109,7 @@ func requireGolden(t *testing.T, name string, actual []byte) {
 		decoder.UseNumber()
 		var value any
 		require.NoError(t, decoder.Decode(&value))
+		require.ErrorIs(t, decoder.Decode(new(any)), io.EOF)
 		return value
 	}
 	require.Equal(t, decode(expected), decode(actual), "golden fixture: %s", name)

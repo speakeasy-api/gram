@@ -135,7 +135,7 @@ func handler(t *testing.T, m *conversationv1.MessageEvent, definitions []Sensor,
 
 func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 	t.Parallel()
-	c, _ := newRecordingClassifier(t)
+	c, requests := newRecordingClassifier(t)
 	m := message()
 	m.SetRole(conversationv1.MessageEvent_ROLE_ASSISTANT)
 	provenance := &conversationv1.MessageEvent_IngestionContext{}
@@ -159,6 +159,7 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 	provenance.SetSource("promoted")
 	provenance.SetBillingUserId("promoted-billing-user")
 	require.NoError(t, h.Handle(t.Context(), m, meta))
+	require.Equal(t, 2, requests.count())
 	require.Len(t, pub.readings, 6)
 	for i := range 3 {
 		a, b := pub.readings[i], pub.readings[i+3]

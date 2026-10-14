@@ -4251,6 +4251,16 @@ func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
 		}
 	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
+	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
@@ -4324,6 +4334,16 @@ func ValidateGetSensorResponseBody(body *GetSensorResponseBody) (err error) {
 	if body.InputStrategy != nil {
 		if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
 		}
 	}
 	if body.Slug != nil {
@@ -4420,6 +4440,16 @@ func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
 		}
 	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
+		}
+	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
@@ -4493,6 +4523,16 @@ func ValidateDeleteSensorResponseBody(body *DeleteSensorResponseBody) (err error
 	if body.InputStrategy != nil {
 		if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
 		}
 	}
 	if body.Slug != nil {
@@ -7012,6 +7052,16 @@ func ValidateSigintSensorResponseBody(body *SigintSensorResponseBody) (err error
 	if body.InputStrategy != nil {
 		if !(*body.InputStrategy == "single_message" || *body.InputStrategy == "sliding_window") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.input_strategy", *body.InputStrategy, []any{"single_message", "sliding_window"}))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize < 2 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 2, true))
+		}
+	}
+	if body.WindowSize != nil {
+		if *body.WindowSize > 10 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.window_size", *body.WindowSize, 10, false))
 		}
 	}
 	if body.Slug != nil {

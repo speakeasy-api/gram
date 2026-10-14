@@ -114036,6 +114036,8 @@ components:
                     type: integer
                     description: Sliding window size including the target message, between 2 and 10; defaults to 5
                     format: int64
+                    minimum: 2
+                    maximum: 10
             description: A project-scoped sensor with ordered live references to custom signals. signal_ids is always present, including when empty.
             required:
                 - input_strategy

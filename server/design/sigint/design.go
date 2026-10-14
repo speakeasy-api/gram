@@ -276,7 +276,7 @@ var SigintSignal = Type("SigintSignal", func() {
 
 var SigintSensor = Type("SigintSensor", func() {
 	Attribute("input_strategy", SigintInputStrategy, "Message context strategy; defaults to single_message")
-	Attribute("window_size", Int, "Sliding window size including the target message, between 2 and 10; defaults to 5")
+	Attribute("window_size", Int, "Sliding window size including the target message, between 2 and 10; defaults to 5", func() { Minimum(2); Maximum(10) })
 	Required("input_strategy", "window_size")
 	Attribute("enabled", Boolean, "Whether the sensor is eligible for evaluation. Disabled sensors remain visible and editable.")
 	Required("enabled")
