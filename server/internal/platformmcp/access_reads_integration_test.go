@@ -192,9 +192,11 @@ func TestGetMemberMCPAccessEvaluatesLiveRoleGrantsAcrossInventory(t *testing.T) 
 	require.NotNil(t, actual)
 	require.Equal(t, project.ID.String(), actual.ProjectID)
 	require.Equal(t, "rbac", actual.AuthorizationMode)
-	require.Equal(t, "some_tools", actual.ConnectionAccess)
+	// mcp:read expands to connect, so the broad view grant also gives all-tool
+	// connection access despite the additional narrowed connect grant.
+	require.Equal(t, "all_tools", actual.ConnectionAccess)
 	require.True(t, actual.CanConnect)
-	require.Equal(t, "some", actual.ToolAccess)
+	require.Equal(t, "all", actual.ToolAccess)
 	require.True(t, actual.CanView)
 	require.False(t, actual.CanManage)
 

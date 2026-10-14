@@ -147,9 +147,8 @@ func effectiveToolAccess(grants []authz.Grant, check authz.Check, explanation au
 
 func selectorReachesMCP(selector authz.Selector, check authz.Check) bool {
 	for key, want := range map[string]string{
-		authz.SelectorKeyResourceKind: check.ResourceKind,
-		authz.SelectorKeyResourceID:   check.ResourceID,
-		authz.SelectorKeyProjectID:    check.Dimensions[authz.SelectorKeyProjectID],
+		authz.SelectorKeyResourceID: check.ResourceID,
+		authz.SelectorKeyProjectID:  check.Dimensions[authz.SelectorKeyProjectID],
 	} {
 		if value := selector[key]; value != "" && value != authz.WildcardResource && value != want {
 			return false
