@@ -340,8 +340,12 @@ func (s *Service) describeMemberToolset(
 	// The consent-screen tool selection narrows describe exactly as
 	// buildMemberDispatch narrows execute, so the two surfaces agree on the
 	// session's visible tools (parity with rpc_tools_list.go).
-	if gate.toolSelection != nil {
-		described.Tools = toolfilter.FilterToolsBySelection(described.Tools, gate.toolSelection)
+	memberSelection, err := gate.memberToolSelection(member)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "scope tool selection to member").LogError(ctx, logger)
+	}
+	if memberSelection != nil {
+		described.Tools = toolfilter.FilterToolsBySelection(described.Tools, memberSelection)
 	}
 
 	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
@@ -432,6 +436,10 @@ func (s *Service) buildMemberDispatch(
 	if err != nil {
 		return nil, nil, err
 	}
+	memberSelection, err := gate.memberToolSelection(member)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "scope tool selection to member").LogError(ctx, logger)
+	}
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
@@ -496,7 +504,7 @@ func (s *Service) buildMemberDispatch(
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,
 		identityCoverageRecorded: false,
-		toolSelection:            gate.toolSelection,
+		toolSelection:            memberSelection,
 	}
 	return toolset, inputs, nil
 }

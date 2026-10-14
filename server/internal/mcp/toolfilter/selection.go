@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 )
 
 // Annotation names a raw MCP tool hint the consent screen can filter on.
@@ -91,7 +92,9 @@ type AllowEntry struct {
 // entries. An empty allow list authorizes zero tools.
 type SessionSelection struct {
 	// Resource pins the selection to the endpoint whose tool inventory the
-	// user consented on: "mcp_server:<uuid>" or "toolset:<uuid>". Session
+	// user consented on: "mcp_server:<uuid>", "toolset:<uuid>", or
+	// "meta_mcp_server:<uuid>" for a gateway, whose names are qualified with
+	// the member server's slug. Session
 	// tokens are portable across endpoints sharing an issuer, so a selection
 	// served against a different resource is rejected, never reinterpreted.
 	Resource string `json:"resource"`
@@ -199,7 +202,7 @@ func ParseSessionSelection(raw []byte) (*SessionSelection, error) {
 // server-authored "<kind>:<uuid>" shape with a canonical, non-zero UUID.
 func validResource(resource string) bool {
 	kind, id, ok := strings.Cut(resource, ":")
-	if !ok || (kind != "mcp_server" && kind != "toolset") {
+	if !ok || (kind != "mcp_server" && kind != "toolset" && kind != gatewayResourceKind) {
 		return false
 	}
 	parsed, err := uuid.Parse(id)
@@ -383,4 +386,48 @@ func FilterToolsBySelection(tools []*types.Tool, sel *SessionSelection) []*types
 		}
 	}
 	return filtered
+}
+
+const gatewayResourceKind = "meta_mcp_server"
+
+// ForGatewayMember projects a gateway selection onto one member server so the
+// member's own catalogs, dispatch, and proxies enforce it with member-local
+// tool names. Live annotation grants carry over unchanged; named grants keep
+// only the member's tools. The member gets its own resource and a grant id
+// derived from the gateway grant, keeping per-session caches member-scoped.
+func (s *SessionSelection) ForGatewayMember(memberSlug string, memberServerID uuid.UUID) (*SessionSelection, error) {
+	if s == nil {
+		return nil, nil
+	}
+	if kind, _, _ := strings.Cut(s.Resource, ":"); kind != gatewayResourceKind {
+		return nil, fmt.Errorf("tool selection is not bound to a gateway")
+	}
+	prefix := memberSlug + metamcp.QualifiedNameSeparator
+	local := func(names []string) []string {
+		out := []string{}
+		for _, name := range names {
+			if tool, ok := strings.CutPrefix(name, prefix); ok && tool != "" {
+				out = append(out, tool)
+			}
+		}
+		return out
+	}
+	entries := make([]AllowEntry, 0, len(s.Allow))
+	for _, entry := range s.Allow {
+		switch entry.Type {
+		case AllowTypeTool:
+			for _, name := range local([]string{entry.Name}) {
+				entries = append(entries, AllowEntry{Type: AllowTypeTool, Name: name, Mode: nil, Tools: nil})
+			}
+		case AllowTypeAnnotation:
+			projected := AllowEntry{Type: AllowTypeAnnotation, Name: entry.Name, Mode: entry.Mode, Tools: nil}
+			if entry.Tools != nil {
+				tools := local(*entry.Tools)
+				projected.Tools = &tools
+			}
+			entries = append(entries, projected)
+		}
+	}
+	grantID := uuid.NewSHA1(s.GrantID, []byte(memberServerID.String()))
+	return NewSessionSelection("mcp_server:"+memberServerID.String(), grantID, entries)
 }

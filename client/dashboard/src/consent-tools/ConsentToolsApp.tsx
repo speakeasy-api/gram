@@ -35,6 +35,34 @@ export interface ConsentToolsAppProps {
 interface ConsentTool {
   name: string;
   annotations: ToolAnnotation[];
+  /** The gateway member server the tool comes from; absent on single servers. */
+  source?: string;
+}
+
+const SOURCE_META_KEY = "gram.dev/source";
+
+/** A gateway qualifies tool names as `<server slug>--<tool>`. */
+const QUALIFIED_NAME_SEPARATOR = "--";
+
+/** The name to show for a tool: a gateway tool drops its server prefix. */
+function displayName(tool: ConsentTool): string {
+  if (!tool.source) return tool.name;
+  const at = tool.name.indexOf(QUALIFIED_NAME_SEPARATOR);
+  return at > 0
+    ? tool.name.slice(at + QUALIFIED_NAME_SEPARATOR.length)
+    : tool.name;
+}
+
+/** Groups tools by source, keeping each source in first-seen order. */
+function toolsBySource(tools: ConsentTool[]): [string, ConsentTool[]][] {
+  const sections = new Map<string, ConsentTool[]>();
+  for (const tool of tools) {
+    const source = tool.source ?? "";
+    const section = sections.get(source);
+    if (section) section.push(tool);
+    else sections.set(source, [tool]);
+  }
+  return [...sections];
 }
 
 interface RoleHiddenTools {
@@ -150,9 +178,11 @@ async function fetchConsentInventory(
       for (const tool of page.tools) {
         if (seen.has(tool.name)) throw new Error("duplicate tool name");
         seen.add(tool.name);
+        const source = tool._meta?.[SOURCE_META_KEY];
         tools.push({
           name: tool.name,
           annotations: annotationsFromHints(tool.annotations),
+          ...(typeof source === "string" && source !== "" ? { source } : {}),
         });
       }
       const meta = (page as { _meta?: Record<string, unknown> })._meta;
@@ -449,7 +479,12 @@ export function ConsentToolsApp({
   const viewed =
     normalizedQuery === ""
       ? grouped
-      : grouped.filter((t) => t.name.toLowerCase().includes(normalizedQuery));
+      : grouped.filter(
+          (t) =>
+            t.name.toLowerCase().includes(normalizedQuery) ||
+            (t.source ?? "").toLowerCase().includes(normalizedQuery),
+        );
+  const hasSources = tools.some((t) => t.source !== undefined);
 
   const groupGranted = (id: ConsentGroup): boolean => {
     if (id === "all") {
@@ -462,11 +497,9 @@ export function ConsentToolsApp({
     return annGrants.has(id);
   };
 
-  // Bulk-select the tools in the current nav group by name. Used for the
-  // groups that have no annotation grant to express them: "All tools" and the
-  // unannotated bucket.
-  const toggleGroupPicks = (group: ConsentGroup) => {
-    const members = groupTools(tools, group);
+  // Bulk-select tools by name: the "All tools" and unannotated groups, which
+  // have no annotation grant to express them, and a gateway's source sections.
+  const togglePicks = (members: ConsentTool[]) => {
     // Read "already granted" from the scope, the same union the checkbox
     // renders from. Reading it from picks alone leaves a group that is fully
     // covered by an annotation grant showing as checked but refusing to
@@ -493,7 +526,7 @@ export function ConsentToolsApp({
 
   const toggleGroupGrant = () => {
     if (nav === "all" || nav === "none") {
-      toggleGroupPicks(nav);
+      togglePicks(groupTools(tools, nav));
       return;
     }
     const next = new Map(annGrants);
@@ -519,6 +552,46 @@ export function ConsentToolsApp({
             (t) => t.name === n && t.annotations.some((a) => annGrants.has(a)),
           ),
       ).length;
+
+  const renderTool = (tool: ConsentTool) => {
+    const viaGrant = allGrant || tool.annotations.some((a) => annGrants.has(a));
+    const inScope = scope.has(tool.name);
+    return (
+      <div
+        key={tool.name}
+        role="checkbox"
+        aria-checked={inScope}
+        aria-disabled={viaGrant}
+        tabIndex={viaGrant ? -1 : 0}
+        onClick={viaGrant ? undefined : () => togglePick(tool.name)}
+        onKeyDown={
+          viaGrant
+            ? undefined
+            : (e) => {
+                if (e.key === " " || e.key === "Enter") {
+                  e.preventDefault();
+                  togglePick(tool.name);
+                }
+              }
+        }
+        className={cn(
+          "flex items-center gap-2.5 px-3 py-2",
+          viaGrant ? "cursor-default" : "hover:bg-accent cursor-pointer",
+        )}
+      >
+        <SelectionBox checked={inScope} />
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-sm"
+          title={tool.name}
+        >
+          {displayName(tool)}
+        </span>
+        {!allGrant && viaGrant && (
+          <span className="text-eyebrow shrink-0">via annotation</span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -616,50 +689,40 @@ export function ConsentToolsApp({
             {/* A minimum height so a three-tool server does not render a
                 letterbox, and a cap so a 200-tool one stays scannable. */}
             <div className="max-h-[19rem] min-h-[11rem] overflow-y-auto">
-              {viewed.map((tool) => {
-                const viaGrant =
-                  allGrant || tool.annotations.some((a) => annGrants.has(a));
-                const inScope = scope.has(tool.name);
-                return (
-                  <div
-                    key={tool.name}
-                    role="checkbox"
-                    aria-checked={inScope}
-                    aria-disabled={viaGrant}
-                    tabIndex={viaGrant ? -1 : 0}
-                    onClick={viaGrant ? undefined : () => togglePick(tool.name)}
-                    onKeyDown={
-                      viaGrant
-                        ? undefined
-                        : (e) => {
-                            if (e.key === " " || e.key === "Enter") {
-                              e.preventDefault();
-                              togglePick(tool.name);
-                            }
-                          }
-                    }
-                    className={cn(
-                      "flex items-center gap-2.5 px-3 py-2",
-                      viaGrant
-                        ? "cursor-default"
-                        : "hover:bg-accent cursor-pointer",
-                    )}
-                  >
-                    <SelectionBox checked={inScope} />
-                    <span
-                      className="min-w-0 flex-1 truncate font-mono text-sm"
-                      title={tool.name}
-                    >
-                      {tool.name}
-                    </span>
-                    {!allGrant && viaGrant && (
-                      <span className="text-eyebrow shrink-0">
-                        via annotation
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
+              {hasSources
+                ? toolsBySource(viewed).map(([source, sectionTools]) => {
+                    const sectionGranted = sectionTools.every((t) =>
+                      scope.has(t.name),
+                    );
+                    return (
+                      <div key={source} role="group" aria-label={source}>
+                        <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={sectionGranted}
+                          onClick={() => togglePicks(sectionTools)}
+                          className="border-border bg-background hover:bg-accent sticky top-0 flex w-full cursor-pointer items-center gap-2.5 border-b px-3 py-2 text-left"
+                        >
+                          <SelectionBox checked={sectionGranted} />
+                          <span
+                            className="min-w-0 flex-1 truncate text-sm font-medium"
+                            title={source}
+                          >
+                            {source}
+                          </span>
+                          <span className="text-muted-foreground shrink-0 text-xs">
+                            {
+                              sectionTools.filter((t) => scope.has(t.name))
+                                .length
+                            }{" "}
+                            of {sectionTools.length}
+                          </span>
+                        </button>
+                        {sectionTools.map(renderTool)}
+                      </div>
+                    );
+                  })
+                : viewed.map(renderTool)}
               {viewed.length === 0 && (
                 <p className="text-muted-foreground px-3 py-3 text-sm">
                   {normalizedQuery === ""

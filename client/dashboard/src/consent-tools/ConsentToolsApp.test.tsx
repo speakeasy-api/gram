@@ -481,4 +481,44 @@ describe("parsePrefillBootstrap", () => {
     ).toBeNull();
     expect(parsePrefillBootstrap('{"tools":["a"]}')).toBeNull();
   });
+  it("groups a gateway's tools by source and selects a source at once", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "github--create_issue",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        {
+          name: "github--list_issues",
+          annotations: { readOnlyHint: true },
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        { name: "docs--search", _meta: { "gram.dev/source": "Docs" } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({ serverName: "gateway" });
+    await openPicker(user);
+
+    expect(screen.getByRole("group", { name: "GitHub" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Docs" })).toBeTruthy();
+    expect(screen.getByText("create_issue")).toBeTruthy();
+    expect(screen.queryByText("github--create_issue")).toBeNull();
+
+    await user.click(screen.getByRole("checkbox", { name: /GitHub/ }));
+    expect(formFieldValues("tools")).toEqual([
+      "github--create_issue",
+      "github--list_issues",
+    ]);
+
+    await user.type(screen.getByRole("searchbox"), "docs");
+    expect(screen.queryByRole("group", { name: "GitHub" })).toBeNull();
+    await user.click(screen.getByText("search"));
+    expect(formFieldValues("tools")).toEqual([
+      "docs--search",
+      "github--create_issue",
+      "github--list_issues",
+    ]);
+  });
 });

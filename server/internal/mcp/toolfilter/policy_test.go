@@ -69,3 +69,70 @@ func TestSessionPolicyRejectsMalformedGatewayOptions(t *testing.T) {
 		require.Nil(t, policy, raw)
 	}
 }
+
+func TestSessionPolicyGatewaySelectionRoundTrip(t *testing.T) {
+	t.Parallel()
+	resource := "meta_mcp_server:" + uuid.NewString()
+	live := AnnotationModeLive
+	selection, err := NewSessionSelection(resource, uuid.New(), []AllowEntry{
+		{Type: AllowTypeTool, Name: "github--create_issue", Mode: nil, Tools: nil},
+		{Type: AllowTypeAnnotation, Name: AnnotationReadOnly, Mode: &live, Tools: nil},
+	})
+	require.NoError(t, err)
+
+	raw, err := json.Marshal(&SessionPolicy{Resource: resource, Selection: selection, Gateway: &GatewayOptions{DiscoveryMode: nil}})
+	require.NoError(t, err)
+	parsed, err := ParseSessionPolicy(raw)
+	require.NoError(t, err)
+	require.Nil(t, parsed.Gateway.DiscoveryMode)
+	require.True(t, parsed.Selection.AllowsName("github--create_issue"))
+	require.Equal(t, []string{AnnotationReadOnly}, parsed.Selection.LiveAnnotations())
+}
+
+func TestSessionPolicyRejectsMisboundGatewaySelection(t *testing.T) {
+	t.Parallel()
+	resource := "meta_mcp_server:" + uuid.NewString()
+	other, err := NewSessionSelection("meta_mcp_server:"+uuid.NewString(), uuid.New(), []AllowEntry{})
+	require.NoError(t, err)
+	_, err = json.Marshal(&SessionPolicy{Resource: resource, Selection: other, Gateway: &GatewayOptions{DiscoveryMode: nil}})
+	require.Error(t, err)
+
+	legacy, err := json.Marshal(other)
+	require.NoError(t, err)
+	_, err = ParseSessionPolicy(legacy)
+	require.Error(t, err, "gateway selections are only valid inside a versioned policy")
+}
+
+func TestForGatewayMemberProjectsMemberTools(t *testing.T) {
+	t.Parallel()
+	resource := "meta_mcp_server:" + uuid.NewString()
+	grantID := uuid.New()
+	snapshot := AnnotationModeSnapshot
+	live := AnnotationModeLive
+	frozen := []string{"github--list_issues", "linear--list_issues"}
+	selection, err := NewSessionSelection(resource, grantID, []AllowEntry{
+		{Type: AllowTypeTool, Name: "github--create_issue", Mode: nil, Tools: nil},
+		{Type: AllowTypeTool, Name: "linear--create_issue", Mode: nil, Tools: nil},
+		{Type: AllowTypeAnnotation, Name: AnnotationReadOnly, Mode: &snapshot, Tools: &frozen},
+		{Type: AllowTypeAnnotation, Name: AnnotationIdempotent, Mode: &live, Tools: nil},
+	})
+	require.NoError(t, err)
+
+	memberID := uuid.New()
+	member, err := selection.ForGatewayMember("github", memberID)
+	require.NoError(t, err)
+	require.Equal(t, "mcp_server:"+memberID.String(), member.Resource)
+	require.NotEqual(t, grantID, member.GrantID)
+	require.True(t, member.AllowsName("create_issue"))
+	require.True(t, member.AllowsName("list_issues"))
+	require.False(t, member.AllowsName("github--create_issue"))
+	require.Equal(t, []string{AnnotationIdempotent}, member.LiveAnnotations())
+
+	unlisted, err := selection.ForGatewayMember("slack", uuid.New())
+	require.NoError(t, err)
+	require.False(t, unlisted.AllowsName("create_issue"))
+	require.Equal(t, []string{AnnotationIdempotent}, unlisted.LiveAnnotations())
+
+	_, err = (&SessionSelection{Resource: testResource}).ForGatewayMember("github", memberID)
+	require.Error(t, err)
+}

@@ -108,6 +108,19 @@ func (m metaMembership) derived() bool {
 	return m.agentID != uuid.Nil || m.organization
 }
 
+// memberToolSelection projects the connection's gateway tool selection onto
+// one member, so every member surface filters with member-local names.
+func (g *metaGateContext) memberToolSelection(member metaMember) (*toolfilter.SessionSelection, error) {
+	if g.toolSelection == nil {
+		return nil, nil
+	}
+	selection, err := g.toolSelection.ForGatewayMember(member.slug, member.serverID)
+	if err != nil {
+		return nil, fmt.Errorf("scope gateway tool selection to member: %w", err)
+	}
+	return selection, nil
+}
+
 // serveResolvedMetaMCPEndpoint terminates MCP for a meta-MCP-backed
 // endpoint: it runs the issuer gate when the meta server is issuer-gated,
 // then dispatches the JSON-RPC request. Only POST reaches here — GET/DELETE
