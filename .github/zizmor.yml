@@ -24,8 +24,6 @@ rules:
     disable: true
   excessive-permissions:
     disable: true
-  github-app:
-    disable: true
   template-injection:
     disable: true
   undocumented-permissions:

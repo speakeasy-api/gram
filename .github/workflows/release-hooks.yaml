@@ -134,6 +134,10 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram,homebrew-tap
+          # Reads the merged PR's labels; goreleaser publishes the release
+          # and pushes the Homebrew formula.
+          permission-contents: write
+          permission-pull-requests: read
       - name: Resolve the next version
         id: version
         env:
@@ -206,6 +210,9 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram
+          # Pushes the pin branch and opens its pull request.
+          permission-contents: write
+          permission-pull-requests: write
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

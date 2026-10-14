@@ -56,6 +56,10 @@ jobs:
           app-id: ${{ vars.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
 
+          # changesets pushes the version branch, opens its PR, and tags and
+          # creates the GitHub releases.
+          permission-contents: write
+          permission-pull-requests: write
       # Configure git to commit as the GitHub App so commits trigger workflows.
       # Commits from github-actions[bot] don't trigger workflows by design.
       - name: Configure git for GitHub App
@@ -113,6 +117,8 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram,homebrew-tap
+          # goreleaser publishes the release and pushes the Homebrew formula.
+          permission-contents: write
       - name: Create release tag
         # GoReleaser expects a tag on HEAD before releasing. The newest tag
         # will be on an old commit, specified by `changeset`, so this is a

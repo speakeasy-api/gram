@@ -2572,6 +2572,8 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram-infra
+          # Only dispatches gram-infra's Prepare Release workflow.
+          permission-actions: write
       - name: Dispatch prepare-release
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}

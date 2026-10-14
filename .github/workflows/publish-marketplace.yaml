@@ -59,6 +59,8 @@ jobs:
           owner: speakeasy-api
           repositories: marketplace
 
+          # Only clones and pushes the marketplace repository.
+          permission-contents: write
       - name: Publish to the public marketplace repo
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
