@@ -8,13 +8,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -120,4 +123,49 @@ func callGatewayTool(t *testing.T, ti *testInstance, slug, token, name string, a
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 	return w.Body.String()
+}
+
+// TestGatewayLiveAnnotationGrantCallsStatefulMember pins live grants on a
+// member that opens a new MCP session per connection: the call session must
+// carry its own listing witness, so a tool shown under the live grant stays
+// callable in Direct and Progressive modes while others remain refused.
+func TestGatewayLiveAnnotationGrantCallsStatefulMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
+	upstream := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, []testmcp.Tool{
+		{Name: "read_docs", Annotations: &mcpsdk.ToolAnnotations{ReadOnlyHint: true}, InputSchema: map[string]any{"type": "object"}, Response: testmcp.ToolResponse{Content: []map[string]any{{"type": "text", "text": "read ok"}}}},
+		{Name: "delete_docs", InputSchema: map[string]any{"type": "object"}, Response: testmcp.ToolResponse{Content: []map[string]any{{"type": "text", "text": "delete ok"}}}},
+	})
+	t.Cleanup(upstream.Close)
+	memberSlug := "docs-" + uuid.NewString()[:8]
+	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Docs", memberSlug, 1, upstream.URL)
+
+	resource := "meta_mcp_server:" + gateway.ID.String()
+	live := toolfilter.AnnotationModeLive
+	selection, err := toolfilter.NewSessionSelection(resource, uuid.New(), []toolfilter.AllowEntry{
+		{Type: toolfilter.AllowTypeAnnotation, Name: toolfilter.AnnotationReadOnly, Mode: &live, Tools: nil},
+	})
+	require.NoError(t, err)
+	mint := func(mode metamcp.DiscoveryMode) string {
+		return mintGatewaySelectionToken(t, ti, issuerID, slug, authCtx.UserID, &toolfilter.SessionPolicy{Resource: resource, Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: &mode}, Members: map[string]uuid.UUID{memberSlug: memberID}})
+	}
+
+	direct := mint(metamcp.DiscoveryModeDirect)
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), direct, nil)
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), memberSlug+"--read_docs")
+	require.NotContains(t, w.Body.String(), memberSlug+"--delete_docs")
+	require.Contains(t, callGatewayTool(t, ti, slug, direct, memberSlug+"--read_docs", map[string]any{}), "read ok")
+	require.NotContains(t, callGatewayTool(t, ti, slug, direct, memberSlug+"--delete_docs", map[string]any{}), "delete ok")
+
+	progressive := mint(metamcp.DiscoveryModeProgressive)
+	execute := func(name string) string {
+		return callGatewayTool(t, ti, slug, progressive, "execute_tool", map[string]any{"name": name, "arguments": map[string]any{}})
+	}
+	require.Contains(t, execute(memberSlug+"--read_docs"), "read ok")
+	require.NotContains(t, execute(memberSlug+"--delete_docs"), "delete ok")
 }
