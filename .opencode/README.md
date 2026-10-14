@@ -12,16 +12,18 @@ Requires Worktrunk with `switch/remove --format=json` and list JSON schema 2
 (tested with `wt` 0.80.0).
 
 - **Create:** `wt switch --create --format=json --no-cd --yes`, with OpenCode's
-  suggested destination and a unique `opencode/<name>-<suffix>` branch. Starts
+  suggested destination and a unique `opencode/<sanitized-name>-<suffix>` branch. Starts
   from the source checkout's HEAD unless a starting ref is supplied. Normal
-  Worktrunk hooks initialize and boot the stack.
+  Worktrunk hooks initialize the worktree and provision its stack in the
+  background, then leave it paused; run `mise run wake` to resume it.
 - **Remove:** `wt remove --foreground --format=json --yes`.
   Runs the existing MCP cleanup and `nuke --keep-shared` pre-remove hooks before
   deleting files. Dirty worktrees require OpenCode's force confirmation; only
   then is `--force` passed. Branch deletion follows Worktrunk's configuration
   (by default, integrated branches are deleted and unmerged branches retained).
 - **List:** `wt list --format=json` with schema 2, filtered to the repository
-  root and paths recorded in this plugin's durable storage.
+  root and worktrees whose private Git identity marker matches this plugin's
+  durable storage. Reusing a removed worktree's path does not transfer ownership.
 
 The `--yes` flag runs configured Worktrunk hooks non-interactively. Existing
 worktrees keep their original OpenCode strategy; enabling this plugin does not

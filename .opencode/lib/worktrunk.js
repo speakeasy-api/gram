@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { basename, resolve } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const exec = promisify(execFile);
@@ -12,17 +13,40 @@ async function run(file, args, cwd, signal) {
   return child;
 }
 
+async function identityPath(directory, signal) {
+  const { stdout } = await run(
+    "git",
+    ["rev-parse", "--absolute-git-dir"],
+    directory,
+    signal,
+  );
+  return join(stdout.trim(), "speakeasy-opencode-worktree-id");
+}
+
 // Ownership is durable across plugin reloads, and independent of branch renames.
 export function makeStrategy({
   directory: canonical,
   storage,
   OperationError,
 }) {
+  async function owns(directory, signal) {
+    const identity = await storage.get(key(directory));
+    if (typeof identity !== "string") return false;
+    try {
+      const path = await identityPath(directory, signal);
+      return (await readFile(path, { encoding: "utf8", signal })) === identity;
+    } catch (error) {
+      if (error.code === "ENOENT") return false;
+      throw error;
+    }
+  }
+
   return {
     id: "speakeasy.worktrunk",
     async create({ sourceDirectory, directory, branch }, { signal }) {
       directory = resolve(directory);
-      const name = `opencode/${basename(directory)}-${randomUUID().slice(0, 8)}`;
+      const slug = basename(directory).replace(/[^a-zA-Z0-9_-]+/g, "-");
+      const name = `opencode/${slug}-${randomUUID().slice(0, 8)}`;
       // A literal Jinja expression preserves paths containing template syntax.
       const template = `{{ ${JSON.stringify(directory)} }}`;
       const { stdout } = await run(
@@ -48,12 +72,19 @@ export function makeStrategy({
       ) {
         throw new Error("Worktrunk returned an unexpected worktree path");
       }
-      await storage.set(key(directory), true);
+      // Git removes this private marker with the worktree's administrative
+      // directory, so recreating the same path cannot inherit ownership.
+      const identity = randomUUID();
+      await writeFile(await identityPath(directory, signal), identity, {
+        flag: "wx",
+        signal,
+      });
+      await storage.set(key(directory), identity);
       return { directory };
     },
     async remove({ directory, force }, { signal }) {
       directory = resolve(directory);
-      if ((await storage.get(key(directory))) !== true) {
+      if (!(await owns(directory, signal))) {
         throw new Error("Worktree is not owned by the Worktrunk strategy");
       }
       // Check before cleanup hooks so a declined removal leaves services running.
@@ -111,7 +142,7 @@ export function makeStrategy({
         const directory = resolve(worktree.path);
         if (worktree.main) {
           inventory.push({ directory, type: "root" });
-        } else if ((await storage.get(key(directory))) === true) {
+        } else if (await owns(directory, signal)) {
           inventory.push({ directory, type: "worktree" });
         }
       }

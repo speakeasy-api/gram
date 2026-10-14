@@ -74,7 +74,7 @@ pre-remove = "test ! -f fail-cleanup && test -f initialized && echo cleaned > '{
   let strategy = reload();
   const context = { signal: new AbortController().signal };
   // Exercise spaces and literal template delimiters in the destination parent.
-  const directory = join(root, "space {{ literal }}", "feature");
+  const directory = join(root, "space {{ literal }}", "feature work");
   await mkdir(join(root, "space {{ literal }}"));
   assert.deepEqual(
     await strategy.create(
@@ -131,13 +131,49 @@ pre-remove = "test ! -f fail-cleanup && test -f initialized && echo cleaned > '{
     { directory: repo, type: "root" },
   ]);
 
-  const second = join(root, "default-base");
+  const second = join(root, "foo..bar");
   await strategy.create({ sourceDirectory: repo, directory: second }, context);
   assert.equal(
     await git(["rev-parse", "HEAD"], second),
     await git(["rev-parse", "HEAD"]),
   );
   await strategy.remove({ directory: second, force: false }, context);
+
+  // Ownership survives a branch rename but not external removal and recreation,
+  // even when both the branch and Git administrative path are reused.
+  const reused = join(root, "reused");
+  await strategy.create({ sourceDirectory: repo, directory: reused }, context);
+  await git(["branch", "-m", "renamed"], reused);
+  const gitdir = await git(["rev-parse", "--absolute-git-dir"], reused);
+  assert.ok(
+    (await reload().list(repo, context)).some(
+      (item) => item.directory === reused,
+    ),
+  );
+  await git(["worktree", "remove", "--force", reused]);
+  await git(["worktree", "add", reused, "renamed"]);
+  assert.equal(await git(["rev-parse", "--absolute-git-dir"], reused), gitdir);
+  await rm(join(root, "cleaned"));
+  strategy = reload();
+  assert.deepEqual(await strategy.list(repo, context), [
+    { directory: repo, type: "root" },
+  ]);
+  // A replacement marker must match the saved identity, not merely exist.
+  await writeFile(
+    join(gitdir, "speakeasy-opencode-worktree-id"),
+    "replacement",
+  );
+  assert.deepEqual(await strategy.list(repo, context), [
+    { directory: repo, type: "root" },
+  ]);
+  for (const force of [false, true]) {
+    await assert.rejects(
+      strategy.remove({ directory: reused, force }, context),
+      /not owned/,
+    );
+  }
+  await access(join(reused, ".git"));
+  await assert.rejects(access(join(root, "cleaned")));
 
   const controller = new AbortController();
   controller.abort();
