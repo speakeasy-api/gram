@@ -16,7 +16,5 @@ rules:
         "*": hash-pin
 
   # Findings to burn down.
-  anonymous-definition:
-    disable: true
   template-injection:
     disable: true

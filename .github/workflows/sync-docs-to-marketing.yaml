@@ -14,6 +14,7 @@ env:
   BRANCH: main
 jobs:
   sync:
+    name: sync
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read

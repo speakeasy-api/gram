@@ -16,6 +16,7 @@ permissions: {}
 
 jobs:
   check-generator-versions:
+    name: check-generator-versions
     runs-on: ubuntu-latest
     permissions:
       contents: read

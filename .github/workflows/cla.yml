@@ -18,6 +18,7 @@ permissions: {}
 
 jobs:
   CLAAssistant:
+    name: CLAAssistant
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       actions: write # the action re-runs this workflow after a signature
