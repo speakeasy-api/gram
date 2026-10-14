@@ -177,6 +177,21 @@ const (
 	AuthUserIDKey            = attribute.Key("gram.auth.user_id")
 	AuthUserExternalIDKey    = attribute.Key("gram.auth.external_user_id")
 	AuthImpersonatorEmailKey = attribute.Key("gram.auth.impersonator_email")
+	// AuthAuthenticationMethodKey is WorkOS's method for a sign-in, e.g. "SSO".
+	AuthAuthenticationMethodKey = attribute.Key("gram.auth.authentication_method")
+	// AuthSignInFlowKey names the flow that exchanged a WorkOS code:
+	// "dashboard" or "mcp_authorize".
+	AuthSignInFlowKey = attribute.Key("gram.auth.sign_in_flow")
+	// AuthWorkOSSessionFingerprintKey is a short one-way digest of a WorkOS
+	// session id, enough to tell whether two flows shared a session.
+	AuthWorkOSSessionFingerprintKey = attribute.Key("gram.auth.workos_session_fingerprint")
+	// SignInRecordOutcomeKey is how a WorkOS code exchange resolved to a
+	// sign-in row.
+	SignInRecordOutcomeKey = attribute.Key("gram.sign_in.record_outcome")
+	// SignInRevokeReasonKey is why sign-ins were revoked.
+	SignInRevokeReasonKey = attribute.Key("gram.sign_in.revoke_reason")
+	// SignInDeliveryKindKey is what a revocation delivery pushes.
+	SignInDeliveryKindKey = attribute.Key("gram.sign_in.delivery_kind")
 
 	TopicProtoNameKey        = attribute.Key("gram.topic.proto_name")
 	SubscriptionProtoNameKey = attribute.Key("gram.subscription.proto_name")
@@ -1538,6 +1553,28 @@ func SlogAuthScheme(v string) slog.Attr      { return slog.String(string(AuthSch
 func AuthUserEmail(v string) attribute.KeyValue { return AuthUserEmailKey.String(v) }
 func SlogAuthUserEmail(v string) slog.Attr      { return slog.String(string(AuthUserEmailKey), v) }
 
+func AuthAuthenticationMethod(v string) attribute.KeyValue {
+	return AuthAuthenticationMethodKey.String(v)
+}
+func SlogAuthAuthenticationMethod(v string) slog.Attr {
+	return slog.String(string(AuthAuthenticationMethodKey), v)
+}
+func SlogAuthSignInFlow(v string) slog.Attr      { return slog.String(string(AuthSignInFlowKey), v) }
+func AuthSignInFlow(v string) attribute.KeyValue { return AuthSignInFlowKey.String(v) }
+func SignInRecordOutcome(v string) attribute.KeyValue {
+	return SignInRecordOutcomeKey.String(v)
+}
+func SlogSignInRecordOutcome(v string) slog.Attr {
+	return slog.String(string(SignInRecordOutcomeKey), v)
+}
+func SignInRevokeReason(v string) attribute.KeyValue { return SignInRevokeReasonKey.String(v) }
+func SignInDeliveryKind(v string) attribute.KeyValue { return SignInDeliveryKindKey.String(v) }
+func SlogSignInDeliveryKind(v string) slog.Attr {
+	return slog.String(string(SignInDeliveryKindKey), v)
+}
+func SlogAuthWorkOSSessionFingerprint(v string) slog.Attr {
+	return slog.String(string(AuthWorkOSSessionFingerprintKey), v)
+}
 func AuthImpersonatorEmail(v string) attribute.KeyValue { return AuthImpersonatorEmailKey.String(v) }
 func SlogAuthImpersonatorEmail(v string) slog.Attr {
 	return slog.String(string(AuthImpersonatorEmailKey), v)

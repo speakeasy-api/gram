@@ -52,6 +52,7 @@ type Service struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
 	auth         *auth.Auth
+	sessions     *sessions.Manager
 	authz        *authz.Engine
 	chatSessions TokenRevoker
 	audit        *audit.Logger
@@ -124,6 +125,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		logger:       logger,
 		db:           db,
 		auth:         auth.New(logger, db, sessionManager, authzEngine),
+		sessions:     sessionManager,
 		authz:        authzEngine,
 		chatSessions: chatSessionsManager,
 		audit:        auditLogger,

@@ -13480,6 +13480,94 @@ paths:
       x-speakeasy-name-override: logout
       x-speakeasy-react-hook:
         name: Logout
+  /rpc/auth.logoutEverywhere:
+    post:
+      description: 'Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.'
+      operationId: logoutEverywhere
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeSignInsResult'
+          description: OK response.
+          headers:
+            Set-Cookie:
+              description: Empty string to clear the session
+              schema:
+                description: Empty string to clear the session
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: logoutEverywhere auth
+      tags:
+        - auth
+      x-speakeasy-name-override: logoutEverywhere
+      x-speakeasy-react-hook:
+        name: LogoutEverywhere
   /rpc/auth.register:
     post:
       description: Register a new org for a user with their session information.
@@ -41689,6 +41777,94 @@ paths:
       x-speakeasy-name-override: revokeInvite
       x-speakeasy-react-hook:
         name: RevokeInvite
+  /rpc/organizations.revokeMemberSignIns:
+    post:
+      description: Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
+      operationId: revokeOrganizationMemberSignIns
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeMemberSignInsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeSignInsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: revokeMemberSignIns organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: revokeMemberSignIns
+      x-speakeasy-react-hook:
+        name: RevokeOrganizationMemberSignIns
   /rpc/organizations.sendEnterpriseAdminOnboardingEmail:
     post:
       description: Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.
@@ -100320,6 +100496,14 @@ components:
           format: uuid
       required:
         - id
+    RevokeMemberSignInsRequestBody:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: Speakeasy user ID of the member.
+      required:
+        - user_id
     RevokeSessionRequestBody:
       type: object
       properties:
@@ -100333,6 +100517,21 @@ components:
       required:
         - agent_id
         - session_id
+    RevokeSignInsResult:
+      type: object
+      properties:
+        revoked_sessions:
+          type: integer
+          description: Number of MCP grants revoked.
+          format: int64
+        revoked_sign_ins:
+          type: integer
+          description: Number of sign-ins revoked.
+          format: int64
+      description: What a sign-in revocation revoked.
+      required:
+        - revoked_sign_ins
+        - revoked_sessions
     RiskAnalysisStatusResult:
       type: object
       properties:

@@ -44,6 +44,10 @@ type Client struct {
 	// endpoint.
 	RemoveUserDoer goahttp.Doer
 
+	// RevokeMemberSignIns Doer is the HTTP client used to make requests to the
+	// revokeMemberSignIns endpoint.
+	RevokeMemberSignInsDoer goahttp.Doer
+
 	// EnableWebhooks Doer is the HTTP client used to make requests to the
 	// enableWebhooks endpoint.
 	EnableWebhooksDoer goahttp.Doer
@@ -112,6 +116,7 @@ func NewClient(
 		ListInvitesDoer:                        doer,
 		ListUsersDoer:                          doer,
 		RemoveUserDoer:                         doer,
+		RevokeMemberSignInsDoer:                doer,
 		EnableWebhooksDoer:                     doer,
 		DisableWebhooksDoer:                    doer,
 		CreatePortalSessionDoer:                doer,
@@ -293,6 +298,30 @@ func (c *Client) RemoveUser() goa.Endpoint {
 		resp, err := c.RemoveUserDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "removeUser", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeMemberSignIns returns an endpoint that makes HTTP requests to the
+// organizations service revokeMemberSignIns server.
+func (c *Client) RevokeMemberSignIns() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeMemberSignInsRequest(c.encoder)
+		decodeResponse = DecodeRevokeMemberSignInsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeMemberSignInsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeMemberSignInsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "revokeMemberSignIns", err)
 		}
 		return decodeResponse(resp)
 	}

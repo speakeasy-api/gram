@@ -16,6 +16,7 @@ export const AUDIT_ACTIONS = [
   "slack-identity-mapping:reconfirm",
   "slack-identity-mapping:unmap",
   "access_challenge:resolve",
+  "access_member:revoke_sign_ins",
   "access_member:update_role",
   "access_role:create",
   "access_role:delete",
@@ -356,6 +357,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disconnected Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
+    case "access_member:revoke_sign_ins":
+      return "revoked sign-ins for";
     case "access_member:update_role":
       return "changed member role for";
     case "access_role:create":

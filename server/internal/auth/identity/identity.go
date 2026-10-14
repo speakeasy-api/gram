@@ -59,14 +59,21 @@ type AuthorizationURLParams struct {
 	// ScreenHint selects which AuthKit screen to land on. Only "sign-up" is
 	// used, and only while provider is "authkit". Omitted when empty.
 	ScreenHint string
+
+	// Prompt "login" forces the user to authenticate again rather than
+	// reuse an existing session. Omitted when empty.
+	Prompt string
 }
 
 // AuthenticateResult holds the fields Speakeasy uses from the IDP code exchange.
 type AuthenticateResult struct {
-	AccessToken       string
-	OrganizationID    string // WorkOS org ID the user selected during auth (may be empty)
-	User              AuthenticatedUser
-	impersonatorEmail string
+	AccessToken    string
+	OrganizationID string // WorkOS org ID the user selected during auth (may be empty)
+	// AuthenticationMethod is WorkOS's method for this sign-in, e.g. "SSO".
+	AuthenticationMethod string
+	Evidence             SignInEvidence
+	User                 AuthenticatedUser
+	impersonatorEmail    string
 }
 
 type MagicAuthChallenge struct {
@@ -104,14 +111,17 @@ type WorkOSClient interface {
 
 // IDPUserInfo represents the user identity returned by the IDP after code exchange.
 type IDPUserInfo struct {
-	Sub               string  `json:"sub"`
-	Email             string  `json:"email"`
-	Name              string  `json:"name"`
-	Picture           *string `json:"picture,omitempty"`
-	ExternalID        string  `json:"-"`
-	WorkOSSessionID   string  `json:"-"`
-	OrganizationID    string  `json:"-"` // WorkOS org ID selected during auth
-	impersonatorEmail string
+	Sub             string  `json:"sub"`
+	Email           string  `json:"email"`
+	Name            string  `json:"name"`
+	Picture         *string `json:"picture,omitempty"`
+	ExternalID      string  `json:"-"`
+	WorkOSSessionID string  `json:"-"`
+	OrganizationID  string  `json:"-"` // WorkOS org ID selected during auth
+	// AuthenticationMethod is WorkOS's method for this sign-in, e.g. "SSO".
+	AuthenticationMethod string         `json:"-"`
+	Evidence             SignInEvidence `json:"-"`
+	impersonatorEmail    string
 }
 
 // ImpersonatorEmail returns the WorkOS Dashboard operator who initiated an
@@ -197,7 +207,7 @@ func (r *Resolver) ExchangeCodeForTokens(ctx context.Context, code string) (_ *I
 
 	resp, err := r.idpClient.AuthenticateWithCode(ctx, r.idpClientID, code)
 	if err != nil {
-		return nil, fmt.Errorf("workos authenticate with code: %w", err)
+		return nil, &providerError{operation: "code exchange", cause: err}
 	}
 	if resp == nil {
 		return nil, errors.New("workos authenticate with code: empty response")
@@ -217,7 +227,7 @@ func (r *Resolver) AuthenticateWithMagicAuth(ctx context.Context, email string) 
 
 	challenge, err := r.idpClient.CreateMagicAuth(ctx, email)
 	if err != nil {
-		return nil, fmt.Errorf("workos create magic auth: %w", err)
+		return nil, &providerError{operation: "magic auth creation", cause: err}
 	}
 	if challenge == nil || challenge.Code == "" {
 		return nil, errors.New("workos create magic auth: empty code")
@@ -225,14 +235,14 @@ func (r *Resolver) AuthenticateWithMagicAuth(ctx context.Context, email string) 
 
 	resp, err := r.idpClient.AuthenticateWithMagicAuth(ctx, r.idpClientID, challenge.Email, challenge.Code)
 	if err != nil {
-		return nil, fmt.Errorf("workos authenticate with magic auth: %w", err)
+		return nil, &providerError{operation: "magic auth", cause: err}
 	}
 	if resp == nil {
 		return nil, errors.New("workos authenticate with magic auth: empty response")
 	}
 	if !resp.User.EmailVerified {
 		if err := r.idpClient.SetEmailVerified(ctx, resp.User.ID); err != nil {
-			return nil, fmt.Errorf("workos mark email verified: %w", err)
+			return nil, &providerError{operation: "email verification", cause: err}
 		}
 	}
 
@@ -247,14 +257,16 @@ func idpUserInfoFromAuthenticateResult(resp *AuthenticateResult) *IDPUserInfo {
 	}
 
 	return &IDPUserInfo{
-		Sub:               resp.User.ID,
-		Email:             resp.User.Email,
-		Name:              name,
-		Picture:           picture,
-		ExternalID:        resp.User.ExternalID,
-		WorkOSSessionID:   extractSessionIDFromJWT(resp.AccessToken),
-		OrganizationID:    resp.OrganizationID,
-		impersonatorEmail: resp.impersonatorEmail,
+		Sub:                  resp.User.ID,
+		Email:                resp.User.Email,
+		Name:                 name,
+		Picture:              picture,
+		ExternalID:           resp.User.ExternalID,
+		WorkOSSessionID:      extractSessionIDFromJWT(resp.AccessToken),
+		OrganizationID:       resp.OrganizationID,
+		AuthenticationMethod: resp.AuthenticationMethod,
+		Evidence:             resp.Evidence,
+		impersonatorEmail:    resp.impersonatorEmail,
 	}
 }
 
@@ -849,6 +861,9 @@ func (r *Resolver) BuildAuthorizationURL(ctx context.Context, params Authorizati
 	}
 	if params.ScreenHint != "" {
 		q.Set("screen_hint", params.ScreenHint)
+	}
+	if params.Prompt != "" {
+		q.Set("prompt", params.Prompt)
 	}
 
 	authorizeBase := workosAuthorizeEndpoint

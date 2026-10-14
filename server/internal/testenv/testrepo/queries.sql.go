@@ -387,6 +387,20 @@ func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType s
 	return count, err
 }
 
+const countPendingSignInRevocationDeliveries = `-- name: CountPendingSignInRevocationDeliveries :one
+SELECT count(*)
+FROM sign_in_revocation_deliveries
+WHERE organization_id = $1
+  AND delivered_at IS NULL
+`
+
+func (q *Queries) CountPendingSignInRevocationDeliveries(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingSignInRevocationDeliveries, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPlatformMCPSetupMilestoneFixture = `-- name: CountPlatformMCPSetupMilestoneFixture :one
 SELECT count(*)
 FROM platform_mcp_onboarding_milestones
@@ -3497,6 +3511,53 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 	return items, nil
 }
 
+const listSignInRevocationDeliveriesFixture = `-- name: ListSignInRevocationDeliveriesFixture :many
+SELECT id, kind, target, attempts, effective_at, next_attempt_at, claimed_until, delivered_at
+FROM sign_in_revocation_deliveries
+WHERE organization_id = $1
+ORDER BY created_at, id
+`
+
+type ListSignInRevocationDeliveriesFixtureRow struct {
+	ID            uuid.UUID
+	Kind          string
+	Target        string
+	Attempts      int32
+	EffectiveAt   pgtype.Timestamptz
+	NextAttemptAt pgtype.Timestamptz
+	ClaimedUntil  pgtype.Timestamptz
+	DeliveredAt   pgtype.Timestamptz
+}
+
+func (q *Queries) ListSignInRevocationDeliveriesFixture(ctx context.Context, organizationID string) ([]ListSignInRevocationDeliveriesFixtureRow, error) {
+	rows, err := q.db.Query(ctx, listSignInRevocationDeliveriesFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSignInRevocationDeliveriesFixtureRow
+	for rows.Next() {
+		var i ListSignInRevocationDeliveriesFixtureRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Target,
+			&i.Attempts,
+			&i.EffectiveAt,
+			&i.NextAttemptAt,
+			&i.ClaimedUntil,
+			&i.DeliveredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockExternalOAuthMetadataNowaitFixture = `-- name: LockExternalOAuthMetadataNowaitFixture :one
 SELECT id FROM external_oauth_server_metadata WHERE id = $1 AND project_id = $2 FOR UPDATE NOWAIT
 `
@@ -3683,6 +3744,20 @@ func (q *Queries) MakeAttachmentIssuerGlobalFixture(ctx context.Context, id uuid
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const makeSignInRevocationDeliveriesDueFixture = `-- name: MakeSignInRevocationDeliveriesDueFixture :exec
+UPDATE sign_in_revocation_deliveries
+SET next_attempt_at = NULL,
+    claimed_until = NULL
+WHERE organization_id = $1
+  AND delivered_at IS NULL
+`
+
+// Skips the backoff so a test can retry failed deliveries at once.
+func (q *Queries) MakeSignInRevocationDeliveriesDueFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, makeSignInRevocationDeliveriesDueFixture, organizationID)
+	return err
 }
 
 const movePreparationFixtureClientProject = `-- name: MovePreparationFixtureClientProject :execrows
@@ -4637,6 +4712,45 @@ func (q *Queries) SeedInternalSessionIssuerFixture(ctx context.Context, arg Seed
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedInternalSessionIssuerSignInMethodsFixture = `-- name: SeedInternalSessionIssuerSignInMethodsFixture :exec
+WITH credential AS (
+    INSERT INTO external_credentials (organization_id, provider, name)
+    VALUES ($1, 'gcp_iam', $5 || '-credential')
+    RETURNING id
+), key AS (
+    INSERT INTO external_keys (organization_id, external_credential_id, provider, algorithm, name)
+    SELECT $1, credential.id, 'gcp_kms', 'RS256', $5 || '-key' FROM credential
+    RETURNING id
+), key_set AS (
+    INSERT INTO json_web_key_sets (organization_id, external_key_id, name)
+    SELECT $1, key.id, $5 FROM key
+    RETURNING id
+)
+INSERT INTO internal_session_issuers (organization_id, issuer, json_web_key_set_id, allowed_sign_in_methods, allowed_microsoft_tenant_ids)
+SELECT $1, $2, key_set.id, $3::text[], $4::text[] FROM key_set
+`
+
+type SeedInternalSessionIssuerSignInMethodsFixtureParams struct {
+	OrganizationID            string
+	Issuer                    string
+	AllowedSignInMethods      []string
+	AllowedMicrosoftTenantIds []string
+	Name                      pgtype.Text
+}
+
+// Plants an organization's internal session issuer limited to the given
+// sign-in tiers, skipping the KMS provisioning the real enable performs.
+func (q *Queries) SeedInternalSessionIssuerSignInMethodsFixture(ctx context.Context, arg SeedInternalSessionIssuerSignInMethodsFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedInternalSessionIssuerSignInMethodsFixture,
+		arg.OrganizationID,
+		arg.Issuer,
+		arg.AllowedSignInMethods,
+		arg.AllowedMicrosoftTenantIds,
+		arg.Name,
+	)
+	return err
 }
 
 const seedJsonWebKeySetFixture = `-- name: SeedJsonWebKeySetFixture :one
