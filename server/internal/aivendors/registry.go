@@ -619,6 +619,11 @@ var registry = []Product{
 		Documents:       nil,
 	},
 	{
+		// ~/.gemini itself is shared with Google Antigravity, which keeps its
+		// state in ~/.gemini/antigravity, ~/.gemini/config and others, so the
+		// root would report every Antigravity install as Gemini CLI too. The
+		// marker is the CLI's session directory instead, written on first use,
+		// which neither Antigravity 2.23.0 nor its CLI 1.3.5 references.
 		ID:          "gemini-cli",
 		VendorKey:   "google",
 		DisplayName: "Gemini CLI",
@@ -626,7 +631,7 @@ var registry = []Product{
 		Signatures: Signatures{
 			BundleIDs:    nil,
 			Binaries:     []string{"gemini"},
-			ConfigDirs:   []string{"~/.gemini"},
+			ConfigDirs:   []string{"~/.gemini/tmp"},
 			ProcessNames: []string{"gemini"},
 		},
 		VersionPlistKey: "",
