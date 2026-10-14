@@ -486,7 +486,7 @@ describe("useMcpServerCandidates", () => {
     );
   });
 
-  it("re-enables a public hosted server as public", async () => {
+  it("sends hosted server enables to the toolset page", async () => {
     mocks.scopes = ["mcp:write"];
     mocks.toolsets = [
       { id: "toolset-1", name: "Hosted", slug: "hosted", mcpIsPublic: true },
@@ -506,14 +506,8 @@ describe("useMcpServerCandidates", () => {
     await act(async () => {
       await hosted?.run("enable");
     });
-    expect(mocks.updateMcpServer).toHaveBeenCalledWith({
-      request: {
-        updateMcpServerForm: expect.objectContaining({
-          id: "toolset-1",
-          visibility: "public",
-        }),
-      },
-    });
+    expect(mocks.updateMcpServer).not.toHaveBeenCalled();
+    expect(mocks.goToToolsetDetails).toHaveBeenCalledWith("hosted");
   });
 
   // A hosted server is granted under its toolset id (the server resolves the

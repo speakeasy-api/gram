@@ -40,8 +40,9 @@ function verbsFor(server: McpServer, canWrite: boolean): Verb[] {
  * Toolset-backed mcp_servers rows are not listed on their own so hosted
  * servers aren't doubled (see the TODO(AGE-1902) note in the MCP page), but
  * they are the rows that carry a hosted server's visibility: each toolset
- * candidate reads its linked row's state and flips that row on
- * enable/disable. A toolset with no linked row is open-only.
+ * candidate reads its linked row's state and flips that row on disable, and
+ * on enable unless it is a hosted wrapper, whose enable opens the toolset
+ * page. A toolset with no linked row is open-only.
  *
  * Verbs are gated per server (`hasScope("mcp:write", <grant resource>)`),
  * the same check the server's own pages apply, so a grant scoped to some
@@ -153,17 +154,8 @@ export function useMcpServerCandidates({
       void invalidateMcpServerQueries(queryClient).catch(() => {});
     };
 
-    // A hosted server keeps its public flag on the toolset while disabled, so enabling restores it.
-    const setVisibility = (
-      server: McpServer,
-      verb: Verb,
-      hostedPublic = false,
-    ) =>
-      applyVisibility(
-        server,
-        verb === "disable" ? "disabled" : hostedPublic ? "public" : "private",
-        true,
-      );
+    const setVisibility = (server: McpServer, verb: Verb) =>
+      applyVisibility(server, verb === "enable" ? "private" : "disabled", true);
 
     const toolsetCandidates: LauncherCandidate[] = toolsets.map((toolset) => {
       const linked = byToolsetId.get(toolset.id);
@@ -177,12 +169,15 @@ export function useMcpServerCandidates({
         icon: "network",
         group: GROUP,
         run: (verb) => {
-          if (linked && (verb === "enable" || verb === "disable")) {
-            return setVisibility(
-              linked,
-              verb,
-              isCanonicalHostedWrapper(linked) && toolset.mcpIsPublic === true,
-            );
+          // Enabling a hosted server picks private or public, with its warnings, on the toolset page.
+          const hostedEnable =
+            verb === "enable" && !!linked && isCanonicalHostedWrapper(linked);
+          if (
+            linked &&
+            !hostedEnable &&
+            (verb === "enable" || verb === "disable")
+          ) {
+            return setVisibility(linked, verb);
           }
           routes.mcp.details.goTo(toolset.slug);
         },
