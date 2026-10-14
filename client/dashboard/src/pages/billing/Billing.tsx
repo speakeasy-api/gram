@@ -100,7 +100,15 @@ function BillingInner() {
       isNotFoundError(subscription.error);
   }
 
+  const baseSubscriptionError =
+    productTier === "base" &&
+    !activeTrial &&
+    canStartBaseCheckout &&
+    subscription.isError &&
+    !isNotFoundError(subscription.error);
+
   const paymentGroup = (activeTrial ||
+    baseSubscriptionError ||
     productTier === "payg" ||
     paymentRequired) && (
     <div
@@ -110,7 +118,28 @@ function BillingInner() {
         activeTrial && canStartCheckout && "@3xl/main:grid-cols-2",
       )}
     >
-      <PaygPlanSection />
+      {baseSubscriptionError ? (
+        <Page.Section>
+          <Page.Section.Title area="">Payment</Page.Section.Title>
+          <Page.Section.Body>
+            <Stack direction="horizontal" align="center" gap={3}>
+              <Text muted small role="alert">
+                Couldn't load your subscription.
+              </Text>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={subscription.isFetching}
+                onClick={() => void subscription.refetch()}
+              >
+                {subscription.isFetching ? "RETRYING..." : "RETRY"}
+              </Button>
+            </Stack>
+          </Page.Section.Body>
+        </Page.Section>
+      ) : (
+        <PaygPlanSection />
+      )}
       <PaygPriceList />
     </div>
   );

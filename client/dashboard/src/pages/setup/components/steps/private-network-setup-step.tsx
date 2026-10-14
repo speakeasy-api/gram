@@ -25,6 +25,7 @@ export function PrivateNetworkSetupStep({
       title="Set up private network access"
       description="Connect Tailscale to serve hosted MCP endpoints privately."
       onContinue={onComplete}
+      canContinue={!features.isPending && !unavailable && entitled}
     >
       <div className="space-y-4">
         <Text>

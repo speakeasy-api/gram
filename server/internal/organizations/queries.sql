@@ -1436,11 +1436,10 @@ WHERE stripe_promotion_code_id = @stripe_promotion_code_id
 FOR SHARE;
 
 -- name: GetAcceptedSignupOfferFlow :one
--- Display-only lookup: disabled offers still describe accepted promotions.
-SELECT signup_flow FROM signup_offers
-WHERE stripe_promotion_code_id = (
-  SELECT stripe_promotion_code_id FROM organization_promotion_applications
-  WHERE organization_id = @organization_id::text
-  ORDER BY redeemed_at IS NULL DESC, created_at DESC, id DESC
-  LIMIT 1
-);
+-- All accepted applications originate in the partner gateway signup path.
+-- Derive display context from that immutable acceptance, not mutable offer mappings.
+-- Persist the accepted flow before introducing another signup flow or ledger writer.
+SELECT 'tailscale_partner_gateway'::text AS signup_flow
+FROM organization_promotion_applications
+WHERE organization_id = @organization_id::text
+LIMIT 1;

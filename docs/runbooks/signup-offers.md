@@ -29,6 +29,18 @@ There is no partner-playbook environment configuration.
   offer discovery alone would not provide the approved management outcome.
 - **Customer Platform MCP:** no tool change. Shared staff-only offers must not become
   tenant-visible configuration or an alternative way to grant networking access.
+  Pre-signup code attribution and payment-method collection remain browser-owned:
+  they do not provide an authenticated agent operation for assigning an offer or
+  activating networking. Existing onboarding and network-access tools retain their
+  current authorization and entitlement checks.
+- **Subscription discount read:** assessed separately from shared offer management.
+  This is an organization-scoped billing read for an authorized billing user, not
+  a shared-configuration mutation. Existing Platform MCP tools do not expose a
+  subscription/discount read. This change intentionally keeps verified discount
+  display in the dashboard's payment workflow; it does not add a standalone agent
+  billing workflow for either external users or managed assistants. The shared
+  Admin MCP write restrictions are not a reason to prohibit such a read; adding
+  one would require its own billing authorization and audience contract.
 - **Demo seed:** no global signup offers are seeded. The customer demo is an existing,
   read-only organization and has no staff offer page. Seeding shared Stripe promotion
   configuration in its daily tenant reseed would affect other organizations' signup

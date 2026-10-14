@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"strings"
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
@@ -68,4 +69,19 @@ func TestSignupOfferValidation(t *testing.T) {
 		require.Error(t, validateSignupOffer(tc.name, tc.promotion, tc.flow))
 	}
 	require.NoError(t, validateSignupOffer("Fixture", "promo_fixture", "tailscale_partner_gateway"))
+}
+
+func TestSignupOfferValidationUnicode200Characters(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, validateSignupOffer(strings.Repeat("界", 200), "promo_fixture", "tailscale_partner_gateway"))
+}
+
+func TestSignupOfferValidationUnicode201Characters(t *testing.T) {
+	t.Parallel()
+	require.Error(t, validateSignupOffer(strings.Repeat("界", 201), "promo_fixture", "tailscale_partner_gateway"))
+}
+
+func TestSignupOfferValidationWhitespaceName(t *testing.T) {
+	t.Parallel()
+	require.Error(t, validateSignupOffer(" \t\n\u2003", "promo_fixture", "tailscale_partner_gateway"))
 }

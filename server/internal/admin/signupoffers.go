@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -20,7 +21,7 @@ import (
 var signupPromotionID = regexp.MustCompile(`^promo_[A-Za-z0-9_]+$`)
 
 func validateSignupOffer(name, promotionID, flow string) error {
-	if strings.TrimSpace(name) == "" || len(name) > 200 || len(promotionID) > 255 || !signupPromotionID.MatchString(promotionID) || flow != "tailscale_partner_gateway" {
+	if strings.TrimSpace(name) == "" || utf8.RuneCountInString(name) > 200 || len(promotionID) > 255 || !signupPromotionID.MatchString(promotionID) || flow != "tailscale_partner_gateway" {
 		return oops.E(oops.CodeBadRequest, errors.New("invalid signup offer"), "Provide a name, exact Stripe promotion code ID and supported signup flow.")
 	}
 	return nil

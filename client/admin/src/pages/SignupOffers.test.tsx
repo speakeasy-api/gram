@@ -97,15 +97,16 @@ describe("Signup offers", () => {
       target: { value: "promo_changed" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save offer" }));
-    await waitFor(() =>
-      expect(api.mutate).toHaveBeenCalledWith(
-        "/admin/signupOffers.update",
+    await waitFor(() => {
+      expect(api.mutate).toHaveBeenCalledOnce();
+      const [path, request] = api.mutate.mock.calls[0]!;
+      expect(path).toBe("/admin/signupOffers.update");
+      expect(JSON.parse(request.body)).toEqual(
         expect.objectContaining({
-          body: expect.stringContaining(
-            '"stripe_promotion_code_id":"promo_changed"',
-          ),
+          stripe_promotion_code_id: "promo_changed",
+          enabled: false,
         }),
-      ),
-    );
+      );
+    });
   });
 });

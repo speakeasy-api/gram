@@ -848,7 +848,7 @@ func TestInfoAcceptedSignupOfferNoApplication(t *testing.T) {
 
 func TestInfoAcceptedSignupOfferMissingOffer(t *testing.T) {
 	t.Parallel()
-	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true})
+	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, want: new("tailscale_partner_gateway")})
 }
 
 func TestInfoAcceptedSignupOfferEnabledOffer(t *testing.T) {
@@ -863,12 +863,12 @@ func TestInfoAcceptedSignupOfferDisabledOffer(t *testing.T) {
 
 func TestInfoAcceptedSignupOfferEditedPromotion(t *testing.T) {
 	t.Parallel()
-	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, offer: true, promotionID: "promo_replacement", flow: "tailscale_partner_gateway"})
+	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, offer: true, promotionID: "promo_replacement", flow: "tailscale_partner_gateway", want: new("tailscale_partner_gateway")})
 }
 
 func TestInfoAcceptedSignupOfferEditedFlow(t *testing.T) {
 	t.Parallel()
-	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, offer: true, promotionID: "promo_fixture", flow: "future_flow", want: new("future_flow")})
+	testInfoAcceptedSignupOffer(t, acceptedSignupOfferCase{accepted: true, offer: true, promotionID: "promo_fixture", flow: "future_flow", want: new("tailscale_partner_gateway")})
 }
 
 type acceptedSignupOfferCase struct {
@@ -881,12 +881,14 @@ func testInfoAcceptedSignupOffer(t *testing.T, tc acceptedSignupOfferCase) {
 	t.Helper()
 	ctx, instance, orgID := setupInfoRequest(t)
 	repo := orgRepo.New(instance.conn)
+	if tc.offer {
+		seedPartnerOffer(t, ctx, instance)
+	}
 	if tc.accepted {
 		_, err := repo.AttributePartnerSignup(ctx, orgRepo.AttributePartnerSignupParams{OrganizationID: conv.ToPGText(orgID), StripePromotionCodeID: "promo_fixture"})
 		require.NoError(t, err)
 	}
 	if tc.offer {
-		seedPartnerOffer(t, ctx, instance)
 		changePartnerOffer(t, ctx, instance, tc.promotionID, tc.flow, tc.enabled)
 	}
 	result, err := instance.service.Info(ctx, &gen.InfoPayload{})

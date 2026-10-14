@@ -55,12 +55,19 @@ describe("private network setup handoff", () => {
     expect(screen.getByText(/Never paste/)).toBeTruthy();
     expect(container.querySelector("input")).toBeNull();
     expect(onComplete).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Mark done" }));
+    const done = screen.getByRole("button", { name: "Mark done" });
+    expect(done.hasAttribute("disabled")).toBe(false);
+    await user.click(done);
     expect(onComplete).toHaveBeenCalledOnce();
   });
 
-  it("offers support when the entitlement is missing", () => {
-    renderStep();
+  it("offers support when the entitlement is missing", async () => {
+    const onComplete = vi.fn<() => void>();
+    renderStep(onComplete);
+    const done = screen.getByRole("button", { name: "Mark done" });
+    expect(done.hasAttribute("disabled")).toBe(true);
+    await userEvent.setup().click(done);
+    expect(onComplete).not.toHaveBeenCalled();
     expect(screen.getByText(/not enabled for this organization/)).toBeTruthy();
     expect(
       screen
@@ -71,10 +78,15 @@ describe("private network setup handoff", () => {
 
   it.each(["pending", "error"] as const)(
     "does not claim entitlement while %s",
-    (status) => {
+    async (status) => {
       state[status] = true;
       state.enabled = true;
-      renderStep();
+      const onComplete = vi.fn<() => void>();
+      renderStep(onComplete);
+      const done = screen.getByRole("button", { name: "Mark done" });
+      expect(done.hasAttribute("disabled")).toBe(true);
+      await userEvent.setup().click(done);
+      expect(onComplete).not.toHaveBeenCalled();
       expect(screen.queryByText(/is enabled for this organization/)).toBeNull();
       expect(
         screen.getByRole("link", { name: "Open private network settings" }),
