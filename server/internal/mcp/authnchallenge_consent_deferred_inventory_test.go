@@ -1,14 +1,17 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -49,6 +54,11 @@ func TestConsentPage_ChainedServiceDefersToolInventory(t *testing.T) {
 
 	// The transport still answers "not connected"; the page flag is what
 	// turns that answer into the deferred state.
+	requireConsentInventoryConflict(t, fx)
+}
+
+func requireConsentInventoryConflict(t *testing.T, fx consentActionFixture) {
+	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Content-Type", "application/json")
@@ -59,6 +69,97 @@ func TestConsentPage_ChainedServiceDefersToolInventory(t *testing.T) {
 	var se *oops.ShareableError
 	require.ErrorAs(t, err, &se)
 	require.Equal(t, oops.CodeConflict, se.Code)
+}
+
+// logRecords returns every JSON log record in logs whose message is msg.
+func logRecords(t *testing.T, logs *syncBuffer, msg string) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(logs.String(), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &rec))
+		if rec["msg"] == msg {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+// seedLoggedChainedConsent is seedChainedConsentEndpoint over a service
+// whose logs are captured.
+func seedLoggedChainedConsent(t *testing.T, tag string) (context.Context, consentActionFixture, uuid.UUID, *syncBuffer) {
+	t.Helper()
+	logs := &syncBuffer{mu: sync.Mutex{}, buf: bytes.Buffer{}}
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{AddSource: false, Level: slog.LevelDebug, ReplaceAttr: nil})), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	}, nil)
+	projectID, orgID := consentTestTenant(t, ctx)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	slug := tag + "-" + uuid.NewString()[:8]
+	serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, consentChainedUpstream)
+	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, issuerID, slug)
+	endpoint.McpServerID = conv.ToNullUUID(serverID)
+	endpoint.UpstreamResource = consentChainedUpstream
+	fx := consentActionFixture{ti: ti, endpoint: endpoint, stateID: stateID, projectID: projectID, orgID: orgID, shared: issuerID, subject: subject, clientA: uuid.Nil, clientB: uuid.Nil, clientC: uuid.Nil, clientD: uuid.Nil}
+	registerPageClient(t, ctx, fx)
+	fx.clientA = createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, tag, "", []uuid.UUID{issuerID})
+	return ctx, fx, clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, fx.clientA), logs
+}
+
+const (
+	deferredConflictLog = "consent tool inventory waits for identity chaining"
+	realConflictLog     = "connect the upstream service before choosing tools"
+)
+
+func TestConsentInventory_DeferredConflictLogsAtInfo(t *testing.T) {
+	t.Parallel()
+
+	_, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-deferred")
+	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+
+	requireConsentInventoryConflict(t, fx)
+	deferred := logRecords(t, logs, deferredConflictLog)
+	require.Len(t, deferred, 1)
+	require.Equal(t, "INFO", deferred[0]["level"])
+	require.Equal(t, true, deferred[0]["gram.consent.inventory_deferred"])
+	require.Empty(t, logRecords(t, logs, realConflictLog))
+}
+
+func TestConsentInventory_StoredSelectionConflictStaysWarn(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-prefill")
+	setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	seedSubjectToolSelection(t, ctx, fx, []string{"get_thing"})
+
+	requireConsentInventoryConflict(t, fx)
+	require.Empty(t, logRecords(t, logs, deferredConflictLog), "the page keeps blocking, so the conflict is not expected")
+	warned := logRecords(t, logs, realConflictLog)
+	require.Len(t, warned, 1)
+	require.Equal(t, "WARN", warned[0]["level"])
+	require.NotContains(t, warned[0], "gram.consent.inventory_deferred")
+}
+
+func TestConsentInventory_AmbiguousBindingConflictStaysWarn(t *testing.T) {
+	t.Parallel()
+
+	_, fx, issuer, logs := seedLoggedChainedConsent(t, "aim524-log-ambiguous")
+	g := setConsentGovernor(t, fx, issuer)
+	// Governed but served by no single binding: the page renders no chained card.
+	g.governs = true
+
+	requireConsentInventoryConflict(t, fx)
+	require.Empty(t, logRecords(t, logs, deferredConflictLog))
+	warned := logRecords(t, logs, realConflictLog)
+	require.Len(t, warned, 1)
+	require.Equal(t, "WARN", warned[0]["level"])
 }
 
 func TestConsentPage_LinkedServiceDoesNotDeferToolInventory(t *testing.T) {

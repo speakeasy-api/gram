@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -42,7 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -354,7 +354,7 @@ func (s *Service) serveConsentProxiedMCP(
 		}
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
 			conflict := oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools")
-			if s.consentUpstreamChained(ctx, endpoint, subject, serverRow) {
+			if s.consentTransportDeferred(ctx, logger, endpoint, challengeState) {
 				// Expected before approval: chaining mints the token afterwards.
 				logger.InfoContext(ctx, "consent tool inventory waits for identity chaining", attr.SlogConsentInventoryDeferred(true))
 				return conflict
@@ -475,19 +475,38 @@ func (s *Service) serveConsentProxiedMCP(
 	return nil
 }
 
-// consentUpstreamChained reports whether identity chaining governs the
-// backend's upstream for the consent subject, judged as the runtime would.
-func (s *Service) consentUpstreamChained(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, serverRow *mcpservers_repo.McpServer) bool {
-	if s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser {
+// consentInventoryDeferred is the page's rule for loading tools only after
+// approval: every service is reachable only by identity chaining, which has
+// no upstream token before the grant exists, and no chain check has been
+// refused yet. A stored restrictive selection keeps blocking instead, since
+// deferring would replace it with all tools.
+func consentInventoryDeferred(cards []remoteSessionCard, hasPrefill bool) bool {
+	if len(cards) == 0 || hasPrefill {
 		return false
 	}
-	tunneled := serverRow.TunneledMcpServerID.Valid
-	backendIssuer := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if tunneled {
-		backendIssuer = tunneledBackendIssuer(serverRow)
+	for _, c := range cards {
+		if !c.Chained || c.Connected || c.ChainCheck == chainCheckRejected {
+			return false
+		}
 	}
-	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, tunneled, backendIssuer)
-	return ok && s.identityChainer.Governs(ctx, req)
+	return true
+}
+
+// consentTransportDeferred re-evaluates consentInventoryDeferred for the
+// transport's "not connected" answer, so only the conflict the page treats
+// as deferred is logged as expected. Any lookup fault reads as not deferred.
+func (s *Service) consentTransportDeferred(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) bool {
+	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
+	if err != nil {
+		logger.WarnContext(ctx, "build consent cards for inventory deferral", attr.SlogError(err))
+		return false
+	}
+	client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
+	if err != nil {
+		return false
+	}
+	prefill := s.consentToolSelectionPrefill(ctx, endpoint, *challengeState.Subject, client.ID)
+	return consentInventoryDeferred(cards, prefill != nil)
 }
 
 // consentMethodAllowlistInterceptor rejects every JSON-RPC message outside
