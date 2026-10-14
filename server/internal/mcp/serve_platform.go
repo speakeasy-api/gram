@@ -210,7 +210,7 @@ func (s *Service) handlePlatformToolsetRequest(
 		}()
 	}
 
-	if !methodAvailable(req, *protocolVersion, mcpversions.SupportedPlatformToolset()) {
+	if !methodAvailable(req, *protocolVersion, mcpversions.SupportedPlatformToolset(), nil) {
 		return nil, unavailableMethod(req)
 	}
 

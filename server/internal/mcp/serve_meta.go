@@ -264,7 +264,7 @@ func (s *Service) handleMetaMCPRequest(
 		}()
 	}
 
-	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer()) {
+	if !methodAvailable(req, gate.protocolVersion, mcpversions.SupportedMetaServer(), nil) {
 		return nil, unavailableMethod(req)
 	}
 
