@@ -176,6 +176,7 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 		Tags:             nil,
 		AgentID:          agentID.String(),
 		ProjectScoped:    true,
+		HooksProjectID:   nil,
 	})
 	require.NoError(t, err)
 

@@ -13,6 +13,8 @@ function admission(
     id: "33333333-3333-3333-3333-333333333333",
     organizationId: "org",
     projectId: "",
+    hooksProjectId: "",
+    hooksProjectSlug: "",
     workloadIssuerId: "11111111-1111-1111-1111-111111111111",
     issuer: "https://ci-identity.example.com",
     issuerName: "Example CI",

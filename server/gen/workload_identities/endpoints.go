@@ -16,16 +16,18 @@ import (
 
 // Endpoints wraps the "workloadIdentities" service endpoints.
 type Endpoints struct {
-	List               goa.Endpoint
-	ListPlatforms      goa.Endpoint
-	GetCustomFlows     goa.Endpoint
-	ListTokenEndpoints goa.Endpoint
-	RegisterIssuer     goa.Endpoint
-	UpdateIssuer       goa.Endpoint
-	WithdrawIssuer     goa.Endpoint
-	AdmitSubject       goa.Endpoint
-	UpdateSubject      goa.Endpoint
-	WithdrawSubject    goa.Endpoint
+	List                  goa.Endpoint
+	ListPlatforms         goa.Endpoint
+	GetCustomFlows        goa.Endpoint
+	ListTokenEndpoints    goa.Endpoint
+	RegisterIssuer        goa.Endpoint
+	UpdateIssuer          goa.Endpoint
+	WithdrawIssuer        goa.Endpoint
+	AdmitSubject          goa.Endpoint
+	UpdateSubject         goa.Endpoint
+	WithdrawSubject       goa.Endpoint
+	CreateDeviceJoinToken goa.Endpoint
+	RegisterDevice        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "workloadIdentities" service with
@@ -34,16 +36,18 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		List:               NewListEndpoint(s, a.APIKeyAuth),
-		ListPlatforms:      NewListPlatformsEndpoint(s, a.APIKeyAuth),
-		GetCustomFlows:     NewGetCustomFlowsEndpoint(s, a.APIKeyAuth),
-		ListTokenEndpoints: NewListTokenEndpointsEndpoint(s, a.APIKeyAuth),
-		RegisterIssuer:     NewRegisterIssuerEndpoint(s, a.APIKeyAuth),
-		UpdateIssuer:       NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
-		WithdrawIssuer:     NewWithdrawIssuerEndpoint(s, a.APIKeyAuth),
-		AdmitSubject:       NewAdmitSubjectEndpoint(s, a.APIKeyAuth),
-		UpdateSubject:      NewUpdateSubjectEndpoint(s, a.APIKeyAuth),
-		WithdrawSubject:    NewWithdrawSubjectEndpoint(s, a.APIKeyAuth),
+		List:                  NewListEndpoint(s, a.APIKeyAuth),
+		ListPlatforms:         NewListPlatformsEndpoint(s, a.APIKeyAuth),
+		GetCustomFlows:        NewGetCustomFlowsEndpoint(s, a.APIKeyAuth),
+		ListTokenEndpoints:    NewListTokenEndpointsEndpoint(s, a.APIKeyAuth),
+		RegisterIssuer:        NewRegisterIssuerEndpoint(s, a.APIKeyAuth),
+		UpdateIssuer:          NewUpdateIssuerEndpoint(s, a.APIKeyAuth),
+		WithdrawIssuer:        NewWithdrawIssuerEndpoint(s, a.APIKeyAuth),
+		AdmitSubject:          NewAdmitSubjectEndpoint(s, a.APIKeyAuth),
+		UpdateSubject:         NewUpdateSubjectEndpoint(s, a.APIKeyAuth),
+		WithdrawSubject:       NewWithdrawSubjectEndpoint(s, a.APIKeyAuth),
+		CreateDeviceJoinToken: NewCreateDeviceJoinTokenEndpoint(s, a.APIKeyAuth),
+		RegisterDevice:        NewRegisterDeviceEndpoint(s),
 	}
 }
 
@@ -60,6 +64,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.AdmitSubject = m(e.AdmitSubject)
 	e.UpdateSubject = m(e.UpdateSubject)
 	e.WithdrawSubject = m(e.WithdrawSubject)
+	e.CreateDeviceJoinToken = m(e.CreateDeviceJoinToken)
+	e.RegisterDevice = m(e.RegisterDevice)
 }
 
 // NewListEndpoint returns an endpoint function that calls the method "list" of
@@ -529,5 +535,61 @@ func NewWithdrawSubjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.WithdrawSubject(ctx, p)
+	}
+}
+
+// NewCreateDeviceJoinTokenEndpoint returns an endpoint function that calls the
+// method "createDeviceJoinToken" of service "workloadIdentities".
+func NewCreateDeviceJoinTokenEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateDeviceJoinTokenPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateDeviceJoinToken(ctx, p)
+	}
+}
+
+// NewRegisterDeviceEndpoint returns an endpoint function that calls the method
+// "registerDevice" of service "workloadIdentities".
+func NewRegisterDeviceEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RegisterDevicePayload)
+		return s.RegisterDevice(ctx, p)
 	}
 }

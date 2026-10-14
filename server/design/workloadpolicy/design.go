@@ -278,6 +278,95 @@ var _ = Service("workloadIdentities", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "withdrawSubject")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WithdrawWorkloadSubject"}`)
 	})
+
+	Method("createDeviceJoinToken", func() {
+		Description("Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent's policy.")
+
+		Payload(func() {
+			Attribute("agent_id", String, "The agent the enrolled device inherits its policy from.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("hooks_project_id", String, "The project the enrolled device may send hooks to. Recorded on its admission, it bounds the hooks grant the device's tokens carry. Must be a project in the caller's organization.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("expires_in_seconds", Int, "How long the token stays redeemable. Defaults to one hour.", func() {
+				Minimum(60)
+				Maximum(86400)
+				Default(3600)
+			})
+			Required("agent_id", "hooks_project_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(WorkloadDeviceJoinToken)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.createDeviceJoinToken")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createWorkloadDeviceJoinToken")
+		Meta("openapi:extension:x-speakeasy-name-override", "createDeviceJoinToken")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateWorkloadDeviceJoinToken"}`)
+	})
+
+	Method("registerDevice", func() {
+		Description("Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants the device-agent scopes returns a failed precondition without spending the token. In one transaction the device's key is registered, the device is admitted under the organization's Speakeasy device issuer, and it is assigned the token's agent.")
+
+		NoSecurity()
+
+		Payload(func() {
+			Attribute("join_token", String, "The join token from createDeviceJoinToken.", func() {
+				MinLength(1)
+				MaxLength(512)
+			})
+			Attribute("public_jwk", MapOf(String, Any), "The device's public signing key as a JWK: EC P-256 (ES256) or OKP Ed25519 (EdDSA). Private key material is refused.")
+			Attribute("hostname", String, "The device's hostname, shown to administrators. Self-reported.", func() {
+				MaxLength(255)
+			})
+			Attribute("serial", String, "The device's serial number, shown to administrators. Self-reported.", func() {
+				MaxLength(255)
+			})
+			Required("join_token", "public_jwk")
+		})
+
+		Result(WorkloadDeviceRegistration)
+
+		HTTP(func() {
+			POST("/rpc/workloadIdentities.registerDevice")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "registerWorkloadDevice")
+		Meta("openapi:extension:x-speakeasy-name-override", "registerDevice")
+	})
+})
+
+var WorkloadDeviceJoinToken = Type("WorkloadDeviceJoinToken", func() {
+	Attribute("token", String, "The join token. Shown once; only its hash is stored.")
+	Attribute("expires_at", String, "When the token stops being redeemable.", func() {
+		Format(FormatDateTime)
+	})
+	Required("token", "expires_at")
+})
+
+var WorkloadDeviceRegistration = Type("WorkloadDeviceRegistration", func() {
+	Attribute("device_subject", String, "The device's workload subject, device:<uuid>. Its assertions carry this as sub.")
+	Attribute("issuer", String, "The issuer its assertions carry as iss.")
+	Attribute("agent_id", String, "The agent the device inherits its policy from.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_id", String, "The organization the device enrolled in.")
+	Attribute("hooks_project_id", String, "The project the device may send hooks to.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("hooks_project_slug", String, "That project's slug, which the device sends as Gram-Project on hooks requests.")
+	Required("device_subject", "issuer", "agent_id", "organization_id", "hooks_project_id", "hooks_project_slug")
 })
 
 var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
@@ -352,6 +441,9 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.", func() {
 		Default(false)
 	})
+	Attribute("hooks_project_id", String, "The project the workload may send hooks to, which bounds the hooks grant its device-agent tokens carry. Must be a project in the caller's organization. Omitted, the workload sends no hooks.", func() {
+		Format(FormatUUID)
+	})
 
 	Required("issuer", "subject", "agent_id")
 })
@@ -371,6 +463,7 @@ var UpdateWorkloadSubjectForm = Type("UpdateWorkloadSubjectForm", func() {
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits. Shared with any admission of the same subject under the same issuer at the other tier.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("hooks_project_id", String, "The project the workload may send hooks to: a project id in the caller's organization, or blank to stop it sending hooks.")
 
 	Required("id")
 })
@@ -426,6 +519,8 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Format(FormatUUID)
 	})
 	Attribute("agent_name", String, "The assigned agent's name; empty when the assignment is missing.")
+	Attribute("hooks_project_id", String, "The project this workload may send hooks to; empty when it sends none.")
+	Attribute("hooks_project_slug", String, "That project's slug; empty when it sends none or the project was deleted.")
 	Attribute("wildcard_active", Boolean, "False when this is a wildcard rule under an issuer that no longer permits wildcard matching. Such a rule is inert: it is stored, listed, and matches nothing.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
@@ -434,7 +529,7 @@ var WorkloadAdmission = Type("WorkloadAdmission", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "tags", "agent_id", "agent_name", "wildcard_active", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "workload_issuer_id", "issuer", "issuer_name", "subject", "match_kind", "name", "tags", "agent_id", "agent_name", "hooks_project_id", "hooks_project_slug", "wildcard_active", "created_at", "updated_at")
 })
 
 var WorkloadIdentityPolicy = Type("WorkloadIdentityPolicy", func() {

@@ -208,7 +208,7 @@ func UsageCommands() []string {
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
-		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject)",
+		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|register-device)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
 }
@@ -4972,6 +4972,15 @@ func ParseEndpoint(
 		workloadIdentitiesWithdrawSubjectApikeyTokenFlag      = workloadIdentitiesWithdrawSubjectFlags.String("apikey-token", "", "")
 		workloadIdentitiesWithdrawSubjectProjectSlugInputFlag = workloadIdentitiesWithdrawSubjectFlags.String("project-slug-input", "", "")
 
+		workloadIdentitiesCreateDeviceJoinTokenFlags                = flag.NewFlagSet("create-device-join-token", flag.ExitOnError)
+		workloadIdentitiesCreateDeviceJoinTokenBodyFlag             = workloadIdentitiesCreateDeviceJoinTokenFlags.String("body", "REQUIRED", "")
+		workloadIdentitiesCreateDeviceJoinTokenSessionTokenFlag     = workloadIdentitiesCreateDeviceJoinTokenFlags.String("session-token", "", "")
+		workloadIdentitiesCreateDeviceJoinTokenApikeyTokenFlag      = workloadIdentitiesCreateDeviceJoinTokenFlags.String("apikey-token", "", "")
+		workloadIdentitiesCreateDeviceJoinTokenProjectSlugInputFlag = workloadIdentitiesCreateDeviceJoinTokenFlags.String("project-slug-input", "", "")
+
+		workloadIdentitiesRegisterDeviceFlags    = flag.NewFlagSet("register-device", flag.ExitOnError)
+		workloadIdentitiesRegisterDeviceBodyFlag = workloadIdentitiesRegisterDeviceFlags.String("body", "REQUIRED", "")
+
 		variationsFlags = flag.NewFlagSet("variations", flag.ContinueOnError)
 
 		variationsUpsertGlobalFlags                = flag.NewFlagSet("upsert-global", flag.ExitOnError)
@@ -6053,6 +6062,8 @@ func ParseEndpoint(
 	workloadIdentitiesAdmitSubjectFlags.Usage = workloadIdentitiesAdmitSubjectUsage
 	workloadIdentitiesUpdateSubjectFlags.Usage = workloadIdentitiesUpdateSubjectUsage
 	workloadIdentitiesWithdrawSubjectFlags.Usage = workloadIdentitiesWithdrawSubjectUsage
+	workloadIdentitiesCreateDeviceJoinTokenFlags.Usage = workloadIdentitiesCreateDeviceJoinTokenUsage
+	workloadIdentitiesRegisterDeviceFlags.Usage = workloadIdentitiesRegisterDeviceUsage
 
 	variationsFlags.Usage = variationsUsage
 	variationsUpsertGlobalFlags.Usage = variationsUpsertGlobalUsage
@@ -9250,6 +9261,12 @@ func ParseEndpoint(
 			case "withdraw-subject":
 				epf = workloadIdentitiesWithdrawSubjectFlags
 
+			case "create-device-join-token":
+				epf = workloadIdentitiesCreateDeviceJoinTokenFlags
+
+			case "register-device":
+				epf = workloadIdentitiesRegisterDeviceFlags
+
 			}
 
 		case "variations":
@@ -12294,6 +12311,12 @@ func ParseEndpoint(
 			case "withdraw-subject":
 				endpoint = c.WithdrawSubject()
 				data, err = workloadidentitiesc.BuildWithdrawSubjectPayload(*workloadIdentitiesWithdrawSubjectIDFlag, *workloadIdentitiesWithdrawSubjectSessionTokenFlag, *workloadIdentitiesWithdrawSubjectApikeyTokenFlag, *workloadIdentitiesWithdrawSubjectProjectSlugInputFlag)
+			case "create-device-join-token":
+				endpoint = c.CreateDeviceJoinToken()
+				data, err = workloadidentitiesc.BuildCreateDeviceJoinTokenPayload(*workloadIdentitiesCreateDeviceJoinTokenBodyFlag, *workloadIdentitiesCreateDeviceJoinTokenSessionTokenFlag, *workloadIdentitiesCreateDeviceJoinTokenApikeyTokenFlag, *workloadIdentitiesCreateDeviceJoinTokenProjectSlugInputFlag)
+			case "register-device":
+				endpoint = c.RegisterDevice()
+				data, err = workloadidentitiesc.BuildRegisterDevicePayload(*workloadIdentitiesRegisterDeviceBodyFlag)
 			}
 		case "variations":
 			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -33408,6 +33431,8 @@ func workloadIdentitiesUsage() {
 	fmt.Fprintln(os.Stderr, `    admit-subject: Admit a subject one of the trusted issuers asserts, and assign the agent it inherits its policy from. Both happen in one transaction: a subject admitted without an agent is refused at the token endpoint, so that half-configured state is not reachable. Requires workload:write.`)
 	fmt.Fprintln(os.Stderr, `    update-subject: Edit an admitted subject's label, tags, or assigned agent. Omitted fields are left unchanged. The subject, match kind, issuer, and tier are fixed at admission. The agent assignment is shared by every admission of the same subject under the same issuer, at either tier, so reassigning it through one admission reassigns it for both. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 	fmt.Fprintln(os.Stderr, `    withdraw-subject: Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.`)
+	fmt.Fprintln(os.Stderr, `    create-device-join-token: Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent's policy.`)
+	fmt.Fprintln(os.Stderr, `    register-device: Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants the device-agent scopes returns a failed precondition without spending the token. In one transaction the device's key is registered, the device is admitted under the organization's Speakeasy device issuer, and it is assigned the token's agent.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s workload-identities COMMAND --help\n", os.Args[0])
@@ -33593,7 +33618,7 @@ func workloadIdentitiesAdmitSubjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities admit-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities admit-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"hooks_project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesUpdateSubjectUsage() {
@@ -33617,7 +33642,7 @@ func workloadIdentitiesUpdateSubjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities update-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities update-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"hooks_project_id\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"tags\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesWithdrawSubjectUsage() {
@@ -33642,6 +33667,48 @@ func workloadIdentitiesWithdrawSubjectUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities withdraw-subject --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func workloadIdentitiesCreateDeviceJoinTokenUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities create-device-join-token", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a single-use join token that enrolls one headless box with no platform identity as a workload assigned to an agent. The token is returned once and only its hash is kept. Requires workload:write, and either owning the agent or agent:authorize on it, since an enrolled box acts under the agent's policy.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities create-device-join-token --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expires_in_seconds\": 61,\n      \"hooks_project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func workloadIdentitiesRegisterDeviceUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities register-device", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Enroll a device with its public key, redeeming a join token. No session or API key: the single-use join token is the credential, and an unknown, expired, or already redeemed token returns 401. A key already registered to another device returns 409, and an agent whose policy no longer grants the device-agent scopes returns a failed precondition without spending the token. In one transaction the device's key is registered, the device is admitted under the organization's Speakeasy device issuer, and it is assigned the token's agent.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities register-device --body '{\n      \"hostname\": \"aaa\",\n      \"join_token\": \"aa\",\n      \"public_jwk\": {\n         \"abc123\": \"abc123\"\n      },\n      \"serial\": \"aaa\"\n   }'")
 }
 
 // variationsUsage displays the usage of the variations command and its

@@ -322,6 +322,26 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const countLiveWorkloadDeviceKeysFixture = `-- name: CountLiveWorkloadDeviceKeysFixture :one
+SELECT count(*)
+FROM workload_device_keys
+WHERE organization_id = $1
+  AND subject = $2
+  AND deleted IS FALSE
+`
+
+type CountLiveWorkloadDeviceKeysFixtureParams struct {
+	OrganizationID string
+	Subject        string
+}
+
+func (q *Queries) CountLiveWorkloadDeviceKeysFixture(ctx context.Context, arg CountLiveWorkloadDeviceKeysFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveWorkloadDeviceKeysFixture, arg.OrganizationID, arg.Subject)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countMcpMetadataForBackendIDFixture = `-- name: CountMcpMetadataForBackendIDFixture :one
 SELECT count(*)
 FROM mcp_metadata
@@ -934,6 +954,55 @@ func (q *Queries) CreateWorkloadAgentAssignmentFixture(ctx context.Context, arg 
 	return err
 }
 
+const createWorkloadDeviceIssuerFixture = `-- name: CreateWorkloadDeviceIssuerFixture :one
+INSERT INTO workload_issuers (organization_id, name, issuer, jwks_uri, allow_wildcard_admission, key_source)
+VALUES ($1, $2, $3, $4, false, 'device_keys')
+RETURNING id
+`
+
+type CreateWorkloadDeviceIssuerFixtureParams struct {
+	OrganizationID string
+	Name           string
+	Issuer         string
+	JwksUri        string
+}
+
+func (q *Queries) CreateWorkloadDeviceIssuerFixture(ctx context.Context, arg CreateWorkloadDeviceIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createWorkloadDeviceIssuerFixture,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Issuer,
+		arg.JwksUri,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createWorkloadDeviceKeyFixture = `-- name: CreateWorkloadDeviceKeyFixture :exec
+INSERT INTO workload_device_keys (organization_id, workload_issuer_id, subject, public_jwk, thumbprint)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type CreateWorkloadDeviceKeyFixtureParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	PublicJwk        []byte
+	Thumbprint       string
+}
+
+func (q *Queries) CreateWorkloadDeviceKeyFixture(ctx context.Context, arg CreateWorkloadDeviceKeyFixtureParams) error {
+	_, err := q.db.Exec(ctx, createWorkloadDeviceKeyFixture,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.PublicJwk,
+		arg.Thumbprint,
+	)
+	return err
+}
+
 const createWorkloadIdentityAdmissionFixture = `-- name: CreateWorkloadIdentityAdmissionFixture :exec
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
 VALUES ($1, $2, $3, $4)
@@ -1223,6 +1292,20 @@ WHERE id = $1
 func (q *Queries) ExpireRemoteSessionAccessTokenFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, expireRemoteSessionAccessTokenFixture, id)
 	return err
+}
+
+const expireWorkloadDeviceJoinTokensFixture = `-- name: ExpireWorkloadDeviceJoinTokensFixture :execrows
+UPDATE workload_device_join_tokens
+SET expires_at = clock_timestamp() - interval '1 minute'
+WHERE organization_id = $1
+`
+
+func (q *Queries) ExpireWorkloadDeviceJoinTokensFixture(ctx context.Context, organizationID string) (int64, error) {
+	result, err := q.db.Exec(ctx, expireWorkloadDeviceJoinTokensFixture, organizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const failDeviceIntegrationSyncsFixture = `-- name: FailDeviceIntegrationSyncsFixture :exec
@@ -2214,6 +2297,27 @@ func (q *Queries) GetUserSessionMigrationTombstonesFixture(ctx context.Context, 
 		&i.RemoteSessionIssuerID,
 	)
 	return i, err
+}
+
+const hardDeleteProjectFixture = `-- name: HardDeleteProjectFixture :execrows
+DELETE FROM projects
+WHERE organization_id = $1
+  AND id = $2
+`
+
+type HardDeleteProjectFixtureParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// Projects are soft-deleted in the product; this exercises the foreign-key
+// actions that only a hard delete fires.
+func (q *Queries) HardDeleteProjectFixture(ctx context.Context, arg HardDeleteProjectFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, hardDeleteProjectFixture, arg.OrganizationID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertAttachmentFixture = `-- name: InsertAttachmentFixture :execrows
@@ -6184,6 +6288,46 @@ func (q *Queries) SoftDeleteUserSessionMigrationChildrenFixture(ctx context.Cont
 		&i.RemoteSessions,
 	)
 	return i, err
+}
+
+const softDeleteWorkloadAdmissionFixture = `-- name: SoftDeleteWorkloadAdmissionFixture :execrows
+UPDATE workload_identity_admissions
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND subject = $2
+`
+
+type SoftDeleteWorkloadAdmissionFixtureParams struct {
+	OrganizationID string
+	Subject        string
+}
+
+func (q *Queries) SoftDeleteWorkloadAdmissionFixture(ctx context.Context, arg SoftDeleteWorkloadAdmissionFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteWorkloadAdmissionFixture, arg.OrganizationID, arg.Subject)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const softDeleteWorkloadDeviceKeyFixture = `-- name: SoftDeleteWorkloadDeviceKeyFixture :execrows
+UPDATE workload_device_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND subject = $2
+`
+
+type SoftDeleteWorkloadDeviceKeyFixtureParams struct {
+	OrganizationID string
+	Subject        string
+}
+
+func (q *Queries) SoftDeleteWorkloadDeviceKeyFixture(ctx context.Context, arg SoftDeleteWorkloadDeviceKeyFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteWorkloadDeviceKeyFixture, arg.OrganizationID, arg.Subject)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const softDeleteWorkloadIssuerFixture = `-- name: SoftDeleteWorkloadIssuerFixture :execrows
