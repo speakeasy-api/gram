@@ -99,6 +99,8 @@ export const AUDIT_ACTIONS = [
   "identity-provider-connection:submit-client-id",
   "identity-provider-connection:sync-applications",
   "identity-provider-connection:verify",
+  "internal_session_issuer:disable",
+  "internal_session_issuer:enable",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -468,6 +470,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated JSON Web Key Set";
     case "json_web_key_set:delete":
       return "deleted JSON Web Key Set";
+    case "internal_session_issuer:enable":
+      return "enabled Speakeasy signing with issuer";
+    case "internal_session_issuer:disable":
+      return "disabled Speakeasy signing with issuer";
     case "json_web_key:publish":
       return "published JSON Web Key";
     case "json_web_key:activate":

@@ -18,6 +18,9 @@ const GENERIC_LABEL_WORDS = new Set([
 
 /** Short forms a policy name may use in place of the full category label. */
 const CATEGORY_LABEL_ALIASES: Partial<Record<RuleCategory, string>> = {
+  // The category reads "Shadow AI" since the fold-in, but the server still
+  // auto-names its policies "Shadow MCP Server Policy"; that name covers it.
+  shadow_mcp: "Shadow MCP",
   pii: "PII",
   government_ids: "Government IDs",
 };

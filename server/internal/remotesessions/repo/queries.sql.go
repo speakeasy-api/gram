@@ -9744,13 +9744,14 @@ func (q *Queries) LockEMAUserIssuer(ctx context.Context, arg LockEMAUserIssuerPa
 }
 
 const lockJsonWebKeySetForClientAttach = `-- name: LockJsonWebKeySetForClientAttach :one
-SELECT id, identity_provider_connection_id
+SELECT json_web_key_sets.id, json_web_key_sets.identity_provider_connection_id
 FROM json_web_key_sets
-WHERE id = $1
-  AND organization_id = $2
-  AND project_id IS NULL
-  AND deleted IS FALSE
-FOR SHARE
+WHERE json_web_key_sets.id = $1
+  AND json_web_key_sets.organization_id = $2
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT is_internal_session_issuer_key_set(json_web_key_sets.organization_id, json_web_key_sets.id)
+  AND json_web_key_sets.deleted IS FALSE
+FOR SHARE OF json_web_key_sets
 `
 
 type LockJsonWebKeySetForClientAttachParams struct {
@@ -10817,12 +10818,13 @@ func (q *Queries) ReadEMAIssuer(ctx context.Context, arg ReadEMAIssuerParams) (R
 }
 
 const readEMAJsonWebKeySet = `-- name: ReadEMAJsonWebKeySet :one
-SELECT id
+SELECT json_web_key_sets.id
 FROM json_web_key_sets
-WHERE id = $1
-  AND organization_id = $2
-  AND project_id IS NULL
-  AND deleted IS FALSE
+WHERE json_web_key_sets.id = $1
+  AND json_web_key_sets.organization_id = $2
+  AND json_web_key_sets.project_id IS NULL
+  AND NOT is_internal_session_issuer_key_set(json_web_key_sets.organization_id, json_web_key_sets.id)
+  AND json_web_key_sets.deleted IS FALSE
 `
 
 type ReadEMAJsonWebKeySetParams struct {
