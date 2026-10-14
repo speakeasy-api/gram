@@ -213,8 +213,8 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                     RFC 7523
                   </a>
                   . It never changes, even when signing keys are replaced.
-                  Registering it alone changes nothing: select Speakeasy as the
-                  service's EMA provider too.
+                  Registering it alone changes nothing: add Speakeasy to the
+                  service's EMA provider order too.
                 </SettingsSection.Description>
               </SettingsSection.Header>
               <SettingsSection.Panel>
@@ -497,7 +497,7 @@ function IssuerStatus({
   switch (issuer.state) {
     case "enabled":
       message =
-        "The issuer is ready. Speakeasy vouches for your team only to services where an admin has selected it; other services keep their current identity provider.";
+        "The issuer is ready. Speakeasy vouches for your team only to services whose EMA provider order includes it; other services keep their current identity provider.";
       break;
     case "setup_required":
       message = issuer.canEnable
