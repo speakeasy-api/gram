@@ -2184,6 +2184,7 @@ func seedUserSessionWithSelection(t *testing.T, ctx context.Context, ti *testIns
 		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: 0, Valid: true},
 		ToolSelection:       selection,
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 	return refreshToken

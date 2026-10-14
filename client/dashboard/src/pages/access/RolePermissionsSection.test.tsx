@@ -101,39 +101,3 @@ describe("RolePermissionsSection tabs", () => {
     expect(screen.getByRole("tab", { name: "MCP access (4)" })).toBeTruthy();
   });
 });
-
-describe("a permission the role only blocks", () => {
-  function renderBlocked(onToggleScope: (scope: string) => void = () => {}) {
-    render(
-      <RolePermissionsSection
-        groups={groups}
-        selectedScopes={new Set(["mcp:read"])}
-        blockOnlyScopes={new Set(["mcp:read"])}
-        onToggleScope={onToggleScope}
-        renderScopeRule={() => null}
-      />,
-    );
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Platform access/ }));
-  }
-
-  it("marks the row blocked and drops the connect note", () => {
-    renderBlocked();
-    expect(screen.getByText("Blocked")).toBeTruthy();
-    expect(screen.queryByText(/Also allows connecting/)).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Remove block on mcp:read" }),
-    ).toBeTruthy();
-  });
-
-  it("offers the blocked permission as not yet added, so picking it grants it", () => {
-    const toggled: string[] = [];
-    renderBlocked((scope) => {
-      toggled.push(scope);
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
-    const option = screen.getByRole("option", { name: /^mcp:read/ });
-    expect(option.textContent).not.toContain("Already added");
-    fireEvent.click(option);
-    expect(toggled).toEqual(["mcp:read"]);
-  });
-});

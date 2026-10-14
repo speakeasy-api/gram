@@ -48,7 +48,7 @@ describe("DetectorCard", () => {
     renderCard({ onToggle });
 
     const toggle = screen.getByRole("switch", {
-      name: "Shadow MCP built-in rule",
+      name: "Shadow AI built-in rule",
     }) as HTMLButtonElement;
     expect(toggle.disabled).toBe(false);
     expect(toggle.closest('[data-slot="tooltip-trigger"]')).toBeNull();
@@ -58,11 +58,11 @@ describe("DetectorCard", () => {
   });
 
   it("shows a disabled switch reason only when its tooltip trigger is hovered", async () => {
-    const reason = "Turn off other built-in rules to select Shadow MCP.";
+    const reason = "Turn off other built-in rules to select Shadow AI.";
     renderCard({ disabledReason: reason });
 
     const toggle = screen.getByRole("switch", {
-      name: "Shadow MCP built-in rule",
+      name: "Shadow AI built-in rule",
     }) as HTMLButtonElement;
     const trigger = toggle.closest<HTMLElement>(
       '[data-slot="tooltip-trigger"]',
@@ -71,7 +71,7 @@ describe("DetectorCard", () => {
     expect(toggle.disabled).toBe(true);
     expect(trigger).not.toBeNull();
     expect(trigger?.tabIndex).toBe(0);
-    expect(trigger?.getAttribute("aria-label")).toBe("Shadow MCP unavailable");
+    expect(trigger?.getAttribute("aria-label")).toBe("Shadow AI unavailable");
     expect(trigger?.children.length).toBe(1);
     expect(trigger?.firstElementChild).toBe(toggle);
 
@@ -87,11 +87,11 @@ describe("DetectorCard", () => {
   });
 
   it("shows a disabled switch reason when its tooltip trigger is focused", async () => {
-    const reason = "Turn off other built-in rules to select Shadow MCP.";
+    const reason = "Turn off other built-in rules to select Shadow AI.";
     renderCard({ disabledReason: reason });
 
     const toggle = screen.getByRole("switch", {
-      name: "Shadow MCP built-in rule",
+      name: "Shadow AI built-in rule",
     });
     const trigger = toggle.closest<HTMLElement>(
       '[data-slot="tooltip-trigger"]',

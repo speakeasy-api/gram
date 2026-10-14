@@ -1209,17 +1209,24 @@ func EncodeDeleteUserSessionIssuerError(encoder func(context.Context, http.Respo
 // *types.UserSessionIssuer.
 func marshalTypesUserSessionIssuerToUserSessionIssuerResponseBody(v *types.UserSessionIssuer) *UserSessionIssuerResponseBody {
 	res := &UserSessionIssuerResponseBody{
-		ID:                            v.ID,
-		ProjectID:                     v.ProjectID,
-		OrganizationID:                v.OrganizationID,
-		Slug:                          v.Slug,
-		AuthnChallengeMode:            v.AuthnChallengeMode,
-		SessionDurationHours:          v.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: v.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  v.TrustedRemoteSessionClientID,
-		CreatedAt:                     v.CreatedAt,
-		UpdatedAt:                     v.UpdatedAt,
+		ID:                                   v.ID,
+		ProjectID:                            v.ProjectID,
+		OrganizationID:                       v.OrganizationID,
+		Slug:                                 v.Slug,
+		AuthnChallengeMode:                   v.AuthnChallengeMode,
+		SessionDurationHours:                 v.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        v.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         v.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         v.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              v.AuthorizationServerMode,
+		UseAuthenticationHost:                v.UseAuthenticationHost,
+		IssuerURLPinned:                      v.IssuerURLPinned,
+		IssuerURL:                            v.IssuerURL,
+		TokenEndpoint:                        v.TokenEndpoint,
+		AuthorizationServerUnavailableReason: v.AuthorizationServerUnavailableReason,
+		ProjectName:                          v.ProjectName,
+		CreatedAt:                            v.CreatedAt,
+		UpdatedAt:                            v.UpdatedAt,
 	}
 
 	return res

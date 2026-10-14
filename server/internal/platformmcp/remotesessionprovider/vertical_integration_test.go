@@ -472,3 +472,7 @@ func (g *fixedGovernor) Serves(_ context.Context, req identitychaining.Request) 
 func (g *fixedGovernor) HasUsableCredential(context.Context, identitychaining.Request) bool {
 	return g.usable
 }
+
+func (g *fixedGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool, error) {
+	return remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: true, Providers: []remotesessions.EMAProvider{{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}}}, g.serves, nil
+}

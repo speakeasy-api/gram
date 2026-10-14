@@ -64,10 +64,13 @@ runs:
     - name: Generate preview tag
       id: preview-tag
       shell: bash
+      env:
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
-        if [ "${{ github.event_name }}" == "pull_request" ]; then
-          SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
-          echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+        if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
+          SHORT_SHA=$(echo "${PR_HEAD_SHA}" | cut -c1-8)
+          echo "tag=pr-${PR_NUMBER}-${SHORT_SHA}" >> $GITHUB_OUTPUT
           echo "enabled=true" >> $GITHUB_OUTPUT
         else
           echo "tag=" >> $GITHUB_OUTPUT
@@ -147,10 +150,6 @@ runs:
 
         echo "Build arguments validated successfully"
 
-    - name: Set GIT_SHA
-      shell: bash
-      run: echo "GIT_SHA=$(echo $GITHUB_SHA)" >> $GITHUB_ENV
-
     - name: Build and push registry Docker image
       # Blacksmith fork of docker/build-push-action, paired with the
       # setup-docker-builder step above: buildkit state lives on a sticky disk
@@ -165,7 +164,7 @@ runs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           ${{ inputs.build-args }}
-          GIT_SHA=${{ env.GIT_SHA }}
+          GIT_SHA=${{ github.sha }}
         secrets: |
           git_auth_token=${{ inputs.git-auth-token }}
 
@@ -173,5 +172,7 @@ runs:
       id: set-tag
       shell: bash
       run: |
-        IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n 1)
+        IMAGE_TAG=$(echo "${STEPS_META_OUTPUTS_TAGS}" | head -n 1)
         echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+      env:
+        STEPS_META_OUTPUTS_TAGS: ${{ steps.meta.outputs.tags }}

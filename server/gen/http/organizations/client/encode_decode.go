@@ -1617,6 +1617,241 @@ func DecodeRemoveUserResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildRevokeMemberSignInsRequest instantiates a HTTP request object with
+// method and path set to call the "organizations" service
+// "revokeMemberSignIns" endpoint
+func (c *Client) BuildRevokeMemberSignInsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevokeMemberSignInsOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "revokeMemberSignIns", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRevokeMemberSignInsRequest returns an encoder for requests sent to the
+// organizations revokeMemberSignIns server.
+func EncodeRevokeMemberSignInsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.RevokeMemberSignInsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "revokeMemberSignIns", "*organizations.RevokeMemberSignInsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRevokeMemberSignInsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "revokeMemberSignIns", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRevokeMemberSignInsResponse returns a decoder for responses returned
+// by the organizations revokeMemberSignIns endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeRevokeMemberSignInsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRevokeMemberSignInsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RevokeMemberSignInsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+			}
+			err = ValidateRevokeMemberSignInsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+			}
+			res := NewRevokeMemberSignInsRevokeSignInsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RevokeMemberSignInsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+			}
+			err = ValidateRevokeMemberSignInsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+			}
+			return nil, NewRevokeMemberSignInsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RevokeMemberSignInsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+			}
+			err = ValidateRevokeMemberSignInsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+			}
+			return nil, NewRevokeMemberSignInsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RevokeMemberSignInsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+			}
+			err = ValidateRevokeMemberSignInsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+			}
+			return nil, NewRevokeMemberSignInsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RevokeMemberSignInsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+			}
+			err = ValidateRevokeMemberSignInsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+			}
+			return nil, NewRevokeMemberSignInsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RevokeMemberSignInsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+			}
+			err = ValidateRevokeMemberSignInsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+			}
+			return nil, NewRevokeMemberSignInsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RevokeMemberSignInsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+			}
+			err = ValidateRevokeMemberSignInsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+			}
+			return nil, NewRevokeMemberSignInsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RevokeMemberSignInsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+			}
+			err = ValidateRevokeMemberSignInsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+			}
+			return nil, NewRevokeMemberSignInsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RevokeMemberSignInsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+				}
+				err = ValidateRevokeMemberSignInsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+				}
+				return nil, NewRevokeMemberSignInsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RevokeMemberSignInsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+				}
+				err = ValidateRevokeMemberSignInsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+				}
+				return nil, NewRevokeMemberSignInsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "revokeMemberSignIns", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RevokeMemberSignInsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "revokeMemberSignIns", err)
+			}
+			err = ValidateRevokeMemberSignInsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "revokeMemberSignIns", err)
+			}
+			return nil, NewRevokeMemberSignInsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "revokeMemberSignIns", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildEnableWebhooksRequest instantiates a HTTP request object with method
 // and path set to call the "organizations" service "enableWebhooks" endpoint
 func (c *Client) BuildEnableWebhooksRequest(ctx context.Context, v any) (*http.Request, error) {

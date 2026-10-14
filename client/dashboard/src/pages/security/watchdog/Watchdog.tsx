@@ -74,6 +74,7 @@ import { ExposureBar } from "./ExposureBar";
 import { SignalDrawer } from "./SignalDrawer";
 import { SignalsList } from "./SignalsList";
 import { SuppressedFindings } from "./SuppressedFindings";
+import { UndecidedToolsTile } from "./UndecidedToolsTile";
 
 const WATCHDOG_PRESETS: DateRangePreset[] = ["1d", "7d", "30d"];
 
@@ -787,6 +788,7 @@ function KPIRow({
         <StatTileSkeleton />
         <StatTileSkeleton />
         <StatTileSkeleton />
+        <StatTileSkeleton />
       </StatTileGroup>
     );
   }
@@ -837,6 +839,7 @@ function KPIRow({
         icon="users"
         comparisonLabel="vs previous period"
       />
+      <UndecidedToolsTile />
     </StatTileGroup>
   );
 }

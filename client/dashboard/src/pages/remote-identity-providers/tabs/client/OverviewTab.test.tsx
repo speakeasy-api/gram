@@ -240,7 +240,7 @@ function scopesField(): HTMLElement {
 }
 
 function openScopes() {
-  fireEvent.click(screen.getByText("No scopes"));
+  fireEvent.click(screen.getByText("Discovered at sign-in"));
 }
 
 describe("client overview identity provider card", () => {
@@ -340,30 +340,24 @@ describe("client overview scope picker", () => {
     renderTab({ client: client(undefined, { scope: ["openid", "extra"] }) });
     save();
 
-    expect(lastSaved().scope).toEqual(["openid", "extra"]);
+    expect(lastSaved().scope).toBeUndefined();
     expect(screen.getByText("extra")).toBeTruthy();
   });
 
-  it("sends an empty array when no scopes are chosen", () => {
+  it("omits an unset scope on an unrelated save", () => {
     renderTab();
     save();
 
-    expect(lastSaved().scope).toEqual([]);
+    expect(lastSaved().scope).toBeUndefined();
   });
 
-  it("warns about an issuer override only once a scope is selected", () => {
-    renderTab({ issuer: issuer({ scopeOverride: ["read"] }) });
-
-    expect(screen.queryByText(/has a scope override/)).toBeNull();
-    openScopes();
-    fireEvent.click(screen.getByRole("option", { name: /openid/ }));
-    expect(screen.getByText(/has a scope override/)).toBeTruthy();
-  });
-
-  it("does not warn when the issuer has no override", () => {
+  it("sends an empty array when saved scopes are cleared", () => {
     renderTab({ client: client(undefined, { scope: ["openid"] }) });
+    fireEvent.click(scopesField());
+    fireEvent.click(screen.getByRole("option", { name: /openid/ }));
+    save();
 
-    expect(screen.queryByText(/has a scope override/)).toBeNull();
+    expect(lastSaved().scope).toEqual([]);
   });
 });
 

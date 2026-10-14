@@ -22,6 +22,9 @@ type Request struct {
 	// UserID is the authenticated Speakeasy human, never an agent or workload.
 	UserID string
 
+	// UserSessionJTI identifies the exact validated MCP grant. It never comes from caller input.
+	UserSessionJTI string
+
 	// UpstreamResource is the endpoint's upstream, compared to binding
 	// resources without a trailing slash.
 	UpstreamResource string
@@ -63,6 +66,7 @@ func NewUpstreamRequest(organizationID string, projectID, userSessionIssuerID uu
 		ProjectID:             projectID,
 		UserSessionIssuerID:   userSessionIssuerID,
 		UserID:                "",
+		UserSessionJTI:        "",
 		UpstreamResource:      upstreamResource,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}

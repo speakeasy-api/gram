@@ -265,10 +265,14 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer move").LogError(ctx, logger)
 	}
+	moved, err := q.GetOrganizationManagedUserSessionIssuerWithProjectByID(ctx, repo.GetOrganizationManagedUserSessionIssuerWithProjectByIDParams{ID: updated.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read moved user session issuer").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	return after, nil
+	return s.organizationIssuerView(ctx, moved.UserSessionIssuer, moved.ProjectName), nil
 }
 
 type userSessionMigrationPreflight struct {
@@ -289,14 +293,23 @@ func (p userSessionMigrationPreflight) canMigrate() bool {
 // Deterministic side effects of every migration, such as issuer-bound access
 // tokens being rejected until refreshed, are documented on the endpoint
 // instead of reported here: a warning that never varies carries no decision.
-func userSessionMigrationWarnings(source, target repo.UserSessionIssuer) []*orggen.UserSessionIssuerFieldMismatch {
-	sourceView, targetView := UserSessionIssuerView(source), UserSessionIssuerView(target)
+//
+// The authorization server settings are reported because repointed MCP servers
+// then direct clients to the target's authorization server. issuer_url differs
+// exactly when either issuer serves a shared authorization server, whose issuer
+// identifier names that issuer; anything configured with the source's must be
+// updated.
+func (s *Service) userSessionMigrationWarnings(ctx context.Context, source, target repo.UserSessionIssuer) []*orggen.UserSessionIssuerFieldMismatch {
+	sourceView, targetView := s.issuerView(ctx, source), s.issuerView(ctx, target)
 	settings := []struct{ field, source, target string }{
 		{field: "session_duration_hours", source: strconv.Itoa(sourceView.SessionDurationHours), target: strconv.Itoa(targetView.SessionDurationHours)},
 		{field: "client_id_metadata_admission_mode", source: sourceView.ClientIDMetadataAdmissionMode, target: targetView.ClientIDMetadataAdmissionMode},
 		{field: "authn_challenge_mode", source: source.AuthnChallengeMode, target: target.AuthnChallengeMode},
 		{field: "trusted_remote_session_issuer_id", source: nullableUUIDString(source.TrustedRemoteSessionIssuerID), target: nullableUUIDString(target.TrustedRemoteSessionIssuerID)},
 		{field: "trusted_remote_session_client_id", source: nullableUUIDString(source.TrustedRemoteSessionClientID), target: nullableUUIDString(target.TrustedRemoteSessionClientID)},
+		{field: "authorization_server_mode", source: sourceView.AuthorizationServerMode, target: targetView.AuthorizationServerMode},
+		{field: "use_authentication_host", source: strconv.FormatBool(sourceView.UseAuthenticationHost), target: strconv.FormatBool(targetView.UseAuthenticationHost)},
+		{field: "issuer_url", source: conv.PtrValOr(sourceView.IssuerURL, ""), target: conv.PtrValOr(targetView.IssuerURL, "")},
 	}
 	warnings := make([]*orggen.UserSessionIssuerFieldMismatch, 0, len(settings))
 	for _, setting := range settings {
@@ -326,7 +339,7 @@ func userSessionMigrationWarningsFingerprint(sourceID, targetID uuid.UUID, warni
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-func buildUserSessionMigrationPreflight(ctx context.Context, q *repo.Queries, organizationID string, source, target repo.UserSessionIssuer) (userSessionMigrationPreflight, error) {
+func (s *Service) buildUserSessionMigrationPreflight(ctx context.Context, q *repo.Queries, organizationID string, source, target repo.UserSessionIssuer) (userSessionMigrationPreflight, error) {
 	clients, err := q.CountUserSessionIssuerClientsForMigration(ctx, repo.CountUserSessionIssuerClientsForMigrationParams{UserSessionIssuerID: source.ID, OrganizationID: organizationID})
 	if err != nil {
 		return userSessionMigrationPreflight{}, fmt.Errorf("count clients: %w", err)
@@ -367,7 +380,7 @@ func buildUserSessionMigrationPreflight(ctx context.Context, q *repo.Queries, or
 	if err != nil {
 		return userSessionMigrationPreflight{}, fmt.Errorf("check target Platform MCP ownership: %w", err)
 	}
-	warnings := userSessionMigrationWarnings(source, target)
+	warnings := s.userSessionMigrationWarnings(ctx, source, target)
 	return userSessionMigrationPreflight{
 		clientCount: clients, sessionCount: sessions, consentCount: consents, cimdClientCount: cimdClients, remoteSessionCount: remoteSessions,
 		conflictingClientIDs: conflicts, principalBindingConflictCount: principalConflicts, emaBindingConflictCount: emaConflicts,
@@ -401,7 +414,7 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orggen
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
 	}
-	preflight, err := buildUserSessionMigrationPreflight(ctx, repo.New(s.db), authCtx.ActiveOrganizationID, source, target)
+	preflight, err := s.buildUserSessionMigrationPreflight(ctx, repo.New(s.db), authCtx.ActiveOrganizationID, source, target)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build user session issuer migrate preflight").LogError(ctx, logger)
 	}
@@ -463,7 +476,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	if err := q.LockUserSessionIssuerClientsForMigration(ctx, source.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock source user session clients").LogError(ctx, logger)
 	}
-	preflight, err := buildUserSessionMigrationPreflight(ctx, q, authCtx.ActiveOrganizationID, source, target)
+	preflight, err := s.buildUserSessionMigrationPreflight(ctx, q, authCtx.ActiveOrganizationID, source, target)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build user session issuer migrate preflight").LogError(ctx, logger)
 	}
@@ -561,11 +574,15 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log user session issuer migration").LogError(ctx, logger)
 	}
+	surviving, err := q.GetOrganizationManagedUserSessionIssuerWithProjectByID(ctx, repo.GetOrganizationManagedUserSessionIssuerWithProjectByIDParams{ID: target.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read surviving user session issuer").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 	return &orggen.MigrateOrganizationUserSessionIssuerResult{
-		Issuer: targetView, ClientsMigrated: int(clientsMigrated), SessionsMigrated: int(sessionsMigrated), ConsentsMigrated: int(consentsMigrated), CimdClientsMigrated: int(cimdClientsMigrated), RemoteSessionsMigrated: int(remoteSessionsMigrated), SourceDeleted: true,
+		Issuer: s.organizationIssuerView(ctx, surviving.UserSessionIssuer, surviving.ProjectName), ClientsMigrated: int(clientsMigrated), SessionsMigrated: int(sessionsMigrated), ConsentsMigrated: int(consentsMigrated), CimdClientsMigrated: int(cimdClientsMigrated), RemoteSessionsMigrated: int(remoteSessionsMigrated), SourceDeleted: true,
 	}, nil
 }
 

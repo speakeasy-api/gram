@@ -10,10 +10,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions: {}
+
 jobs:
   lint-pr:
     name: Lint PR Title and Changesets
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lists the pull request files
     env:
       PR_TITLE: ${{ github.event.pull_request.title }}
       GIT_REF: ${{ github.ref }}
@@ -23,8 +28,8 @@ jobs:
       - name: Validate PR title format
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "merge_group" || "$GIT_REF" == "refs/heads/main" ]]; then
-            echo "Skipping PR title validation on $GIT_REF (event: ${{ github.event_name }})."
+          if [[ "${GITHUB_EVENT_NAME}" == "merge_group" || "$GIT_REF" == "refs/heads/main" ]]; then
+            echo "Skipping PR title validation on $GIT_REF (event: ${GITHUB_EVENT_NAME})."
             exit 0
           fi
 
@@ -178,8 +183,8 @@ jobs:
       - name: Check for significant changes
         id: check
         run: |
-          if [[ "${{ github.event_name }}" == "merge_group" || "$GIT_REF" == "refs/heads/main" ]]; then
-            echo "Skipping changesets-lint job on $GIT_REF (event: ${{ github.event_name }})."
+          if [[ "${GITHUB_EVENT_NAME}" == "merge_group" || "$GIT_REF" == "refs/heads/main" ]]; then
+            echo "Skipping changesets-lint job on $GIT_REF (event: ${GITHUB_EVENT_NAME})."
           elif [[ "$PR_TITLE" =~ ^(chore|mig)(\([a-zA-Z0-9_-]+\))?: ]]; then
             echo "Skipping changesets-lint job for chore/mig PR."
           else

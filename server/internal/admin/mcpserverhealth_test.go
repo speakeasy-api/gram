@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -297,6 +298,7 @@ func (f healthFixture) seedUserSession(t *testing.T, userIssuerID uuid.UUID, sub
 		ExpiresAt:              conv.ToPGTimestamptz(refreshExpiresAt),
 		ToolSelection:          nil,
 		UserSessionIssuerID:    userIssuerID,
+		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
 	return session.ID
@@ -374,6 +376,8 @@ func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
 	require.Equal(t, int64(720), issuer.SessionDurationHours)
 	require.Equal(t, "project", issuer.AttachmentScope)
 	require.Equal(t, "open", *issuer.ClientIDMetadataAdmissionMode, "new issuers are written with the resting policy")
+	require.Equal(t, "endpoint", issuer.AuthorizationServerMode)
+	require.False(t, issuer.IssuerURLPinned)
 	require.Nil(t, issuer.TrustedRemoteSession)
 	require.Empty(t, issuer.OtherServersUsingIssuer)
 
@@ -755,4 +759,27 @@ func TestDescribeMcpServerHealth_SharedClientCountsSessionsFromEitherIssuer(t *t
 	require.Equal(t, int64(1), sessions.LinkedSubjects)
 	require.Equal(t, int64(1), sessions.Reauthorizations)
 	require.Equal(t, map[string]int64{"valid": 1}, sessions.ValidationStatusCounts)
+}
+
+func TestDescribeMcpServerHealth_SharedAuthorizationServer(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	ctx := t.Context()
+	toolsetID := seedToolset(t, ctx, f.conn, f.orgID, f.projectID, "shared-backing", false)
+	issuerID := f.seedUserSessionIssuer(t, "shared-mode-issuer")
+	serverID := f.seedServerWithIssuer(t, toolsetID, issuerID, "shared-served")
+	updated, err := testrepo.New(f.conn).SetUserSessionIssuerAuthorizationServerModeFixture(ctx, testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{
+		AuthorizationServerMode: "shared",
+		PinnedIssuerUrl:         conv.ToPGText("https://app.example.com/oauth/usi/" + issuerID.String()),
+		IssuerID:                issuerID,
+		OrganizationID:          f.orgID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), updated)
+
+	got, err := f.describe(t, serverID, 14)
+	require.NoError(t, err)
+	require.Equal(t, "shared", got.UserSessionIssuer.AuthorizationServerMode)
+	require.True(t, got.UserSessionIssuer.IssuerURLPinned)
 }
