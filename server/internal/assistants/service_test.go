@@ -438,7 +438,7 @@ func TestServiceCoreExpireThreadRuntimeRevertsWhenTurnInFlight(t *testing.T) {
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateActive,
 		WarmUntil:           pgtype.Timestamptz{Time: warmUntil, Valid: true},
@@ -453,7 +453,7 @@ func TestServiceCoreExpireThreadRuntimeRevertsWhenTurnInFlight(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	busyIdle := uint64(0)
 	backend := testRuntimeBackend{
-		backend:      runtimeBackendFlyIO,
+		backend:      runtimeBackendGKE,
 		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: &busyIdle},
 		stopCalls:    &stopCalls,
 	}
@@ -497,7 +497,7 @@ func TestServiceCoreExpireThreadRuntimeRetryAfterStopFailureIsIdempotent(t *test
 		AssistantThreadID:   threadID,
 		AssistantID:         assistantID,
 		ProjectID:           projectID,
-		Backend:             runtimeBackendFlyIO,
+		Backend:             runtimeBackendGKE,
 		BackendMetadataJson: []byte(`{}`),
 		State:               runtimeStateActive,
 		WarmUntil:           pgtype.Timestamptz{Time: warmUntil, Valid: true},
@@ -511,9 +511,9 @@ func TestServiceCoreExpireThreadRuntimeRetryAfterStopFailureIsIdempotent(t *test
 	var stopCalls atomic.Int64
 	logger := testenv.NewLogger(t)
 	failingBackend := testRuntimeBackend{
-		backend:      runtimeBackendFlyIO,
+		backend:      runtimeBackendGKE,
 		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(DefaultWarmTTLSeconds + 60))},
-		stopErr:      errors.New("fly delete app blew up"),
+		stopErr:      errors.New("delete sandbox claim blew up"),
 		stopCalls:    &stopCalls,
 	}
 	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, failingBackend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
@@ -530,7 +530,7 @@ func TestServiceCoreExpireThreadRuntimeRetryAfterStopFailureIsIdempotent(t *test
 	require.Equal(t, runtimeStateExpiring, runtime.State, "row must remain in expiring after Stop failure")
 
 	healingBackend := testRuntimeBackend{
-		backend:      runtimeBackendFlyIO,
+		backend:      runtimeBackendGKE,
 		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(DefaultWarmTTLSeconds + 60))},
 		stopCalls:    &stopCalls,
 	}
@@ -710,9 +710,9 @@ func TestServiceCoreReapStuckRuntimesLeavesIdleActiveRuntime(t *testing.T) {
 	event, err := assistantsrepo.New(conn).GetLatestAssistantThreadEventByThreadID(ctx, threadKey)
 	require.NoError(t, err)
 
-	// Long-idle active runtime: warm window long passed, no heartbeat in
-	// ages. Idle runtimes keep their VM — only the stale processing lease
-	// on the event gets requeued.
+	// Long-idle active Fly runtime: warm window long passed, no heartbeat in
+	// ages. Fly keeps idle VMs up — only the stale processing lease on the
+	// event gets requeued.
 	idleSince := time.Now().UTC().Add(-30 * time.Minute)
 	err = assistantsrepo.New(conn).CreateAssistantRuntime(ctx, assistantsrepo.CreateAssistantRuntimeParams{
 		ID:                  uuid.New(),
@@ -742,7 +742,8 @@ func TestServiceCoreReapStuckRuntimesLeavesIdleActiveRuntime(t *testing.T) {
 
 	result, err := core.ReapStuckRuntimes(ctx)
 	require.NoError(t, err)
-	require.EqualValues(t, 0, result.StaleRuntimesStopped, "idle active runtimes must never be reaped")
+	require.EqualValues(t, 0, result.StaleRuntimesStopped, "idle active Fly runtimes must never be reaped")
+	require.EqualValues(t, 0, result.IdleRuntimesStopped)
 	require.EqualValues(t, 1, result.StaleEventsRequeued)
 
 	runtime, err := assistantsrepo.New(conn).GetLatestAssistantRuntimeByThreadID(ctx, runtimeKey)
@@ -753,6 +754,164 @@ func TestServiceCoreReapStuckRuntimesLeavesIdleActiveRuntime(t *testing.T) {
 	event, err = assistantsrepo.New(conn).GetLatestAssistantThreadEventByThreadID(ctx, threadKey)
 	require.NoError(t, err)
 	require.Equal(t, eventStatusPending, event.Status)
+}
+
+func TestServiceCoreExpireThreadRuntimeKeepsIdleFlyRuntime(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_expire_fly")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "expire-fly")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendFlyIO, runtimeStateActive, `{"app_name":"gram-asst-idle","machine_id":"m-1"}`)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendFlyIO,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ExpireThreadRuntime(t.Context(), projectID, threadID, DefaultWarmTTLSeconds)
+	require.NoError(t, err)
+	require.True(t, result.Stopped, "the thread workflow must exit its expiry loop")
+	require.Zero(t, stopCalls.Load(), "an idle Fly runtime must stay up")
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
+		ID:        runtimeID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, runtime.State)
+	require.False(t, runtime.Deleted)
+}
+
+func TestServiceCoreExpireThreadRuntimeStopsIdleV2Runtime(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_expire_v2")
+	require.NoError(t, err)
+
+	projectID, assistantID, admittingThreadID := insertReapableProject(t, conn, "expire-v2")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, admittingThreadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-idle","pod_ip":"10.0.0.1"}`)
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendGKE,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(DefaultWarmTTLSeconds))},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ExpireThreadRuntime(t.Context(), projectID, admittingThreadID, DefaultWarmTTLSeconds)
+	require.NoError(t, err)
+	require.True(t, result.Stopped)
+	require.EqualValues(t, 1, stopCalls.Load())
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
+		ID:        runtimeID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, runtime.State)
+	require.True(t, runtime.Deleted)
+}
+
+func TestServiceCoreReapStuckRuntimesExpiresUnwatchedIdleRuntime(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_runtime")
+	require.NoError(t, err)
+
+	lapsedWarmUntil := time.Now().UTC().Add(-(runtimeIdleSweepGrace + time.Minute))
+
+	idleProjectID, idleAssistantID, idleThreadID := insertReapableProject(t, conn, "reap-idle-gke")
+	idleRuntimeID := insertActiveV2RuntimeRow(t, conn, idleProjectID, idleAssistantID, idleThreadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-idle","pod_ip":"10.0.0.1"}`)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeActive(t.Context(), assistantsrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive,
+		WarmUntil:   pgtype.Timestamptz{Time: lapsedWarmUntil, Valid: true},
+		RuntimeID:   idleRuntimeID,
+		ProjectID:   idleProjectID,
+	}))
+
+	freshProjectID, freshAssistantID, freshThreadID := insertReapableProject(t, conn, "reap-idle-fresh")
+	freshRuntimeID := insertActiveV2RuntimeRow(t, conn, freshProjectID, freshAssistantID, freshThreadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-fresh","pod_ip":"10.0.0.2"}`)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeActive(t.Context(), assistantsrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive,
+		WarmUntil:   pgtype.Timestamptz{Time: time.Now().UTC().Add(-time.Minute), Valid: true},
+		RuntimeID:   freshRuntimeID,
+		ProjectID:   freshProjectID,
+	}))
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendGKE,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, result.IdleRuntimesStopped)
+	require.EqualValues(t, 1, stopCalls.Load())
+	require.Empty(t, result.AffectedAssistantIDs, "an idle runtime has no pending work to re-admit")
+
+	idle, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
+		ID:        idleRuntimeID,
+		ProjectID: idleProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateStopped, idle.State)
+
+	fresh, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
+		ID:        freshRuntimeID,
+		ProjectID: freshProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, fresh.State, "a runtime inside the sweep grace belongs to its thread workflow")
+}
+
+func TestServiceCoreReapStuckRuntimesKeepsBusyIdleSweepCandidate(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_idle_busy_runtime")
+	require.NoError(t, err)
+
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "reap-idle-busy")
+	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"asst-busy","pod_ip":"10.0.0.1"}`)
+	require.NoError(t, assistantsrepo.New(conn).SetAssistantRuntimeActive(t.Context(), assistantsrepo.SetAssistantRuntimeActiveParams{
+		ActiveState: runtimeStateActive,
+		WarmUntil:   pgtype.Timestamptz{Time: time.Now().UTC().Add(-(runtimeIdleSweepGrace + time.Minute)), Valid: true},
+		RuntimeID:   runtimeID,
+		ProjectID:   projectID,
+	}))
+
+	var stopCalls atomic.Int64
+	logger := testenv.NewLogger(t)
+	backend := testRuntimeBackend{
+		backend:      runtimeBackendGKE,
+		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: new(uint64(0))},
+		stopCalls:    &stopCalls,
+	}
+	core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+
+	result, err := core.ReapStuckRuntimes(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, result.IdleRuntimesStopped)
+	require.Zero(t, stopCalls.Load(), "a runtime with a turn in flight must not be stopped")
+
+	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{
+		ID:        runtimeID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, runtimeStateActive, runtime.State)
+	require.True(t, runtime.WarmUntil.Time.After(time.Now().UTC()), "revert must re-arm the warm window")
 }
 
 func TestServiceCoreReapStuckRuntimesStopsLocalRowsWithMissingContainers(t *testing.T) {

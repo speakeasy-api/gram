@@ -131,13 +131,27 @@ const (
 	// ScheduleToCloseTimeout = 25m) so a still-retrying activity isn't
 	// stomped mid-flight; the row only becomes reapable after Temporal
 	// gives up.
-	runtimeExpiringReapGrace     = 30 * time.Minute
+	runtimeExpiringReapGrace = 30 * time.Minute
+	// runtimeIdleSweepGrace is how long past warm_until the reaper waits
+	// before expiring an idle runtime itself. Thread workflows expire their
+	// runtime when the warm timer fires; the grace keeps the sweep off those
+	// timers so it only collects runtimes no workflow is watching.
+	runtimeIdleSweepGrace = 10 * time.Minute
+	// runtimeIdleSweepBatch bounds how many idle runtimes one reaper tick
+	// expires. Each costs a runner /state poll and a backend delete inside
+	// a 2-minute activity; later ticks pick up the rest.
+	runtimeIdleSweepBatch        = 25
 	eventProcessingRequeueGrace  = 3 * time.Minute
 	processingLeaseHeartbeatTick = 30 * time.Second
 	admitFailureBackoff          = 30 * time.Second
 )
 
 var errAssistantValidation = errors.New("assistant validation")
+
+// idleRetainedRuntimeBackends keep their runtime up while idle, until the
+// assistant is deleted. A Fly cold admit costs minutes, so expiring an idle
+// Fly VM would put that boot in front of most turns.
+var idleRetainedRuntimeBackends = []string{runtimeBackendFlyIO}
 
 func assistantValidationError(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errAssistantValidation, fmt.Sprintf(format, args...))
@@ -634,6 +648,12 @@ func (s *ServiceCore) emitAssistantTelemetry(
 type ReapStuckRuntimesResult struct {
 	StaleRuntimesStopped int64
 	StaleEventsRequeued  int64
+
+	// IdleRuntimesStopped counts runtimes the idle sweep expired. These
+	// assistants have no pending work, so they are not in
+	// AffectedAssistantIDs.
+	IdleRuntimesStopped int64
+
 	// AffectedAssistantIDs lists distinct assistants whose events were
 	// requeued or whose runtimes were stopped. The singleton reaper uses
 	// these to kick the per-assistant coordinators so admit re-runs
@@ -660,9 +680,10 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 	//     attempts after CAS active->expiring without reaching Stop or
 	//     Revert. Without this the row blocks the partial unique index
 	//     ReserveAssistantRuntime depends on.
-	// Healthy 'active' rows are never reaped: an idle runtime keeps its VM
-	// until the assistant is deleted. The local reconciliation below is the
-	// narrow exception for a row whose container no longer exists.
+	// Healthy 'active' rows are not reaped here; the idle sweep at the end
+	// expires them through the runner's idle clock. The local reconciliation
+	// below is the narrow exception for a row whose container no longer
+	// exists.
 	queries := assistantrepo.New(s.db)
 	// Local containers can be removed outside Speakeasy (docker rm, daemon reset,
 	// pruning). Reconcile those rows before the age-based SQL sweep: unlike a
@@ -752,6 +773,57 @@ func (s *ServiceCore) ReapStuckRuntimes(ctx context.Context) (ReapStuckRuntimesR
 		out.AffectedAssistantIDs = make([]uuid.UUID, 0, len(affected))
 		for id := range affected {
 			out.AffectedAssistantIDs = append(out.AffectedAssistantIDs, id)
+		}
+	}
+
+	// 3. Expire idle runtimes no thread workflow is watching: workflows that
+	// exited without expiring, or died before their warm timer fired.
+	idleRows, err := queries.ListIdleAssistantRuntimes(ctx, assistantrepo.ListIdleAssistantRuntimesParams{
+		ActiveState:          runtimeStateActive,
+		IdleRetainedBackends: idleRetainedRuntimeBackends,
+		WarmUntilBefore:      conv.ToPGTimestamptz(now.Add(-runtimeIdleSweepGrace)),
+		MaxRows:              runtimeIdleSweepBatch,
+	})
+	if err != nil {
+		return out, fmt.Errorf("list idle assistant runtimes: %w", err)
+	}
+	for _, idle := range idleRows {
+		row, err := queries.BeginExpireIdleAssistantRuntime(ctx, assistantrepo.BeginExpireIdleAssistantRuntimeParams{
+			ExpiringState: runtimeStateExpiring,
+			RuntimeID:     idle.ID,
+			ProjectID:     idle.ProjectID,
+			ActiveState:   runtimeStateActive,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return out, fmt.Errorf("begin expire idle assistant runtime: %w", err)
+		}
+
+		result, err := s.expireRuntime(ctx, assistantRuntimeRecord{
+			ID:                  row.ID,
+			AssistantThreadID:   row.AssistantThreadID,
+			AssistantID:         row.AssistantID,
+			ProjectID:           row.ProjectID,
+			Backend:             row.Backend,
+			BackendMetadataJSON: row.BackendMetadataJson,
+			State:               row.State,
+			WarmUntil:           row.WarmUntil,
+		}, conv.SafeInt(idle.WarmTtlSeconds))
+		if err != nil {
+			// The row stays `expiring`; the expiring-row reap above retires it
+			// once runtimeExpiringReapGrace passes.
+			s.logger.WarnContext(ctx, "expire idle assistant runtime failed",
+				attr.SlogAssistantID(row.AssistantID.String()),
+				attr.SlogProjectID(row.ProjectID.String()),
+				attr.SlogAssistantRuntimeID(row.ID.String()),
+				attr.SlogError(err),
+			)
+			continue
+		}
+		if result.Stopped {
+			out.IdleRuntimesStopped++
 		}
 	}
 
@@ -3433,25 +3505,25 @@ func (s *ServiceCore) ProcessThreadEventsByThreadID(ctx context.Context, project
 // `expiring` blocks new dispatches; the post-CAS /state poll catches any turn
 // that slipped in (the runner clears idle_seconds synchronously inside /turn).
 func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, threadID uuid.UUID, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
-	q := assistantrepo.New(s.db)
-
-	row, err := q.BeginExpireAssistantRuntime(ctx, assistantrepo.BeginExpireAssistantRuntimeParams{
-		ExpiringState: runtimeStateExpiring,
-		ProjectID:     projectID,
-		ThreadID:      threadID,
-		ActiveState:   runtimeStateActive,
+	row, err := assistantrepo.New(s.db).BeginExpireAssistantRuntime(ctx, assistantrepo.BeginExpireAssistantRuntimeParams{
+		ExpiringState:        runtimeStateExpiring,
+		ProjectID:            projectID,
+		ThreadID:             threadID,
+		ActiveState:          runtimeStateActive,
+		IdleRetainedBackends: idleRetainedRuntimeBackends,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// No active row, or another actor (Stop, reaper, manual API) moved it
-		// before us. The runtime is going away regardless — report stopped so
-		// the workflow exits its expiry loop.
+		// No expirable row: another actor (Stop, reaper, manual API) moved it
+		// before us, or its backend keeps idle runtimes. Either way this
+		// workflow has nothing left to expire — report stopped so it exits
+		// its expiry loop.
 		return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil
 	case err != nil:
 		return ExpireThreadRuntimeResult{}, fmt.Errorf("begin expire assistant runtime: %w", err)
 	}
 
-	runtimeRecord := assistantRuntimeRecord{
+	return s.expireRuntime(ctx, assistantRuntimeRecord{
 		ID:                  row.ID,
 		AssistantThreadID:   row.AssistantThreadID,
 		AssistantID:         row.AssistantID,
@@ -3460,14 +3532,19 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 		BackendMetadataJSON: row.BackendMetadataJson,
 		State:               row.State,
 		WarmUntil:           row.WarmUntil,
-	}
+	}, warmTTLSeconds)
+}
 
+// expireRuntime finishes an expire on a row already moved to `expiring`. It
+// polls the runner's idle clock and either reverts the row to `active` with
+// the remaining warm window, or stops the backend and retires the row.
+func (s *ServiceCore) expireRuntime(ctx context.Context, runtimeRecord assistantRuntimeRecord, warmTTLSeconds int) (ExpireThreadRuntimeResult, error) {
 	status, statusErr := s.runtime.Status(ctx, runtimeRecord)
 	if statusErr != nil {
 		// Runtime is already gone or unhealthy — fall through to Stop so the
 		// row + backend resources get cleaned up.
 		s.logger.WarnContext(ctx, "runtime status failed during expire; tearing down",
-			attr.SlogAssistantThreadID(threadID.String()),
+			attr.SlogAssistantRuntimeID(runtimeRecord.ID.String()),
 			attr.SlogError(statusErr),
 		)
 	} else if remaining := warmRemainingSeconds(status.IdleSeconds, warmTTLSeconds); remaining > 0 {
@@ -3475,11 +3552,11 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 		// Revert to active and let the workflow re-arm with the remaining
 		// window measured against the runner's current idle.
 		warmUntil := time.Now().UTC().Add(time.Duration(remaining) * time.Second)
-		revertErr := q.RevertExpireAssistantRuntimeToActive(ctx, assistantrepo.RevertExpireAssistantRuntimeToActiveParams{
+		revertErr := assistantrepo.New(s.db).RevertExpireAssistantRuntimeToActive(ctx, assistantrepo.RevertExpireAssistantRuntimeToActiveParams{
 			ActiveState:   runtimeStateActive,
 			WarmUntil:     conv.ToPGTimestamptz(warmUntil),
 			RuntimeID:     runtimeRecord.ID,
-			ProjectID:     projectID,
+			ProjectID:     runtimeRecord.ProjectID,
 			ExpiringState: runtimeStateExpiring,
 		})
 		if revertErr != nil {
@@ -3491,7 +3568,7 @@ func (s *ServiceCore) ExpireThreadRuntime(ctx context.Context, projectID, thread
 	if err := s.runtime.Stop(ctx, runtimeRecord); err != nil {
 		return ExpireThreadRuntimeResult{}, fmt.Errorf("stop assistant runtime backend: %w", err)
 	}
-	if err := s.stopRuntimeRecord(ctx, projectID, runtimeRecord.ID, runtimeStateStopped); err != nil {
+	if err := s.stopRuntimeRecord(ctx, runtimeRecord.ProjectID, runtimeRecord.ID, runtimeStateStopped); err != nil {
 		return ExpireThreadRuntimeResult{}, err
 	}
 	return ExpireThreadRuntimeResult{Stopped: true, RemainingSeconds: 0}, nil

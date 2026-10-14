@@ -1,8 +1,9 @@
 -- name: ReapStuckAssistantRuntimes :many
 -- Short-horizon reaper for rows the happy-path can no longer move — crash
--- recovery only. Idle runtimes are deliberately not collected: a VM with no
--- traffic stays up until its assistant is deleted. Both branches cover rows
--- stranded by a dead process, and the next admit recreates the runtime:
+-- recovery only. Idle runtimes are collected separately through
+-- ListIdleAssistantRuntimes, which must poll the runner before stopping. Both
+-- branches cover rows stranded by a dead process, and the next admit
+-- recreates the runtime:
 --   - 'starting' rows that never transitioned to active within the startup
 --     grace window (server crashed mid-boot).
 --   - 'expiring' rows older than the ExpireThreadRuntime activity's full
@@ -1362,6 +1363,9 @@ WHERE id = @runtime_id
 -- ErrNoRows means another actor (Stop, reaper, manual API) already finalized
 -- the row; callers must not then call Stop.
 --
+-- Rows on an idle-retained backend never match, so their thread workflows
+-- exit the expiry loop and leave the runtime warm.
+--
 -- v2 (single-VM-per-assistant) rows pin assistant_thread_id to the admitting
 -- thread, but every thread workflow under the assistant runs its own warm
 -- timer and calls expire with its own thread id. Resolve the row via
@@ -1386,11 +1390,46 @@ WHERE id = (
     AND r.state IN (@active_state, @expiring_state)
     AND r.deleted IS FALSE
     AND r.ended IS FALSE
+    AND r.backend <> ALL(@idle_retained_backends::text[])
   ORDER BY r.runtime_version DESC, r.created_at DESC
   LIMIT 1
 )
   AND project_id = @project_id
   AND state IN (@active_state, @expiring_state)
+  AND deleted IS FALSE
+  AND ended IS FALSE
+RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
+
+-- name: ListIdleAssistantRuntimes :many
+-- Active v2 runtimes whose warm window lapsed before @warm_until_before with
+-- no thread workflow left to expire them. Rows on an idle-retained backend
+-- stay up until their assistant is deleted.
+SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.backend, r.backend_metadata_json, r.state, r.warm_until, a.warm_ttl_seconds
+FROM assistant_runtimes r
+JOIN assistants a
+  ON a.id = r.assistant_id
+ AND a.project_id = r.project_id
+ AND a.deleted IS FALSE
+WHERE r.state = @active_state
+  AND r.runtime_version = 2
+  AND r.deleted IS FALSE
+  AND r.ended IS FALSE
+  AND r.backend <> ALL(@idle_retained_backends::text[])
+  AND r.warm_until < @warm_until_before
+ORDER BY r.warm_until ASC
+LIMIT @max_rows;
+
+-- name: BeginExpireIdleAssistantRuntime :one
+-- Runtime-id counterpart of BeginExpireAssistantRuntime for the reaper's idle
+-- sweep. Only `active` rows move: an `expiring` row already has an expire in
+-- flight. ErrNoRows means another actor moved the row first.
+UPDATE assistant_runtimes
+SET
+  state = @expiring_state,
+  updated_at = clock_timestamp()
+WHERE id = @runtime_id
+  AND project_id = @project_id
+  AND state = @active_state
   AND deleted IS FALSE
   AND ended IS FALSE
 RETURNING id, assistant_thread_id, assistant_id, project_id, backend, backend_metadata_json, state, warm_until;
