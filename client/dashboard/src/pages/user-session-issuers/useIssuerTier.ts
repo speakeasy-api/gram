@@ -43,7 +43,10 @@ export function useIssuerTier(tier: "organization" | "project"): IssuerTier {
 
   return {
     items,
-    isLoading: query.isLoading || draining,
+    // A retry after a failure counts as loading, so its progress shows
+    // instead of the failure it is replacing.
+    isLoading:
+      query.isLoading || draining || (query.isError && query.isFetching),
     isError: query.isError,
     retry: () => void query.refetch(),
   };
