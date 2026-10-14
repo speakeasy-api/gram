@@ -560,6 +560,27 @@ var registry = []Product{
 		}},
 	},
 
+	// Verified 2026-10-14, re-verified 2026-10-14. A desktop IDE and CLI with
+	// a same-origin hosted https callback (antigravity.google). Sibling paths
+	// return 404 (/oauth/client-metadata, /oauth/zzz.json, etc.), so an exact
+	// entry rather than a pattern is the right rule. The www form
+	// (www.antigravity.google) is deliberately absent because its client_id is
+	// the apex URL.
+	{
+		ID:              "antigravity",
+		VendorKey:       "google",
+		DisplayName:     "Google Antigravity",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://antigravity.google/oauth/client-metadata.json",
+			DisplayName: "Google Antigravity",
+			Enabled:     true,
+		}},
+	},
+
 	// Products below publish no CIMD document. They register dynamically or
 	// do not speak MCP to Speakeasy at all, so an access decision about them is
 	// recorded and enforces nothing — the dashboard says so rather than
