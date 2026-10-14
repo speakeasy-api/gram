@@ -158,6 +158,12 @@ func TestSetEMAProviders_RejectsInvalidProviders(t *testing.T) {
 	for range 11 {
 		tooMany = append(tooMany, externalInput(uuid.New()))
 	}
+	// Cleanup runs after every parallel rejection has finished.
+	t.Cleanup(func() {
+		rows, err := repo.New(ti.conn).ListEMAProviders(context.WithoutCancel(ctx), repo.ListEMAProvidersParams{OrganizationID: f.org, VendorIssuer: "https://vendor.example.com"})
+		require.NoError(t, err)
+		require.Empty(t, rows, "a rejected order saves nothing")
+	})
 	for name, providers := range map[string][]*types.EMAProviderInput{
 		"unknown kind":              {{Kind: "okta", RemoteSessionIssuerID: nil}},
 		"external without issuer":   {{Kind: "external", RemoteSessionIssuerID: nil}},
@@ -174,9 +180,6 @@ func TestSetEMAProviders_RejectsInvalidProviders(t *testing.T) {
 			requireOopsCode(t, err, oops.CodeBadRequest)
 		})
 	}
-	rows, err := repo.New(ti.conn).ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: f.org, VendorIssuer: "https://vendor.example.com"})
-	require.NoError(t, err)
-	require.Empty(t, rows, "a rejected order saves nothing")
 }
 
 func TestSetEMAProviders_SpeakeasyNeedsAnInternalSessionIssuer(t *testing.T) {

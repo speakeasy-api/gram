@@ -203,8 +203,9 @@ type PrepareEMAResponseBody struct {
 	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
-	// EMA providers identity chaining tries for this endpoint, in order, each with
-	// whether it can serve now. Returned by readEMA only.
+	// The vendor's EMA provider order resolved for this endpoint. Identity
+	// chaining tries the providers that can serve, in order; entries with
+	// unavailable_reason are skipped. Returned by readEMA only.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
 }
 
@@ -230,8 +231,9 @@ type ReadEMAResponseBody struct {
 	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
-	// EMA providers identity chaining tries for this endpoint, in order, each with
-	// whether it can serve now. Returned by readEMA only.
+	// The vendor's EMA provider order resolved for this endpoint. Identity
+	// chaining tries the providers that can serve, in order; entries with
+	// unavailable_reason are skipped. Returned by readEMA only.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
 }
 
@@ -257,8 +259,9 @@ type UnlinkEMAResponseBody struct {
 	Scopes     []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
-	// EMA providers identity chaining tries for this endpoint, in order, each with
-	// whether it can serve now. Returned by readEMA only.
+	// The vendor's EMA provider order resolved for this endpoint. Identity
+	// chaining tries the providers that can serve, in order; entries with
+	// unavailable_reason are skipped. Returned by readEMA only.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
 }
 

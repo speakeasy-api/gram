@@ -216,7 +216,7 @@ func TestClassifyEndpointError(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, Outcome{Stage: StageRedemption, Reason: tc.reason, Confidence: tc.confidence, Retryable: tc.retryable, Cached: false, Provider: ""}, classifyEndpointError(StageRedemption, tc.err))
+			require.Equal(t, Outcome{Stage: StageRedemption, Reason: tc.reason, Confidence: tc.confidence, Retryable: tc.retryable, Cached: false, Provider: "", Submitted: tc.reason == ReasonTransientFailure}, classifyEndpointError(StageRedemption, tc.err))
 		})
 	}
 }

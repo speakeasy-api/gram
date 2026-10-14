@@ -191,3 +191,18 @@ func TestExhausted_PrefersAnAttemptedProvider(t *testing.T) {
 	require.Nil(t, only.Failures, "one provider needs no list")
 	require.False(t, only.Applicable())
 }
+
+func TestTryProviders_SubmittedTransientFailureIsNotRepeated(t *testing.T) {
+	t.Parallel()
+	c, _ := meteredChainer(t)
+	script := newScriptedTry()
+	ambiguous := newOutcome(StageRedemption, ReasonTransientFailure, ConfidenceUnknown, true)
+	ambiguous.Submitted = true
+	script.outcomes[remotesessions.EMAProviderSpeakeasy] = []Outcome{ambiguous}
+
+	ctx, cancel := context.WithTimeout(t.Context(), acquireTimeout)
+	defer cancel()
+	_, outcome := c.tryProviders(ctx, testenv.NewLogger(t), "acquire", twoProviderOrder(), script.try)
+	require.True(t, outcome.Succeeded(), "the next provider serves")
+	require.Equal(t, 1, script.calls[remotesessions.EMAProviderSpeakeasy], "a request that may have reached the provider is never repeated")
+}

@@ -44,8 +44,8 @@ type ProviderFailure struct {
 // until one succeeds. A provider that cannot serve, including one the
 // endpoint's authorization server does not trust, is skipped. Each provider
 // gets an equal share of the time left, so a slow provider never starves the
-// rest, and its transient failures are retried within that share. Any other
-// failure moves to the next provider at once.
+// rest, and its transient failures from before any token request are retried
+// within that share. Any other failure moves to the next provider at once.
 //
 // Identity ineligibility needs no special case: it is the Speakeasy issuer's
 // judgment of the human's sign-in, and a de-duplicated order names that
@@ -123,11 +123,14 @@ func (c *Chainer) tryProvider(ctx context.Context, logger *slog.Logger, p remote
 	}
 }
 
-// retryable reports a failure an identical immediate attempt may not repeat.
-// A shared failure answered from the cache, stale configuration and every
-// provider rejection move to the next provider instead.
+// retryable reports a transient failure that is safe to repeat: one that
+// happened before any token request could have reached the provider. A
+// failure after submission is ambiguous, and repeating it could mint a
+// duplicate grant against the provider's quota, so it, a shared failure
+// answered from the cache, stale configuration and every provider rejection
+// move to the next provider instead.
 func retryable(o Outcome) bool {
-	return o.Reason == ReasonTransientFailure && o.Retryable && !o.Cached
+	return o.Reason == ReasonTransientFailure && o.Retryable && !o.Cached && !o.Submitted
 }
 
 // jitter spreads retries between half and one and a half times d.
