@@ -90,113 +90,129 @@ jobs:
           STACKED_SERVER: ${{ steps.stacked.outputs.server }}
           STACKED_CLIENT: ${{ steps.stacked.outputs.client }}
           STACKED_PYSTREAMS: ${{ steps.stacked.outputs.pystreams }}
+          STEPS_FILTER_OUTPUTS_SERVER: ${{ steps.filter.outputs.server }}
+          STEPS_FILTER_OUTPUTS_CLIENT: ${{ steps.filter.outputs.client }}
+          STEPS_FILTER_OUTPUTS_CLI: ${{ steps.filter.outputs.cli }}
+          STEPS_FILTER_OUTPUTS_HOOKS: ${{ steps.filter.outputs.hooks }}
+          STEPS_FILTER_OUTPUTS_FUNCTIONS: ${{ steps.filter.outputs.functions }}
+          STEPS_FILTER_OUTPUTS_TSFRAMEWORK: ${{ steps.filter.outputs.tsframework }}
+          STEPS_FILTER_OUTPUTS_MIGRATIONS: ${{ steps.filter.outputs.migrations }}
+          STEPS_FILTER_OUTPUTS_PLOG: ${{ steps.filter.outputs.plog }}
+          STEPS_FILTER_OUTPUTS_GLINT: ${{ steps.filter.outputs.glint }}
+          STEPS_FILTER_OUTPUTS_INFRA: ${{ steps.filter.outputs.infra }}
+          STEPS_FILTER_OUTPUTS_PYSTREAMS: ${{ steps.filter.outputs.pystreams }}
+          STEPS_FILTER_OUTPUTS_SDK: ${{ steps.filter.outputs.sdk }}
+          STEPS_FILTER_OUTPUTS_SDK_GEN: ${{ steps.filter.outputs.sdk-gen }}
+          STEPS_FILTER_OUTPUTS_WEBHOOKS_CATALOG: ${{ steps.filter.outputs.webhooks-catalog }}
+          STEPS_FILTER_OUTPUTS_OTEL_COLLECTOR: ${{ steps.filter.outputs.otel-collector }}
+          STEPS_FILTER_OUTPUTS_TUNNEL: ${{ steps.filter.outputs.tunnel }}
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_SERVER" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_SERVER}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_SERVER" == "true" ]]; then
             echo "server=true" >> $GITHUB_OUTPUT
             echo "Server jobs will run."
           else
             echo "Server jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_CLIENT" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_CLIENT}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_CLIENT" == "true" ]]; then
             echo "client=true" >> $GITHUB_OUTPUT
             echo "Client jobs will run."
           else
             echo "Client jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.cli }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_CLI}" == "true" || "${GITHUB_REF}" ==  "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "cli=true" >> $GITHUB_OUTPUT
             echo "CLI jobs will run."
           else
             echo "CLI jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.hooks }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_HOOKS}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "hooks=true" >> $GITHUB_OUTPUT
             echo "Hooks jobs will run."
           else
             echo "Hooks jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_FUNCTIONS}" == "true" || "${GITHUB_REF}" ==  "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "functions=true" >> $GITHUB_OUTPUT
             echo "Functions jobs will run."
           else
             echo "Functions jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.tsframework }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_TSFRAMEWORK}" == "true" || "${GITHUB_REF}" ==  "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "tsframework=true" >> $GITHUB_OUTPUT
             echo "TypeScript framework jobs will run."
           else
             echo "TypeScript framework jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.migrations }}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_MIGRATIONS}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "migrations=true" >> $GITHUB_OUTPUT
             echo "Migrations jobs will run."
           else
             echo "Migrations jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.plog }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_PLOG}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "plog=true" >> $GITHUB_OUTPUT
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.glint }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_GLINT}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "glint=true" >> $GITHUB_OUTPUT
             echo "glint jobs will run."
           else
             echo "glint jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.infra }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_INFRA}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "infra=true" >> $GITHUB_OUTPUT
             echo "Infra jobs will run."
           else
             echo "Infra jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.pystreams }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_PYSTREAMS" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_PYSTREAMS}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" || "$STACKED_PYSTREAMS" == "true" ]]; then
             echo "pystreams=true" >> $GITHUB_OUTPUT
             echo "Pystreams jobs will run."
           else
             echo "Pystreams jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_SDK}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk=true" >> $GITHUB_OUTPUT
             echo "SDK jobs will run."
           else
             echo "SDK jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.sdk-gen }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_SDK_GEN}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "sdk-gen=true" >> $GITHUB_OUTPUT
             echo "SDK generation check will run."
           else
             echo "SDK generation check will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.webhooks-catalog }}" == "true" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_WEBHOOKS_CATALOG}" == "true" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "webhooks-catalog=true" >> $GITHUB_OUTPUT
             echo "Webhooks catalog breaking-change check will run."
           else
             echo "Webhooks catalog breaking-change check will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.otel-collector }}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_OTEL_COLLECTOR}" == "true" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "otel-collector=true" >> $GITHUB_OUTPUT
             echo "OTel collector jobs will run."
           else
             echo "OTel collector jobs will be skipped."
           fi
 
-          if [[ "${{ steps.filter.outputs.tunnel }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+          if [[ "${STEPS_FILTER_OUTPUTS_TUNNEL}" == "true" || "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_EVENT_NAME}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
             echo "tunnel=true" >> $GITHUB_OUTPUT
             echo "Tunnel jobs will run."
           else
@@ -395,7 +411,9 @@ jobs:
 
       # Blocks added lines that use the old product name; see lint:brand.
       - name: Check product naming
-        run: mise run lint:brand --base "origin/${{ github.base_ref || 'main' }}"
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: mise run lint:brand --base "origin/${BASE_REF}"
 
       - name: Prune aube store
         if: success()
@@ -464,10 +482,12 @@ jobs:
             GIT_USERNAME=speakeasybot
       - name: Pull and Run Image
         run: |
-          echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
-          docker pull ${{ steps.build.outputs.image-tag }}
+          echo "Pulling image: ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}"
+          docker pull ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}
           echo "Running image..."
-          docker run --rm ${{ steps.build.outputs.image-tag }} version
+          docker run --rm ${STEPS_BUILD_OUTPUTS_IMAGE_TAG} version
+        env:
+          STEPS_BUILD_OUTPUTS_IMAGE_TAG: ${{ steps.build.outputs.image-tag }}
 
   docker-build-pystreams:
     name: docker-build-pystreams
@@ -525,10 +545,12 @@ jobs:
           cache-key: gram/pystreams-image
       - name: Pull and Run Image
         run: |
-          echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
-          docker pull ${{ steps.build.outputs.image-tag }}
+          echo "Pulling image: ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}"
+          docker pull ${STEPS_BUILD_OUTPUTS_IMAGE_TAG}
           echo "Running image..."
-          docker run --rm ${{ steps.build.outputs.image-tag }} --help
+          docker run --rm ${STEPS_BUILD_OUTPUTS_IMAGE_TAG} --help
+        env:
+          STEPS_BUILD_OUTPUTS_IMAGE_TAG: ${{ steps.build.outputs.image-tag }}
 
   assistant-runtime-image:
     name: assistant-runtime-image
@@ -588,23 +610,26 @@ jobs:
 
       - name: Build assistant runner
         run: |
-          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${{ env.RUNNER_TARGET }}
-          mkdir -p ${{ env.RUNNER_BINARY_DIR }}
-          cp agents/runner/target/${{ env.RUNNER_TARGET }}/release/gram-assistant-runner ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner
+          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${RUNNER_TARGET}
+          mkdir -p ${RUNNER_BINARY_DIR}
+          cp agents/runner/target/${RUNNER_TARGET}/release/gram-assistant-runner ${RUNNER_BINARY_DIR}/gram-assistant-runner
 
       - name: Smoke test assistant runner binary
         run: |
-          file -b ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
+          file -b ${RUNNER_BINARY_DIR}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
             || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
-          ${{ env.RUNNER_BINARY_DIR }}/gram-assistant-runner --help
+          ${RUNNER_BINARY_DIR}/gram-assistant-runner --help
 
       - name: Generate preview tag
         id: assistant-preview-tag
         shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
-            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
+            SHORT_SHA=$(echo "${PR_HEAD_SHA}" | cut -c1-8)
+            echo "tag=pr-${PR_NUMBER}-${SHORT_SHA}" >> $GITHUB_OUTPUT
             echo "enabled=true" >> $GITHUB_OUTPUT
           else
             echo "tag=" >> $GITHUB_OUTPUT
@@ -720,9 +745,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
           FLY_IMAGE: ${{ vars.FLY_OTEL_COLLECTOR_IMAGE_DEV }}
+          FLY_ORG_DEV: ${{ secrets.FLY_ORG_DEV }}
         run: |
           mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_DEV }} \
+            --org ${FLY_ORG_DEV} \
             --image $FLY_IMAGE \
             --force
 
@@ -732,9 +758,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
           FLY_IMAGE: ${{ vars.FLY_OTEL_COLLECTOR_IMAGE_PROD }}
+          FLY_ORG_PROD: ${{ secrets.FLY_ORG_PROD }}
         run: |
           mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_PROD }} \
+            --org ${FLY_ORG_PROD} \
             --image $FLY_IMAGE \
             --force
 
@@ -777,10 +804,12 @@ jobs:
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+          STEPS_COLLECTORFLYCREATEDEV_OUTPUTS_FLYAPPNAME: ${{ steps.collectorFlyCreateDev.outputs.flyAppName }}
+          STEPS_COLLECTORFLYCREATEDEV_OUTPUTS_FLYAPPREGISTRY: ${{ steps.collectorFlyCreateDev.outputs.flyAppRegistry }}
         run: |
           fly deploy \
-            --app ${{ steps.collectorFlyCreateDev.outputs.flyAppName }} \
-            --image ${{ steps.collectorFlyCreateDev.outputs.flyAppRegistry }}:sha-${{ github.sha }} \
+            --app ${STEPS_COLLECTORFLYCREATEDEV_OUTPUTS_FLYAPPNAME} \
+            --image ${STEPS_COLLECTORFLYCREATEDEV_OUTPUTS_FLYAPPREGISTRY}:sha-${GITHUB_SHA} \
             --config otel-collector/fly.toml \
             --yes
 
@@ -814,10 +843,12 @@ jobs:
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+          STEPS_COLLECTORFLYCREATEPROD_OUTPUTS_FLYAPPNAME: ${{ steps.collectorFlyCreateProd.outputs.flyAppName }}
+          STEPS_COLLECTORFLYCREATEPROD_OUTPUTS_FLYAPPREGISTRY: ${{ steps.collectorFlyCreateProd.outputs.flyAppRegistry }}
         run: |
           fly deploy \
-            --app ${{ steps.collectorFlyCreateProd.outputs.flyAppName }} \
-            --image ${{ steps.collectorFlyCreateProd.outputs.flyAppRegistry }}:sha-${{ github.sha }} \
+            --app ${STEPS_COLLECTORFLYCREATEPROD_OUTPUTS_FLYAPPNAME} \
+            --image ${STEPS_COLLECTORFLYCREATEPROD_OUTPUTS_FLYAPPREGISTRY}:sha-${GITHUB_SHA} \
             --config otel-collector/fly.toml \
             --yes
 
@@ -1088,12 +1119,15 @@ jobs:
 
       - name: Generate tag
         id: tag
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            SHORT_SHA=$(echo "${{ github.event.pull_request.head.sha }}" | cut -c1-8)
-            echo "tag=pr-${{ github.event.pull_request.number }}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
+            SHORT_SHA=$(echo "${PR_HEAD_SHA}" | cut -c1-8)
+            echo "tag=pr-${PR_NUMBER}-${SHORT_SHA}" >> $GITHUB_OUTPUT
           else
-            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
             echo "tag=sha-${SHORT_SHA}" >> $GITHUB_OUTPUT
           fi
 
@@ -1150,9 +1184,11 @@ jobs:
         if: hashFiles('breaking-changes.md') != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           jq -n \
-            --arg commit_id "${{ github.event.pull_request.head.sha }}" \
+            --arg commit_id "${PR_HEAD_SHA}" \
             --rawfile body breaking-changes.md \
             '{
               commit_id: $commit_id,
@@ -1161,7 +1197,7 @@ jobs:
               body: $body
             }' \
             | gh api \
-                "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments" \
+                "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/comments" \
                 --method POST \
                 --input -
 
@@ -1337,14 +1373,18 @@ jobs:
           path: ${{ env.UV_CACHE_DIR }}
 
       - name: Fetch base branch
-        run: git fetch --depth=1 origin "${{ github.base_ref || 'main' }}"
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: git fetch --depth=1 origin "${BASE_REF}"
 
       # buf breaking against the PR base is what catches a wire-incompatible
       # proto change (field renumbering, type change) that would corrupt
       # already published messages. Stacked PRs compare against their feature
       # base; that base's own PR re-checks the full stack against main.
       - name: Lint proto files
-        run: mise run lint:infra --against ".git#ref=origin/${{ github.base_ref || 'main' }}"
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: mise run lint:infra --against ".git#ref=origin/${BASE_REF}"
 
       # gram-infra only. --all-packages would pull in pystreams, whose spaCy
       # model is a 400MB wheel fetched from a github.com release on every run.
@@ -1626,10 +1666,13 @@ jobs:
       - name: Install discovery wire-test dependencies on its shard
         shell: bash
         run: |
-          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${{ matrix.shard }}/${{ strategy.job-total }}" -isolate "$SHARD_ISOLATE" -tags=inv.debug ./...)
+          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" -isolate "$SHARD_ISOLATE" -tags=inv.debug ./...)
           if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
             aube install --frozen-lockfile --filter . --filter 'dashboard...'
           fi
+        env:
+          STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
+          MATRIX_SHARD: ${{ matrix.shard }}
 
       - name: Test
         id: test
@@ -1643,7 +1686,10 @@ jobs:
         # other branches) a failure fails the job as before: those runs mix
         # flakes with the branch's own breakage.
         continue-on-error: ${{ github.event_name == 'merge_group' || github.ref == 'refs/heads/main' }}
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --shard-isolate="$SHARD_ISOLATE" -p=2 -race -tags=inv.debug ./...
+        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} --shard-isolate="$SHARD_ISOLATE" -p=2 -race -tags=inv.debug ./...
+        env:
+          STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
+          MATRIX_SHARD: ${{ matrix.shard }}
 
       - name: Let tracked flaky tests through
         # Passes only when every failure is an open flaky-test ticket (see
@@ -1655,7 +1701,7 @@ jobs:
         run: >-
           go run github.com/speakeasy-api/gram/ci/cmd/flaky gate
           -junit server/junit-report.xml
-          -run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          -run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -1753,7 +1799,7 @@ jobs:
       - name: Upload source maps to DataDog
         env:
           DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
-        run: mise run datadog:sourcemaps --git-sha "${{ github.sha }}"
+        run: mise run datadog:sourcemaps --git-sha "${GITHUB_SHA}"
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -2210,6 +2256,8 @@ jobs:
         id: apko
         env:
           MELANGE_PUBLIC_KEY: ${{ vars.MELANGE_PUBLIC_KEY }}
+          MATRIX_APKO_CONFIG: ${{ matrix.apko-config }}
+          MATRIX_RUNTIME: ${{ matrix.runtime }}
         run: |
           KEY_DIR=$(mktemp -d)
           KEY_FILE="$KEY_DIR/melange-signing-key.rsa.pub"
@@ -2217,16 +2265,19 @@ jobs:
 
           mise run build:functions-image \
             --melange-public-key "$KEY_FILE" \
-            --apko-config ${{ matrix.apko-config }} \
-            --image "apko-${{ matrix.runtime }}:${{ github.sha }}" \
-            --tarball-name ${{ matrix.runtime }} \
-            --out oci/${{ matrix.runtime }}
+            --apko-config ${MATRIX_APKO_CONFIG} \
+            --image "apko-${MATRIX_RUNTIME}:${GITHUB_SHA}" \
+            --tarball-name ${MATRIX_RUNTIME} \
+            --out oci/${MATRIX_RUNTIME}
 
       - name: Run safety checks
         run: |
           mise run test:apko-functions \
-            --image ${{ steps.apko.outputs.image }} \
-            --tarball ${{ steps.apko.outputs.tarball }}
+            --image ${STEPS_APKO_OUTPUTS_IMAGE} \
+            --tarball ${STEPS_APKO_OUTPUTS_TARBALL}
+        env:
+          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
+          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
 
       - name: "[DEV] Create fly app"
         id: flyCreateDev
@@ -2235,9 +2286,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
           FLY_IMAGE: ${{ vars.FLY_IMAGE_DEV }}
+          FLY_ORG_DEV: ${{ secrets.FLY_ORG_DEV }}
         run: |
           mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_DEV }} \
+            --org ${FLY_ORG_DEV} \
             --image $FLY_IMAGE \
             --force
 
@@ -2248,9 +2300,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
           FLY_IMAGE: ${{ vars.FLY_IMAGE_PROD }}
+          FLY_ORG_PROD: ${{ secrets.FLY_ORG_PROD }}
         run: |
           mise run fly:init-runner \
-            --org ${{ secrets.FLY_ORG_PROD }} \
+            --org ${FLY_ORG_PROD} \
             --image $FLY_IMAGE \
             --force
 
@@ -2285,13 +2338,17 @@ jobs:
         run: |
           set -x
 
-          echo "Loading image from tarball: ${{ steps.apko.outputs.tarball }}"
-          docker image load -i ${{ steps.apko.outputs.tarball }}
+          echo "Loading image from tarball: ${STEPS_APKO_OUTPUTS_TARBALL}"
+          docker image load -i ${STEPS_APKO_OUTPUTS_TARBALL}
 
-          TAGS="${{ steps.meta.outputs.tags }}"
+          TAGS="${STEPS_META_OUTPUTS_TAGS}"
           for TAG in $TAGS; do
-            docker tag "${{ steps.apko.outputs.image }}-amd64" "$TAG"
+            docker tag "${STEPS_APKO_OUTPUTS_IMAGE}-amd64" "$TAG"
           done
+        env:
+          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
+          STEPS_META_OUTPUTS_TAGS: ${{ steps.meta.outputs.tags }}
+          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
 
       - parallel:
           - name: "[DEV] Push images"
@@ -2618,7 +2675,7 @@ jobs:
           gh workflow run "Prepare Release" \
             -R speakeasy-api/gram-infra \
             -f environment=dev \
-            -f commit_hash=${{ github.sha }}
+            -f commit_hash=${GITHUB_SHA}
 
   tunnel-agent:
     name: Tunnel agent

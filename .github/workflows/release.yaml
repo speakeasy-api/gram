@@ -195,4 +195,6 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=AGPL-3.0
       - name: Sign image
-        run: cosign sign --yes "${IMAGE}@${{ steps.build.outputs.digest }}"
+        run: cosign sign --yes "${IMAGE}@${STEPS_BUILD_OUTPUTS_DIGEST}"
+        env:
+          STEPS_BUILD_OUTPUTS_DIGEST: ${{ steps.build.outputs.digest }}
