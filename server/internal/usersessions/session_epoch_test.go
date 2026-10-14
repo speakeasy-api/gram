@@ -44,10 +44,22 @@ func TestSessionEpoch_PreDeploySessionKeepsWorking(t *testing.T) {
 	replacement.WorkOSSessionID = "session_cas"
 	require.NoError(t, ti.sessionManager.UpdateSession(ctx, current, replacement), "compare-and-swap matches the stored bytes")
 
-	// Epochs are per user; a fresh id keeps this off the shared fixture user.
+	// Epochs are per user, so the epoch check uses an isolated pre-deploy
+	// session of a fresh user rather than the shared fixture user.
 	userID := "epoch-user-" + uuid.NewString()
+	isolated := sessions.Session{
+		SessionID:             "epoch-session-" + uuid.NewString(),
+		UserID:                userID,
+		ActiveOrganizationID:  "",
+		WorkOSSessionID:       "",
+		ImpersonatorEmail:     "",
+		SupportOrganizationID: "",
+		SupportExpiresAt:      time.Time{},
+	}
+	require.NoError(t, ti.sessionManager.StoreSessionIssuedAt(ctx, isolated, time.Now()))
+	require.NoError(t, ti.redis.Del(ctx, "sessions:issued_at:"+isolated.SessionID).Err())
 	require.NoError(t, ti.sessionManager.RaiseUserEpoch(ctx, userID, time.Now()))
-	predates, err := ti.sessionManager.SessionPredatesEpoch(ctx, userID, sessionID)
+	predates, err := ti.sessionManager.SessionPredatesEpoch(ctx, userID, isolated.SessionID)
 	require.NoError(t, err)
 	require.True(t, predates, "after signing out everywhere an unknown issuance is treated as older")
 }

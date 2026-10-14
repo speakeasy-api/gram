@@ -361,7 +361,9 @@ UPDATE organization_metadata
 SET verified_domains = array_append(COALESCE(verified_domains, '{}'), $2::text)
 WHERE id = $1
   AND $2::text <> ''
-  AND NOT ($2::text = ANY(COALESCE(verified_domains, '{}')))
+  AND NOT EXISTS (
+      SELECT 1 FROM unnest(COALESCE(verified_domains, '{}')) AS d WHERE lower(d) = lower($2::text)
+  )
 `
 
 // A key with a well-known hash. The plaintext is never stored, so the row is

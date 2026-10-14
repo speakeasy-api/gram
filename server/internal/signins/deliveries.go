@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -84,23 +85,31 @@ func (d *Deliverer) DeliverNow(ctx context.Context, organizationIDs []string, id
 	}
 	ctx = context.WithoutCancel(ctx)
 	d.pending.Go(func() {
-		ctx, cancel := context.WithTimeout(ctx, deliveryLease)
-		defer cancel()
-		rows, err := repo.New(d.db).ClaimRevocationDeliveries(ctx, repo.ClaimRevocationDeliveriesParams{
-			LeaseSeconds:    deliveryLease.Seconds(),
-			OrganizationIds: organizationIDs,
-			Ids:             ids,
-		})
-		if err != nil {
-			d.logger.ErrorContext(ctx, "claim sign-in revocation deliveries", attr.SlogError(err))
-			return
+		// Claimed and pushed in chunks that fit the lease, so no claimed
+		// delivery outlives its lease while earlier ones are pushed.
+		for chunk := range slices.Chunk(ids, SweepBatchSize) {
+			d.deliverChunk(ctx, organizationIDs, chunk)
 		}
-		claimed := make([]repo.ClaimPendingRevocationDeliveriesRow, len(rows))
-		for i, r := range rows {
-			claimed[i] = repo.ClaimPendingRevocationDeliveriesRow(r)
-		}
-		d.deliver(ctx, claimed)
 	})
+}
+
+func (d *Deliverer) deliverChunk(ctx context.Context, organizationIDs []string, ids []uuid.UUID) {
+	ctx, cancel := context.WithTimeout(ctx, deliveryLease)
+	defer cancel()
+	rows, err := repo.New(d.db).ClaimRevocationDeliveries(ctx, repo.ClaimRevocationDeliveriesParams{
+		LeaseSeconds:    deliveryLease.Seconds(),
+		OrganizationIds: organizationIDs,
+		Ids:             ids,
+	})
+	if err != nil {
+		d.logger.ErrorContext(ctx, "claim sign-in revocation deliveries", attr.SlogError(err))
+		return
+	}
+	claimed := make([]repo.ClaimPendingRevocationDeliveriesRow, len(rows))
+	for i, r := range rows {
+		claimed[i] = repo.ClaimPendingRevocationDeliveriesRow(r)
+	}
+	d.deliver(ctx, claimed)
 }
 
 // Drain waits for background deliveries started by DeliverNow, until ctx

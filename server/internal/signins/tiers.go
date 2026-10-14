@@ -94,8 +94,9 @@ func tenantAllowed(tenant string, allowed []string) bool {
 		return false
 	}
 	return slices.ContainsFunc(allowed, func(a string) bool {
+		// Only the canonical hyphenated form counts as a pin.
 		pinned, err := uuid.Parse(a)
-		return err == nil && pinned == id && !strings.EqualFold(a, MicrosoftConsumerTenantID)
+		return err == nil && strings.EqualFold(a, pinned.String()) && pinned == id && !strings.EqualFold(a, MicrosoftConsumerTenantID)
 	})
 }
 

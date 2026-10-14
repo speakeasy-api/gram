@@ -1887,6 +1887,37 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Record the sign-in like any other login, so grants from this session
+	// link to it and later revocations reach them.
+	// Magic Auth selects no WorkOS organization; the invite's is the one.
+	workosOrganizationID := idpUser.OrganizationID
+	if workosOrganizationID == "" {
+		if org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, invite.OrganizationID); err == nil && org.WorkosID.Valid {
+			workosOrganizationID = org.WorkosID.String
+		}
+	}
+	recorded := signins.RecordExchange(ctx, s.logger, s.db, signins.ExchangeParams{
+		Flow:                   signins.FlowDashboard,
+		WorkOSOrganizationID:   workosOrganizationID,
+		ExpectedOrganizationID: invite.OrganizationID,
+		UserID:                 gramUserID,
+		WorkOSSessionID:        idpUser.WorkOSSessionID,
+		AuthenticationMethod:   idpUser.AuthenticationMethod,
+		Evidence: signins.Evidence{
+			HostedDomain:       idpUser.Evidence.HostedDomain,
+			TenantID:           idpUser.Evidence.TenantID,
+			VerifiedEmail:      idpUser.Evidence.VerifiedEmail,
+			IDPAuthenticatedAt: idpUser.Evidence.AuthenticatedAt,
+		},
+		Impersonated:    idpUser.ImpersonatorEmail() != "",
+		AuthenticatedAt: authenticatedAt,
+	})
+	if (recorded.Failed || recorded.Revoked) && recorded.OrganizationID != "" && s.sessions.SignInEnforced(ctx, recorded.OrganizationID) {
+		s.logger.ErrorContext(ctx, "invite callback: sign-in could not back a session", attr.SlogOrganizationID(recorded.OrganizationID))
+		redirectError("invite authentication failed")
+		return
+	}
+
 	// Create a Speakeasy session directly. The invitee is already authenticated
 	// by Magic Auth, and the WorkOS session ID is stored for logout revocation.
 	sessionID := uuid.New().String()

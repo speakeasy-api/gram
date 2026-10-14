@@ -364,12 +364,13 @@ func TestHandleConsent_LinksOnlyTheAuthorizersOwnSession(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name         string
-		sameAsAuthor bool
-		wantLinked   bool
+		name       string
+		authorizer string
+		wantLinked bool
 	}{
-		{name: "authorizer's own session", sameAsAuthor: true, wantLinked: true},
-		{name: "state without an authorizer", sameAsAuthor: false, wantLinked: false},
+		{name: "authorizer's own session", authorizer: "self", wantLinked: true},
+		{name: "state without an authorizer", authorizer: "", wantLinked: false},
+		{name: "another user authorized the subject", authorizer: "other", wantLinked: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -379,8 +380,11 @@ func TestHandleConsent_LinksOnlyTheAuthorizersOwnSession(t *testing.T) {
 			subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
 			signIn := uuid.New()
 			authorizer := ""
-			if tc.sameAsAuthor {
+			switch tc.authorizer {
+			case "self":
 				authorizer = subject.ID
+			case "other":
+				authorizer = "other-user-" + uuid.NewString()
 			}
 			stateID := uuid.NewString()
 			csrfToken := "csrf-" + uuid.NewString()

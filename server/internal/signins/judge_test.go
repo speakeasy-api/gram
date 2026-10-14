@@ -92,6 +92,10 @@ func TestJudge(t *testing.T) {
 			microsoft(r, workTenant, "example.com")
 			r.AllowedMicrosoftTenantIds = nil
 		}, want: ReasonTenantNotAllowed},
+		{name: "microsoft pin in a non-canonical form", mutate: func(r *repo.GetSignInEligibilityRow) {
+			microsoft(r, workTenant, "example.com")
+			r.AllowedMicrosoftTenantIds = []string{"urn:uuid:" + workTenant, "{" + workTenant + "}", strings.ReplaceAll(workTenant, "-", "")}
+		}, want: ReasonTenantNotAllowed},
 		{name: "microsoft pin that is not a tenant id", mutate: func(r *repo.GetSignInEligibilityRow) {
 			microsoft(r, "tenant-1", "example.com")
 			r.AllowedMicrosoftTenantIds = []string{"tenant-1"}

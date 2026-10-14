@@ -322,6 +322,9 @@ func (h *Handler) handleWorkosRevokeSession(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusOK)
 }
 
+// mockSessionLifetime is how long an emulated WorkOS session stays active.
+const mockSessionLifetime = 30 * 24 * time.Hour
+
 // handleWorkosListSessions mocks GET /user_management/users/{id}/sessions:
 // the user's active sessions, newest first, in one page.
 func (h *Handler) handleWorkosListSessions(w http.ResponseWriter, r *http.Request) {
@@ -337,12 +340,13 @@ func (h *Handler) handleWorkosListSessions(w http.ResponseWriter, r *http.Reques
 	}
 	h.sessionsMu.Lock()
 	data := make([]sessionJSON, 0)
+	now := time.Now()
 	for id, s := range h.sessions {
-		if s.userID != userID || s.revoked {
+		if s.userID != userID || s.revoked || !now.Before(s.createdAt.Add(mockSessionLifetime)) {
 			continue
 		}
 		created := s.createdAt.Format(time.RFC3339Nano)
-		data = append(data, sessionJSON{Object: "session", ID: id, UserID: s.userID, Status: "active", CreatedAt: created, UpdatedAt: created, ExpiresAt: s.createdAt.Add(30 * 24 * time.Hour).Format(time.RFC3339Nano)})
+		data = append(data, sessionJSON{Object: "session", ID: id, UserID: s.userID, Status: "active", CreatedAt: created, UpdatedAt: created, ExpiresAt: s.createdAt.Add(mockSessionLifetime).Format(time.RFC3339Nano)})
 	}
 	h.sessionsMu.Unlock()
 	sort.Slice(data, func(i, j int) bool { return data[i].CreatedAt > data[j].CreatedAt })

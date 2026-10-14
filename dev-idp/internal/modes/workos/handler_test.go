@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -402,9 +403,9 @@ func TestWorkOSAuthorizationCodeClientMismatchDoesNotConsumeCode(t *testing.T) {
 // Under the workos backend Google userinfo goes to Google with the caller's
 // token, never through the WorkOS proxy or its client-secret check.
 func TestGoogleUserInfoIsForwardedToGoogleUnderWorkOSBackend(t *testing.T) { //nolint:paralleltest // overrides the package's Google endpoint
-	var gotAuth string
+	gotAuth := make(chan string, 1)
 	google := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
+		gotAuth <- r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"hd":"example.com"}`))
 	}))
@@ -413,9 +414,9 @@ func TestGoogleUserInfoIsForwardedToGoogleUnderWorkOSBackend(t *testing.T) { //n
 	googleUserInfoURL = google.URL + "/v1/userinfo"
 	t.Cleanup(func() { googleUserInfoURL = previous })
 
-	proxied := false
+	var proxied atomic.Bool
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		proxied = true
+		proxied.Store(true)
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(upstream.Close)
@@ -432,6 +433,6 @@ func TestGoogleUserInfoIsForwardedToGoogleUnderWorkOSBackend(t *testing.T) { //n
 	h.Handler().ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.JSONEq(t, `{"hd":"example.com"}`, rec.Body.String())
-	require.Equal(t, "Bearer google-token", gotAuth)
-	require.False(t, proxied)
+	require.Equal(t, "Bearer google-token", <-gotAuth)
+	require.False(t, proxied.Load())
 }
