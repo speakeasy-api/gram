@@ -250,10 +250,12 @@ vi.mock("@/routes", () => ({
     environments: { environment: { goTo: vi.fn() } },
     deployments: { deployment: { goTo: vi.fn() } },
     policyCenter: { href: () => "/acme/projects/default/policy-center" },
-    shadowMCP: {
-      href: () => "/acme/projects/default/shadow-mcp",
-      detail: {
-        href: (slug: string) => `/acme/projects/default/shadow-mcp/${slug}`,
+    shadowAI: {
+      mcps: {
+        detail: {
+          href: (slug: string) =>
+            `/acme/projects/default/shadow-ai/mcps/${slug}`,
+        },
       },
     },
     identities: {

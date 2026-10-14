@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  EMAProviderOrder,
+  EMAProviderOrder$inboundSchema,
+} from "./emaproviderorder.js";
 
 export const IdentityChainingPreparationStage = {
   Selection: "selection",
@@ -50,6 +54,10 @@ export type IdentityChainingPreparation = {
    * Exact selected remote_session_client row ID, when available.
    */
   clientId?: string | undefined;
+  /**
+   * The EMA providers identity chaining tries, in order, for one vendor authorization server; each failure falls through to the next.
+   */
+  emaProviders?: EMAProviderOrder | undefined;
   /**
    * Public OAuth client identifier, never a secret.
    */
@@ -96,6 +104,7 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
   z.object({
     binding_id: z.optional(z.string()),
     client_id: z.optional(z.string()),
+    ema_providers: z.optional(EMAProviderOrder$inboundSchema),
     external_client_id: z.optional(z.string()),
     generation: z.int(),
     grant_source: z.string(),
@@ -112,6 +121,7 @@ export const IdentityChainingPreparation$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "binding_id": "bindingId",
       "client_id": "clientId",
+      "ema_providers": "emaProviders",
       "external_client_id": "externalClientId",
       "grant_source": "grantSource",
       "grant_types": "grantTypes",

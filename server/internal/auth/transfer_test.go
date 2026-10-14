@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
@@ -151,6 +152,9 @@ func newTransfer(t *testing.T, opts transferOptions) (context.Context, *transfer
 	t.Helper()
 
 	userInfo := defaultMockUserInfo()
+	// Sign-out-everywhere epochs are per user in shared Redis, so each
+	// fixture gets its own user.
+	userInfo.UserID = "test-user-" + uuid.NewString()[:8]
 	ctx, instance := newTestAuthService(t, userInfo)
 	require.NoError(t, instance.createTestUser(ctx, userInfo))
 	org := userInfo.Organizations[0]
@@ -176,7 +180,7 @@ func newTransfer(t *testing.T, opts transferOptions) (context.Context, *transfer
 	if opts.supportOrgID != "" {
 		source.SupportExpiresAt = time.Now().Add(time.Hour)
 	}
-	require.NoError(t, instance.sessionManager.StoreSession(ctx, source))
+	require.NoError(t, instance.sessionManager.StoreSessionIssuedAt(ctx, source, time.Now()))
 
 	return ctx, &transferFixture{instance: instance, userInfo: userInfo, source: source}
 }
@@ -569,6 +573,8 @@ func TestService_TransferOut_StoresOnlyTheNonceHash(t *testing.T) {
 
 	var record map[string]any
 	require.NoError(t, f.instance.nonceStore.Get(ctx, "session_transfer:"+nonceHash(code), &record))
+	require.NotZero(t, record["SourceIssuedAt"], "the source session's issuance travels, never its id")
+	delete(record, "SourceIssuedAt")
 	require.Equal(t, map[string]any{
 		"UserID":               f.source.UserID,
 		"ActiveOrganizationID": f.source.ActiveOrganizationID,
@@ -577,6 +583,48 @@ func TestService_TransferOut_StoresOnlyTheNonceHash(t *testing.T) {
 		"TargetHost":           testExtraPlatformHost,
 		"NonceHash":            nonceHash(nonce),
 	}, record)
+}
+
+func TestService_TransferIn_RefusesASessionFromBeforeSignOutEverywhere(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	code, _, b := f.begin(ctx, t)
+
+	require.NoError(t, f.instance.sessionManager.RaiseUserEpoch(ctx, f.source.UserID, time.Now()))
+	requireRefused(t, f.in(ctx, t, testTargetBaseURL, code, b), errAccessChanged)
+}
+
+func TestService_Transfer_UnknownSourceIssuanceNeverOutlivesSignOutEverywhere(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	require.NoError(t, f.instance.nonceStore.Delete(ctx, "sessions:issued_at:"+f.source.SessionID))
+	code, _, b := f.begin(ctx, t)
+
+	result := f.in(ctx, t, testTargetBaseURL, code, b)
+	f.requireAccepted(ctx, t, result)
+	require.NoError(t, f.instance.sessionManager.RaiseUserEpoch(ctx, f.source.UserID, time.Now().Add(-time.Hour)))
+	predates, err := f.instance.sessionManager.SessionPredatesEpoch(ctx, f.source.UserID, *result.SessionCookie)
+	require.NoError(t, err)
+	require.True(t, predates, "a session transferred from an unknown issuance predates any epoch")
+}
+
+func TestService_Transfer_KeepsTheSourceIssuance(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newTransfer(t, defaultTransferOptions())
+	sourceIssued, known, err := f.instance.sessionManager.IssuedAt(ctx, f.source.SessionID)
+	require.NoError(t, err)
+	require.True(t, known)
+	code, _, b := f.begin(ctx, t)
+
+	result := f.in(ctx, t, testTargetBaseURL, code, b)
+	f.requireAccepted(ctx, t, result)
+	issued, known, err := f.instance.sessionManager.IssuedAt(ctx, *result.SessionCookie)
+	require.NoError(t, err)
+	require.True(t, known)
+	require.Equal(t, sourceIssued.UnixMicro(), issued.UnixMicro(), "a transfer never resets issuance past the epoch")
 }
 
 func TestService_Transfer_RoundTrip(t *testing.T) {
@@ -735,7 +783,7 @@ func TestService_TransferIn_NonMemberDoesNotConsume(t *testing.T) {
 	// if the membership was removed after transferOut issued it.
 	ctx, f := newTransfer(t, transferOptions{member: false, defaultHost: new(testTargetBaseURL), impersonator: "", supportOrgID: ""})
 	nonce := "browser-nonce"
-	code, err := sessions.NewTransferManager(f.instance.nonceStore).Create(ctx, f.source, nonce, testServerURL.Host, testExtraPlatformHost)
+	code, err := sessions.NewTransferManager(f.instance.nonceStore).Create(ctx, f.source, time.Time{}, nonce, testServerURL.Host, testExtraPlatformHost)
 	require.NoError(t, err)
 	b := newBrowser()
 	b.Set(constants.TransferInNonceCookiePrefix+nonceHash(nonce)[:16], nonce)

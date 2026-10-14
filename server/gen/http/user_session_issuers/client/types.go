@@ -74,8 +74,43 @@ type CreateUserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -109,8 +144,43 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -152,8 +222,43 @@ type GetUserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
@@ -1137,8 +1242,43 @@ type UserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt                    *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every MCP server its own authorization server, rooted at
+	// the server's URL. 'shared' serves one authorization server for the issuer,
+	// used by all of its MCP servers; issuer_url and token_endpoint locate it. A
+	// shared issuer whose authorization server this deployment does not serve
+	// falls back to per-endpoint authorization servers, and
+	// authorization_server_unavailable_reason says why.
+	AuthorizationServerMode *string `form:"authorization_server_mode,omitempty" json:"authorization_server_mode,omitempty" xml:"authorization_server_mode,omitempty"`
+	// Whether the issuer opts in to announcing its authorization servers on the
+	// deployment's authentication host rather than the MCP host. This is the
+	// stored setting: on a deployment without an authentication host it has no
+	// effect, and issuer_url shows the host actually used.
+	UseAuthenticationHost *bool `form:"use_authentication_host,omitempty" json:"use_authentication_host,omitempty" xml:"use_authentication_host,omitempty"`
+	// Whether the shared authorization server's issuer URL was fixed when the
+	// issuer was set up, so it stays the same if the deployment's hosts change. An
+	// unpinned shared issuer derives its issuer URL from the deployment's current
+	// hosts, so a host change also changes the values configured on other
+	// platforms. Always false outside shared mode.
+	IssuerURLPinned *bool `form:"issuer_url_pinned,omitempty" json:"issuer_url_pinned,omitempty" xml:"issuer_url_pinned,omitempty"`
+	// The RFC 8414 issuer identifier of the issuer's shared authorization server.
+	// Present only for a shared issuer whose authorization server this deployment
+	// serves.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	// The token endpoint of the issuer's shared authorization server. Present
+	// exactly when issuer_url is.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Why a shared issuer's authorization server is not served, so its MCP servers
+	// fall back to per-endpoint authorization servers: the pinned issuer URL is
+	// not this issuer's shared authorization server (pinned_issuer_url_invalid),
+	// or it is on a host this deployment does not serve (host_not_served). Absent
+	// otherwise.
+	AuthorizationServerUnavailableReason *string `form:"authorization_server_unavailable_reason,omitempty" json:"authorization_server_unavailable_reason,omitempty" xml:"authorization_server_unavailable_reason,omitempty"`
+	// The owning project's name. Present on organization-level reads of
+	// project-specific issuers.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateUserSessionIssuerRequestBody builds the HTTP request body from the
@@ -1171,17 +1311,24 @@ func NewUpdateUserSessionIssuerRequestBody(p *usersessionissuers.UpdateUserSessi
 // service "createUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewCreateUserSessionIssuerUserSessionIssuerOK(body *CreateUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                            *body.ID,
-		ProjectID:                     *body.ProjectID,
-		OrganizationID:                *body.OrganizationID,
-		Slug:                          *body.Slug,
-		AuthnChallengeMode:            *body.AuthnChallengeMode,
-		SessionDurationHours:          *body.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
-		CreatedAt:                     *body.CreatedAt,
-		UpdatedAt:                     *body.UpdatedAt,
+		ID:                                   *body.ID,
+		ProjectID:                            *body.ProjectID,
+		OrganizationID:                       *body.OrganizationID,
+		Slug:                                 *body.Slug,
+		AuthnChallengeMode:                   *body.AuthnChallengeMode,
+		SessionDurationHours:                 *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         body.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *body.AuthorizationServerMode,
+		UseAuthenticationHost:                *body.UseAuthenticationHost,
+		IssuerURLPinned:                      *body.IssuerURLPinned,
+		IssuerURL:                            body.IssuerURL,
+		TokenEndpoint:                        body.TokenEndpoint,
+		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
+		ProjectName:                          body.ProjectName,
+		CreatedAt:                            *body.CreatedAt,
+		UpdatedAt:                            *body.UpdatedAt,
 	}
 
 	return v
@@ -1341,17 +1488,24 @@ func NewCreateUserSessionIssuerGatewayError(body *CreateUserSessionIssuerGateway
 // service "updateUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewUpdateUserSessionIssuerUserSessionIssuerOK(body *UpdateUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                            *body.ID,
-		ProjectID:                     *body.ProjectID,
-		OrganizationID:                *body.OrganizationID,
-		Slug:                          *body.Slug,
-		AuthnChallengeMode:            *body.AuthnChallengeMode,
-		SessionDurationHours:          *body.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
-		CreatedAt:                     *body.CreatedAt,
-		UpdatedAt:                     *body.UpdatedAt,
+		ID:                                   *body.ID,
+		ProjectID:                            *body.ProjectID,
+		OrganizationID:                       *body.OrganizationID,
+		Slug:                                 *body.Slug,
+		AuthnChallengeMode:                   *body.AuthnChallengeMode,
+		SessionDurationHours:                 *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         body.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *body.AuthorizationServerMode,
+		UseAuthenticationHost:                *body.UseAuthenticationHost,
+		IssuerURLPinned:                      *body.IssuerURLPinned,
+		IssuerURL:                            body.IssuerURL,
+		TokenEndpoint:                        body.TokenEndpoint,
+		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
+		ProjectName:                          body.ProjectName,
+		CreatedAt:                            *body.CreatedAt,
+		UpdatedAt:                            *body.UpdatedAt,
 	}
 
 	return v
@@ -1679,17 +1833,24 @@ func NewListUserSessionIssuersGatewayError(body *ListUserSessionIssuersGatewayEr
 // service "getUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewGetUserSessionIssuerUserSessionIssuerOK(body *GetUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                            *body.ID,
-		ProjectID:                     *body.ProjectID,
-		OrganizationID:                *body.OrganizationID,
-		Slug:                          *body.Slug,
-		AuthnChallengeMode:            *body.AuthnChallengeMode,
-		SessionDurationHours:          *body.SessionDurationHours,
-		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
-		TrustedRemoteSessionIssuerID:  body.TrustedRemoteSessionIssuerID,
-		TrustedRemoteSessionClientID:  body.TrustedRemoteSessionClientID,
-		CreatedAt:                     *body.CreatedAt,
-		UpdatedAt:                     *body.UpdatedAt,
+		ID:                                   *body.ID,
+		ProjectID:                            *body.ProjectID,
+		OrganizationID:                       *body.OrganizationID,
+		Slug:                                 *body.Slug,
+		AuthnChallengeMode:                   *body.AuthnChallengeMode,
+		SessionDurationHours:                 *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode:        *body.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:         body.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:         body.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:              *body.AuthorizationServerMode,
+		UseAuthenticationHost:                *body.UseAuthenticationHost,
+		IssuerURLPinned:                      *body.IssuerURLPinned,
+		IssuerURL:                            body.IssuerURL,
+		TokenEndpoint:                        body.TokenEndpoint,
+		AuthorizationServerUnavailableReason: body.AuthorizationServerUnavailableReason,
+		ProjectName:                          body.ProjectName,
+		CreatedAt:                            *body.CreatedAt,
+		UpdatedAt:                            *body.UpdatedAt,
 	}
 
 	return v
@@ -2019,6 +2180,15 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 	if body.ClientIDMetadataAdmissionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2038,6 +2208,16 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 	}
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2072,6 +2252,15 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 	if body.ClientIDMetadataAdmissionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2091,6 +2280,16 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 	}
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2141,6 +2340,15 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	if body.ClientIDMetadataAdmissionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2160,6 +2368,16 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	}
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -3401,6 +3619,15 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	if body.ClientIDMetadataAdmissionMode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
 	}
+	if body.AuthorizationServerMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_mode", "body"))
+	}
+	if body.UseAuthenticationHost == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_authentication_host", "body"))
+	}
+	if body.IssuerURLPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer_url_pinned", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3420,6 +3647,16 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	}
 	if body.TrustedRemoteSessionClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.trusted_remote_session_client_id", *body.TrustedRemoteSessionClientID, goa.FormatUUID))
+	}
+	if body.AuthorizationServerMode != nil {
+		if !(*body.AuthorizationServerMode == "endpoint" || *body.AuthorizationServerMode == "shared") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_mode", *body.AuthorizationServerMode, []any{"endpoint", "shared"}))
+		}
+	}
+	if body.AuthorizationServerUnavailableReason != nil {
+		if !(*body.AuthorizationServerUnavailableReason == "pinned_issuer_url_invalid" || *body.AuthorizationServerUnavailableReason == "host_not_served") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authorization_server_unavailable_reason", *body.AuthorizationServerUnavailableReason, []any{"pinned_issuer_url_invalid", "host_not_served"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

@@ -8,6 +8,7 @@ export const POLICY_CENTER_TABS = [
   "policies",
   "detection-rules",
   "shadow-ai-targets",
+  "mcp-approvals",
   "exclusions",
   "quarantines",
 ] as const;
@@ -18,14 +19,25 @@ const TAB_LABEL: Record<PolicyCenterTab, string> = {
   policies: "Policies",
   "detection-rules": "Detection Rules",
   "shadow-ai-targets": "Shadow AI targets",
+  "mcp-approvals": "MCP approvals",
   exclusions: "Exclusion Rules",
   quarantines: "Quarantines",
 };
+
+export function policyCenterTabLabel(tab: PolicyCenterTab): string {
+  return TAB_LABEL[tab];
+}
+
+/** The query string that selects a tab, for links that land on one from
+ *  elsewhere: append it to the Guardrails href. */
+export function policyCenterTabSearch(tab: PolicyCenterTab): string {
+  return `?tab=${tab}`;
+}
 
 export function policyCenterTabs(): PageTab[] {
   return POLICY_CENTER_TABS.map((tab) => ({
     value: tab,
     label: TAB_LABEL[tab],
-    href: `?tab=${tab}`,
+    href: policyCenterTabSearch(tab),
   }));
 }

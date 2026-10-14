@@ -7727,6 +7727,12 @@ components:
           enum:
             - chain
             - interactive
+        authorization_server_mode:
+          type: string
+          description: 'Which OAuth authorization server the issuer''s MCP servers point clients to: one per MCP server (endpoint), or one for the issuer at /oauth/usi/{id} (shared).'
+          enum:
+            - endpoint
+            - shared
         classification:
           type: string
           description: custom, or project_default_idp for the auto-provisioned issuer of private servers.
@@ -7747,6 +7753,9 @@ components:
         id:
           type: string
           description: The user session issuer ID.
+        issuer_url_pinned:
+          type: boolean
+          description: Whether a shared authorization server's issuer URL is pinned, so it stays the same if the deployment's hosts change.
         other_servers_using_issuer:
           type: array
           items:
@@ -7780,6 +7789,8 @@ components:
         - session_duration_hours
         - attachment_scope
         - use_authentication_host
+        - authorization_server_mode
+        - issuer_url_pinned
         - other_servers_using_issuer
         - created_at
         - sessions
@@ -9186,6 +9197,53 @@ components:
           minLength: 1
       required:
         - id
+    EMAProvider:
+      type: object
+      properties:
+        internal_session_issuer_id:
+          type: string
+          description: The organization's internal session issuer, for speakeasy.
+          format: uuid
+        kind:
+          type: string
+          description: external or speakeasy.
+          enum:
+            - external
+            - speakeasy
+        remote_session_issuer_id:
+          type: string
+          description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
+          format: uuid
+        unavailable_reason:
+          type: string
+          description: Why the provider cannot serve now; omitted when it can. Unavailable providers are skipped.
+          enum:
+            - deleted
+            - disabled
+            - not_trusted_by_endpoint
+            - signing_unavailable
+      description: One EMA provider in a vendor's order.
+      required:
+        - kind
+    EMAProviderOrder:
+      type: object
+      properties:
+        is_default:
+          type: boolean
+          description: 'No order is saved, so every available provider applies: external first, then Speakeasy.'
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAProvider'
+          description: Providers in the order they are tried.
+        vendor_issuer:
+          type: string
+          description: The vendor authorization server issuer, canonicalized.
+      description: The EMA providers identity chaining tries, in order, for one vendor authorization server; each failure falls through to the next.
+      required:
+        - vendor_issuer
+        - is_default
+        - providers
     EnableOrganizationRequestBody:
       type: object
       properties:
@@ -9626,6 +9684,8 @@ components:
         created_at:
           type: string
           format: date-time
+        ema_providers:
+          $ref: '#/components/schemas/EMAProviderOrder'
         grant_types_supported:
           type: array
           items:

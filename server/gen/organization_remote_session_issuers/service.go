@@ -83,6 +83,13 @@ type Service interface {
 	// organization-level issuer, and an organization-level issuer may migrate onto
 	// another organization-level issuer. Requires org:admin.
 	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
+	// Replace the order in which EMA providers issue ID-JAGs for the vendor
+	// authorization server this issuer names. Identity chaining tries them in
+	// order and falls through to the next on any failure. An empty list restores
+	// the default: every available provider, external first, then Speakeasy. The
+	// order applies organization-wide to every issuer with the same canonical
+	// issuer URL. Requires org:admin and the ema-providers rollout.
+	SetEMAProviders(context.Context, *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error)
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for
 	// organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need
@@ -120,7 +127,7 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "fetchIssuerMetadata", "refreshIssuerMetadata"}
+var MethodNames = [13]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "setEMAProviders", "fetchIssuerMetadata", "refreshIssuerMetadata"}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -413,6 +420,17 @@ type RefreshIssuerMetadataPayload struct {
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// SetEMAProvidersPayload is the payload type of the
+// organizationRemoteSessionIssuers service setEMAProviders method.
+type SetEMAProvidersPayload struct {
+	// Any remote_session_issuer in the caller's organization that names the vendor
+	// authorization server.
+	RemoteSessionIssuerID string
+	// Providers in the order they are tried; each at most once.
+	Providers    []*types.EMAProviderInput
+	SessionToken *string
 }
 
 // An organization-owned user_session_issuer that uses a remote_session_issuer

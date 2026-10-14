@@ -10,6 +10,7 @@ package organizations
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -22,6 +23,7 @@ type Client struct {
 	ListInvitesEndpoint                        goa.Endpoint
 	ListUsersEndpoint                          goa.Endpoint
 	RemoveUserEndpoint                         goa.Endpoint
+	RevokeMemberSignInsEndpoint                goa.Endpoint
 	EnableWebhooksEndpoint                     goa.Endpoint
 	DisableWebhooksEndpoint                    goa.Endpoint
 	CreatePortalSessionEndpoint                goa.Endpoint
@@ -35,7 +37,7 @@ type Client struct {
 }
 
 // NewClient initializes a "organizations" service client given the endpoints.
-func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession, getOnboardingStatus, verifyOnboardingHooksSetup, sendEnterpriseAdminOnboardingEmail, generateWorkOSAdminPortalLink, listSetupTasks, updateSetupTask, submitOnboardingSurvey goa.Endpoint) *Client {
+func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, listUsers, removeUser, revokeMemberSignIns, enableWebhooks, disableWebhooks, createPortalSession, getOnboardingStatus, verifyOnboardingHooksSetup, sendEnterpriseAdminOnboardingEmail, generateWorkOSAdminPortalLink, listSetupTasks, updateSetupTask, submitOnboardingSurvey goa.Endpoint) *Client {
 	return &Client{
 		GetEndpoint:                                get,
 		SendInviteEndpoint:                         sendInvite,
@@ -44,6 +46,7 @@ func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, lis
 		ListInvitesEndpoint:                        listInvites,
 		ListUsersEndpoint:                          listUsers,
 		RemoveUserEndpoint:                         removeUser,
+		RevokeMemberSignInsEndpoint:                revokeMemberSignIns,
 		EnableWebhooksEndpoint:                     enableWebhooks,
 		DisableWebhooksEndpoint:                    disableWebhooks,
 		CreatePortalSessionEndpoint:                createPortalSession,
@@ -203,6 +206,29 @@ func (c *Client) ListUsers(ctx context.Context, p *ListUsersPayload) (res *ListU
 func (c *Client) RemoveUser(ctx context.Context, p *RemoveUserPayload) (err error) {
 	_, err = c.RemoveUserEndpoint(ctx, p)
 	return
+}
+
+// RevokeMemberSignIns calls the "revokeMemberSignIns" endpoint of the
+// "organizations" service.
+// RevokeMemberSignIns may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RevokeMemberSignIns(ctx context.Context, p *RevokeMemberSignInsPayload) (res *types.RevokeSignInsResult, err error) {
+	var ires any
+	ires, err = c.RevokeMemberSignInsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RevokeSignInsResult), nil
 }
 
 // EnableWebhooks calls the "enableWebhooks" endpoint of the "organizations"

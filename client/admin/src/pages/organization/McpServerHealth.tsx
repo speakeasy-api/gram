@@ -950,6 +950,11 @@ function IssuerPanel({
         <KeyValue label="Authentication host">
           {issuer.useAuthenticationHost ? "Used" : "Not used"}
         </KeyValue>
+        <KeyValue label="Authorization server">
+          {issuer.authorizationServerMode === "shared"
+            ? `Shared by the issuer · issuer URL ${issuer.issuerUrlPinned ? "pinned" : "not pinned"}`
+            : "One per MCP server"}
+        </KeyValue>
         <KeyValue label="Trusted remote session">
           {trusted ? (
             <span className={MONO}>

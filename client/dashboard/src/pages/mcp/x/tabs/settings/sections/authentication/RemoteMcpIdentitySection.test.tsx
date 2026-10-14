@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
 import type { AuthTarget } from "./authTarget";
+import type { CommitServerIdentityConfigurationForm } from "@gram/client/models/components/commitserveridentityconfigurationform.js";
 
 const mocks = vi.hoisted(() => ({
   headers: vi.fn(),
@@ -676,10 +677,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("requests the protected resource's scopes, not every advertised one", async () => {
-    // Left empty, the server asks for everything the issuer advertises — the
-    // request that broke Salesforce logins. Settings has to send the same
-    // RFC 9728 scopes the create flow does.
+  it("stores no scope on an automatic client so each sign-in discovers it live", async () => {
+    // Nothing discovered here is copied onto the client: the server resolves
+    // the scopes to request at each sign-in from the protected resource, so
+    // a copied list cannot go stale.
     mocks.issuers.mockReturnValue({
       data: {
         result: {
@@ -712,16 +713,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
-    expect(mocks.commit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        commitServerIdentityConfigurationForm: expect.objectContaining({
-          clientMode: "auto",
-          clientConfiguration: expect.objectContaining({
-            scope: ["read"],
-            tokenEndpointAuthMethod: "client_secret_post",
-          }),
-        }),
-      }),
+    const form = mocks.commit.mock.calls[0]![0]
+      .commitServerIdentityConfigurationForm as CommitServerIdentityConfigurationForm;
+    expect(form.clientMode).toBe("auto");
+    expect(form.clientConfiguration?.scope).toBeUndefined();
+    expect(form.clientConfiguration?.tokenEndpointAuthMethod).toBe(
+      "client_secret_post",
     );
   });
 
@@ -1767,7 +1764,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("requests the default scopes when a manual client chooses none", async () => {
+  it("sends no scope when a manual client chooses none", async () => {
     mocks.issuers.mockReturnValue({
       data: {
         result: {
@@ -1786,8 +1783,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
         },
       },
     });
-    // Only the scope probe answers; the save-time probe stays unavailable,
-    // so the resource's scopes can only come from what the field loaded.
+    // The resource's scopes are on offer in the picker, but only scopes the
+    // operator picks are stored; none picked means none sent.
     mocks.protectedResourceMetadata.mockImplementation(
       (_id: unknown, enabled: unknown) =>
         enabled
@@ -1809,14 +1806,11 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
-    expect(mocks.commit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        commitServerIdentityConfigurationForm: expect.objectContaining({
-          clientMode: "manual",
-          clientConfiguration: expect.objectContaining({ scope: ["issues"] }),
-        }),
-      }),
-    );
+    const form = mocks.commit.mock.calls[0]![0]
+      .commitServerIdentityConfigurationForm as CommitServerIdentityConfigurationForm;
+    expect(form.clientMode).toBe("manual");
+    expect(form.clientConfiguration?.clientId).toBe("manual-client");
+    expect(form.clientConfiguration?.scope).toBeUndefined();
     // The new client changes what the pin view resolves.
     await waitFor(() => expect(mocks.invalidateScopes).toHaveBeenCalled());
   });
@@ -1857,16 +1851,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
-    expect(mocks.commit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        commitServerIdentityConfigurationForm: expect.objectContaining({
-          clientMode: "auto",
-          clientConfiguration: expect.objectContaining({
-            scope: ["read", "write", "admin"],
-          }),
-        }),
-      }),
-    );
+    const form = mocks.commit.mock.calls[0]![0]
+      .commitServerIdentityConfigurationForm as CommitServerIdentityConfigurationForm;
+    expect(form.clientMode).toBe("auto");
+    expect(form.clientConfiguration?.scope).toBeUndefined();
   });
 
   it("previews the Authorization header without revealing the credential", async () => {

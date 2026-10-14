@@ -24,6 +24,7 @@ type Server struct {
 	ListIssuers               http.Handler
 	GetIssuer                 http.Handler
 	UpdateIssuer              http.Handler
+	ListMcpServers            http.Handler
 	GetIssuerDeletePreflight  http.Handler
 	DeleteIssuer              http.Handler
 	MoveIssuer                http.Handler
@@ -66,6 +67,7 @@ func New(
 			{"ListIssuers", "GET", "/rpc/organizationUserSessionIssuers.list"},
 			{"GetIssuer", "GET", "/rpc/organizationUserSessionIssuers.get"},
 			{"UpdateIssuer", "POST", "/rpc/organizationUserSessionIssuers.update"},
+			{"ListMcpServers", "GET", "/rpc/organizationUserSessionIssuers.listMcpServers"},
 			{"GetIssuerDeletePreflight", "GET", "/rpc/organizationUserSessionIssuers.getDeletePreflight"},
 			{"DeleteIssuer", "DELETE", "/rpc/organizationUserSessionIssuers.delete"},
 			{"MoveIssuer", "POST", "/rpc/organizationUserSessionIssuers.move"},
@@ -80,6 +82,7 @@ func New(
 		ListIssuers:               NewListIssuersHandler(e.ListIssuers, mux, decoder, encoder, errhandler, formatter),
 		GetIssuer:                 NewGetIssuerHandler(e.GetIssuer, mux, decoder, encoder, errhandler, formatter),
 		UpdateIssuer:              NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
+		ListMcpServers:            NewListMcpServersHandler(e.ListMcpServers, mux, decoder, encoder, errhandler, formatter),
 		GetIssuerDeletePreflight:  NewGetIssuerDeletePreflightHandler(e.GetIssuerDeletePreflight, mux, decoder, encoder, errhandler, formatter),
 		DeleteIssuer:              NewDeleteIssuerHandler(e.DeleteIssuer, mux, decoder, encoder, errhandler, formatter),
 		MoveIssuer:                NewMoveIssuerHandler(e.MoveIssuer, mux, decoder, encoder, errhandler, formatter),
@@ -101,6 +104,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListIssuers = m(s.ListIssuers)
 	s.GetIssuer = m(s.GetIssuer)
 	s.UpdateIssuer = m(s.UpdateIssuer)
+	s.ListMcpServers = m(s.ListMcpServers)
 	s.GetIssuerDeletePreflight = m(s.GetIssuerDeletePreflight)
 	s.DeleteIssuer = m(s.DeleteIssuer)
 	s.MoveIssuer = m(s.MoveIssuer)
@@ -122,6 +126,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListIssuersHandler(mux, h.ListIssuers)
 	MountGetIssuerHandler(mux, h.GetIssuer)
 	MountUpdateIssuerHandler(mux, h.UpdateIssuer)
+	MountListMcpServersHandler(mux, h.ListMcpServers)
 	MountGetIssuerDeletePreflightHandler(mux, h.GetIssuerDeletePreflight)
 	MountDeleteIssuerHandler(mux, h.DeleteIssuer)
 	MountMoveIssuerHandler(mux, h.MoveIssuer)
@@ -331,6 +336,60 @@ func NewUpdateIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListMcpServersHandler configures the mux to serve the
+// "organizationUserSessionIssuers" service "listMcpServers" endpoint.
+func MountListMcpServersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizationUserSessionIssuers.listMcpServers", f)
+}
+
+// NewListMcpServersHandler creates a HTTP handler which loads the HTTP request
+// and calls the "organizationUserSessionIssuers" service "listMcpServers"
+// endpoint.
+func NewListMcpServersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListMcpServersRequest(mux, decoder)
+		encodeResponse = EncodeListMcpServersResponse(encoder)
+		encodeError    = EncodeListMcpServersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listMcpServers")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationUserSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

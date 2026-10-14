@@ -1,0 +1,7 @@
+---
+"server": patch
+---
+
+Add storage for Speakeasy sign-ins and link MCP grants to the sign-in that created them, so revoking a sign-in can revoke its grants.
+
+Also record the evidence that decides which sign-in methods may back a signed assertion (the social identity provider's managed domain and tenant), and let each organization limit those methods on its issuer. Sign-ins also keep the email WorkOS verified and when the user actually authenticated, issuers can pin Microsoft tenants, and revocation deliveries gain leases and backoff.

@@ -51,7 +51,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -60,7 +59,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -95,6 +93,10 @@ type ParentChallenge struct {
 	RouteBase           string
 	McpServerID         uuid.NullUUID
 	MetaMcpServerID     uuid.NullUUID
+	// ResourceMcpServerID is the gateway member whose protected resource
+	// decides the login's scopes, as McpServerID does for a server login. Set
+	// only once the gateway has qualified the client to that member.
+	ResourceMcpServerID uuid.NullUUID
 	FinalRedirectURI    string
 	// ConsentURL is the consent page the callback returns to when it cannot
 	// be rebuilt from RouteBase and McpSlug, as on a shared authorization
@@ -199,6 +201,8 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
+		// The retry leg reuses the first leg's scopes, so it reads no resource.
+		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
 		BrowserCookieID:     s.BrowserCookieID,
@@ -247,9 +251,6 @@ type ChallengeManager struct {
 	// protectedResources resolves the login's protected resource row, probing
 	// it within a short budget; nil skips the resource steps of scope resolution.
 	protectedResources *protectedresource.Prober
-
-	// features gates resource-first scope discovery per organization; nil reads as off.
-	features feature.Provider
 
 	registrationTelemetry registration.Recorder
 
@@ -360,11 +361,6 @@ func WithProtectedResourceProber(prober *protectedresource.Prober) ChallengeMana
 	return func(m *ChallengeManager) { m.protectedResources = prober }
 }
 
-// WithFeatureFlags evaluates the resource-first scope discovery rollout flag.
-func WithFeatureFlags(features feature.Provider) ChallengeManagerOption {
-	return func(m *ChallengeManager) { m.features = features }
-}
-
 func NewChallengeManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -401,7 +397,6 @@ func NewChallengeManager(
 		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
 		scopeMetrics:              remotesessionmetrics.NewScopeResolution(logger, meterProvider),
 		protectedResources:        nil,
-		features:                  nil,
 		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
@@ -608,8 +603,8 @@ type ScopeResolution struct {
 // Operator-set scopes (client scope, pin, override) are sent exactly as set.
 // A challenge gains the standard scopes the resource itself advertises; the
 // advertised lists already carry whichever their own server offers. Without
-// resource discovery the issuer's override still beats the client's scope,
-// as before the rollout flag.
+// resource discovery (no prober) the issuer's override still beats the
+// client's scope.
 func (c Client) RequestedScopes(resource ResourceScopes) ScopeResolution {
 	asSet := func(scopes []string, source remotesessionmetrics.ScopeSource) ScopeResolution {
 		return ScopeResolution{Scopes: slices.Clone(scopes), Widened: nil, Source: source, Unadvertised: nil}
@@ -670,36 +665,12 @@ func withStandardScopes(base, offered []string) (scopes []string, widened []stri
 	return scopes, widened
 }
 
-// ResourceScopeDiscoveryEnabled reports whether the organization's logins
-// consult the protected resource row (its challenge scopes, pin, and
-// advertised list) when deciding their scope request. A manager without a
-// prober, an unreadable organization, or an unreadable flag reads as off, so
-// the consent card and the login always agree.
-func (m *ChallengeManager) ResourceScopeDiscoveryEnabled(ctx context.Context, organizationID string) bool {
-	if m.features == nil || m.protectedResources == nil {
-		return false
-	}
-	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		m.logger.WarnContext(ctx, "read organization for scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return false
-	}
-	return ResourceScopeDiscoveryEnabled(ctx, m.logger, m.features, organizationID, org.Slug)
-}
-
-// ResourceScopeDiscoveryEnabled evaluates the resource-first scope discovery
-// rollout flag for an organization whose slug the caller already holds. A
-// nil provider or an unreadable flag reads as off.
-func ResourceScopeDiscoveryEnabled(ctx context.Context, logger *slog.Logger, features feature.Provider, organizationID, organizationSlug string) bool {
-	if features == nil {
-		return false
-	}
-	enabled, err := features.IsFlagEnabledLocal(ctx, feature.FlagRemoteSessionLiveResourceScopes, organizationID, feature.OrgProjectGroups(organizationSlug, ""), nil)
-	if err != nil {
-		logger.WarnContext(ctx, "evaluate scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		return false
-	}
-	return enabled
+// ResourceScopeDiscoveryEnabled reports whether logins consult the protected
+// resource row (its challenge scopes, pin, and advertised list) when deciding
+// their scope request. Only a manager without a prober reads as off, so the
+// consent card and the login always agree.
+func (m *ChallengeManager) ResourceScopeDiscoveryEnabled() bool {
+	return m.protectedResources != nil
 }
 
 // CachedResourceScopesForServer is the protected resource row of a
@@ -787,13 +758,14 @@ func (m *ChallengeManager) ResourceAppliesToClients(ctx context.Context, organiz
 
 // loginResourceScopes resolves the protected resource row of the MCP server
 // the login is for, probing it within the login budget, and returns the
-// resource URL it consulted. An organization not enrolled (discover false), a
-// client whose own scope decides, a login with no remote-backed server, or a
+// resource URL it consulted. A gateway login reads the member it qualified the
+// client to. A manager without a prober (discover false), a client whose own
+// scope decides, a login with no remote-backed server or member, or a
 // server whose resource the selected client's grant is not qualified to has
 // no row.
 func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent ParentChallenge, client Client, discover bool) (ResourceScopes, protectedresource.LoginResolution, string) {
-	// UseDiscovered carries the flag alone, so an enrolled login that skips
-	// the resource still ranks the client's scope above the issuer override.
+	// UseDiscovered carries discover alone, so a login that skips the
+	// resource still ranks the client's scope above the issuer override.
 	none := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discover}
 	skipped := protectedresource.LoginResolution{Row: nil, ScopesSupported: nil, Live: false, Outcome: protectedresource.ProbeOutcomeNotApplicable, ProbeDuration: 0}
 	switch {
@@ -803,11 +775,16 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 	case len(client.ClientScope) > 0:
 		skipped.Outcome = protectedresource.ProbeOutcomeSkippedClientScope
 		return none, skipped, ""
-	case !parent.McpServerID.Valid:
+	}
+	serverID, viaMember := parent.McpServerID, false
+	if !serverID.Valid && parent.ResourceMcpServerID.Valid {
+		serverID, viaMember = parent.ResourceMcpServerID, true
+	}
+	if !serverID.Valid {
 		return none, skipped, ""
 	}
 	q := remotesessions_repo.New(m.db)
-	resourceURL, err := q.GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: parent.McpServerID.UUID, ProjectID: parent.ProjectID})
+	resourceURL, err := q.GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: serverID.UUID, ProjectID: parent.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, skipped, ""
@@ -816,21 +793,26 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 		skipped.Outcome = protectedresource.ProbeOutcomeDBError
 		return none, skipped, ""
 	}
-	siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
-		UserSessionIssuerID: parent.UserSessionIssuerID,
-		ProjectID:           parent.ProjectID,
-		OrganizationID:      parent.OrganizationID,
-	})
-	if err != nil {
-		m.logger.ErrorContext(ctx, "list sibling clients for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
-		skipped.Outcome = protectedresource.ProbeOutcomeDBError
-		return none, skipped, resourceURL
-	}
-	applies, err := m.ResourceAppliesToClient(ctx, parent.OrganizationID, client.ID, siblingIDs, resourceURL)
-	if err != nil {
-		m.logger.ErrorContext(ctx, "decide resource ownership for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()), attr.SlogRemoteSessionClientID(client.ID.String()))
-		skipped.Outcome = protectedresource.ProbeOutcomeDBError
-		return none, skipped, resourceURL
+	// The gateway qualified the client to its member before the login, so
+	// only the member's URL must still be the resource the grant names.
+	applies := viaMember && sameUpstream(resourceURL, parent.Resource)
+	if !viaMember {
+		siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
+			UserSessionIssuerID: parent.UserSessionIssuerID,
+			ProjectID:           parent.ProjectID,
+			OrganizationID:      parent.OrganizationID,
+		})
+		if err != nil {
+			m.logger.ErrorContext(ctx, "list sibling clients for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
+			skipped.Outcome = protectedresource.ProbeOutcomeDBError
+			return none, skipped, resourceURL
+		}
+		applies, err = m.ResourceAppliesToClient(ctx, parent.OrganizationID, client.ID, siblingIDs, resourceURL)
+		if err != nil {
+			m.logger.ErrorContext(ctx, "decide resource ownership for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()), attr.SlogRemoteSessionClientID(client.ID.String()))
+			skipped.Outcome = protectedresource.ProbeOutcomeDBError
+			return none, skipped, resourceURL
+		}
 	}
 	if !applies {
 		skipped.Outcome = protectedresource.ProbeOutcomeNotOwned
@@ -1187,14 +1169,14 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		return "", ErrSelfCredentialClient
 	}
 	// Evaluated once per login; the retry leg reuses the scopes it chose.
-	discover := m.ResourceScopeDiscoveryEnabled(ctx, parent.OrganizationID)
+	discover := m.ResourceScopeDiscoveryEnabled()
 	return m.mintAuthorization(ctx, parent, client, nil, discover)
 }
 
 // mintAuthorization is BuildAuthorizationUrl; retryOf is the state of the
 // first leg when this is the single resource-less leg minted after
-// invalid_target, and discover is the resource-first scope discovery flag as
-// the login evaluated it.
+// invalid_target, and discover reports whether the login consults the
+// protected resource row.
 func (m *ChallengeManager) mintAuthorization(
 	ctx context.Context,
 	parent ParentChallenge,
@@ -1280,7 +1262,7 @@ func (m *ChallengeManager) mintAuthorization(
 		if resolved.ProbeDuration > 0 {
 			m.scopeMetrics.RecordProbe(ctx, resolved.Outcome, resolved.ProbeDuration)
 		}
-		m.logger.InfoContext(ctx, "resolved login scope",
+		logAttrs := []any{
 			attr.SlogProjectID(parent.ProjectID.String()),
 			attr.SlogOrganizationID(parent.OrganizationID),
 			attr.SlogOAuthIssuer(client.IssuerURL),
@@ -1290,7 +1272,11 @@ func (m *ChallengeManager) mintAuthorization(
 			attr.SlogOAuthResourceProbeOutcome(resolved.Outcome),
 			attr.SlogOAuthScope(strings.Join(scopes, " ")),
 			attr.SlogOAuthResourceProbeDuration(resolved.ProbeDuration),
-		)
+		}
+		if parent.MetaMcpServerID.Valid {
+			logAttrs = append(logAttrs, attr.SlogMetaMcpServerID(parent.MetaMcpServerID.UUID.String()))
+		}
+		m.logger.InfoContext(ctx, "resolved login scope", logAttrs...)
 	}
 	if len(resolution.Unadvertised) > 0 {
 		m.logger.InfoContext(ctx, "resource scope pin requests scopes the resource does not advertise",

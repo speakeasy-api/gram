@@ -1,0 +1,502 @@
+import { ShadowAISetupEmptyState } from "@/components/setup-empty-state";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import { Page } from "@/components/page-layout";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
+import { useShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
+import { useEffect, useMemo, useState } from "react";
+import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import { cn } from "@/lib/utils";
+import {
+  type DecideAccessTarget,
+  DecideAccessSheet,
+  POLICIES_UNAVAILABLE_REASON,
+} from "@/components/mcp-approvals/DecideAccessSheet";
+import {
+  ShadowMCPInventoryReviewCell,
+  ShadowMCPInventoryServerCell,
+  ShadowMCPInventoryUsageCell,
+} from "./ShadowMCPInventoryCells";
+import { ReviewRequestSheet } from "@/components/mcp-approvals/ReviewRequestSheet";
+import {
+  matchesReviewFilter,
+  observedDate,
+  reviewSortRank,
+} from "./shadowMCPInventoryReview";
+import {
+  defineFilters,
+  type FilterValue,
+  useFilterState,
+} from "@/components/filters";
+import {
+  shadowMCPBlockingPolicyDisposition,
+  shadowMCPInventoryStatus,
+  shadowMCPInventoryStatusBadgeVariant,
+  shadowMCPInventoryStatusDescription,
+  shadowMCPInventoryStatusLabel,
+  type ShadowMCPPolicy,
+} from "./shadowMCPInventoryStatus";
+
+const REVIEW_FILTER_OPTIONS = [
+  { value: "requested", label: "Awaiting decision" },
+  { value: "approved", label: "Approved" },
+  { value: "denied", label: "Denied" },
+  { value: "superseded", label: "Superseded" },
+  { value: "none", label: "No review" },
+];
+
+const INVENTORY_FILTERS = defineFilters([
+  { id: "review", label: "Review", kind: "select" },
+]);
+
+const INVENTORY_PAGE_LIMIT = 50;
+const FIRST_PAGE_CURSOR = "";
+
+type InventoryPage = {
+  cursor: string;
+  nextCursor?: string;
+  servers: ShadowMCPInventoryServer[];
+};
+
+const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
+
+function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
+  const status = shadowMCPInventoryStatus(server);
+
+  // The badge is the verdict; the description is the mechanism behind it,
+  // which a one-word badge cannot carry. "Restricted" covers five different
+  // postures — selected users only, mixed, blocked for some, and two ways a
+  // denial still leaves standing access — and "Observed" can hide a decision
+  // lying dormant for want of a blocking policy, which is the state that
+  // should worry an admin most. Triaging those apart is the column's job, so
+  // the detail stays on the row rather than only on the server page. It sits
+  // in a tooltip to keep the column scannable, on a focusable span so it is
+  // reachable by keyboard and announced through aria-describedby rather than
+  // being hover-only.
+  return (
+    <SimpleTooltip tooltip={shadowMCPInventoryStatusDescription(server)}>
+      <span tabIndex={0} className="inline-flex cursor-help">
+        <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
+          <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
+        </Badge>
+      </span>
+    </SimpleTooltip>
+  );
+}
+
+function InventoryEmptyState() {
+  return (
+    <ShadowAISetupEmptyState
+      heading="No MCP servers observed yet"
+      description="Shadow AI reveals MCP servers observed in agent traffic or raised in an access request. Install and run the device agent to discover servers on your organization's devices."
+    />
+  );
+}
+
+export function ShadowMCPInventoryTable({
+  className,
+  enabled = true,
+  members,
+  onOpenServer,
+  policiesUnavailable = false,
+  projectID,
+  roles,
+  shadowMCPPolicies,
+}: {
+  className?: string;
+  enabled?: boolean;
+  members: AccessMember[];
+  onOpenServer?: (server: ShadowMCPInventoryServer) => void;
+  /** The policy list failed to load: the inventory still shows, deciding waits. */
+  policiesUnavailable?: boolean;
+  projectID: string;
+  roles: Role[];
+  shadowMCPPolicies: ShadowMCPPolicy[];
+}): JSX.Element {
+  const inventoryScope = enabled && projectID.length > 0 ? projectID : "";
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [pages, setPages] = useState<InventoryPage[]>([]);
+  const [paginationScope, setPaginationScope] = useState(inventoryScope);
+  const hasActivePagination = paginationScope === inventoryScope;
+  const activeCursor = hasActivePagination ? cursor : undefined;
+  const activePages = hasActivePagination ? pages : EMPTY_INVENTORY_PAGES;
+  const inventoryRequest = activeCursor
+    ? {
+        projectId: projectID,
+        limit: INVENTORY_PAGE_LIMIT,
+        cursor: activeCursor,
+      }
+    : { projectId: projectID, limit: INVENTORY_PAGE_LIMIT };
+  const inventoryQuery = useShadowMCPInventory(inventoryRequest, undefined, {
+    enabled: enabled && projectID.length > 0,
+    // The dashboard default throws every non-auth failure to the error
+    // boundary; the table has its own failure state and a retry.
+    throwOnError: false,
+  });
+  // The row action and the stdio review's button wait while the policy list
+  // is unavailable, the way the server page's button does.
+  const decideDisabledReason = policiesUnavailable
+    ? POLICIES_UNAVAILABLE_REASON
+    : undefined;
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortDescriptor | null>({
+    id: "review",
+    direction: "asc",
+  });
+  const [decideTarget, setDecideTarget] = useState<DecideAccessTarget | null>(
+    null,
+  );
+  const [reviewSheetServer, setReviewSheetServer] =
+    useState<ShadowMCPInventoryServer | null>(null);
+  // The sheet words its form and picks its write path from the policy set's
+  // disposition; row rendering no longer touches it.
+  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
+  const { values, setValue, clearValue, clearAll } =
+    useFilterState(INVENTORY_FILTERS);
+
+  useEffect(() => {
+    setPaginationScope(inventoryScope);
+    setCursor(undefined);
+    setPages([]);
+  }, [inventoryScope]);
+
+  useEffect(() => {
+    if (
+      !hasActivePagination ||
+      !enabled ||
+      projectID.length === 0 ||
+      !inventoryQuery.data
+    ) {
+      return;
+    }
+
+    const pageCursor = activeCursor ?? FIRST_PAGE_CURSOR;
+    setPages((currentPages) => {
+      const page: InventoryPage = {
+        cursor: pageCursor,
+        nextCursor: inventoryQuery.data.nextCursor,
+        servers: inventoryQuery.data.servers,
+      };
+      const existingPageIndex = currentPages.findIndex(
+        (currentPage) => currentPage.cursor === pageCursor,
+      );
+
+      if (existingPageIndex === -1) {
+        return [...currentPages, page];
+      }
+
+      return currentPages.map((currentPage, index) =>
+        index === existingPageIndex ? page : currentPage,
+      );
+    });
+  }, [
+    activeCursor,
+    enabled,
+    hasActivePagination,
+    inventoryQuery.data,
+    projectID,
+  ]);
+
+  const loadedServers = useMemo(() => {
+    return activePages.flatMap((page) => page.servers);
+  }, [activePages]);
+
+  const latestPage = activePages[activePages.length - 1];
+  const canUseInventoryQueryData =
+    enabled && projectID.length > 0 && hasActivePagination;
+  const nextCursor =
+    latestPage?.nextCursor ??
+    (canUseInventoryQueryData ? inventoryQuery.data?.nextCursor : undefined);
+  const hasLoadedPages = activePages.length > 0;
+  const isInitialLoading = inventoryQuery.isLoading && !hasLoadedPages;
+  const isInitialError = Boolean(inventoryQuery.error && !hasLoadedPages);
+  const isLoadingMore = Boolean(
+    hasLoadedPages && (inventoryQuery.isFetching || inventoryQuery.isLoading),
+  );
+
+  const loadMoreServers = () => {
+    if (!nextCursor || isLoadingMore) {
+      return;
+    }
+
+    if (activeCursor === nextCursor && inventoryQuery.error) {
+      void inventoryQuery.refetch();
+      return;
+    }
+
+    setCursor(nextCursor);
+  };
+
+  const isStdio = (server: ShadowMCPInventoryServer) =>
+    server.targetKind === "stdio_command";
+
+  const openRow = (server: ShadowMCPInventoryServer) => {
+    // Local commands have no server page; their review lives in a sheet.
+    if (isStdio(server)) {
+      setReviewSheetServer(server);
+      return;
+    }
+    onOpenServer?.(server);
+  };
+
+  const openDecide = (server: ShadowMCPInventoryServer) => {
+    if (isStdio(server)) {
+      setReviewSheetServer(server);
+      return;
+    }
+    setDecideTarget({
+      canonicalServerUrl: server.canonicalServerUrl,
+      displayName:
+        server.serverName || server.urlHost || server.canonicalServerUrl,
+      approvalRequestId: server.approvalRequest?.id,
+      // A pending legacy bypass request rides along so the sheet promotes it
+      // into the review and the decision drains it too.
+      pendingBypassRequestId: server.latestRequest?.id,
+    });
+  };
+
+  const columns: Column<ShadowMCPInventoryServer>[] = [
+    {
+      key: "server",
+      header: "Server",
+      sortable: true,
+      sortValue: (server) =>
+        (server.serverName || server.urlHost || server.canonicalServerUrl)
+          .trim()
+          .toLowerCase(),
+      width: "2fr",
+      render: (server) => <ShadowMCPInventoryServerCell server={server} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      sortValue: (server) =>
+        shadowMCPInventoryStatusLabel(shadowMCPInventoryStatus(server)),
+      width: "0.9fr",
+      render: (server) =>
+        server.targetKind === "stdio_command" ? (
+          <Text muted small>
+            —
+          </Text>
+        ) : (
+          <InventoryStatusCell server={server} />
+        ),
+    },
+    {
+      key: "review",
+      header: "Review",
+      sortable: true,
+      sortValue: reviewSortRank,
+      width: "0.8fr",
+      render: (server) => <ShadowMCPInventoryReviewCell server={server} />,
+    },
+    {
+      key: "lastCalled",
+      header: "Last called",
+      sortable: true,
+      sortValue: (server) => server.lastCalled?.getTime() ?? 0,
+      width: "0.7fr",
+      render: (server) => (
+        <Text variant="small">{formatShortDate(server.lastCalled)}</Text>
+      ),
+    },
+    {
+      key: "lastSeen",
+      header: "Last seen",
+      sortable: true,
+      sortValue: (server) => observedDate(server.lastSeen)?.getTime() ?? 0,
+      width: "0.7fr",
+      render: (server) => (
+        <Text variant="small">
+          {formatShortDate(observedDate(server.lastSeen))}
+        </Text>
+      ),
+    },
+    {
+      key: "usage",
+      header: "Usage",
+      sortable: true,
+      sortValue: (server) => server.observedUseCount,
+      width: "0.5fr",
+      render: (server) => <ShadowMCPInventoryUsageCell server={server} />,
+    },
+  ];
+
+  const servers = useMemo(() => {
+    if (loadedServers.length > 0) {
+      return loadedServers;
+    }
+
+    return canUseInventoryQueryData ? (inventoryQuery.data?.servers ?? []) : [];
+  }, [canUseInventoryQueryData, inventoryQuery.data?.servers, loadedServers]);
+  const normalizedSearch = search.trim().toLowerCase();
+  const reviewFilter = values.review ?? undefined;
+  const filteredServers = useMemo(() => {
+    return servers.filter((server) => {
+      if (!matchesReviewFilter(server, reviewFilter)) return false;
+      if (normalizedSearch.length === 0) return true;
+      return [
+        server.serverName,
+        server.urlHost,
+        server.canonicalServerUrl,
+      ].some((value) => value?.toLowerCase().includes(normalizedSearch));
+    });
+  }, [normalizedSearch, reviewFilter, servers]);
+  const sortedServers = sortTableData(
+    filteredServers,
+    columns,
+    sort,
+  ) as ShadowMCPInventoryServer[];
+  const reviewFilterLabel = REVIEW_FILTER_OPTIONS.find(
+    (option) => option.value === reviewFilter,
+  )?.label;
+  const noResultsMessage =
+    normalizedSearch.length > 0
+      ? `No servers matching “${search.trim()}”`
+      : reviewFilterLabel
+        ? `No servers with review state “${reviewFilterLabel}”`
+        : undefined;
+
+  if (isInitialLoading) {
+    return <SkeletonTable />;
+  }
+
+  if (isInitialError) {
+    return (
+      <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-3 px-4 py-8 text-center">
+        <div className="space-y-1">
+          <Text variant="body" className="font-medium">
+            Shadow MCP inventory could not be loaded
+          </Text>
+          <Text muted small className="max-w-md">
+            It may be a temporary problem. Try again.
+          </Text>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void inventoryQuery.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </div>
+    );
+  }
+
+  if (servers.length === 0) {
+    return <InventoryEmptyState />;
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 shrink flex-col gap-4 overflow-hidden",
+        className,
+      )}
+    >
+      <ReviewRequestSheet
+        request={
+          reviewSheetServer?.approvalRequest
+            ? {
+                id: reviewSheetServer.approvalRequest.id,
+                targetRaw: reviewSheetServer.canonicalServerUrl,
+                requesterCount:
+                  reviewSheetServer.approvalRequest.requesterCount,
+              }
+            : null
+        }
+        open={reviewSheetServer !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReviewSheetServer(null);
+          }
+        }}
+        onDecide={(request) => {
+          setDecideTarget({
+            targetKind: "stdio_command",
+            canonicalServerUrl: request.targetRaw,
+            displayName: request.targetRaw,
+            approvalRequestId: request.id,
+          });
+        }}
+        decideDisabledReason={decideDisabledReason}
+      />
+      <DecideAccessSheet
+        target={decideTarget}
+        open={decideTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDecideTarget(null);
+          }
+        }}
+        disposition={disposition}
+        members={members}
+        roles={roles}
+        onDecided={() => {
+          setCursor(undefined);
+          setPages([]);
+          // A decision handed off from the stdio review sheet resolves that
+          // review; leaving the sheet open underneath would return the admin
+          // to a stale pending view of a request that was just decided.
+          setReviewSheetServer(null);
+        }}
+      />
+      <Page.Toolbar className="shrink-0">
+        <Page.Toolbar.Search
+          onChange={setSearch}
+          placeholder="Search servers..."
+          value={search}
+        />
+        <Page.Toolbar.Filters
+          schema={INVENTORY_FILTERS}
+          values={values}
+          optionsById={{ review: REVIEW_FILTER_OPTIONS }}
+          onChange={setValue as (id: string, value: FilterValue) => void}
+          onClear={clearValue as (id: string) => void}
+          onClearAll={clearAll}
+        />
+      </Page.Toolbar>
+      <Table
+        columns={columns}
+        className="min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto overflow-y-hidden"
+      >
+        <Table.Header columns={columns} sort={sort} onSortChange={setSort} />
+        <Table.Body
+          columns={columns}
+          data={sortedServers}
+          handleLoadMore={loadMoreServers}
+          hasMore={Boolean(nextCursor)}
+          isLoading={isLoadingMore}
+          noResultsMessage={noResultsMessage}
+          onRowClick={openRow}
+          rowKey={(row) => row.canonicalServerUrl}
+          className="min-h-0 content-start overflow-y-auto"
+          renderRow={(row, rowElement) => (
+            <TableRowContextMenu
+              key={row.canonicalServerUrl}
+              actions={[
+                {
+                  label: "Decide access",
+                  onClick: () => openDecide(row),
+                  disabled: policiesUnavailable,
+                  description: decideDisabledReason,
+                },
+              ]}
+            >
+              {rowElement}
+            </TableRowContextMenu>
+          )}
+        />
+      </Table>
+    </div>
+  );
+}

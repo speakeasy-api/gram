@@ -211,6 +211,12 @@ GRAM_DEVIDP_BACKEND = "local"
 ## Points the Speakeasy server at the dev-idp's WorkOS surface. Constant across
 ## backends — the backend flag decides what serves it.
 WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
+# Google hosted-domain lookups for sign-in evidence go to the dev-idp mock.
+GRAM_GOOGLE_USERINFO_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos/google/userinfo"
+## Sign-in tier knobs for the local WorkOS emulator (set in mise.local.toml):
+##   DEVIDP_AUTHENTICATION_METHOD = "SSO" (default) | "GoogleOAuth" | "MicrosoftOAuth" | "MagicAuth" | "Password" | "none"
+##   DEVIDP_IDP_HOSTED_DOMAIN     = managed domain (default: the user's email domain; "none" = personal account)
+##   DEVIDP_IDP_TENANT_ID         = Microsoft tenant (default: a fixed work tenant; "consumer" = personal account)
 ## Real WorkOS API the workos backend proxies to.
 # GRAM_DEVIDP_WORKOS_UPSTREAM_URL = "https://api.workos.com"
 ## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.
