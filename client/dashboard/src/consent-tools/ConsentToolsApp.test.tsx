@@ -525,4 +525,43 @@ describe("parsePrefillBootstrap", () => {
       "github--list_issues",
     ]);
   });
+  it("shows partially selected sources as mixed and counts scope once", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "github--create_issue",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        {
+          name: "github--list_issues",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        { name: "docs--search", _meta: { "gram.dev/source": "Docs" } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({ serverName: "gateway" });
+    await openPicker(user);
+
+    await user.click(screen.getByText("create_issue"));
+    expect(
+      screen
+        .getByRole("checkbox", { name: /GitHub/ })
+        .getAttribute("aria-checked"),
+    ).toBe("mixed");
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Docs/ })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Select all 3/ })
+        .getAttribute("aria-checked"),
+    ).toBe("mixed");
+    expect(
+      screen.getByText(/of 3 tools in scope on gateway/).textContent,
+    ).not.toMatch(/picked/);
+  });
 });
