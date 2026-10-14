@@ -68,15 +68,16 @@ func (s *Service) handleMetaConnectionStatusCall(
 	return bs, nil
 }
 
-// memberSignInStatus classifies one member. A member bound to no sign-in
-// provider (no derived remote_session_issuer) needs no sign-in; otherwise the
-// member's own routing rule decides whether a credential reaches it.
+// memberSignInStatus classifies one member by its own routing rule. A member
+// that receives no credential and is bound to no sign-in provider (no derived
+// remote_session_issuer) needs no sign-in. A remote member can still receive
+// a grant routed by its upstream resource without a derived issuer, so
+// routing runs before that shortcut.
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, string) {
-	if !member.remoteSessionIssuerID.Valid {
-		return metamcp.SignInNotRequired, ""
-	}
-
 	if member.backend == metaMemberBackendHosted {
+		if !member.remoteSessionIssuerID.Valid {
+			return metamcp.SignInNotRequired, ""
+		}
 		tokens, err := hostedMemberTokens(gate.tokens, member)
 		if err != nil {
 			return metamcp.SignInError, memberErrorMessage(err)
@@ -93,10 +94,13 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	if err != nil {
 		return metamcp.SignInError, memberErrorMessage(err)
 	}
-	if dial.anonymous {
-		return metamcp.SignInNotConnected, ""
+	if !dial.anonymous {
+		return metamcp.SignInConnected, ""
 	}
-	return metamcp.SignInConnected, ""
+	if !member.remoteSessionIssuerID.Valid {
+		return metamcp.SignInNotRequired, ""
+	}
+	return metamcp.SignInNotConnected, ""
 }
 
 func memberErrorMessage(err error) string {

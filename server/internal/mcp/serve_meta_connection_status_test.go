@@ -109,6 +109,35 @@ func TestServePublic_MetaEndpoint_ConnectionStatus_GatedReportsPerMemberSignIn(t
 	require.Contains(t, got.text, got.connectURL, "the text fallback must carry the same connect link")
 }
 
+// A remote member bound to no sign-in provider still receives a grant routed
+// by its upstream resource, so it reads connected rather than not required.
+func TestServePublic_MetaEndpoint_ConnectionStatus_RemoteMemberRoutedWithoutIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-status-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	routedURL := "https://routed.example.com/mcp/" + uuid.NewString()
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-routed", routedURL, uuid.NullUUID{}, 0)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member-open", "https://open.example.com/mcp/"+uuid.NewString(), uuid.NullUUID{}, 1)
+
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "status-routed", "", []uuid.UUID{sharedIssuerID})
+	subject := createTestUser(t, ctx, ti, "status-user-"+uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-routed", routedURL)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	got := callConnectionStatus(t, ti, context.Background(), metaSlug, bearer)
+	require.Equal(t, metamcp.SignInConnected, got.statuses["member-routed"])
+	require.Equal(t, metamcp.SignInNotRequired, got.statuses["member-open"])
+}
+
 // tools/list links connection_status to its view, and resources/list and
 // resources/read serve that view as an MCP Apps resource.
 func TestServePublic_MetaEndpoint_ConnectionStatus_ServesMCPAppView(t *testing.T) {
