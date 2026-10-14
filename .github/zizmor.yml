@@ -6,15 +6,10 @@
 # to a commit SHA and every container image to a sha256 digest. Tags are
 # mutable, so a tag pin runs whatever the tag points at today.
 #
-# The audits disabled below each have findings on main. They are off so the
-# pinning rule can land on its own; turn each one back on as its findings are
-# fixed. Audits not listed here are enforced.
+# Every audit is enforced. Where a finding is accepted rather than fixed, the
+# workflow carries a `# zizmor: ignore[...]` comment with the reason.
 rules:
   unpinned-uses:
     config:
       policies:
         "*": hash-pin
-
-  # Findings to burn down.
-  template-injection:
-    disable: true
