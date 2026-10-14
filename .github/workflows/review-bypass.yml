@@ -38,6 +38,12 @@ on:
 
 permissions: {}
 
+# Each run reconciles the PR's current labels and reviews, so a queued run
+# replaced by a newer one loses nothing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   reconcile:
     name: Reconcile bypass approval with label
