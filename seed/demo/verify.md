@@ -558,7 +558,7 @@ that URL.
     - Open a gateway with tools.
     - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
     - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
-    - Restore the gateway default to Progressive. Connections with no override follow it; explicit Direct connections keep their mode.
+    - Select Direct in Inspect and apply/reconnect, then restore the gateway default to Progressive. Confirm the explicit Direct connection stays Direct while a connection using the gateway default follows Progressive.
 
 ## On failure
 

@@ -61,17 +61,28 @@ export function GatewayInspectTab({
 
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedMode = searchParams.get("discovery_mode");
-  const [modeDraft, setModeDraft] = useState<
-    "default" | "direct" | "progressive"
-  >(
+  const urlMode =
     requestedMode === "direct" || requestedMode === "progressive"
       ? requestedMode
-      : "default",
-  );
-  const [connection, setConnection] = useState(() => ({
-    mode: modeDraft,
-    version: crypto.randomUUID(),
-  }));
+      : "default";
+  const [modeDraft, setModeDraft] = useState<
+    "default" | "direct" | "progressive"
+  >(urlMode);
+  // A stable initial version lets the token and inspection caches hit across
+  // visits; only an explicit reconnect mints a fresh one.
+  const [connection, setConnection] = useState<{
+    mode: "default" | "direct" | "progressive";
+    version: string;
+  }>({ mode: urlMode, version: urlMode });
+  const syncKey = `${metaMcpServer.id}:${urlMode}`;
+  const [syncedKey, setSyncedKey] = useState(syncKey);
+  if (syncedKey !== syncKey) {
+    setSyncedKey(syncKey);
+    setModeDraft(urlMode);
+    if (connection.mode !== urlMode) {
+      setConnection({ mode: urlMode, version: urlMode });
+    }
+  }
   function applyMode(mode: "default" | "direct" | "progressive") {
     setSearchParams(
       (current) => {
