@@ -103,19 +103,44 @@ export function pluginServesToolset(
 }
 
 /**
- * The plugin servers that serve skills over MCP: the hosted ones. A server
- * carrying a toolset id is hosted; one carrying only an mcp_servers id is
- * hosted when the index resolves that id to a toolset, and remote otherwise.
- * Without an index, only toolset-keyed servers count.
+ * The plugin servers that serve skills over MCP, split by what the index can
+ * prove. A server carrying a toolset id is hosted. One carrying only an
+ * mcp_servers id is hosted when the index resolves that id to a toolset; an
+ * id the index does not know is unresolved, not remote: the server list is
+ * filtered by the caller's grants, so the row may be a hosted wrapper the
+ * caller cannot view. Without an index every such server is unresolved.
  */
+export type HostedPluginServers<T> = {
+  /** Servers known to be hosted, in plugin order. */
+  servers: T[];
+  /** Servers keyed by an mcp_servers id the caller cannot resolve. */
+  unresolved: T[];
+};
+
 export function hostedPluginServers<T extends ServingPluginServer>(
   servers: T[] | undefined,
   index?: HostedServerIndex,
-): T[] {
-  return (servers ?? []).filter(
-    (server) =>
-      !!server.toolsetId ||
-      (!!server.mcpServerId && !!index?.has(server.mcpServerId)),
+): HostedPluginServers<T> {
+  const result: HostedPluginServers<T> = { servers: [], unresolved: [] };
+  for (const server of servers ?? []) {
+    if (server.toolsetId) {
+      result.servers.push(server);
+    } else if (server.mcpServerId) {
+      if (index?.has(server.mcpServerId)) result.servers.push(server);
+      else result.unresolved.push(server);
+    }
+  }
+  return result;
+}
+
+/** Whether any of the plugins includes a server the caller cannot resolve. */
+export function pluginsHaveUnresolvedServers(
+  plugins: ReadonlyArray<Pick<ServingPlugin, "servers">>,
+  index?: HostedServerIndex,
+): boolean {
+  return plugins.some(
+    (plugin) =>
+      hostedPluginServers(plugin.servers, index).unresolved.length > 0,
   );
 }
 

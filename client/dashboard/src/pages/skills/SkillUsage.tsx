@@ -35,7 +35,7 @@ export default function SkillUsage(): JSX.Element {
               carrying this skill ship it inside the plugin package for everyone
               who installs it
               {skillsOverMcp
-                ? ", and their hosted MCP servers serve it to connected agents."
+                ? ", and plugins with a hosted MCP server also serve it to connected agents."
                 : "."}
             </SettingsSection.Description>
             {skillsOverMcp && (

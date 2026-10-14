@@ -18,7 +18,7 @@ export function usePluginServerQueries({
   >;
   serversQuery: Pick<
     ReturnType<typeof useMcpServers>,
-    "data" | "isLoading" | "error"
+    "data" | "isLoading" | "error" | "refetch"
   >;
   endpointsQuery: Pick<
     ReturnType<typeof useMcpEndpoints>,

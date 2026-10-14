@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
     selectors: Array<Record<string, string>>;
   }>,
   canReadOrg: true,
+  rbacLoading: false,
   plugins: {
     data: undefined as unknown,
     error: null as unknown,
@@ -21,8 +22,11 @@ const state = vi.hoisted(() => ({
     data: undefined as unknown,
     error: null as unknown,
     isLoading: false,
+    refetch: vi.fn(),
   },
   distributions: vi.fn(),
+  fetchNextPage: vi.fn(),
+  refetchDistributions: vi.fn(),
   mutate: vi.fn(),
   picker: vi.fn(),
 }));
@@ -50,13 +54,38 @@ vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-a", slug: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
 }));
-vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/hooks/useRBAC")>()),
-  useRBAC: () => ({
-    grants: state.grants,
-    isLoading: false,
-    hasAnyScope: () => state.canReadOrg,
-  }),
+vi.mock("@/hooks/useRBAC", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/hooks/useRBAC")>();
+  type Scope = Parameters<typeof original.hasScopeInGrants>[1];
+  // Org scopes stand for "may list plugins"; everything else reads the grants
+  // the way the real hook does, so RequireScope sees project-scoped reads.
+  const hasScope = (scope: Scope, resourceId?: string, projectId?: string) =>
+    scope.startsWith("org:")
+      ? state.canReadOrg
+      : original.hasScopeInGrants(
+          state.grants as never,
+          scope,
+          resourceId,
+          projectId,
+        );
+  return {
+    ...original,
+    useRBAC: () => ({
+      grants: state.grants,
+      isLoading: state.rbacLoading,
+      hasScope,
+      hasAnyScope: (scopes: Scope[], resourceId?: string, projectId?: string) =>
+        scopes.some((scope) => hasScope(scope, resourceId, projectId)),
+      hasAllScopes: (
+        scopes: Scope[],
+        resourceId?: string,
+        projectId?: string,
+      ) => scopes.every((scope) => hasScope(scope, resourceId, projectId)),
+    }),
+  };
+});
+vi.mock("@gram/client/react-query/requestAccess.js", () => ({
+  useRequestAccessMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("@/pages/plugins/usePluginServerQueries", () => ({
   usePluginServerQueries: () => ({
@@ -169,10 +198,26 @@ function renderTab(ui: ReactNode = <MCPSkillsTab toolset={toolset} />) {
   );
 }
 
+/** A loaded distributions query with the given pages. */
+function distributionsResult(
+  distributions: ReturnType<typeof distribution>[],
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    data: { pages: [{ result: { distributions } }] },
+    hasNextPage: false,
+    error: null,
+    fetchNextPage: state.fetchNextPage,
+    refetch: state.refetchDistributions,
+    ...overrides,
+  };
+}
+
 afterEach(cleanup);
 beforeEach(() => {
   state.flag = { status: "enabled" };
   state.canReadOrg = true;
+  state.rbacLoading = false;
   state.grants = [
     { scope: "skill:read", selectors: [{ resourceId: "project-a" }] },
   ];
@@ -190,28 +235,21 @@ beforeEach(() => {
     },
     error: null,
     isLoading: false,
+    refetch: vi.fn(),
   };
   state.mutate.mockReset();
   state.picker.mockReset();
-  state.distributions.mockReset().mockReturnValue({
-    data: {
-      pages: [
-        {
-          result: {
-            distributions: [
-              distribution("1", "plugin-a", {
-                lastLoadedOverMcpAt: new Date(Date.now() - 5 * 60_000),
-              }),
-              distribution("2", "plugin-b"),
-              distribution("3", "plugin-c"),
-            ],
-          },
-        },
-      ],
-    },
-    hasNextPage: false,
-    error: null,
-  });
+  state.fetchNextPage.mockReset();
+  state.refetchDistributions.mockReset();
+  state.distributions.mockReset().mockReturnValue(
+    distributionsResult([
+      distribution("1", "plugin-a", {
+        lastLoadedOverMcpAt: new Date(Date.now() - 5 * 60_000),
+      }),
+      distribution("2", "plugin-b"),
+      distribution("3", "plugin-c"),
+    ]),
+  );
 });
 
 describe("MCPSkillsTab", () => {
@@ -237,23 +275,68 @@ describe("MCPSkillsTab", () => {
       error: null,
       isLoading: false,
     };
-    state.distributions.mockReturnValue({
-      data: {
-        pages: [{ result: { distributions: [distribution("4", "plugin-d")] } }],
-      },
-      hasNextPage: false,
-      error: null,
-    });
+    state.distributions.mockReturnValue(
+      distributionsResult([distribution("4", "plugin-d")]),
+    );
     renderTab();
     expect(screen.getByText("Second wrapper")).toBeDefined();
     expect(screen.getByText("Skill 4")).toBeDefined();
   });
 
   it("waits for the server list before deciding membership", () => {
-    state.servers = { data: undefined, error: null, isLoading: true };
+    state.servers = { ...state.servers, data: undefined, isLoading: true };
     renderTab();
     expect(screen.queryByText("Finance tools")).toBeNull();
     expect(screen.queryByText("No plugin includes this server yet")).toBeNull();
+  });
+
+  it("offers a retry when the server list fails instead of deciding membership", () => {
+    state.servers = {
+      ...state.servers,
+      data: undefined,
+      error: new Error("boom"),
+    };
+    renderTab();
+    expect(screen.getByText("Couldn't load MCP servers")).toBeDefined();
+    expect(screen.queryByText("Finance tools")).toBeNull();
+    expect(screen.queryByText("No plugin includes this server yet")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.servers.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a retry when a later distributions page fails", () => {
+    state.distributions.mockReturnValue(
+      distributionsResult([distribution("1", "plugin-a")], {
+        hasNextPage: true,
+        error: new Error("boom"),
+      }),
+    );
+    renderTab();
+    expect(screen.getByText("Couldn't load skills")).toBeDefined();
+    expect(screen.queryByText("Skill 1")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.fetchNextPage).toHaveBeenCalledTimes(1);
+    expect(state.refetchDistributions).not.toHaveBeenCalled();
+  });
+
+  it("refetches from the start when the first distributions page fails", () => {
+    state.distributions.mockReturnValue(
+      distributionsResult([], { data: undefined, error: new Error("boom") }),
+    );
+    renderTab();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.refetchDistributions).toHaveBeenCalledTimes(1);
+    expect(state.fetchNextPage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the skeleton up while the grants load", () => {
+    state.rbacLoading = true;
+    state.canReadOrg = false;
+    const { container } = renderTab();
+    expect(container.querySelector(".skeleton")).not.toBeNull();
+    expect(
+      screen.queryByText("You can't see which plugins include this server"),
+    ).toBeNull();
   });
 
   it("explains itself to a reader who cannot list plugins", () => {
@@ -336,29 +419,73 @@ describe("MCPSkillsTab", () => {
     ).toBe("/plugins");
   });
 
+  it("says so when a plugin includes a server the reader cannot resolve", () => {
+    // The server list is filtered by the reader's grants, so a wrapper of
+    // this toolset they cannot view is unresolved, not proof of absence.
+    state.plugins = {
+      data: {
+        plugins: [
+          otherPlugin,
+          {
+            id: "plugin-e",
+            name: "Hidden wrapper",
+            assignmentCount: 1,
+            servers: [
+              { id: "ps-5", displayName: "Hidden", mcpServerId: "wrapper-9" },
+            ],
+          },
+        ],
+      },
+      error: null,
+      isLoading: false,
+    };
+    renderTab();
+    expect(
+      screen.getByText("No plugin you can see includes this server"),
+    ).toBeDefined();
+    expect(screen.queryByText("No plugin includes this server yet")).toBeNull();
+    expect(
+      screen.getByText("Go to plugins").closest("a")?.getAttribute("href"),
+    ).toBe("/plugins");
+  });
+
   it("names the plugin to distribute to when nothing is served yet", () => {
     state.plugins = {
       data: { plugins: [hostedPlugin] },
       error: null,
       isLoading: false,
     };
-    state.distributions.mockReturnValue({
-      data: { pages: [{ result: { distributions: [] } }] },
-      hasNextPage: false,
-      error: null,
-    });
+    state.distributions.mockReturnValue(distributionsResult([]));
     renderTab();
     expect(screen.getByText("No skills served yet")).toBeDefined();
     expect(
       screen.getByText(/Distribute a skill to Finance tools/),
     ).toBeDefined();
   });
+});
 
-  it("redirects to the overview while the flag is off", () => {
+describe("MCPSkillsTabRoute", () => {
+  it("redirects to the overview while the flag is off, before any scope check", () => {
     state.flag = { status: "disabled" };
+    state.grants = [];
     renderTab(<MCPSkillsTabRoute toolset={toolset} />);
     expect(screen.getByTestId("navigate").textContent).toBe(
       "/mcp/toolset-a/overview",
     );
+    expect(screen.queryByText("Access restricted")).toBeNull();
+  });
+
+  it("opens the tab for a skill reader of this project", () => {
+    renderTab(<MCPSkillsTabRoute toolset={toolset} />);
+    expect(screen.getByText("Finance tools")).toBeDefined();
+  });
+
+  it("walls a reader whose skill access is for another project", () => {
+    state.grants = [
+      { scope: "skill:read", selectors: [{ resourceId: "project-b" }] },
+    ];
+    renderTab(<MCPSkillsTabRoute toolset={toolset} />);
+    expect(screen.getByText("Access restricted")).toBeDefined();
+    expect(screen.queryByText("Finance tools")).toBeNull();
   });
 });

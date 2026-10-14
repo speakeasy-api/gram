@@ -6,6 +6,7 @@ import {
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
+import { useProject } from "@/contexts/Auth";
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -46,6 +47,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   const { toolsetSlug } = useParams<{ toolsetSlug: string }>();
 
   const { data: toolset } = useToolset(toolsetSlug);
+  const project = useProject();
   const { hasScope } = useRBAC();
   const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
   const { data: environmentsData } = useListEnvironments();
@@ -69,7 +71,10 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
   const canViewTeamAccess =
     !!toolset && hasScope("org:read") && hasScope("mcp:read", toolset.id);
-  const canViewSkills = skillsOverMcp && hasScope("skill:read");
+  // Same check as the Skills tab route: skill read on this project, not on
+  // any project.
+  const canViewSkills =
+    skillsOverMcp && hasScope("skill:read", project.id, project.id);
 
   const items: DetailSidebarNavItem[] = [
     {

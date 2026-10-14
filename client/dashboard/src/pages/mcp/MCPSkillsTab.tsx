@@ -1,6 +1,7 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { RequirePluginWrite } from "@/components/require-plugin-write";
+import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import {
   DropdownMenu,
@@ -25,6 +26,7 @@ import {
   groupServedSkillsByPlugin,
   hostedServerIndex,
   pluginServesToolset,
+  pluginsHaveUnresolvedServers,
   type ServedSkillGroup,
 } from "@/pages/skills/mcp-served-skills";
 import { SkillDistributionVersionBadge } from "@/pages/skills/skill-badges";
@@ -53,7 +55,11 @@ type SkillsTabToolset = { id: string; slug: string; name: string };
 /**
  * The route behind the Skills tab. The tab only exists while skills over MCP
  * is on for the organization; a direct link with the flag off lands on the
- * overview instead of an empty page.
+ * overview instead of an empty page. The flag is decided before the scope so
+ * a reader without skill access is redirected, not walled, while it is off.
+ * Served skills are plugin distributions, which skill readers of this project
+ * may list (the same gate as the Skills page); adding and removing is gated
+ * per control on plugin write.
  */
 export function MCPSkillsTabRoute({
   toolset,
@@ -61,10 +67,20 @@ export function MCPSkillsTabRoute({
   toolset: SkillsTabToolset;
 }): JSX.Element {
   const routes = useRoutes();
+  const project = useProject();
   const flag = useFeatureFlag(FEATURE_FLAGS.skillsOverMcp);
   switch (flag.status) {
     case "enabled":
-      return <MCPSkillsTab toolset={toolset} />;
+      return (
+        <RequireScope
+          scope="skill:read"
+          resourceId={project.id}
+          projectId={project.id}
+          level="page"
+        >
+          <MCPSkillsTab toolset={toolset} />
+        </RequireScope>
+      );
     case "loading":
       return <SkeletonTable />;
     case "disabled":
@@ -123,6 +139,13 @@ export function MCPSkillsTab({
         pluginServesToolset(plugin, toolset.id, hostedIndex),
       ),
     [pluginsQuery.plugins, toolset.id, hostedIndex],
+  );
+  // A plugin server keyed by an mcp_servers id the list does not resolve may
+  // be a wrapper of this toolset the reader cannot view, so an empty
+  // membership is not proof that no plugin includes the server.
+  const hasUnresolvedServers = useMemo(
+    () => pluginsHaveUnresolvedServers(pluginsQuery.plugins ?? [], hostedIndex),
+    [pluginsQuery.plugins, hostedIndex],
   );
 
   // Every distribution in the project, then grouped under the plugins that
@@ -216,8 +239,20 @@ export function MCPSkillsTab({
     onRemove: handleRemove,
   });
 
+  const goToPlugins = (
+    <routes.plugins.Link>
+      <Button size="sm" variant="secondary">
+        Go to plugins
+      </Button>
+    </routes.plugins.Link>
+  );
+
   let body: JSX.Element;
-  if (!pluginsQuery.canReadPlugins) {
+  if (pluginsQuery.isPermissionLoading) {
+    // Whether the reader may list plugins is unknown until the grants load;
+    // deciding denial now would flash the locked state at every reader.
+    body = <SkeletonTable />;
+  } else if (!pluginsQuery.canReadPlugins) {
     // Skill read opens the tab, but which plugins include the server is a
     // plugin listing, which needs organization read or plugin write.
     body = (
@@ -240,7 +275,29 @@ export function MCPSkillsTab({
         }
       />
     );
-  } else if (distributionsQuery.error && !distributionsQuery.data) {
+  } else if (canReadServers && serversQuery.error && !serversQuery.data) {
+    // Without the server list, plugins that include this server through a
+    // non-canonical wrapper would silently vanish from the membership.
+    body = (
+      <InlineEmptyState
+        icon="triangle-alert"
+        heading="Couldn't load MCP servers"
+        description="The list that tells which plugins include this server could not be loaded."
+        action={
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void serversQuery.refetch()}
+          >
+            Retry
+          </Button>
+        }
+      />
+    );
+  } else if (distributionsQuery.error) {
+    // Any failed page, not only the first: a later page's failure keeps the
+    // loaded pages, stops the drain and would otherwise leave the skeleton
+    // up for good.
     body = (
       <InlineEmptyState
         icon="triangle-alert"
@@ -250,7 +307,11 @@ export function MCPSkillsTab({
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => void distributionsQuery.refetch()}
+            onClick={() =>
+              void (distributionsQuery.data && distributionsQuery.hasNextPage
+                ? distributionsQuery.fetchNextPage()
+                : distributionsQuery.refetch())
+            }
           >
             Retry
           </Button>
@@ -264,19 +325,22 @@ export function MCPSkillsTab({
     !isMembershipLoaded
   ) {
     body = <SkeletonTable />;
+  } else if (servingPlugins.length === 0 && hasUnresolvedServers) {
+    body = (
+      <InlineEmptyState
+        icon="puzzle"
+        heading="No plugin you can see includes this server"
+        description="Some plugins include MCP servers you can't view, and one of them may be this server. Skills reach agents through plugins: add this server to a plugin, then distribute skills to that plugin."
+        action={goToPlugins}
+      />
+    );
   } else if (servingPlugins.length === 0) {
     body = (
       <InlineEmptyState
         icon="puzzle"
         heading="No plugin includes this server yet"
         description="Skills reach agents through plugins. Add this server to a plugin, then distribute skills to that plugin."
-        action={
-          <routes.plugins.Link>
-            <Button size="sm" variant="secondary">
-              Go to plugins
-            </Button>
-          </routes.plugins.Link>
-        }
+        action={goToPlugins}
       />
     );
   } else if (servedCount === 0) {

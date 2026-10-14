@@ -232,7 +232,10 @@ function useServedOverMcp(): ServedOverMcp {
 /**
  * One line under the plugin name naming the hosted MCP servers that serve the
  * skill to agents, each linked to its server page. A plugin with no hosted
- * server says so, since adding one is what turns serving on.
+ * server says so, since adding one is what turns serving on. A server the
+ * caller cannot resolve (the server list is filtered by their grants) is
+ * counted rather than taken as remote, so the line never denies serving it
+ * cannot see.
  */
 function ServedOverMcpLine({
   pluginId,
@@ -248,11 +251,18 @@ function ServedOverMcpLine({
   }
   const plugin = served.pluginsById.get(pluginId);
   if (!plugin) return null;
-  const servers = hostedPluginServers(plugin.servers, served.hostedIndex);
+  const { servers, unresolved } = hostedPluginServers(
+    plugin.servers,
+    served.hostedIndex,
+  );
+  const hiddenCount = unresolved.length;
+  const hiddenNoun = hiddenCount === 1 ? "server" : "servers";
   if (servers.length === 0) {
     return (
       <Text small muted className="block text-xs">
-        Not served over MCP: this plugin includes no hosted MCP server.
+        {hiddenCount > 0
+          ? `May be served over MCP: this plugin includes ${hiddenCount} MCP ${hiddenNoun} you can't view.`
+          : "Not served over MCP: this plugin includes no hosted MCP server."}
       </Text>
     );
   }
@@ -283,6 +293,7 @@ function ServedOverMcpLine({
           </span>
         );
       })}
+      {hiddenCount > 0 && `, and ${hiddenCount} ${hiddenNoun} you can't view`}
     </Text>
   );
 }

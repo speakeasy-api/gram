@@ -6,6 +6,7 @@ import {
   hostedServerIndex,
   pluginServerServesToolset,
   pluginServesToolset,
+  pluginsHaveUnresolvedServers,
   servedSkillDigest,
   shortServedSkillDigest,
 } from "./mcp-served-skills";
@@ -141,31 +142,85 @@ describe("hostedPluginServers", () => {
     { id: "s2", displayName: "Hosted by wrapper", mcpServerId: "toolset-b" },
     { id: "s3", displayName: "Remote", mcpServerId: "remote-1" },
   ];
+  const ids = (list: { id: string }[]) => list.map((s) => s.id);
 
-  it("keeps toolset-keyed servers without an index", () => {
-    expect(hostedPluginServers(servers).map((s) => s.id)).toEqual(["s1"]);
+  it("keeps toolset-keyed servers and leaves the rest unresolved without an index", () => {
+    const result = hostedPluginServers(servers);
+    expect(ids(result.servers)).toEqual(["s1"]);
+    expect(ids(result.unresolved)).toEqual(["s2", "s3"]);
   });
 
   it("also keeps wrapper-keyed servers the index resolves", () => {
-    expect(
-      hostedPluginServers(
-        servers,
-        hostedServerIndex(undefined, [toolsetId, "toolset-b"]),
-      ).map((s) => s.id),
-    ).toEqual(["s1", "s2"]);
-    expect(
-      hostedPluginServers(
-        [
-          ...servers,
-          { id: "s4", displayName: "Wrapper", mcpServerId: "wrapper-2" },
-        ],
-        hostedServerIndex(mcpServers),
-      ).map((s) => s.id),
-    ).toEqual(["s1", "s4"]);
+    const byToolsets = hostedPluginServers(
+      servers,
+      hostedServerIndex(undefined, [toolsetId, "toolset-b"]),
+    );
+    expect(ids(byToolsets.servers)).toEqual(["s1", "s2"]);
+    expect(ids(byToolsets.unresolved)).toEqual(["s3"]);
+    const byServers = hostedPluginServers(
+      [
+        ...servers,
+        { id: "s4", displayName: "Wrapper", mcpServerId: "wrapper-2" },
+      ],
+      hostedServerIndex(mcpServers),
+    );
+    expect(ids(byServers.servers)).toEqual(["s1", "s4"]);
+    expect(ids(byServers.unresolved)).toEqual(["s2", "s3"]);
+  });
+
+  it("does not take an unindexed id as remote", () => {
+    // The caller may lack the grant to view a hosted wrapper, so the row is
+    // reported as unresolved rather than dropped.
+    const result = hostedPluginServers(
+      [{ id: "s5", displayName: "Hidden wrapper", mcpServerId: "wrapper-9" }],
+      hostedServerIndex(mcpServers),
+    );
+    expect(result.servers).toEqual([]);
+    expect(ids(result.unresolved)).toEqual(["s5"]);
   });
 
   it("returns nothing for an undefined list", () => {
-    expect(hostedPluginServers(undefined)).toEqual([]);
+    expect(hostedPluginServers(undefined)).toEqual({
+      servers: [],
+      unresolved: [],
+    });
+  });
+});
+
+describe("pluginsHaveUnresolvedServers", () => {
+  const index = hostedServerIndex(mcpServers);
+
+  it("is true when any plugin includes a server the index cannot resolve", () => {
+    expect(
+      pluginsHaveUnresolvedServers(
+        [
+          { servers: [{ id: "s1", displayName: "Hosted", toolsetId }] },
+          {
+            servers: [
+              { id: "s2", displayName: "Hidden", mcpServerId: "wrapper-9" },
+            ],
+          },
+        ],
+        index,
+      ),
+    ).toBe(true);
+  });
+
+  it("is false when every server resolves or carries a toolset id", () => {
+    expect(
+      pluginsHaveUnresolvedServers(
+        [
+          { servers: [{ id: "s1", displayName: "Hosted", toolsetId }] },
+          {
+            servers: [
+              { id: "s2", displayName: "Wrapper", mcpServerId: "wrapper-2" },
+            ],
+          },
+          {},
+        ],
+        index,
+      ),
+    ).toBe(false);
   });
 });
 

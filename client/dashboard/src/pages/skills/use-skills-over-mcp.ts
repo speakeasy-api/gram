@@ -22,8 +22,12 @@ export function useSkillsOverMcpEnabled(): boolean {
  * write, so the query stays off for readers who lack both rather than failing.
  */
 export function useProjectPluginsWithServers(enabled = true): {
+  /** False until the grants have loaded and allow listing plugins. */
   canReadPlugins: boolean;
   plugins: Plugin[] | undefined;
+  /** Grants still loading, so canReadPlugins is not yet decided. */
+  isPermissionLoading: boolean;
+  /** Permission or plugin list still loading; never a settled denial. */
   isLoading: boolean;
   error: unknown;
   refetch: () => void;
@@ -42,10 +46,13 @@ export function useProjectPluginsWithServers(enabled = true): {
   });
   // A disabled query can still expose a previous identity's cache; never hand
   // that to the page after authorization is lost.
+  const isPermissionLoading = enabled && isLoadingGrants;
   return {
     canReadPlugins,
     plugins: canReadPlugins ? query.data?.plugins : undefined,
-    isLoading: enabled && canReadPlugins && query.isLoading,
+    isPermissionLoading,
+    isLoading:
+      isPermissionLoading || (enabled && canReadPlugins && query.isLoading),
     error: query.error,
     refetch: () => void query.refetch(),
   };

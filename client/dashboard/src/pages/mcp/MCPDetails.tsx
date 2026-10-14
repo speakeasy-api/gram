@@ -231,13 +231,9 @@ function renderMcpDetailTabContent(
     case "prompts":
       return <MCPPromptsTab toolset={toolset} />;
     case "skills":
-      // Served skills are plugin distributions, which skill readers may list;
-      // adding and removing is gated per control on plugin write.
-      return (
-        <RequireScope scope="skill:read" level="page">
-          <MCPSkillsTabRoute toolset={toolset} />
-        </RequireScope>
-      );
+      // The route decides the flag before the scope, so a disabled tab always
+      // redirects; it gates skill read on this project itself.
+      return <MCPSkillsTabRoute toolset={toolset} />;
     case "authentication":
       return (
         <RequireScope scope="mcp:write" level="page">
