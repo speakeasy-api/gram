@@ -35,8 +35,9 @@ const (
 	// can shorten it to preserve checkpoint and response headroom.
 	verdictBudget = 9 * time.Second
 	// scanConcurrency bounds how many inputs of one transcript are evaluated
-	// at once.
-	scanConcurrency = 4
+	// at once. The inputs share one enforcement plan, so the policy, grant
+	// and exclusion reads do not grow with it.
+	scanConcurrency = 8
 	// checkpointBudget bounds the marker write that follows scanning.
 	checkpointBudget = 500 * time.Millisecond
 	// responseBudget reserves time to serialize the verdict after checkpointing.
@@ -109,7 +110,7 @@ func NewService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgx
 // Process archives attempts independently of enforcement. Only a successfully
 // evaluated checkpoint can exempt historical content from another scan.
 func (s *Service) Process(ctx context.Context, config Config, frame Frame) (Verdict, error) {
-	ctx = policyflags.WithRequestMemo(ctx)
+	ctx = risk.WithEnforcementPlanMemo(policyflags.WithRequestMemo(ctx))
 	duration := verdictBudget
 	if deadline, ok := ctx.Deadline(); ok {
 		duration = min(duration, time.Until(deadline)-checkpointBudget-responseBudget)

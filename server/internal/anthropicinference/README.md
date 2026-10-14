@@ -138,6 +138,14 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   use separate rows so background policies retain their native scope. Attachments
   are stored as `prompt_attachment` content parts, atomically with their parent.
   These rows still count as one incoming message for append-by-count storage.
+- Only enforcing (block, warn, quarantine) policies are evaluated before the
+  verdict. Flag policies never run on this path; they evaluate the archived
+  messages in the background analysis the shared writer enqueues. Every input
+  of one request shares a single enforcement plan, resolved once on first use:
+  the applicable policies with their audience grants, compiled detection
+  scopes, exclusions, and engine flags. Policy edits made during a request
+  take effect on the next delivery, and the checkpoint's revision recheck
+  still refuses to accept a frame scanned against a changed configuration.
 - Stored messages also enter the shared writer's analysis pipeline. Transcript
   capture is synchronous: a storage or outer policy-scanner error returns a
   generic HTTP-200 deny verdict. Suppressed per-policy analyzer failures retain
