@@ -1351,7 +1351,7 @@ type resourceDisplayOwner struct {
 	upstreams map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow
 }
 
-func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint) *resourceDisplayOwner {
+func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) *resourceDisplayOwner {
 	return &resourceDisplayOwner{
 		endpoint: endpoint,
 		load: func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
@@ -1360,10 +1360,19 @@ func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint) *resour
 				if err != nil {
 					return nil, fmt.Errorf("list organization proxied MCP server resources: %w", err)
 				}
-				surface := requestNetworkSurface(ctx)
+				// Only servers the subject reaches lend a card their resource;
+				// another server's would say it exists.
+				members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+				if err != nil {
+					return nil, err
+				}
+				admitted := make(map[uuid.UUID]bool, len(members))
+				for _, member := range members {
+					admitted[member.serverID] = true
+				}
 				converted := make([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, 0, len(rows))
 				for _, row := range rows {
-					if servableOnSurface(row.McpServerNetworkAccessMode, surface) {
+					if admitted[row.McpServerID] {
 						converted = append(converted, metamcprepo.ListMetaMCPProxiedMemberResourcesRow(row))
 					}
 				}
@@ -1488,7 +1497,7 @@ func (s *Service) buildRemoteSessionCards(
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
-	owner := s.newResourceDisplayOwner(endpoint)
+	owner := s.newResourceDisplayOwner(endpoint, challengeState)
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
 		unroutable := hasSession && state.Status == remotesessions.RemoteSessionActive && routing.unroutable(c, state.Resource)

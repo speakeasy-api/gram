@@ -385,6 +385,7 @@ ORDER BY s.project_id, s.slug;
 -- caller matches against a card's client and the request's surface.
 SELECT
     s.remote_session_issuer_id,
+    s.id AS mcp_server_id,
     s.project_id AS project_id,
     s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
@@ -415,6 +416,7 @@ ORDER BY s.project_id, s.slug;
 -- read.
 SELECT
     s.remote_session_issuer_id,
+    s.id AS mcp_server_id,
     s.project_id AS project_id,
     s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url

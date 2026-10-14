@@ -890,6 +890,7 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 const listMetaMCPProxiedMemberResources = `-- name: ListMetaMCPProxiedMemberResources :many
 SELECT
     s.remote_session_issuer_id,
+    s.id AS mcp_server_id,
     s.project_id AS project_id,
     s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
@@ -923,6 +924,7 @@ type ListMetaMCPProxiedMemberResourcesParams struct {
 
 type ListMetaMCPProxiedMemberResourcesRow struct {
 	RemoteSessionIssuerID      uuid.NullUUID
+	McpServerID                uuid.UUID
 	ProjectID                  uuid.UUID
 	McpServerNetworkAccessMode pgtype.Text
 	UpstreamUrl                string
@@ -943,6 +945,7 @@ func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg Lis
 		var i ListMetaMCPProxiedMemberResourcesRow
 		if err := rows.Scan(
 			&i.RemoteSessionIssuerID,
+			&i.McpServerID,
 			&i.ProjectID,
 			&i.McpServerNetworkAccessMode,
 			&i.UpstreamUrl,
@@ -1134,6 +1137,7 @@ func (q *Queries) ListOrganizationMCPServersForRemoteSessionIssuer(ctx context.C
 const listOrganizationProxiedMCPServerResources = `-- name: ListOrganizationProxiedMCPServerResources :many
 SELECT
     s.remote_session_issuer_id,
+    s.id AS mcp_server_id,
     s.project_id AS project_id,
     s.network_access_mode AS mcp_server_network_access_mode,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
@@ -1160,6 +1164,7 @@ ORDER BY s.project_id, s.slug
 
 type ListOrganizationProxiedMCPServerResourcesRow struct {
 	RemoteSessionIssuerID      uuid.NullUUID
+	McpServerID                uuid.UUID
 	ProjectID                  uuid.UUID
 	McpServerNetworkAccessMode pgtype.Text
 	UpstreamUrl                string
@@ -1180,6 +1185,7 @@ func (q *Queries) ListOrganizationProxiedMCPServerResources(ctx context.Context,
 		var i ListOrganizationProxiedMCPServerResourcesRow
 		if err := rows.Scan(
 			&i.RemoteSessionIssuerID,
+			&i.McpServerID,
 			&i.ProjectID,
 			&i.McpServerNetworkAccessMode,
 			&i.UpstreamUrl,

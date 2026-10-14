@@ -131,12 +131,14 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
-12a. **Organization gateway** — open **MCP** (`/mcp`). The title row shows
-**Connect all servers**, because `acme-workforce` is the organization's only
-organization-wide authorization server. Clicking it opens **Connect all your
-servers at once** with the URL `<server>/mcp/gateway/acme-demo` and a copy
-button; `organizations.getGateway` in the network panel returns
-`available: true` with that URL.
+12a. **Organization gateway** — open **MCP** (`/<org>/projects/default/mcp`).
+The title row shows **Connect all servers**, because `acme-workforce` is the
+organization's only organization-wide authorization server. Clicking it opens
+**Connect all your servers at once** with the URL `<server>/mcp/gateway/<org>`
+and a copy button, where `<org>` is the organization's slug (`acme-demo` in the
+demo org, your own org's slug after `mise run seed`);
+`organizations.getGateway` in the network panel returns `available: true` with
+that URL.
 
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this

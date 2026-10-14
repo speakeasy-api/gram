@@ -361,18 +361,12 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 		if err != nil {
 			return nil, fmt.Errorf("list organization remote session clients: %w", err)
 		}
-		if len(clients) == 0 || challengeState.Subject == nil {
+		if len(clients) == 0 {
 			return nil, nil
 		}
-		// A session id keeps RBAC enforced: a context without one reads as an
-		// internal call.
-		memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
 		if err != nil {
-			return nil, fmt.Errorf("stamp consent subject context: %w", err)
-		}
-		_, members, err := s.resolveOrganizationMemberSnapshot(memberCtx, s.logger, endpoint.OrganizationID)
-		if err != nil {
-			return nil, fmt.Errorf("resolve organization gateway members: %w", err)
+			return nil, err
 		}
 		reachable := make([]remotesessions.Client, 0, len(clients))
 		for _, client := range clients {
@@ -387,6 +381,25 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
 	return clients, nil
+}
+
+// consentSubjectMembers resolves the organization gateway members the
+// challenge's subject is admitted to, as its runtime requests will be.
+func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]metaMember, error) {
+	if challengeState.Subject == nil {
+		return nil, nil
+	}
+	// A session id keeps RBAC enforced: a context without one reads as an
+	// internal call.
+	memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+	if err != nil {
+		return nil, fmt.Errorf("stamp consent subject context: %w", err)
+	}
+	_, members, err := s.resolveOrganizationMemberSnapshot(memberCtx, s.logger, endpoint.OrganizationID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve organization gateway members: %w", err)
+	}
+	return members, nil
 }
 
 // clientServesAnyMember reports whether a client authenticates for at least
