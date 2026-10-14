@@ -26,6 +26,10 @@ import (
 // it comes from, so the picker can group a gateway's tools by source.
 const consentToolSourceMetaKey = "gram.dev/source"
 
+// consentUnavailableSourcesMetaKey names the gateway members whose tools
+// could not be listed, usually because their upstream is not connected yet.
+const consentUnavailableSourcesMetaKey = "gram.dev/unavailableSources"
+
 // serveConsentGatewayMCP answers the consent method surface for a gateway:
 // Speakeasy is the MCP server, so the whole inventory is one page of
 // member-qualified tools, resolved through the same member catalogs the
@@ -70,7 +74,7 @@ func (s *Service) serveConsentGatewayMCP(w http.ResponseWriter, r *http.Request,
 	case mcpversions.MethodPing:
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{}, nil)
 	case mcpversions.MethodToolsList:
-		tools, err := s.enumerateGatewayConsentInventory(w, r, endpoint, challengeState)
+		tools, unavailable, err := s.enumerateGatewayConsentInventory(w, r, endpoint, challengeState)
 		if err != nil {
 			return err
 		}
@@ -80,7 +84,11 @@ func (s *Service) serveConsentGatewayMCP(w http.ResponseWriter, r *http.Request,
 			}
 			return oops.E(oops.CodeInvalid, aerr, "the tool inventory could not be captured").LogWarn(ctx, logger)
 		}
-		return writeConsentJSONRPCResult(w, req.ID, map[string]any{"tools": consentWireTools(tools)}, cacheHintsCallerVarying)
+		result := map[string]any{"tools": consentWireTools(tools)}
+		if len(unavailable) > 0 {
+			result["_meta"] = map[string]any{consentUnavailableSourcesMetaKey: unavailable}
+		}
+		return writeConsentJSONRPCResult(w, req.ID, result, cacheHintsCallerVarying)
 	default:
 		return writeConsentJSONRPCError(w, req.ID, proxy.RejectCodeMethodNotFound, "method is not available on the consent transport")
 	}
@@ -89,40 +97,42 @@ func (s *Service) serveConsentGatewayMCP(w http.ResponseWriter, r *http.Request,
 // enumerateGatewayConsentInventory resolves the gateway's tools as the
 // consenting subject's session will see them: the subject's upstream
 // credentials, RBAC, and member visibility all apply, with no tool selection.
-func (s *Service) enumerateGatewayConsentInventory(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]consentInventoryTool, error) {
+// Members that cannot be listed yet are named rather than failing the page,
+// so their tools are simply not offered.
+func (s *Service) enumerateGatewayConsentInventory(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]consentInventoryTool, []string, error) {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 	subject := *challengeState.Subject
 
 	private := !endpoint.IsPublic
 	if private && subject.Kind == urn.SessionSubjectKindAnonymous {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
 
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
 		switch {
 		case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
-			return nil, remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+			return nil, nil, remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
 		case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
-			return nil, clientCredentialMisconfiguredError(err).LogWarn(ctx, logger)
+			return nil, nil, clientCredentialMisconfiguredError(err).LogWarn(ctx, logger)
 		case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
-			return nil, oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
 		case errors.Is(err, remotesessions.ErrNoValidToken):
-			return nil, oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
 		default:
-			return nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 		}
 	}
 
 	sessionID := "consent:" + challengeState.ID
 	ctx, err = s.contextForSessionSubject(ctx, endpoint, subject, sessionID, challengeState.ClientID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "stamp consent subject context").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "stamp consent subject context").LogError(ctx, logger)
 	}
 	if private {
 		if _, ok := contextvalues.GetAuthContext(ctx); !ok {
-			return nil, oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
 		}
 	}
 	// Discovery identity belongs to the user who authenticated this challenge.
@@ -135,11 +145,11 @@ func (s *Service) enumerateGatewayConsentInventory(w http.ResponseWriter, r *htt
 	}
 	if s.authz != nil && private {
 		if ctx, err = s.authz.PrepareContext(ctx); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load access grants for consent inventory").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "load access grants for consent inventory").LogError(ctx, logger)
 		}
 		connectResourceID := endpoint.connectResourceID()
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())); err != nil {
-			return nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, connectResourceID.String(), endpoint.Slug)))
+			return nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, connectResourceID.String(), endpoint.Slug)))
 		}
 	}
 
@@ -172,9 +182,10 @@ func (s *Service) enumerateGatewayConsentInventory(w http.ResponseWriter, r *htt
 		// The agent or workload actor rides on ctx; the gate has no field for it.
 	}
 
-	inventory, err := s.collectGatewayTools(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID, gate)
+	unavailable := []string{}
+	inventory, err := s.collectGatewayTools(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID, gate, &unavailable)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	tools := make([]consentInventoryTool, 0, len(inventory))
 	for _, tool := range inventory {
@@ -184,7 +195,7 @@ func (s *Service) enumerateGatewayConsentInventory(w http.ResponseWriter, r *htt
 			Source:      conv.Default(tool.member.name, tool.member.slug),
 		})
 	}
-	return tools, nil
+	return tools, unavailable, nil
 }
 
 // consentAnnotationsFromEntry keeps only explicitly true hints, the same

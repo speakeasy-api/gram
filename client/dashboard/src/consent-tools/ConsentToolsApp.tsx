@@ -53,6 +53,12 @@ function displayName(tool: ConsentTool): string {
     : tool.name;
 }
 
+/** Joins names as "A", "A and B", or "A, B and C". */
+function listNames(names: string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 /** Groups tools by source, keeping each source in first-seen order. */
 function toolsBySource(tools: ConsentTool[]): [string, ConsentTool[]][] {
   const sections = new Map<string, ConsentTool[]>();
@@ -61,6 +67,9 @@ function toolsBySource(tools: ConsentTool[]): [string, ConsentTool[]][] {
     const section = sections.get(source);
     if (section) section.push(tool);
     else sections.set(source, [tool]);
+  }
+  for (const section of sections.values()) {
+    section.sort((a, b) => displayName(a).localeCompare(displayName(b)));
   }
   return [...sections];
 }
@@ -75,6 +84,8 @@ interface RoleHiddenTools {
 interface ConsentInventory {
   tools: ConsentTool[];
   roleHiddenTools: RoleHiddenTools;
+  /** Gateway servers whose tools could not be listed, e.g. not yet connected. */
+  unavailableSources: string[];
 }
 
 type ConsentPhase =
@@ -172,6 +183,7 @@ async function fetchConsentInventory(
     const tools: ConsentTool[] = [];
     const seen = new Set<string>();
     const roleHiddenTools: RoleHiddenTools = { count: 0, names: [] };
+    const unavailableSources: string[] = [];
     let cursor: string | undefined = undefined;
     do {
       const page = await client.listTools(cursor ? { cursor } : undefined);
@@ -199,9 +211,17 @@ async function fetchConsentInventory(
           }
         }
       }
+      const unavailable = meta?.["gram.dev/unavailableSources"];
+      if (Array.isArray(unavailable)) {
+        for (const source of unavailable) {
+          if (typeof source === "string" && source !== "") {
+            unavailableSources.push(source);
+          }
+        }
+      }
       cursor = page.nextCursor;
     } while (cursor);
-    return { tools, roleHiddenTools };
+    return { tools, roleHiddenTools, unavailableSources };
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);
@@ -733,6 +753,16 @@ export function ConsentToolsApp({
             </div>
           </div>
         </div>
+      )}
+      {mode === "specific" && phase.inventory.unavailableSources.length > 0 && (
+        <p className="text-muted-foreground text-xs">
+          {listNames(phase.inventory.unavailableSources)}{" "}
+          {phase.inventory.unavailableSources.length === 1 ? "isn't" : "aren't"}{" "}
+          connected yet, so{" "}
+          {phase.inventory.unavailableSources.length === 1 ? "its" : "their"}{" "}
+          tools can't be chosen here. Choose All tools to include them once
+          connected.
+        </p>
       )}
       {phase.inventory.roleHiddenTools.count > 0 && (
         <RoleHiddenNote hidden={phase.inventory.roleHiddenTools} />

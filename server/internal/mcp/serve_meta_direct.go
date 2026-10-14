@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -71,10 +72,12 @@ type gatewayTool struct {
 }
 
 // collectGatewayTools resolves every member's permission-filtered catalog
-// under gateway-qualified names. Members the caller cannot see, cannot reach
-// or has not connected are skipped, as Progressive does; any other member
-// failure, or a malformed member catalog, fails the whole inventory.
-func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, metaServerID, projectID uuid.UUID, gate *metaGateContext) ([]gatewayTool, error) {
+// under gateway-qualified names. Members the caller cannot see are skipped,
+// as are members it cannot reach or has not connected, as Progressive does.
+// Any other member failure fails the whole inventory, unless unavailable is
+// non-nil: then a member that cannot be listed right now is skipped and its
+// name is appended there.
+func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, metaServerID, projectID uuid.UUID, gate *metaGateContext, unavailable *[]string) ([]gatewayTool, error) {
 	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, metaServerID, projectID)
 	if err != nil {
 		return nil, err
@@ -89,13 +92,20 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
 				continue
 			}
-			if _, ok := errors.AsType[*metaMemberError](err); ok {
+			if _, memberErr := errors.AsType[*metaMemberError](err); memberErr || unavailable != nil {
 				logger.WarnContext(ctx, "gateway member tools unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+				if unavailable != nil {
+					*unavailable = append(*unavailable, conv.Default(member.name, member.slug))
+				}
 				continue
 			}
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
 		}
 		if catalog.incomplete {
+			if unavailable != nil {
+				*unavailable = append(*unavailable, conv.Default(member.name, member.slug))
+				continue
+			}
 			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again").LogWarn(ctx, logger)
 		}
 		for _, entry := range catalog.entries {
@@ -128,7 +138,7 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	if len(params.Cursor) > 512 {
 		return nil, oops.E(oops.CodeInvalid, nil, "invalid tool listing cursor")
 	}
-	inventory, err := s.collectGatewayTools(ctx, logger, server.ID, endpoint.ProjectID, gate)
+	inventory, err := s.collectGatewayTools(ctx, logger, server.ID, endpoint.ProjectID, gate, nil)
 	if err != nil {
 		return nil, err
 	}

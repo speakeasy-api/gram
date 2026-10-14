@@ -495,12 +495,16 @@ describe("parsePrefillBootstrap", () => {
         },
         { name: "docs--search", _meta: { "gram.dev/source": "Docs" } },
       ],
+      _meta: { "gram.dev/unavailableSources": ["Linear", "Slack"] },
       nextCursor: undefined,
     });
     const user = userEvent.setup();
     renderApp({ serverName: "gateway" });
     await openPicker(user);
 
+    expect(
+      screen.getByText(/Linear and Slack aren't connected yet/),
+    ).toBeTruthy();
     expect(screen.getByRole("group", { name: "GitHub" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Docs" })).toBeTruthy();
     expect(screen.getByText("create_issue")).toBeTruthy();
