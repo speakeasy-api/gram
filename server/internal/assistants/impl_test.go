@@ -468,7 +468,7 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 	require.NoError(t, err)
 	serverURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
-	resolved := resolveAssistantMCPServers(t.Context(), testenv.NewLogger(t), serverURL, nil, rows[assistantID], nil)
+	resolved := resolveAssistantMCPServers(t.Context(), testenv.NewLogger(t), serverURL, rows[assistantID], nil)
 	require.Len(t, resolved, 1)
 	require.Equal(t, "external-remote-mcp-xyz", resolved[0].ID)
 	require.Equal(t, "https://gram.test/mcp/team-remote-mcp", resolved[0].URL)
@@ -542,7 +542,7 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 		tx := testenv.BeginTx(t, t.Context(), conn)
 		_, resolveErr := svc.core.resolveMcpServerRefsForWrite(t.Context(), tx, projectID, []*types.AssistantMCPServerRef{
 			{McpServerSlug: tt.slug, EnvironmentSlug: nil},
-		})
+		}, nil)
 		require.NoError(t, tx.Rollback(t.Context()))
 		require.ErrorContains(t, resolveErr, tt.wantErr)
 
@@ -595,7 +595,6 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		authz:    authzEngine,
 		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn)),
 		signaler: &stubWorkflowSignaler{signalledThreads: nil},
-		features: identityFlags(true),
 	}
 
 	sessionID := "session-test"

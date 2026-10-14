@@ -12,6 +12,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// ProviderAuthorizationIdentityChaining is the absence recorded when a usable
+// chained credential, not an interactive session, authorizes the caller.
+const ProviderAuthorizationIdentityChaining = "identity_chaining"
+
 const (
 	providerAuthorizationFingerprintDomain = "platform-mcp-provider-authorization-v1"
 	assistantReadinessFingerprintDomain    = "platform-mcp-assistant-readiness-v1"
@@ -110,11 +114,11 @@ func ProviderAuthorizationFingerprint(identity ProviderAuthorizationIdentity) (s
 		payload += ProviderAuthorizationClientCredential + "\x00" +
 			identity.RemoteSessionClientID.String() + "\x00" +
 			identity.RemoteSessionIssuerID.String()
-	case "no_client", "no_session", "anonymous":
+	case "no_client", "no_session", "anonymous", ProviderAuthorizationIdentityChaining:
 		if identity.RemoteSessionID != uuid.Nil || !identity.RemoteSessionUpdatedAt.IsZero() || identity.RemoteSessionClientID != uuid.Nil {
 			return "", ErrReadinessInvalid
 		}
-		if identity.Absence == "no_session" && identity.RemoteSessionIssuerID == uuid.Nil {
+		if (identity.Absence == "no_session" || identity.Absence == ProviderAuthorizationIdentityChaining) && identity.RemoteSessionIssuerID == uuid.Nil {
 			return "", ErrReadinessInvalid
 		}
 		issuer := "no_issuer"

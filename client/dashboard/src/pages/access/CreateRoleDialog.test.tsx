@@ -2,15 +2,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import type { Role } from "@gram/client/models/components/role.js";
 
 const mocks = vi.hoisted(() => ({
-  status: "ready" as "ready" | "loading" | "error",
-  enabled: false as boolean | undefined,
   agents: vi.fn(() => ({ data: [] })),
   create: vi.fn(),
   update: vi.fn(),
@@ -20,13 +17,18 @@ const mocks = vi.hoisted(() => ({
     name: string;
     email: string;
     roleIds: string[];
+    groups?: string[];
   }[],
-}));
-vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetryContext: () => ({
-    featureFlags: { status: mocks.status },
-    telemetry: { isFeatureEnabled: () => mocks.enabled },
-  }),
+  mappings: {
+    groups: [] as { id: string; name: string; memberCount: number }[],
+    attributes: [] as { key: string; value: string; memberCount: number }[],
+    mappings: [] as {
+      id: string;
+      sourceKind: "group" | "attribute";
+      roleUrn: string;
+      directoryGroupId?: string;
+    }[],
+  },
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
@@ -43,6 +45,14 @@ vi.mock("@gram/client/react-query/agents.js", () => ({
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({ data: { members: mocks.members } }),
   invalidateAllMembers: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
+  useDirectoryRoleMappings: () => ({
+    data: mocks.mappings,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 vi.mock("@gram/client/react-query/listScopes.js", () => ({
   useListScopes: () => ({
@@ -149,10 +159,9 @@ function openPlatformTab() {
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.status = "ready";
-  mocks.enabled = false;
   mocks.scimEnabled = false;
   mocks.members = [];
+  mocks.mappings = { groups: [], attributes: [], mappings: [] };
 });
 it("labels the permissions section as a section rather than an action", () => {
   renderEditor();
@@ -202,25 +211,10 @@ describe("role assignment confirmation", () => {
   });
 });
 
-describe("agent management rollout", () => {
-  it.each(["false", "loading", "missing", "error"] as const)(
-    "does not enable the query or show the picker when %s",
-    (state) => {
-      if (state === "loading" || state === "error") mocks.status = state;
-      if (state === "missing") mocks.enabled = undefined;
-      renderEditor();
-      expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
-        enabled: false,
-        throwOnError: false,
-      });
-      expect(screen.queryByText("Assign Agents")).toBeNull();
-    },
-  );
-  it("enables the query and picker when enabled", () => {
-    mocks.enabled = true;
+describe("agent assignment", () => {
+  it("requests agents and shows the picker", () => {
     renderEditor();
     expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
-      enabled: true,
       throwOnError: false,
     });
     fireEvent.click(screen.getByText("Assign Agents"));
@@ -228,7 +222,7 @@ describe("agent management rollout", () => {
       screen.getByText("No agents in this organization yet."),
     ).toBeTruthy();
   });
-  it("saves an ordinary role without replacing existing agents when unavailable", () => {
+  it("keeps an edited role's existing agents when nothing about them changes", () => {
     renderEditor(role);
     fireEvent.change(
       screen.getByPlaceholderText("Describe what this role can do..."),
@@ -238,9 +232,9 @@ describe("agent management rollout", () => {
     expect(mocks.update).toHaveBeenCalledOnce();
     const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
     expect(form.description).toBe("Updated description");
-    expect(form).not.toHaveProperty("agentIds");
+    expect(form.agentIds).toEqual(["agent-test"]);
   });
-  it("creates an ordinary role without agent assignments when unavailable", () => {
+  it("creates a role without agent assignments when none are selected", () => {
     renderEditor();
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Test role" },
@@ -255,37 +249,48 @@ describe("agent management rollout", () => {
   });
 });
 
-describe("member assignment under directory sync", () => {
+describe("who holds the role under directory sync", () => {
   beforeEach(() => {
     mocks.scimEnabled = true;
-    mocks.members = [
-      {
-        id: "m-1",
-        name: "Enrolled Person",
-        email: "a@example.com",
-        roleIds: [role.id],
-      },
-      { id: "m-2", name: "Other Person", email: "b@example.com", roleIds: [] },
-    ];
+    mocks.mappings = {
+      groups: [{ id: "g-data", name: "Data Analytics", memberCount: 14 }],
+      attributes: [],
+      mappings: [
+        {
+          id: "map-1",
+          sourceKind: "group",
+          roleUrn: role.principalUrn,
+          directoryGroupId: "g-data",
+        },
+      ],
+    };
   });
 
-  it("lists only the members the directory enrolled", () => {
+  it("shows the groups that give out the role in place of a member picker", () => {
     renderEditor(role);
-    fireEvent.click(screen.getByText("Assign Members"));
-    expect(screen.getByText("Enrolled Person")).toBeTruthy();
-    expect(screen.queryByText("Other Person")).toBeNull();
+    expect(screen.getByText("Data Analytics")).toBeTruthy();
+    expect(screen.getByText("14 users")).toBeTruthy();
+    expect(screen.queryByText("Assign Members")).toBeNull();
     expect(
-      screen
-        .getByRole("checkbox", { name: /Enrolled Person/ })
-        .hasAttribute("disabled"),
-    ).toBe(true);
+      screen.getByRole("link", { name: "View mapping →" }).getAttribute("href"),
+    ).toBe("/org/identity");
   });
 
-  it("links to directory sync setup when nobody is enrolled", () => {
+  it("says so when nothing gives out the role", () => {
+    mocks.mappings.mappings = [];
+    renderEditor(role);
+    expect(
+      screen.getByText("No directory group or attribute gives out this role"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Map a group" }).getAttribute("href"),
+    ).toBe("/org/identity");
+  });
+
+  it("points a new role at mapping once it exists", () => {
     renderEditor();
-    const link = screen.getByRole("link", { name: "Configure directory sync" });
-    expect(link.getAttribute("href")).toBe("/org/identity");
-    expect(screen.queryByText("Enrolled Person")).toBeNull();
+    expect(screen.getByRole("link", { name: "IDP and SSO" })).toBeTruthy();
+    expect(screen.queryByText("Assign Members")).toBeNull();
   });
 });
 

@@ -95,8 +95,7 @@ agent identifier and must show unavailable, never human-owner activity or zeros.
 
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
-`agent-management` enables inventory; `agent-identity-credentials` enables API key
-management. PG `agents` ×5 includes Release assistant, Support triage, Retired
+PG `agents` ×5 includes Release assistant, Support triage, Retired
 documentation bot, the active Release notes assistant, and the dedicated
 Identity-bound assistant agent (empty grants), covering active,
 suspended, and revoked identities with three existing fictional owners (display names and
@@ -269,6 +268,10 @@ confirmed zero bindings/sessions and no client secret. No dedicated preparation
 dashboard, provider acceptance, or usable human access is demonstrated.
 
 [Browser evidence and supplementary checks](https://github.com/speakeasy-api/gram/pull/6438#issuecomment-5798502630).
+
+### [~] Self remote session client (client credentials)
+
+The project has a hand-entered Jamf Pro remote issuer (`jamf-pro`, reserved `acme-demo.jamfcloud.example` host, token endpoint only, no discovery) and one client, `demo-jamf-pro-api-client`, whose `credential_owner` is `self`: it would obtain one shared access token with the `client_credentials` grant, authenticating with `client_secret_post` as Jamf Pro documents. The issuer's client setup documentation link points to Jamf's API Roles and Clients guide. The secret is the inert `DEMO-NOT-VALID-CIPHERTEXT`, and the client has no user session issuer binding, remote session, or MCP server, so it demonstrates configuration only, never a usable credential. Until the dashboard reads `credentialOwner` (AIM-464), the client renders like any secret-authenticated client; `credential_owner` and `grant_types` are management API evidence only.
 
 ### [~] Organization Identity: Slack workspaces
 

@@ -180,8 +180,9 @@ type consentTemplateData struct {
 	ConsentToolsPrefill string
 	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
 	ValidationDeadlineMS int64
-	// ConnectedCardCount is the number of RemoteSessionCards already linked,
-	// rendered as the "n of m connected" summary above the service list.
+	// ConnectedCardCount is the number of RemoteSessionCards already linked or
+	// holding a usable chained credential, rendered as the "n of m connected"
+	// summary above the service list.
 	ConnectedCardCount int
 	// Styles is the compiled design-system stylesheet inlined into the
 	// document head. A build artifact, never user input.
@@ -248,7 +249,13 @@ type remoteSessionCard struct {
 	Connected  bool
 	Expired    bool
 	Unroutable bool
-	CanRefresh bool
+	// Chained marks a card without a usable interactive link whose upstream identity chaining is configured to serve; Connect stays a fallback.
+	Chained bool
+	// ChainCheck is a chained card's exchange check state; the page script settles pending.
+	ChainCheck string
+	// ChainMessage is the user-safe reason a rejected check shows.
+	ChainMessage string
+	CanRefresh   bool
 	// IdentityReconnect marks a connected grant lacking openid while a reconnect would request it.
 	IdentityReconnect bool
 	// Access expiry describes the current credential. Refresh expiry is kept
@@ -567,13 +574,18 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	connectedCardCount := 0
+	chainedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
-		if c.Connected {
+		// A chained service counts once its exchange is known to work; access rules use chainedCardCount.
+		if c.Connected || c.ChainCheck == chainCheckConnected {
 			connectedCardCount++
+		}
+		if c.Chained {
+			chainedCardCount++
 		}
 		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
@@ -581,21 +593,21 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		everyCardAutoRefreshes = everyCardAutoRefreshes && c.AutoRefreshChecked
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
-	consentEnabled := len(cards) == 0 || connectedCardCount > 0
+	// Chained cards enable access too: the runtime chains when no interactive token exists.
+	consentEnabled := len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
 
 	agentSelectionEnabled := false
 	agentSetupURL := ""
 	var agentOptions []consentAgentOption
 	if !challengeState.FirstParty && challengeState.AuthorizerUserID != "" {
-		if enabled, setupURL, _ := s.agentAuthorizationRollout(ctx, logger, endpoint.OrganizationID); enabled {
-			options, aerr := s.eligibleConsentAgents(ctx, challengeState, endpoint)
-			if aerr != nil {
-				logger.WarnContext(ctx, "eligible agent selection unavailable", attr.SlogError(aerr))
-			} else {
-				agentSelectionEnabled = true
-				agentSetupURL = setupURL
-				agentOptions = options
-			}
+		if setupURL, serr := s.agentSetupURL(ctx, logger, endpoint.OrganizationID); serr != nil {
+			logger.WarnContext(ctx, "agent selection unavailable", attr.SlogError(serr))
+		} else if options, aerr := s.eligibleConsentAgents(ctx, challengeState, endpoint); aerr != nil {
+			logger.WarnContext(ctx, "eligible agent selection unavailable", attr.SlogError(aerr))
+		} else {
+			agentSelectionEnabled = true
+			agentSetupURL = setupURL
+			agentOptions = options
 		}
 	}
 
@@ -701,6 +713,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	// Consent cannot be embedded, even by the same origin. Do not restrict
+	// form-action: consent submissions redirect to clients on other origins,
+	// including loopback addresses and custom URI schemes.
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	w.Header().Set("X-Frame-Options", "DENY")
 	if err := consentTemplate.Execute(w, data); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "render consent template").LogError(ctx, logger)
 	}
@@ -815,9 +832,6 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
 	}
 	if selectedAgentID != "" {
-		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint.OrganizationID); !enabled {
-			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
-		}
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
 		if err != nil {
 			return consentAgentAuthorizationError(err, "selected agent is not eligible").LogWarn(ctx, logger)
@@ -931,10 +945,6 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if ferr != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
-		}
-		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint.OrganizationID); !enabled {
-			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
-			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		agentAuthorization, ferr = s.authorizeConsentAgent(ctx, challengeState, finalEndpoint, selectedAgentID)
 		if ferr != nil {
@@ -1431,25 +1441,11 @@ func (s *Service) buildRemoteSessionCards(
 		}
 	}
 
-	// Single round-trip for connection state across all cards. Empty when
-	// the subject hasn't been stamped yet (early render before IDP /
-	// anonymous late-bind); the per-card check below then resolves to
-	// not-connected.
-	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
-	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
-		if err != nil {
-			return nil, fmt.Errorf("remote session statuses: %w", err)
-		}
+	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients)
+	if err != nil {
+		return nil, err
 	}
-
-	var routing consentRouting
-	if len(statuses) > 0 {
-		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
-		if err != nil {
-			return nil, err
-		}
-	}
+	chainRequests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
@@ -1511,6 +1507,11 @@ func (s *Service) buildRemoteSessionCards(
 		}
 		requested := c.RequestedScopes(resourceScopes).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
+		chained := len(chainRequests[c.ID]) > 0 && !connected && !unroutable
+		chainCheck := ""
+		if chained {
+			chainCheck = s.consentChainCheckAtRender(ctx, chainRequests[c.ID])
+		}
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		cards = append(cards, remoteSessionCard{
 			ClientID:               c.ID.String(),
@@ -1523,6 +1524,9 @@ func (s *Service) buildRemoteSessionCards(
 			Connected:              connected,
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,
+			Chained:                chained,
+			ChainCheck:             chainCheck,
+			ChainMessage:           "",
 			CanRefresh:             state.CanRefresh,
 			IdentityReconnect:      identityReconnect,
 			AccessExpiresAt:        accessExpiresAt,
@@ -1611,7 +1615,7 @@ func (s *Service) maybeAutoConnect(
 	challengeState AuthnChallengeState,
 	cards []remoteSessionCard,
 ) (bool, error) {
-	if challengeState.AutoConnectDone || len(cards) != 1 || cards[0].Connected {
+	if challengeState.AutoConnectDone || len(cards) != 1 || cards[0].Connected || cards[0].Chained {
 		return false, nil
 	}
 

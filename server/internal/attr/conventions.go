@@ -404,10 +404,17 @@ const (
 	McpToolsReturnedKey    = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey    = attribute.Key("gram.mcp.tools_filtered")
 	McpServerIDKey         = attribute.Key("gram.mcp_server.id")
+	McpEndpointIDKey       = attribute.Key("gram.mcp_endpoint.id")
 	MetaMcpServerIDKey     = attribute.Key("gram.meta_mcp_server.id")
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
+
+	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
+	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
+	McpFallbackCanonicalWrapperKey    = attribute.Key("gram.mcp.fallback.canonical_wrapper")
+	McpFallbackToolsetCustomDomainKey = attribute.Key("gram.mcp.fallback.toolset_custom_domain")
+
 	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
 	// self-reported identity from the initialize handshake (or the
 	// per-request _meta hint). Untrusted client input: attribution only,
@@ -506,6 +513,12 @@ const (
 	OAuthResourceScopesSupportedKey = attribute.Key("gram.oauth.resource_scopes_supported")
 	// OAuthScopeSourceKey names which precedence step produced a login's scope request.
 	OAuthScopeSourceKey = attribute.Key("gram.oauth.scope_source")
+	// OAuthFederatedCallbackRejectReasonKey is why a federated IdP callback was rejected.
+	OAuthFederatedCallbackRejectReasonKey = attribute.Key("gram.oauth.federated_callback_reject_reason")
+	// OAuthResponseIssuerAdvertisedKey reports RFC 9207 iss support in issuer metadata.
+	OAuthResponseIssuerAdvertisedKey = attribute.Key("gram.oauth.response_issuer_advertised")
+	// OAuthScopeGrantedKey lists the scopes a token endpoint reported granting.
+	OAuthScopeGrantedKey = attribute.Key("gram.oauth.scope_granted")
 	// OAuthScopeUnadvertisedKey lists pinned scopes the resource's advertised list lacks.
 	OAuthScopeUnadvertisedKey = attribute.Key("gram.oauth.scope_unadvertised")
 	// OAuthResourceProbeOutcomeKey is how a login resolved its resource's metadata.
@@ -2089,6 +2102,18 @@ func SlogOAuthScopeSource[V ~string](v V) slog.Attr {
 	return slog.String(string(OAuthScopeSourceKey), string(v))
 }
 
+func SlogOAuthFederatedCallbackRejectReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthFederatedCallbackRejectReasonKey), string(v))
+}
+
+func SlogOAuthResponseIssuerAdvertised(v bool) slog.Attr {
+	return slog.Bool(string(OAuthResponseIssuerAdvertisedKey), v)
+}
+
+func SlogOAuthScopeGranted(v []string) slog.Attr {
+	return slog.Any(string(OAuthScopeGrantedKey), v)
+}
+
 func SlogOAuthScopeUnadvertised(v []string) slog.Attr {
 	return slog.Any(string(OAuthScopeUnadvertisedKey), v)
 }
@@ -2803,6 +2828,9 @@ func SlogResourceURI(v string) slog.Attr      { return slog.String(string(Resour
 func McpServerID(v string) attribute.KeyValue { return McpServerIDKey.String(v) }
 func SlogMcpServerID(v string) slog.Attr      { return slog.String(string(McpServerIDKey), v) }
 
+func McpEndpointID(v string) attribute.KeyValue { return McpEndpointIDKey.String(v) }
+func SlogMcpEndpointID(v string) slog.Attr      { return slog.String(string(McpEndpointIDKey), v) }
+
 func MetaMcpServerID(v string) attribute.KeyValue   { return MetaMcpServerIDKey.String(v) }
 func SlogMetaMcpServerID(v string) slog.Attr        { return slog.String(string(MetaMcpServerIDKey), v) }
 func MetaMemberBackend(v string) attribute.KeyValue { return MetaMemberBackendKey.String(v) }
@@ -2847,6 +2875,21 @@ func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
 }
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
+func SlogMcpEntryPoint[V ~string](v V) slog.Attr {
+	return slog.String(string(McpEntryPointKey), string(v))
+}
+
+func SlogMcpFallbackRequestHost[V ~string](v V) slog.Attr {
+	return slog.String(string(McpFallbackRequestHostKey), string(v))
+}
+
+func SlogMcpFallbackCanonicalWrapper(v bool) slog.Attr {
+	return slog.Bool(string(McpFallbackCanonicalWrapperKey), v)
+}
+
+func SlogMcpFallbackToolsetCustomDomain[V ~string](v V) slog.Attr {
+	return slog.String(string(McpFallbackToolsetCustomDomainKey), string(v))
+}
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {
 	return McpKillswitchSurfaceKey.String(string(v))

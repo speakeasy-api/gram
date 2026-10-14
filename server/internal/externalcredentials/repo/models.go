@@ -10,37 +10,64 @@ import (
 )
 
 type AwsIamCredential struct {
-	ExternalCredentialID        uuid.UUID
+	// @access: confidential
+	ExternalCredentialID uuid.UUID
+	// @access: confidential
 	ExternalCredentialsProvider string
-	AssumeRoleArn               pgtype.Text
-	ExternalID                  pgtype.Text
-	OidcAudience                pgtype.Text
-	OidcSubject                 pgtype.Text
-	StsRegion                   pgtype.Text
-	CreatedAt                   pgtype.Timestamptz
-	UpdatedAt                   pgtype.Timestamptz
+	// @access: restricted
+	AssumeRoleArn pgtype.Text
+	// @access: secret-restricted
+	ExternalID pgtype.Text
+	// @access: restricted
+	OidcAudience pgtype.Text
+	// @access: restricted
+	OidcSubject pgtype.Text
+	// @access: confidential
+	StsRegion pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type ExternalCredential struct {
-	ID             uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
 	OrganizationID pgtype.Text
-	ProjectID      uuid.NullUUID
-	Provider       string
-	Name           string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	Provider string
+	// @access: confidential
+	Name string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type GcpIamCredential struct {
-	ExternalCredentialID        uuid.UUID
+	// @access: confidential
+	ExternalCredentialID uuid.UUID
+	// @access: confidential
 	ExternalCredentialsProvider string
-	ImpersonateServiceAccount   pgtype.Text
-	WifPoolID                   pgtype.Text
-	WifProviderID               pgtype.Text
-	WifProjectNumber            pgtype.Text
-	SkipProjectVerification     bool
-	CreatedAt                   pgtype.Timestamptz
-	UpdatedAt                   pgtype.Timestamptz
+	// @access: restricted
+	ImpersonateServiceAccount pgtype.Text
+	// @access: restricted
+	WifPoolID pgtype.Text
+	// @access: restricted
+	WifProviderID pgtype.Text
+	// @access: restricted
+	WifProjectNumber pgtype.Text
+	// @access: confidential
+	SkipProjectVerification bool
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }

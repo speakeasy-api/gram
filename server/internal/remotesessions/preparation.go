@@ -167,6 +167,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if in.ExpectedGeneration != b.Generation {
 			return preparationResult(b, issuer, client, PreparationStateConfigurationRequired), oops.E(oops.CodeConflict, nil, "binding generation changed; read current preparation before unlinking")
 		}
+		before := b
 		b.Generation++
 		b.State = conv.ToPGText(PreparationStateUnlinked)
 		b.RemoteSessionClientID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
@@ -177,6 +178,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		b, err = setPreparationBinding(ctx, q, b, previous)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+		}
+		if err := s.auditIdentityChainingTransition(ctx, tx, before, b, client); err != nil {
+			return nil, err
 		}
 		if err = tx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -237,6 +241,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 			return preparationResult(b, issuer, client, PreparationStateManualSetupRequired), nil
 		}
 		// Only mutate the returned binding once the request can be persisted.
+		before := b
 		if changed {
 			b.Generation++
 		}
@@ -248,6 +253,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		b, err = setPreparationBinding(ctx, q, b, previous)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+		}
+		if err := s.auditIdentityChainingTransition(ctx, tx, before, b, client); err != nil {
+			return nil, err
 		}
 		if err = tx.Commit(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -316,6 +324,13 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		}
 	}
 	if !samePreparationGrants(grants, client.GrantTypes) {
+		// Publishing/modifying inherited registrations affects other projects and
+		// therefore requires organization-level authority in addition to project write.
+		if !client.ProjectID.Valid {
+			if err = s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
+				return nil, err
+			}
+		}
 		// CIMD grants are also the live interactive registration. Preparation
 		// must not disable login or refresh, even when selected as manual.
 		// Reject removal rather than silently broadening explicit confirmation.
@@ -341,13 +356,6 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 		if count > allowed {
 			return preparationResult(b, issuer, client, PreparationStateConfigurationRequired), nil
 		}
-		// Publishing/modifying inherited registrations affects other projects and
-		// therefore requires organization-level authority in addition to project write.
-		if !client.ProjectID.Valid {
-			if err = s.authz.Require(ctx, authz.Check{ResourceKind: "", Dimensions: nil, Scope: authz.ScopeOrgAdmin, ResourceID: org}); err != nil {
-				return nil, err
-			}
-		}
 		client, err = q.SetEMAClientGrants(ctx, repo.SetEMAClientGrantsParams{ID: client.ID, ProjectID: conv.ToNullUUID(project), OrganizationID: conv.ToPGText(org), GrantTypes: grants})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
@@ -358,6 +366,7 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	}
 	// All configuration-required exits above return the persisted generation
 	// and scopes, not a prospective transition that will be rolled back.
+	before := b
 	if changed {
 		b.Generation++
 	}
@@ -370,6 +379,9 @@ func (s *Service) prepareIdentityChaining(ctx context.Context, in PreparationInp
 	b, err = setPreparationBinding(ctx, q, b, previous)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")
+	}
+	if err := s.auditIdentityChainingTransition(ctx, tx, before, b, client); err != nil {
+		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "prepare identity chaining")

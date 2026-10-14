@@ -39,7 +39,7 @@ export type AIToolAccessSummaryState = ClosedEnum<
 >;
 
 /**
- * The enforcement verdict for one detected AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
+ * The enforcement verdict for one AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
  */
 export type AIToolAccessSummary = {
   /**

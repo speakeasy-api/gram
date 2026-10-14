@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -36,12 +35,6 @@ type assistantIdentityManagementFunc func(context.Context, *genassistants.Upgrad
 
 func (f assistantIdentityManagementFunc) UpgradeAssistantIdentity(ctx context.Context, payload *genassistants.UpgradeAssistantIdentityPayload) (*types.Assistant, error) {
 	return f(ctx, payload)
-}
-
-func identityFlags(org string, enabled bool) *feature.InMemory {
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagAgentIdentityCredentials, org, enabled)
-	return flags
 }
 
 func TestAssistantIdentityToolContract(t *testing.T) {
@@ -84,7 +77,6 @@ func TestAssistantIdentityUpgradeUsesAuthorizedEndpointAndSafeProjection(t *test
 	calls := 0
 	service := &AssistantIdentityService{
 		organizations: riskMutationOrganizationResolver{slug: "test-org", err: nil},
-		flags:         identityFlags("test-org", true),
 		resolveProject: func(_ context.Context, org string, input FindMCPInput) (ResolvedProject, error) {
 			require.Equal(t, principal.OrganizationID, org)
 			require.Equal(t, projectID.String(), input.ProjectID)
@@ -138,7 +130,6 @@ func TestAssistantIdentityUpgradeRejectsAmbiguousUnconfirmedAndHiddenTargets(t *
 	resolutions := 0
 	service := &AssistantIdentityService{
 		organizations: riskMutationOrganizationResolver{slug: "test-org", err: nil},
-		flags:         identityFlags("test-org", true),
 		resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
 			resolutions++
 			return ResolvedProject{}, ErrForbidden
@@ -189,13 +180,13 @@ func TestAssistantIdentityAPIAndMCPRequireSameProjectWrite(t *testing.T) {
 	t.Parallel()
 	logger := testenv.NewLogger(t)
 	engine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := assistants.NewService(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &sessions.Manager{}, engine, nil, nil, nil, identityFlags("test-org", true))
+	management := assistants.NewService(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, &sessions.Manager{}, engine, nil, nil, nil)
 	projectID, assistantID := uuid.New(), uuid.New()
 	principal := Principal{OrganizationID: "test-org", UserID: "test-user"}
 	auth := &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &projectID}
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), auth, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
-	service := &AssistantIdentityService{management: management, organizations: riskMutationOrganizationResolver{slug: "test-org", err: nil}, flags: identityFlags(principal.OrganizationID, true), resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
+	service := &AssistantIdentityService{management: management, organizations: riskMutationOrganizationResolver{slug: "test-org", err: nil}, resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
 		return ResolvedProject{ID: projectID}, nil
 	}}
 	for _, grants := range [][]authz.Grant{nil, {authz.NewGrant(authz.ScopeProjectWrite, uuid.NewString())}, {authz.NewGrant(authz.ScopeProjectRead, projectID.String())}} {
@@ -230,9 +221,8 @@ func TestAssistantIdentityOAuthUpgradeMatchesAPI(t *testing.T) {
 	tracer, meter := testenv.NewTracerProvider(t), testenv.NewMeterProvider(t)
 	identities := assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
 	core := assistants.NewServiceCore(logger, tracer, meter, db, nil, nil, nil, nil, nil, nil, telemetry.NewStub(logger), nil, audit.NewLogger(), identities, engine)
-	flags := identityFlags(principal.OrganizationID, true)
-	management := assistants.NewService(logger, tracer, meter, db, &sessions.Manager{}, engine, core, nil, nil, flags)
-	service := NewAssistantIdentityService(management, NewPostgresReader(logger, db), flags)
+	management := assistants.NewService(logger, tracer, meter, db, &sessions.Manager{}, engine, core, nil, nil)
+	service := NewAssistantIdentityService(management, NewPostgresReader(logger, db))
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextWithPrincipal(ctx, principal)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID), authz.NewGrant(authz.ScopeProjectWrite, project.ID.String())})
@@ -261,29 +251,4 @@ func TestAssistantIdentityOAuthUpgradeMatchesAPI(t *testing.T) {
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
 	require.Equal(t, *output.AgentID, metadata["agent_id"])
-}
-
-func TestAssistantIdentityUpgradeRefusedOutsideRollout(t *testing.T) {
-	t.Parallel()
-	projectID := uuid.New()
-	principal := Principal{OrganizationID: "test-org", UserID: "test-user"}
-	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
-	service := &AssistantIdentityService{
-		organizations: riskMutationOrganizationResolver{slug: "test-org", err: nil},
-		flags:         identityFlags(principal.OrganizationID, false),
-		resolveProject: func(context.Context, string, FindMCPInput) (ResolvedProject, error) {
-			return ResolvedProject{ID: projectID, Slug: "project"}, nil
-		},
-		management: assistantIdentityManagementFunc(func(context.Context, *genassistants.UpgradeAssistantIdentityPayload) (*types.Assistant, error) {
-			t.Fatal("must not upgrade outside the rollout")
-			return nil, nil
-		}),
-	}
-	_, err := service.upgrade(ctx, principal, UpgradeAssistantIdentityInput{ProjectID: projectID.String(), AssistantID: uuid.NewString(), Confirmed: true})
-	require.ErrorIs(t, err, errAssistantIdentityNotEnabled)
-	result, ok := assistantIdentityToolResult(err)
-	require.True(t, ok)
-	text, ok := result.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.Contains(t, text.Text, "not enabled for this organization")
 }

@@ -10,17 +10,30 @@ import (
 )
 
 type Asset struct {
-	ID             uuid.UUID
-	ProjectID      uuid.NullUUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
 	OrganizationID pgtype.Text
-	Name           string
-	Url            string
-	Kind           string
-	ContentType    string
-	ContentLength  int64
-	Sha256         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Url string
+	// @access: confidential
+	Kind string
+	// @access: confidential
+	ContentType string
+	// @access: confidential
+	ContentLength int64
+	// @access: confidential
+	Sha256 string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }

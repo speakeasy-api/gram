@@ -16,6 +16,10 @@ import {
   AiScanTargetSignatures,
   AiScanTargetSignatures$inboundSchema,
 } from "./aiscantargetsignatures.js";
+import {
+  AIToolAccessSummary,
+  AIToolAccessSummary$inboundSchema,
+} from "./aitoolaccesssummary.js";
 
 /**
  * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
@@ -46,6 +50,10 @@ export type Origin = ClosedEnum<typeof Origin>;
  * One Shadow AI scan target in an organization's list: a Speakeasy built-in, or a target the organization added.
  */
 export type AiScanTarget = {
+  /**
+   * The enforcement verdict for one AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
+   */
+  access?: AIToolAccessSummary | undefined;
   /**
    * Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).
    */
@@ -102,6 +110,7 @@ export const Origin$inboundSchema: z.ZodMiniEnum<typeof Origin> = z.enum(
 export const AiScanTarget$inboundSchema: z.ZodMiniType<AiScanTarget, unknown> =
   z.pipe(
     z.object({
+      access: z.optional(AIToolAccessSummary$inboundSchema),
       category: AiScanTargetCategory$inboundSchema,
       created_at: z.optional(
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),

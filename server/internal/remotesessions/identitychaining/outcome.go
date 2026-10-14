@@ -18,6 +18,9 @@ type Outcome struct {
 	// Cached reports that a recent identical failure answered the attempt
 	// without contacting the provider.
 	Cached bool `json:"cached"`
+
+	// providerDescription is the provider's error_description, for logs only.
+	providerDescription string
 }
 
 // Applicable reports whether identity chaining owns the upstream. When false,
@@ -45,7 +48,7 @@ func (o Outcome) cacheable() bool {
 }
 
 func newOutcome(stage Stage, reason Reason, confidence Confidence, retryable bool) Outcome {
-	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false}
+	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false, providerDescription: ""}
 }
 
 var (

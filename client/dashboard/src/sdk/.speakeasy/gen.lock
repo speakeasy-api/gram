@@ -217,6 +217,8 @@ trackedFiles:
   src/funcs/dataExportsUpdateRoute.ts: {}
   src/funcs/deploymentsActive.ts: {}
   src/funcs/deploymentsCreate.ts: {}
+  src/funcs/deploymentsEvaluateOpenAPIv3.ts: {}
+  src/funcs/deploymentsEvaluation.ts: {}
   src/funcs/deploymentsEvolveDeployment.ts: {}
   src/funcs/deploymentsGetById.ts: {}
   src/funcs/deploymentsLatest.ts: {}
@@ -561,6 +563,7 @@ trackedFiles:
   src/funcs/remoteSessionsCommitServerIdentityConfiguration.ts: {}
   src/funcs/remoteSessionsCount.ts: {}
   src/funcs/remoteSessionsDetachBinding.ts: {}
+  src/funcs/remoteSessionsGetServerIdentityImpact.ts: {}
   src/funcs/remoteSessionsList.ts: {}
   src/funcs/remoteSessionsListBindings.ts: {}
   src/funcs/remoteSessionsRevoke.ts: {}
@@ -594,7 +597,6 @@ trackedFiles:
   src/funcs/riskPoliciesList.ts: {}
   src/funcs/riskPoliciesListForMcpServer.ts: {}
   src/funcs/riskPoliciesListMcpPlatformToolsets.ts: {}
-  src/funcs/riskPoliciesStatus.ts: {}
   src/funcs/riskPoliciesTrigger.ts: {}
   src/funcs/riskPoliciesUpdate.ts: {}
   src/funcs/riskPolicyBypassRequestsApprove.ts: {}
@@ -605,6 +607,8 @@ trackedFiles:
   src/funcs/riskPolicyChallengesAcknowledge.ts: {}
   src/funcs/riskPolicyChallengesDecline.ts: {}
   src/funcs/riskPolicyChallengesGet.ts: {}
+  src/funcs/riskPresetsList.ts: {}
+  src/funcs/riskPresetsSuggest.ts: {}
   src/funcs/riskResultsByChat.ts: {}
   src/funcs/riskResultsList.ts: {}
   src/funcs/riskResultsListDismissed.ts: {}
@@ -752,7 +756,6 @@ trackedFiles:
   src/funcs/unproxiedMcpDeleteServer.ts: {}
   src/funcs/unproxiedMcpGetServer.ts: {}
   src/funcs/unproxiedMcpListServers.ts: {}
-  src/funcs/unproxiedMcpListTools.ts: {}
   src/funcs/usageCancelStripeSubscription.ts: {}
   src/funcs/usageCreateCheckout.ts: {}
   src/funcs/usageCreateCustomerSession.ts: {}
@@ -1083,6 +1086,7 @@ trackedFiles:
   src/models/components/environment.ts: {}
   src/models/components/environmententry.ts: {}
   src/models/components/environmententryinput.ts: {}
+  src/models/components/evaluateopenapiv3form.ts: {}
   src/models/components/evaluatepromptguardrailrequestbody.ts: {}
   src/models/components/eventlogentry.ts: {}
   src/models/components/eventvolumebucket.ts: {}
@@ -1128,6 +1132,7 @@ trackedFiles:
   src/models/components/generateworkosadminportallinkrequestbody.ts: {}
   src/models/components/generateworkosadminportallinkresult.ts: {}
   src/models/components/getactivedeploymentresult.ts: {}
+  src/models/components/getdeploymentevaluationresult.ts: {}
   src/models/components/getdeploymentlogsresult.ts: {}
   src/models/components/getdeploymentresult.ts: {}
   src/models/components/getemployeedataflowgraphpayload.ts: {}
@@ -1401,7 +1406,6 @@ trackedFiles:
   src/models/components/listtunneledmcpserversresult.ts: {}
   src/models/components/listunknownskillactivationsresult.ts: {}
   src/models/components/listunproxiedmcpserversresult.ts: {}
-  src/models/components/listunproxiedmcpservertoolsresult.ts: {}
   src/models/components/listusergrantsresult.ts: {}
   src/models/components/listusersessionclientsresult.ts: {}
   src/models/components/listusersessionconsentsresult.ts: {}
@@ -1475,7 +1479,14 @@ trackedFiles:
   src/models/components/oktaserversuggestionremoteheader.ts: {}
   src/models/components/onboardinghookevent.ts: {}
   src/models/components/onboardingstatusresult.ts: {}
+  src/models/components/openapiv3affectedtoolset.ts: {}
   src/models/components/openapiv3deploymentasset.ts: {}
+  src/models/components/openapiv3documentsnapshot.ts: {}
+  src/models/components/openapiv3evaluation.ts: {}
+  src/models/components/openapiv3evaluationcategory.ts: {}
+  src/models/components/openapiv3evaluationchange.ts: {}
+  src/models/components/openapiv3evaluationseverity.ts: {}
+  src/models/components/openapiv3securityschemesummary.ts: {}
   src/models/components/organization.ts: {}
   src/models/components/organizationclientdelegationstatus.ts: {}
   src/models/components/organizationclientdeletepreflight.ts: {}
@@ -1638,7 +1649,9 @@ trackedFiles:
   src/models/components/riskpolicybypassrequest.ts: {}
   src/models/components/riskpolicyevalreview.ts: {}
   src/models/components/riskpolicymodelconfig.ts: {}
-  src/models/components/riskpolicystatus.ts: {}
+  src/models/components/riskpreset.ts: {}
+  src/models/components/riskpresetmatch.ts: {}
+  src/models/components/riskpresetsresult.ts: {}
   src/models/components/riskresult.ts: {}
   src/models/components/riskresultredacted.ts: {}
   src/models/components/riskrevealpayloadresult.ts: {}
@@ -1690,6 +1703,8 @@ trackedFiles:
   src/models/components/sendmessagerequestbody.ts: {}
   src/models/components/sendmessageresult.ts: {}
   src/models/components/serveridentityclientconfiguration.ts: {}
+  src/models/components/serveridentityimpactresult.ts: {}
+  src/models/components/serveridentityimpactserver.ts: {}
   src/models/components/serveridentityregistrationfailure.ts: {}
   src/models/components/servernameoverride.ts: {}
   src/models/components/servervariable.ts: {}
@@ -1793,6 +1808,8 @@ trackedFiles:
   src/models/components/suggestcustomdetectionruleresult.ts: {}
   src/models/components/suggestexclusionrequestbody.ts: {}
   src/models/components/suggestexclusionresult.ts: {}
+  src/models/components/suggestriskpolicyrequestbody.ts: {}
+  src/models/components/suggestriskpolicyresult.ts: {}
   src/models/components/summarizechatresult.ts: {}
   src/models/components/summarizerequestbody.ts: {}
   src/models/components/summarizetoolcallrequestbody.ts: {}
@@ -1876,7 +1893,6 @@ trackedFiles:
   src/models/components/unmarkriskresultsfalsepositiverequestbody.ts: {}
   src/models/components/unproxiedmcpserver.ts: {}
   src/models/components/unproxiedmcpserverclientusagerow.ts: {}
-  src/models/components/unproxiedmcpservertool.ts: {}
   src/models/components/unproxiedmcpservertoolusagerow.ts: {}
   src/models/components/unproxiedmcpserverusagebreakdownpayload.ts: {}
   src/models/components/unproxiedmcpserverusagebucket.ts: {}
@@ -2207,6 +2223,7 @@ trackedFiles:
   src/models/operations/ensuremanagedassistant.ts: {}
   src/models/operations/ensuremcpserverreview.ts: {}
   src/models/operations/enterdemo.ts: {}
+  src/models/operations/evaluateopenapiv3.ts: {}
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/explainresourceaccess.ts: {}
@@ -2235,6 +2252,7 @@ trackedFiles:
   src/models/operations/getcustomdetectionrule.ts: {}
   src/models/operations/getdashboard.ts: {}
   src/models/operations/getdeployment.ts: {}
+  src/models/operations/getdeploymentevaluation.ts: {}
   src/models/operations/getdeploymentlogs.ts: {}
   src/models/operations/getdeviceagentconfiguration.ts: {}
   src/models/operations/getdeviceintegrationconfig.ts: {}
@@ -2311,11 +2329,11 @@ trackedFiles:
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
   src/models/operations/getriskpolicychallenge.ts: {}
-  src/models/operations/getriskpolicystatus.ts: {}
   src/models/operations/getriskrulebreakdown.ts: {}
   src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
   src/models/operations/getrole.ts: {}
+  src/models/operations/getserveridentityimpact.ts: {}
   src/models/operations/getshadowmcpinventoryserver.ts: {}
   src/models/operations/getsharedskill.ts: {}
   src/models/operations/getsigintsensor.ts: {}
@@ -2481,6 +2499,7 @@ trackedFiles:
   src/models/operations/listriskpolicies.ts: {}
   src/models/operations/listriskpoliciesformcpserver.ts: {}
   src/models/operations/listriskpolicybypassrequests.ts: {}
+  src/models/operations/listriskpresets.ts: {}
   src/models/operations/listriskresults.ts: {}
   src/models/operations/listriskresultsbychat.ts: {}
   src/models/operations/listriskresultsforagent.ts: {}
@@ -2525,7 +2544,6 @@ trackedFiles:
   src/models/operations/listtunneledmcpservers.ts: {}
   src/models/operations/listunknownskillactivations.ts: {}
   src/models/operations/listunproxiedmcpservers.ts: {}
-  src/models/operations/listunproxiedmcpservertools.ts: {}
   src/models/operations/listusersessionclients.ts: {}
   src/models/operations/listusersessionconsents.ts: {}
   src/models/operations/listusersessionfacets.ts: {}
@@ -2687,6 +2705,7 @@ trackedFiles:
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
   src/models/operations/suggestexclusion.ts: {}
+  src/models/operations/suggestriskpolicy.ts: {}
   src/models/operations/summarizechat.ts: {}
   src/models/operations/summarizetoolcall.ts: {}
   src/models/operations/suspendagent.ts: {}
@@ -3018,6 +3037,8 @@ trackedFiles:
   src/react-query/deleteWidget.ts: {}
   src/react-query/deployment.core.ts: {}
   src/react-query/deployment.ts: {}
+  src/react-query/deploymentEvaluation.core.ts: {}
+  src/react-query/deploymentEvaluation.ts: {}
   src/react-query/deploymentLogs.core.ts: {}
   src/react-query/deploymentLogs.ts: {}
   src/react-query/detachOrganizationRemoteSessionClientKeySet.ts: {}
@@ -3059,6 +3080,7 @@ trackedFiles:
   src/react-query/ensureManagedAssistant.ts: {}
   src/react-query/ensureMcpServerReview.ts: {}
   src/react-query/enterDemo.ts: {}
+  src/react-query/evaluateOpenAPIv3.ts: {}
   src/react-query/evolveDeployment.ts: {}
   src/react-query/explainResourceAccess.core.ts: {}
   src/react-query/explainResourceAccess.ts: {}
@@ -3617,10 +3639,10 @@ trackedFiles:
   src/react-query/riskPoliciesDelete.ts: {}
   src/react-query/riskPoliciesGet.core.ts: {}
   src/react-query/riskPoliciesGet.ts: {}
-  src/react-query/riskPoliciesStatus.core.ts: {}
-  src/react-query/riskPoliciesStatus.ts: {}
   src/react-query/riskPoliciesTrigger.ts: {}
   src/react-query/riskPoliciesUpdate.ts: {}
+  src/react-query/riskPresets.core.ts: {}
+  src/react-query/riskPresets.ts: {}
   src/react-query/riskReleaseSessionQuarantine.ts: {}
   src/react-query/riskRevealResultPayload.ts: {}
   src/react-query/riskRevokePolicyBypassRequest.ts: {}
@@ -3632,6 +3654,7 @@ trackedFiles:
   src/react-query/riskSubmitBlockFeedback.ts: {}
   src/react-query/riskSuggestCustomRule.ts: {}
   src/react-query/riskSuggestExclusion.ts: {}
+  src/react-query/riskSuggestPolicy.ts: {}
   src/react-query/riskTestDetectionRule.ts: {}
   src/react-query/riskUnmarkResultsFalsePositive.ts: {}
   src/react-query/riskUnmaskResult.ts: {}
@@ -3672,6 +3695,8 @@ trackedFiles:
   src/react-query/serveImage.ts: {}
   src/react-query/serveOpenAPIv3.core.ts: {}
   src/react-query/serveOpenAPIv3.ts: {}
+  src/react-query/serverIdentityImpact.core.ts: {}
+  src/react-query/serverIdentityImpact.ts: {}
   src/react-query/sessionInfo.core.ts: {}
   src/react-query/sessionInfo.ts: {}
   src/react-query/setAIIntegrationScheduleEnabled.ts: {}
@@ -3797,8 +3822,6 @@ trackedFiles:
   src/react-query/undistributeSkill.ts: {}
   src/react-query/unknownSkillActivations.core.ts: {}
   src/react-query/unknownSkillActivations.ts: {}
-  src/react-query/unproxiedMcpServerTools.core.ts: {}
-  src/react-query/unproxiedMcpServerTools.ts: {}
   src/react-query/unproxiedMcpServers.core.ts: {}
   src/react-query/unproxiedMcpServers.ts: {}
   src/react-query/unshareSkill.ts: {}
@@ -3988,6 +4011,7 @@ trackedFiles:
   src/sdk/policies.ts: {}
   src/sdk/policybypassrequests.ts: {}
   src/sdk/policychallenges.ts: {}
+  src/sdk/presets.ts: {}
   src/sdk/projects.ts: {}
   src/sdk/registrydiscovery.ts: {}
   src/sdk/remotemcp.ts: {}
@@ -6463,6 +6487,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  evaluateOpenAPIv3:
+    speakeasy-default-evaluate-open-AP-iv3:
+      requestBody:
+        application/json: {"asset_id": "<id>", "slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"affected_toolsets": [{"affected_tool_count": 745765, "id": "<id>", "mcp_enabled": true, "name": "<value>", "oauth_configured": true, "slug": "<value>", "tool_count": 185129}], "breaking_count": 647782, "changes": [], "info_count": 721312, "name": "<value>", "slug": "<value>", "status": "unchanged", "warning_count": 274582}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   evaluatePromptGuardrail:
     speakeasy-default-evaluate-prompt-guardrail:
       requestBody:
@@ -6502,7 +6537,7 @@ examples:
   exportMcpMetadata:
     speakeasy-default-export-mcp-metadata:
       requestBody:
-        application/json: {"mcp_slug": "<value>"}
+        application/json: {}
       responses:
         "200":
           application/json: {"authentication": {"headers": [{"display_name": "Arden_Friesen", "name": "<value>"}], "required": false}, "name": "<value>", "server_url": "https://musty-technician.biz/", "slug": "<value>", "tools": [{"description": "blank disk where zowie", "input_schema": "<value>", "name": "<value>"}]}
@@ -6831,6 +6866,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getDeploymentEvaluation:
+    speakeasy-default-get-deployment-evaluation:
+      parameters:
+        query:
+          deployment_id: "<id>"
+      responses:
+        "200":
+          application/json: {"deployment_id": "<id>", "documents": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getDeploymentLogs:
     speakeasy-default-get-deployment-logs:
       parameters:
@@ -7772,6 +7819,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getServerIdentityImpact:
+    speakeasy-default-get-server-identity-impact:
+      parameters:
+        query:
+          user_session_issuer_id: "d0fab2e7-207a-45ba-85f9-9efca2883735"
+          change: "detach"
+      responses:
+        "200":
+          application/json: {"hidden_server_count": 158626, "servers": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getShadowMCPInventoryServer:
     speakeasy-default-get-shadow-MCP-inventory-server:
       parameters:
@@ -8672,7 +8732,7 @@ examples:
     speakeasy-default-list-ai-scan-targets:
       responses:
         "200":
-          application/json: {"etag": "<value>", "list_version": 52473, "targets": [{"category": "harness", "customized": true, "display_name": "Antwon_Metz", "gateway_client": {"cimd_vendor_keys": ["<value 1>", "<value 2>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": []}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>", "<value 2>"], "config_dirs": ["<value 1>"], "process_names": ["<value 1>"]}}]}
+          application/json: {"etag": "<value>", "list_version": 52473, "targets": [{"access": {"decision": "unreviewed", "enforceable": false, "state": "allowed"}, "category": "harness", "customized": true, "display_name": "Antwon_Metz", "gateway_client": {"cimd_vendor_keys": ["<value 1>", "<value 2>"], "client_info_names": ["<value 1>", "<value 2>"], "oauth_client_ids": []}, "id": "<id>", "origin": "default", "signatures": {"binaries": ["<value 1>"], "bundle_ids": ["<value 1>", "<value 2>"], "config_dirs": ["<value 1>"], "process_names": ["<value 1>"]}}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9735,7 +9795,7 @@ examples:
     speakeasy-default-list-risk-policies:
       responses:
         "200":
-          application/json: {"policies": [{"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "audience_type": "everyone", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "name": "<value>", "pending_messages": 203949, "policy_type": "standard", "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "score": 5, "sources": ["<value 1>", "<value 2>"], "total_messages": 276564, "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
+          application/json: {"policies": [{"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "audience_type": "everyone", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "name": "<value>", "policy_type": "standard", "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "score": 5, "sources": ["<value 1>", "<value 2>"], "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -9761,6 +9821,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listRiskPresets:
+    speakeasy-default-list-risk-presets:
+      responses:
+        "200":
+          application/json: {"presets": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listRiskResults:
     speakeasy-default-list-risk-results:
       responses:
@@ -12162,6 +12231,17 @@ examples:
       responses:
         "200":
           application/json: {"match_type": "<value>", "match_value": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  suggestRiskPolicy:
+    speakeasy-default-suggest-risk-policy:
+      requestBody:
+        application/json: {"prompt": "<value>"}
+      responses:
+        "200":
+          application/json: {"action": "warn", "alternatives": [], "confidence": 2490.3, "name": "<value>", "policy_type": "standard", "preset_id": "<id>", "presidio_entities": ["<value 1>", "<value 2>"], "prompt": "<value>", "rationale": "<value>", "score": 9398.92, "sources": ["<value 1>", "<value 2>", "<value 3>"], "user_message": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

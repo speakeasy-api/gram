@@ -243,6 +243,13 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"list_my_sessions", "continue_session",
 		// The analytics reads hold the caller to project:read in the handler.
 		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
+		// The widget tools hold the caller to project:read in the handler; the
+		// widgets service's creator-or-write rule decides updates and deletes.
+		listWidgetsToolName, getWidgetToolName, saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName,
+		// The dashboard tools hold the caller to project:read; the
+		// dashboards service decides creator or project:write for a change.
+		listDashboardsToolName, getDashboardToolName, saveDashboardToolName, duplicateDashboardToolName,
+		deleteDashboardToolName, editDashboardLayoutToolName, saveDashboardFiltersToolName,
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
 	}
@@ -281,7 +288,8 @@ func TestGetPlatformContextPreservesAssistantCallsWithoutExternalGrants(t *testi
 	contextResult, ok := result.(PlatformContext)
 	require.True(t, ok)
 	require.Equal(t, principal.OrganizationID, contextResult.OrganizationID)
-	require.Contains(t, contextResult.Overview, "binding inspection, unlinking, and rebinding are not available through this server")
+	require.Contains(t, contextResult.Overview, "binding unlinking and rebinding are not available through this server")
+	require.Contains(t, contextResult.Overview, "where the catalogue lists get_xaa_readiness (organization administrators on external clients only)")
 	require.Contains(t, contextResult.Overview, "explicitly unlink affected bindings")
 	require.Contains(t, contextResult.Overview, "blocking_reason=identity_chaining and ema_binding_count greater than zero (can_delete=false)")
 	require.Contains(t, contextResult.Overview, "current generation before retrying deletion")
@@ -441,6 +449,21 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		// with write access to it, not for the assistant.
 		createProjectToolName,
 		renameProjectToolName,
+		// Widget writes are audited under a user; an assistant has no user identity.
+		listWidgetsToolName,
+		getWidgetToolName,
+		saveWidgetToolName,
+		duplicateWidgetToolName,
+		deleteWidgetToolName,
+		// Every dashboard write is audited under a user's email, and the
+		// assistant has no user identity; the reads stay with the writes.
+		listDashboardsToolName,
+		getDashboardToolName,
+		saveDashboardToolName,
+		duplicateDashboardToolName,
+		deleteDashboardToolName,
+		editDashboardLayoutToolName,
+		saveDashboardFiltersToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}
@@ -485,6 +508,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"list_risk_exclusions",
 		"get_risk_analysis_status",
 		"list_watchdog_findings",
+		"list_risk_presets",
+		"suggest_risk_policy",
 		"list_risk_findings",
 		"list_risk_findings_by_chat",
 		"get_risk_rule_breakdown",
