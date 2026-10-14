@@ -149,15 +149,22 @@ jobs:
             echo "No changes to sync."
             exit 0
           fi
-          git checkout -b "$SYNC_BRANCH"
+          git checkout -B "$SYNC_BRANCH"
           git add -A
           git -c user.name="Beezy the bot" -c user.email="beezy-bot@users.noreply.github.com" \
             commit -m "Sync marketing docs from Speakeasy 🐝 (source ${GITHUB_SHA})"
-          # The checkout step does not persist credentials, so authenticate
-          # this one push with the bot token.
-          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
-            push origin "HEAD:refs/heads/${SYNC_BRANCH}"
+          # The checkout step does not persist credentials, so this one push
+          # gets the bot token through git's environment config, which keeps
+          # it out of the process arguments. --force makes a rerun for the
+          # same source commit replace its own earlier branch.
+          GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" \
+            git push --force origin "HEAD:refs/heads/${SYNC_BRANCH}"
+          if gh pr list --repo "$MARKETING_REPO" --head "$SYNC_BRANCH" --state open --json number --jq '.[].number' | grep -q .; then
+            echo "Sync pull request for $SYNC_BRANCH already open; branch updated."
+            exit 0
+          fi
           gh pr create \
             --repo "$MARKETING_REPO" \
             --base "$BRANCH" \
