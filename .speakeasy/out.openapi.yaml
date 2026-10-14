@@ -41270,6 +41270,88 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: Organization
+  /rpc/organizations.getGateway:
+    get:
+      description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer. It is served while the organization owns exactly one organization-level user session issuer. Requires org:read.'
+      operationId: getOrganizationGateway
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationGateway'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getGateway organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: getGateway
+      x-speakeasy-react-hook:
+        name: OrganizationGateway
   /rpc/organizations.getOnboardingStatus:
     get:
       description: Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
@@ -96615,6 +96697,24 @@ components:
         - name
         - slug
         - projects
+    OrganizationGateway:
+      type: object
+      properties:
+        available:
+          type: boolean
+          description: Whether the organization is served a gateway.
+        unavailable_reason:
+          type: string
+          description: Why the gateway is not served. Set only when not available.
+          enum:
+            - no_organization_issuer
+            - multiple_organization_issuers
+        url:
+          type: string
+          description: The gateway's MCP URL. Set only when available.
+      description: The active organization's gateway, or why it is not served.
+      required:
+        - available
     OrganizationInvitation:
       type: object
       properties:
@@ -96869,6 +96969,9 @@ components:
           items:
             $ref: '#/components/schemas/OrganizationUserSessionIssuerReference'
           description: Live toolsets that block deletion.
+        withdraws_organization_gateway:
+          type: boolean
+          description: True when this is the organization's only organization-level issuer, so deleting it stops serving the organization gateway its members sign in to. Does not block deletion.
       description: Authoritative impact summary for deleting an organization-owned user_session_issuer.
       required:
         - client_count
@@ -96877,6 +96980,7 @@ components:
         - toolsets
         - can_delete
         - ema_binding_count
+        - withdraws_organization_gateway
     OrganizationUserSessionIssuerMigratePreflight:
       type: object
       properties:

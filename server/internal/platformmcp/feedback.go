@@ -429,6 +429,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	operationRepublishPlugin:                {},
 	"get_my_mcp_access":                     {},
 	"get_my_mcp_connection_status":          {},
+	getMyOrganizationGatewayName:            {},
 	"get_mcp_client_admission":              {},
 	"set_mcp_client_admission":              {},
 	"get_risk_analysis_status":              {},

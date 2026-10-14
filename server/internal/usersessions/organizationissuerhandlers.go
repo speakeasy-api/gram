@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -618,6 +619,7 @@ type organizationIssuerPreflightQueries interface {
 	CountOrganizationUserSessionIssuerLiveSessions(context.Context, repo.CountOrganizationUserSessionIssuerLiveSessionsParams) (int32, error)
 	ListOrganizationUserSessionIssuerMCPServers(context.Context, repo.ListOrganizationUserSessionIssuerMCPServersParams) ([]repo.ListOrganizationUserSessionIssuerMCPServersRow, error)
 	ListOrganizationUserSessionIssuerToolsets(context.Context, repo.ListOrganizationUserSessionIssuerToolsetsParams) ([]repo.ListOrganizationUserSessionIssuerToolsetsRow, error)
+	orggateway.IssuerLister
 }
 
 func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger, q organizationIssuerPreflightQueries, bindings *remotesessionsrepo.Queries, id uuid.UUID, organizationID string) (*orggen.OrganizationUserSessionIssuerDeletePreflight, error) {
@@ -650,12 +652,17 @@ func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger,
 	for _, row := range toolsetRows {
 		toolsets = append(toolsets, &orggen.OrganizationUserSessionIssuerReference{ID: row.ID.String(), Name: row.Name, ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName})
 	}
+	gatewayIssuerID, _, err := orggateway.Resolve(ctx, q, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, logger)
+	}
 	return &orggen.OrganizationUserSessionIssuerDeletePreflight{
-		EmaBindingCount:  count,
-		ClientCount:      int(clients),
-		LiveSessionCount: int(sessions),
-		McpServers:       mcpServers,
-		Toolsets:         toolsets,
-		CanDelete:        count == 0 && len(mcpServers) == 0 && len(toolsets) == 0,
+		EmaBindingCount:              count,
+		ClientCount:                  int(clients),
+		LiveSessionCount:             int(sessions),
+		McpServers:                   mcpServers,
+		Toolsets:                     toolsets,
+		CanDelete:                    count == 0 && len(mcpServers) == 0 && len(toolsets) == 0,
+		WithdrawsOrganizationGateway: gatewayIssuerID == id,
 	}, nil
 }

@@ -223,6 +223,7 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(project.ID),
 		OrganizationID:      conv.ToPGText(organizationID),
+		OrganizationWide:    false,
 	})
 	if err != nil {
 		return false, fmt.Errorf("list registered identity providers: %w", err)

@@ -366,6 +366,7 @@ type PostgresReader struct {
 	riskFindings              riskFindingsLister
 	riskFindingList           riskFindingListLister
 	chatMetadata              *ChatMetadataService
+	organizationGateway       *OrganizationGatewayService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -401,6 +402,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskFindings:              nil,
 		riskFindingList:           nil,
 		chatMetadata:              nil,
+		organizationGateway:       nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -594,6 +596,14 @@ func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, bu
 func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.chatMetadata = service
+	}
+	return r
+}
+
+// WithOrganizationGateway serves get_my_organization_gateway.
+func (r *PostgresReader) WithOrganizationGateway(service *OrganizationGatewayService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.organizationGateway = service
 	}
 	return r
 }

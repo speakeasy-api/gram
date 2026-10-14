@@ -304,6 +304,10 @@ type OrganizationUserSessionIssuerDeletePreflight struct {
 	// Active identity-chaining bindings that must be explicitly unlinked before
 	// deletion.
 	EmaBindingCount int64
+	// True when this is the organization's only organization-level issuer, so
+	// deleting it stops serving the organization gateway its members sign in to.
+	// Does not block deletion.
+	WithdrawsOrganizationGateway bool
 }
 
 // OrganizationUserSessionIssuerMigratePreflight is the result type of the

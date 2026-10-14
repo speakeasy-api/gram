@@ -779,8 +779,13 @@ func (s *Service) contextForSessionSubject(
 		return ctx, nil
 	}
 
-	projectID := endpoint.ProjectID
-	authCtx, err := s.sessionAuthContext(ctx, endpoint.OrganizationID, &projectID, sessionID)
+	// An organization gateway belongs to no project; its members carry their
+	// own into every check.
+	var projectID *uuid.UUID
+	if id := endpoint.ProjectID; id != uuid.Nil {
+		projectID = &id
+	}
+	authCtx, err := s.sessionAuthContext(ctx, endpoint.OrganizationID, projectID, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -982,13 +987,24 @@ func (s *Service) authenticateIssuerGate(
 		refreshable   bool
 		valErr        error
 	)
-	if principalcredential.IsToken(authToken) {
+	// An organization gateway serves the organization's users, each with the
+	// servers their own access reaches. Principal credentials, agent keys,
+	// assistant tokens, and workload sessions are all bound to a project or a
+	// workload's own policy, so none of them signs in to it.
+	organizationGateway := endpoint.IsOrganizationGateway()
+	switch {
+	case principalcredential.IsToken(authToken) && !organizationGateway:
 		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
-	} else {
+	case principalcredential.IsToken(authToken):
+	default:
 		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
+		if subject != nil && organizationGateway && subject.Kind != urn.SessionSubjectKindUser {
+			newCtx, subject, toolSelection, refreshable = ctx, nil, nil, false
+			valErr = fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
+		}
 	}
 	refreshableUserSession := subject != nil && refreshable
-	if subject == nil {
+	if subject == nil && !organizationGateway {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted
 		// in project A could resolve a remote_session linked under
@@ -1002,7 +1018,7 @@ func (s *Service) authenticateIssuerGate(
 			newCtx, subject = s.identityValidator.StampAssistant(assistCtx), &ssubj
 		}
 	}
-	if subject == nil && strings.HasPrefix(authToken, "gram_") {
+	if subject == nil && !organizationGateway && strings.HasPrefix(authToken, "gram_") {
 		newCtx, subject, valErr = s.authenticateIssuerGateAgentKey(ctx, authToken, endpoint)
 		var denied *oops.ShareableError
 		if errors.As(valErr, &denied) && denied.Code == oops.CodeNotFound {

@@ -367,6 +367,8 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 	routeBase := ""
 	slug := ""
 	switch {
+	case strings.HasPrefix(routePath, organizationGatewayRouteBase+"/"):
+		routeBase, slug = organizationGatewayRouteBase, strings.TrimPrefix(routePath, organizationGatewayRouteBase+"/")
 	case strings.HasPrefix(routePath, "x/mcp/"):
 		routeBase, slug = "x/mcp", strings.TrimPrefix(routePath, "x/mcp/")
 	case strings.HasPrefix(routePath, "mcp/"):

@@ -594,6 +594,8 @@ var OrganizationUserSessionIssuerDeletePreflight = Type("OrganizationUserSession
 	Required("client_count", "live_session_count", "mcp_servers", "toolsets", "can_delete")
 	Attribute("ema_binding_count", Int64, "Active identity-chaining bindings that must be explicitly unlinked before deletion.")
 	Required("ema_binding_count")
+	Attribute("withdraws_organization_gateway", Boolean, "True when this is the organization's only organization-level issuer, so deleting it stops serving the organization gateway its members sign in to. Does not block deletion.")
+	Required("withdraws_organization_gateway")
 })
 
 var UserSessionIssuerFieldMismatch = Type("UserSessionIssuerFieldMismatch", func() {

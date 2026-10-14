@@ -335,6 +335,10 @@ type GetIssuerDeletePreflightResponseBody struct {
 	// Active identity-chaining bindings that must be explicitly unlinked before
 	// deletion.
 	EmaBindingCount *int64 `form:"ema_binding_count,omitempty" json:"ema_binding_count,omitempty" xml:"ema_binding_count,omitempty"`
+	// True when this is the organization's only organization-level issuer, so
+	// deleting it stops serving the organization gateway its members sign in to.
+	// Does not block deletion.
+	WithdrawsOrganizationGateway *bool `form:"withdraws_organization_gateway,omitempty" json:"withdraws_organization_gateway,omitempty" xml:"withdraws_organization_gateway,omitempty"`
 }
 
 // MoveIssuerResponseBody is the type of the "organizationUserSessionIssuers"
@@ -4227,10 +4231,11 @@ func NewListMcpServersGatewayError(body *ListMcpServersGatewayErrorResponseBody)
 // endpoint result from a HTTP "OK" response.
 func NewGetIssuerDeletePreflightOrganizationUserSessionIssuerDeletePreflightOK(body *GetIssuerDeletePreflightResponseBody) *organizationusersessionissuers.OrganizationUserSessionIssuerDeletePreflight {
 	v := &organizationusersessionissuers.OrganizationUserSessionIssuerDeletePreflight{
-		ClientCount:      *body.ClientCount,
-		LiveSessionCount: *body.LiveSessionCount,
-		CanDelete:        *body.CanDelete,
-		EmaBindingCount:  *body.EmaBindingCount,
+		ClientCount:                  *body.ClientCount,
+		LiveSessionCount:             *body.LiveSessionCount,
+		CanDelete:                    *body.CanDelete,
+		EmaBindingCount:              *body.EmaBindingCount,
+		WithdrawsOrganizationGateway: *body.WithdrawsOrganizationGateway,
 	}
 	v.McpServers = make([]*organizationusersessionissuers.OrganizationUserSessionIssuerReference, len(body.McpServers))
 	for i, val := range body.McpServers {
@@ -6007,6 +6012,9 @@ func ValidateGetIssuerDeletePreflightResponseBody(body *GetIssuerDeletePreflight
 	}
 	if body.EmaBindingCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ema_binding_count", "body"))
+	}
+	if body.WithdrawsOrganizationGateway == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("withdraws_organization_gateway", "body"))
 	}
 	for _, e := range body.McpServers {
 		if e != nil {

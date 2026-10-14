@@ -370,7 +370,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			logger.InfoContext(ctx, "remote session re-check skipped: no endpoint serves this grant")
 			continue
 		}
-		clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		clients, err := s.listEndpointClients(ctx, endpoint)
 		if err != nil {
 			logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(err))
 			continue
@@ -447,6 +447,12 @@ func (s *Service) placeRemoteSessionRecheck(ctx context.Context, logger *slog.Lo
 		RouteBase:       "mcp",
 
 		SharedAuthorizationServer: false,
+	}
+	if placement.OrganizationGateway {
+		// Addressed by organization slug; the synthetic id is what the
+		// resolver checks the ref against.
+		ref.RouteBase = organizationGatewayRouteBase
+		ref.MetaMcpServerID = uuid.NullUUID{UUID: organizationGatewayID(organizationID), Valid: true}
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, ref)
 	if errors.Is(err, mcpendpoints.ErrPolicyDenied) {
