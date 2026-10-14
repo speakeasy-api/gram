@@ -34,8 +34,6 @@ rules:
     disable: true
   github-app:
     disable: true
-  github-env:
-    disable: true
   obfuscation:
     disable: true
   overprovisioned-secrets:
