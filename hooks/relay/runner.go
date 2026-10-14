@@ -171,10 +171,8 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			r.debugf("event=%s token-rejected", agenthooks.EventOf(typed).NativeName)
 			return tokenRejectedResult(), stateBroken
 		}
-		// The device agent could not produce a token. That is a missing
-		// verdict, not a missing credential: report it like an unreachable
-		// control plane, so observe-only events spool for replay and gating
-		// events follow the org's fail-open posture.
+		// No token is a missing verdict, not a missing credential: treat it like an
+		// outage (spool observe-only events, gate by the fail-open posture).
 		return r.tokenUnavailable(typed), stateReady
 	}
 	if !ok {

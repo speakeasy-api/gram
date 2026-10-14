@@ -16,25 +16,10 @@ import (
 	"unicode"
 )
 
-// The token-command credential source (ADR-0025, contracts C7 and C8)
-// authenticates a headless workload box. The command is the device agent's
-// `speakeasyd hooks-token`, which prints a short-lived device-agent bearer and
-// the project the box's admission names. It is found in one of three ways, in
-// order:
-//
-//  1. SPEAKEASY_AI_HOOKS_TOKEN_COMMAND, an explicit override, split on
-//     whitespace (no quoting).
-//  2. Discovery: `speakeasyd identity` reports "workload": true and the argv in
-//     "hooks_token_argv", executed as given.
-//  3. The token-box record (tokenBoxPath): once a box has authenticated by
-//     token it never drops back to a key because an identity lookup failed or
-//     answered from a stale cache. Removing that file is the only way back to
-//     key authentication.
-//
-// Whichever applies, it is the only credential source: an env key, a cached
-// personal key or the baked org-wide key would all bypass the admission's
-// project filter. The bearer is cached in the auth cache until shortly before
-// it expires, so a hook event costs a file read rather than a process spawn.
+// The token-command credential source authenticates a headless workload box
+// (ADR-0025). The command comes from SPEAKEASY_AI_HOOKS_TOKEN_COMMAND, identity
+// discovery, or the token-box record, and is then the only source: any key
+// would bypass the admission's project filter.
 
 const (
 	tokenCommandTimeout   = 5 * time.Second
@@ -44,28 +29,21 @@ const (
 	tokenMaxBearerBytes   = 8 << 10
 	tokenCacheKind        = "token"
 
-	// tokenCommandRefusedExit is the exit status the token command uses for a
-	// definitive refusal (the device was revoked, is not a workload, or has no
-	// hooks project), as opposed to any other failure such as an unreachable
-	// control plane.
+	// tokenCommandRefusedExit is the command's exit status for a definitive
+	// refusal (revoked, not a workload, no hooks project), as opposed to an outage.
 	tokenCommandRefusedExit = 3
 )
 
 // errTokenRefused marks a token command failure as a definitive refusal.
 var errTokenRefused = errors.New("the device agent refused to issue a hooks token")
 
-// A token box that has been definitively refused, by the server rejecting
-// its token or by the command exiting tokenCommandRefusedExit, fails closed
-// until a fresh token is accepted. Without the marker, a refused box would
-// reach the no-token path once its cached token expired, and that path follows
-// the org's fail-open posture: a revoked device would get through. The marker
-// is a separate file, so a damaged token cache cannot clear it.
+// A refused token box fails closed until a fresh token is accepted; otherwise an
+// expired token would reach the fail-open no-token path. A separate file, so a
+// damaged token cache cannot clear it.
 func tokenRejectedPath() string { return authFilePath() + ".token-rejected" }
 
-// tokenBoxPath records that this machine authenticates by token: the argv that
-// mints the token, the project its admission authorizes, and whether it was
-// refused. It lives apart from the auth cache, so forgetting a rejected bearer
-// or a damaged cache never erases the proof that keys must not be used.
+// tokenBoxPath records that this machine authenticates by token (argv, project,
+// refused). It lives apart from the auth cache so losing a bearer never erases it.
 func tokenBoxPath() string { return authFilePath() + ".token-box" }
 
 type tokenBoxState struct {
@@ -113,10 +91,8 @@ func markTokenRejected() error {
 	return nil
 }
 
-// updateTokenBox applies fn to the token-box record under a cross-process
-// lock, so a concurrent live send and spool drain cannot overwrite each
-// other's update (a lost Rejected flag would reopen fail-open). The write
-// error, if any, is stored in errOut.
+// updateTokenBox applies fn under a cross-process lock, so a live send and a
+// drain cannot lose each other's Rejected flag. The write error goes to errOut.
 func updateTokenBox(fn func(*tokenBoxState), errOut *error) {
 	withFileLock(tokenBoxPath(), func() {
 		st, _ := readTokenBox()
@@ -150,10 +126,8 @@ func clearTokenRejected() {
 	_ = os.Remove(tokenRejectedPath())
 }
 
-// tokenPersistFailed is set when a fresh token could not be persisted with
-// its token-box record. The token is then not used, and this process treats
-// the box as refused (fail closed, nothing spooled) until a token persists:
-// without the record, a later failed identity lookup could fall back to a key.
+// tokenPersistFailed is set when a token's token-box record could not be saved.
+// The box is then treated as refused until a record persists.
 var tokenPersistFailed atomic.Bool
 
 // nowFunc is the relay's clock for token expiry; a var so tests can move it.
@@ -163,10 +137,8 @@ var nowFunc = time.Now
 // script its output without a real binary.
 var runTokenCommand = execTokenCommand
 
-// tokenCommandArgv returns the argv this machine must authenticate with, and
-// whether the token source applies at all. An applying source with an empty
-// or invalid argv is still exclusive: it fails as credential-unavailable and
-// never falls back to a key.
+// tokenCommandArgv returns the argv to authenticate with and whether the token
+// source applies. An applying source with a bad argv still never falls back to a key.
 func tokenCommandArgv() ([]string, bool) {
 	if commandLine := Env("HOOKS_TOKEN_COMMAND"); commandLine != "" {
 		return strings.Fields(commandLine), true
@@ -196,10 +168,8 @@ type tokenCommandOutput struct {
 	ExpiresAt     time.Time `json:"expires_at"`
 }
 
-// resolveTokenAuth returns a usable token credential: the cached one while it
-// has more than tokenRefreshMargin left, else a fresh one from the command.
-// refresh skips the cache and asks the command for a new token, for the
-// 401/403 recovery path.
+// resolveTokenAuth returns the cached token while it has tokenRefreshMargin
+// left, else a fresh one. refresh skips the cache, for 401/403 recovery.
 func resolveTokenAuth(cfg Config, argv []string, refresh bool) (creds, bool) {
 	if !refresh {
 		if c, ok := readCachedToken(cfg); ok {
@@ -268,10 +238,8 @@ func parseTokenOutput(raw []byte) (tokenCommandOutput, error) {
 	return out, nil
 }
 
-// readCachedToken loads the cached token when it was minted for this
-// deployment and still has more than tokenRefreshMargin left. The project is
-// the token's own: it is the project the admission authorizes, not the
-// plugin's.
+// readCachedToken loads the cached token if it belongs to this deployment and
+// has tokenRefreshMargin left. Its project is the admission's, not the plugin's.
 func readCachedToken(cfg Config) (creds, bool) {
 	values, err := readAuthFile(authFilePath())
 	if err != nil || values["kind"] != tokenCacheKind {
@@ -321,11 +289,8 @@ func writeTokenAuth(c creds, argv []string) error {
 	return nil
 }
 
-// recoverTokenRejection handles a definitive rejection of token credentials c.
-// The live send and the spool drain both use it, so their handling cannot
-// drift: one fresh token and one resend, never into a different project than
-// the rejected event was bound to; if that does not succeed, the refusal is
-// recorded and the rejected bearer forgotten (the token-box record survives).
+// recoverTokenRejection is shared by the live send and the drain: one fresh token
+// and one resend in the same project, else record the refusal and forget the bearer.
 func recoverTokenRejection(cfg Config, c creds, res ingestResult, resend func(creds) ingestResult) (ingestResult, creds) {
 	argv, _ := tokenCommandArgv()
 	fresh, ok := resolveTokenAuth(cfg, argv, true)
@@ -347,10 +312,8 @@ func recoverTokenRejection(cfg Config, c creds, res ingestResult, resend func(cr
 	return res, c
 }
 
-// tokenCommandEnvAllow lists the environment passed to the command: enough to
-// locate the user's state and the device agent's own configuration, and
-// nothing that carries a credential. It is an explicit list: any other name,
-// SPEAKEASY_* included, is withheld.
+// tokenCommandEnvAllow is the only environment passed to the command: enough to
+// find the user's state and the agent's config, and no credentials.
 var tokenCommandEnvAllow = map[string]bool{
 	"HOME": true, "PATH": true, "USER": true, "LOGNAME": true, "TMPDIR": true,
 	"XDG_CONFIG_HOME": true, "XDG_STATE_HOME": true, "XDG_RUNTIME_DIR": true,

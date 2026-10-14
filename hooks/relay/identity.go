@@ -61,10 +61,8 @@ type deviceIdentity struct {
 	Known bool
 }
 
-// deviceIdentityTTL bounds how long one lookup serves. Per-event invocations
-// share it between credential selection and attribution, so an event spawns
-// the identity command at most once; a long-running serve process re-asks
-// periodically and picks up an enrollment change.
+// deviceIdentityTTL bounds how long one lookup serves, so an event runs identity
+// at most once and a serve process still picks up enrollment changes.
 const deviceIdentityTTL = 30 * time.Second
 
 var deviceIdentityMemo struct {
