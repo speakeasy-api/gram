@@ -40,9 +40,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// testServerURL is the test service's server URL, which its shared
-// authorization servers are served on.
-const testServerURL = "http://0.0.0.0"
+const (
+	// testServerURL is the test service's server URL, which its shared
+	// authorization servers are served on.
+	testServerURL = "http://0.0.0.0"
+
+	// testAuthenticationHostURL is the test service's authentication host.
+	testAuthenticationHostURL = "https://auth.example.test"
+)
+
+// testHosts are the hosts the test service serves authorization servers on.
+var testHosts = authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil}
 
 var infra *testenv.Environment
 
@@ -130,7 +138,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
 		testServerURL,
-		authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil},
+		testHosts,
 		ratelimit.NewRedisStore(redisClient),
 	)
 

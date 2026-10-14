@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 )
@@ -34,6 +35,31 @@ func TestGetAttachImpactBetweenPerServerIssuers(t *testing.T) {
 	// its own per-server authorization server.
 	require.True(t, impact.ReauthorizationRequired)
 	require.False(t, impact.AuthorizationServerChanges)
+}
+
+func TestGetAttachImpactBetweenPerServerIssuersOnDifferentHosts(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	currentID := seedIssuer(t, ctx, ti, "impact-host-current")
+	candidateID := seedIssuer(t, ctx, ti, "impact-host-candidate")
+	updated, err := testrepo.New(ti.conn).SetUserSessionIssuerUseAuthenticationHostFixture(ctx, testrepo.SetUserSessionIssuerUseAuthenticationHostFixtureParams{
+		UseAuthenticationHost: true,
+		IssuerID:              candidateID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), updated)
+	toolset := attachIssuerToolset(t, ctx, ti, *authCtx.ProjectID, currentID, "impact-host-toolset")
+
+	impact, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
+	require.NoError(t, err)
+	// The server's own authorization server moves from the server URL to the
+	// authentication host.
+	require.True(t, impact.ReauthorizationRequired)
+	require.True(t, impact.AuthorizationServerChanges)
 }
 
 func TestGetAttachImpactOntoSharedIssuer(t *testing.T) {
@@ -161,4 +187,61 @@ func TestGetAttachImpactRBAC(t *testing.T) {
 	readCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
 	_, err = ti.service.GetAttachImpact(readCtx, payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// The preview honors project-scoped MCP grants and exclusions as the toolset
+// update it previews does.
+func TestGetAttachImpactHonorsProjectScopedAuthorization(t *testing.T) {
+	t.Parallel()
+
+	projectGrant := func(projectID string, scope authz.Scope) authz.Grant {
+		return authz.NewGrantWithSelector(scope, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   authz.WildcardResource,
+			authz.SelectorKeyProjectID:    projectID,
+		})
+	}
+
+	for _, tc := range []struct {
+		name    string
+		grants  func(string) []authz.Grant
+		allowed bool
+	}{
+		{name: "matching project grant", grants: func(projectID string) []authz.Grant {
+			return []authz.Grant{projectGrant(projectID, authz.ScopeMCPWrite)}
+		}, allowed: true},
+		{name: "other project grant", grants: func(string) []authz.Grant {
+			return []authz.Grant{projectGrant(uuid.NewString(), authz.ScopeMCPWrite)}
+		}},
+		{name: "matching project exclusion", grants: func(projectID string) []authz.Grant {
+			return []authz.Grant{
+				authz.NewGrant(authz.ScopeMCPWrite, authz.WildcardResource),
+				projectGrant(projectID, authz.ScopeMCPBlockedWrite),
+			}
+		}},
+		{name: "other project exclusion", grants: func(string) []authz.Grant {
+			return []authz.Grant{
+				authz.NewGrant(authz.ScopeMCPWrite, authz.WildcardResource),
+				projectGrant(uuid.NewString(), authz.ScopeMCPBlockedWrite),
+			}
+		}, allowed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			issuerID := seedIssuer(t, ctx, ti, "impact-project-authz")
+			toolset := attachIssuerToolset(t, ctx, ti, *authCtx.ProjectID, issuerID, "impact-project-authz-toolset")
+
+			grantedCtx := withExactAuthzGrants(t, ctx, ti.conn, tc.grants(authCtx.ProjectID.String())...)
+			_, err := ti.service.GetAttachImpact(grantedCtx, &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: nil})
+			if tc.allowed {
+				require.NoError(t, err)
+			} else {
+				requireOopsCode(t, err, oops.CodeForbidden)
+			}
+		})
+	}
 }
