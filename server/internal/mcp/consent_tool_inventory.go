@@ -91,6 +91,11 @@ type consentToolInventory struct {
 	// established; the consent transport's DELETE only terminates an
 	// exactly matching session.
 	McpSessionID string `json:"mcp_session_id"`
+
+	// Members maps each gateway member slug with displayed tools to its
+	// server id, so the approved selection binds to those servers. Empty for
+	// every other endpoint.
+	Members map[string]uuid.UUID `json:"members,omitempty"`
 }
 
 func consentToolInventoryCacheKey(stateID, attempt string) string {
@@ -136,6 +141,7 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 		ExpectedCursor: "",
 		Complete:       false,
 		McpSessionID:   "",
+		Members:        nil,
 	}, nil
 }
 

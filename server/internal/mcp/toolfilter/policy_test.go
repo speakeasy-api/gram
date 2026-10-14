@@ -80,11 +80,13 @@ func TestSessionPolicyGatewaySelectionRoundTrip(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	raw, err := json.Marshal(&SessionPolicy{Resource: resource, Selection: selection, Gateway: &GatewayOptions{DiscoveryMode: nil}})
+	githubID := uuid.New()
+	raw, err := json.Marshal(&SessionPolicy{Resource: resource, Selection: selection, Gateway: &GatewayOptions{DiscoveryMode: nil}, Members: map[string]uuid.UUID{"github": githubID}})
 	require.NoError(t, err)
 	parsed, err := ParseSessionPolicy(raw)
 	require.NoError(t, err)
 	require.Nil(t, parsed.Gateway.DiscoveryMode)
+	require.Equal(t, map[string]uuid.UUID{"github": githubID}, parsed.Members)
 	require.True(t, parsed.Selection.AllowsName("github--create_issue"))
 	require.Equal(t, []string{AnnotationReadOnly}, parsed.Selection.LiveAnnotations())
 }
@@ -119,7 +121,9 @@ func TestForGatewayMemberProjectsMemberTools(t *testing.T) {
 	require.NoError(t, err)
 
 	memberID := uuid.New()
-	member, err := selection.ForGatewayMember("github", memberID)
+	slackID := uuid.New()
+	consented := map[string]uuid.UUID{"github": memberID, "linear": uuid.New(), "slack": slackID}
+	member, err := selection.ForGatewayMember("github", memberID, consented)
 	require.NoError(t, err)
 	require.Equal(t, "mcp_server:"+memberID.String(), member.Resource)
 	require.NotEqual(t, grantID, member.GrantID)
@@ -128,11 +132,77 @@ func TestForGatewayMemberProjectsMemberTools(t *testing.T) {
 	require.False(t, member.AllowsName("github--create_issue"))
 	require.Equal(t, []string{AnnotationIdempotent}, member.LiveAnnotations())
 
-	unlisted, err := selection.ForGatewayMember("slack", uuid.New())
+	unlisted, err := selection.ForGatewayMember("slack", slackID, consented)
 	require.NoError(t, err)
 	require.False(t, unlisted.AllowsName("create_issue"))
 	require.Equal(t, []string{AnnotationIdempotent}, unlisted.LiveAnnotations())
 
-	_, err = (&SessionSelection{Resource: testResource}).ForGatewayMember("github", memberID)
+	_, err = (&SessionSelection{Resource: testResource}).ForGatewayMember("github", memberID, consented)
+	require.Error(t, err)
+}
+
+// A member replaced by a different server under the same slug inherits
+// nothing the user approved for the server shown at consent.
+func TestForGatewayMemberRefusesReplacedMemberServer(t *testing.T) {
+	t.Parallel()
+	live := AnnotationModeLive
+	selection, err := NewSessionSelection("meta_mcp_server:"+uuid.NewString(), uuid.New(), []AllowEntry{
+		{Type: AllowTypeTool, Name: "github--create_issue", Mode: nil, Tools: nil},
+		{Type: AllowTypeAnnotation, Name: AnnotationReadOnly, Mode: &live, Tools: nil},
+	})
+	require.NoError(t, err)
+
+	replacement := uuid.New()
+	member, err := selection.ForGatewayMember("github", replacement, map[string]uuid.UUID{"github": uuid.New()})
+	require.NoError(t, err)
+	require.Equal(t, "mcp_server:"+replacement.String(), member.Resource)
+	require.False(t, member.AllowsName("create_issue"))
+	require.Empty(t, member.LiveAnnotations())
+}
+
+// Live annotation grants reach only members whose tools were shown at
+// consent, not members that were unavailable then or were added later.
+func TestForGatewayMemberScopesLiveGrantsToConsentedMembers(t *testing.T) {
+	t.Parallel()
+	live := AnnotationModeLive
+	selection, err := NewSessionSelection("meta_mcp_server:"+uuid.NewString(), uuid.New(), []AllowEntry{
+		{Type: AllowTypeAnnotation, Name: AnnotationReadOnly, Mode: &live, Tools: nil},
+	})
+	require.NoError(t, err)
+	shown := uuid.New()
+	consented := map[string]uuid.UUID{"docs": shown}
+
+	member, err := selection.ForGatewayMember("docs", shown, consented)
+	require.NoError(t, err)
+	require.Equal(t, []string{AnnotationReadOnly}, member.LiveAnnotations())
+
+	added, err := selection.ForGatewayMember("added-later", uuid.New(), consented)
+	require.NoError(t, err)
+	require.Empty(t, added.LiveAnnotations())
+	require.False(t, added.AllowsName("anything"))
+}
+
+func TestSessionPolicyGatewaySelectionRequiresConsentedMembers(t *testing.T) {
+	t.Parallel()
+	resource := "meta_mcp_server:" + uuid.NewString()
+	selection, err := NewSessionSelection(resource, uuid.New(), []AllowEntry{
+		{Type: AllowTypeTool, Name: "github--create_issue", Mode: nil, Tools: nil},
+	})
+	require.NoError(t, err)
+	_, err = json.Marshal(&SessionPolicy{Resource: resource, Selection: selection, Gateway: &GatewayOptions{DiscoveryMode: nil}, Members: nil})
+	require.Error(t, err)
+
+	stored := `{"version":1,"resource":"` + resource + `","gateway":{},"selection":{"resource":"` + resource + `","grant_id":"` + uuid.NewString() + `","allow":[{"type":"tool","name":"github--create_issue"}]}}`
+	_, err = ParseSessionPolicy([]byte(stored))
+	require.Error(t, err, "a stored gateway selection without consented members fails closed")
+
+	empty, err := NewSessionSelection(resource, uuid.New(), []AllowEntry{})
+	require.NoError(t, err)
+	raw, err := json.Marshal(&SessionPolicy{Resource: resource, Selection: empty, Gateway: &GatewayOptions{DiscoveryMode: nil}, Members: nil})
+	require.NoError(t, err, "a selection granting nothing needs no members")
+	_, err = ParseSessionPolicy(raw)
+	require.NoError(t, err)
+
+	_, err = json.Marshal(&SessionPolicy{Resource: resource, Selection: nil, Gateway: &GatewayOptions{DiscoveryMode: nil}, Members: map[string]uuid.UUID{"github": uuid.New()}})
 	require.Error(t, err)
 }

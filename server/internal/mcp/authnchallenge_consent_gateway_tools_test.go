@@ -64,7 +64,7 @@ func TestGatewayConsentPicksToolsPerSource(t *testing.T) {
 	// Hosted members share the project's latest deployment, so the second
 	// source is a remote server.
 	docsSlug := "docs-" + uuid.NewString()[:8]
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Docs", docsSlug, 2, newRecordingUpstream(t, "search_docs").url)
+	docsID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Docs", docsSlug, 2, newRecordingUpstream(t, "search_docs").url)
 	stateID, csrfToken := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
 	require.NoError(t, err)
@@ -129,6 +129,7 @@ func TestGatewayConsentPicksToolsPerSource(t *testing.T) {
 	require.True(t, selection.AllowsName(issues.slug+"--create_issue"))
 	require.True(t, selection.AllowsName(docsSlug+"--search_docs"))
 	require.False(t, selection.AllowsName(issues.slug+"--list_issues"))
+	require.Equal(t, map[string]uuid.UUID{issues.slug: issues.serverID, docsSlug: docsID}, policy.Members)
 }
 
 // TestGatewayToolSelectionSurvivesRefresh pins renewal: refreshing a gateway
@@ -150,7 +151,7 @@ func TestGatewayToolSelectionSurvivesRefresh(t *testing.T) {
 		{Type: toolfilter.AllowTypeTool, Name: member.slug + "--create_issue", Mode: nil, Tools: nil},
 	})
 	require.NoError(t, err)
-	original, err := json.Marshal(&toolfilter.SessionPolicy{Resource: resource, Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: nil}})
+	original, err := json.Marshal(&toolfilter.SessionPolicy{Resource: resource, Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: nil}, Members: map[string]uuid.UUID{member.slug: member.serverID}})
 	require.NoError(t, err)
 	refreshToken := seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, original)
 

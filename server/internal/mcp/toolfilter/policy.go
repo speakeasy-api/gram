@@ -31,13 +31,23 @@ type SessionPolicy struct {
 
 	// Gateway holds explicit options for a stored gateway connection.
 	Gateway *GatewayOptions
+
+	// Members maps each gateway member slug whose tools were shown at consent
+	// to the server it named then. Gateway selection grants apply only to
+	// members still served by that same server.
+	Members map[string]uuid.UUID
 }
 
+// gatewayPolicyMaxMembers bounds the consented member map. Gateways list far
+// fewer members; the cap only bounds a stored document's size.
+const gatewayPolicyMaxMembers = 1000
+
 type gatewayPolicyDocument struct {
-	Version   int               `json:"version"`
-	Resource  string            `json:"resource"`
-	Gateway   *GatewayOptions   `json:"gateway"`
-	Selection *SessionSelection `json:"selection,omitempty"`
+	Version   int                  `json:"version"`
+	Resource  string               `json:"resource"`
+	Gateway   *GatewayOptions      `json:"gateway"`
+	Selection *SessionSelection    `json:"selection,omitempty"`
+	Members   map[string]uuid.UUID `json:"members,omitempty"`
 }
 
 // PolicyForSelection preserves a legacy restrictive selection without adding
@@ -46,7 +56,7 @@ func PolicyForSelection(selection *SessionSelection) *SessionPolicy {
 	if selection == nil {
 		return nil
 	}
-	return &SessionPolicy{Resource: selection.Resource, Selection: selection, Gateway: nil}
+	return &SessionPolicy{Resource: selection.Resource, Selection: selection, Gateway: nil, Members: nil}
 }
 
 // ParseSessionPolicy reads legacy selections and versioned gateway documents.
@@ -89,7 +99,7 @@ func ParseSessionPolicy(raw []byte) (*SessionPolicy, error) {
 			return nil, err
 		}
 	}
-	policy := &SessionPolicy{Resource: document.Resource, Selection: document.Selection, Gateway: document.Gateway}
+	policy := &SessionPolicy{Resource: document.Resource, Selection: document.Selection, Gateway: document.Gateway, Members: document.Members}
 	if err := policy.validateGateway(); err != nil {
 		return nil, err
 	}
@@ -115,6 +125,20 @@ func (p *SessionPolicy) validateGateway() error {
 	// bound to any other resource could match another member's tool.
 	if p.Selection != nil && p.Selection.Resource != p.Resource {
 		return fmt.Errorf("gateway policy tool selection is bound to a different resource")
+	}
+	if p.Selection == nil && p.Members != nil {
+		return fmt.Errorf("gateway policy names consented members without a tool selection")
+	}
+	if p.Selection != nil && len(p.Selection.Allow) > 0 && len(p.Members) == 0 {
+		return fmt.Errorf("gateway policy tool selection names no consented members")
+	}
+	if len(p.Members) > gatewayPolicyMaxMembers {
+		return fmt.Errorf("gateway policy exceeds %d consented members", gatewayPolicyMaxMembers)
+	}
+	for slug, serverID := range p.Members {
+		if slug == "" || strings.Contains(slug, metamcp.QualifiedNameSeparator) || serverID == uuid.Nil {
+			return fmt.Errorf("gateway policy carries an invalid consented member")
+		}
 	}
 	return nil
 }
@@ -147,7 +171,7 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 			return nil, err
 		}
 	}
-	raw, err := json.Marshal(gatewayPolicyDocument{Version: 1, Resource: p.Resource, Gateway: p.Gateway, Selection: p.Selection})
+	raw, err := json.Marshal(gatewayPolicyDocument{Version: 1, Resource: p.Resource, Gateway: p.Gateway, Selection: p.Selection, Members: p.Members})
 	if err != nil {
 		return nil, fmt.Errorf("marshal gateway policy: %w", err)
 	}

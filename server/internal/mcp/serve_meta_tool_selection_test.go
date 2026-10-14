@@ -29,9 +29,10 @@ func TestGatewayToolSelectionRestrictsEveryMode(t *testing.T) {
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
 	hosted := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha", "beta")
 	allowedSlug := "remote-" + uuid.NewString()[:8]
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Allowed remote", allowedSlug, 2, newRecordingUpstream(t, "ping").url)
+	allowedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Allowed remote", allowedSlug, 2, newRecordingUpstream(t, "ping").url)
 	blockedSlug := "remote-" + uuid.NewString()[:8]
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Blocked remote", blockedSlug, 3, newRecordingUpstream(t, "pong").url)
+	blockedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Blocked remote", blockedSlug, 3, newRecordingUpstream(t, "pong").url)
+	members := map[string]uuid.UUID{hosted.slug: hosted.serverID, allowedSlug: allowedID, blockedSlug: blockedID}
 
 	resource := "meta_mcp_server:" + gateway.ID.String()
 	selection, err := toolfilter.NewSessionSelection(resource, uuid.New(), []toolfilter.AllowEntry{
@@ -41,20 +42,10 @@ func TestGatewayToolSelectionRestrictsEveryMode(t *testing.T) {
 	require.NoError(t, err)
 
 	mint := func(mode metamcp.DiscoveryMode) string {
-		policy, err := json.Marshal(&toolfilter.SessionPolicy{Resource: resource, Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: &mode}})
-		require.NoError(t, err)
-		subject := urn.NewUserSubject(authCtx.UserID)
-		token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(issuerID).String(), Issuer: ti.serverURL.String() + "/mcp/" + slug, Lifetime: time.Hour})
-		require.NoError(t, err)
-		_, err = usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{UserSessionIssuerID: issuerID, SubjectUrn: subject, Jti: jti, RefreshTokenHash: conv.ToPGText("gateway-selection-test-" + uuid.NewString()), RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ToolSelection: policy})
-		require.NoError(t, err)
-		return token
+		return mintGatewaySelectionToken(t, ti, issuerID, slug, authCtx.UserID, &toolfilter.SessionPolicy{Resource: resource, Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: &mode}, Members: members})
 	}
 	call := func(token, name string, arguments map[string]any) string {
-		w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": name, "arguments": arguments}), token, nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
-		return w.Body.String()
+		return callGatewayTool(t, ti, slug, token, name, arguments)
 	}
 
 	direct := mint(metamcp.DiscoveryModeDirect)
@@ -80,4 +71,53 @@ func TestGatewayToolSelectionRestrictsEveryMode(t *testing.T) {
 	require.Contains(t, described, allowedSlug+"--ping")
 	require.Contains(t, described, `"not_found":[`)
 	require.NotContains(t, described, `\"name\":\"`+blockedSlug+`--pong\"`)
+}
+
+// TestGatewayToolSelectionRefusesReplacedMember pins the member binding: a
+// grant approved for one server does not carry over to a different server
+// later attached under the same slug.
+func TestGatewayToolSelectionRefusesReplacedMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuerID)
+	memberSlug := "remote-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Replacement", memberSlug, 1, newRecordingUpstream(t, "ping").url)
+
+	resource := "meta_mcp_server:" + gateway.ID.String()
+	selection, err := toolfilter.NewSessionSelection(resource, uuid.New(), []toolfilter.AllowEntry{
+		{Type: toolfilter.AllowTypeTool, Name: metamcp.QualifyName(memberSlug, "ping"), Mode: nil, Tools: nil},
+	})
+	require.NoError(t, err)
+	direct := metamcp.DiscoveryModeDirect
+	consentedServer := uuid.New()
+	token := mintGatewaySelectionToken(t, ti, issuerID, slug, authCtx.UserID, &toolfilter.SessionPolicy{Resource: resource, Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: &direct}, Members: map[string]uuid.UUID{memberSlug: consentedServer}})
+
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotContains(t, w.Body.String(), memberSlug+"--ping")
+	require.NotContains(t, callGatewayTool(t, ti, slug, token, memberSlug+"--ping", map[string]any{}), "pong from ping")
+}
+
+func mintGatewaySelectionToken(t *testing.T, ti *testInstance, issuerID uuid.UUID, slug, userID string, policy *toolfilter.SessionPolicy) string {
+	t.Helper()
+	raw, err := json.Marshal(policy)
+	require.NoError(t, err)
+	subject := urn.NewUserSubject(userID)
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(issuerID).String(), Issuer: ti.serverURL.String() + "/mcp/" + slug, Lifetime: time.Hour})
+	require.NoError(t, err)
+	_, err = usersessionsrepo.New(ti.conn).CreateUserSession(t.Context(), usersessionsrepo.CreateUserSessionParams{UserSessionIssuerID: issuerID, SubjectUrn: subject, Jti: jti, RefreshTokenHash: conv.ToPGText("gateway-selection-test-" + uuid.NewString()), RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ToolSelection: raw})
+	require.NoError(t, err)
+	return token
+}
+
+func callGatewayTool(t *testing.T, ti *testInstance, slug, token, name string, arguments map[string]any) string {
+	t.Helper()
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": name, "arguments": arguments}), token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	return w.Body.String()
 }

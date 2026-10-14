@@ -75,16 +75,19 @@ type metaGateContext struct {
 	// chainUpstream acquires a member's upstream token by identity chaining
 	// when routing finds none. Set only on the tools/call dispatch copy, so
 	// describe and consent probes never exchange; nil otherwise.
-	chainUpstream   func(ctx context.Context, upstreamResource string) (string, error)
-	toolSelection   *toolfilter.SessionSelection
-	discoveryMode   metamcp.DiscoveryMode
-	authenticated   bool
-	sessionID       string
-	chatID          string
-	userID          string
-	externalUserID  string
-	apiKeyID        string
-	protocolVersion mcpversions.Resolution
+	chainUpstream func(ctx context.Context, upstreamResource string) (string, error)
+	toolSelection *toolfilter.SessionSelection
+	// selectionMembers maps each member slug shown at consent to the server
+	// it named; toolSelection grants reach only those members.
+	selectionMembers map[string]uuid.UUID
+	discoveryMode    metamcp.DiscoveryMode
+	authenticated    bool
+	sessionID        string
+	chatID           string
+	userID           string
+	externalUserID   string
+	apiKeyID         string
+	protocolVersion  mcpversions.Resolution
 	// connectURL is the gateway's browser connect page; empty when ungated.
 	connectURL string
 }
@@ -114,7 +117,7 @@ func (g *metaGateContext) memberToolSelection(member metaMember) (*toolfilter.Se
 	if g.toolSelection == nil {
 		return nil, nil
 	}
-	selection, err := g.toolSelection.ForGatewayMember(member.slug, member.serverID)
+	selection, err := g.toolSelection.ForGatewayMember(member.slug, member.serverID, g.selectionMembers)
 	if err != nil {
 		return nil, fmt.Errorf("scope gateway tool selection to member: %w", err)
 	}
@@ -259,6 +262,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		toolSelection:       nil,
+		selectionMembers:    nil,
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
 		sessionID:           parseMcpSessionID(r.Header),
@@ -273,6 +277,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	}
 	if gatePolicy != nil {
 		gate.toolSelection = gatePolicy.Selection
+		gate.selectionMembers = gatePolicy.Members
 		if gatePolicy.Gateway != nil && gatePolicy.Gateway.DiscoveryMode != nil {
 			gate.discoveryMode = *gatePolicy.Gateway.DiscoveryMode
 		}
