@@ -20,7 +20,7 @@ Use product language in every distributed skill: **Speakeasy AI Control Plane**,
 | Purpose                           | Path                                                                                     |
 | --------------------------------- | ---------------------------------------------------------------------------------------- |
 | Authoring source shipped to users | `server/internal/plugins/platform_mcp_skills/<skill-name>/SKILL.md`                      |
-| Generator and validation          | `server/internal/plugins/generate.go` (`loadPlatformMCPSkills`, `emitPlatformMCPSkills`) |
+| Generator and validation          | `server/internal/plugins/generate.go` (`PlatformMCPSkills`, `emitPlatformMCPSkills`) |
 | Package tests                     | `server/internal/plugins/generate_test.go`                                               |
 | Claude package output             | `speakeasy/skills/<skill-name>/SKILL.md`                                                 |
 | Portable Agent Plugin output      | `agent-plugins/speakeasy/skills/<skill-name>/SKILL.md`                                   |
