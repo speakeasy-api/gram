@@ -231,6 +231,13 @@ func (r *Resolver) accountOwner(ctx context.Context, orgID string, emails []stri
 		return "", false
 	}
 
+	return singleAccountOwner(accounts)
+}
+
+// singleAccountOwner returns the one org member who linked an AI account among
+// the rows, if there is exactly one. No owner and several owners are the same
+// answer: nobody the usage can be attributed to.
+func singleAccountOwner(accounts []hooksRepo.ListUserAccountsByEmailsRow) (string, bool) {
 	owners := make([]string, 0, len(accounts))
 	for _, account := range accounts {
 		owners = append(owners, conv.FromPGTextOrEmpty[string](account.UserID))
