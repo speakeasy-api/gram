@@ -231,6 +231,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
+		FocusServer:     "",
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {

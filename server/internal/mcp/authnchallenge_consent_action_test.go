@@ -43,6 +43,9 @@ type consentActionFixture struct {
 	clientB uuid.UUID
 	clientC uuid.UUID
 	clientD uuid.UUID
+	// server is the gateway server whose connect page a render opens, empty
+	// for the endpoint's own consent page.
+	server string
 }
 
 const (

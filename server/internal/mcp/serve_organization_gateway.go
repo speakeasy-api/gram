@@ -383,8 +383,8 @@ func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcp
 	return clients, nil
 }
 
-// consentSubjectMembers resolves the organization gateway members the
-// challenge's subject is admitted to, as its runtime requests will be.
+// consentSubjectMembers resolves the gateway members the challenge's subject
+// is admitted to, as its runtime requests will be.
 func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]metaMember, error) {
 	if challengeState.Subject == nil {
 		return nil, nil
@@ -395,9 +395,9 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)
 	}
-	_, members, err := s.resolveOrganizationMemberSnapshot(memberCtx, s.logger, endpoint.OrganizationID)
+	_, members, err := s.resolveEndpointMemberSnapshot(memberCtx, s.logger, endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("resolve organization gateway members: %w", err)
+		return nil, fmt.Errorf("resolve gateway members: %w", err)
 	}
 	return members, nil
 }

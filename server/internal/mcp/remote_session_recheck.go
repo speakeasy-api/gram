@@ -394,6 +394,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			CreatedAt:                now,
 			FirstParty:               true,
 			AutoConnectDone:          false,
+			FocusServer:              "",
 		}
 		clients, err := s.listEndpointClients(ctx, endpoint, state)
 		if err != nil {

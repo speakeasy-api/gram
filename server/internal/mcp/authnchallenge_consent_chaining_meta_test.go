@@ -15,6 +15,7 @@ func TestConsentPage_MetaGovernedRemoteMemberIsManaged(t *testing.T) {
 	ctx, fx, metaID, _, issuerID := metaConsent(t, "aim61-meta-chained")
 	const upstream = "https://meta-chained.example.com/mcp"
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-chained-member", upstream, conv.ToNullUUID(issuerID), 0)
+	fx.server = "aim61-meta-chained-member"
 	g := setConsentGovernor(t, fx, issuerID, upstream)
 
 	code, page, loc := render(t, fx)
@@ -35,14 +36,17 @@ func TestConsentPage_MetaGovernedRemoteMemberIsManaged(t *testing.T) {
 
 func TestConsentPage_MetaUngovernedMemberStillConnectsInteractively(t *testing.T) {
 	t.Parallel()
-	ctx, fx, metaID, _, issuerID := metaConsent(t, "aim61-meta-unchained")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "aim61-meta-unchained")
+	fx.clientA = clientID
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-unchained-member", "https://meta-unchained.example.com/mcp", conv.ToNullUUID(issuerID), 0)
+	fx.server = "aim61-meta-unchained-member"
 	setConsentGovernor(t, fx, issuerID)
 
-	code, _, loc := render(t, fx)
-	require.Equal(t, http.StatusSeeOther, code)
-	require.NotNil(t, loc)
-	require.Equal(t, "aim61-meta-unchained-as.example.com", loc.Host)
+	code, page, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, page)
+	require.NotContains(t, page, consentManagedCopy)
+	require.Contains(t, page, "data-connect-link")
+	require.Equal(t, "aim61-meta-unchained-as.example.com", postConnectAction(t, fx, fx.clientA).Host)
 }
 
 func TestConsentPage_MetaCardWithAnUngovernedMemberIsNotChained(t *testing.T) {
@@ -51,6 +55,7 @@ func TestConsentPage_MetaCardWithAnUngovernedMemberIsNotChained(t *testing.T) {
 	const governed = "https://meta-partial-a.example.com/mcp"
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-partial-a", governed, conv.ToNullUUID(issuerID), 0)
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-partial-b", "https://meta-partial-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
+	fx.server = "aim61-meta-partial-a"
 	setConsentGovernor(t, fx, issuerID, governed)
 
 	code, page, loc := render(t, fx)
@@ -81,6 +86,7 @@ func TestConsentPage_MetaGovernedTunneledMemberCarriesCardIssuer(t *testing.T) {
 	ctx, fx, metaID, _, issuerID := metaConsent(t, "aim61-meta-tunnel")
 	const identifier = "urn:gram:tunnel:aim61-meta"
 	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "aim61-meta-tunnel-member", identifier, conv.ToNullUUID(issuerID), 0)
+	fx.server = "aim61-meta-tunnel-member"
 	g := setConsentGovernor(t, fx, issuerID, identifier)
 
 	code, page, _ := render(t, fx)

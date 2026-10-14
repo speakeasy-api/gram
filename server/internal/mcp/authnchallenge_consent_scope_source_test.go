@@ -133,7 +133,8 @@ func TestServeConsent_MultiBindingCardReadsOwnResourceScopes(t *testing.T) {
 func TestServeConsent_GatewayIdentityReconnectFollowsLogin(t *testing.T) {
 	t.Parallel()
 
-	ctx, fx, _, clientID, issuerID := metaConsent(t, "scope-gw")
+	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "scope-gw")
+	fx = focusClaimingMember(t, ctx, fx, metaID, issuerID, "scope-gw-member")
 	const claimed = "https://claimed.example.com/mcp"
 	claimResource(t, ctx, fx, clientID, claimed)
 	cacheResourceScopes(t, ctx, fx, claimed, []string{"read"})
@@ -182,6 +183,7 @@ func TestServeConsent_GatewayMemberResourceDecidesScopes(t *testing.T) {
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "scope-gw-member")
 	const member = "https://member.example.com/mcp"
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "scope-gw-member-m", member, conv.ToNullUUID(issuerID), 0)
+	fx.server = "scope-gw-member-m"
 	cacheResourceScopes(t, ctx, fx, member, []string{"m:read", "openid"})
 	advertise(t, ctx, fx, issuerID, []string{"admin", "openid"})
 	overrideIssuerScopes(t, ctx, fx, issuerID, []string{"admin"})

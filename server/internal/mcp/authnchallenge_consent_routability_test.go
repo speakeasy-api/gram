@@ -123,7 +123,11 @@ func createTunneledServer(t *testing.T, ctx context.Context, ti *testInstance, p
 // redirect the page issues once per challenge when its sole card is unlinked.
 func render(t *testing.T, fx consentActionFixture) (int, string, *url.URL) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+fx.endpoint.Slug+"/connect?state="+url.QueryEscape(fx.stateID), nil)
+	target := "/mcp/" + fx.endpoint.Slug + "/connect?state=" + url.QueryEscape(fx.stateID)
+	if fx.server != "" {
+		target += "&server=" + url.QueryEscape(fx.server)
+	}
+	req := httptest.NewRequest(http.MethodGet, target, nil)
 	w := httptest.NewRecorder()
 	require.NoError(t, fx.ti.service.ServeConsent(w, req, fx.endpoint))
 	if w.Code == http.StatusOK {
@@ -177,10 +181,11 @@ func TestServeConsent_MetaRemoteMemberLegacyGrantAsksForReconnect(t *testing.T) 
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "rt-legacy")
 	const upstream = "https://member.example.com/mcp"
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-legacy-member", upstream, conv.ToNullUUID(issuerID), 0)
+	fx.server = "rt-legacy-member"
 
 	grant(t, ctx, fx, clientID, "")
-	expectAutoReconnect(t, fx, upstream)
 	expect(t, fx, 0, 1, true)
+	require.Equal(t, upstream, postConnectAction(t, fx, clientID).Query().Get("resource"))
 	grant(t, ctx, fx, clientID, "https://elsewhere.example.com/mcp")
 	expect(t, fx, 0, 1, true)
 	grant(t, ctx, fx, clientID, upstream+"/")
@@ -195,23 +200,27 @@ func TestServeConsent_MetaTunneledMemberHonoursIdentifierRule(t *testing.T) {
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, "rt-tunnel")
 	const identifier = "urn:gram:tunnel:routability"
 	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-tunnel-member", identifier, conv.ToNullUUID(issuerID), 0)
+	fx.server = "rt-tunnel-member"
 
 	grant(t, ctx, fx, clientID, "")
 	expect(t, fx, 1, 1, false)
 	grant(t, ctx, fx, clientID, identifier)
 	expect(t, fx, 1, 1, false)
 	grant(t, ctx, fx, clientID, "urn:gram:tunnel:other")
-	expectAutoReconnect(t, fx, identifier)
 	expect(t, fx, 0, 1, true)
+	require.Equal(t, identifier, postConnectAction(t, fx, clientID).Query().Get("resource"))
 }
 
-// A provider no member claims keeps its stored status.
-func TestServeConsent_MetaUnclaimedProviderKeepsStoredStatus(t *testing.T) {
+// A provider no member claims serves no server on the gateway, so neither
+// the gateway's page nor any server's page shows it.
+func TestServeConsent_MetaUnclaimedProviderIsNotShown(t *testing.T) {
 	t.Parallel()
 	ctx, fx, _, clientID, _ := metaConsent(t, "rt-unclaimed")
 	grant(t, ctx, fx, clientID, "")
-	expect(t, fx, 1, 1, false)
-	expectRechecks(t, fx, 0)
+	code, html, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.NotContains(t, html, "data-remote-client")
+	require.Contains(t, html, "You don't have access to any servers on this gateway yet.")
 }
 
 // Two grants naming one remote upstream make the runtime refuse both.
@@ -223,11 +232,12 @@ func TestServeConsent_DuplicateRemoteGrantsAskForReconnect(t *testing.T) {
 	issuerB := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientB)
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-a", upstream, conv.ToNullUUID(issuerA), 0)
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-dup-member-b", upstream, conv.ToNullUUID(issuerB), 1)
+	fx.server = "rt-dup-member-a"
 
 	grant(t, ctx, fx, clientA, upstream)
-	expect(t, fx, 1, 2, false)
+	expect(t, fx, 1, 1, false)
 	grant(t, ctx, fx, clientB, upstream)
-	expect(t, fx, 0, 2, true)
+	expect(t, fx, 0, 1, true)
 }
 
 // A single remote-backed server applies the rule against its one upstream.
@@ -314,4 +324,27 @@ func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
 	grant(t, ctx, fx, own, "https://mcp.example.test/a/b/")
 	expect(t, fx, 1, 2, true)
 	expectRechecks(t, fx, 0)
+}
+
+// A server picked from the gateway's list shows its page, which says what
+// connecting does; a connect opened for that one server, as a tool call's
+// link opens it, goes straight on to its provider.
+func TestServeConsent_GatewayServerLinkGoesStraightToProvider(t *testing.T) {
+	t.Parallel()
+	ctx, fx, metaID, _, issuerID := metaConsent(t, "rt-link")
+	const upstream = "https://link.example.com/mcp"
+	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-link-member", upstream, conv.ToNullUUID(issuerID), 0)
+
+	fx.server = "rt-link-member"
+	code, html, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Contains(t, html, "Connecting is all rt-link-member needs")
+
+	linked := firstPartyConsent(t, ctx, fx)
+	linked.server = ""
+	state, err := linked.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+linked.stateID)
+	require.NoError(t, err)
+	state.FocusServer = "rt-link-member"
+	require.NoError(t, linked.ti.authnChallengeCache.Store(ctx, state))
+	expectAutoReconnect(t, linked, upstream)
 }
