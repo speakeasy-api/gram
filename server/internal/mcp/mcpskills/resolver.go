@@ -38,6 +38,13 @@ const (
 	// idempotencyKeyPrefix namespaces MCP activation keys from the keys hook
 	// adapters choose, which share the per-project unique index.
 	idempotencyKeyPrefix = "mcp:"
+
+	// servedSkillRowLimit is the LIMIT of ListServedSkillsForEndpoint: the
+	// most (distribution, plugin) rows one resolution reads. A listing is
+	// answered in one page, so the cap bounds the work of a single call; an
+	// endpoint reaching it has its later skills by name cut off, which the
+	// resolver logs. Keep it equal to the LIMIT in queries.sql.
+	servedSkillRowLimit = 1000
 )
 
 // ErrSkillNotFound reports that no served skill matches the requested URI for
@@ -139,6 +146,12 @@ func (r *Resolver) resolve(ctx context.Context, scope Scope, name pgtype.Text) (
 	if err != nil {
 		return nil, fmt.Errorf("list served skills: %w", err)
 	}
+	if len(rows) >= servedSkillRowLimit {
+		r.logger.WarnContext(ctx, "served skill listing reached its row cap; later skills by name are not served",
+			attr.SlogProjectID(scope.ProjectID.String()),
+			attr.SlogToolsetID(scope.ToolsetID.String()),
+		)
+	}
 
 	entries := make([]Entry, 0, len(rows))
 	for start := 0; start < len(rows); {
@@ -187,6 +200,18 @@ func (r *Resolver) resolve(ctx context.Context, scope Scope, name pgtype.Text) (
 			continue
 		}
 		winner.Frontmatter = frontmatter
+		if err := winner.CheckFrontmatterName(); err != nil {
+			// Validation trims the name before checking it, so a version
+			// whose author quoted a padded name is stored valid under the
+			// trimmed name while its frontmatter still carries the padding.
+			// SEP-2640 requires the two to agree, so it is not served.
+			r.logger.ErrorContext(ctx, "skip served skill whose frontmatter name differs from its URI",
+				attr.SlogProjectID(scope.ProjectID.String()),
+				attr.SlogResourceURI(winner.URI()),
+				attr.SlogError(err),
+			)
+			continue
+		}
 		entries = append(entries, winner)
 	}
 	return entries, nil

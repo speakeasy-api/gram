@@ -80,3 +80,24 @@ func jsonInt(v int) string {
 	}
 	return string(encoded)
 }
+
+func TestEntryCheckFrontmatterName(t *testing.T) {
+	t.Parallel()
+
+	base := mcpskills.Entry{
+		SkillID: uuid.New(), VersionID: uuid.New(), PluginID: uuid.New(),
+		Name: "refunds", Content: "", RawSHA256: "", Frontmatter: nil, Pinned: false,
+	}
+
+	exact := base
+	exact.Frontmatter = map[string]any{"name": "refunds", "description": "Handle refunds."}
+	require.NoError(t, exact.CheckFrontmatterName())
+
+	padded := base
+	padded.Frontmatter = map[string]any{"name": "refunds ", "description": "Handle refunds."}
+	require.Error(t, padded.CheckFrontmatterName(), "SEP-2640 requires frontmatter.name to equal the URI's final segment")
+
+	missing := base
+	missing.Frontmatter = map[string]any{"description": "Handle refunds."}
+	require.Error(t, missing.CheckFrontmatterName())
+}

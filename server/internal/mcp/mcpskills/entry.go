@@ -1,6 +1,7 @@
 package mcpskills
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -76,6 +77,21 @@ type Entry struct {
 // URI returns the entry's resource URI, skill://<name>/SKILL.md.
 func (e Entry) URI() string {
 	return SkillURI(e.Name)
+}
+
+// CheckFrontmatterName reports an error when the entry's frontmatter name is
+// not exactly its served name. SEP-2640 requires the final segment of the
+// entry's URI to equal frontmatter.name, and a conforming host refuses to
+// load an entry where they differ, so such an entry must not be served.
+func (e Entry) CheckFrontmatterName() error {
+	name, ok := e.Frontmatter["name"].(string)
+	if !ok {
+		return fmt.Errorf("frontmatter name is %T, not a string", e.Frontmatter["name"])
+	}
+	if name != e.Name {
+		return fmt.Errorf("frontmatter name %q does not equal served name %q", name, e.Name)
+	}
+	return nil
 }
 
 // Digest returns the SEP-2640 digest of the served content, "sha256:<hex>".

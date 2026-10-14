@@ -224,6 +224,7 @@ WHERE sd.project_id = $1
       AND pa.principal_urn = ANY($5::text[])
   )
 ORDER BY sk.name ASC, resolved.effective_at DESC, resolved.id DESC, p.id ASC
+LIMIT 1000
 `
 
 type ListServedSkillsForEndpointParams struct {
@@ -255,7 +256,9 @@ type ListServedSkillsForEndpointRow struct {
 // the same ordering as GetLatestValidSkillVersion. A skill appears once per
 // matching plugin, so the caller still has to pick one row per skill name.
 // The row order (name, newest resolved version first, then plugin) is what
-// that selection relies on. An empty principal list matches nothing.
+// that selection relies on. An empty principal list matches nothing. The
+// listing is answered in one page, so the row count is capped (the Go
+// resolver warns when the cap is reached; keep servedSkillRowLimit in sync).
 func (q *Queries) ListServedSkillsForEndpoint(ctx context.Context, arg ListServedSkillsForEndpointParams) ([]ListServedSkillsForEndpointRow, error) {
 	rows, err := q.db.Query(ctx, listServedSkillsForEndpoint,
 		arg.ProjectID,

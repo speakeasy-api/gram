@@ -9,7 +9,9 @@
 -- the same ordering as GetLatestValidSkillVersion. A skill appears once per
 -- matching plugin, so the caller still has to pick one row per skill name.
 -- The row order (name, newest resolved version first, then plugin) is what
--- that selection relies on. An empty principal list matches nothing.
+-- that selection relies on. An empty principal list matches nothing. The
+-- listing is answered in one page, so the row count is capped (the Go
+-- resolver warns when the cap is reached; keep servedSkillRowLimit in sync).
 SELECT
     sk.id AS skill_id,
     sk.name AS skill_name,
@@ -70,7 +72,8 @@ WHERE sd.project_id = @project_id
       AND pa.organization_id = p.organization_id
       AND pa.principal_urn = ANY(@principal_urns::text[])
   )
-ORDER BY sk.name ASC, resolved.effective_at DESC, resolved.id DESC, p.id ASC;
+ORDER BY sk.name ASC, resolved.effective_at DESC, resolved.id DESC, p.id ASC
+LIMIT 1000;
 
 -- name: InsertMCPSkillObservation :execrows
 -- Records one resources/read of a served skill as an activation. The server

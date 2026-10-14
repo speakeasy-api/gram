@@ -257,6 +257,24 @@ func TestResolverListInvalidVersionExcluded(t *testing.T) {
 	require.Equal(t, skillContent("half-valid", "Serves half-valid."), entries[0].Content, "the newer invalid version is never served")
 }
 
+func TestResolverListPaddedFrontmatterNameExcluded(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFixture(t)
+	skillID, _, _ := servedSkill(t, ctx, f, "padded", urn.PrincipalWildcard)
+	// Validation trims the name, so a quoted name with trailing whitespace is
+	// stored valid under "padded" while its frontmatter keeps the padding.
+	padded := "---\nname: \"padded \"\ndescription: Serves padded.\n---\n\n# padded\n"
+	addVersion(t, ctx, f, f.projectID, skillID, padded)
+
+	entries, err := f.resolver.List(ctx, f.scope(urn.PrincipalWildcard))
+	require.NoError(t, err)
+	require.Empty(t, entries, "an entry whose frontmatter name differs from its URI is never served")
+
+	_, err = f.resolver.Get(ctx, f.scope(urn.PrincipalWildcard), mcpskills.SkillURI("padded"))
+	require.ErrorIs(t, err, mcpskills.ErrSkillNotFound)
+}
+
 func TestResolverListDeletedPluginExcluded(t *testing.T) {
 	t.Parallel()
 

@@ -68,6 +68,9 @@ func newPlatformSkillCatalog() (*platformSkillCatalog, error) {
 			Frontmatter: frontmatter,
 			Pinned:      false,
 		}
+		if err := entry.CheckFrontmatterName(); err != nil {
+			return nil, fmt.Errorf("embedded platform skill %q: %w", name, err)
+		}
 		catalog.entries = append(catalog.entries, entry)
 		catalog.byName[name] = entry
 	}
