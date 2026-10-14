@@ -777,15 +777,21 @@ export function AddServersSheet({
   const allSelected =
     selectableValues.length > 0 &&
     selectableValues.every((value) => selectedValues.includes(value));
+  const canSelectAll =
+    !isLoading &&
+    !loadFailed &&
+    !toolsetsLoading &&
+    selectableValues.length > 0;
   const toggleSelectAll = () =>
-    setSelected((previous) =>
-      allSelected
-        ? previous.filter((value) => !selectableValues.includes(value))
-        : [
-            ...previous.filter((value) => !selectableValues.includes(value)),
-            ...selectableValues,
-          ],
-    );
+    setSelected((previous) => {
+      const rest = previous.filter(
+        (value) => !selectableValues.includes(value),
+      );
+      const everySelected = selectableValues.every((value) =>
+        previous.includes(value),
+      );
+      return everySelected ? rest : [...rest, ...selectableValues];
+    });
   const submit = async () => {
     if (
       submittingRef.current ||
@@ -1031,7 +1037,7 @@ export function AddServersSheet({
               <Text as="h3" id="add-existing-server" variant="subheading">
                 Add existing servers
               </Text>
-              {!isLoading && !loadFailed && selectableValues.length > 0 && (
+              {canSelectAll && (
                 <Button
                   variant="tertiary"
                   size="sm"

@@ -112,6 +112,9 @@ function setup(
   return { onAdd };
 }
 
+const checked = (name: string) =>
+  screen.getByRole("checkbox", { name }).getAttribute("aria-checked");
+
 describe("Add servers sheet", () => {
   it("offers one creation trigger with accessible grouped choices", () => {
     setup();
@@ -349,8 +352,6 @@ describe("Add servers sheet", () => {
         } as McpServer,
       ],
     });
-    const checked = (name: string) =>
-      screen.getByRole("checkbox", { name }).getAttribute("aria-checked");
     fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     expect([checked("Alpha"), checked("Beta"), checked("Direct")]).toEqual([
       "true",
@@ -365,6 +366,26 @@ describe("Add servers sheet", () => {
     );
     await waitFor(() => expect(onAdd).toHaveBeenCalledOnce());
     expect(onAdd.mock.calls[0]![0]).toHaveLength(2);
+  });
+
+  it("selects only search matches, leaving filtered-out servers unchecked", () => {
+    setup();
+    const search = screen.getByRole("textbox", {
+      name: "Search existing servers",
+    });
+    fireEvent.change(search, { target: { value: "alpha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    fireEvent.change(search, { target: { value: "" } });
+    expect([checked("Alpha"), checked("Beta")]).toEqual(["true", "false"]);
+  });
+
+  it.each([
+    { isLoading: true },
+    { loadFailed: true },
+    { toolsetsLoading: true },
+  ])("hides Select all while %o", (props) => {
+    setup(props);
+    expect(screen.queryByRole("button", { name: "Select all" })).toBeNull();
   });
 
   it("selects existing wrappers sharing a toolset independently", async () => {
