@@ -50,6 +50,10 @@ type InternalSessionIssuer struct {
 	// @access: confidential
 	DisabledAt pgtype.Timestamptz
 	// @access: confidential
+	AllowedSignInMethods []string
+	// @access: opaque-confidential
+	AllowedMicrosoftTenantIds []string
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz

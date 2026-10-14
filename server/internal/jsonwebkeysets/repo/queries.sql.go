@@ -166,7 +166,7 @@ func (q *Queries) CountRemoteSessionClientsForJsonWebKeySet(ctx context.Context,
 const createInternalSessionIssuer = `-- name: CreateInternalSessionIssuer :one
 INSERT INTO internal_session_issuers (organization_id, json_web_key_set_id, issuer)
 VALUES ($1, $2, $3)
-RETURNING id, organization_id, issuer, json_web_key_set_id, disabled_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, issuer, json_web_key_set_id, disabled_at, allowed_sign_in_methods, allowed_microsoft_tenant_ids, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateInternalSessionIssuerParams struct {
@@ -185,6 +185,8 @@ func (q *Queries) CreateInternalSessionIssuer(ctx context.Context, arg CreateInt
 		&i.Issuer,
 		&i.JsonWebKeySetID,
 		&i.DisabledAt,
+		&i.AllowedSignInMethods,
+		&i.AllowedMicrosoftTenantIds,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -555,7 +557,7 @@ func (q *Queries) GetOrganizationEMAIssuerKeys(ctx context.Context, arg GetOrgan
 }
 
 const getOrganizationInternalSessionIssuer = `-- name: GetOrganizationInternalSessionIssuer :one
-SELECT isi.id, isi.organization_id, isi.issuer, isi.json_web_key_set_id, isi.disabled_at, isi.created_at, isi.updated_at, isi.deleted_at, isi.deleted
+SELECT isi.id, isi.organization_id, isi.issuer, isi.json_web_key_set_id, isi.disabled_at, isi.allowed_sign_in_methods, isi.allowed_microsoft_tenant_ids, isi.created_at, isi.updated_at, isi.deleted_at, isi.deleted
 FROM internal_session_issuers AS isi
 JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
 WHERE isi.organization_id = $1
@@ -573,6 +575,8 @@ func (q *Queries) GetOrganizationInternalSessionIssuer(ctx context.Context, orga
 		&i.Issuer,
 		&i.JsonWebKeySetID,
 		&i.DisabledAt,
+		&i.AllowedSignInMethods,
+		&i.AllowedMicrosoftTenantIds,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1249,7 +1253,7 @@ SET disabled_at = CASE WHEN $1::boolean THEN COALESCE(disabled_at, clock_timesta
     updated_at = clock_timestamp()
 WHERE organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, issuer, json_web_key_set_id, disabled_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, issuer, json_web_key_set_id, disabled_at, allowed_sign_in_methods, allowed_microsoft_tenant_ids, created_at, updated_at, deleted_at, deleted
 `
 
 type SetInternalSessionIssuerDisabledParams struct {
@@ -1267,6 +1271,8 @@ func (q *Queries) SetInternalSessionIssuerDisabled(ctx context.Context, arg SetI
 		&i.Issuer,
 		&i.JsonWebKeySetID,
 		&i.DisabledAt,
+		&i.AllowedSignInMethods,
+		&i.AllowedMicrosoftTenantIds,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
