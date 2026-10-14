@@ -228,13 +228,15 @@ describe("ConsolidateIssuerDialog", () => {
     testState.preflight = preflight({
       clientCount: 2,
       sessionCount: 3,
+      consentCount: 4,
+      cimdClientCount: 1,
       remoteSessionCount: 1,
     });
     renderDialog();
 
     expect(
       screen.getByText(
-        "2 clients, 3 sessions and 1 linked account move to the target.",
+        "2 clients, 3 sessions, 4 sign-in approvals, 1 allowed client document and 1 linked account move to the target.",
       ),
     ).toBeDefined();
   });

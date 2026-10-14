@@ -133,6 +133,11 @@ describe("display helpers", () => {
         authorizationServerUnavailableReason: "host_not_served",
       }),
     ).toBe("This deployment doesn't serve its address");
+    expect(
+      unavailableReason({
+        authorizationServerUnavailableReason: "pinned_issuer_url_invalid",
+      }),
+    ).toBe("Its fixed issuer URL doesn't belong to it");
     expect(unavailableReason({})).toBe("It isn't available right now");
   });
 

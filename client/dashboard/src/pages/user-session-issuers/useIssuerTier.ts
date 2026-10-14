@@ -48,3 +48,17 @@ export function useIssuerTier(tier: "organization" | "project"): IssuerTier {
     retry: () => void query.refetch(),
   };
 }
+
+/**
+ * Retries only the tiers that failed, so a healthy one is not reloaded with
+ * them. Undefined when none failed.
+ */
+export function retryFailedTiers(
+  tiers: IssuerTier[],
+): (() => void) | undefined {
+  const failed = tiers.filter((tier) => tier.isError);
+  if (failed.length === 0) return undefined;
+  return () => {
+    for (const tier of failed) tier.retry();
+  };
+}

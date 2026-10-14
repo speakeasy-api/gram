@@ -27,7 +27,7 @@ import {
   consolidationTargets,
 } from "./issuerDisplay";
 import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
-import { useIssuerTier } from "./useIssuerTier";
+import { retryFailedTiers, useIssuerTier } from "./useIssuerTier";
 
 /** Route shell: the whole surface waits on its rollout flag. */
 export function UserSessionIssuersRoot(): JSX.Element | null {
@@ -115,14 +115,7 @@ function UserSessionIssuersOverview(): JSX.Element {
           candidatesLoading={
             organizationTier.isLoading || projectTier.isLoading
           }
-          onRetryCandidates={
-            organizationTier.isError || projectTier.isError
-              ? () => {
-                  organizationTier.retry();
-                  projectTier.retry();
-                }
-              : undefined
-          }
+          onRetryCandidates={retryFailedTiers([organizationTier, projectTier])}
           onClose={() => setConsolidateSource(null)}
         />
       )}

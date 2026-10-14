@@ -32,7 +32,7 @@ import {
   unavailableReason,
 } from "./issuerDisplay";
 import { MakeOrganizationWideDialog } from "./MakeOrganizationWideDialog";
-import { useIssuerTier } from "./useIssuerTier";
+import { retryFailedTiers, useIssuerTier } from "./useIssuerTier";
 
 export default function UserSessionIssuerDetail(): JSX.Element {
   // Gate the reads too, not only what renders.
@@ -381,14 +381,7 @@ function ConsolidateFromDetail({
         ...projectTier.items,
       ])}
       candidatesLoading={organizationTier.isLoading || projectTier.isLoading}
-      onRetryCandidates={
-        organizationTier.isError || projectTier.isError
-          ? () => {
-              organizationTier.retry();
-              projectTier.retry();
-            }
-          : undefined
-      }
+      onRetryCandidates={retryFailedTiers([organizationTier, projectTier])}
       onClose={onClose}
       onConsolidated={onConsolidated}
     />
