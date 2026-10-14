@@ -23,7 +23,6 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goahttp "goa.design/goa/v3/http"
 	"golang.org/x/sync/singleflight"
@@ -201,7 +200,7 @@ type cachedDocument struct {
 }
 
 // missingDocument stands for an organization with no issuer.
-var missingDocument = cachedDocument{body: nil, renderedAt: time.Time{}, version: keysVersion{JsonWebKeySetID: uuid.Nil, KeyCount: 0, KeysUpdatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}}, checkedAt: nil}
+var missingDocument = cachedDocument{body: nil, renderedAt: time.Time{}, version: keysVersion{JsonWebKeySetID: uuid.Nil, KeysDigest: ""}, checkedAt: nil}
 
 // keysVersion fingerprints an issuer's key rows; any key write changes it.
 type keysVersion = repo.GetOrganizationEMAIssuerKeysVersionRow
@@ -341,15 +340,11 @@ func (h *handler) keysCurrent(ctx context.Context, key documentKey, cached cache
 		return true
 	}
 	version, ok := loaded.(keysVersion)
-	if !ok || !sameKeysVersion(version, cached.version) {
+	if !ok || version != cached.version {
 		return false
 	}
 	cached.checkedAt.Store(now.UnixNano())
 	return true
-}
-
-func sameKeysVersion(a, b keysVersion) bool {
-	return a.JsonWebKeySetID == b.JsonWebKeySetID && a.KeyCount == b.KeyCount && a.KeysUpdatedAt.Valid == b.KeysUpdatedAt.Valid && a.KeysUpdatedAt.Time.Equal(b.KeysUpdatedAt.Time)
 }
 
 // render builds a document. Metadata needs only the issuer; keys are read
