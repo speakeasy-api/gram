@@ -18,8 +18,6 @@ rules:
   # Findings to burn down.
   anonymous-definition:
     disable: true
-  artipacked:
-    disable: true
   concurrency-limits:
     disable: true
   excessive-permissions:

@@ -119,6 +119,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # Kept: this job pushes the hooks@ release tag with it.
+          persist-credentials: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: "go.mod"
@@ -220,6 +222,8 @@ jobs:
           # be the bot's — the workflow token is read-only here, and pushes
           # made with it would not trigger the pin PR's own checks anyway.
           token: ${{ steps.bot-token.outputs.token }}
+          # Kept: this job pushes the pin branch with it.
+          persist-credentials: true
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: "go.mod"
