@@ -2,6 +2,7 @@ package mcpskills_test
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -394,8 +395,8 @@ func TestRecordReadIdempotentPerSession(t *testing.T) {
 	require.Equal(t, conv.ToNullUUID(versionID), row.SkillVersionID)
 	require.True(t, row.ReconciledAt.Valid, "an MCP read arrives already reconciled")
 	require.False(t, row.ReconcileErrorCode.Valid)
-	require.False(t, row.MetricsSyncedAt.Valid)
-	require.False(t, row.EfficacyEnqueuedAt.Valid)
+	require.True(t, row.MetricsSyncedAt.Valid, "an MCP session is nothing for the ClickHouse session sync to map, so the row is born synced")
+	require.True(t, row.EfficacyEnqueuedAt.Valid, "an MCP session names no transcript to score, so the row is born enqueued")
 
 	skill, err := skillsrepo.New(f.conn).GetSkill(ctx, skillsrepo.GetSkillParams{ProjectID: f.projectID, ID: skillID})
 	require.NoError(t, err)
@@ -454,18 +455,26 @@ func TestRecordReadRejectsUnknownVersion(t *testing.T) {
 	require.False(t, written, "a version that is not the skill's records nothing")
 }
 
+// addMember creates a user and gives them an active membership in the
+// fixture organization, which is what makes them a skill recipient.
+func addMember(t *testing.T, ctx context.Context, f *fixture, userID, email string) {
+	t.Helper()
+
+	_, err := usersrepo.New(f.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: userID, Email: email, DisplayName: "Member", PhotoUrl: pgtype.Text{}, Admin: false,
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(f.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: f.organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+}
+
 func TestPrincipalURNsForCaller(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newFixture(t)
-	_, err := usersrepo.New(f.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
-		ID: testUserID, Email: "Alice@Example.test", DisplayName: "Alice", PhotoUrl: pgtype.Text{}, Admin: false,
-	})
-	require.NoError(t, err)
-	_, err = orgrepo.New(f.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: f.organizationID, UserID: conv.ToPGText(testUserID),
-	})
-	require.NoError(t, err)
+	addMember(t, ctx, f, testUserID, "Alice@Example.test")
 
 	principals, err := mcpskills.PrincipalURNsForCaller(ctx, f.conn, f.organizationID, testUserID)
 	require.NoError(t, err)
@@ -486,10 +495,7 @@ func TestPrincipalURNsForCallerServeAssignedSkills(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newFixture(t)
-	_, err := usersrepo.New(f.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
-		ID: testUserID, Email: testUserEmail, DisplayName: "Alice", PhotoUrl: pgtype.Text{}, Admin: false,
-	})
-	require.NoError(t, err)
+	addMember(t, ctx, f, testUserID, testUserEmail)
 	_, _, _ = servedSkill(t, ctx, f, "for-alice", emailPrincipal(testUserEmail))
 	_, _, _ = servedSkill(t, ctx, f, "for-bob", emailPrincipal("bob@example.test"))
 
@@ -500,4 +506,111 @@ func TestPrincipalURNsForCallerServeAssignedSkills(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	require.Equal(t, "for-alice", entries[0].Name)
+}
+
+func TestPrincipalURNsForCallerRequiresLiveMembership(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFixture(t)
+	addMember(t, ctx, f, testUserID, testUserEmail)
+	_, _, _ = servedSkill(t, ctx, f, "for-everyone", urn.PrincipalWildcard)
+
+	resolveFor := func(userID string) []mcpskills.Entry {
+		t.Helper()
+		principals, err := mcpskills.PrincipalURNsForCaller(ctx, f.conn, f.organizationID, userID)
+		require.NoError(t, err)
+		entries, err := f.resolver.List(ctx, f.scope(principals...))
+		require.NoError(t, err)
+		return entries
+	}
+	require.Len(t, resolveFor(testUserID), 1, "an active member receives the wildcard assignment")
+
+	// A user who exists but was never a member: a valid credential for the
+	// organization does not make them a recipient of its assignments.
+	_, err := usersrepo.New(f.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: "user_outsider", Email: "outsider@example.test", DisplayName: "Outsider", PhotoUrl: pgtype.Text{}, Admin: false,
+	})
+	require.NoError(t, err)
+	principals, err := mcpskills.PrincipalURNsForCaller(ctx, f.conn, f.organizationID, "user_outsider")
+	require.NoError(t, err)
+	require.Empty(t, principals, "a non-member has no delivery principals, not even the wildcard")
+	require.Empty(t, resolveFor("user_outsider"))
+
+	// A member of another organization is an outsider here.
+	otherOrg := "org-other-" + uuid.NewString()[:8]
+	_, err = orgrepo.New(f.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID: otherOrg, Name: otherOrg, Slug: otherOrg, WorkosID: pgtype.Text{}, Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(f.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: otherOrg, UserID: conv.ToPGText("user_outsider"),
+	})
+	require.NoError(t, err)
+	require.Empty(t, resolveFor("user_outsider"))
+
+	// A member removed from the organization stops receiving its assignments
+	// the moment the membership ends, whatever credential they still hold.
+	err = orgrepo.New(f.conn).DeleteOrganizationUserRelationship(ctx, orgrepo.DeleteOrganizationUserRelationshipParams{
+		OrganizationID: f.organizationID, UserID: conv.ToPGText(testUserID),
+	})
+	require.NoError(t, err)
+	require.Empty(t, resolveFor(testUserID), "a removed member is served nothing")
+
+	// A deleted user is no recipient even while their membership row stands.
+	addMember(t, ctx, f, "user_deleted", "deleted@example.test")
+	require.Len(t, resolveFor("user_deleted"), 1)
+	err = usersrepo.New(f.conn).SoftDeleteOrganizationUserFixture(ctx, usersrepo.SoftDeleteOrganizationUserFixtureParams{
+		UserID: "user_deleted", OrganizationID: f.organizationID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, resolveFor("user_deleted"), "a deleted user is served nothing")
+}
+
+func TestResolverListCapCountsSkillsNotPlugins(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newFixture(t)
+	var logs bytes.Buffer
+	resolver := mcpskills.NewResolver(slog.New(slog.NewTextHandler(&logs, nil)), f.conn)
+	mcpskills.SetServedSkillLimit(resolver, 3)
+
+	// "alpha" is carried by three assigned plugins; "beta" and "gamma" by one
+	// each. Three skills fit the cap of three exactly, however many plugins
+	// carry them, and an exact fit is not a truncation.
+	alphaID, _, _ := servedSkill(t, ctx, f, "alpha", urn.PrincipalWildcard)
+	for _, slug := range []string{"alpha-second", "alpha-third"} {
+		pluginID := createPlugin(t, ctx, f, f.projectID, slug)
+		containToolset(t, ctx, f, pluginID, f.toolsetID)
+		assign(t, ctx, f, pluginID, urn.PrincipalWildcard)
+		distribute(t, ctx, f, f.projectID, alphaID, pluginID, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	}
+	_, _, _ = servedSkill(t, ctx, f, "beta", urn.PrincipalWildcard)
+	_, _, _ = servedSkill(t, ctx, f, "gamma", urn.PrincipalWildcard)
+
+	entries, err := resolver.List(ctx, f.scope(urn.PrincipalWildcard))
+	require.NoError(t, err)
+	require.Equal(t, []string{"alpha", "beta", "gamma"}, entryNames(entries))
+	require.NotContains(t, logs.String(), "level=WARN", "exactly the cap's worth of skills is not a truncation")
+
+	// A fourth skill is one past the cap: the first three by name are served
+	// and the truncation is logged.
+	_, _, _ = servedSkill(t, ctx, f, "delta", urn.PrincipalWildcard)
+	entries, err = resolver.List(ctx, f.scope(urn.PrincipalWildcard))
+	require.NoError(t, err)
+	require.Equal(t, []string{"alpha", "beta", "delta"}, entryNames(entries))
+	require.Contains(t, logs.String(), "level=WARN")
+	require.Contains(t, logs.String(), "exceeds its cap")
+
+	// Get is unaffected by the cap: it names one skill.
+	entry, err := resolver.Get(ctx, f.scope(urn.PrincipalWildcard), mcpskills.SkillURI("gamma"))
+	require.NoError(t, err)
+	require.Equal(t, "gamma", entry.Name)
+}
+
+func entryNames(entries []mcpskills.Entry) []string {
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name)
+	}
+	return names
 }

@@ -170,7 +170,7 @@ func TestServePlatformToolset_Skills_ListIsTheEmbeddedSet(t *testing.T) {
 		require.Equal(t, "sha256:"+hex.EncodeToString(digest[:]), skill.Resources[0].Digest)
 		require.Equal(t, len(content), skill.Resources[0].Size)
 	}
-	require.True(t, slices.IsSorted(names), "listing is sorted by name: %v", names)
+	require.Equal(t, slices.Sorted(maps.Keys(embedded)), names, "listing is every embedded skill once, sorted by name")
 }
 
 func TestServePlatformToolset_Skills_ListRejectsUnknownCursor(t *testing.T) {

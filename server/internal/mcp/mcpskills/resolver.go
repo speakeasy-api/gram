@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/skills"
-	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 const (
@@ -39,12 +38,13 @@ const (
 	// adapters choose, which share the per-project unique index.
 	idempotencyKeyPrefix = "mcp:"
 
-	// servedSkillRowLimit is the LIMIT of ListServedSkillsForEndpoint: the
-	// most (distribution, plugin) rows one resolution reads. A listing is
-	// answered in one page, so the cap bounds the work of a single call; an
-	// endpoint reaching it has its later skills by name cut off, which the
-	// resolver logs. Keep it equal to the LIMIT in queries.sql.
-	servedSkillRowLimit = 1000
+	// servedSkillLimit is the most skills one resolution serves. A listing is
+	// answered in one page, so the cap bounds the work of a single call. The
+	// query picks one version per skill before the cap applies, so a skill
+	// carried by many plugins takes one slot; an endpoint with more skills
+	// than this has its later skills by name cut off, which the resolver
+	// logs.
+	servedSkillLimit = 1000
 )
 
 // ErrSkillNotFound reports that no served skill matches the requested URI for
@@ -96,11 +96,13 @@ type Read struct {
 type Resolver struct {
 	logger *slog.Logger
 	db     database.DBTX
+	// limit is the most skills one resolution serves; see servedSkillLimit.
+	limit int32
 }
 
 // NewResolver builds a resolver over the given database handle.
 func NewResolver(logger *slog.Logger, db database.DBTX) *Resolver {
-	return &Resolver{logger: logger, db: db}
+	return &Resolver{logger: logger, db: db, limit: servedSkillLimit}
 }
 
 // List returns every skill the endpoint serves to the caller, one entry per
@@ -136,7 +138,10 @@ func (r *Resolver) resolve(ctx context.Context, scope Scope, name pgtype.Text) (
 		mcpServerID = conv.ToNullUUID(*scope.MCPServerID)
 	}
 
+	// One row past the cap is the sentinel that tells a listing of exactly
+	// the cap's size from one that was cut off.
 	rows, err := repo.New(r.db).ListServedSkillsForEndpoint(ctx, repo.ListServedSkillsForEndpointParams{
+		RowLimit:      r.limit + 1,
 		ProjectID:     scope.ProjectID,
 		SkillName:     name,
 		ToolsetID:     scope.ToolsetID,
@@ -146,117 +151,64 @@ func (r *Resolver) resolve(ctx context.Context, scope Scope, name pgtype.Text) (
 	if err != nil {
 		return nil, fmt.Errorf("list served skills: %w", err)
 	}
-	if len(rows) >= servedSkillRowLimit {
-		r.logger.WarnContext(ctx, "served skill listing reached its row cap; later skills by name are not served",
+	if len(rows) > int(r.limit) {
+		r.logger.WarnContext(ctx, "served skill listing exceeds its cap; later skills by name are not served",
 			attr.SlogProjectID(scope.ProjectID.String()),
 			attr.SlogToolsetID(scope.ToolsetID.String()),
 		)
+		rows = rows[:r.limit]
 	}
 
 	entries := make([]Entry, 0, len(rows))
-	for start := 0; start < len(rows); {
-		end := start + 1
-		for end < len(rows) && rows[end].SkillName == rows[start].SkillName {
-			end++
+	for _, row := range rows {
+		// The query already kept one version per skill name: a pin over
+		// latest, and the newest version between pins.
+		entry := Entry{
+			SkillID:     row.SkillID,
+			VersionID:   row.VersionID,
+			PluginID:    row.PluginID,
+			Name:        row.SkillName,
+			Content:     row.Content,
+			RawSHA256:   row.RawSha256,
+			Frontmatter: nil,
+			Pinned:      row.Pinned,
 		}
-
-		candidates := make([]candidate, 0, end-start)
-		for _, row := range rows[start:end] {
-			candidates = append(candidates, candidate{
-				entry: Entry{
-					SkillID:     row.SkillID,
-					VersionID:   row.VersionID,
-					PluginID:    row.PluginID,
-					Name:        row.SkillName,
-					Content:     row.Content,
-					RawSHA256:   row.RawSha256,
-					Frontmatter: nil,
-					Pinned:      row.Pinned,
-				},
-				effectiveAt: row.EffectiveAt.Time,
-			})
-		}
-		start = end
-
-		winner, conflicts := pickWinner(candidates)
-		if len(conflicts) > 0 {
+		if row.PinnedVersions > 1 {
 			r.logger.WarnContext(ctx, "served skill pinned to different versions across plugins; serving the newest pin",
 				attr.SlogProjectID(scope.ProjectID.String()),
 				attr.SlogToolsetID(scope.ToolsetID.String()),
-				attr.SlogResourceURI(winner.URI()),
-				attr.SlogMcpSkillPinConflictCount(len(conflicts)),
+				attr.SlogResourceURI(entry.URI()),
+				attr.SlogMcpSkillPinConflictCount(int(row.PinnedVersions)-1),
 			)
 		}
 
-		frontmatter, err := skills.SkillFrontmatter(winner.Content)
+		frontmatter, err := skills.SkillFrontmatter(entry.Content)
 		if err != nil {
 			// A valid version parsed when it was written, so this is a
 			// storage-level surprise; the rest of the listing still serves.
 			r.logger.ErrorContext(ctx, "skip served skill with unparseable frontmatter",
 				attr.SlogProjectID(scope.ProjectID.String()),
-				attr.SlogResourceURI(winner.URI()),
+				attr.SlogResourceURI(entry.URI()),
 				attr.SlogError(err),
 			)
 			continue
 		}
-		winner.Frontmatter = frontmatter
-		if err := winner.CheckFrontmatterName(); err != nil {
+		entry.Frontmatter = frontmatter
+		if err := entry.CheckFrontmatterName(); err != nil {
 			// Validation trims the name before checking it, so a version
 			// whose author quoted a padded name is stored valid under the
 			// trimmed name while its frontmatter still carries the padding.
 			// SEP-2640 requires the two to agree, so it is not served.
 			r.logger.ErrorContext(ctx, "skip served skill whose frontmatter name differs from its URI",
 				attr.SlogProjectID(scope.ProjectID.String()),
-				attr.SlogResourceURI(winner.URI()),
+				attr.SlogResourceURI(entry.URI()),
 				attr.SlogError(err),
 			)
 			continue
 		}
-		entries = append(entries, winner)
+		entries = append(entries, entry)
 	}
 	return entries, nil
-}
-
-// candidate is one distribution's resolved version of a skill, before the
-// resolver picks the version the endpoint serves.
-type candidate struct {
-	entry       Entry
-	effectiveAt time.Time
-}
-
-// pickWinner selects the version served among the candidates for one skill
-// name: a pinned candidate beats one that tracks the latest version, and among
-// pinned candidates the newest version (by effective time, then id) wins. The
-// returned conflicts are the version ids of pinned candidates that lost to a
-// different pinned version. Callers pass at least one candidate.
-func pickWinner(candidates []candidate) (Entry, []uuid.UUID) {
-	best := candidates[0]
-	for _, other := range candidates[1:] {
-		if beats(other, best) {
-			best = other
-		}
-	}
-
-	var conflicts []uuid.UUID
-	if best.entry.Pinned {
-		for _, other := range candidates {
-			if other.entry.Pinned && other.entry.VersionID != best.entry.VersionID {
-				conflicts = append(conflicts, other.entry.VersionID)
-			}
-		}
-	}
-	return best.entry, conflicts
-}
-
-// beats reports whether a should be served instead of b.
-func beats(a, b candidate) bool {
-	if a.entry.Pinned != b.entry.Pinned {
-		return a.entry.Pinned
-	}
-	if !a.effectiveAt.Equal(b.effectiveAt) {
-		return a.effectiveAt.After(b.effectiveAt)
-	}
-	return a.entry.VersionID.String() > b.entry.VersionID.String()
 }
 
 // RecordRead records a resources/read of a served skill as an activation of
@@ -292,14 +244,21 @@ func ObservationIdempotencyKey(sessionID, rawSHA256 string) string {
 }
 
 // PrincipalURNsForCaller returns the delivery principals of the authenticated
-// caller, which decide the plugins assigned to them. An unknown or anonymous
-// caller has no principals and so resolves to no skills.
+// caller, which decide the plugins assigned to them. The caller must be a
+// live user holding an active membership in the organization that owns the
+// endpoint, checked against the database on every call: a credential can
+// outlive the membership it was issued under, and the wildcard principal
+// would otherwise keep serving every organization-wide assignment to someone
+// who was removed. An unknown, deleted, removed or anonymous caller has no
+// principals and so resolves to no skills.
 func PrincipalURNsForCaller(ctx context.Context, db database.DBTX, organizationID, userID string) ([]string, error) {
 	if organizationID == "" || userID == "" {
 		return nil, nil
 	}
 
-	user, err := usersrepo.New(db).GetUser(ctx, userID)
+	email, err := repo.New(db).GetServedSkillRecipient(ctx, repo.GetServedSkillRecipientParams{
+		UserID: userID, OrganizationID: organizationID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -307,7 +266,7 @@ func PrincipalURNsForCaller(ctx context.Context, db database.DBTX, organizationI
 		return nil, fmt.Errorf("load skill recipient: %w", err)
 	}
 
-	principals, err := plugins.ResolveDeliveryPrincipals(ctx, db, organizationID, user.Email, userID)
+	principals, err := plugins.ResolveDeliveryPrincipals(ctx, db, organizationID, email, userID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve skill delivery principals: %w", err)
 	}
