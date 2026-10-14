@@ -2,6 +2,7 @@ package llmanalyzer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -122,12 +123,14 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	if sources := m.GetSources(); len(sources) > 0 {
 		result.Findings = FindingsForSources(result.Findings, sources)
 	}
-
 	// A shadow request publishes exactly like an enforcing one; the marker on
 	// each finding is what keeps the rows out of every user-facing read path
 	// while the comparison query can still join them with the legacy
-	// engines' rows for the same message.
-	_, _, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
+	// engines' rows for the same message. Findings for the compared sources
+	// (prompt_injection) carry the marker in every mode: their legacy engine
+	// enforces, so the model's verdict is a comparison record even on an
+	// enforcing request.
+	meta := scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
 		ChatMessageID:     m.GetChatMessageId(),
 		ContentPartID:     m.GetContentPartId(),
@@ -136,7 +139,18 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 		RiskPolicyID:      m.GetRiskPolicyId(),
 		RiskPolicyVersion: m.GetRiskPolicyVersion(),
 		Shadow:            m.GetShadow(),
-	}, result.Findings, "llm analyzer")
+	}
+	enforced, compared := splitEnforcedFindings(result.Findings)
+	var err error
+	if len(enforced) > 0 || len(compared) == 0 {
+		_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, meta, enforced, "llm analyzer")
+	}
+	if len(compared) > 0 {
+		comparedMeta := meta
+		comparedMeta.Shadow = true
+		_, _, comparedErr := scanners.PublishFindings(ctx, h.logger, h.findingsPub, comparedMeta, compared, "llm analyzer compared")
+		err = errors.Join(err, comparedErr)
+	}
 	if err != nil {
 		err = fmt.Errorf("publish llm analyzer findings: %w", err)
 	}
@@ -164,6 +178,21 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	}
 	h.metrics.RecordHandled(ctx, m.GetOrganizationId(), Source, scanners.AsyncScanEngineReal, outcome, scanners.AsyncShadowGateReasonNotGated)
 	return nil
+}
+
+// splitEnforcedFindings separates the findings the request's engine mode may
+// enforce (enforced sources and the dead-letter sentinel) from those of the
+// compared sources, which are published as shadow records in every mode.
+func splitEnforcedFindings(findings []scanners.Finding) (enforced, compared []scanners.Finding) {
+	enforced = make([]scanners.Finding, 0, len(findings))
+	for _, f := range findings {
+		if EnforcedRuleID(f.RuleID) {
+			enforced = append(enforced, f)
+			continue
+		}
+		compared = append(compared, f)
+	}
+	return enforced, compared
 }
 
 // judgeMessage maps the request onto the judge message the analyzer renders,

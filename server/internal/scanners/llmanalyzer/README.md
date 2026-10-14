@@ -6,8 +6,13 @@ one message for four risks in a single call. The multivariate PostHog flag
 organization's **engine mode**: `off` keeps the gitleaks, Presidio,
 prompt-injection, destructive-tool and CLI-destructive engines; `shadow`
 keeps them enforcing and runs the model on the same traffic for comparison;
-`llm` replaces them with the model. Policies keep their configured `sources`;
-the mode swaps the engine behind them. Everything below describes the code in
+`llm` replaces the gitleaks, Presidio, destructive-tool and CLI-destructive
+engines with the model (`EnforcedSources`). Prompt injection is a **compared
+source** (`ComparedSources`): its Jev prefilter and Sonnet confirmer
+(`scanners/promptinjection`, the detector `mise run risk:pi` scores) enforce
+in every mode, and the model's `prompt_injection` verdict is only compared.
+Policies keep their configured `sources`; the mode swaps the engine behind
+the enforced ones. Everything below describes the code in
 this package and its call sites, not the plan.
 
 ## Scope
@@ -16,7 +21,7 @@ this package and its call sites, not the plan.
 | ------------------ | ----------------------- | ---------------------- | ------------------ |
 | `gitleaks`         | `secrets_leak`          | `secret.llm`           | `secrets`          |
 | `presidio`         | `personal_data_leak`    | `pii.llm`              | `pii`              |
-| `prompt_injection` | `prompt_injection`      | `prompt_injection.llm` | `prompt_injection` |
+| `prompt_injection` | `prompt_injection`      | `prompt_injection.llm` | `prompt_injection` | compared only: always published `shadow = 1`, never enforced |
 | `destructive_tool` | `destructive_tool_call` | `destructive_tool.llm` | `destructive_tool` |
 | `cli_destructive`  | `destructive_tool_call` | `cli_destructive.llm`  | `cli_destructive`  |
 
@@ -39,11 +44,11 @@ text and no entity type).
 
 ## Engine modes
 
-| Mode     | Legacy engines                         | Model                                                                                   | Enforces |
-| -------- | -------------------------------------- | --------------------------------------------------------------------------------------- | -------- |
-| `off`    | run and enforce                        | never called                                                                            | legacy   |
-| `shadow` | run and enforce exactly as under `off` | called on the same traffic; verdicts compared with the legacy verdicts, never enforced  | legacy   |
-| `llm`    | not run for covered sources            | replaces the legacy engines; sync lane fails closed, batch falls back when unconfigured | model    |
+| Mode     | Legacy engines                                                            | Model                                                                                                                     | Enforces                                             |
+| -------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `off`    | run and enforce                                                           | never called                                                                                                              | legacy                                               |
+| `shadow` | run and enforce exactly as under `off`                                    | called on the same traffic; verdicts compared with the legacy verdicts, never enforced                                    | legacy                                               |
+| `llm`    | not run for enforced sources; the prompt-injection cascade still enforces | replaces the enforced engines; sync lane fails closed, batch falls back when unconfigured; prompt injection compared only | model (enforced sources), cascade (prompt injection) |
 
 Resolution (`policyflags.ProjectFlagMode`, once per realtime scan and once per
 batch activity, memoized per request): the server evaluates the flag with
@@ -105,6 +110,9 @@ PostHog); anything else — off, absent, unrecognized, provider error — is `of
   never scanned.
 - Shadow scans are metered like enforcing ones (`gram.risk.scan.llm_analyzer`
   readings carry the shadow execution path in their operation id).
+- In the `llm` mode a policy with a compared source (prompt injection) is
+  still compared for that source alone, from the same awaited lane reply the
+  enforced sources read.
 
 ### Cutover order
 

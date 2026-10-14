@@ -857,8 +857,8 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		span.End()
 	}()
 	llmMode := mode == feature.VariantRiskLLMLLM
-	llmCovered := policy.PolicyType != ra.PolicyTypePromptBased && llmanalyzer.CoversAnySource(policy.Sources)
-	if llmMode && llmCovered {
+	standard := policy.PolicyType != ra.PolicyTypePromptBased
+	if llmMode && standard && llmanalyzer.EnforcesAnySource(policy.Sources) {
 		policyStarted := time.Now()
 		defer func() {
 			if retErr != nil {
@@ -867,20 +867,32 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			s.recordLLMPolicyEvaluation(ctx, policy, llmPolicyOutcome(result), time.Since(policyStarted))
 		}()
 	}
-	// The shadow comparison needs the policy's message view, category scope
-	// and finding filter, which are built below; they are declared here so
-	// the deferred comparison sees them, and filter stays nil on the returns
-	// that precede it. legacyUnavailable is set wherever a legacy engine
-	// produced no usable verdict for an in-scope source (a missing or
-	// dead-lettered lane, an incomplete in-process scan), so the comparison
-	// does not read that as clean.
+	// The comparison needs the policy's message view, category scope and
+	// finding filter, which are built below; they are declared here so the
+	// deferred comparison sees them, and filter stays nil on the returns that
+	// precede it. legacyUnavailable is set wherever a legacy engine produced
+	// no usable verdict for an in-scope source (a missing or dead-lettered
+	// lane, an incomplete in-process scan), so the comparison does not read
+	// that as clean. Under shadow every covered source is compared; under
+	// llm only the compared sources are, since the enforced ones have no
+	// legacy verdict to compare with.
 	var (
 		view              ra.MessageView
 		categoryScope     ra.CategoryScope
 		filter            func([]scanners.Finding) []scanners.Finding
 		legacyUnavailable bool
+		compareSources    []string
 	)
-	if mode == feature.VariantRiskLLMShadow && llmCovered {
+	compare := false
+	switch {
+	case mode == feature.VariantRiskLLMShadow && standard && llmanalyzer.CoversAnySource(policy.Sources):
+		compare = true
+	case llmMode && standard && slices.ContainsFunc(policy.Sources, func(source string) bool {
+		return slices.Contains(llmanalyzer.ComparedSources, source)
+	}):
+		compare, compareSources = true, llmanalyzer.ComparedSources
+	}
+	if compare {
 		policyStarted := time.Now()
 		defer func() {
 			if retErr != nil || filter == nil {
@@ -894,6 +906,7 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 				view:              view,
 				categoryScope:     categoryScope,
 				filter:            filter,
+				sources:           compareSources,
 			}, time.Since(policyStarted))
 		}()
 	}
@@ -984,10 +997,12 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 		if !categoryScope.SourceInScope(view, source) {
 			continue
 		}
-		if _, covered := llmanalyzer.RiskKeyForSource(source); covered && llmMode {
+		if llmMode && llmanalyzer.Enforces(source) {
 			// The lane already answered for every covered source at once; no
 			// legacy engine runs for this source, not even when the lane is
-			// degraded (its sentinel denies instead).
+			// degraded (its sentinel denies instead). Compared sources
+			// (prompt_injection) fall through to their legacy engine below in
+			// every mode; the lane's verdict for them is only compared.
 			// The sentinel is taken out before exclusions and disabled rules
 			// apply: those only ever silence real verdicts, never the lane's
 			// own outage signal, or an exclusion would turn a degraded lane
@@ -1735,6 +1750,10 @@ type shadowComparisonInput struct {
 	view              ra.MessageView
 	categoryScope     ra.CategoryScope
 	filter            func([]scanners.Finding) []scanners.Finding
+	// sources restricts the comparison to these policy sources; nil compares
+	// every source in realtimeLegacySources. The llm mode sets it to the
+	// compared sources, whose legacy engine still enforced.
+	sources []string
 }
 
 // recordShadowComparison sets the LLM analyzer lane's verdict for a policy
@@ -1754,6 +1773,9 @@ func (s *Scanner) recordShadowComparison(ctx context.Context, policy repo.RiskPo
 	llmMatched := false
 	for _, source := range policy.Sources {
 		if !slices.Contains(realtimeLegacySources, source) || !in.categoryScope.SourceInScope(in.view, source) {
+			continue
+		}
+		if in.sources != nil && !slices.Contains(in.sources, source) {
 			continue
 		}
 		compared++

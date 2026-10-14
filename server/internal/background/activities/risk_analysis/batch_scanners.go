@@ -227,7 +227,17 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if !llmMode && sources.Has(SourceGitleaks) {
+	// In the llm mode the model's lane replaces the legacy engine of every
+	// enforced source (gitleaks, presidio, destructive_tool, cli_destructive):
+	// no inline scan, no legacy analysis request, and no Postgres rows for
+	// those sources. prompt_injection is only compared: its cascade keeps
+	// enforcing in every mode and the model's verdict for it lands as a
+	// shadow finding. In the shadow mode every legacy engine runs exactly as
+	// in the off mode.
+	legacyRuns := func(source string) bool {
+		return !llmMode || !llmanalyzer.Enforces(source)
+	}
+	if legacyRuns(SourceGitleaks) && sources.Has(SourceGitleaks) {
 		wg.Go(func() {
 			findings, err := a.scanGitleaks(ctx, args, messages, contents)
 			if err != nil {
@@ -238,7 +248,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if !llmMode && sources.Has(SourcePresidio) {
+	if legacyRuns(SourcePresidio) && sources.Has(SourcePresidio) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePresidio])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePresidio, masks.RecommendedPrefilteredCount(sourceCategories[SourcePresidio]))
@@ -260,7 +270,7 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	if !llmMode && sources.Has(SourcePromptInjection) {
+	if legacyRuns(SourcePromptInjection) && sources.Has(SourcePromptInjection) {
 		wg.Go(func() {
 			subMessages, subContents, indices := masks.Subset(messages, contents, sourceCategories[SourcePromptInjection])
 			a.metrics.RecordRecommendedScopePrefiltered(ctx, args.OrganizationID, SourcePromptInjection, masks.RecommendedPrefilteredCount(sourceCategories[SourcePromptInjection]))
@@ -335,11 +345,11 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		shadowMCPFindings = a.scanShadowMCP(ctx, args.OrganizationID, args.ProjectID, args.RiskPolicyID, messages)
 		activity.RecordHeartbeat(ctx, shadowmcp.SourceShadowMCP)
 	}
-	if !llmMode && sources.Has(shadowmcp.SourceDestructiveTool) {
+	if legacyRuns(shadowmcp.SourceDestructiveTool) && sources.Has(shadowmcp.SourceDestructiveTool) {
 		destructiveToolFindings = a.scanDestructiveToolAnnotations(ctx, args.OrganizationID, messages)
 		activity.RecordHeartbeat(ctx, shadowmcp.SourceDestructiveTool)
 	}
-	if !llmMode && sources.Has(SourceCLIDestructive) {
+	if legacyRuns(SourceCLIDestructive) && sources.Has(SourceCLIDestructive) {
 		findings, err := a.scanDestructiveCLICommands(ctx, args, messages)
 		if err != nil {
 			scanSpan.SetStatus(codes.Error, err.Error())
