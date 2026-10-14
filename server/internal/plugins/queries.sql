@@ -296,12 +296,6 @@ SELECT EXISTS (
     AND deleted IS FALSE AND visibility <> 'disabled'
 )::bool;
 
--- name: ListCanonicalWrapperIDs :many
--- Of the given ids, those that are a live canonical hosted wrapper (toolset id = server id) of a live toolset in the project.
-SELECT s.id FROM mcp_servers s
-JOIN toolsets t ON t.id = s.toolset_id AND t.project_id = s.project_id AND t.deleted IS FALSE
-WHERE s.project_id = @project_id AND s.id = ANY(@ids::uuid[]) AND s.toolset_id = s.id AND s.deleted IS FALSE;
-
 -- name: AddGatewayPluginServer :one
 INSERT INTO plugin_servers (plugin_id, project_id, meta_mcp_server_id, display_name, policy, sort_order)
 SELECT p.id, p.project_id, @meta_mcp_server_id, @display_name, @policy, @sort_order

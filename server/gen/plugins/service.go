@@ -354,13 +354,11 @@ type PluginAudience struct {
 type PluginServer struct {
 	// Unique plugin server identifier.
 	ID string
-	// Speakeasy toolset ID. A hosted MCP server sets toolset_id and mcp_server_id
-	// to the same id; otherwise exactly one backend ID is set.
+	// Speakeasy toolset ID. Exactly one backend ID is set.
 	ToolsetID *string
-	// Speakeasy MCP server ID. A hosted MCP server sets toolset_id and
-	// mcp_server_id to the same id; otherwise exactly one backend ID is set.
+	// Speakeasy MCP server ID. Exactly one backend ID is set.
 	McpServerID *string
-	// MCP gateway ID. When set, no other backend ID is set.
+	// MCP gateway ID. Exactly one backend ID is set.
 	MetaMcpServerID *string
 	// Display name shown in generated plugin config.
 	DisplayName string
