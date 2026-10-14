@@ -680,33 +680,19 @@ jobs:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
+      # No caches in this job: it publishes the collector image.
       - name: Setup Mise
-        # Caches restored here also feed the image this job publishes. On
-        # main they can only come from main's own runs: GitHub scopes caches
-        # that PR runs write to the PR's ref, so a PR cannot poison them.
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
-          cache: true
+          cache: false
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache aube store
-        # Same cache scoping as Setup Mise above.
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
-        with:
-          key: ${{ env.GH_CACHE_AUBE_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_AUBE_KEY }}
-            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
-          path: |
-            ${{ env.AUBE_STORE_PATH }}
-
-      # fly:init-runner is a .mts task that imports zx from the workspace.
       - name: Install dependencies
         run: aube install --frozen-lockfile
 

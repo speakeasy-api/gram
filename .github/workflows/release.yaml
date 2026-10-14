@@ -32,27 +32,19 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # No caches in this job: it publishes to npm, so nothing it installs
+      # may come from a restored cache.
       - name: Setup Mise
         uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
-          cache: true
+          cache: false
           cache_key_prefix: mise-github-v1
           env: false
 
       - name: Prepare GitHub Actions environment
         run: mise run github
-
-      - name: Cache aube store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_AUBE_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_AUBE_KEY }}
-            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
-          path: |
-            ${{ env.AUBE_STORE_PATH }}
 
       - name: Install dependencies
         run: aube install --frozen-lockfile
@@ -79,9 +71,6 @@ jobs:
           pr-title: "chore: version packages"
           version-script: mise exec -- aube exec changeset -- version
           publish-script: mise exec --env viteprod -- aube exec changeset -- publish
-
-      - name: Prune aube store
-        run: aube store prune
 
   release-cli:
     needs: [release]
