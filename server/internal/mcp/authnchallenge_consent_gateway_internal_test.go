@@ -259,7 +259,11 @@ func TestConsentTemplate_GatewayListsServers(t *testing.T) {
 
 	require.Contains(t, page, "1 of 2 servers connected")
 	require.Contains(t, page, "Show servers")
-	require.Contains(t, page, `/mcp/gateway/acme/connect?state=state-id&server=eng.github"`)
+	// A server signing in through one service connects in place, with no
+	// stop on its own page; a server needing no sign-in has nothing to do.
+	require.Contains(t, page, `<input type="hidden" name="client_id" value="github-client" />`)
+	require.Contains(t, page, "data-connect-link > Connect </button>")
+	require.NotContains(t, page, "data-gateway-server-page")
 	require.Contains(t, page, `id="consent-approve-button"`)
 	require.NotContains(t, page, "data-service-connections")
 	require.NotContains(t, page, "Connect a service above to enable access")
@@ -292,4 +296,38 @@ func TestConsentTemplate_GatewayServerPageHasNoApproval(t *testing.T) {
 	page = renderGatewayConsent(t, firstParty)
 	require.Contains(t, page, "Go back to your AI client and try again")
 	require.NotContains(t, page, "consent-approve-button")
+}
+
+// A server signing in through several services connects on its own page,
+// where each is named; one with a usable connection is managed there.
+func TestConsentTemplate_GatewayListLinksServerPages(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	github, linear := uuid.New(), uuid.New()
+	projectCard := gatewayTestCard("project-client", github, uuid.NullUUID{UUID: project, Valid: true})
+	orgCard := gatewayTestCard("org-client", github, uuid.NullUUID{})
+	linearCard := gatewayTestCard("linear-client", linear, uuid.NullUUID{})
+	linearCard.Connected = true
+	view := gatewayServersView([]metaMember{
+		gatewayTestMember("eng.github", "GitHub", github, project),
+		gatewayTestMember("eng.linear", "Linear", linear, project),
+	}, []remoteSessionCard{projectCard, orgCard, linearCard})
+	require.Empty(t, serverBySlug(t, view, "eng.github").ConnectClientID)
+
+	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+	require.Contains(t, page, `/mcp/gateway/acme/connect?state=state-id&server=eng.github" class="text-muted-foreground interact:text-foreground shrink-0 text-xs" data-gateway-server-page >Connect`)
+	require.Contains(t, page, `/mcp/gateway/acme/connect?state=state-id&server=eng.linear" class="text-muted-foreground interact:text-foreground shrink-0 text-xs" data-gateway-server-page >Manage`)
+	require.NotContains(t, page, "data-connect-link")
+}
+
+// The list renders open or collapsed as the view decides.
+func TestConsentTemplate_GatewayListOpenState(t *testing.T) {
+	t.Parallel()
+
+	view := gatewayServersView([]metaMember{gatewayTestMember("docs", "Docs", uuid.Nil, uuid.New())}, nil)
+	view.ListOpen = true
+	require.Contains(t, renderGatewayConsent(t, gatewayTemplateData(view, nil)), `data-state="state-id" open`)
+	view.ListOpen = false
+	require.NotContains(t, renderGatewayConsent(t, gatewayTemplateData(view, nil)), `data-state="state-id" open`)
 }

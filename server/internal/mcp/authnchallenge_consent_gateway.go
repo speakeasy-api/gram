@@ -15,6 +15,10 @@ import (
 	"slices"
 )
 
+// gatewayListOpenLimit is the most servers a gateway's page lists open by
+// default; a longer list starts collapsed behind its summary.
+const gatewayListOpenLimit = 5
+
 // maxFocusServerLength bounds a gateway server named in a connect URL or
 // card form. Server slugs, qualified by their project on an organization
 // gateway, are far shorter.
@@ -53,6 +57,11 @@ type gatewayServer struct {
 	// Name is the server's display name, falling back to its slug.
 	Name   string
 	Status gatewayServerStatus
+	// ConnectClientID is the one service the gateway's list connects in
+	// place, set when the server signs in through exactly one service and
+	// needs connecting. A server with several services connects on its own
+	// page instead, where each is named.
+	ConnectClientID string
 	// cardIDs are the services the server signs in through.
 	cardIDs []string
 }
@@ -114,6 +123,10 @@ type gatewayConsentView struct {
 	Servers    []gatewayServer
 	ReadyCount int
 
+	// ListOpen lists the servers open by default: a short list, or a
+	// first-party page, which has nothing else on it.
+	ListOpen bool
+
 	// Focus is the server whose connect page is rendered, nil on the
 	// gateway's own page.
 	Focus *gatewayServer
@@ -140,6 +153,7 @@ func (s *Service) gatewayConsent(
 		return nil, nil, err
 	}
 	view := gatewayServersView(members, cards)
+	view.ListOpen = challengeState.FirstParty || len(view.Servers) <= gatewayListOpenLimit
 	if focus == "" {
 		return view, nil, nil
 	}
@@ -160,9 +174,9 @@ func (s *Service) gatewayConsent(
 // server, from the member's own project unless no project owns it, the same
 // match clientServesAnyMember makes.
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
-	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, Focus: nil, FocusUnavailable: false}
+	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, cardIDs: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", cardIDs: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
@@ -171,6 +185,9 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 		}
 		if member.remoteSessionIssuerID.Valid && len(server.cardIDs) == 0 {
 			server.Status = gatewayServerNotSetUp
+		}
+		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect) {
+			server.ConnectClientID = server.cardIDs[0]
 		}
 		if server.Ready() {
 			view.ReadyCount++

@@ -7,6 +7,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -351,4 +352,22 @@ func TestServeConsent_GatewayServerLinkGoesStraightToProvider(t *testing.T) {
 	state.FocusServer = "rt-link-member"
 	require.NoError(t, linked.ti.authnChallengeCache.Store(ctx, state))
 	expectAutoReconnect(t, linked, upstream)
+}
+
+// A gateway with a few servers lists them open; past five the list starts
+// collapsed behind its summary.
+func TestServeConsent_GatewayListOpensOnlyWhenShort(t *testing.T) {
+	t.Parallel()
+	ctx, fx, metaID, _, issuerID := metaConsent(t, "rt-list")
+	for i := range 5 {
+		createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, fmt.Sprintf("rt-list-%d", i), "https://list.example.com/mcp", conv.ToNullUUID(issuerID), int32(i))
+	}
+	code, html, _ := render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Regexp(t, `data-gateway-list data-state="[^"]+" open`, html)
+
+	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "rt-list-5", "https://list.example.com/mcp", conv.ToNullUUID(issuerID), 5)
+	code, html, _ = render(t, fx)
+	require.Equal(t, http.StatusOK, code, html)
+	require.Regexp(t, `data-gateway-list data-state="[^"]+" >`, html)
 }

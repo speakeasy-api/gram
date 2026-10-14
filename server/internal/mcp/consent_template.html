@@ -225,7 +225,12 @@
           </p>
           {{end}}
           {{if .Gateway.Servers}}
-          <details class="group" {{if .FirstParty}}open{{end}}>
+          <details
+            class="group"
+            data-gateway-list
+            data-state="{{.State}}"
+            {{if .Gateway.ListOpen}}open{{end}}
+          >
             <summary
               class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8"
             >
@@ -246,28 +251,48 @@
               </p>
               <ul class="m-0 flex max-h-96 list-none flex-col overflow-y-auto border p-0">
                 {{range .Gateway.Servers}}
-                <li class="not-first:border-t">
+                <li
+                  class="flex items-center justify-between gap-3 px-4 py-3 not-first:border-t"
+                  data-gateway-server="{{.Slug}}"
+                >
+                  <span class="flex min-w-0 flex-col gap-0.5">
+                    <span class="flex min-w-0 items-baseline gap-2">
+                      <span class="truncate text-sm">{{.Name}}</span>
+                      {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
+                    </span>
+                    <span
+                      class="text-xs {{if .NeedsAttention}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
+                      data-gateway-server-status="{{.Status}}"
+                      >{{.StatusLabel}}</span
+                    >
+                  </span>
+                  {{if .ConnectClientID}}
+                  <form
+                    method="POST"
+                    action="{{$.ConsentPath}}/remote-session"
+                    class="shrink-0"
+                  >
+                    <input type="hidden" name="state" value="{{$.State}}" />
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
+                    <input type="hidden" name="client_id" value="{{.ConnectClientID}}" />
+                    <button
+                      type="submit"
+                      name="action"
+                      value="connect"
+                      class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
+                      data-connect-link
+                    >
+                      {{if .NeedsAttention}}Reconnect{{else}}Connect{{end}}
+                    </button>
+                  </form>
+                  {{else if .NeedsSignIn}}
                   <a
                     href="{{$.ConsentPath}}?state={{$.State}}&server={{.Slug}}"
-                    class="interact:bg-accent flex items-center justify-between gap-3 px-4 py-3"
-                    data-gateway-server="{{.Slug}}"
+                    class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
+                    data-gateway-server-page
+                    >{{if .Ready}}Manage{{else}}Connect{{end}} &rsaquo;</a
                   >
-                    <span class="flex min-w-0 flex-col gap-0.5">
-                      <span class="flex min-w-0 items-baseline gap-2">
-                        <span class="truncate text-sm">{{.Name}}</span>
-                        {{if ne .Name .Slug}}<span class="text-muted-foreground truncate font-mono text-xs">{{.Slug}}</span>{{end}}
-                      </span>
-                      <span
-                        class="text-xs {{if .NeedsAttention}}text-default-warning{{else if .Ready}}text-default-success{{else}}text-muted-foreground{{end}}"
-                        data-gateway-server-status="{{.Status}}"
-                        >{{.StatusLabel}}</span
-                      >
-                    </span>
-                    <span class="text-xs text-muted-foreground shrink-0"
-                      >{{if not .NeedsSignIn}}View{{else if .NeedsAttention}}Reconnect{{else if .Ready}}Manage{{else}}Connect{{end}}
-                      &rsaquo;</span
-                    >
-                  </a>
+                  {{end}}
                 </li>
                 {{end}}
               </ul>
