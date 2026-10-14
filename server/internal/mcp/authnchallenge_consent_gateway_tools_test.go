@@ -172,3 +172,54 @@ func TestGatewayToolSelectionSurvivesRefresh(t *testing.T) {
 		refreshToken = issued.RefreshToken
 	}
 }
+
+// TestGatewayConsentListsConnectedSourcesWhenOneProviderIsMissing pins
+// partial resolution at consent: a provider the subject has not connected
+// makes only its own member unavailable, while connected members still offer
+// their tools.
+func TestGatewayConsentListsConnectedSourcesWhenOneProviderIsMissing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "gateway-partial-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, issuer.ID)
+
+	deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(deny.Close)
+	connected := newRecordingUpstream(t, "search_docs")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, gateway.ID, "Tracker", "tracker-"+uuid.NewString()[:8], 1, deny.URL)
+	docsSlug := "docs-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, gateway.ID, "Docs", docsSlug, 2, connected.url)
+
+	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-a-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "gw-partial-b-"+uuid.NewString()[:8], "", []uuid.UUID{issuer.ID})
+	insertQualifiedRemoteSessionToken(t, ctx, ti, issuer.ID, clientB, urn.NewUserSubject(mockidp.MockUserID), "token-docs", connected.url)
+
+	stateID, csrfToken := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+
+	w := serveConsentMCPRequest(t, ctx, ti, endpoint, stateID, csrfToken, uuid.NewString(), `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, nil)
+	var listed struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+			Meta map[string]any `json:"_meta"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &listed), w.Body.String())
+	names := []string{}
+	for _, tool := range listed.Result.Tools {
+		names = append(names, tool.Name)
+	}
+	require.Equal(t, []string{docsSlug + "--search_docs"}, names)
+	require.Equal(t, []any{"Tracker"}, listed.Result.Meta["gram.dev/unavailableSources"])
+}
