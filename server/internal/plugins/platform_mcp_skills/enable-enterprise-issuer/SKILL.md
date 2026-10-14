@@ -74,9 +74,11 @@ replace an existing trusted issuer automatically.
 If the user wants to configure an MCP connection too, use `list_projects`,
 `find_mcp`, and `get_mcp` to identify an exact project and MCP server. Follow its
 supported setup handoff and obtain separate authorization for any provider or
-binding changes. Choosing Speakeasy as an MCP server's enterprise authorization
-provider isn't available through this workflow or the dashboard yet; say so
-rather than implying this skill can select the provider.
+binding changes. This workflow cannot choose Speakeasy as an MCP server's
+enterprise authorization provider. Send an organization administrator to the
+server's **Settings** → **Authentication** → **Identity chaining** control in
+the dashboard, where **Use Speakeasy sign-in** adds Speakeasy to the vendor's
+EMA provider order; that needs the ema-providers rollout.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for
 enterprise authorization readiness. Do not substitute a Platform MCP registration
 ID or generic registration readiness for this check.

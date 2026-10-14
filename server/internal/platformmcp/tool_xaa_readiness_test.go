@@ -414,6 +414,9 @@ func TestXAAReadinessOktaSignInGuidanceCoversEveryStep(t *testing.T) {
 		return reg.Descriptors()[0]
 	}()
 	require.Contains(t, descriptor.Description, "send the administrator to the dashboard")
+	require.Contains(t, descriptor.Description, "Identity chaining control in the dashboard")
+	require.NotContains(t, descriptor.Description, "setEMAProviders")
+	require.Contains(t, platformOverview, "so is changing a vendor's EMA provider order")
 }
 
 type xaaServerStub struct {
