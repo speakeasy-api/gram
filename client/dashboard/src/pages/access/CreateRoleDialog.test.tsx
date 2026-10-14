@@ -17,7 +17,6 @@ const mocks = vi.hoisted(() => ({
     name: string;
     email: string;
     roleIds: string[];
-    directoryRoleIds?: string[];
     groups?: string[];
   }[],
   mappings: {
@@ -332,32 +331,6 @@ describe("who holds the role under directory sync", () => {
     expect(
       screen.getByRole("link", { name: "Map a group" }).getAttribute("href"),
     ).toBe("/org/identity");
-  });
-
-  it("counts members whose role no mapping explains", () => {
-    mocks.members = [
-      {
-        id: "m-1",
-        name: "Direct Person",
-        email: "a@example.com",
-        roleIds: [role.id],
-        directoryRoleIds: [],
-      },
-      {
-        id: "m-2",
-        name: "Mapped Person",
-        email: "b@example.com",
-        roleIds: [],
-        directoryRoleIds: [role.id],
-        groups: ["Data Analytics"],
-      },
-    ];
-    renderEditor(role);
-    expect(
-      screen.getByText(
-        "1 more person gets this role from your identity provider without a mapping here.",
-      ),
-    ).toBeTruthy();
   });
 
   it("points a new role at mapping once it exists", () => {

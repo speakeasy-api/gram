@@ -1,8 +1,5 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import {
-  type FacepileMember,
-  MemberFacepile,
-} from "@/components/member-facepile";
+import { MemberFacepile } from "@/components/member-facepile";
 import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
@@ -93,11 +90,9 @@ function SourcesForRole({
     { throwOnError: false },
   );
   const { data: membersData } = useMembers();
-  const { sources, unmapped } = useMemo(
+  const sources = useMemo(
     () =>
-      data
-        ? roleDirectorySources(data, membersData?.members ?? [], role)
-        : { sources: [], unmapped: [] },
+      data ? roleDirectorySources(data, membersData?.members ?? [], role) : [],
     [data, membersData?.members, role],
   );
 
@@ -168,50 +163,18 @@ function SourcesForRole({
     },
   ];
 
-  return (
-    <div className="space-y-0">
-      {sources.length > 0 ? (
-        <Table
-          columns={columns}
-          data={sources}
-          rowKey={(source) => source.key}
-        />
-      ) : (
-        <InlineEmptyState
-          icon="users"
-          heading="No directory group or attribute gives out this role"
-          description={`Nobody gets ${role.name} from your directory yet. Map a group or an attribute value to it to give it out.`}
-          action={
-            <Button asChild size="sm" variant="secondary">
-              <Link to={mappingsHref}>Map a group</Link>
-            </Button>
-          }
-        />
-      )}
-      {unmapped.length > 0 && <UnmappedHolders members={unmapped} />}
-    </div>
-  );
-}
-
-/**
- * Members who hold the role directly. Under directory sync that is the
- * identity provider's own role rules, which no mapping here explains, so
- * they are named rather than silently left out.
- */
-function UnmappedHolders({
-  members,
-}: {
-  members: FacepileMember[];
-}): JSX.Element {
-  const count = members.length;
-  return (
-    <div className="border-border bg-muted/40 flex flex-wrap items-center gap-3 border border-t-0 px-4 py-3">
-      <MemberFacepile members={members} maxFaces={3} />
-      <Text small>
-        {count === 1
-          ? "1 more person gets this role from your identity provider without a mapping here."
-          : `${count} more people get this role from your identity provider without a mapping here.`}
-      </Text>
-    </div>
+  return sources.length > 0 ? (
+    <Table columns={columns} data={sources} rowKey={(source) => source.key} />
+  ) : (
+    <InlineEmptyState
+      icon="users"
+      heading="No directory group or attribute gives out this role"
+      description={`Nobody gets ${role.name} from your directory yet. Map a group or an attribute value to it to give it out.`}
+      action={
+        <Button asChild size="sm" variant="secondary">
+          <Link to={mappingsHref}>Map a group</Link>
+        </Button>
+      }
+    />
   );
 }

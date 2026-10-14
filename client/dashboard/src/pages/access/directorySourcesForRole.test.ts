@@ -4,7 +4,7 @@ import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/compon
 import { describe, expect, it } from "vitest";
 import { roleDirectorySources } from "./directorySourcesForRole";
 
-const analyst = { id: "role-analyst", principalUrn: "role:analyst" };
+const analyst = { principalUrn: "role:analyst" };
 
 function mapping(
   fields: Partial<DirectoryRoleMapping> &
@@ -62,7 +62,7 @@ const data: ListDirectoryRoleMappingsResult = {
 
 describe("roleDirectorySources", () => {
   it("lists only the role's mappings, groups before attributes, by name", () => {
-    const { sources } = roleDirectorySources(data, [], analyst);
+    const sources = roleDirectorySources(data, [], analyst);
     expect(sources.map((s) => [s.kind, s.label, s.memberCount])).toEqual([
       ["group", "Data Analytics", 14],
       ["group", "Finance Ops", 6],
@@ -75,13 +75,13 @@ describe("roleDirectorySources", () => {
       member({ id: "ava", name: "Ava", groups: ["Data Analytics"] }),
       member({ id: "ben", name: "Ben", groups: ["Engineering"] }),
     ];
-    const { sources } = roleDirectorySources(data, members, analyst);
+    const sources = roleDirectorySources(data, members, analyst);
     expect(sources[0]?.members.map((m) => m.id)).toEqual(["ava"]);
     expect(sources[1]?.members).toEqual([]);
   });
 
   it("falls back to the mapping's group name when the group is gone", () => {
-    const { sources } = roleDirectorySources(
+    const sources = roleDirectorySources(
       {
         ...data,
         groups: [],
@@ -98,25 +98,5 @@ describe("roleDirectorySources", () => {
       analyst,
     );
     expect(sources).toMatchObject([{ label: "Old Team", memberCount: 0 }]);
-  });
-
-  it("names members whose role no mapping explains", () => {
-    const members = [
-      member({ id: "direct", name: "Direct", roleIds: [analyst.id] }),
-      member({
-        id: "mapped",
-        name: "Mapped",
-        directoryRoleIds: [analyst.id],
-      }),
-      member({
-        id: "both",
-        name: "Both",
-        roleIds: [analyst.id],
-        directoryRoleIds: [analyst.id],
-      }),
-      member({ id: "other", name: "Other", roleIds: ["role-other"] }),
-    ];
-    const { unmapped } = roleDirectorySources(data, members, analyst);
-    expect(unmapped.map((m) => m.id)).toEqual(["direct"]);
   });
 });
