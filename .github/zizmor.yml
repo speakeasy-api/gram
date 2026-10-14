@@ -28,8 +28,6 @@ rules:
     disable: true
   dangerous-triggers:
     disable: true
-  dependabot-cooldown:
-    disable: true
   excessive-permissions:
     disable: true
   github-app:
