@@ -495,8 +495,19 @@ function McpMatrix({
         });
       }
     }
+    // A project without servers still takes grants for the ones added later.
+    const listed = new Set(inventory.groups.map((g) => g.projectId));
+    for (const project of projects) {
+      if (listed.has(project.id)) continue;
+      rows.push({
+        row: { kind: "project", projectId: project.id },
+        name: project.name,
+        detail: "No servers yet",
+        depth: 1,
+      });
+    }
     return rows;
-  }, [inventory.groups, serverIndex]);
+  }, [inventory.groups, serverIndex, projects]);
 
   // A project row stays while any of its servers match, so a match never
   // loses the project it sits in.

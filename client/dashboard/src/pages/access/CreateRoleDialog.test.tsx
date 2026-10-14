@@ -114,10 +114,12 @@ vi.mock("./GrantRuleDrawerContent", () => ({
   }) => (
     <button
       onClick={() =>
-        onChangeSelectors([{ resourceKind: "mcp", resourceId: "server-a" }])
+        onChangeSelectors([
+          { resourceKind: "project", resourceId: "project-a" },
+        ])
       }
     >
-      Select server A
+      Select project A
     </button>
   ),
 }));
@@ -204,7 +206,7 @@ describe("role assignment confirmation", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Change where View applies" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Select server A" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select project A" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
 
     expect(confirmation.getAttribute("data-state")).toBe("unchecked");
