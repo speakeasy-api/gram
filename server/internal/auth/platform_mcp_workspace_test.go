@@ -1,0 +1,81 @@
+package auth_test
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+)
+
+func TestProvisionPlatformMCPWorkspace(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.Organizations = nil
+	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+	armedAt := time.Now().UTC()
+	orgID, orgName, err := instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "  Acme   Workspace ")
+	require.NoError(t, err)
+	require.Equal(t, "Acme Workspace", orgName)
+	require.Equal(t, []string{orgID}, instance.trialNotifier.trialStarted)
+
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, orgprovision.SourcePlatformMCP, conv.FromPGTextOrEmpty[string](org.CreationSource))
+	require.True(t, org.Whitelisted)
+	require.Equal(t, "enterprise", org.GramAccountType)
+
+	// Same 14-day trial as a dashboard signup.
+	trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", trial.Tier)
+	require.WithinDuration(t, armedAt.Add(14*24*time.Hour), trial.EndsAt.Time, time.Minute)
+
+	platformMCPEnabled, err := featurerepo.New(instance.conn).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+		OrganizationID: orgID,
+		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+	})
+	require.NoError(t, err)
+	require.True(t, platformMCPEnabled)
+
+	projects, err := projectsRepo.New(instance.conn).ListProjectsByOrganization(ctx, orgID)
+	require.NoError(t, err)
+	require.Len(t, projects, 1)
+	require.Equal(t, "default", projects[0].Slug)
+
+	member, err := orgRepo.New(instance.conn).HasActiveOrganizationUser(ctx, orgRepo.HasActiveOrganizationUserParams{
+		UserID:         userInfo.UserID,
+		OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	require.True(t, member)
+
+	// The user now has an organization, so a second workspace is refused.
+	_, _, err = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Second Workspace")
+	require.ErrorIs(t, err, auth.ErrUserHasOrganization)
+}
+
+func TestProvisionPlatformMCPWorkspaceRejectsInvalidName(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.Organizations = nil
+	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+	_, _, err := instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "!")
+	require.Error(t, err)
+
+	organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+	require.NoError(t, err)
+	require.Empty(t, organizations)
+}

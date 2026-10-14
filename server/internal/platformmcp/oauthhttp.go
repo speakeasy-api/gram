@@ -29,6 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -86,6 +88,10 @@ type oauthPageData struct {
 	CSRFToken        string
 	ScriptNonce      string
 	AutoClose        bool
+	// WorkspaceName prefills the workspace form, and WorkspaceError explains
+	// why a submitted name was refused.
+	WorkspaceName  string
+	WorkspaceError string
 }
 
 // BrowserIdentity resolves a real Speakeasy user from the product identity provider.
@@ -102,6 +108,16 @@ type OrganizationOption struct {
 
 type OrganizationSelector interface {
 	EligibleOrganizations(ctx context.Context, userID string) ([]OrganizationOption, error)
+}
+
+// WorkspaceProvisioner creates the first organization for a user who signs in
+// with no organization, so a new user can connect without visiting the
+// dashboard first. ProvisionWorkspace must refuse a user who already belongs
+// to an organization. A nil provisioner in OAuthHTTPConfig refuses a user
+// with no organization instead.
+type WorkspaceProvisioner interface {
+	SuggestedWorkspaceName(ctx context.Context, userID string) (string, error)
+	ProvisionWorkspace(ctx context.Context, userID, name string) (OrganizationOption, error)
 }
 
 type oauthChallenge struct {
@@ -146,6 +162,7 @@ type OAuthHTTP struct {
 	gate          Gate
 	authorizer    Authorizer
 	organizations OrganizationSelector
+	workspaces    WorkspaceProvisioner
 	signer        *sessiontokens.Signer
 	credentials   *CredentialCodec
 	telemetry     OAuthTelemetry
@@ -172,6 +189,7 @@ type OAuthHTTPConfig struct {
 	Gate          Gate
 	Authorizer    Authorizer
 	Organizations OrganizationSelector
+	Workspaces    WorkspaceProvisioner
 	Signer        *sessiontokens.Signer
 	Encryption    *encryption.Client
 	Telemetry     OAuthTelemetry
@@ -221,6 +239,7 @@ func NewOAuthHTTP(config OAuthHTTPConfig) (*OAuthHTTP, error) {
 		gate:          config.Gate,
 		authorizer:    config.Authorizer,
 		organizations: config.Organizations,
+		workspaces:    config.Workspaces,
 		signer:        config.Signer,
 		credentials:   credentials,
 		telemetry:     config.Telemetry,
@@ -250,6 +269,7 @@ func (s *OAuthHTTP) Attach(mux interface {
 	mux.Handle("GET", "/platform-mcp/idp_callback", handlerFunc(s.IDPCallbackHandler()))
 	mux.Handle("GET", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
 	mux.Handle("POST", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
+	mux.Handle("POST", "/platform-mcp/create-workspace", handlerFunc(s.CreateWorkspaceHandler()))
 	mux.Handle("GET", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
 	mux.Handle("POST", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
 	mux.Handle("GET", "/platform-mcp/provider-setup-complete", handlerFunc(s.ProviderSetupCompleteHandler()))
@@ -461,7 +481,7 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not load eligible organizations")
 		return
 	}
-	if len(organizations) == 0 {
+	if len(organizations) == 0 && s.workspaces == nil {
 		writeOAuthError(w, http.StatusForbidden, "access_denied", "no eligible organizations are available")
 		return
 	}
@@ -472,6 +492,15 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+		return
+	}
+	if len(organizations) == 0 {
+		// A suggestion is a convenience. Without one the user types a name.
+		suggestion, err := s.workspaces.SuggestedWorkspaceName(r.Context(), subject.ID)
+		if err != nil {
+			s.logger.WarnContext(r.Context(), "could not suggest a Platform MCP workspace name", attr.SlogError(err))
+		}
+		s.renderWorkspacePage(w, client.Name, challenge, suggestion, "")
 		return
 	}
 	s.renderOAuthPage(w, oauthPageData{
@@ -523,6 +552,88 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 		}
 	}
 	writeOAuthError(w, http.StatusForbidden, "access_denied", "selected organization is not available")
+}
+
+func (s *OAuthHTTP) renderWorkspacePage(w http.ResponseWriter, clientName string, challenge oauthChallenge, name, problem string) {
+	s.renderOAuthPage(w, oauthPageData{
+		Title:          "Name your workspace · Platform MCP",
+		Kind:           "workspace",
+		ClientName:     clientName,
+		RedirectURI:    challenge.RedirectURI,
+		State:          challenge.ID,
+		CSRFToken:      challenge.CSRFToken,
+		WorkspaceName:  name,
+		WorkspaceError: problem,
+	})
+}
+
+// CreateWorkspaceHandler creates the first organization for a signed-in user
+// who has none, then continues to the consent page for it. It accepts only
+// the state and CSRF token of a challenge that already carries the user, so
+// it cannot be driven from outside the flow.
+func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.workspaces == nil {
+			writeOAuthError(w, http.StatusNotFound, "invalid_request", "workspace creation is not available")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+		if err := r.ParseForm(); err != nil {
+			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse workspace")
+			return
+		}
+		stateKey := platformOAuthChallengePrefix + r.PostForm.Get("state")
+		challenge, err := s.cache.Get(r.Context(), stateKey)
+		if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
+			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+			return
+		}
+		if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
+			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "workspace request is invalid")
+			return
+		}
+		subject, err := urn.ParseSessionSubject(challenge.Subject)
+		if err != nil || subject.Kind != urn.SessionSubjectKindUser {
+			writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+			return
+		}
+		client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
+		if err != nil {
+			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+			return
+		}
+
+		// A refused name keeps the challenge, so the user can correct it.
+		submitted := r.PostForm.Get("workspace_name")
+		if _, err := orgprovision.ValidateName(submitted); err != nil {
+			problem := "Enter a workspace name."
+			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+				problem = shareable.Error()
+			}
+			s.renderWorkspacePage(w, client.Name, challenge, submitted, problem)
+			return
+		}
+
+		// Consume the challenge before creating anything, so a replayed or
+		// doubled submit cannot create a second organization.
+		challenge, err = s.cache.GetAndDelete(r.Context(), stateKey)
+		if err != nil {
+			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+			return
+		}
+		organization, err := s.workspaces.ProvisionWorkspace(r.Context(), subject.ID, submitted)
+		if err != nil {
+			s.logger.ErrorContext(r.Context(), "could not create Platform MCP workspace", attr.SlogError(err))
+			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your workspace could not be created. Sign in to the Speakeasy dashboard to create one, then connect again."})
+			return
+		}
+		challenge.OrganizationID = organization.ID
+		if err := s.cache.Store(r.Context(), challenge); err != nil {
+			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
+			return
+		}
+		http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
+	})
 }
 
 func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthChallenge) (OrganizationOption, error) {

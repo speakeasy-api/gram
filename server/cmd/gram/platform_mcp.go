@@ -22,6 +22,7 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -66,7 +67,10 @@ import (
 )
 
 type platformMCPConfig struct {
-	AssistantIdentity      platformmcp.AssistantIdentityManagement
+	AssistantIdentity platformmcp.AssistantIdentityManagement
+	// Workspaces creates the first organization for a user who connects with
+	// none. Nil refuses such a user, as before self-serve signup existed.
+	Workspaces             platformmcp.WorkspaceProvisioner
 	SignalAuthoring        *sigint.Service
 	Logger                 *slog.Logger
 	MeterProvider          metric.MeterProvider
@@ -242,6 +246,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Gate:          gate,
 		Authorizer:    authorizer,
 		Organizations: platformmcp.NewLiveOrganizationSelector(config.DB, authorizer),
+		Workspaces:    config.Workspaces,
 		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
 		Encryption:    config.Encryption,
 		Telemetry:     oauthTelemetry,
@@ -858,6 +863,28 @@ func newPlatformMCPOktaSignIn(config platformMCPConfig) *identityproviderconnect
 	return identityproviderconnections.NewSignInReader(config.Logger, config.DB, remotesessions.DefaultCallbackOrigins(origin))
 }
 
+// platformMCPWorkspaces adapts the auth service, which owns organization
+// signup, to the Platform MCP OAuth flow.
+type platformMCPWorkspaces struct {
+	auth *auth.Service
+}
+
+func (w platformMCPWorkspaces) SuggestedWorkspaceName(ctx context.Context, userID string) (string, error) {
+	name, err := w.auth.PlatformMCPWorkspaceNameSuggestion(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("suggest workspace name: %w", err)
+	}
+	return name, nil
+}
+
+func (w platformMCPWorkspaces) ProvisionWorkspace(ctx context.Context, userID, name string) (platformmcp.OrganizationOption, error) {
+	id, stored, err := w.auth.ProvisionPlatformMCPWorkspace(ctx, userID, name)
+	if err != nil {
+		return platformmcp.OrganizationOption{}, fmt.Errorf("provision workspace: %w", err)
+	}
+	return platformmcp.OrganizationOption{ID: id, Name: stored}, nil
+}
+
 // platformMCPIdentityChaining builds the identity chaining governor
 // authenticated status surfaces consult, or nil when remote sessions are off.
 func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityChainingGovernor {
@@ -884,6 +911,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Gate:          gate,
 		Authorizer:    authorizer,
 		Organizations: platformmcp.NewLiveOrganizationSelector(config.DB, authorizer),
+		Workspaces:    config.Workspaces,
 		Signer:        sessiontokens.NewSigner(config.JWTSigningKey),
 		Encryption:    config.Encryption,
 		Telemetry:     oauthTelemetry,
