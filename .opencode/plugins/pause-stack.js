@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { isPluginEnabled } from "../lib/plugins.js";
 
 const exec = promisify(execFile);
 const pluginID = "speakeasy.pause-stack";
@@ -46,16 +47,7 @@ async function stackPausedOrBooting(gitdir) {
 export default {
   id: pluginID,
   async setup(ctx) {
-    try {
-      const { stdout } = await exec("mise", ["env", "--json"], {
-        cwd: ctx.location.directory,
-      });
-      const plugins = JSON.parse(stdout).GRAM_OPENCODE_PLUGINS ?? "";
-      if (!plugins.split(":").some((id) => id.trim() === pluginID)) return;
-    } catch {
-      // An unset variable (or failed lookup) leaves the plugin disabled.
-      return;
-    }
+    if (!(await isPluginEnabled(ctx.location.directory, pluginID))) return;
 
     const controller = new AbortController();
 

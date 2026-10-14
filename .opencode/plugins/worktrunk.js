@@ -1,23 +1,13 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { isPluginEnabled } from "../lib/plugins.js";
 import { makeStrategy } from "../lib/worktrunk.js";
 
-const exec = promisify(execFile);
 const pluginID = "speakeasy.worktrunk";
 
 /** @type {import("@opencode/plugin").Plugin.Plugin} */
 export default {
   id: pluginID,
   async setup(ctx) {
-    try {
-      const { stdout } = await exec("mise", ["env", "--json"], {
-        cwd: ctx.location.directory,
-      });
-      const plugins = JSON.parse(stdout).GRAM_OPENCODE_PLUGINS ?? "";
-      if (!plugins.split(":").some((id) => id.trim() === pluginID)) return;
-    } catch {
-      return;
-    }
+    if (!(await isPluginEnabled(ctx.location.directory, pluginID))) return;
 
     const { Worktree } = await import("@opencode/plugin");
     const strategy = makeStrategy({
