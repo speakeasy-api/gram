@@ -30,11 +30,11 @@ type MessageSource interface {
 // HistorySource resolves non-system predecessors of a persisted target snapshot,
 // newest first. System messages do not consume the history limit.
 type HistorySource interface {
-	LoadHistory(context.Context, string, uuid.UUID, repo.ChatMessage, int) ([]repo.LoadEvaluationMessagesRow, error)
+	LoadHistory(context.Context, string, uuid.UUID, repo.LoadEvaluationMessagesRow, int) ([]repo.LoadEvaluationHistoryRow, error)
 }
 
 // LoadHistory pins context to the target's tenant, conversation, generation and timestamp.
-func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.UUID, target repo.ChatMessage, limit int) ([]repo.LoadEvaluationMessagesRow, error) {
+func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.UUID, target repo.LoadEvaluationMessagesRow, limit int) ([]repo.LoadEvaluationHistoryRow, error) {
 	rows, err := repo.New(r.db).LoadEvaluationHistory(ctx, repo.LoadEvaluationHistoryParams{
 		OrganizationID: org, ProjectID: project, ChatID: target.ChatID, Generation: target.Generation,
 		TargetID: target.ID, TargetCreatedAt: target.CreatedAt, TargetSeq: target.Seq, HistoryLimit: conv.SafeInt32(limit),
@@ -42,11 +42,7 @@ func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.U
 	if err != nil {
 		return nil, fmt.Errorf("load evaluation history: %w", err)
 	}
-	ordered := make([]repo.LoadEvaluationMessagesRow, len(rows))
-	for i, row := range rows {
-		ordered[i] = repo.LoadEvaluationMessagesRow(row)
-	}
-	return ordered, nil
+	return rows, nil
 }
 
 // LoadMessages reads non-system message state and attachment locators together.
@@ -127,7 +123,7 @@ func (h *ConversationHandler) HandleBatchWithResult(ctx context.Context, message
 
 		byID := make(map[uuid.UUID]repo.LoadEvaluationMessagesRow, len(rows))
 		for _, row := range rows {
-			byID[row.ChatMessage.ID] = row
+			byID[row.ID] = row
 		}
 		for _, m := range batch {
 			row, ok := byID[uuid.MustParse(m.Message.GetMessageId())]
@@ -169,7 +165,7 @@ func (h *ConversationHandler) Handle(ctx context.Context, m *conversationv1.Mess
 }
 
 func (h *ConversationHandler) evaluate(ctx context.Context, m *conversationv1.MessageEvent, row repo.LoadEvaluationMessagesRow) error {
-	p := row.ChatMessage
+	p := row
 	if p.ID.String() != m.GetMessageId() || p.ProjectID.UUID.String() != m.GetProjectId() || p.ChatID.String() != m.GetConversationId() {
 		var event Event
 		h.evaluator.terminal(ctx, event, "invalid_identity")
@@ -188,14 +184,14 @@ type conversationInput struct {
 	blobs         BlobReader
 	history       HistorySource
 	historyLoaded bool
-	historyRows   []repo.LoadEvaluationMessagesRow
+	historyRows   []repo.LoadEvaluationHistoryRow
 	historyErr    error
 	resolved      map[uuid.UUID]classifier.Entry
 	resolvedBytes int
 }
 
 func (in *conversationInput) Resolve(ctx context.Context) (classifier.Entry, error) {
-	return in.resolveMessage(ctx, in.stored)
+	return in.resolveMessage(ctx, targetContent(in.stored))
 }
 
 type conversationState struct {
@@ -206,8 +202,8 @@ type conversationState struct {
 	TargetMessageIndex int `json:"target_message_index"`
 }
 
-func (in *conversationInput) resolveMessage(ctx context.Context, row repo.LoadEvaluationMessagesRow) (classifier.Entry, error) {
-	if entry, ok := in.resolved[row.ChatMessage.ID]; ok {
+func (in *conversationInput) resolveMessage(ctx context.Context, row repo.LoadEvaluationHistoryRow) (classifier.Entry, error) {
+	if entry, ok := in.resolved[row.ID]; ok {
 		return entry, nil
 	}
 	entry, err := inputWithBudget(ctx, in.blobs, in.message.GetProjectId(), row, maxContentBytes-in.resolvedBytes)
@@ -221,7 +217,7 @@ func (in *conversationInput) resolveMessage(ctx context.Context, row repo.LoadEv
 	if in.resolved == nil {
 		in.resolved = make(map[uuid.UUID]classifier.Entry)
 	}
-	in.resolved[row.ChatMessage.ID] = entry
+	in.resolved[row.ID] = entry
 	in.resolvedBytes += len(data)
 	return entry, nil
 }
@@ -239,7 +235,7 @@ func (in *conversationInput) ResolveWindow(ctx context.Context, size int) (class
 		if in.history == nil {
 			return empty, fmt.Errorf("%w: conversation history unavailable", ErrInvalidInput)
 		}
-		in.historyRows, in.historyErr = in.history.LoadHistory(ctx, in.message.GetOrganizationId(), uuid.MustParse(in.message.GetProjectId()), in.stored.ChatMessage, inputconfig.MaxWindowSize-1)
+		in.historyRows, in.historyErr = in.history.LoadHistory(ctx, in.message.GetOrganizationId(), uuid.MustParse(in.message.GetProjectId()), in.stored, inputconfig.MaxWindowSize-1)
 		in.historyLoaded = true
 	}
 	if in.historyErr != nil {
@@ -263,12 +259,12 @@ func (in *conversationInput) ResolveWindow(ctx context.Context, size int) (class
 }
 
 func (in *conversationInput) MatchingMessage() *matching.Message {
-	return &matching.Message{Role: in.stored.ChatMessage.Role}
+	return &matching.Message{Role: in.stored.Role}
 }
 
 func (in *conversationInput) Event() Event {
 	m := in.message
-	p := in.stored.ChatMessage
+	p := in.stored
 	messageContext := &sigintv1.Reading_ConversationMessage{}
 	messageContext.SetConversationId(m.GetConversationId())
 	messageContext.SetRole(sigintv1.Reading_ConversationMessage_ROLE_USER)

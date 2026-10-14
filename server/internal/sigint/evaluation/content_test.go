@@ -29,7 +29,7 @@ func (m memoryBlobs) Read(_ context.Context, u *url.URL) (io.ReadCloser, error) 
 func TestInputResolvesFilesystemWriterLocator(t *testing.T) {
 	t.Parallel()
 	m := message()
-	row := storedMessage(m)
+	row := targetContent(storedMessage(m))
 	data := []byte(`{"text":"original"}`)
 
 	root, err := os.OpenRoot(t.TempDir())
@@ -45,8 +45,8 @@ func TestInputResolvesFilesystemWriterLocator(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
-	row.ChatMessage.ContentRaw = nil
-	row.ChatMessage.ContentAssetUrl = conv.ToPGText(locator.String())
+	row.ContentRaw = nil
+	row.ContentAssetUrl = conv.ToPGText(locator.String())
 
 	got, err := inputWithBudget(t.Context(), store, m.GetProjectId(), row, maxContentBytes)
 	require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestInputResolvesFilesystemWriterLocator(t *testing.T) {
 	requireGolden(t, "state/filesystem-content", encoded)
 
 	for _, uri := range []string{"file:another-project/content.json", "file:" + m.GetProjectId() + "/../content.json", "file:" + m.GetProjectId() + "/%2e%2e/content.json"} {
-		row.ChatMessage.ContentAssetUrl = conv.ToPGText(uri)
+		row.ContentAssetUrl = conv.ToPGText(uri)
 		_, err := inputWithBudget(t.Context(), store, m.GetProjectId(), row, maxContentBytes)
 		var failed *permanentError
 		require.ErrorAs(t, err, &failed)
@@ -66,7 +66,7 @@ func TestInputResolvesFilesystemWriterLocator(t *testing.T) {
 func TestInputAttachmentFailureAndSizeLimit(t *testing.T) {
 	t.Parallel()
 	m := message()
-	row := storedMessage(m)
+	row := targetContent(storedMessage(m))
 	uri := "gs://test-bucket/" + m.GetProjectId() + "/part.txt"
 	row.AttachmentUris = []string{uri}
 

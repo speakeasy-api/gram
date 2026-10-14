@@ -113,12 +113,26 @@ type messageState struct {
 	Parts []any `json:"parts"`
 }
 
-func inputWithBudget(ctx context.Context, reader BlobReader, project string, row repo.LoadEvaluationMessagesRow, budget int) (classifier.Entry, error) {
+// targetContent projects the target onto the same content-only shape as history.
+// Target attribution and the ordering anchor remain on the conversation input.
+func targetContent(row repo.LoadEvaluationMessagesRow) repo.LoadEvaluationHistoryRow {
+	return repo.LoadEvaluationHistoryRow{
+		ID:              row.ID,
+		Role:            row.Role,
+		Content:         row.Content,
+		ContentRaw:      row.ContentRaw,
+		ContentAssetUrl: row.ContentAssetUrl,
+		ToolCalls:       row.ToolCalls,
+		RowLocalContent: row.RowLocalContent,
+		AttachmentUris:  row.AttachmentUris,
+	}
+}
+
+func inputWithBudget(ctx context.Context, reader BlobReader, project string, m repo.LoadEvaluationHistoryRow, budget int) (classifier.Entry, error) {
 	var empty classifier.Entry
-	m := row.ChatMessage
 	remaining := budget - len(m.Content) - len(m.ToolCalls)
 	var content any
-	hasOriginal := !row.RowLocalContent && (len(m.ContentRaw) > 0 || m.ContentAssetUrl.Valid && m.ContentAssetUrl.String != "")
+	hasOriginal := !m.RowLocalContent && (len(m.ContentRaw) > 0 || m.ContentAssetUrl.Valid && m.ContentAssetUrl.String != "")
 	if hasOriginal {
 		data := m.ContentRaw
 		if len(data) == 0 {
@@ -181,7 +195,7 @@ func inputWithBudget(ctx context.Context, reader BlobReader, project string, row
 			parts = append(parts, map[string]any{"tool_call": map[string]string{"id": call.ID, "name": call.Function.Name, "arguments": arguments}})
 		}
 	}
-	for _, uri := range row.AttachmentUris {
+	for _, uri := range m.AttachmentUris {
 		data, err := readReference(ctx, reader, project, uri, &remaining)
 		if err != nil {
 			return empty, err

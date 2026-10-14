@@ -43,11 +43,11 @@ func assertConversationModelRequest(t *testing.T, strategy string) {
 	definitions[2].Signals = []classifier.Option{classifier.NewOption("a", classifier.Text("Low impact")), classifier.NewOption("b", classifier.Text("High impact"))}
 
 	target := storedMessage(m)
-	target.ChatMessage.Content = "Searchable fallback must not duplicate the original payload."
+	target.Content = "Searchable fallback must not duplicate the original payload."
 	contentURI := "gs://test-bucket/" + m.GetProjectId() + "/message.json"
 	attachmentURI := "gs://test-bucket/" + m.GetProjectId() + "/attachment.txt"
-	target.ChatMessage.ContentAssetUrl = conv.ToPGText(contentURI)
-	target.ChatMessage.ToolCalls = []byte(`[{"id":"call-check","function":{"name":"check_payment","arguments":"{\"invoice\":\"example-invoice\"}"}}]`)
+	target.ContentAssetUrl = conv.ToPGText(contentURI)
+	target.ToolCalls = []byte(`[{"id":"call-check","function":{"name":"check_payment","arguments":"{\"invoice\":\"example-invoice\"}"}}]`)
 	target.AttachmentUris = []string{attachmentURI}
 	blobs := memoryBlobs{
 		contentURI:    []byte(`{"text":"I will check whether the payment retry succeeded.","reference":9007199254740993}`),
@@ -57,7 +57,7 @@ func assertConversationModelRequest(t *testing.T, strategy string) {
 	// HistorySource supplies non-system history newest first. The oldest row is
 	// deliberately outside the five-message window. Other context roles need not
 	// match the target's sensor predicate.
-	var history []repo.LoadEvaluationMessagesRow
+	var history []repo.LoadEvaluationHistoryRow
 	for _, item := range []struct{ role, content string }{
 		{"tool", "Payment declined: retry required."},
 		{"assistant", "Checking the invoice."},
@@ -65,19 +65,19 @@ func assertConversationModelRequest(t *testing.T, strategy string) {
 		{"user", "The first failed charge was this morning."},
 		{"user", "This older message is outside the window."},
 	} {
-		row := storedMessage(m)
-		row.ChatMessage.ID = uuid.New()
-		row.ChatMessage.Role, row.ChatMessage.Content = item.role, item.content
+		row := targetContent(storedMessage(m))
+		row.ID = uuid.New()
+		row.Role, row.Content = item.role, item.content
 		history = append(history, row)
 	}
 	// Split transcript rows must expose row-local text and calls, not the archive.
 	history[1].RowLocalContent = true
-	history[1].ChatMessage.ContentRaw = []byte(`[{"text":"Archived sibling content must not appear."}]`)
+	history[1].ContentRaw = []byte(`[{"text":"Archived sibling content must not appear."}]`)
 	// Incomplete streamed arguments remain evidence rather than being reparsed.
-	history[1].ChatMessage.ToolCalls = []byte(`[{"id":"call-invoice","function":{"name":"lookup_invoice","arguments":"{\"invoice\":"}}]`)
+	history[1].ToolCalls = []byte(`[{"id":"call-invoice","function":{"name":"lookup_invoice","arguments":"{\"invoice\":"}}]`)
 	c, requests := newRecordingClassifier(t)
 	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
-	h.messages = &windowMessages{storedMessages: storedMessages{target.ChatMessage.ID: target}, history: history}
+	h.messages = &windowMessages{storedMessages: storedMessages{target.ID: target}, history: history}
 	h.blobs = blobs
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Len(t, pub.readings, 3)

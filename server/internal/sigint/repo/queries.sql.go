@@ -752,7 +752,7 @@ func (q *Queries) ListSignals(ctx context.Context, arg ListSignalsParams) ([]Sig
 }
 
 const loadEvaluationHistory = `-- name: LoadEvaluationHistory :many
-SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.replayed, m.created_at, m.risk_analyzed_at, c.user_account_id,
+SELECT m.id, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
        COALESCE(m.origin = 'anthropic-inference' AND (
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling
@@ -790,8 +790,12 @@ type LoadEvaluationHistoryParams struct {
 }
 
 type LoadEvaluationHistoryRow struct {
-	ChatMessage     ChatMessage
-	UserAccountID   uuid.NullUUID
+	ID              uuid.UUID
+	Role            string
+	Content         string
+	ContentRaw      []byte
+	ContentAssetUrl pgtype.Text
+	ToolCalls       []byte
 	RowLocalContent bool
 	AttachmentUris  []string
 }
@@ -817,40 +821,12 @@ func (q *Queries) LoadEvaluationHistory(ctx context.Context, arg LoadEvaluationH
 	for rows.Next() {
 		var i LoadEvaluationHistoryRow
 		if err := rows.Scan(
-			&i.ChatMessage.ID,
-			&i.ChatMessage.Seq,
-			&i.ChatMessage.ChatID,
-			&i.ChatMessage.ProjectID,
-			&i.ChatMessage.Role,
-			&i.ChatMessage.Content,
-			&i.ChatMessage.ContentRaw,
-			&i.ChatMessage.ContentAssetUrl,
-			&i.ChatMessage.Model,
-			&i.ChatMessage.MessageID,
-			&i.ChatMessage.FinishReason,
-			&i.ChatMessage.ToolCalls,
-			&i.ChatMessage.PromptTokens,
-			&i.ChatMessage.CompletionTokens,
-			&i.ChatMessage.TotalTokens,
-			&i.ChatMessage.StorageError,
-			&i.ChatMessage.UserID,
-			&i.ChatMessage.ExternalUserID,
-			&i.ChatMessage.ExternalMessageID,
-			&i.ChatMessage.Origin,
-			&i.ChatMessage.UserAgent,
-			&i.ChatMessage.IpAddress,
-			&i.ChatMessage.Source,
-			&i.ChatMessage.ToolCallID,
-			&i.ChatMessage.ToolUrn,
-			&i.ChatMessage.ToolOutcome,
-			&i.ChatMessage.ToolOutcomeNotes,
-			&i.ChatMessage.ToolCallSummaries,
-			&i.ChatMessage.ContentHash,
-			&i.ChatMessage.Generation,
-			&i.ChatMessage.Replayed,
-			&i.ChatMessage.CreatedAt,
-			&i.ChatMessage.RiskAnalyzedAt,
-			&i.UserAccountID,
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.ToolCalls,
 			&i.RowLocalContent,
 			&i.AttachmentUris,
 		); err != nil {
@@ -865,7 +841,9 @@ func (q *Queries) LoadEvaluationHistory(ctx context.Context, arg LoadEvaluationH
 }
 
 const loadEvaluationMessages = `-- name: LoadEvaluationMessages :many
-SELECT m.id, m.seq, m.chat_id, m.project_id, m.role, m.content, m.content_raw, m.content_asset_url, m.model, m.message_id, m.finish_reason, m.tool_calls, m.prompt_tokens, m.completion_tokens, m.total_tokens, m.storage_error, m.user_id, m.external_user_id, m.external_message_id, m.origin, m.user_agent, m.ip_address, m.source, m.tool_call_id, m.tool_urn, m.tool_outcome, m.tool_outcome_notes, m.tool_call_summaries, m.content_hash, m.generation, m.replayed, m.created_at, m.risk_analyzed_at, c.user_account_id,
+SELECT m.id, m.chat_id, m.project_id, m.seq, m.generation, m.created_at,
+       m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
+       m.user_id, m.external_user_id, c.user_account_id,
        COALESCE(m.origin = 'anthropic-inference' AND (
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling
@@ -894,7 +872,19 @@ type LoadEvaluationMessagesParams struct {
 }
 
 type LoadEvaluationMessagesRow struct {
-	ChatMessage     ChatMessage
+	ID              uuid.UUID
+	ChatID          uuid.UUID
+	ProjectID       uuid.NullUUID
+	Seq             int64
+	Generation      int32
+	CreatedAt       pgtype.Timestamptz
+	Role            string
+	Content         string
+	ContentRaw      []byte
+	ContentAssetUrl pgtype.Text
+	ToolCalls       []byte
+	UserID          pgtype.Text
+	ExternalUserID  pgtype.Text
 	UserAccountID   uuid.NullUUID
 	RowLocalContent bool
 	AttachmentUris  []string
@@ -912,39 +902,19 @@ func (q *Queries) LoadEvaluationMessages(ctx context.Context, arg LoadEvaluation
 	for rows.Next() {
 		var i LoadEvaluationMessagesRow
 		if err := rows.Scan(
-			&i.ChatMessage.ID,
-			&i.ChatMessage.Seq,
-			&i.ChatMessage.ChatID,
-			&i.ChatMessage.ProjectID,
-			&i.ChatMessage.Role,
-			&i.ChatMessage.Content,
-			&i.ChatMessage.ContentRaw,
-			&i.ChatMessage.ContentAssetUrl,
-			&i.ChatMessage.Model,
-			&i.ChatMessage.MessageID,
-			&i.ChatMessage.FinishReason,
-			&i.ChatMessage.ToolCalls,
-			&i.ChatMessage.PromptTokens,
-			&i.ChatMessage.CompletionTokens,
-			&i.ChatMessage.TotalTokens,
-			&i.ChatMessage.StorageError,
-			&i.ChatMessage.UserID,
-			&i.ChatMessage.ExternalUserID,
-			&i.ChatMessage.ExternalMessageID,
-			&i.ChatMessage.Origin,
-			&i.ChatMessage.UserAgent,
-			&i.ChatMessage.IpAddress,
-			&i.ChatMessage.Source,
-			&i.ChatMessage.ToolCallID,
-			&i.ChatMessage.ToolUrn,
-			&i.ChatMessage.ToolOutcome,
-			&i.ChatMessage.ToolOutcomeNotes,
-			&i.ChatMessage.ToolCallSummaries,
-			&i.ChatMessage.ContentHash,
-			&i.ChatMessage.Generation,
-			&i.ChatMessage.Replayed,
-			&i.ChatMessage.CreatedAt,
-			&i.ChatMessage.RiskAnalyzedAt,
+			&i.ID,
+			&i.ChatID,
+			&i.ProjectID,
+			&i.Seq,
+			&i.Generation,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Content,
+			&i.ContentRaw,
+			&i.ContentAssetUrl,
+			&i.ToolCalls,
+			&i.UserID,
+			&i.ExternalUserID,
 			&i.UserAccountID,
 			&i.RowLocalContent,
 			&i.AttachmentUris,

@@ -71,7 +71,7 @@ type storedMessages map[uuid.UUID]repo.LoadEvaluationMessagesRow
 func (s storedMessages) LoadMessages(_ context.Context, _ string, project uuid.UUID, ids []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error) {
 	var rows []repo.LoadEvaluationMessagesRow
 	for _, id := range ids {
-		if row, ok := s[id]; ok && row.ChatMessage.ProjectID.UUID == project {
+		if row, ok := s[id]; ok && row.ProjectID.UUID == project {
 			rows = append(rows, row)
 		}
 	}
@@ -80,13 +80,13 @@ func (s storedMessages) LoadMessages(_ context.Context, _ string, project uuid.U
 
 func storedMessage(m *conversationv1.MessageEvent) repo.LoadEvaluationMessagesRow {
 	var row repo.LoadEvaluationMessagesRow
-	row.ChatMessage.ID = uuid.MustParse(m.GetMessageId())
-	row.ChatMessage.ChatID = uuid.MustParse(m.GetConversationId())
-	row.ChatMessage.ProjectID = uuid.NullUUID{UUID: uuid.MustParse(m.GetProjectId()), Valid: true}
-	row.ChatMessage.Role = strings.TrimPrefix(strings.ToLower(m.GetRole().String()), "role_")
-	row.ChatMessage.Content = "Please help with a failed payment"
+	row.ID = uuid.MustParse(m.GetMessageId())
+	row.ChatID = uuid.MustParse(m.GetConversationId())
+	row.ProjectID = uuid.NullUUID{UUID: uuid.MustParse(m.GetProjectId()), Valid: true}
+	row.Role = strings.TrimPrefix(strings.ToLower(m.GetRole().String()), "role_")
+	row.Content = "Please help with a failed payment"
 	created, _ := time.Parse(time.RFC3339Nano, m.GetMessageCreatedAt())
-	row.ChatMessage.CreatedAt = conv.ToPGTimestamptz(created)
+	row.CreatedAt = conv.ToPGTimestamptz(created)
 	return row
 }
 
@@ -130,7 +130,7 @@ func handler(t *testing.T, m *conversationv1.MessageEvent, definitions []Sensor,
 	require.NoError(t, err)
 
 	row := storedMessage(m)
-	return NewConversationHandler(evaluator, nil, storedMessages{row.ChatMessage.ID: row}), &pub
+	return NewConversationHandler(evaluator, nil, storedMessages{row.ID: row}), &pub
 }
 
 func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
@@ -150,10 +150,10 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 	m.SetIngestion(provenance)
 	h, pub := handler(t, m, sensors(), c, testenv.NewMeterProvider(t))
 	row := storedMessage(m)
-	row.ChatMessage.UserID = conv.ToPGText("message-user")
-	row.ChatMessage.ExternalUserID = conv.ToPGText("external-user")
+	row.UserID = conv.ToPGText("message-user")
+	row.ExternalUserID = conv.ToPGText("external-user")
 	row.UserAccountID = uuid.NullUUID{UUID: accountID, Valid: true}
-	h.messages = storedMessages{row.ChatMessage.ID: row}
+	h.messages = storedMessages{row.ID: row}
 	var meta gcp.MessageMetadata
 	require.NoError(t, h.Handle(t.Context(), m, meta))
 	provenance.SetSource("promoted")
@@ -382,7 +382,7 @@ func TestHandlerSkipsDisabledAndOtherRoles(t *testing.T) {
 	require.NoError(t, err)
 
 	row := storedMessage(m)
-	h := NewConversationHandler(evaluator, nil, storedMessages{row.ChatMessage.ID: row})
+	h := NewConversationHandler(evaluator, nil, storedMessages{row.ID: row})
 	var meta gcp.MessageMetadata
 	require.NoError(t, h.Handle(t.Context(), m, meta))
 	m.SetRole(conversationv1.MessageEvent_ROLE_TOOL)
@@ -403,7 +403,7 @@ func TestHandlerEntitlementFailureNacks(t *testing.T) {
 	require.NoError(t, err)
 
 	row := storedMessage(m)
-	h := NewConversationHandler(evaluator, nil, storedMessages{row.ChatMessage.ID: row})
+	h := NewConversationHandler(evaluator, nil, storedMessages{row.ID: row})
 	var meta gcp.MessageMetadata
 	require.ErrorContains(t, h.Handle(t.Context(), m, meta), "check evaluation entitlement")
 }

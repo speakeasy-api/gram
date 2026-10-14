@@ -358,7 +358,9 @@ ORDER BY sensor.id;
 -- name: LoadEvaluationMessages :many
 -- One tenant-pinned read resolves the batch and its current attachment locators.
 -- System messages are excluded for every input strategy.
-SELECT sqlc.embed(m), c.user_account_id,
+SELECT m.id, m.chat_id, m.project_id, m.seq, m.generation, m.created_at,
+       m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
+       m.user_id, m.external_user_id, c.user_account_id,
        COALESCE(m.origin = 'anthropic-inference' AND (
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling
@@ -382,7 +384,7 @@ WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
 -- name: LoadEvaluationHistory :many
 -- Anchor to the target snapshot, never to the latest message in the conversation.
 -- Filter system messages before LIMIT so they do not consume window capacity.
-SELECT sqlc.embed(m), c.user_account_id,
+SELECT m.id, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
        COALESCE(m.origin = 'anthropic-inference' AND (
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling

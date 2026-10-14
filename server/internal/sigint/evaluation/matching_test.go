@@ -25,8 +25,8 @@ func TestSensorMatchingSkipsContentResolution(t *testing.T) {
 	}
 	h, pub := handler(t, m, definitions, nil, testenv.NewMeterProvider(t))
 	row := storedMessage(m)
-	row.ChatMessage.ContentRaw = []byte("invalid json must not be read")
-	h.messages = storedMessages{row.ChatMessage.ID: row}
+	row.ContentRaw = []byte("invalid json must not be read")
+	h.messages = storedMessages{row.ID: row}
 	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
 	require.Empty(t, pub.readings)
 }

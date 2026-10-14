@@ -43,6 +43,11 @@ projects are acknowledged; database failures nack the affected tenant's deliveri
 The adapter owns the `{role, content, parts}` projection. Asset reads occur only
 after entitlement and runnable sensors have been established.
 
+Both message queries select explicit columns. History returns only the message
+ID, role, content representations, tool calls, row-local-content flag and attachment
+locators. The target lookup additionally selects identity, ordering and attribution
+fields needed to anchor the window and publish readings.
+
 `Source.Load` receives the event kind alongside organization and project. The
 repository currently selects configuration only for `conversation.message`;
 other kinds have no eligible sensors. Per-sensor source applicability is deferred.
