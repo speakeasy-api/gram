@@ -520,20 +520,31 @@ const (
 	// IdentityChainingProviderKey is the EMA provider kind serving an
 	// identity chaining attempt (external or speakeasy).
 	IdentityChainingProviderKey = attribute.Key("gram.identity_chaining.provider")
-	// IdentityChainingFallbackKey reports an attempt after an earlier provider failed.
+	// IdentityChainingPathKey distinguishes consent checks from token requests.
+	IdentityChainingPathKey = attribute.Key("gram.identity_chaining.path")
+	// IdentityChainingUnavailableReasonKey says why an EMA provider in the
+	// order could not serve.
+	IdentityChainingUnavailableReasonKey = attribute.Key("gram.identity_chaining.unavailable_reason")
+	// IdentityChainingFallbackKey reports an attempt after an earlier
+	// provider in the order failed.
 	IdentityChainingFallbackKey = attribute.Key("gram.identity_chaining.fallback")
-	// IdentityChainingSkippedProvidersKey counts providers an order could not use.
-	IdentityChainingSkippedProvidersKey = attribute.Key("gram.identity_chaining.skipped_providers")
-	OAuthRedirectURICountKey            = attribute.Key("gram.oauth.redirect_uri.count")
-	OAuthRedirectURIFullKey             = attribute.Key("gram.oauth.redirect_uri.full")
-	OAuthRegisteredAuthMethodKey        = attribute.Key("gram.oauth.registered_auth_method")
-	OAuthRegistrationEndpointKey        = attribute.Key("gram.oauth.registration_endpoint")
-	OAuthRegistrationMethodKey          = attribute.Key("gram.oauth.registration_method")
-	OAuthRegistrationOutcomeKey         = attribute.Key("gram.oauth.registration_outcome")
-	OAuthRegistrationReasonKey          = attribute.Key("gram.oauth.registration_reason")
-	OAuthRegistrationRetryableKey       = attribute.Key("gram.oauth.registration_retryable")
-	OAuthRequiredKey                    = attribute.Key("gram.oauth.required")
-	OAuthScopeKey                       = attribute.Key("gram.oauth.scope")
+	// IdentityChainingRetriesKey counts transient-failure retries against one
+	// provider within an attempt.
+	IdentityChainingRetriesKey = attribute.Key("gram.identity_chaining.retries")
+	// IdentityChainingFailuresKey lists the failures of the providers tried
+	// or skipped so far, as provider:reason pairs: every provider's when the
+	// order is exhausted, the earlier ones' when a fallback serves.
+	IdentityChainingFailuresKey   = attribute.Key("gram.identity_chaining.failures")
+	OAuthRedirectURICountKey      = attribute.Key("gram.oauth.redirect_uri.count")
+	OAuthRedirectURIFullKey       = attribute.Key("gram.oauth.redirect_uri.full")
+	OAuthRegisteredAuthMethodKey  = attribute.Key("gram.oauth.registered_auth_method")
+	OAuthRegistrationEndpointKey  = attribute.Key("gram.oauth.registration_endpoint")
+	OAuthRegistrationMethodKey    = attribute.Key("gram.oauth.registration_method")
+	OAuthRegistrationOutcomeKey   = attribute.Key("gram.oauth.registration_outcome")
+	OAuthRegistrationReasonKey    = attribute.Key("gram.oauth.registration_reason")
+	OAuthRegistrationRetryableKey = attribute.Key("gram.oauth.registration_retryable")
+	OAuthRequiredKey              = attribute.Key("gram.oauth.required")
+	OAuthScopeKey                 = attribute.Key("gram.oauth.scope")
 	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
 	// client's configured scope because the issuer advertises them.
 	OAuthScopeAddedKey = attribute.Key("gram.oauth.scope_added")
@@ -2104,12 +2115,25 @@ func IdentityChainingProvider(v string) attribute.KeyValue {
 func SlogIdentityChainingProvider(v string) slog.Attr {
 	return slog.String(string(IdentityChainingProviderKey), v)
 }
+func IdentityChainingPath(v string) attribute.KeyValue { return IdentityChainingPathKey.String(v) }
+
+func IdentityChainingUnavailableReason(v string) attribute.KeyValue {
+	return IdentityChainingUnavailableReasonKey.String(v)
+}
+func SlogIdentityChainingUnavailableReason(v string) slog.Attr {
+	return slog.String(string(IdentityChainingUnavailableReasonKey), v)
+}
+
 func IdentityChainingFallback(v bool) attribute.KeyValue { return IdentityChainingFallbackKey.Bool(v) }
 func SlogIdentityChainingFallback(v bool) slog.Attr {
 	return slog.Bool(string(IdentityChainingFallbackKey), v)
 }
-func SlogIdentityChainingSkippedProviders(v int) slog.Attr {
-	return slog.Int(string(IdentityChainingSkippedProvidersKey), v)
+func IdentityChainingRetries(v int) attribute.KeyValue { return IdentityChainingRetriesKey.Int(v) }
+func SlogIdentityChainingRetries(v int) slog.Attr {
+	return slog.Int(string(IdentityChainingRetriesKey), v)
+}
+func SlogIdentityChainingFailures(v string) slog.Attr {
+	return slog.String(string(IdentityChainingFailuresKey), v)
 }
 
 func OAuthProvider(v string) attribute.KeyValue { return OAuthProviderKey.String(v) }

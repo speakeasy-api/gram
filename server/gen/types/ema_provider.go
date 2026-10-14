@@ -16,7 +16,10 @@ type EMAProvider struct {
 	RemoteSessionIssuerID *string
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string
-	// Why the provider cannot serve now; omitted when it can. Unavailable
-	// providers are skipped.
+	// Why the provider cannot serve now; omitted when it can. Identity chaining
+	// skips it and tries the next provider. not_trusted_by_endpoint means the
+	// endpoint's authorization server does not accept this issuer.
+	// readiness_unknown means the Speakeasy issuer's state could not be read just
+	// now; retry the read.
 	UnavailableReason *string
 }

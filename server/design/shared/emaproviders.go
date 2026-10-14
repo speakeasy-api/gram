@@ -30,8 +30,8 @@ var EMAProvider = Type("EMAProvider", func() {
 	Attribute("internal_session_issuer_id", String, "The organization's internal session issuer, for speakeasy.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("unavailable_reason", String, "Why the provider cannot serve now; omitted when it can. Unavailable providers are skipped.", func() {
-		Enum("deleted", "disabled", "not_trusted_by_endpoint", "signing_unavailable")
+	Attribute("unavailable_reason", String, "Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.", func() {
+		Enum("deleted", "disabled", "not_trusted_by_endpoint", "signing_unavailable", "not_rolled_out", "verified_domain_required", "setup_required", "keyless", "signing_paused", "sign_in_enforcement_required", "readiness_unknown")
 	})
 	Required("kind")
 })
@@ -39,9 +39,9 @@ var EMAProvider = Type("EMAProvider", func() {
 // EMAProviderOrder is a vendor's EMA provider order, saved or default.
 var EMAProviderOrder = Type("EMAProviderOrder", func() {
 	Meta("struct:pkg:path", "types")
-	Description("The EMA providers identity chaining tries, in order, for one vendor authorization server; each failure falls through to the next.")
+	Description("The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.")
 	Attribute("vendor_issuer", String, "The vendor authorization server issuer, canonicalized.")
-	Attribute("is_default", Boolean, "No order is saved, so every available provider applies: external first, then Speakeasy.")
-	Attribute("providers", ArrayOf(EMAProvider), "Providers in the order they are tried.")
+	Attribute("is_default", Boolean, "No order is saved, so the endpoint uses its configured external issuer.")
+	Attribute("providers", ArrayOf(EMAProvider), "The saved providers in order, or the external default.")
 	Required("vendor_issuer", "is_default", "providers")
 })

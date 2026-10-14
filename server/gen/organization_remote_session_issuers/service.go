@@ -83,12 +83,16 @@ type Service interface {
 	// organization-level issuer, and an organization-level issuer may migrate onto
 	// another organization-level issuer. Requires org:admin.
 	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
-	// Replace the order in which EMA providers issue ID-JAGs for the vendor
-	// authorization server this issuer names. Identity chaining tries them in
-	// order and falls through to the next on any failure. An empty list restores
-	// the default: every available provider, external first, then Speakeasy. The
-	// order applies organization-wide to every issuer with the same canonical
-	// issuer URL. Requires org:admin and the ema-providers rollout.
+	// Replace the ordered list of EMA providers that issue ID-JAGs for the vendor
+	// authorization server this issuer names. Identity chaining tries the
+	// providers that can serve and that the endpoint's authorization server
+	// trusts, in order, retrying transient failures briefly before moving to the
+	// next, until one succeeds. An empty list restores the default: the endpoint's
+	// configured external issuer. Speakeasy is used only for vendors whose list
+	// names it. The order applies organization-wide to every issuer with the same
+	// canonical issuer URL. Requires org:admin and the ema-providers rollout;
+	// restoring the default only needs org:admin. Not available from support or
+	// impersonated sessions.
 	SetEMAProviders(context.Context, *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error)
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for
@@ -428,7 +432,8 @@ type SetEMAProvidersPayload struct {
 	// Any remote_session_issuer in the caller's organization that names the vendor
 	// authorization server.
 	RemoteSessionIssuerID string
-	// Providers in the order they are tried; each at most once.
+	// Providers in the order they are tried, at most 10; each at most once. An
+	// empty list restores the external default.
 	Providers    []*types.EMAProviderInput
 	SessionToken *string
 }

@@ -12,10 +12,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -85,13 +87,18 @@ func seedXAAInspectorFixture(t *testing.T, ctx context.Context, conn *pgxpool.Po
 // under issuer.
 func bindXAAInspectorUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f xaaInspectorFixture, issuer uuid.UUID) {
 	t.Helper()
+	bindXAAInspectorResource(t, ctx, conn, f, issuer, "https://upstream.example.test/mcp")
+}
+
+func bindXAAInspectorResource(t *testing.T, ctx context.Context, conn *pgxpool.Pool, f xaaInspectorFixture, issuer uuid.UUID, resource string) {
+	t.Helper()
 	q := remotesessionsrepo.New(conn)
 	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
 		OrganizationID: conv.ToPGText(f.organizationID), ProjectID: conv.ToNullUUID(f.projectID), RemoteSessionIssuerID: issuer, ClientID: "resource-" + uuid.NewString()[:8],
 		ClientIDIssuedAt: conv.ToPGTimestamptz(time.Now().UTC()), TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{},
 	})
 	require.NoError(t, err)
-	key := remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: issuer, Resource: "https://upstream.example.test/mcp"}
+	key := remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: issuer, Resource: resource}
 	require.NoError(t, q.EnsureEMABinding(ctx, remotesessionsrepo.EnsureEMABindingParams(key)))
 	current, err := q.GetEMABinding(ctx, key)
 	require.NoError(t, err)
@@ -148,13 +155,14 @@ type orderedGovernor struct {
 	*recordingGovernor
 	order   remotesessions.EMAProviderOrder
 	ordered bool
+	err     error
 }
 
-func (g orderedGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool) {
-	return g.order, g.ordered
+func (g orderedGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool, error) {
+	return g.order, g.ordered, g.err
 }
 
-func TestXAAIdentityInspectorReportsAvailableProviders(t *testing.T) {
+func TestXAAIdentityInspectorReportsTheProviderOrder(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_inspector_providers")
@@ -162,7 +170,11 @@ func TestXAAIdentityInspectorReportsAvailableProviders(t *testing.T) {
 	f := seedXAAInspectorFixture(t, ctx, conn, pgtype.Text{})
 	bindXAAInspectorUpstream(t, ctx, conn, f, f.issuerA)
 	external := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.issuerA, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}
+	untrusted := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.issuerB, InternalSessionIssuerID: uuid.Nil, Unavailable: remotesessions.EMAProviderNotTrustedByEndpoint}
 	pending := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.New(), Unavailable: remotesessions.EMAProviderSigningUnavailable}
+	order := func(providers ...remotesessions.EMAProvider) remotesessions.EMAProviderOrder {
+		return remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: providers}
+	}
 	inspect := func(g orderedGovernor) XAAIdentityChaining {
 		inspector := &postgresXAAIdentityInspector{db: conn, governor: g, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
 		chaining, _, err := inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
@@ -170,17 +182,92 @@ func TestXAAIdentityInspectorReportsAvailableProviders(t *testing.T) {
 		return chaining
 	}
 
-	served := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: []remotesessions.EMAProvider{pending, external}}, ordered: true})
-	require.True(t, served.Served)
+	served := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, order: order(pending, untrusted, external), ordered: true})
+	require.True(t, served.Served, "a provider later in the order serves")
 	require.Nil(t, served.NotServedReason)
-	require.Equal(t, []XAAEMAProvider{{Kind: "external", RemoteSessionIssuerID: new(f.issuerA.String())}}, served.Providers, "a provider that cannot serve is omitted")
+	require.Equal(t, []XAAEMAProvider{
+		{Kind: "speakeasy", UnavailableReason: new("signing_unavailable")},
+		{Kind: "external", RemoteSessionIssuerID: new(f.issuerB.String()), UnavailableReason: new("not_trusted_by_endpoint")},
+		{Kind: "external", RemoteSessionIssuerID: new(f.issuerA.String())},
+	}, served.Providers, "every provider is listed in order with why it cannot serve")
 
-	unavailable := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: []remotesessions.EMAProvider{pending}}, ordered: true})
+	unavailable := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: order(pending, untrusted), ordered: true})
 	require.False(t, unavailable.Served)
-	require.Equal(t, "provider_unavailable", conv.PtrValOr(unavailable.NotServedReason, ""))
-	require.Empty(t, unavailable.Providers)
+	require.Equal(t, "provider_unavailable", conv.PtrValOr(unavailable.NotServedReason, ""), "no provider in the order can serve")
+	require.Len(t, unavailable.Providers, 2)
 
-	unbound := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: nil}, ordered: false})
+	unbound := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: remotesessions.EMAProviderOrder{}, ordered: false})
 	require.Equal(t, "binding_not_ready", conv.PtrValOr(unbound.NotServedReason, ""))
-	require.Empty(t, unbound.Providers)
+	require.Nil(t, unbound.Providers)
+
+	unreadable := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: remotesessions.EMAProviderOrder{}, ordered: false, err: identitychaining.ErrProviderOrderUnavailable})
+	require.False(t, unreadable.Served)
+	require.Equal(t, "provider_order_unavailable", conv.PtrValOr(unreadable.NotServedReason, ""), "an unreadable order is not reported as a missing binding")
+	require.Nil(t, unreadable.Providers)
+}
+
+type failedResourceGovernor struct {
+	*recordingGovernor
+	err   error
+	calls int
+}
+
+func (g *failedResourceGovernor) ResolveResource(context.Context, identitychaining.Request) (protectedresource.EndpointResource, error) {
+	g.calls++
+	return protectedresource.EndpointResource{}, g.err
+}
+func (*failedResourceGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool, error) {
+	panic("failed discovery must not be probed a second time")
+}
+
+func TestXAAIdentityInspectorPreservesSnapshotAfterDiscoveryFailure(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"invalid metadata", protectedresource.ErrEndpointResourceInvalid},
+		{"transient metadata failure", context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			conn, err := platformMCPInfra.CloneTestDatabase(t, "xaa_failed_resource")
+			require.NoError(t, err)
+			f := seedXAAInspectorFixture(t, ctx, conn, conv.ToPGText("https://recorded.example.test"))
+			bindXAAInspectorResource(t, ctx, conn, f, f.issuerA, "https://upstream.example.test")
+			governor := &failedResourceGovernor{recordingGovernor: &recordingGovernor{}, err: tc.err}
+			inspector := &postgresXAAIdentityInspector{logger: testenv.NewLogger(t), db: conn, governor: governor, origins: remotesessions.CallbackOrigins{}}
+			result, callback, err := inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
+			require.NoError(t, err)
+			require.False(t, result.Served)
+			require.Equal(t, "resource_unavailable", conv.PtrValOr(result.NotServedReason, ""))
+			require.Len(t, result.Bindings, 1, "stored diagnostics survive failed metadata resolution")
+			require.NotNil(t, callback)
+			require.Equal(t, 1, governor.calls)
+		})
+	}
+}
+
+func TestXAAIdentityInspectorExplainsANonRoutableServer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_inspector_not_routable")
+	require.NoError(t, err)
+	f := seedXAAInspectorFixture(t, ctx, conn, pgtype.Text{})
+
+	inspector := &postgresXAAIdentityInspector{db: conn, governor: &recordingGovernor{issuer: f.issuerA, serves: true}, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
+	for name, call := range map[string]struct {
+		issuer   uuid.UUID
+		resource string
+	}{
+		"no upstream issuer": {issuer: uuid.Nil, resource: "https://upstream.example.test/mcp"},
+		"no resource":        {issuer: f.issuerA, resource: ""},
+	} {
+		chaining, _, err := inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, call.issuer, call.resource)
+		require.NoError(t, err, name)
+		require.False(t, chaining.Served, name)
+		require.NotNil(t, chaining.NotServedReason, name)
+		require.Equal(t, xaaNotRoutable, *chaining.NotServedReason, name)
+	}
 }

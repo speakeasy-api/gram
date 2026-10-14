@@ -34,11 +34,8 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: org, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	if contextvalues.IsSupportSession(ctx) {
-		return nil, oops.E(oops.CodeForbidden, nil, "the EMA provider order cannot be changed from a support session").LogError(ctx, logger)
-	}
-	if err := s.requireEMAProviders(ctx, logger, org); err != nil {
-		return nil, err
+	if contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "the EMA provider order cannot be changed from a support or impersonated session").LogError(ctx, logger)
 	}
 	vendorID, err := uuid.Parse(payload.RemoteSessionIssuerID)
 	if err != nil {
@@ -47,6 +44,13 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	providers, err := parseEMAProviders(payload.Providers)
 	if err != nil {
 		return nil, err
+	}
+	// Restoring the external default stays possible with the rollout off, so
+	// a saved order can always be undone.
+	if len(providers) > 0 {
+		if err := s.requireEMAProviders(ctx, logger, org); err != nil {
+			return nil, err
+		}
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -88,8 +92,16 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	for _, p := range providers {
 		after.Providers = append(after.Providers, auditEMAProvider(p.RemoteSessionIssuerID, p.InternalSessionIssuerID))
 	}
+	scope := EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: s.speakeasySigningAvailable}
 	if slices.Equal(before.Providers, after.Providers) {
-		return s.emaProvidersView(ctx, logger, q, org, vendor)
+		order, err := ResolveEMAProviders(ctx, q, org, vendor, scope)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
+		}
+		if err := dbtx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "release ema provider order").LogError(ctx, logger)
+		}
+		return s.liveEMAProvidersView(ctx, logger, org, order), nil
 	}
 
 	if _, err := q.DeleteEMAProviders(ctx, repo.DeleteEMAProvidersParams{OrganizationID: org, VendorIssuer: vendor}); err != nil {
@@ -121,18 +133,18 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 		return nil, oops.E(oops.CodeUnexpected, err, "log ema provider order").LogError(ctx, logger)
 	}
 	// Read under the lock, so the response is this write's order.
-	view, err := s.emaProvidersView(ctx, logger, q, org, vendor)
+	order, err := ResolveEMAProviders(ctx, q, org, vendor, scope)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit ema provider order").LogError(ctx, logger)
 	}
-	return view, nil
+	return s.liveEMAProvidersView(ctx, logger, org, order), nil
 }
 
-// requireEMAProviders checks the rollout flag; a lookup failure reads as
-// unavailable, never forbidden.
+// requireEMAProviders checks the rollout flag for saving an order; a lookup
+// failure reads as unavailable, never forbidden.
 func (s *Service) requireEMAProviders(ctx context.Context, logger *slog.Logger, organizationID string) error {
 	if s.featureFlags == nil {
 		return oops.E(oops.CodeForbidden, nil, "the EMA provider order is not enabled for this organization")
@@ -151,9 +163,16 @@ func (s *Service) requireEMAProviders(ctx context.Context, logger *slog.Logger, 
 	return nil
 }
 
+// maxEMAProviders bounds an order's length; the API documents it.
+const maxEMAProviders = 10
+
 // parseEMAProviders validates an order's shape: a remote session issuer
-// exactly for external entries, and each provider at most once.
+// exactly for external entries, and each provider at most once. An empty
+// order restores the endpoint's external issuer.
 func parseEMAProviders(in []*types.EMAProviderInput) ([]EMAProvider, error) {
+	if len(in) > maxEMAProviders {
+		return nil, oops.E(oops.CodeBadRequest, nil, "an EMA provider order has at most %d providers", maxEMAProviders)
+	}
 	out := make([]EMAProvider, 0, len(in))
 	for _, p := range in {
 		if p == nil {
@@ -175,7 +194,7 @@ func parseEMAProviders(in []*types.EMAProviderInput) ([]EMAProvider, error) {
 			entry.RemoteSessionIssuerID = id
 		}
 		if slices.Contains(out, entry) {
-			return nil, oops.E(oops.CodeBadRequest, nil, "each provider may appear once")
+			return nil, oops.E(oops.CodeBadRequest, nil, "each provider may appear in the order once")
 		}
 		out = append(out, entry)
 	}
@@ -185,6 +204,9 @@ func parseEMAProviders(in []*types.EMAProviderInput) ([]EMAProvider, error) {
 // resolveEMAProviderIDs checks each external provider is one the
 // organization can name, and resolves speakeasy to its internal session issuer.
 func resolveEMAProviderIDs(ctx context.Context, logger *slog.Logger, q *repo.Queries, organizationID string, providers []EMAProvider) error {
+	if len(providers) == 0 {
+		return nil
+	}
 	candidates, err := q.ListEMAExternalProviderCandidates(ctx, conv.ToPGText(organizationID))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "read external ema providers").LogError(ctx, logger)
@@ -209,13 +231,24 @@ func resolveEMAProviderIDs(ctx context.Context, logger *slog.Logger, q *repo.Que
 }
 
 // emaProvidersView is the organization-wide order for vendor, the same one
-// runtime selection resolves.
+// runtime resolves.
 func (s *Service) emaProvidersView(ctx context.Context, logger *slog.Logger, q *repo.Queries, organizationID, vendor string) (*types.EMAProviderOrder, error) {
-	order, err := ResolveEMAProviders(ctx, q, organizationID, vendor, EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: SpeakeasyEMASigning})
+	order, err := ResolveEMAProviders(ctx, q, organizationID, vendor, EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: s.speakeasySigningAvailable})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
 	}
-	return EMAProviderOrderView(order), nil
+	return s.liveEMAProvidersView(ctx, logger, organizationID, order), nil
+}
+
+// liveEMAProvidersView runs after the order's transaction releases its
+// locks. A failed readiness read is reported as readiness_unknown: it must
+// never fail a read, or a write that already committed.
+func (s *Service) liveEMAProvidersView(ctx context.Context, logger *slog.Logger, organizationID string, order EMAProviderOrder) *types.EMAProviderOrder {
+	order, err := ApplyEMAProviderReadiness(ctx, organizationID, order, s.speakeasyReadiness)
+	if err != nil {
+		logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err))
+	}
+	return EMAProviderOrderView(order)
 }
 
 // EMAProviderOrderView renders an order for the management API.

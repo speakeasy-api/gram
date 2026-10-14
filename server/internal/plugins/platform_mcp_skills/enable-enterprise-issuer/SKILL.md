@@ -66,8 +66,8 @@ or imply that support staff may mutate the organization's issuer.
 
 Show the exact public issuer URI from the successful read. Explain that the
 service's administrator must register it in that service's enterprise-managed
-authorization settings, and that Speakeasy must then be selected as that
-service's EMA provider: registering the URI alone changes nothing. This is a separate trust change requiring the user's
+authorization settings, and that Speakeasy must then be added to that
+service's EMA provider order: registering the URI alone changes nothing. This is a separate trust change requiring the user's
 explicit authorization; do not change ordinary employee SSO login settings or
 replace an existing trusted issuer automatically.
 

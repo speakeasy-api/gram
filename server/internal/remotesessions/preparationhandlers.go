@@ -90,11 +90,11 @@ func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput,
 	if err != nil || authCtx == nil {
 		return nil, nil //nolint:nilnil // No order for an issuer that is not an identifier.
 	}
-	order, err := EndpointEMAProviders(ctx, repo.New(s.db), authCtx.ActiveOrganizationID, in.UserSessionIssuerID, vendor, SpeakeasyEMASigning)
+	order, err := EndpointEMAProviders(ctx, repo.New(s.db), authCtx.ActiveOrganizationID, in.UserSessionIssuerID, vendor, s.speakeasySigningAvailable)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, s.logger)
 	}
-	return EMAProviderOrderView(order), nil
+	return s.liveEMAProvidersView(ctx, s.logger, authCtx.ActiveOrganizationID, order), nil
 }
 
 func (s *Service) UnlinkEMA(ctx context.Context, p *gen.UnlinkEMAPayload) (*gen.IdentityChainingPreparation, error) {

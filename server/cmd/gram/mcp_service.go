@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -84,6 +85,8 @@ type mcpServiceDependencies struct {
 	CallbackOrigins        remotesessions.CallbackOrigins
 	PlatformHosts          map[string]string
 	CallerAssertions       *mcpauthz.Issuer
+	IssuerGate             *internalsessionissuers.Gate
+	IssuerSigner           *internalsessionissuers.Signer
 }
 
 func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, error) {
@@ -116,6 +119,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	if err != nil {
 		return nil, err
 	}
+	chainer.SetSpeakeasyIssuer(d.IssuerGate, d.IssuerSigner, d.Features)
 	service.SetIdentityChainer(chainer)
 	return service, nil
 }
@@ -128,6 +132,7 @@ func newIdentityChainer(logger *slog.Logger, meter metric.MeterProvider, db *pgx
 		return nil, fmt.Errorf("initialize identity chaining key resolver: %w", err)
 	}
 	chainer := identitychaining.New(logger, db, enc, challenges, delegation, assertionKeys, cache.NewRedisCacheAdapter(redisClient))
+	chainer.SetResourceResolver(challenges.ResolveEMAResource)
 	chainer.SetMeterProvider(meter)
 	chainer.SetObserver(oktaresourceconnections.NewObserver(logger, meter, db, auditLogger))
 	return chainer, nil

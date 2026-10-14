@@ -7,14 +7,14 @@
 
 package types
 
-// The EMA providers identity chaining tries, in order, for one vendor
-// authorization server; each failure falls through to the next.
+// The EMA providers for one vendor authorization server, in the order identity
+// chaining tries them. Each provider that can serve is tried in turn, with
+// short bounded retries for transient failures, until one succeeds.
 type EMAProviderOrder struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string
-	// No order is saved, so every available provider applies: external first, then
-	// Speakeasy.
+	// No order is saved, so the endpoint uses its configured external issuer.
 	IsDefault bool
-	// Providers in the order they are tried.
+	// The saved providers in order, or the external default.
 	Providers []*EMAProvider
 }

@@ -2,7 +2,7 @@
 
 An organization's internal session issuer signs enterprise-managed authorization assertions (ID-JAGs) for its users. Vendors trust its issuer URL, `<origin>/oauth/idp/org/<org-id>`, which never changes. Its signing keys live in GCP KMS on the platform identity provider key ring (`GRAM_IDENTITY_PROVIDER_KMS_KEY_RING`), named `emaissuer-*`. Each assertion's email must be on one of the organization's verified domains at signing time, since vendors trust the email alone.
 
-Speakeasy serves a vendor only where an admin selected it as that vendor's EMA provider, and only while the organization has both the `internal-session-issuer` rollout flag and the `sign-in-enforcement` flag (from the sign-in linking change, #7460) on.
+Speakeasy serves a vendor only where an admin added it to that vendor's EMA provider order, and only while the organization has both the `internal-session-issuer` rollout flag and the `sign-in-enforcement` flag (from the sign-in linking change, #7460) on.
 
 ## Issuer origin
 
@@ -20,7 +20,7 @@ An organization admin replaces a compromised key on IDP and SSO › Identity pro
 3. Read the response:
    - `state: enabled` and `kms_cleanup_pending: 0`: done.
    - `kms_cleanup_pending` above 0: the compromised keys are already unpublished. The hourly sweep retries cleanup until it succeeds. Watch `gram.internal_session_issuer.kms_cleanup.pending`, or clean up by hand (below).
-   - `state: keyless` with `replacement_error`: no replacement yet (KMS outage, signing misconfiguration, or the mint rate limit is exhausted or unreachable, since minting fails closed). The page shows the error instead of success. Nothing is signed meanwhile: services that selected Speakeasy get the interactive sign-in, and nothing falls back to another provider. The page offers **Finish setting up a new key** under **Signing keys**, which repeats the call; through the API, with no active key, `active_kid` may be left out.
+   - `state: keyless` with `replacement_error`: no replacement yet (KMS outage, signing misconfiguration, or the mint rate limit is exhausted or unreachable, since minting fails closed). The page shows the error instead of success. Nothing is signed meanwhile: Speakeasy is skipped, and services whose EMA provider order names another provider that can serve try that provider (if its exchange fails, the request fails with an authorization error); only services with no provider able to serve get the interactive sign-in. The page offers **Finish setting up a new key** under **Signing keys**, which repeats the call; through the API, with no active key, `active_kid` may be left out.
 4. Repeats that name a key that was already replaced change nothing, so retries never revoke the fresh key or mint further keys.
 5. If the platform signing identity itself is suspect (the signing service account or its credential, not one organization's key), rotating alone doesn't help: whoever holds the identity can sign directly with KMS. In order:
    1. Pause all signing (below).

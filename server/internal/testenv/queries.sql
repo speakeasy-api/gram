@@ -1959,6 +1959,13 @@ UPDATE internal_session_issuers
 SET disabled_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;
 
+-- name: WithdrawJsonWebKeyKeepingUpdatedAtFixture :execrows
+-- Soft-deletes one key without moving its updated_at, so a test can show a
+-- cache notices a key change that leaves every timestamp unchanged.
+UPDATE json_web_keys
+SET deleted_at = updated_at
+WHERE organization_id = @organization_id AND kid = @kid AND deleted IS FALSE;
+
 -- name: CountWaitingAdvisoryLocksFixture :one
 -- Advisory lock requests still waiting, so a test can tell a writer blocked.
 SELECT count(*)::bigint AS waiting FROM pg_catalog.pg_locks

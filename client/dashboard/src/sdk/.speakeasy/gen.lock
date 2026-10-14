@@ -12120,6 +12120,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setOrganizationRemoteSessionIssuerEMAProvider:
+    speakeasy-default-set-organization-remote-session-issuer-EMA-provider:
+      requestBody:
+        application/json: {"remote_session_issuer_id": "698138ff-c58c-43b4-97db-c5a76f5bd08d"}
+      responses:
+        "200":
+          application/json: {"is_default": false, "provider": {"kind": "external"}, "vendor_issuer": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   setOrganizationRemoteSessionIssuerEMAProviders:
     speakeasy-default-set-organization-remote-session-issuer-EMA-providers:
       requestBody:

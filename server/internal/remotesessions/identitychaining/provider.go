@@ -2,6 +2,7 @@ package identitychaining
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -20,8 +21,8 @@ type issuedGrant struct {
 	trustedObtainedAt time.Time
 }
 
-// tokenSource is one EMA provider that can issue an ID-JAG for a selection.
-// Sources are tried in the organization's order for the vendor.
+// tokenSource is one EMA provider in a vendor's order, able to issue an
+// ID-JAG for it.
 type tokenSource interface {
 	kind() remotesessions.EMAProviderKind
 
@@ -42,20 +43,66 @@ type tokenSource interface {
 	issue(ctx context.Context, logger *slog.Logger, req Request, sel selection, ready func() Outcome) (issuedGrant, Outcome)
 }
 
-// sourceFactory builds the token source for one provider in an order.
+// sourceFactory builds the token source for a provider in the order.
 type sourceFactory func(remotesessions.EMAProvider) tokenSource
 
-// providerUnavailable marks a request no provider in the order can serve, so
-// the interactive path applies unchanged.
+// providerUnavailable marks a provider that cannot serve the request. The
+// next provider in the order is tried; when none can serve, the interactive
+// path applies unchanged.
 var providerUnavailable = newOutcome(StageAuthorization, ReasonProviderUnavailable, ConfidenceVerified, false)
 
-// providerOrder resolves sel's vendor order for the endpoint. Providers that
-// cannot serve stay in the order, flagged, so views and logs can say why.
+// unavailableBecause is providerUnavailable carrying why, for logs, metrics
+// and status views.
+func unavailableBecause(reason remotesessions.EMAProviderUnavailableReason) Outcome {
+	outcome := providerUnavailable
+	outcome.Unavailable = reason
+	return outcome
+}
+
+// providerOrder resolves sel's vendor provider order for the endpoint.
+// Providers that cannot serve are kept, flagged, so attempts skip them and
+// views and logs can say why.
 func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
 	return g.providerOrderWith(ctx, repo.New(g.db), logger, req, sel)
 }
 
-// providerOrderWith is providerOrder over q, such as a publishing transaction.
+// readyProviderOrder decorates the order with live Speakeasy readiness for
+// status views. Acquisition reads the raw order so transient authority
+// failures keep their retryability.
+func (g *Governor) readyProviderOrder(ctx context.Context, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
+	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
+	if !outcome.Succeeded() {
+		return order, outcome
+	}
+	order, err := remotesessions.ApplyEMAProviderReadiness(ctx, req.OrganizationID, order, g.speakeasyReadiness)
+	if err != nil {
+		g.logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err))
+	}
+	return order, success
+}
+
+// speakeasyReadiness is the status-view readiness of the organization's
+// Speakeasy issuer, using the same checks as minting.
+func (g *Governor) speakeasyReadiness(ctx context.Context, organizationID string, issuerID uuid.UUID) (remotesessions.EMAProviderUnavailableReason, error) {
+	source, ok := g.source(remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: issuerID, Unavailable: ""}).(speakeasySource)
+	if !ok || !source.available() {
+		return remotesessions.EMAProviderSigningUnavailable, nil
+	}
+	_, outcome := source.configuration(ctx, g.logger, organizationID)
+	switch {
+	case outcome.Succeeded():
+		return "", nil
+	case outcome.Retryable:
+		return remotesessions.EMAProviderReadinessUnknown, fmt.Errorf("issuer readiness: %s", outcome.Reason)
+	case outcome.Unavailable != "":
+		return outcome.Unavailable, nil
+	}
+	return remotesessions.EMAProviderSigningUnavailable, nil
+}
+
+// providerOrderWith reads the saved order over q, such as a publishing
+// transaction. Live source readiness is checked outside the transaction; the
+// source's publish fence rechecks its issuer and sign-in under lock.
 func (g *Governor) providerOrderWith(ctx context.Context, q *repo.Queries, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
 	vendor, err := remotesessions.NormalizeVendorIssuer(sel.issuer)
 	if err != nil {
@@ -70,32 +117,11 @@ func (g *Governor) providerOrderWith(ctx context.Context, q *repo.Queries, logge
 	return order, success
 }
 
-// servingProviders lists the providers that can serve sel, logging when a
-// saved order leaves none.
-func (g *Governor) servingProviders(ctx context.Context, logger *slog.Logger, req Request, sel selection) ([]remotesessions.EMAProvider, Outcome) {
-	order, outcome := g.providerOrder(ctx, logger, req, sel)
-	if !outcome.Succeeded() {
-		return nil, outcome
-	}
-	for _, p := range order.Providers {
-		if !p.Available() {
-			logger.DebugContext(ctx, "skipping ema provider that cannot serve", attr.SlogIdentityChainingProvider(string(p.Kind)), attr.SlogReason(string(p.Unavailable)))
-		}
-	}
-	available := order.Available()
-	if len(available) == 0 {
-		logger.InfoContext(ctx, "ema provider order leaves no provider that can serve",
-			attr.SlogOAuthIssuer(order.VendorIssuer),
-			attr.SlogIdentityChainingSkippedProviders(len(order.Providers)),
-		)
-		return nil, providerUnavailable
-	}
-	return available, success
-}
-
-// stillServes rechecks that sel's provider is still an available entry in the
-// vendor's order before a token it produced is published or released, so an
-// admin's order change wins over an attempt already in flight.
+// stillServes rechecks that sel's provider is still in the vendor's order and
+// can serve before a token it produced is published or released, so an
+// admin's change wins over an attempt already in flight. A provider other
+// than the order's first may still serve: the order prefers providers for new
+// credentials and never discards one a provider in it issued.
 func (g *Governor) stillServes(ctx context.Context, logger *slog.Logger, req Request, sel selection) Outcome {
 	return g.stillServesWith(ctx, repo.New(g.db), logger, req, sel)
 }
@@ -106,11 +132,8 @@ func (g *Governor) stillServesWith(ctx context.Context, q *repo.Queries, logger 
 	if !outcome.Succeeded() {
 		return outcome
 	}
-	want := sel.provider
-	for _, p := range order.Available() {
-		if p.Kind == want.Kind && p.RemoteSessionIssuerID == want.RemoteSessionIssuerID && p.InternalSessionIssuerID == want.InternalSessionIssuerID {
-			return success
-		}
+	if order.Serves(sel.provider) {
+		return success
 	}
 	return newOutcome(StagePersistence, ReasonStaleConfiguration, ConfidenceVerified, true)
 }
@@ -120,7 +143,7 @@ func (g *Governor) source(p remotesessions.EMAProvider) tokenSource {
 	if build, ok := g.sources[p.Kind]; ok {
 		return build(p)
 	}
-	return speakeasySource{}
+	return new(speakeasySource)
 }
 
 // sourceAvailable reports whether kind's source can serve on this deployment.
@@ -150,7 +173,8 @@ func (s externalSource) authorize(ctx context.Context, logger *slog.Logger, req 
 	}
 	outcome := s.c.authorize(ctx, logger, req, sel)
 	if outcome.Succeeded() && s.issuer != uuid.Nil && sel.trustedIssuerID != s.issuer {
-		// The endpoint's trust moved after the order was resolved.
+		// The endpoint's trust moved after the order was resolved; this
+		// provider reports stale configuration and the next one is tried.
 		return newOutcome(StageAuthorization, ReasonStaleConfiguration, ConfidenceVerified, true)
 	}
 	return outcome
@@ -162,26 +186,4 @@ func (s externalSource) checkReuse(ctx context.Context, req Request, sel selecti
 
 func (s externalSource) issue(ctx context.Context, logger *slog.Logger, req Request, sel selection, ready func() Outcome) (issuedGrant, Outcome) {
 	return s.c.exchangeGrant(ctx, logger, req, sel, ready)
-}
-
-// speakeasySource will sign ID-JAGs with the organization's internal session
-// issuer (AIM-523). Until then it is unavailable and never presented as serving.
-type speakeasySource struct{}
-
-func (speakeasySource) kind() remotesessions.EMAProviderKind {
-	return remotesessions.EMAProviderSpeakeasy
-}
-
-func (speakeasySource) available() bool { return remotesessions.SpeakeasyEMASigning }
-
-func (speakeasySource) authorize(context.Context, *slog.Logger, Request, *selection) Outcome {
-	return providerUnavailable
-}
-
-func (speakeasySource) checkReuse(context.Context, Request, selection) Outcome {
-	return providerUnavailable
-}
-
-func (speakeasySource) issue(context.Context, *slog.Logger, Request, selection, func() Outcome) (issuedGrant, Outcome) {
-	return issuedGrant{value: "", trustedSessionID: uuid.Nil, trustedObtainedAt: time.Time{}}, providerUnavailable
 }

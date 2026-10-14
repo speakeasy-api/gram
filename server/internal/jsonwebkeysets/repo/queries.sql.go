@@ -556,6 +556,35 @@ func (q *Queries) GetOrganizationEMAIssuerKeys(ctx context.Context, arg GetOrgan
 	return i, err
 }
 
+const getOrganizationEMAIssuerKeysVersion = `-- name: GetOrganizationEMAIssuerKeysVersion :one
+SELECT isi.json_web_key_set_id,
+  md5(COALESCE(string_agg(k.id::text || ':' || k.state || ':' || k.deleted::text || ':' || k.updated_at::text, ',' ORDER BY k.id), ''))::text AS keys_digest
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE isi.organization_id = $1::text
+  AND isi.deleted IS FALSE
+GROUP BY isi.id, isi.json_web_key_set_id
+`
+
+type GetOrganizationEMAIssuerKeysVersionRow struct {
+	JsonWebKeySetID uuid.UUID
+	KeysDigest      string
+}
+
+// A cheap fingerprint of the issuer's key rows, revoked ones included, so a
+// cached JWKS notices any key write without reading the keys. Every row's id,
+// state, deletion and updated_at feed the digest, so a change to any row
+// changes it. A disabled organization has no fingerprint, as it has no keys.
+func (q *Queries) GetOrganizationEMAIssuerKeysVersion(ctx context.Context, organizationID string) (GetOrganizationEMAIssuerKeysVersionRow, error) {
+	row := q.db.QueryRow(ctx, getOrganizationEMAIssuerKeysVersion, organizationID)
+	var i GetOrganizationEMAIssuerKeysVersionRow
+	err := row.Scan(&i.JsonWebKeySetID, &i.KeysDigest)
+	return i, err
+}
+
 const getOrganizationInternalSessionIssuer = `-- name: GetOrganizationInternalSessionIssuer :one
 SELECT isi.id, isi.organization_id, isi.issuer, isi.json_web_key_set_id, isi.disabled_at, isi.allowed_sign_in_methods, isi.allowed_microsoft_tenant_ids, isi.created_at, isi.updated_at, isi.deleted_at, isi.deleted
 FROM internal_session_issuers AS isi

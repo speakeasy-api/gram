@@ -45691,7 +45691,7 @@ paths:
                 name: RefreshOrganizationRemoteSessionIssuerMetadata
     /rpc/organizationRemoteSessionIssuers.setEMAProviders:
         post:
-            description: 'Replace the order in which EMA providers issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external first, then Speakeasy. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout.'
+            description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint''s configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
             operationId: setOrganizationRemoteSessionIssuerEMAProviders
             parameters:
                 - allowEmptyValue: true
@@ -95668,12 +95668,19 @@ components:
                     format: uuid
                 unavailable_reason:
                     type: string
-                    description: Why the provider cannot serve now; omitted when it can. Unavailable providers are skipped.
+                    description: Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
                     enum:
                         - deleted
                         - disabled
                         - not_trusted_by_endpoint
                         - signing_unavailable
+                        - not_rolled_out
+                        - verified_domain_required
+                        - setup_required
+                        - keyless
+                        - signing_paused
+                        - sign_in_enforcement_required
+                        - readiness_unknown
             description: One EMA provider in a vendor's order.
             required:
                 - kind
@@ -95698,16 +95705,16 @@ components:
             properties:
                 is_default:
                     type: boolean
-                    description: 'No order is saved, so every available provider applies: external first, then Speakeasy.'
+                    description: No order is saved, so the endpoint uses its configured external issuer.
                 providers:
                     type: array
                     items:
                         $ref: '#/components/schemas/EMAProvider'
-                    description: Providers in the order they are tried.
+                    description: The saved providers in order, or the external default.
                 vendor_issuer:
                     type: string
                     description: The vendor authorization server issuer, canonicalized.
-            description: The EMA providers identity chaining tries, in order, for one vendor authorization server; each failure falls through to the next.
+            description: The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
             required:
                 - vendor_issuer
                 - is_default
@@ -112791,8 +112798,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/EMAProviderInput'
-                    description: Providers in the order they are tried; each at most once.
-                    maxItems: 10
+                    description: Providers in the order they are tried, at most 10; each at most once. An empty list restores the external default.
                 remote_session_issuer_id:
                     type: string
                     description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.

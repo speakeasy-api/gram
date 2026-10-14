@@ -219,3 +219,31 @@ func TestConsentPage_CachedChainedCredentialRendersConnected(t *testing.T) {
 	require.Contains(t, page, "Use a separate sign-in instead")
 	require.Empty(t, g.acquired, "rendering reads stored credentials only")
 }
+
+func TestConsentChainCheck_ReadyAllowsAuthorizationWithoutPersonalOAuth(t *testing.T) {
+	t.Parallel()
+	_, fx, issuer := seedChainedConsentEndpoint(t, "ema-consent-ready")
+	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
+		return identitychaining.Outcome{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonConsentRequired, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+	}
+	w, err := postChainCheck(t, fx, nil)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"status": "ready", "message": "Ready to connect after authorization"}, chainCheckResult(t, w))
+	code, page, redirect := render(t, fx)
+	require.Equal(t, http.StatusOK, code)
+	require.Nil(t, redirect, "must not redirect to personal upstream OAuth")
+	require.Contains(t, page, `data-consent-enabled="true"`)
+	require.Contains(t, page, "Use a separate sign-in instead")
+	require.NotContains(t, page, "Connect a service above to enable access.")
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	approved := httptest.NewRecorder()
+	require.NoError(t, fx.ti.service.ServeConsent(approved, req, fx.endpoint))
+	require.Equal(t, http.StatusSeeOther, approved.Code)
+	location, err := url.Parse(approved.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "example.com", location.Host, "approval returns to the MCP client, not upstream OAuth")
+	require.NotEmpty(t, location.Query().Get("code"))
+}

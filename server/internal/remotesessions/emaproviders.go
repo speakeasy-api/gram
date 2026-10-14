@@ -25,10 +25,6 @@ const (
 	EMAProviderSpeakeasy EMAProviderKind = "speakeasy"
 )
 
-// SpeakeasyEMASigning reports whether the internal session issuer can sign
-// ID-JAGs yet. TODO(AIM-523): true once Speakeasy signs.
-const SpeakeasyEMASigning = false
-
 // EMAProviderUnavailableReason says why a provider in the order cannot serve.
 type EMAProviderUnavailableReason string
 
@@ -36,7 +32,19 @@ const (
 	EMAProviderDeleted              EMAProviderUnavailableReason = "deleted"
 	EMAProviderDisabled             EMAProviderUnavailableReason = "disabled"
 	EMAProviderNotTrustedByEndpoint EMAProviderUnavailableReason = "not_trusted_by_endpoint"
-	EMAProviderSigningUnavailable   EMAProviderUnavailableReason = "signing_unavailable"
+	// EMAProviderSigningUnavailable means this deployment cannot sign.
+	EMAProviderSigningUnavailable EMAProviderUnavailableReason = "signing_unavailable"
+	EMAProviderNotRolledOut       EMAProviderUnavailableReason = "not_rolled_out"
+	EMAProviderVerifiedDomain     EMAProviderUnavailableReason = "verified_domain_required"
+	EMAProviderSetupRequired      EMAProviderUnavailableReason = "setup_required"
+	EMAProviderKeyless            EMAProviderUnavailableReason = "keyless"
+	EMAProviderSigningPaused      EMAProviderUnavailableReason = "signing_paused"
+	// EMAProviderSignInEnforcement means the organization's sign-in
+	// enforcement is off, so Speakeasy cannot vouch for a sign-in.
+	EMAProviderSignInEnforcement EMAProviderUnavailableReason = "sign_in_enforcement_required"
+	// EMAProviderReadinessUnknown marks a status view whose live readiness
+	// read failed. Runtime never stores or acts on it.
+	EMAProviderReadinessUnknown EMAProviderUnavailableReason = "readiness_unknown"
 )
 
 // EMAProvider is one entry in a vendor's EMA provider order. An external
@@ -51,6 +59,11 @@ type EMAProvider struct {
 
 // Available reports whether the provider can serve now.
 func (p EMAProvider) Available() bool { return p.Unavailable == "" }
+
+// Same reports whether p and o name the same provider, ignoring availability.
+func (p EMAProvider) Same(o EMAProvider) bool {
+	return p.Kind == o.Kind && p.RemoteSessionIssuerID == o.RemoteSessionIssuerID && p.InternalSessionIssuerID == o.InternalSessionIssuerID
+}
 
 // EMAProviderOrder is a vendor's EMA provider order, saved or default.
 type EMAProviderOrder struct {
@@ -70,11 +83,21 @@ func (o EMAProviderOrder) Available() []EMAProvider {
 	return out
 }
 
-// EMAProviderScope is what a provider order is resolved for.
+// Serves reports whether p is in the order and can serve now.
+func (o EMAProviderOrder) Serves(p EMAProvider) bool {
+	for _, candidate := range o.Providers {
+		if candidate.Available() && candidate.Same(p) {
+			return true
+		}
+	}
+	return false
+}
+
+// EMAProviderScope is what an order is resolved for.
 type EMAProviderScope struct {
-	// Endpoint, when true, resolves for one endpoint: external providers are
-	// eligible only when they are TrustedIssuer, the issuer whose subject
-	// token identity chaining holds for the human.
+	// Endpoint, when true, resolves for one endpoint: an external provider is
+	// eligible only when it is TrustedIssuer, the issuer whose subject token
+	// identity chaining holds for the human.
 	Endpoint      bool
 	TrustedIssuer uuid.NullUUID
 
@@ -95,10 +118,10 @@ func NormalizeVendorIssuer(issuer string) (string, error) {
 	return canonical.String(), nil
 }
 
-// ResolveEMAProviders reads a vendor's EMA provider order. With no saved rows
-// the default is every available provider, external first and Speakeasy last;
-// for an endpoint the only external provider is its trusted issuer. Runtime
-// selection and every view use this one function.
+// ResolveEMAProviders reads a vendor's saved provider order. Providers that
+// cannot serve are kept and flagged, so views can say why and runtime skips
+// them. No saved order keeps the endpoint's external issuer; enabling the
+// Speakeasy issuer alone never changes an existing integration's authority.
 func ResolveEMAProviders(ctx context.Context, q *repo.Queries, organizationID, vendorIssuer string, scope EMAProviderScope) (EMAProviderOrder, error) {
 	order := EMAProviderOrder{VendorIssuer: vendorIssuer, IsDefault: false, Providers: []EMAProvider{}}
 	rows, err := q.ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: organizationID, VendorIssuer: vendorIssuer})
@@ -125,30 +148,8 @@ func ResolveEMAProviders(ctx context.Context, q *repo.Queries, organizationID, v
 	if len(rows) > 0 {
 		return order, nil
 	}
-
 	order.IsDefault = true
-	if scope.Endpoint {
-		order.Providers = append(order.Providers, EMAProvider{Kind: EMAProviderExternal, RemoteSessionIssuerID: scope.TrustedIssuer.UUID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""})
-	} else {
-		candidates, err := q.ListEMAExternalProviderCandidates(ctx, conv.ToPGText(organizationID))
-		if err != nil {
-			return order, fmt.Errorf("list ema external provider candidates: %w", err)
-		}
-		for _, c := range candidates {
-			order.Providers = append(order.Providers, EMAProvider{Kind: EMAProviderExternal, RemoteSessionIssuerID: c.ID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""})
-		}
-	}
-	if !scope.SpeakeasySigns {
-		return order, nil
-	}
-	issuer, err := q.GetEMAInternalSessionIssuer(ctx, organizationID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-	case err != nil:
-		return order, fmt.Errorf("read internal session issuer: %w", err)
-	case !issuer.Disabled:
-		order.Providers = append(order.Providers, EMAProvider{Kind: EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: issuer.ID, Unavailable: ""})
-	}
+	order.Providers = append(order.Providers, EMAProvider{Kind: EMAProviderExternal, RemoteSessionIssuerID: scope.TrustedIssuer.UUID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""})
 	return order, nil
 }
 
@@ -166,4 +167,31 @@ func EndpointEMAProviders(ctx context.Context, q *repo.Queries, organizationID s
 		trusted = issuer.TrustedRemoteSessionIssuerID
 	}
 	return ResolveEMAProviders(ctx, q, organizationID, vendorIssuer, EMAProviderScope{Endpoint: true, TrustedIssuer: trusted, SpeakeasySigns: speakeasySigns})
+}
+
+// EMAProviderReadiness checks live signing eligibility for an organization
+// issuer without minting. An empty reason means ready; an error means
+// readiness is unknown.
+type EMAProviderReadiness func(context.Context, string, uuid.UUID) (EMAProviderUnavailableReason, error)
+
+// ApplyEMAProviderReadiness decorates a stored order for status views
+// without requiring a user grant. A failed check marks the provider
+// readiness_unknown rather than failing the read. Call after releasing
+// transactions: readiness may query the database and flag providers.
+func ApplyEMAProviderReadiness(ctx context.Context, organizationID string, order EMAProviderOrder, check EMAProviderReadiness) (EMAProviderOrder, error) {
+	order.Providers = append([]EMAProvider(nil), order.Providers...)
+	var errs []error
+	for i, p := range order.Providers {
+		if p.Kind != EMAProviderSpeakeasy || !p.Available() || check == nil {
+			continue
+		}
+		reason, err := check(ctx, organizationID, p.InternalSessionIssuerID)
+		if err != nil {
+			order.Providers[i].Unavailable = EMAProviderReadinessUnknown
+			errs = append(errs, fmt.Errorf("check issuer readiness: %w", err))
+			continue
+		}
+		order.Providers[i].Unavailable = reason
+	}
+	return order, errors.Join(errs...)
 }

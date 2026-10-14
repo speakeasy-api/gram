@@ -450,6 +450,9 @@ func inputsFor(sv repo.ListEligibleServersRow, rc *record, agentRecorded bool) I
 	return in
 }
 
+// ResourceIndicator is the resource readiness reports for an eligible server.
+func ResourceIndicator(sv repo.ListEligibleServersRow) string { return resourceIndicator(sv) }
+
 // resourceIndicator is the RFC 9728 identifier when the server declares one,
 // else the server URL.
 func resourceIndicator(sv repo.ListEligibleServersRow) string {

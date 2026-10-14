@@ -245,7 +245,8 @@ func (l *Logger) LogRemoteSessionIssuerDelete(ctx context.Context, dbtx repo.DBT
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionIssuerV1})
 }
 
-// RemoteSessionIssuerEMAProviders is a vendor's saved EMA provider order.
+// RemoteSessionIssuerEMAProviders is a vendor's saved EMA provider order; an
+// empty order means the endpoint's external issuer.
 type RemoteSessionIssuerEMAProviders struct {
 	VendorIssuer string                           `json:"vendor_issuer"`
 	Providers    []RemoteSessionIssuerEMAProvider `json:"providers"`

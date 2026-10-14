@@ -25,6 +25,18 @@ type Outcome struct {
 	// when the attempt stopped before any provider was tried.
 	Provider remotesessions.EMAProviderKind `json:"provider,omitempty"`
 
+	// Unavailable says why the provider could not serve; set only with
+	// ReasonProviderUnavailable.
+	Unavailable remotesessions.EMAProviderUnavailableReason `json:"unavailable,omitempty"`
+
+	// Submitted reports that a token request may already have reached the
+	// provider, so repeating the attempt could mint a duplicate grant.
+	Submitted bool `json:"submitted,omitempty"`
+
+	// Failures lists every provider's failure when more than one provider in
+	// the order was tried or skipped and none succeeded.
+	Failures []ProviderFailure `json:"failures,omitempty"`
+
 	// providerDescription is the provider's error_description, for logs only.
 	providerDescription string
 }
@@ -54,7 +66,7 @@ func (o Outcome) cacheable() bool {
 }
 
 func newOutcome(stage Stage, reason Reason, confidence Confidence, retryable bool) Outcome {
-	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false, Provider: "", providerDescription: ""}
+	return Outcome{Stage: stage, Reason: reason, Confidence: confidence, Retryable: retryable, Cached: false, Provider: "", Unavailable: "", Submitted: false, Failures: nil, providerDescription: ""}
 }
 
 var (

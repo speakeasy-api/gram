@@ -398,6 +398,22 @@ WHERE isi.organization_id = @organization_id::text
   AND isi.deleted IS FALSE
 GROUP BY isi.id, isi.issuer;
 
+-- A cheap fingerprint of the issuer's key rows, revoked ones included, so a
+-- cached JWKS notices any key write without reading the keys. Every row's id,
+-- state, deletion and updated_at feed the digest, so a change to any row
+-- changes it. A disabled organization has no fingerprint, as it has no keys.
+-- name: GetOrganizationEMAIssuerKeysVersion :one
+SELECT isi.json_web_key_set_id,
+  md5(COALESCE(string_agg(k.id::text || ':' || k.state || ':' || k.deleted::text || ':' || k.updated_at::text, ',' ORDER BY k.id), ''))::text AS keys_digest
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+LEFT JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE isi.organization_id = @organization_id::text
+  AND isi.deleted IS FALSE
+GROUP BY isi.id, isi.json_web_key_set_id;
+
 -- Retired issuer keys stop being published once nothing they signed can still
 -- verify. Uses the database clock.
 -- name: RevokeExpiredEMAIssuerKeys :many

@@ -29,6 +29,7 @@ func TestInternalSessionIssuerToolContract(t *testing.T) {
 	require.Empty(t, reg.For(AudienceAssistant))
 	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "company-managed Google or Microsoft account, magic link, or password")
 	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "registering alone changes nothing")
+	require.Contains(t, internalSessionIssuerNextSteps[internalsessionissuers.StateEnabled], "add Speakeasy to that service's EMA provider order")
 }
 
 func TestInternalSessionIssuerToolStates(t *testing.T) {

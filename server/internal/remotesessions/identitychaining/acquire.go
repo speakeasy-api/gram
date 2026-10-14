@@ -53,12 +53,26 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 	cred.trustedSessionID = grant.trustedSessionID
 	cred.trustedObtainedAt = grant.trustedObtainedAt
 
-	switch err := c.publish(ctx, logger, req, sel, cred); {
+	slot, err := c.publishSlot(ctx, logger, req, sel, cred)
+	switch {
 	case errors.Is(err, errStale):
 		return none, newOutcome(StagePersistence, ReasonStaleConfiguration, ConfidenceVerified, true), true
 	case err != nil:
 		logger.ErrorContext(ctx, "publish identity chaining credential", attr.SlogError(err))
-		return none, newOutcome(StagePersistence, ReasonTransientFailure, ConfidenceVerified, true), true
+		// The grant was already redeemed.
+		outcome := newOutcome(StagePersistence, ReasonTransientFailure, ConfidenceVerified, true)
+		outcome.Submitted = true
+		return none, outcome, true
+	}
+	// The delegation check can't join the publish transaction, so a
+	// credential whose authority changed meanwhile is withdrawn at once.
+	if outcome := src.checkReuse(ctx, req, sel); !outcome.Succeeded() {
+		c.retire(ctx, logger, req, slot)
+		return none, outcome, true
+	}
+	if outcome := c.stillServes(ctx, logger, req, sel); !outcome.Succeeded() {
+		c.retire(ctx, logger, req, slot)
+		return none, outcome, true
 	}
 	return Token{value: cred.accessToken, expiresAt: cred.expiresAt.Add(-accessExpirySkew)}, success, true
 }
@@ -139,7 +153,10 @@ func (c *Chainer) validateGrant(ctx context.Context, logger *slog.Logger, verifi
 	header, err := verifier.VerifyAssertion(ctx, raw, &claims)
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrJWTKeySetUnavailable) {
-			return newOutcome(StageValidation, ReasonTransientFailure, ConfidenceVerified, true)
+			// The provider already issued this grant.
+			outcome := newOutcome(StageValidation, ReasonTransientFailure, ConfidenceVerified, true)
+			outcome.Submitted = true
+			return outcome
 		}
 		logger.WarnContext(ctx, "identity chaining assertion grant failed verification", attr.SlogError(err))
 		return invalid
@@ -214,6 +231,8 @@ func classifyEndpointError(stage Stage, err error) Outcome {
 	}
 	outcome := classifyEndpointFailure(stage, failure)
 	outcome.providerDescription = failure.Description
+	// The request may have been processed before it failed.
+	outcome.Submitted = outcome.Reason == ReasonTransientFailure
 	return outcome
 }
 
