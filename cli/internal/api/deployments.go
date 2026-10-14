@@ -39,6 +39,8 @@ func NewDeploymentsClient(options *DeploymentsClientOptions) *DeploymentsClient 
 		h.Redeploy(),
 		h.ListDeployments(),
 		h.GetDeploymentLogs(),
+		h.EvaluateOpenAPIv3(),
+		h.GetDeploymentEvaluation(),
 	)
 
 	return &DeploymentsClient{client: client}

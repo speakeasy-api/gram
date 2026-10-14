@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -52,6 +54,11 @@ type SessionRevoker interface {
 	RevokeSession(ctx context.Context, sessionID string) error
 }
 
+// SessionLister lists a user's IDP sessions.
+type SessionLister interface {
+	ListSessionIDs(ctx context.Context, idpUserID string) ([]string, error)
+}
+
 // UserResolver provides identity-layer operations that Authenticate needs.
 // Implemented by the identity.Resolver to avoid a circular import.
 type UserResolver interface {
@@ -65,6 +72,8 @@ type Manager struct {
 	logger       *slog.Logger
 	tracer       trace.Tracer
 	sessionCache cache.TypedCacheObject[Session]
+	redis        *redis.Client
+	flags        feature.Provider
 	idpClient    SessionRevoker
 	orgRepo      *orgRepo.Queries
 	userRepo     *userRepo.Queries
@@ -88,6 +97,8 @@ func NewManager(
 		logger:       logger,
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
 		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), suffix),
+		redis:        redisClient,
+		flags:        nil,
 		idpClient:    idpClient,
 		orgRepo:      orgRepo.New(db),
 		userRepo:     userRepo.New(db),
@@ -113,6 +124,9 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnavailable, err, "error checking auth session").LogError(ctx, s.logger)
+	}
+	if err := s.checkValidAfter(ctx, session); err != nil {
+		return ctx, err
 	}
 
 	validatedSupportAdmin := false
@@ -261,13 +275,29 @@ func (s *Manager) GetSession(ctx context.Context, sessionID string) (Session, er
 	return session, nil
 }
 
+// StoreSession stores a session. A session stored again keeps its original
+// issuance, so re-storing never lifts it past the sign-out-everywhere epoch;
+// one stored for the first time this way has unknown issuance (EpochZero).
+// New sessions use StoreSessionIssuedAt with when authentication started.
 func (s *Manager) StoreSession(ctx context.Context, session Session) error {
-	err := s.sessionCache.Store(ctx, session)
-	if err != nil {
+	if err := s.sessionCache.Store(ctx, session); err != nil {
 		return fmt.Errorf("store session: %w", err)
 	}
+	return s.storeIssuedAt(ctx, session, func() error {
+		return s.redis.SetNX(ctx, sessionIssuedAtKey(session.SessionID), EpochZero.UnixMicro(), sessionMarkerTTL).Err()
+	})
+}
 
-	return nil
+// StoreSessionIssuedAt stores a session and records when it was issued, for
+// the sign-out-everywhere epoch. Issuance lives beside the session so the
+// session's serialized form stays unchanged across versions.
+func (s *Manager) StoreSessionIssuedAt(ctx context.Context, session Session, issuedAt time.Time) error {
+	if err := s.sessionCache.Store(ctx, session); err != nil {
+		return fmt.Errorf("store session: %w", err)
+	}
+	return s.storeIssuedAt(ctx, session, func() error {
+		return s.redis.Set(ctx, sessionIssuedAtKey(session.SessionID), issuedAt.UnixMicro(), sessionMarkerTTL).Err()
+	})
 }
 
 func (s *Manager) UpdateSession(ctx context.Context, expected, replacement Session) error {
@@ -303,6 +333,11 @@ func (s *Manager) ClearSession(ctx context.Context, session Session) error {
 	if err != nil {
 		return fmt.Errorf("clear session: %w", err)
 	}
+	if s.redis != nil {
+		if err := s.redis.Del(ctx, sessionIssuedAtKey(session.SessionID)).Err(); err != nil {
+			s.logger.WarnContext(ctx, "clear session issuance", attr.SlogError(err))
+		}
+	}
 
 	return nil
 }
@@ -325,6 +360,195 @@ func (s *Manager) HasAccessToOrganization(ctx context.Context, organizationID, u
 func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) error {
 	if err := s.identity.InvalidateUserInfoCache(ctx, userID); err != nil {
 		return fmt.Errorf("invalidate user info cache: %w", err)
+	}
+	return nil
+}
+
+// SetFlags wires the flag provider gating sign-in enforcement.
+func (s *Manager) SetFlags(flags feature.Provider) { s.flags = flags }
+
+// SignInEnforced reports whether sign-in enforcement is on for the
+// organization.
+func (s *Manager) SignInEnforced(ctx context.Context, organizationID string) bool {
+	return feature.SignInEnforced(ctx, s.flags, organizationID)
+}
+
+// storeIssuedAt records issuance. It is best effort while enforcement is off
+// for the session's organization; the epoch check treats a missing marker as
+// issued before any epoch.
+func (s *Manager) storeIssuedAt(ctx context.Context, session Session, write func() error) error {
+	if s.redis == nil {
+		return nil
+	}
+	err := write()
+	if err == nil {
+		return nil
+	}
+	if s.SignInEnforced(ctx, session.ActiveOrganizationID) {
+		return fmt.Errorf("store session issuance: %w", err)
+	}
+	s.logger.WarnContext(ctx, "store session issuance", attr.SlogError(err))
+	return nil
+}
+
+// sessionMarkerTTL outlives any dashboard session the markers describe.
+const sessionMarkerTTL = 400 * 24 * time.Hour
+
+func sessionIssuedAtKey(sessionID string) string { return "sessions:issued_at:" + sessionID }
+
+func userValidAfterKey(userID string) string { return "sessions:valid_after:" + userID }
+
+// raiseValidAfter stores max(current, ARGV[1]) so concurrent writers never
+// move the epoch backwards.
+var raiseValidAfter = redis.NewScript(`
+local current = tonumber(redis.call("GET", KEYS[1]) or "0")
+local proposed = tonumber(ARGV[1])
+if proposed > current then
+  redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+  return proposed
+end
+redis.call("PEXPIRE", KEYS[1], ARGV[2])
+return current
+`)
+
+// IssuedAt is when a dashboard session was issued; ok is false for sessions
+// stored before issuance was recorded.
+func (s *Manager) IssuedAt(ctx context.Context, sessionID string) (time.Time, bool, error) {
+	if s.redis == nil {
+		return time.Time{}, false, nil
+	}
+	v, err := s.redis.Get(ctx, sessionIssuedAtKey(sessionID)).Int64()
+	if errors.Is(err, redis.Nil) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("get session issuance: %w", err)
+	}
+	return time.UnixMicro(v), true, nil
+}
+
+// EpochZero is the issuance recorded for a session whose real issuance is
+// unknown: it predates any sign-out-everywhere epoch.
+var EpochZero = time.UnixMicro(0)
+
+// ListUserIDPSessionIDs lists every IDP session a user holds, or nothing when
+// the IDP client cannot list them or the user has no IDP identity.
+func (s *Manager) ListUserIDPSessionIDs(ctx context.Context, userID string) ([]string, error) {
+	lister, ok := s.idpClient.(SessionLister)
+	if !ok || lister == nil {
+		return nil, nil
+	}
+	user, err := s.userRepo.GetUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+	if !user.WorkosID.Valid || user.WorkosID.String == "" {
+		return nil, nil
+	}
+	ids, err := lister.ListSessionIDs(ctx, user.WorkosID.String)
+	if err != nil {
+		return nil, fmt.Errorf("list idp sessions: %w", err)
+	}
+	return ids, nil
+}
+
+// SessionPredatesEpoch reports whether a session was issued at or before its
+// user signed out everywhere, reading both markers in one round trip. A
+// session of unknown issuance predates any epoch. Enforced whenever an epoch
+// exists, whatever the enforcement flag says.
+func (s *Manager) SessionPredatesEpoch(ctx context.Context, userID, sessionID string) (bool, error) {
+	if s.redis == nil {
+		return false, nil
+	}
+	values, err := s.redis.MGet(ctx, userValidAfterKey(userID), sessionIssuedAtKey(sessionID)).Result()
+	if err != nil {
+		return false, fmt.Errorf("get session epoch: %w", err)
+	}
+	epoch, hasEpoch, err := markerValue(values, 0)
+	if err != nil || !hasEpoch {
+		return false, err
+	}
+	issuedAt, known, err := markerValue(values, 1)
+	if err != nil {
+		return false, err
+	}
+	return !known || issuedAt <= epoch, nil
+}
+
+// IssuedBeforeEpoch reports whether a session issued at issuedAt (known false
+// when unrecorded) predates its user's sign-out-everywhere epoch.
+func (s *Manager) IssuedBeforeEpoch(ctx context.Context, userID string, issuedAt time.Time, known bool) (bool, error) {
+	if s.redis == nil {
+		return false, nil
+	}
+	epoch, err := s.redis.Get(ctx, userValidAfterKey(userID)).Int64()
+	if errors.Is(err, redis.Nil) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("get session epoch: %w", err)
+	}
+	return !known || issuedAt.UnixMicro() <= epoch, nil
+}
+
+func markerValue(values []any, i int) (int64, bool, error) {
+	if i >= len(values) || values[i] == nil {
+		return 0, false, nil
+	}
+	raw, ok := values[i].(string)
+	if !ok {
+		return 0, false, fmt.Errorf("session marker has type %T", values[i])
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("parse session marker: %w", err)
+	}
+	return v, true, nil
+}
+
+// checkValidAfter rejects a session issued before its user signed out
+// everywhere.
+func (s *Manager) checkValidAfter(ctx context.Context, session Session) error {
+	predates, err := s.SessionPredatesEpoch(ctx, session.UserID, session.SessionID)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "error checking session validity").LogError(ctx, s.logger)
+	}
+	if predates {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	return nil
+}
+
+// RaiseUserEpoch invalidates every dashboard session the user was issued at or
+// before at. The stored epoch only ever moves forward.
+func (s *Manager) RaiseUserEpoch(ctx context.Context, userID string, at time.Time) error {
+	return EpochStore{redis: s.redis}.RaiseUserEpoch(ctx, userID, at)
+}
+
+// EpochStore raises users' sign-out-everywhere epochs, for processes that
+// deliver revocations without a session manager.
+type EpochStore struct{ redis *redis.Client }
+
+func NewEpochStore(redisClient *redis.Client) EpochStore { return EpochStore{redis: redisClient} }
+
+// RaiseUserEpoch moves the user's epoch forward to at.
+func (e EpochStore) RaiseUserEpoch(ctx context.Context, userID string, at time.Time) error {
+	if e.redis == nil {
+		return errors.New("session epoch store is not configured")
+	}
+	if err := raiseValidAfter.Run(ctx, e.redis, []string{userValidAfterKey(userID)}, at.UnixMicro(), sessionMarkerTTL.Milliseconds()).Err(); err != nil {
+		return fmt.Errorf("raise session epoch: %w", err)
+	}
+	return nil
+}
+
+// RevokeSession ends one identity provider session.
+func (s *Manager) RevokeSession(ctx context.Context, idpSessionID string) error {
+	if idpSessionID == "" || s.idpClient == nil {
+		return nil
+	}
+	if err := s.idpClient.RevokeSession(ctx, idpSessionID); err != nil {
+		return fmt.Errorf("revoke idp session: %w", err)
 	}
 	return nil
 }

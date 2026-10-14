@@ -39,4 +39,21 @@ describe("pluginServerFilterOptions", () => {
       matchesPluginFilters(plugin, { servers: ["toolset:toolset-1"] }),
     ).toBe(true);
   });
+
+  it("matches either saved key for an entry that reports both ids", () => {
+    const plugin = {
+      id: "both-plugin",
+      servers: [
+        {
+          toolsetId: "toolset-1",
+          mcpServerId: "toolset-1",
+          displayName: "Billing",
+        },
+      ],
+    } as unknown as Plugin;
+
+    for (const saved of ["toolset:toolset-1", "mcpServer:toolset-1"]) {
+      expect(matchesPluginFilters(plugin, { servers: [saved] })).toBe(true);
+    }
+  });
 });

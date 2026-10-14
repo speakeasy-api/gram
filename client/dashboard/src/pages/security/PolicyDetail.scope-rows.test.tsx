@@ -364,7 +364,7 @@ const CATEGORIES: RiskCategoryDefinition[] = [
   category("secrets", "Secrets", {
     recommendedScopeInclude: 'kind == "tool_response"',
   }),
-  category("shadow_mcp", "Shadow MCP"),
+  category("shadow_mcp", "Shadow AI"),
   category("custom", "Custom rules"),
   category("account_identity", "Account identity", {
     recommendedScopeApplicable: false,
@@ -543,7 +543,7 @@ describe("StandardPolicyEditor scope rows", () => {
     renderEditor(policy());
 
     expect(screen.getByText("Secrets")).toBeTruthy();
-    expect(screen.getByText("Shadow MCP")).toBeTruthy();
+    expect(screen.getByText("Shadow AI")).toBeTruthy();
     expect(screen.getByText("Custom rules")).toBeTruthy();
     expect(screen.getAllByText("Tool", { selector: "span" })).toHaveLength(2);
     expect(screen.getByText("Response", { selector: "span" })).toBeTruthy();

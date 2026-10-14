@@ -713,6 +713,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	// Consent cannot be embedded, even by the same origin. Do not restrict
+	// form-action: consent submissions redirect to clients on other origins,
+	// including loopback addresses and custom URI schemes.
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	w.Header().Set("X-Frame-Options", "DENY")
 	if err := consentTemplate.Execute(w, data); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "render consent template").LogError(ctx, logger)
 	}
@@ -992,7 +997,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		AgentAuthorization:          agentAuthorization,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
 		ToolSelection:               toolSelection,
+		SignInID:                    nil,
 		CreatedAt:                   time.Now(),
+	}
+	// Only a human subject's own session is linked to its sign-in.
+	if agentAuthorization == nil && subject.Kind == urn.SessionSubjectKindUser && subject.ID == challengeState.AuthorizerUserID {
+		grant.SignInID = challengeState.SignInID
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
@@ -1407,13 +1417,13 @@ func (s *Service) buildRemoteSessionCards(
 	}
 	clients = s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)
 	// Cards read the cached resource row only; the login probes. The row is
-	// the one the login resolves (keyed by the endpoint's server URL) and,
-	// as at login, it decides only for a client whose grant is qualified to
-	// that resource among the bound clients. A gateway, a tunneled or hosted
-	// server, or a client whose grant goes elsewhere is decided by its
-	// authorization server alone; a client's own claimed resource never
-	// stands in, because no login reads it.
-	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
+	// the one the login resolves (keyed by the endpoint's server URL, or on a
+	// gateway the member the client is qualified to) and, as at login, it
+	// decides only for a client whose grant is qualified to that resource. A
+	// tunneled or hosted server, or a client whose grant goes elsewhere, is
+	// decided by its authorization server alone; a client's own claimed
+	// resource never stands in, because no login reads it.
+	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled()
 	var serverResource remotesessions.ResourceScopes
 	var serverResourceURL string
 	hasServerResource := false
@@ -1440,6 +1450,14 @@ func (s *Service) buildRemoteSessionCards(
 	if err != nil {
 		return nil, err
 	}
+	// The member's scopes only feed the reconnect hint, which needs a session.
+	connectedClients := make([]remotesessions.Client, 0, len(clients))
+	for _, c := range clients {
+		if state, ok := statuses[c.ID]; ok && state.Status == remotesessions.RemoteSessionActive {
+			connectedClients = append(connectedClients, c)
+		}
+	}
+	memberResources := s.gatewayMemberResourceScopes(ctx, endpoint, challengeState, connectedClients, discoverScopes)
 	chainRequests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
 
 	cards := make([]remoteSessionCard, 0, len(clients))
@@ -1499,6 +1517,9 @@ func (s *Service) buildRemoteSessionCards(
 		resourceScopes := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discoverScopes}
 		if resourceApplies[c.ID] {
 			resourceScopes = serverResource
+		}
+		if member, ok := memberResources[c.ID]; ok {
+			resourceScopes = member
 		}
 		requested := c.RequestedScopes(resourceScopes).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable

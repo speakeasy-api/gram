@@ -21,6 +21,7 @@ type StubClient struct {
 	eventCalls            []events.ListEventsOpts
 	userExternalIDUpdates []UserExternalIDUpdate
 	orgExternalIDUpdates  []OrgExternalIDUpdate
+	revokedSessions       []string
 	directories           map[string][]Directory
 	directoryUsers        map[string][]DirectoryUser
 	directoryGroups       map[string][]DirectoryGroup
@@ -59,6 +60,7 @@ func NewStubClient() *StubClient {
 		eventCalls:            make([]events.ListEventsOpts, 0),
 		userExternalIDUpdates: make([]UserExternalIDUpdate, 0),
 		orgExternalIDUpdates:  make([]OrgExternalIDUpdate, 0),
+		revokedSessions:       nil,
 		directories:           make(map[string][]Directory),
 		directoryUsers:        make(map[string][]DirectoryUser),
 		directoryGroups:       make(map[string][]DirectoryGroup),
@@ -559,3 +561,19 @@ func (s *StubClient) nextRoleID() string {
 }
 
 const stubRoleTimestamp = "2024-12-28T07:55:09Z"
+
+func (s *StubClient) RevokeSession(_ context.Context, sessionID string) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.revokedSessions = append(s.revokedSessions, sessionID)
+	return nil
+}
+
+// RevokedSessions returns the WorkOS sessions RevokeSession ended.
+func (s *StubClient) RevokedSessions() []string {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]string(nil), s.revokedSessions...)
+}

@@ -118,7 +118,7 @@ func TestExchange_ClassifiesProviderRejection(t *testing.T) {
 	t.Parallel()
 	idp := &recordingPoster{err: &remotesessions.TokenEndpointError{StatusCode: http.StatusBadRequest, Code: "invalid_target", Transport: false, Signing: false}}
 	_, outcome := exchange(t.Context(), idp, "id-token-value", testSelection())
-	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonInvalidTarget, Confidence: ConfidenceInferred, Retryable: false, Cached: false}, outcome)
+	require.Equal(t, Outcome{Stage: StageExchange, Reason: ReasonInvalidTarget, Confidence: ConfidenceInferred, Retryable: false, Cached: false, Provider: ""}, outcome)
 }
 
 func TestRedeem_PresentsGrantAndDiscardsRefreshToken(t *testing.T) {
@@ -216,7 +216,7 @@ func TestClassifyEndpointError(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, Outcome{Stage: StageRedemption, Reason: tc.reason, Confidence: tc.confidence, Retryable: tc.retryable, Cached: false}, classifyEndpointError(StageRedemption, tc.err))
+			require.Equal(t, Outcome{Stage: StageRedemption, Reason: tc.reason, Confidence: tc.confidence, Retryable: tc.retryable, Cached: false, Provider: "", Submitted: tc.reason == ReasonTransientFailure}, classifyEndpointError(StageRedemption, tc.err))
 		})
 	}
 }
@@ -316,7 +316,7 @@ func TestValidateGrant_RejectsUnboundClaims(t *testing.T) {
 			claims := validGrantClaims(sel, now)
 			tc.mutate(claims, now)
 			outcome := c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: tc.typ, claims: claims, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
-			require.Equal(t, Outcome{Stage: StageValidation, Reason: ReasonMalformedAssertion, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome)
+			require.Equal(t, Outcome{Stage: StageValidation, Reason: ReasonMalformedAssertion, Confidence: ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, outcome)
 		})
 	}
 }
@@ -443,7 +443,7 @@ func TestValidateGrant_ScopeMismatchIsAScopeFailure(t *testing.T) {
 				claims["scope"] = tc.scope
 			}
 			outcome := c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: "oauth-id-jag+jwt", claims: claims, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
-			require.Equal(t, Outcome{Stage: StageValidation, Reason: tc.reason, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome)
+			require.Equal(t, Outcome{Stage: StageValidation, Reason: tc.reason, Confidence: ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}, outcome)
 			require.True(t, outcome.cacheable())
 		})
 	}

@@ -35,6 +35,9 @@ type JsonWebKeySnapshot struct {
 // since the audit subject only identifies the key row itself.
 type JsonWebKeyAuditMetadata struct {
 	JsonWebKeySetID string `json:"json_web_key_set_id"`
+	// InternalSessionIssuer marks keys of an organization's Speakeasy issuer,
+	// which customer key pages don't list.
+	InternalSessionIssuer bool `json:"internal_session_issuer,omitempty"`
 }
 
 // LogJsonWebKeyEvent is the shared payload for every json_web_key action. The
@@ -55,6 +58,8 @@ type LogJsonWebKeyEvent struct {
 
 	KeySnapshotBefore *JsonWebKeySnapshot
 	KeySnapshotAfter  *JsonWebKeySnapshot
+
+	InternalSessionIssuer bool
 }
 
 func (l *Logger) LogJsonWebKeyPublish(ctx context.Context, dbtx repo.DBTX, event LogJsonWebKeyEvent) error {
@@ -81,7 +86,7 @@ func (l *Logger) LogJsonWebKeyDelete(ctx context.Context, dbtx repo.DBTX, event 
 // actions differ only in the action string — one payload struct serves them
 // all, unlike subjects whose update event carries fields the others lack.
 func (l *Logger) logJsonWebKey(ctx context.Context, dbtx repo.DBTX, action Action, event LogJsonWebKeyEvent) error {
-	metadata, err := marshalAuditPayload(JsonWebKeyAuditMetadata{JsonWebKeySetID: event.SetURN.ID.String()})
+	metadata, err := marshalAuditPayload(JsonWebKeyAuditMetadata{JsonWebKeySetID: event.SetURN.ID.String(), InternalSessionIssuer: event.InternalSessionIssuer})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

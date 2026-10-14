@@ -36,8 +36,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+// testServerURL is the test service's server URL, which its shared
+// authorization servers are served on.
+const testServerURL = "http://0.0.0.0"
 
 var infra *testenv.Environment
 
@@ -124,7 +129,8 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		nil,
 		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
-		"http://0.0.0.0",
+		testServerURL,
+		authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil},
 		ratelimit.NewRedisStore(redisClient),
 	)
 
@@ -355,6 +361,7 @@ func seedUserSessionFull(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		RefreshTokenHash:    conv.ToPGText("hash-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: refreshExpiresAt, InfinityModifier: 0, Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return repo.UserSession{}, fmt.Errorf("seed user session: %w", err)

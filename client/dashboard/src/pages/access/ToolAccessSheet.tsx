@@ -323,12 +323,14 @@ function ToolChecklist({
   }
 
   const chosen = new Set(selected);
-  const { tools } = source;
+  const tools = [...source.tools].sort((a, b) => a.name.localeCompare(b.name));
   const picked = tools.filter((tool) => chosen.has(tool.name)).length;
-  // Servers carry a hundred tools or more, so the list searches. Select all
-  // and Clear act on what the search shows.
+  // Servers carry a hundred tools or more, so the list searches. Toggle all
+  // acts on what the search shows.
   const shown = tools.filter((tool) => fuzzyMatch(query, tool.name));
   const shownNames = new Set(shown.map((tool) => tool.name));
+  const allShownPicked =
+    shown.length > 0 && shown.every((tool) => chosen.has(tool.name));
   const toggle = (name: string, on: boolean) =>
     onChange(
       on ? [...selected, name] : selected.filter((tool) => tool !== name),
@@ -343,23 +345,16 @@ function ToolChecklist({
         <Button
           variant="tertiary"
           size="xs"
-          onClick={() =>
-            onChange([
-              ...selected.filter((name) => !shownNames.has(name)),
-              ...shown.map((tool) => tool.name),
-            ])
-          }
+          onClick={() => {
+            const rest = selected.filter((name) => !shownNames.has(name));
+            onChange(
+              allShownPicked
+                ? rest
+                : [...rest, ...shown.map((tool) => tool.name)],
+            );
+          }}
         >
-          <Button.Text>Select all</Button.Text>
-        </Button>
-        <Button
-          variant="tertiary"
-          size="xs"
-          onClick={() =>
-            onChange(selected.filter((name) => !shownNames.has(name)))
-          }
-        >
-          <Button.Text>Clear</Button.Text>
+          <Button.Text>Toggle all</Button.Text>
         </Button>
       </div>
       <SearchBar

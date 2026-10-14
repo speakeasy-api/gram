@@ -203,14 +203,11 @@ func TestSetMcpMetadata_NewRowsUseTheServerKey(t *testing.T) {
 	unwrapped := createHostedToolset(t, ctx, ti, "hosted-new-unwrapped")
 
 	slugRow := setBySlug(t, ctx, ti, bySlug, &gen.SetMcpMetadataPayload{Instructions: new("hello")})
-	require.Nil(t, slugRow.ToolsetID)
-	require.NotNil(t, slugRow.McpServerID)
-	require.Equal(t, bySlug.ID.String(), *slugRow.McpServerID)
+	requireHostedIDs(t, ctx, ti, slugRow, bySlug.ID, true)
 
 	serverRow, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{McpServerID: new(byServer.ID.String())})
 	require.NoError(t, err)
-	require.Equal(t, byServer.ID.String(), *serverRow.McpServerID)
-	require.Nil(t, serverRow.ToolsetID)
+	requireHostedIDs(t, ctx, ti, serverRow, byServer.ID, true)
 
 	// A toolset without a canonical wrapper keeps the toolset key.
 	legacyRow := setBySlug(t, ctx, ti, unwrapped, &gen.SetMcpMetadataPayload{Instructions: new("hello")})
@@ -253,9 +250,7 @@ func TestSetMcpMetadata_RekeysToolsetRowInPlace(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, legacy.ID.String(), saved.ID, "same row, re-keyed in place")
-			require.Nil(t, saved.ToolsetID)
-			require.NotNil(t, saved.McpServerID)
-			require.Equal(t, toolset.ID.String(), *saved.McpServerID)
+			requireHostedIDs(t, ctx, ti, saved, toolset.ID, true)
 			require.NotNil(t, saved.DefaultEnvironmentID)
 			require.Equal(t, env.ID.String(), *saved.DefaultEnvironmentID)
 			require.Equal(t, envConfigKeys(before.Metadata.EnvironmentConfigs), envConfigKeys(saved.EnvironmentConfigs), "env configs and header aliases kept")
@@ -305,7 +300,7 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 		got, err := ti.service.GetMcpMetadata(ctx, payload)
 		require.NoError(t, err)
 		require.Equal(t, original.Metadata.ID, got.Metadata.ID)
-		require.Nil(t, got.Metadata.ToolsetID)
+		requireHostedIDs(t, ctx, ti, got.Metadata, toolset.ID, true)
 		require.Len(t, got.Metadata.EnvironmentConfigs, 1)
 		require.Equal(t, original.Metadata.EnvironmentConfigs[0].ID, got.Metadata.EnvironmentConfigs[0].ID)
 	}
@@ -328,14 +323,14 @@ func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, original.Metadata.ID, viaServer.ID)
-	require.Nil(t, viaServer.ToolsetID)
+	requireHostedIDs(t, ctx, ti, viaServer, toolset.ID, true)
 	require.Len(t, viaServer.EnvironmentConfigs, 1)
 	requireSingleMetadataRow(t, ctx, ti, toolset.ID)
 
 	// A toolset_slug write updates the server-keyed row instead of adding a twin.
 	viaSlug := setBySlug(t, ctx, ti, toolset, &gen.SetMcpMetadataPayload{Instructions: new("after")})
 	require.Equal(t, original.Metadata.ID, viaSlug.ID)
-	require.Nil(t, viaSlug.ToolsetID)
+	requireHostedIDs(t, ctx, ti, viaSlug, toolset.ID, true)
 	require.Len(t, viaSlug.EnvironmentConfigs, 1)
 	require.Equal(t, original.Metadata.EnvironmentConfigs[0].ID, viaSlug.EnvironmentConfigs[0].ID)
 	requireSingleMetadataRow(t, ctx, ti, toolset.ID)
@@ -397,8 +392,7 @@ func TestSetMcpMetadata_CollapsesTwinKeepingToolsetRow(t *testing.T) {
 			updated, err := ti.service.SetMcpMetadata(ctx, payload)
 			require.NoError(t, err)
 			require.Equal(t, toolsetRow.ID.String(), updated.ID)
-			require.Nil(t, updated.ToolsetID)
-			require.Equal(t, toolset.ID.String(), *updated.McpServerID)
+			requireHostedIDs(t, ctx, ti, updated, toolset.ID, true)
 			require.Len(t, updated.EnvironmentConfigs, 1)
 			require.Equal(t, "TOOLSET_KEY", updated.EnvironmentConfigs[0].VariableName)
 			requireSingleMetadataRow(t, ctx, ti, toolset.ID)
@@ -507,7 +501,7 @@ func TestSetMcpMetadata_ServerKeyedSaveKeepsHeaderAliases(t *testing.T) {
 
 	viaSlug := setBySlug(t, ctx, ti, toolset, &gen.SetMcpMetadataPayload{Instructions: new("after")})
 	require.Equal(t, original.ID.String(), viaSlug.ID)
-	require.Nil(t, viaSlug.ToolsetID)
+	requireHostedIDs(t, ctx, ti, viaSlug, toolset.ID, true)
 
 	queries := repo.New(ti.conn)
 	after, err := queries.GetHeaderDisplayNames(ctx, repo.GetHeaderDisplayNamesParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID})
