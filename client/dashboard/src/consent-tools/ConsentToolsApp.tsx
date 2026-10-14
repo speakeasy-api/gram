@@ -72,8 +72,9 @@ const GENERIC_ERROR_MESSAGE = "Couldn't load this server's tools.";
 
 /**
  * The consent page script raises this, and sets the matching attribute on
- * the document element, once every identity-chained service has been
- * refused, so a deferred inventory can no longer load after approval.
+ * the document element, when any identity-chained service is refused. A
+ * deferred page is chain-only, so its inventory can no longer load after
+ * approval.
  */
 export const CHAIN_REJECTED_EVENT = "gram:consent-chain-rejected";
 const CHAIN_REJECTED_ATTRIBUTE = "data-consent-chain-rejected";
