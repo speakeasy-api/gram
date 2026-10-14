@@ -499,7 +499,6 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 			return clientCredentials
 		}),
 		remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)),
-		remotesessions.WithFeatureFlags(features),
 		remotesessions.WithProtectedResourceProber(protectedResources),
 	)
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)

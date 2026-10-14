@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -72,6 +73,10 @@ type Service struct {
 	// rotator backs the administrator's rotate action with the same
 	// re-registration the authorize path runs automatically.
 	rotator *ClientRotator
+
+	// resources reads a server's protected resource live at registration, as
+	// the first login will; the replica's shared prober, nil without one.
+	resources *protectedresource.Prober
 
 	registrationTelemetry registration.Recorder
 
@@ -105,7 +110,7 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client, protectedResources *protectedresource.Prober) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels, refresher.assertions)
 	registrationTelemetry := registration.NewMetrics(logger, meterProvider)
@@ -129,7 +134,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		revoker:           revoker,
 		// The refresher's lease cache single-flights rotations the same way it
 		// single-flights refreshes, so the two never race on one client.
-		rotator: NewClientRotator(logger, db, enc, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger, registrationTelemetry),
+		rotator:   NewClientRotator(logger, db, enc, policy, tunnels, refresher.locks, serverURL, revoker, auditLogger, registrationTelemetry),
+		resources: protectedResources,
 
 		registrationTelemetry: registrationTelemetry,
 		origins:               DefaultCallbackOrigins(serverURL),

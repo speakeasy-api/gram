@@ -158,20 +158,16 @@ Overview tab; everyone else sees neither. Browser verification: `[~]`.
 
 Linear's protected resource (`https://mcp.linear.app/mcp`) has a PG
 `remote_protected_resources` row read two hours before the seed ran,
-advertising `read` and `write`, with a scope pin of `read`. What the server's
-Identity panel (`remoteMcp.getServerScopes`) shows depends on the
-`remote-session-live-resource-scopes` rollout flag. Off, the pin picker is
-hidden and logins request the issuer override; the panel shows the read-only
-"Requested at sign-in" summary instead (`read`, "Set by the identity
-provider's override."). On (the demo org is enrolled), Linear's seeded client
-has no scopes of its own, so the pin decides and the panel reads "Sign-ins
-request these scopes." The advertised `read` and `write` are offered as picker
+advertising `read` and `write`, with a scope pin of `read`. In the server's
+Identity panel (`remoteMcp.getServerScopes`), Linear's seeded client has no
+scopes of its own, so the pin decides and the panel reads "Sign-ins request
+these scopes." The advertised `read` and `write` are offered as picker
 options. When the pin does not decide, the picker's status line also names
 what sign-ins request, e.g. "Not used for this connection. Sign-ins request
 read, set by the identity provider's override." The extra sentence drops while
 the pin has unsaved edits. Members with only `mcp:read` on the server see no
 picker; instead the same read-only summary lists what the connected client
-requests (`read`, with "Pinned for this MCP server's URL." with the flag on).
+requests (`read`, with "Pinned for this MCP server's URL.").
 Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
