@@ -20,9 +20,11 @@ export function ShadowAIHarnessDetailLegacyRedirect(): JSX.Element {
   const routes = useRoutes();
   const location = useLocation();
   const { targetId = "" } = useParams<{ targetId: string }>();
+  // useParams decodes the segment and href does not encode, so re-encode it:
+  // ids like acme/agent would otherwise split into two path segments.
   return (
     <Navigate
-      to={`${routes.shadowAI.agents.detail.href(targetId)}${location.search}${location.hash}`}
+      to={`${routes.shadowAI.agents.detail.href(encodeURIComponent(targetId))}${location.search}${location.hash}`}
       replace
     />
   );

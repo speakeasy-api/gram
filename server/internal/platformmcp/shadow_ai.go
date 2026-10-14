@@ -93,7 +93,7 @@ func (s *ShadowAIService) admit(ctx context.Context, principal Principal) error 
 }
 
 type ListShadowAIInventoryInput struct {
-	Category string `json:"category,omitempty" jsonschema:"narrow to one kind of tool: harness (coding agents), assistant (assistants) or local_model (open models); omit for all three"`
+	Category string `json:"category,omitempty" jsonschema:"narrow to one kind of tool: harness (coding agents), assistant (assistants) or local_model (locally run open models); omit for all three"`
 }
 
 type ShadowAIToolSummary struct {
@@ -162,7 +162,7 @@ func (s *ShadowAIService) ListInventory(ctx context.Context, principal Principal
 }
 
 type ListAIScanLibraryInput struct {
-	Category string `json:"category,omitempty" jsonschema:"narrow to one kind of target: harness (coding agents), assistant (assistants) or local_model (open models); omit for all three"`
+	Category string `json:"category,omitempty" jsonschema:"narrow to one kind of target: harness (coding agents), assistant (assistants) or local_model (locally run open models); omit for all three"`
 }
 
 type AIScanTargetSummary struct {

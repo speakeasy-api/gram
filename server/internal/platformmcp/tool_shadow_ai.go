@@ -59,7 +59,7 @@ func shadowAIToolResult(err error) (*mcp.CallToolResult, bool) {
 	result := featureUnavailableResult{Feature: shadowAIFeature}
 	switch {
 	case errors.Is(err, ErrShadowAIInvalid):
-		result.Code, result.Message = "invalid_request", "That Shadow AI argument is not one this organization's scan library uses. Narrow with harness (coding agents), assistant (assistants) or local_model (open models), or omit the category for all three."
+		result.Code, result.Message = "invalid_request", "That Shadow AI argument is not one this organization's scan library uses. Narrow with harness (coding agents), assistant (assistants) or local_model (locally run open models), or omit the category for all three."
 	case errors.Is(err, ErrShadowAIUnavailable):
 		result.Code, result.Message = unavailableCode, "Shadow AI is not enabled or is temporarily unavailable."
 	default:

@@ -222,7 +222,7 @@ describe("project routes", () => {
     render(
       <MemoryRouter
         initialEntries={[
-          "/org/projects/project/shadow-ai/harnesses/cursor?tab=people#top",
+          "/org/projects/project/shadow-ai/harnesses/acme%2Fagent?tab=people#top",
         ]}
       >
         <Routes>
@@ -237,7 +237,7 @@ describe("project routes", () => {
 
     expect(
       await screen.findByText(
-        "/org/projects/project/shadow-ai/agents/cursor?tab=people#top",
+        "/org/projects/project/shadow-ai/agents/acme%2Fagent?tab=people#top",
       ),
     ).toBeTruthy();
   });
