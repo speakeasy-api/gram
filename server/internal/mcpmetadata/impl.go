@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -237,6 +238,7 @@ type Service struct {
 	// publishing is not configured.
 	publicationRequests plugins.PublicationRequests
 	publisher           plugins.PluginPublishSignaler
+	features            feature.Provider
 
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
@@ -288,6 +290,7 @@ func NewService(
 		metaInstallAdmission:  metaInstallAdmission,
 		publicationRequests:   plugins.PublicationRequests{Enabled: false},
 		publisher:             nil,
+		features:              nil,
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
 	}
@@ -296,6 +299,12 @@ func NewService(
 func (s *Service) WithPluginPublication(publicationRequests bool, publisher plugins.PluginPublishSignaler) *Service {
 	s.publicationRequests.Enabled = publicationRequests
 	s.publisher = publisher
+	return s
+}
+
+// WithFeatureProvider sets the hosted MCP write rollout gate; without one, saves keep phase A row keys.
+func (s *Service) WithFeatureProvider(provider feature.Provider) *Service {
+	s.features = provider
 	return s
 }
 
@@ -379,6 +388,12 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		}
 	}
 
+	// Resolved before the transaction so flag latency never holds its locks.
+	serverKeyWrites, err := feature.HostedMCPServerKeyWrites(ctx, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
+	if err != nil {
+		logger.WarnContext(ctx, "evaluate hosted mcp server key writes; keeping the toolset key", attr.SlogError(err))
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "access mcp server metadata").LogError(ctx, logger)
@@ -407,18 +422,31 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	var existing *types.McpMetadata
-	var existingRow *repo.McpMetadatum
-	row, err := mcpr.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID()})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		// No existing metadata, proceed with creation
-	case err != nil:
+	if err := mcpr.AcquireMetadataBackendLock(ctx, repo.AcquireMetadataBackendLockParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID()}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock MCP server metadata").LogError(ctx, logger)
+	}
+	rows, err := mcpr.LockMetadataByBackendID(ctx, repo.LockMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: backend.backendID()})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "fetch existing MCP server metadata").LogError(ctx, logger)
-	default:
-		existingRow = &row
-		existing, err = ToMCPMetadata(ctx, mcpr, row)
+	}
+	existingRow := winningMetadataRow(rows)
+	if existingRow != nil {
+		existing, err = ToMCPMetadata(ctx, mcpr, *existingRow)
 		if err != nil {
 			logger.ErrorContext(ctx, "convert existing MCP server metadata", attr.SlogError(err))
+		}
+	}
+
+	wrapperID, err := backend.canonicalWrapperID(ctx, tr, msr, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "fetch canonical MCP server").LogError(ctx, logger)
+	}
+	// Until the server-key rollout is on, saves keep phase A row keys; responses still report both ids.
+	writeWrapperID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if serverKeyWrites && wrapperID.Valid {
+		writeWrapperID = wrapperID
+		if err := rekeyMetadataOntoWrapper(ctx, mcpr, *authCtx.ProjectID, wrapperID.UUID, rows); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "move MCP server metadata onto its server").LogError(ctx, logger)
 		}
 	}
 
@@ -482,7 +510,7 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		defaultEnvironmentID = existingRow.DefaultEnvironmentID
 	}
 
-	toolsetKey, serverKey := backend.writeKey(existingRow)
+	toolsetKey, serverKey := backend.writeKey(existingRow, writeWrapperID)
 
 	// A toolset-keyed row created beside a server-keyed one wins every read, so it takes over the env configs and header aliases.
 	takeOver := existingRow != nil && toolsetKey.Valid && !existingRow.ToolsetID.Valid
@@ -617,11 +645,6 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log MCP server metadata update event").LogError(ctx, logger)
 		}
-	}
-
-	wrapperID, err := backend.canonicalWrapperID(ctx, tr, msr, *authCtx.ProjectID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "fetch canonical MCP server").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -912,10 +935,49 @@ func (b *resolvedMetadataBackend) reportBackendIDs(metadata *types.McpMetadata, 
 	}
 }
 
-// writeKey keeps toolset_slug writes toolset-keyed so pods that read only toolset_id see them;
-// an mcp_server_id write updates the row it read in place.
-func (b *resolvedMetadataBackend) writeKey(existing *repo.McpMetadatum) (toolsetKey, serverKey uuid.NullUUID) {
+// winningMetadataRow picks the row every reader shows: toolset-keyed over a server-keyed twin.
+func winningMetadataRow(rows []repo.McpMetadatum) *repo.McpMetadatum {
+	for i := range rows {
+		if rows[i].ToolsetID.Valid {
+			return &rows[i]
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return &rows[0]
+}
+
+// rekeyMetadataOntoWrapper moves a toolset-keyed row onto the wrapper in place, deleting a server-keyed twin first.
+func rekeyMetadataOntoWrapper(ctx context.Context, mcpr *repo.Queries, projectID, wrapperID uuid.UUID, rows []repo.McpMetadatum) error {
+	winner := winningMetadataRow(rows)
+	if winner == nil || !winner.ToolsetID.Valid {
+		return nil
+	}
+	key := uuid.NullUUID{UUID: wrapperID, Valid: true}
+	for _, row := range rows {
+		if row.McpServerID != key {
+			continue
+		}
+		if _, err := mcpr.DeleteServerKeyedMetadata(ctx, repo.DeleteServerKeyedMetadataParams{ID: row.ID, ProjectID: projectID, McpServerID: key}); err != nil {
+			return fmt.Errorf("delete server-keyed metadata twin: %w", err)
+		}
+	}
+	moved, err := mcpr.RekeyMetadataToMcpServer(ctx, repo.RekeyMetadataToMcpServerParams{McpServerID: key, ID: winner.ID, ProjectID: projectID})
+	if err != nil {
+		return fmt.Errorf("rekey toolset metadata: %w", err)
+	}
+	if moved != 1 {
+		return fmt.Errorf("rekey toolset metadata: %d rows moved", moved)
+	}
+	return nil
+}
+
+// writeKey stores a wrapped backend under its wrapper; otherwise toolset_slug keeps the toolset key and mcp_server_id the row it read.
+func (b *resolvedMetadataBackend) writeKey(existing *repo.McpMetadatum, wrapperID uuid.NullUUID) (toolsetKey, serverKey uuid.NullUUID) {
 	switch {
+	case wrapperID.Valid:
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, wrapperID
 	case b.toolset != nil:
 		return uuid.NullUUID{UUID: b.toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	case existing != nil:

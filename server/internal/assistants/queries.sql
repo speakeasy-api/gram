@@ -462,6 +462,20 @@ FROM assistant_mcp_servers ams
 WHERE ams.assistant_id = @assistant_id
   AND ams.project_id = @project_id;
 
+-- name: ListCanonicalWrapperIDs :many
+-- Dialable toolsets with a live canonical wrapper (same id): the attachments the dependent move re-keys.
+SELECT ms.id
+FROM mcp_servers ms
+JOIN toolsets t ON t.id = ms.id AND t.project_id = ms.project_id
+WHERE ms.project_id = @project_id
+  AND ms.id = ANY(@toolset_ids::UUID[])
+  AND ms.toolset_id = ms.id
+  AND ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND t.mcp_enabled IS TRUE
+  AND t.mcp_slug IS NOT NULL
+  AND t.deleted IS FALSE;
+
 -- name: ClearAssistantToolsetsForServers :exec
 DELETE FROM assistant_toolsets
 WHERE assistant_id = @assistant_id

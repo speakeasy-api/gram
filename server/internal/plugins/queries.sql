@@ -288,6 +288,14 @@ VALUES (
 )
 RETURNING *;
 
+-- name: HasCanonicalWrapper :one
+-- A hosted entry is stored under its enabled canonical wrapper (same id); a drifted, disabled one keeps the toolset key.
+SELECT EXISTS (
+  SELECT 1 FROM mcp_servers
+  WHERE id = @toolset_id AND toolset_id = @toolset_id AND project_id = @project_id
+    AND deleted IS FALSE AND visibility <> 'disabled'
+)::bool;
+
 -- name: ListCanonicalWrapperIDs :many
 -- Of the given ids, those that are a live canonical hosted wrapper (toolset id = server id) of a live toolset in the project.
 SELECT s.id FROM mcp_servers s

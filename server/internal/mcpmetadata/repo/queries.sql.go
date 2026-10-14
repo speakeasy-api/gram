@@ -12,6 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireMetadataBackendLock = `-- name: AcquireMetadataBackendLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mcp_metadata:' || ($1::uuid)::text || ':' || ($2::uuid)::text, 0))
+`
+
+type AcquireMetadataBackendLockParams struct {
+	ProjectID uuid.UUID
+	BackendID uuid.UUID
+}
+
+// Serializes saves for one backend so a save sees a row another save inserted under the other key.
+func (q *Queries) AcquireMetadataBackendLock(ctx context.Context, arg AcquireMetadataBackendLockParams) error {
+	_, err := q.db.Exec(ctx, acquireMetadataBackendLock, arg.ProjectID, arg.BackendID)
+	return err
+}
+
 const deleteAllEnvironmentConfigs = `-- name: DeleteAllEnvironmentConfigs :exec
 DELETE FROM mcp_environment_configs
 WHERE mcp_metadata_id = $1
@@ -36,6 +51,28 @@ type DeleteEnvironmentConfigParams struct {
 func (q *Queries) DeleteEnvironmentConfig(ctx context.Context, arg DeleteEnvironmentConfigParams) error {
 	_, err := q.db.Exec(ctx, deleteEnvironmentConfig, arg.McpMetadataID, arg.VariableName)
 	return err
+}
+
+const deleteServerKeyedMetadata = `-- name: DeleteServerKeyedMetadata :execrows
+DELETE FROM mcp_metadata
+WHERE id = $1
+  AND project_id = $2
+  AND mcp_server_id = $3
+`
+
+type DeleteServerKeyedMetadataParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	McpServerID uuid.NullUUID
+}
+
+// Cascades to the row's mcp_environment_configs.
+func (q *Queries) DeleteServerKeyedMetadata(ctx context.Context, arg DeleteServerKeyedMetadataParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteServerKeyedMetadata, arg.ID, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getHeaderDisplayNames = `-- name: GetHeaderDisplayNames :one
@@ -200,6 +237,92 @@ func (q *Queries) ListEnvironmentConfigs(ctx context.Context, mcpMetadataID uuid
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockMetadataByBackendID = `-- name: LockMetadataByBackendID :many
+SELECT id,
+       toolset_id,
+       mcp_server_id,
+       project_id,
+       external_documentation_url,
+       external_documentation_text,
+       logo_id,
+       instructions,
+       header_display_names,
+       default_environment_id,
+       installation_override_url,
+       created_at,
+       updated_at
+FROM mcp_metadata
+WHERE project_id = $1
+  AND (toolset_id = $2::uuid OR mcp_server_id = $2::uuid)
+ORDER BY (toolset_id IS NOT NULL) DESC, updated_at DESC
+FOR UPDATE
+`
+
+type LockMetadataByBackendIDParams struct {
+	ProjectID uuid.UUID
+	BackendID uuid.UUID
+}
+
+// Locks the toolset-keyed row before its server-keyed twin, the order the dependent move takes.
+func (q *Queries) LockMetadataByBackendID(ctx context.Context, arg LockMetadataByBackendIDParams) ([]McpMetadatum, error) {
+	rows, err := q.db.Query(ctx, lockMetadataByBackendID, arg.ProjectID, arg.BackendID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpMetadatum
+	for rows.Next() {
+		var i McpMetadatum
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolsetID,
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.ExternalDocumentationUrl,
+			&i.ExternalDocumentationText,
+			&i.LogoID,
+			&i.Instructions,
+			&i.HeaderDisplayNames,
+			&i.DefaultEnvironmentID,
+			&i.InstallationOverrideUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rekeyMetadataToMcpServer = `-- name: RekeyMetadataToMcpServer :execrows
+UPDATE mcp_metadata
+SET toolset_id = NULL,
+    mcp_server_id = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND toolset_id = $1
+`
+
+type RekeyMetadataToMcpServerParams struct {
+	McpServerID uuid.NullUUID
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// Same row id, so its mcp_environment_configs stay attached.
+func (q *Queries) RekeyMetadataToMcpServer(ctx context.Context, arg RekeyMetadataToMcpServerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rekeyMetadataToMcpServer, arg.McpServerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setDefaultLogoIfUnset = `-- name: SetDefaultLogoIfUnset :one
