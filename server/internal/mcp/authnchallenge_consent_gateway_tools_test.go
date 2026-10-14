@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -128,4 +129,46 @@ func TestGatewayConsentPicksToolsPerSource(t *testing.T) {
 	require.True(t, selection.AllowsName(issues.slug+"--create_issue"))
 	require.True(t, selection.AllowsName(docsSlug+"--search_docs"))
 	require.False(t, selection.AllowsName(issues.slug+"--list_issues"))
+}
+
+// TestGatewayToolSelectionSurvivesRefresh pins renewal: refreshing a gateway
+// session carries the approved selection forward unchanged, even after the
+// gateway's inventory changes, rather than re-deriving or dropping it.
+func TestGatewayToolSelectionSurvivesRefresh(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "gateway-refresh-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
+	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Issue tracker", 1, mcpservers.VisibilityPublic, "create_issue", "list_issues")
+
+	resource := "meta_mcp_server:" + gateway.ID.String()
+	selection, err := toolfilter.NewSessionSelection(resource, uuid.New(), []toolfilter.AllowEntry{
+		{Type: toolfilter.AllowTypeTool, Name: member.slug + "--create_issue", Mode: nil, Tools: nil},
+	})
+	require.NoError(t, err)
+	original, err := json.Marshal(&toolfilter.SessionPolicy{Resource: resource, Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: nil}})
+	require.NoError(t, err)
+	refreshToken := seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, original)
+
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Added later", "added-"+uuid.NewString()[:8], 2, newRecordingUpstream(t, "new_tool").url)
+
+	for range 2 {
+		w := postRefreshGrant(t, ti, slug, client.ClientID, refreshToken, "")
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var issued struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &issued))
+		claims, err := usersessions.NewSigner("test-jwt-secret").Validate(issued.AccessToken, urn.NewUserSessionIssuer(issuer.ID).String())
+		require.NoError(t, err)
+		row, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
+		require.NoError(t, err)
+		require.JSONEq(t, string(original), string(row.ToolSelection))
+		refreshToken = issued.RefreshToken
+	}
 }
