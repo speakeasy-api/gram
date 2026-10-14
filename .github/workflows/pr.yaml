@@ -26,7 +26,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: "read"
-      pull-requests: read
+      pull-requests: read # paths-filter lists the pull request files
     outputs:
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
@@ -290,7 +290,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Google Cloud workload identity federation
     needs: changes
     # Preview environments deploy images tagged pr-<number>-<8-char head sha>
     # for every PR head commit. Components with changes get that tag from
@@ -404,7 +404,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Google Cloud workload identity federation
     needs: [changes, server-build]
     if: needs.changes.outputs.server == 'true'
     env:
@@ -471,7 +471,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Google Cloud workload identity federation
     needs: [changes]
     if: needs.changes.outputs.pystreams == 'true'
     steps:
@@ -536,7 +536,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Google Cloud workload identity federation
     needs: [changes]
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
     env:
@@ -939,7 +939,7 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: write # Atlas posts its migration lint report on the pull request
     services:
       postgres:
         image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
@@ -1048,7 +1048,6 @@ jobs:
       (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
     permissions:
       contents: read
-      pull-requests: write
     concurrency:
       group: atlas-push-${{ github.ref }}
       cancel-in-progress: true
@@ -1122,7 +1121,7 @@ jobs:
     if: needs.changes.outputs.webhooks-catalog == 'true' && github.event_name == 'pull_request'
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: write # posts review comments on breaking changes
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -1685,7 +1684,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Google Cloud workload identity federation
     needs: [changes]
     # Build the dashboard and admin docker images when server OR client changes
     # exist (the dashboard image is needed for preview environments)
@@ -1818,7 +1817,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
-      id-token: write
+      id-token: write # Google Cloud workload identity federation
     needs: [docker-build-client]
     # Syncs the dist/assets the dashboard image was built from (via artifact,
     # not a rebuild) into the private GCS buckets that will become the CDN
@@ -2532,7 +2531,7 @@ jobs:
         upload-dashboard-assets,
       ]
     permissions:
-      pull-requests: write
+      pull-requests: write # adds the preview label
     # Only on PR creation, so a manually removed label stays removed. Waits
     # for every preview image tag, or the preview polls for missing images.
     if: >-

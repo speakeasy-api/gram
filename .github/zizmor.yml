@@ -20,5 +20,3 @@ rules:
     disable: true
   template-injection:
     disable: true
-  undocumented-permissions:
-    disable: true

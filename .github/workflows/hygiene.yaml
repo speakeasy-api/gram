@@ -18,7 +18,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: read # paths-filter lists the pull request files
     env:
       PR_TITLE: ${{ github.event.pull_request.title }}
       GIT_REF: ${{ github.ref }}
