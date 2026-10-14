@@ -340,6 +340,11 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_GOOGLE_USERINFO_URL"},
 		},
 		&cli.StringFlag{
+			Name:    "openai-apps-challenge-token",
+			Usage:   "Token served at /.well-known/openai-apps-challenge on the platform hosts, for OpenAI's app directory domain verification. Empty serves not found.",
+			EnvVars: []string{"GRAM_OPENAI_APPS_CHALLENGE_TOKEN"},
+		},
+		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
 			EnvVars: []string{"PRESIDIO_ANALYZER_URL"},

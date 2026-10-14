@@ -132,6 +132,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 	}
 	service.SetCallbackOrigins(d.CallbackOrigins)
 	service.SetPlatformHosts(d.PlatformHosts)
+	service.SetOpenAIAppsChallengeToken(c.String("openai-apps-challenge-token"))
 	delegation := remotesessions.NewDelegationService(d.DB, d.Encryption, d.Challenges)
 	service.SetFederatedLoginConsumer(mcp.NewFederatedDelegationConsumer(delegation))
 	chainer, err := newIdentityChainer(d.Logger, d.Meter, d.DB, d.Redis, d.Encryption, d.Guardian, d.Challenges, delegation, d.Audit)
