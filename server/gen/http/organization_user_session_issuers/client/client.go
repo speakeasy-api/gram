@@ -22,6 +22,10 @@ type Client struct {
 	// createIssuer endpoint.
 	CreateIssuerDoer goahttp.Doer
 
+	// CreateSharedIssuer Doer is the HTTP client used to make requests to the
+	// createSharedIssuer endpoint.
+	CreateSharedIssuerDoer goahttp.Doer
+
 	// ListIssuers Doer is the HTTP client used to make requests to the listIssuers
 	// endpoint.
 	ListIssuersDoer goahttp.Doer
@@ -92,6 +96,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		CreateIssuerDoer:              doer,
+		CreateSharedIssuerDoer:        doer,
 		ListIssuersDoer:               doer,
 		GetIssuerDoer:                 doer,
 		UpdateIssuerDoer:              doer,
@@ -131,6 +136,30 @@ func (c *Client) CreateIssuer() goa.Endpoint {
 		resp, err := c.CreateIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "createIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateSharedIssuer returns an endpoint that makes HTTP requests to the
+// organizationUserSessionIssuers service createSharedIssuer server.
+func (c *Client) CreateSharedIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateSharedIssuerRequest(c.encoder)
+		decodeResponse = DecodeCreateSharedIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateSharedIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateSharedIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationUserSessionIssuers", "createSharedIssuer", err)
 		}
 		return decodeResponse(resp)
 	}

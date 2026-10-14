@@ -181,6 +181,23 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateOrganizationUserSessionIssuer"}`)
 	})
 
+	Method("createSharedIssuer", func() {
+		Description("Create an organization-owned user_session_issuer that serves one shared OAuth authorization server for every MCP server attached to it. Everything but the idempotency key is fixed by the server: a generated slug, interactive authentication challenges, a 336-hour maximum authorization lifetime, open CIMD admission, no trusted remote session issuer, shared authorization-server mode and an issuer URL pinned to this deployment's server URL. The issuer id is derived from the organization and the idempotency key, so a retry or a concurrent submission with the same key returns the issuer the first submission created instead of creating another. Workload grants keep their existing 15-minute, nonrefreshable lifetime. Requires org:admin.")
+		Payload(func() {
+			Extend(CreateSharedOrganizationUserSessionIssuerForm)
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuer)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.createShared")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "createSharedOrganizationUserSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "createShared")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateSharedOrganizationUserSessionIssuer"}`)
+	})
+
 	Method("listIssuers", func() {
 		Description("List organization-owned user_session_issuers. Requires org:read.")
 		Payload(func() {
@@ -461,6 +478,15 @@ var CreateOrganizationUserSessionIssuerForm = Type("CreateOrganizationUserSessio
 	})
 })
 
+var CreateSharedOrganizationUserSessionIssuerForm = Type("CreateSharedOrganizationUserSessionIssuerForm", func() {
+	Description("Form for creating an organization-owned user_session_issuer in shared authorization-server mode.")
+	Attribute("idempotency_key", String, "Caller-chosen key that makes the request safe to retry. Submissions from the same organization with the same key resolve to the same issuer; choose a new key to create another issuer.", func() {
+		MinLength(1)
+		MaxLength(200)
+	})
+	Required("idempotency_key")
+})
+
 var UpdateOrganizationUserSessionIssuerForm = Type("UpdateOrganizationUserSessionIssuerForm", func() {
 	Description("Form for updating an organization-owned user_session_issuer. All non-id fields are optional patches.")
 	Extend(UpdateUserSessionIssuerForm)
@@ -490,6 +516,10 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	Attribute("trusted_remote_session_client_id", String, "The organization-level remote_session_client Speakeasy uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("authorization_server_mode", String, "Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every attached MCP server its own authorization server; 'shared' serves one authorization server for the issuer, used by all of its MCP servers.", func() {
+		Enum("endpoint", "shared")
+	})
+	Attribute("issuer_url", String, "The OAuth issuer identifier pinned for the issuer's shared authorization server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode. The token endpoint is listed by workloadIdentities.listTokenEndpoints.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -497,7 +527,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "slug", "authn_challenge_mode", "session_duration_hours", "client_id_metadata_admission_mode", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "slug", "authn_challenge_mode", "session_duration_hours", "client_id_metadata_admission_mode", "authorization_server_mode", "created_at", "updated_at")
 })
 
 var ListUserSessionIssuersResult = Type("ListUserSessionIssuersResult", func() {

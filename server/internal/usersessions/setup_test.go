@@ -36,8 +36,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+// testServerURL is the deployment's server URL: the JWT issuer mintUserSession
+// stamps and the origin shared authorization servers are pinned on.
+const testServerURL = "http://0.0.0.0"
 
 var infra *testenv.Environment
 
@@ -71,20 +76,35 @@ type testInstance struct {
 func newTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestServiceWithRevoker(t, nil)
+	return newTestServiceWith(t, testServiceConfig{})
 }
 
-// newTestServiceWithRevoker builds the service with a substitute
-// TokenRevoker so revoke tests can exercise the revocation-cache failure path
-// without an unreachable Redis, which would cost ~1.7s per seeded session
-// (1s DialTimeout plus go-redis retries). Pass nil for the real
-// chatsessions.Manager over the test Redis.
-//
-// guardianOpts extend the guardian policy the CIMD resolver fetches through —
-// e.g. guardian.WithTLSRootCAs so refresh tests can trust an httptest TLS
-// document server.
-func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
+// testServiceConfig varies the dependencies a test needs to substitute; the
+// zero value builds the service every other test uses.
+type testServiceConfig struct {
+	// revoker substitutes the TokenRevoker so revoke tests can exercise the
+	// revocation-cache failure path without an unreachable Redis, which
+	// would cost ~1.7s per seeded session (1s DialTimeout plus go-redis
+	// retries). Nil uses the real chatsessions.Manager over the test Redis.
+	revoker usersessions.TokenRevoker
+
+	// hosts substitutes the deployment hosts shared authorization servers
+	// are pinned on. Nil uses testServerURL.
+	hosts *authserver.Hosts
+
+	// guardianOpts extend the guardian policy the CIMD resolver fetches
+	// through, e.g. guardian.WithTLSRootCAs so refresh tests can trust an
+	// httptest TLS document server.
+	guardianOpts []func(*guardian.Policy)
+}
+
+func newTestServiceWith(t *testing.T, cfg testServiceConfig) (context.Context, *testInstance) {
 	t.Helper()
+	revoker, guardianOpts := cfg.revoker, cfg.guardianOpts
+	hosts := authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil}
+	if cfg.hosts != nil {
+		hosts = *cfg.hosts
+	}
 
 	ctx := t.Context()
 
@@ -124,7 +144,8 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		nil,
 		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
-		"http://0.0.0.0",
+		testServerURL,
+		hosts,
 		ratelimit.NewRedisStore(redisClient),
 	)
 

@@ -61,6 +61,7 @@ type PlatformContext struct {
 const platformOverview = "This session exposes a catalogue filtered to workflows supported by your current RBAC grants. Exact project or resource checks apply only when a call targets that project or resource. " +
 	"A workflow missing from the catalogue may be requestable; requestable_workflows names only broad categories and never reveals hidden resources. A denied admin-gated call names the required permission and, when safe, offers a request-access link; member reads may instead hide inaccessible resources or return a generic denial. " +
 	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate. " +
+	"Where the catalogue lists create_shared_authorization_server (organization administrators on external clients only), it creates a new organization-owned user session issuer whose single shared authorization server an external platform exchanges workload tokens at; it needs explicit confirmation and an idempotency_key reused on retry, fixes every other setting, attaches no MCP server and grants no agent access. " +
 	"Issuer migration and identity-chaining binding unlinking and rebinding are not available through this server; where the catalogue lists get_xaa_readiness (organization administrators on external clients only), it reads one MCP server's identity-chaining bindings, its federated sign-in callback URL, and the organization's Okta sign-in setup in okta_sign_in (next step, the public key to paste in the agent's Credentials in Okta, the linked app's redirect URI); Okta sign-in setup itself is dashboard-only. Active identity-chaining bindings can block issuer configuration changes, deletion, and consolidation. Organization remote-session client deletion is also blocked when its management API deletion preflight reports blocking_reason=identity_chaining and ema_binding_count greater than zero (can_delete=false). An organization administrator must inspect that client preflight, identify affected projects, and have an authorized project administrator read each exact preparation binding and explicitly unlink or rebind it with its current generation before retrying deletion. Re-read the client preflight afterward; deleting an MCP connection does not remove this blocker. Client deletion and its live preflight are not exposed as Platform MCP tools; do not infer a live binding count or claim deletion is safe from this guidance. Ask an authorized administrator to inspect the issuer preflight in the dashboard or management API, explicitly unlink affected bindings using a supported management workflow before changing the issuer, and prepare new bindings for the target provider afterward. If that workflow is unavailable, stop and contact support; never bypass the binding safeguard or claim that an MCP connection operation unlinks these bindings."
 
 type ListProjectsInput struct {
@@ -267,6 +268,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		xaaReadiness = postgresReader.xaaReadiness
 	}
 	registerXAAReadinessTool(reg, xaaReadiness)
+	var sharedAuthorizationServers SharedAuthorizationServerProvisioner
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		sharedAuthorizationServers = postgresReader.sharedAuthorizationServers
+	}
+	registerCreateSharedAuthorizationServerTool(reg, sharedAuthorizationServers)
 	var connectionMutationService *MCPConnectionMutationService
 	if len(connectionMutations) > 0 {
 		connectionMutationService = connectionMutations[0]

@@ -117,6 +117,7 @@ function makeIssuer(overrides: Partial<UserSessionIssuer>): UserSessionIssuer {
     id: "usi",
     slug: "usi",
     authnChallengeMode: "interactive",
+    authorizationServerMode: "endpoint",
     clientIdMetadataAdmissionMode: "disabled",
     sessionDurationHours: 336,
     organizationId: "organization-id",

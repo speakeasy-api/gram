@@ -136,6 +136,37 @@ WHERE (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id
 ORDER BY id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: CreateSharedOrganizationUserSessionIssuer :one
+-- Creates an organization-owned issuer in shared authorization-server mode
+-- with its issuer URL pinned in the same statement. The id is chosen by the
+-- caller, derived from the organization and an idempotency key, so a retry
+-- or a concurrent submission with the same key hits the primary key and
+-- inserts nothing; the caller then reads the row that id names.
+INSERT INTO user_session_issuers (
+    id,
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration,
+    client_id_metadata_admission_mode,
+    authorization_server_mode,
+    pinned_issuer_url
+)
+VALUES (
+    @id,
+    NULL,
+    @organization_id,
+    @slug,
+    @authn_challenge_mode,
+    @session_duration,
+    'open',
+    @authorization_server_mode,
+    @pinned_issuer_url
+)
+ON CONFLICT (id) DO NOTHING
+RETURNING *;
+
 -- name: ListOrganizationUserSessionIssuers :many
 SELECT *
 FROM user_session_issuers

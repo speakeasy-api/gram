@@ -255,6 +255,241 @@ func DecodeCreateIssuerResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildCreateSharedIssuerRequest instantiates a HTTP request object with
+// method and path set to call the "organizationUserSessionIssuers" service
+// "createSharedIssuer" endpoint
+func (c *Client) BuildCreateSharedIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateSharedIssuerOrganizationUserSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationUserSessionIssuers", "createSharedIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateSharedIssuerRequest returns an encoder for requests sent to the
+// organizationUserSessionIssuers createSharedIssuer server.
+func EncodeCreateSharedIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationusersessionissuers.CreateSharedIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationUserSessionIssuers", "createSharedIssuer", "*organizationusersessionissuers.CreateSharedIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewCreateSharedIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateSharedIssuerResponse returns a decoder for responses returned by
+// the organizationUserSessionIssuers createSharedIssuer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeCreateSharedIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateSharedIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateSharedIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			err = ValidateCreateSharedIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			res := NewCreateSharedIssuerUserSessionIssuerOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateSharedIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			err = ValidateCreateSharedIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			return nil, NewCreateSharedIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateSharedIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			err = ValidateCreateSharedIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			return nil, NewCreateSharedIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateSharedIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			err = ValidateCreateSharedIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			return nil, NewCreateSharedIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateSharedIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			err = ValidateCreateSharedIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			return nil, NewCreateSharedIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateSharedIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			err = ValidateCreateSharedIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			return nil, NewCreateSharedIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateSharedIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			err = ValidateCreateSharedIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			return nil, NewCreateSharedIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateSharedIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			err = ValidateCreateSharedIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			return nil, NewCreateSharedIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateSharedIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+				}
+				err = ValidateCreateSharedIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+				}
+				return nil, NewCreateSharedIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateSharedIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+				}
+				err = ValidateCreateSharedIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+				}
+				return nil, NewCreateSharedIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "createSharedIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateSharedIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			err = ValidateCreateSharedIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationUserSessionIssuers", "createSharedIssuer", err)
+			}
+			return nil, NewCreateSharedIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationUserSessionIssuers", "createSharedIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListIssuersRequest instantiates a HTTP request object with method and
 // path set to call the "organizationUserSessionIssuers" service "listIssuers"
 // endpoint
@@ -3069,6 +3304,8 @@ func unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(v *UserSessi
 		ClientIDMetadataAdmissionMode: *v.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
 		TrustedRemoteSessionClientID:  v.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:       *v.AuthorizationServerMode,
+		IssuerURL:                     v.IssuerURL,
 		CreatedAt:                     *v.CreatedAt,
 		UpdatedAt:                     *v.UpdatedAt,
 	}

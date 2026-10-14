@@ -74,8 +74,17 @@ type CreateUserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -109,8 +118,17 @@ type UpdateUserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -152,8 +170,17 @@ type GetUserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
@@ -1137,8 +1164,17 @@ type UserSessionIssuerResponseBody struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string `form:"trusted_remote_session_client_id,omitempty" json:"trusted_remote_session_client_id,omitempty" xml:"trusted_remote_session_client_id,omitempty"`
-	CreatedAt                    string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                    string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
+	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateUserSessionIssuerResponseBody builds the HTTP response body from
@@ -1155,6 +1191,8 @@ func NewCreateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Creat
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:       res.AuthorizationServerMode,
+		IssuerURL:                     res.IssuerURL,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -1175,6 +1213,8 @@ func NewUpdateUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *Updat
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:       res.AuthorizationServerMode,
+		IssuerURL:                     res.IssuerURL,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}
@@ -1217,6 +1257,8 @@ func NewGetUserSessionIssuerResponseBody(res *types.UserSessionIssuer) *GetUserS
 		ClientIDMetadataAdmissionMode: res.ClientIDMetadataAdmissionMode,
 		TrustedRemoteSessionIssuerID:  res.TrustedRemoteSessionIssuerID,
 		TrustedRemoteSessionClientID:  res.TrustedRemoteSessionClientID,
+		AuthorizationServerMode:       res.AuthorizationServerMode,
+		IssuerURL:                     res.IssuerURL,
 		CreatedAt:                     res.CreatedAt,
 		UpdatedAt:                     res.UpdatedAt,
 	}

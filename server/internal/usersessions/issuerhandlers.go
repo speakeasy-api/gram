@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -475,6 +476,13 @@ func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 	if row.ProjectID.Valid {
 		projectID = row.ProjectID.UUID.String()
 	}
+	// The pin is the issuer identifier a shared authorization server publishes.
+	// An endpoint-mode issuer has no single issuer URL: each attached MCP
+	// server derives its own.
+	var issuerURL *string
+	if authserver.IssuerInSharedMode(row) && row.PinnedIssuerUrl.Valid && row.PinnedIssuerUrl.String != "" {
+		issuerURL = new(row.PinnedIssuerUrl.String)
+	}
 
 	return &types.UserSessionIssuer{
 		ID:                            row.ID.String(),
@@ -486,6 +494,8 @@ func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer 
 		ClientIDMetadataAdmissionMode: string(mode),
 		TrustedRemoteSessionIssuerID:  conv.FromNullableUUID(row.TrustedRemoteSessionIssuerID),
 		TrustedRemoteSessionClientID:  conv.FromNullableUUID(row.TrustedRemoteSessionClientID),
+		AuthorizationServerMode:       row.AuthorizationServerMode,
+		IssuerURL:                     issuerURL,
 		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
 	}

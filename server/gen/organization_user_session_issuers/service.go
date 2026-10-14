@@ -20,6 +20,18 @@ import (
 type Service interface {
 	// Create an organization-owned user_session_issuer. Requires org:admin.
 	CreateIssuer(context.Context, *CreateIssuerPayload) (res *types.UserSessionIssuer, err error)
+	// Create an organization-owned user_session_issuer that serves one shared
+	// OAuth authorization server for every MCP server attached to it. Everything
+	// but the idempotency key is fixed by the server: a generated slug,
+	// interactive authentication challenges, a 336-hour maximum authorization
+	// lifetime, open CIMD admission, no trusted remote session issuer, shared
+	// authorization-server mode and an issuer URL pinned to this deployment's
+	// server URL. The issuer id is derived from the organization and the
+	// idempotency key, so a retry or a concurrent submission with the same key
+	// returns the issuer the first submission created instead of creating another.
+	// Workload grants keep their existing 15-minute, nonrefreshable lifetime.
+	// Requires org:admin.
+	CreateSharedIssuer(context.Context, *CreateSharedIssuerPayload) (res *types.UserSessionIssuer, err error)
 	// List organization-owned user_session_issuers. Requires org:read.
 	ListIssuers(context.Context, *ListIssuersPayload) (res *ListOrganizationUserSessionIssuersResult, err error)
 	// Get an organization-owned user_session_issuer by id. Requires org:read.
@@ -86,7 +98,7 @@ const ServiceName = "organizationUserSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
+var MethodNames = [14]string{"createIssuer", "createSharedIssuer", "listIssuers", "getIssuer", "updateIssuer", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
 
 // CreateCimdClientPayload is the payload type of the
 // organizationUserSessionIssuers service createCimdClient method.
@@ -117,6 +129,16 @@ type CreateIssuerPayload struct {
 	AuthnChallengeMode string
 	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours int
+}
+
+// CreateSharedIssuerPayload is the payload type of the
+// organizationUserSessionIssuers service createSharedIssuer method.
+type CreateSharedIssuerPayload struct {
+	SessionToken *string
+	// Caller-chosen key that makes the request safe to retry. Submissions from the
+	// same organization with the same key resolve to the same issuer; choose a new
+	// key to create another issuer.
+	IdempotencyKey string
 }
 
 // CreateUserSessionIssuerCimdClientResult is the result type of the

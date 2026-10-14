@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	organizationusersessionissuers "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	goa "goa.design/goa/v3/pkg"
@@ -57,6 +58,40 @@ func BuildCreateIssuerPayload(organizationUserSessionIssuersCreateIssuerBody str
 		Slug:                         body.Slug,
 		AuthnChallengeMode:           body.AuthnChallengeMode,
 		SessionDurationHours:         body.SessionDurationHours,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildCreateSharedIssuerPayload builds the payload for the
+// organizationUserSessionIssuers createSharedIssuer endpoint from CLI flags.
+func BuildCreateSharedIssuerPayload(organizationUserSessionIssuersCreateSharedIssuerBody string, organizationUserSessionIssuersCreateSharedIssuerSessionToken string) (*organizationusersessionissuers.CreateSharedIssuerPayload, error) {
+	var err error
+	var body CreateSharedIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationUserSessionIssuersCreateSharedIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"idempotency_key\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.IdempotencyKey) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", body.IdempotencyKey, utf8.RuneCountInString(body.IdempotencyKey), 1, true))
+		}
+		if utf8.RuneCountInString(body.IdempotencyKey) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", body.IdempotencyKey, utf8.RuneCountInString(body.IdempotencyKey), 200, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersCreateSharedIssuerSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersCreateSharedIssuerSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.CreateSharedIssuerPayload{
+		IdempotencyKey: body.IdempotencyKey,
 	}
 	v.SessionToken = sessionToken
 

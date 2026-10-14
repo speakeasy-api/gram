@@ -39271,6 +39271,94 @@ paths:
       x-speakeasy-name-override: createCimdClient
       x-speakeasy-react-hook:
         name: CreateOrganizationUserSessionIssuerCimdClient
+  /rpc/organizationUserSessionIssuers.createShared:
+    post:
+      description: 'Create an organization-owned user_session_issuer that serves one shared OAuth authorization server for every MCP server attached to it. Everything but the idempotency key is fixed by the server: a generated slug, interactive authentication challenges, a 336-hour maximum authorization lifetime, open CIMD admission, no trusted remote session issuer, shared authorization-server mode and an issuer URL pinned to this deployment''s server URL. The issuer id is derived from the organization and the idempotency key, so a retry or a concurrent submission with the same key returns the issuer the first submission created instead of creating another. Workload grants keep their existing 15-minute, nonrefreshable lifetime. Requires org:admin.'
+      operationId: createSharedOrganizationUserSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSharedOrganizationUserSessionIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createSharedIssuer organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: createShared
+      x-speakeasy-react-hook:
+        name: CreateSharedOrganizationUserSessionIssuer
   /rpc/organizationUserSessionIssuers.delete:
     delete:
       description: Soft-delete an organization-owned user_session_issuer. Refuses while a live MCP server or toolset references it. Requires org:admin.
@@ -84700,6 +84788,17 @@ components:
       required:
         - url
         - expires_at
+    CreateSharedOrganizationUserSessionIssuerForm:
+      type: object
+      properties:
+        idempotency_key:
+          type: string
+          description: Caller-chosen key that makes the request safe to retry. Submissions from the same organization with the same key resolve to the same issuer; choose a new key to create another issuer.
+          minLength: 1
+          maxLength: 200
+      description: Form for creating an organization-owned user_session_issuer in shared authorization-server mode.
+      required:
+        - idempotency_key
     CreateSigintSensorForm:
       type: object
       properties:
@@ -110538,6 +110637,12 @@ components:
         authn_challenge_mode:
           type: string
           description: chain | interactive.
+        authorization_server_mode:
+          type: string
+          description: Which OAuth authorization server the issuer's MCP servers point clients to. 'endpoint' gives every attached MCP server its own authorization server; 'shared' serves one authorization server for the issuer, used by all of its MCP servers.
+          enum:
+            - endpoint
+            - shared
         client_id_metadata_admission_mode:
           type: string
           description: 'The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. ''open'' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and ''presets'' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note ''reporting'' can be READ but not written: it is a legacy value that admits exactly what ''open'' admits, and no issuer is created with it.'
@@ -110553,6 +110658,9 @@ components:
           type: string
           description: The user_session_issuer id.
           format: uuid
+        issuer_url:
+          type: string
+          description: The OAuth issuer identifier pinned for the issuer's shared authorization server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode. The token endpoint is listed by workloadIdentities.listTokenEndpoints.
         organization_id:
           type: string
           description: The owning organization id.
@@ -110586,6 +110694,7 @@ components:
         - authn_challenge_mode
         - session_duration_hours
         - client_id_metadata_admission_mode
+        - authorization_server_mode
         - created_at
         - updated_at
     UserSessionIssuerCimdClient:

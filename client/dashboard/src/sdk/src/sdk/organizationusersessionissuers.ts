@@ -4,6 +4,7 @@
 
 import { organizationUserSessionIssuersCreate } from "../funcs/organizationUserSessionIssuersCreate.js";
 import { organizationUserSessionIssuersCreateCimdClient } from "../funcs/organizationUserSessionIssuersCreateCimdClient.js";
+import { organizationUserSessionIssuersCreateShared } from "../funcs/organizationUserSessionIssuersCreateShared.js";
 import { organizationUserSessionIssuersDelete } from "../funcs/organizationUserSessionIssuersDelete.js";
 import { organizationUserSessionIssuersDeleteCimdClient } from "../funcs/organizationUserSessionIssuersDeleteCimdClient.js";
 import { organizationUserSessionIssuersGet } from "../funcs/organizationUserSessionIssuersGet.js";
@@ -30,6 +31,10 @@ import {
   CreateOrganizationUserSessionIssuerCimdClientRequest,
   CreateOrganizationUserSessionIssuerCimdClientSecurity,
 } from "../models/operations/createorganizationusersessionissuercimdclient.js";
+import {
+  CreateSharedOrganizationUserSessionIssuerRequest,
+  CreateSharedOrganizationUserSessionIssuerSecurity,
+} from "../models/operations/createsharedorganizationusersessionissuer.js";
 import {
   DeleteOrganizationUserSessionIssuerRequest,
   DeleteOrganizationUserSessionIssuerSecurity,
@@ -113,6 +118,25 @@ export class OrganizationUserSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CreateUserSessionIssuerCimdClientResult> {
     return unwrapAsync(organizationUserSessionIssuersCreateCimdClient(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createSharedIssuer organizationUserSessionIssuers
+   *
+   * @remarks
+   * Create an organization-owned user_session_issuer that serves one shared OAuth authorization server for every MCP server attached to it. Everything but the idempotency key is fixed by the server: a generated slug, interactive authentication challenges, a 336-hour maximum authorization lifetime, open CIMD admission, no trusted remote session issuer, shared authorization-server mode and an issuer URL pinned to this deployment's server URL. The issuer id is derived from the organization and the idempotency key, so a retry or a concurrent submission with the same key returns the issuer the first submission created instead of creating another. Workload grants keep their existing 15-minute, nonrefreshable lifetime. Requires org:admin.
+   */
+  async createShared(
+    request: CreateSharedOrganizationUserSessionIssuerRequest,
+    security?: CreateSharedOrganizationUserSessionIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<UserSessionIssuer> {
+    return unwrapAsync(organizationUserSessionIssuersCreateShared(
       this,
       request,
       security,

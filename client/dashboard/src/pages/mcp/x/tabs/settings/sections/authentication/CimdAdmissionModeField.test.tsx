@@ -79,6 +79,7 @@ function issuer(
 ): UserSessionIssuer {
   return {
     authnChallengeMode: "chain",
+    authorizationServerMode: "endpoint",
     clientIdMetadataAdmissionMode: mode,
     createdAt: new Date(0),
     id: "issuer-1",

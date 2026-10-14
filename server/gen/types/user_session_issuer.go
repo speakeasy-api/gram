@@ -38,6 +38,15 @@ type UserSessionIssuer struct {
 	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string
-	CreatedAt                    string
-	UpdatedAt                    string
+	// Which OAuth authorization server the issuer's MCP servers point clients to.
+	// 'endpoint' gives every attached MCP server its own authorization server;
+	// 'shared' serves one authorization server for the issuer, used by all of its
+	// MCP servers.
+	AuthorizationServerMode string
+	// The OAuth issuer identifier pinned for the issuer's shared authorization
+	// server, as its RFC 8414 metadata publishes it. Absent in 'endpoint' mode.
+	// The token endpoint is listed by workloadIdentities.listTokenEndpoints.
+	IssuerURL *string
+	CreatedAt string
+	UpdatedAt string
 }

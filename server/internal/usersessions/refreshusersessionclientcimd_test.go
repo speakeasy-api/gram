@@ -163,7 +163,7 @@ func newRefreshTestSetup(t *testing.T, issuerSlug string) (context.Context, *tes
 	t.Helper()
 
 	ds := startCIMDDocServer(t)
-	ctx, ti := newTestServiceWithRevoker(t, nil, guardian.WithTLSRootCAs(ds.certPool()))
+	ctx, ti := newTestServiceWith(t, testServiceConfig{guardianOpts: []func(*guardian.Policy){guardian.WithTLSRootCAs(ds.certPool())}})
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
 		SessionToken:         nil,
@@ -466,7 +466,7 @@ func TestRefreshUserSessionClientCIMD_AdmissionDisabled(t *testing.T) {
 	t.Parallel()
 
 	ds := startCIMDDocServer(t)
-	ctx, ti := newTestServiceWithRevoker(t, nil, guardian.WithTLSRootCAs(ds.certPool()))
+	ctx, ti := newTestServiceWith(t, testServiceConfig{guardianOpts: []func(*guardian.Policy){guardian.WithTLSRootCAs(ds.certPool())}})
 
 	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
 		SessionToken:         nil,

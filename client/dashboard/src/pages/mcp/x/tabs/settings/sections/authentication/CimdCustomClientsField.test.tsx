@@ -149,6 +149,7 @@ vi.mock("sonner", () => ({
 
 const issuer: UserSessionIssuer = {
   authnChallengeMode: "chain",
+  authorizationServerMode: "endpoint",
   clientIdMetadataAdmissionMode: "presets",
   createdAt: new Date(0),
   id: "issuer-1",
