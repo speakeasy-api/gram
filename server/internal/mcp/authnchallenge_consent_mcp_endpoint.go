@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -352,7 +353,13 @@ func (s *Service) serveConsentProxiedMCP(
 			return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
 		}
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
-			return oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
+			conflict := oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools")
+			if s.consentUpstreamChained(ctx, endpoint, subject, serverRow) {
+				// Expected before approval: chaining mints the token afterwards.
+				logger.InfoContext(ctx, "consent tool inventory waits for identity chaining", attr.SlogConsentInventoryDeferred(true))
+				return conflict
+			}
+			return conflict.LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
@@ -466,6 +473,21 @@ func (s *Service) serveConsentProxiedMCP(
 		}
 	}
 	return nil
+}
+
+// consentUpstreamChained reports whether identity chaining governs the
+// backend's upstream for the consent subject, judged as the runtime would.
+func (s *Service) consentUpstreamChained(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, serverRow *mcpservers_repo.McpServer) bool {
+	if s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser {
+		return false
+	}
+	tunneled := serverRow.TunneledMcpServerID.Valid
+	backendIssuer := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if tunneled {
+		backendIssuer = tunneledBackendIssuer(serverRow)
+	}
+	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, tunneled, backendIssuer)
+	return ok && s.identityChainer.Governs(ctx, req)
 }
 
 // consentMethodAllowlistInterceptor rejects every JSON-RPC message outside
