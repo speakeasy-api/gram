@@ -50,7 +50,8 @@ type Event struct {
 // Input adapts a source event into immutable metadata and classifier content.
 // Event must be I/O-free. Resolve is called only after entitlement and sensor
 // selection, avoiding asset reads for disabled tenants or inapplicable events.
-// Inputs and their metadata must not be mutated during Evaluate.
+// Event metadata must remain immutable during Evaluate. Resolvers may cache
+// content privately across sequential resolutions in that evaluation.
 type Input interface {
 	// Event returns the normalized tenant, event identity, and attribution.
 	Event() Event
@@ -63,4 +64,13 @@ type Input interface {
 	// wrapped ErrInvalidInput acknowledges invalid content. The conversation adapter's
 	// asset-validation permanentError is also terminal; other errors trigger retry.
 	Resolve(context.Context) (classifier.Entry, error)
+}
+
+// WindowInput supports target-focused context resolution after sensor selection.
+// Resolutions on one input are sequential; adapters may cache content between sizes.
+type WindowInput interface {
+	Input
+
+	// ResolveWindow returns up to size messages, including the target exactly once.
+	ResolveWindow(ctx context.Context, size int) (classifier.Entry, error)
 }

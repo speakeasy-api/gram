@@ -60,8 +60,33 @@ actor identities and is distinct from the event kind.
 
 Adapters wrap `ErrInvalidInput` for permanent content failures. Conversation asset
 validation also returns terminal failures; other resolution errors retry.
-Resolved JSON must be non-null and at most 16 MiB. Evaluation is
-per event; cross-event windows and correlation are separate input-building work.
+Resolved JSON must be non-null and at most 16 MiB, including the complete window.
+
+## Message context
+
+Sensors select `input_strategy`: `single_message` (default) or `sliding_window`.
+`window_size` accepts 2–10 total messages including the target, default 5.
+Omitted update fields preserve settings; switching strategies retains window size.
+
+Sliding windows classify the target using up to N−1 preceding messages of every
+stored role in its project, conversation and generation. History follows
+`(created_at, seq)` order: sequence only breaks timestamp ties. The target snapshot
+anchors the query, so later messages cannot enter the window. Short histories
+evaluate immediately. Late imports and timestamp corrections affect subsequent
+evaluations; retries resolve current history under the same target reading identity.
+
+State is `{messages: [{role, content, parts}, ...], target_message_index: N-1}`,
+where N is the actual message count. Messages run oldest to newest with the target
+last. Every question explicitly instructs the classifier to classify only that
+target and use the preceding messages as evidence. Target eligibility and matching
+use the incoming user/assistant message; context roles are not filtered.
+
+The evaluator groups sensors by effective input strategy and size. Compatible
+sensors share one request. History is fetched lazily once per target, and resolved
+content is reused across ascending window sizes within the 16 MiB budget. A failed
+group does not prevent other groups from publishing. The classifier contract
+remains questions plus state. Definition hashes include strategy, size and the
+versioned target-framing contract.
 
 ## Compilation and readiness
 
@@ -91,7 +116,8 @@ Based on the [System One request schema](https://openrouter.ai/docs/api/api-refe
 - Empty sensors and incomplete definitions are skipped, counted as `draft` in
   `gram.sigint.evaluation.skipped`.
 
-Every eligible runnable sensor contributes to one logical classifier request per event.
+Every eligible runnable sensor contributes to one logical classifier request per
+event and effective input configuration.
 A multi-label reading requires all its Noul outcomes to succeed.
 
 ## Identity and content
@@ -156,9 +182,11 @@ Conversation and reading topics and the evaluator subscription retain messages
 for four days; acknowledged subscription messages are not retained. Provision
 the generated infrastructure and configure the key before enabling consumption.
 
-Platform MCP assessment: this is an internal ingestion/evaluation capability,
-with no new administrator action or reading query API. Tool exposure remains
-deferred until signals intelligence is production-ready. Existing demo sensor
-configuration remains applicable; this layer adds no dashboard-rendered data.
+Platform MCP assessment: project editors configure message context using the
+existing `create_sensor` and `update_sensor` tools. Their proposals, previews and
+confirmation tokens cover strategy and size; `find_sensors` and `get_sensor`
+return those settings for live verification. The shipped authoring workflow
+documents the same choices as the dashboard. Demo sensors exercise target-only,
+five-message and ten-message inputs.
 
 Temporal actions/month: 0 (Pub/Sub batch handler, no Temporal).

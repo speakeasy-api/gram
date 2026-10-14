@@ -102,10 +102,21 @@ func jsonValue(data []byte) (any, error) {
 	return value, nil
 }
 
-func input(ctx context.Context, reader BlobReader, project string, row repo.LoadEvaluationMessagesRow) (classifier.Entry, error) {
+type messageState struct {
+	// Role preserves the source message's role without elevating it to instructions.
+	Role string `json:"role"`
+
+	// Content preserves the original structured payload when available.
+	Content any `json:"content"`
+
+	// Parts contains row-local text, tool calls, and resolved textual attachments.
+	Parts []any `json:"parts"`
+}
+
+func inputWithBudget(ctx context.Context, reader BlobReader, project string, row repo.LoadEvaluationMessagesRow, budget int) (classifier.Entry, error) {
 	var empty classifier.Entry
 	m := row.ChatMessage
-	remaining := maxContentBytes - len(m.Content) - len(m.ToolCalls)
+	remaining := budget - len(m.Content) - len(m.ToolCalls)
 	var content any
 	hasOriginal := !row.RowLocalContent && (len(m.ContentRaw) > 0 || m.ContentAssetUrl.Valid && m.ContentAssetUrl.String != "")
 	if hasOriginal {
@@ -182,12 +193,12 @@ func input(ctx context.Context, reader BlobReader, project string, row repo.Load
 		parts = append(parts, map[string]any{"text": string(data)})
 	}
 
-	data, err := json.Marshal(map[string]any{"role": "ROLE_" + strings.ToUpper(m.Role), "content": content, "parts": parts})
+	data, err := json.Marshal(messageState{Role: "ROLE_" + strings.ToUpper(m.Role), Content: content, Parts: parts})
 	if err != nil {
 		return empty, permanent("invalid_content")
 	}
 
-	if len(data) > maxContentBytes {
+	if len(data) > budget {
 		return empty, permanent("content_too_large")
 	}
 

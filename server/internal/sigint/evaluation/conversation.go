@@ -2,6 +2,7 @@ package evaluation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -11,6 +12,8 @@ import (
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/sigint/inputconfig"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
@@ -22,6 +25,27 @@ const ConversationMessageKind = "conversation.message"
 // MessageSource resolves a tenant's persisted messages in a single batch.
 type MessageSource interface {
 	LoadMessages(context.Context, string, uuid.UUID, []uuid.UUID) ([]repo.LoadEvaluationMessagesRow, error)
+}
+
+// HistorySource resolves predecessors of a persisted target snapshot, newest first.
+type HistorySource interface {
+	LoadHistory(context.Context, string, uuid.UUID, repo.ChatMessage, int) ([]repo.LoadEvaluationMessagesRow, error)
+}
+
+// LoadHistory pins context to the target's tenant, conversation, generation and timestamp.
+func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.UUID, target repo.ChatMessage, limit int) ([]repo.LoadEvaluationMessagesRow, error) {
+	rows, err := repo.New(r.db).LoadEvaluationHistory(ctx, repo.LoadEvaluationHistoryParams{
+		OrganizationID: org, ProjectID: project, ChatID: target.ChatID, Generation: target.Generation,
+		TargetID: target.ID, TargetCreatedAt: target.CreatedAt, TargetSeq: target.Seq, HistoryLimit: conv.SafeInt32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("load evaluation history: %w", err)
+	}
+	ordered := make([]repo.LoadEvaluationMessagesRow, len(rows))
+	for i, row := range rows {
+		ordered[i] = repo.LoadEvaluationMessagesRow(row)
+	}
+	return ordered, nil
 }
 
 // LoadMessages reads current message state and attachment locators together.
@@ -153,17 +177,88 @@ func (h *ConversationHandler) evaluate(ctx context.Context, m *conversationv1.Me
 	if p.Role != "user" && p.Role != "assistant" {
 		return nil
 	}
-	return h.evaluator.Evaluate(ctx, &conversationInput{message: m, stored: row, blobs: h.blobs})
+	history, _ := h.messages.(HistorySource)
+	return h.evaluator.Evaluate(ctx, &conversationInput{message: m, stored: row, blobs: h.blobs, history: history, historyLoaded: false, historyRows: nil, historyErr: nil, resolved: nil, resolvedBytes: 0})
 }
 
 type conversationInput struct {
-	message *conversationv1.MessageEvent
-	stored  repo.LoadEvaluationMessagesRow
-	blobs   BlobReader
+	message       *conversationv1.MessageEvent
+	stored        repo.LoadEvaluationMessagesRow
+	blobs         BlobReader
+	history       HistorySource
+	historyLoaded bool
+	historyRows   []repo.LoadEvaluationMessagesRow
+	historyErr    error
+	resolved      map[uuid.UUID]classifier.Entry
+	resolvedBytes int
 }
 
 func (in *conversationInput) Resolve(ctx context.Context) (classifier.Entry, error) {
-	return input(ctx, in.blobs, in.message.GetProjectId(), in.stored)
+	return in.resolveMessage(ctx, in.stored)
+}
+
+type conversationState struct {
+	// Messages is chronological, with the target last and present exactly once.
+	Messages []classifier.Entry `json:"messages"`
+
+	// TargetMessageIndex identifies the sole classification subject.
+	TargetMessageIndex int `json:"target_message_index"`
+}
+
+func (in *conversationInput) resolveMessage(ctx context.Context, row repo.LoadEvaluationMessagesRow) (classifier.Entry, error) {
+	if entry, ok := in.resolved[row.ChatMessage.ID]; ok {
+		return entry, nil
+	}
+	entry, err := inputWithBudget(ctx, in.blobs, in.message.GetProjectId(), row, maxContentBytes-in.resolvedBytes)
+	if err != nil {
+		return entry, err
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return classifier.Entry{}, permanent("invalid_content")
+	}
+	if in.resolved == nil {
+		in.resolved = make(map[uuid.UUID]classifier.Entry)
+	}
+	in.resolved[row.ChatMessage.ID] = entry
+	in.resolvedBytes += len(data)
+	return entry, nil
+}
+
+func (in *conversationInput) ResolveWindow(ctx context.Context, size int) (classifier.Entry, error) {
+	var empty classifier.Entry
+	if err := inputconfig.Validate(inputconfig.SlidingWindow, size); err != nil {
+		return empty, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+	}
+	target, err := in.Resolve(ctx)
+	if err != nil {
+		return empty, err
+	}
+	if !in.historyLoaded {
+		if in.history == nil {
+			return empty, fmt.Errorf("%w: conversation history unavailable", ErrInvalidInput)
+		}
+		in.historyRows, in.historyErr = in.history.LoadHistory(ctx, in.message.GetOrganizationId(), uuid.MustParse(in.message.GetProjectId()), in.stored.ChatMessage, inputconfig.MaxWindowSize-1)
+		in.historyLoaded = true
+	}
+	if in.historyErr != nil {
+		return empty, in.historyErr
+	}
+	count := min(size-1, len(in.historyRows))
+	state := conversationState{Messages: make([]classifier.Entry, count+1), TargetMessageIndex: count}
+	state.Messages[count] = target
+	for i := range count {
+		entry, err := in.resolveMessage(ctx, in.historyRows[i])
+		if err != nil {
+			return empty, err
+		}
+		state.Messages[count-1-i] = entry
+	}
+	entry, err := classifier.NewEntry(state)
+	if err != nil {
+		return empty, fmt.Errorf("%w: encode conversation state: %w", ErrInvalidInput, err)
+	}
+	return entry, nil
 }
 
 func (in *conversationInput) MatchingMessage() *matching.Message {

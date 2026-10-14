@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/celeval"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/sigint/inputconfig"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
 
@@ -148,7 +149,34 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		return nil
 	}
 
-	state, err := in.Resolve(ctx)
+	// Ascending sizes let small windows succeed even when older content is invalid
+	// or a larger window exceeds the aggregate content budget.
+	var retry error
+	for size := 1; size <= inputconfig.MaxWindowSize; size++ {
+		var sensors []compiledSensor
+		for _, sensor := range compiled {
+			if sensor.windowSize == size {
+				sensors = append(sensors, sensor)
+			}
+		}
+		if len(sensors) == 0 {
+			continue
+		}
+		var state classifier.Entry
+		var err error
+		if size == 1 {
+			state, err = in.Resolve(ctx)
+		} else if window, ok := in.(WindowInput); ok {
+			state, err = window.ResolveWindow(ctx, size)
+		} else {
+			err = ErrInvalidInput
+		}
+		retry = errors.Join(retry, h.evaluateGroup(ctx, event, sensors, state, err))
+	}
+	return retry
+}
+
+func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []compiledSensor, state classifier.Entry, err error) error {
 	if err != nil {
 		if terminal, ok := errors.AsType[*permanentError](err); ok {
 			h.terminal(ctx, event, terminal.reason)
