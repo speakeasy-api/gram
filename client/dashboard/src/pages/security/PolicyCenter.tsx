@@ -24,8 +24,6 @@ import {
 import { Text } from "@/components/ui/Text";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
 import { Badge } from "@/components/ui/Badge";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Button } from "@/components/ui/Button";
 import {
   DropdownMenu,
@@ -105,7 +103,6 @@ import { DetectionRulesTab } from "./DetectionRules";
 import {
   POLICY_CENTER_TABS,
   policyCenterTabs,
-  visiblePolicyCenterTab,
   type PolicyCenterTab,
 } from "./policy-center-tabs";
 import { ShadowAITargetsTab } from "./ShadowAITargetsTab";
@@ -556,10 +553,10 @@ function truncateSessionID(sessionID: string): string {
 /** Assistant context for the Detection Rules tab: assembled from the static
  *  client-side rule catalog so the other tabs pay no extra queries for it.
  *  Rule-activity questions route through the finding-level tools. */
-function detectionRulesInsightsContext(shadowAIFolded: boolean): string {
+function detectionRulesInsightsContext(): string {
   return [
     "Page: Guardrails, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
-    `Built-in rule ids: ${detectionRulesTabRuleIds(shadowAIFolded).join(", ")}.`,
+    `Built-in rule ids: ${detectionRulesTabRuleIds().join(", ")}.`,
     "Custom rules are organization-defined CEL expressions with ids prefixed 'custom.'; list them with listCustomDetectionRules.",
     "For rule activity, query findings by rule_id via listRiskResultsForAgent (match content is redacted).",
     "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
@@ -615,12 +612,6 @@ function PolicyCenterContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
-  // The Type column and the Shadow AI targets tab arrive with the Shadow AI
-  // fold-in: until the flag is on, "Shadow AI" is not vocabulary the page
-  // uses anywhere.
-  const shadowAIEnabled =
-    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
-  const showPolicyType = shadowAIEnabled;
   const {
     data: quarantinesData,
     isLoading: quarantinesLoading,
@@ -645,11 +636,10 @@ function PolicyCenterContent() {
 
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [requestedTab] = useQueryState(
+  const [activeTab] = useQueryState(
     "tab",
     parseAsStringLiteral(POLICY_CENTER_TABS).withDefault("policies"),
   );
-  const activeTab = visiblePolicyCenterTab(requestedTab, shadowAIEnabled);
   const [exclusionSheet, setExclusionSheet] =
     useState<ExclusionSheetState | null>(null);
   // The Detection Rules tab's create sheet is owned here so the page-level
@@ -828,7 +818,7 @@ function PolicyCenterContent() {
       width: "3fr",
       render: (row) => <PolicyNameCell row={row} />,
     },
-    ...(showPolicyType ? [POLICY_TYPE_COLUMN] : []),
+    POLICY_TYPE_COLUMN,
     {
       key: "action",
       header: "Action",
@@ -1137,14 +1127,14 @@ function PolicyCenterContent() {
       description="Configure the policies, detection rules, and exclusion rules that govern risk detection in agent session interactions."
       primaryAction={primaryAction}
       activeTab={activeTab}
-      tabs={policyCenterTabs(shadowAIEnabled)}
+      tabs={policyCenterTabs()}
     >
       {/* The dock follows the active tab: the Detection Rules tab took over
           the standalone page whose URL used to select these suggestions, and
           the Shadow AI targets tab mounts its own config from its own data. */}
       {activeTab === "detection-rules" ? (
         <InsightsConfig
-          contextInfo={detectionRulesInsightsContext(shadowAIEnabled)}
+          contextInfo={detectionRulesInsightsContext()}
           suggestions={INSIGHTS_SUGGESTIONS["detection-rules"]}
           title="Detection rule insights"
           subtitle="Ask about rule activity, noisy rules, and coverage gaps. Match content is redacted before it reaches the assistant."

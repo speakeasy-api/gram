@@ -282,15 +282,12 @@ export default function PolicyDetail(): JSX.Element {
 }
 
 /** The editor a stored policy opens in. Shadow AI is a presentation of the
- *  blocking Shadow MCP policy, so it only applies while that presentation is
- *  rolled out; otherwise the policy keeps the standard editor. */
+ *  blocking Shadow MCP policy, so that policy opens the Shadow AI editor. */
 function PolicyEditorFor({ policy }: { policy: RiskPolicy }): JSX.Element {
-  const shadowAIFoldEnabled =
-    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
   if (policy.policyType === "prompt_based") {
     return <PromptPolicyEditor policy={policy} />;
   }
-  if (shadowAIFoldEnabled && isShadowAIPolicy(policy)) {
+  if (isShadowAIPolicy(policy)) {
     return <ShadowAIPolicyEditor policy={policy} />;
   }
   return <StandardPolicyEditor policy={policy} />;
@@ -352,8 +349,6 @@ function PolicyNewContent(): JSX.Element {
   const [category] = useQueryState("category");
   const location = useLocation();
   const draft = readPolicyDraft(location.state);
-  const shadowAIFoldEnabled =
-    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
   // Read once: the editor seeds its state on mount and owns it from there.
   const [prefill] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -381,7 +376,7 @@ function PolicyNewContent(): JSX.Element {
       </NewPolicyFrame>
     );
   }
-  if (kind === "shadow-ai" && shadowAIFoldEnabled) {
+  if (kind === "shadow-ai") {
     return (
       <NewPolicyFrame>
         <ShadowAIPolicyEditor policy={null} />

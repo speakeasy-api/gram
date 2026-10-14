@@ -162,10 +162,6 @@ function WatchdogContent(): JSX.Element {
   const groupModeParam = searchParams.get("group");
   const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScopedFlag.status === "enabled";
-  // Folded in, Shadow AI reports here: the tile counts the tools and servers
-  // still waiting on an access decision in the Shadow AI policy.
-  const shadowAIGuardrails =
-    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
   const requestedGroupMode = groupModeParam as SignalGroupMode;
   const groupMode: SignalGroupMode =
     GROUP_MODES.has(requestedGroupMode) &&
@@ -490,11 +486,7 @@ function WatchdogContent(): JSX.Element {
                   />
                 </Page.Toolbar>
               ) : null}
-              <KPIRow
-                data={data}
-                isLoading={signalsQuery.isLoading}
-                showUndecidedTools={shadowAIGuardrails}
-              />
+              <KPIRow data={data} isLoading={signalsQuery.isLoading} />
               {/* The exposure bar doubles as the category filter control, so
                   it hides with the other filter controls while a selection is
                   active. */}
@@ -785,11 +777,9 @@ type SignalsData = NonNullable<ReturnType<typeof useRiskSignals>["data"]>;
 function KPIRow({
   data,
   isLoading,
-  showUndecidedTools,
 }: {
   data: SignalsData | undefined;
   isLoading: boolean;
-  showUndecidedTools: boolean;
 }): JSX.Element {
   if (!data && isLoading) {
     return (
@@ -798,7 +788,7 @@ function KPIRow({
         <StatTileSkeleton />
         <StatTileSkeleton />
         <StatTileSkeleton />
-        {showUndecidedTools ? <StatTileSkeleton /> : null}
+        <StatTileSkeleton />
       </StatTileGroup>
     );
   }
@@ -849,7 +839,7 @@ function KPIRow({
         icon="users"
         comparisonLabel="vs previous period"
       />
-      {showUndecidedTools ? <UndecidedToolsTile /> : null}
+      <UndecidedToolsTile />
     </StatTileGroup>
   );
 }
