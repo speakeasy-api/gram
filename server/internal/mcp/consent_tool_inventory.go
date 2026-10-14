@@ -53,10 +53,12 @@ const (
 var errConsentInventoryUnavailable = errors.New("consent tool inventory store unavailable")
 
 // consentInventoryTool is one captured tool: name plus the known annotation
-// values whose raw hints are explicitly true.
+// values whose raw hints are explicitly true. Source names the member server
+// a gateway tool comes from and is empty for every other endpoint.
 type consentInventoryTool struct {
 	Name        string   `json:"name"`
 	Annotations []string `json:"annotations"`
+	Source      string   `json:"source,omitempty"`
 }
 
 // consentToolInventory is the per-(state, attempt) snapshot. It accumulates

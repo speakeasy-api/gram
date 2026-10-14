@@ -188,6 +188,9 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	r.Header.Del(consentAttemptHeader)
 	r.Header.Del("Cookie")
 
+	if endpoint.MetaMcpServerID.Valid {
+		return s.serveConsentGatewayMCP(w, r, endpoint, challengeState, draft)
+	}
 	if endpoint.ToolsetID.Valid {
 		return s.serveConsentToolsetMCP(w, r, endpoint, challengeState, draft)
 	}
@@ -694,7 +697,8 @@ func consentRoleHiddenMeta(hidden []string) map[string]any {
 }
 
 // consentWireTools maps captured tools to the standard MCP wire shape:
-// names plus explicitly-true annotation hints. Consent renders nothing
+// names plus explicitly-true annotation hints, and a gateway tool's source
+// server in _meta. Consent renders nothing
 // else, so descriptions and input schemas are deliberately replaced by a
 // permissive placeholder schema.
 func consentWireTools(tools []consentInventoryTool) []map[string]any {
@@ -706,6 +710,9 @@ func consentWireTools(tools []consentInventoryTool) []map[string]any {
 		}
 		if hints := consentHintsFromAnnotations(tool.Annotations); hints != nil {
 			entry["annotations"] = hints
+		}
+		if tool.Source != "" {
+			entry["_meta"] = map[string]any{consentToolSourceMetaKey: tool.Source}
 		}
 		wire = append(wire, entry)
 	}

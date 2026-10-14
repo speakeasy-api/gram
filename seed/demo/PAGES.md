@@ -342,3 +342,9 @@ No Stripe subscription, promotion, or local billing settings are seeded for it.
 Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.
 
 The seeded gateway uses Progressive discovery. Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.
+
+### Gateway tool picker
+
+Browser verification: [~] — follow check 31 in `seed/demo/verify.md`.
+
+Consent screens offer the tool picker. On the Acme Agent Gateway it groups the members' tools by server, and the approved choice limits the connection in every discovery mode.

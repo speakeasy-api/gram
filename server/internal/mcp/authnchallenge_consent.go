@@ -691,13 +691,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
-	// Only modern endpoints can author per-tool consent: legacy and meta-MCP
-	// endpoints remain unrestricted-only, and toolset-fronting servers qualify
-	// only when every tool is representable in the island. The island owns
+	// Only modern endpoints can author per-tool consent: legacy endpoints
+	// remain unrestricted-only, and toolset-fronting servers qualify only when
+	// every tool is representable in the island. The island owns
 	// approve-button enabling, so unavailable checks must hide it rather than
 	// prevent unrestricted approval.
 	showToolsIsland := false
-	if !challengeState.FirstParty {
+	if !challengeState.FirstParty && focusServer == "" {
 		var eligibilityErr error
 		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
 		if eligibilityErr != nil {
@@ -1061,7 +1061,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		Endpoint:                    &grantEndpoint,
 		AgentAuthorization:          agentAuthorization,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
-		ToolSelection:               toolSelection,
+		ToolSelection:               legacyToolSelection(toolSelection, toolPolicy),
 		SignInID:                    nil,
 		GatewayPolicy:               toolPolicy,
 		CreatedAt:                   time.Now(),

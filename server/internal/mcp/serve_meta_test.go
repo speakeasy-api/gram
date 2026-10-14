@@ -730,7 +730,7 @@ func TestWellKnown_MetaEndpoint_NoIssuer_NotFound(t *testing.T) {
 // runtime), so the transport answers NotFound — not the BadRequest a
 // missing-consent-headers request would otherwise get, and never the
 // "neither toolset nor mcp server backend" 500.
-func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
+func TestHandleConsentMCP_MetaEndpoint_RequiresConsentCredentials(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -753,7 +753,7 @@ func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code, "gateways reach the consent transport, which requires its own credentials")
 }
 
 // TestServePublic_MetaEndpoint_Initialize_Negotiation pins the negotiation

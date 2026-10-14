@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -63,27 +64,22 @@ func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, 
 	return results
 }
 
-// listDirectGatewayTools exposes qualified member tools through the same
-// permission-filtered catalogs used by Progressive discovery. A member that
-// cannot be reached or is not connected for the caller is left out, as
-// Progressive does; a malformed member catalog fails the whole listing.
-func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logger, endpoint *mcpendpointsrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, req *rawRequest) (json.RawMessage, error) {
-	var params struct {
-		Cursor string `json:"cursor"`
-	}
-	if len(req.Params) > 0 {
-		if err := json.Unmarshal(req.Params, &params); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid tools/list parameters")
-		}
-	}
-	if len(params.Cursor) > 512 {
-		return nil, oops.E(oops.CodeInvalid, nil, "invalid tool listing cursor")
-	}
-	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, server.ID, endpoint.ProjectID)
+// gatewayTool is one member tool under its gateway-qualified name.
+type gatewayTool struct {
+	entry  *toolListEntry
+	member metaMember
+}
+
+// collectGatewayTools resolves every member's permission-filtered catalog
+// under gateway-qualified names. Members the caller cannot see, cannot reach
+// or has not connected are skipped, as Progressive does; any other member
+// failure, or a malformed member catalog, fails the whole inventory.
+func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, metaServerID, projectID uuid.UUID, gate *metaGateContext) ([]gatewayTool, error) {
+	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, metaServerID, projectID)
 	if err != nil {
 		return nil, err
 	}
-	tools := make([]*toolListEntry, 0)
+	tools := make([]gatewayTool, 0)
 	names := map[string]bool{}
 	described := s.describeMetaMembers(ctx, logger, gate, members)
 	for i, member := range members {
@@ -109,11 +105,36 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 				return nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
 			}
 			names[qualified.Name] = true
-			tools = append(tools, &qualified)
+			tools = append(tools, gatewayTool{entry: &qualified, member: member})
 			if len(tools) > 10000 {
 				return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
 			}
 		}
+	}
+	return tools, nil
+}
+
+// listDirectGatewayTools exposes qualified member tools through the same
+// permission-filtered catalogs used by Progressive discovery.
+func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logger, endpoint *mcpendpointsrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, req *rawRequest) (json.RawMessage, error) {
+	var params struct {
+		Cursor string `json:"cursor"`
+	}
+	if len(req.Params) > 0 {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid tools/list parameters")
+		}
+	}
+	if len(params.Cursor) > 512 {
+		return nil, oops.E(oops.CodeInvalid, nil, "invalid tool listing cursor")
+	}
+	inventory, err := s.collectGatewayTools(ctx, logger, server.ID, endpoint.ProjectID, gate)
+	if err != nil {
+		return nil, err
+	}
+	tools := make([]*toolListEntry, 0, len(inventory))
+	for _, tool := range inventory {
+		tools = append(tools, tool.entry)
 	}
 	slices.SortFunc(tools, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
 	catalogBytes, err := json.Marshal(tools)

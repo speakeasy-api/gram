@@ -112,6 +112,9 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 }
 
 func (s *Service) consentToolPickerEligible(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	if endpoint.MetaMcpServerID.Valid {
+		return !endpoint.IsOrganizationGateway(), nil
+	}
 	if !endpoint.McpServerID.Valid {
 		return false, nil
 	}
