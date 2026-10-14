@@ -1086,18 +1086,20 @@ func (s *Service) UpdatePluginServer(ctx context.Context, payload *gen.UpdatePlu
 	}
 
 	if err := s.audit.LogPluginServerUpdate(ctx, tx, audit.LogPluginServerUpdateEvent{
-		OrganizationID:    ac.ActiveOrganizationID,
-		ProjectID:         *ac.ProjectID,
-		Actor:             urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName:  ac.Email,
-		ActorSlug:         nil,
-		PluginID:          plugin.ID,
-		PluginName:        plugin.Name,
-		PluginSlug:        plugin.Slug,
-		ServerID:          row.ID,
-		ServerDisplayName: row.DisplayName,
-		ServerPolicy:      row.Policy,
-		ServerSortOrder:   row.SortOrder,
+		OrganizationID:     ac.ActiveOrganizationID,
+		ProjectID:          *ac.ProjectID,
+		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		ActorDisplayName:   ac.Email,
+		ActorSlug:          nil,
+		PluginID:           plugin.ID,
+		PluginName:         plugin.Name,
+		PluginSlug:         plugin.Slug,
+		ServerID:           row.ID,
+		ServerDisplayName:  row.DisplayName,
+		ServerPolicy:       row.Policy,
+		ServerSortOrder:    row.SortOrder,
+		McpServerURN:       nil,
+		PreviousToolsetURN: nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit log plugin server update").LogError(ctx, s.logger)
 	}
