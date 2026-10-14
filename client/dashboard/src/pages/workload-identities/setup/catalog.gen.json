@@ -385,6 +385,359 @@
           ]
         }
       ]
+    },
+    {
+      "key": "github-actions",
+      "display_name": "GitHub Actions",
+      "description": "Let GitHub Actions workflows in a repository call your MCP servers, with no Speakeasy secret stored in GitHub.",
+      "icon": "/access-hub/github-actions.svg",
+      "enabled": true,
+      "issuer": {
+        "value": "https://token.actions.githubusercontent.com",
+        "visibility": "hidden"
+      },
+      "jwks_uri": {
+        "value": "https://token.actions.githubusercontent.com/.well-known/jwks",
+        "visibility": "hidden"
+      },
+      "variables": [
+        {
+          "key": "owner",
+          "tier": "rule",
+          "label": "Repository owner",
+          "help": "The user or organization the repository belongs to, as in github.com/OWNER/REPO.",
+          "placeholder": "your-org",
+          "pattern": "[A-Za-z0-9-]+",
+          "pattern_message": "An owner is letters, numbers and hyphens."
+        },
+        {
+          "key": "owner_id",
+          "tier": "rule",
+          "label": "Owner ID",
+          "help": "The owner's numeric ID, the number after OWNER@ in the subject.",
+          "placeholder": "12345678",
+          "pattern": "[0-9]+",
+          "pattern_message": "An owner ID is a number."
+        },
+        {
+          "key": "repo",
+          "tier": "rule",
+          "label": "Repository name",
+          "help": "The repository's name, as in github.com/OWNER/REPO.",
+          "placeholder": "your-repo",
+          "pattern": "[A-Za-z0-9._-]+",
+          "pattern_message": "A repository name is letters, numbers, \".\", \"_\" and \"-\"."
+        },
+        {
+          "key": "repo_id",
+          "tier": "rule",
+          "label": "Repository ID",
+          "help": "The repository's numeric ID, the number after REPO@ in the subject.",
+          "placeholder": "123456789",
+          "pattern": "[0-9]+",
+          "pattern_message": "A repository ID is a number."
+        }
+      ],
+      "subject": {
+        "template": "repo:{owner}@{owner_id}/{repo}@{repo_id}:",
+        "wildcard": true
+      },
+      "steps": [
+        {
+          "id": "before",
+          "title": "Before you start",
+          "phase": "collect",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "You need:\n\n- **Admin access to the repository**, to add workflows and Actions variables.\n- **A repository created after July 15, 2026**, or one whose tokens already use ID-bearing subjects. Older repositories sign tokens with name-based subjects, which this setup does not support yet.\n- **A Speakeasy MCP server** reached on a Speakeasy host, not a custom domain.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "text",
+              "markdown": "The workflow requests a short-lived token from GitHub and exchanges it with Speakeasy for each run. Nothing secret is stored in GitHub.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "link",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "https://docs.github.com/en/actions/reference/security/oidc",
+              "label": "GitHub docs: OpenID Connect reference",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "repository",
+          "title": "Your repository",
+          "phase": "collect",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "GitHub doesn't show a repository's numeric IDs on its pages, so read them from a token one of its workflows receives. Use either way below.\n\n**In the browser.** In the repository, open **Actions → New workflow → set up a workflow yourself**, paste this, and commit it. Then open the workflow under **Actions**, click **Run workflow**, and open the run's log.\n\n```yaml\nname: Show Speakeasy subject\non: workflow_dispatch\npermissions:\n  id-token: write\njobs:\n  subject:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Show this repository's subject\n        run: |\n          token=$(curl -sS --fail-with-body \\\n            -H \"Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN\" \\\n            \"$ACTIONS_ID_TOKEN_REQUEST_URL\" | jq -r .value)\n          echo \"::add-mask::$token\"\n          jq -nR --arg t \"$token\" '$t | split(\".\")[1]\n            | gsub(\"-\";\"+\") | gsub(\"_\";\"/\") | @base64d | fromjson\n            | {\"Subject\": .sub,\n               \"Repository owner\": .repository_owner,\n               \"Owner ID\": .repository_owner_id,\n               \"Repository name\": (.repository | split(\"/\")[1]),\n               \"Repository ID\": .repository_id}'\n```\n\n**With the GitHub CLI.** Run this, replacing OWNER and REPO. Each ID follows an `@` in `sub_claim_prefix`.\n\n```sh\ngh api repos/OWNER/REPO/actions/oidc/customization/sub\n```\n\nEither way, the subject must start `repo:OWNER@OWNER_ID/REPO@REPO_ID:`. If it has no IDs after the `@` signs, or starts any other way, the repository uses a subject format this setup doesn't support yet.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "field",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "owner",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "field",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "owner_id",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "field",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "repo",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "field",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "repo_id",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "text",
+              "markdown": "This rule admits **every workflow run in the repository**: each branch, tag, environment and pull request run. Anyone who can push a workflow to the repository can use it. Choose an agent whose policy reaches only what those workflows need.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "subject_rule",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "agent",
+          "title": "Choose an agent and connect",
+          "phase": "create",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "Every workflow run in this repository acts under the agent you choose, and can do only what its policy allows. Connecting saves the access rule from the previous step with this agent. You can remove it from the Access Hub at any time, and the next run is refused.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "agent_picker",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "tags",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "variables",
+          "title": "Add the repository variables",
+          "phase": "connect",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "In the repository, open **Settings → Secrets and variables → Actions**, choose the **Variables** tab, and add each variable below with **New repository variable**. None of them is secret.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "computed_status",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "SPEAKEASY_AUDIENCE",
+              "variable": "",
+              "value": "issuer_url",
+              "help": "The audience the workflow requests its GitHub token for. Speakeasy refuses a token issued for any other audience."
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "SPEAKEASY_TOKEN_ENDPOINT",
+              "variable": "",
+              "value": "token_endpoint",
+              "help": ""
+            },
+            {
+              "type": "checklist_item",
+              "markdown": "The URL of the MCP server the workflow calls, shown on the server's page in Speakeasy.",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "SPEAKEASY_MCP_URL",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "workflow",
+          "title": "Add the workflow step",
+          "phase": "connect",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "Give the job permission to request a GitHub token, then add a step that exchanges it for a Speakeasy access token. Later steps in the job read it from `SPEAKEASY_ACCESS_TOKEN`.\n\n```yaml\njobs:\n  speakeasy:\n    runs-on: ubuntu-latest\n    permissions:\n      id-token: write\n      contents: read\n    steps:\n      - name: Get a Speakeasy access token\n        env:\n          AUDIENCE: ${{ vars.SPEAKEASY_AUDIENCE }}\n          TOKEN_ENDPOINT: ${{ vars.SPEAKEASY_TOKEN_ENDPOINT }}\n        run: |\n          set -euo pipefail\n          oidc=$(curl -sS --fail-with-body \\\n            -H \"Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN\" \\\n            \"$ACTIONS_ID_TOKEN_REQUEST_URL\u0026audience=$(jq -rn --arg a \"$AUDIENCE\" '$a|@uri')\" \\\n            | jq -r .value)\n          echo \"::add-mask::$oidc\"\n          token=$(curl -sS --fail-with-body \"$TOKEN_ENDPOINT\" \\\n            --data-urlencode \"grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer\" \\\n            --data-urlencode \"assertion=$oidc\" \\\n            | jq -r .access_token)\n          echo \"::add-mask::$token\"\n          echo \"SPEAKEASY_ACCESS_TOKEN=$token\" \u003e\u003e \"$GITHUB_ENV\"\n\n      - name: List the MCP server's tools\n        env:\n          MCP_URL: ${{ vars.SPEAKEASY_MCP_URL }}\n        run: |\n          curl -sS --fail-with-body \"$MCP_URL\" \\\n            -H \"Authorization: Bearer $SPEAKEASY_ACCESS_TOKEN\" \\\n            -H \"Content-Type: application/json\" \\\n            -H \"Accept: application/json, text/event-stream\" \\\n            -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}'\n```\n\nThe access token lasts up to 15 minutes and cannot be refreshed. A job that runs longer repeats the first step, which requests a new GitHub token: each one can be exchanged only once.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        },
+        {
+          "id": "check",
+          "title": "Check it worked",
+          "phase": "connect",
+          "blocks": [
+            {
+              "type": "text",
+              "markdown": "Run the workflow. The second step prints the tools the agent's policy lets the workflow reach.\n\nIf the exchange answers `invalid_grant`, check that the run's repository matches the access rule and that `SPEAKEASY_AUDIENCE` matches the value above exactly.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            },
+            {
+              "type": "text",
+              "markdown": "Each run that signs in appears in **Sessions**, under GitHub Actions' issuer and the run's own subject, such as `repo:OWNER@OWNER_ID/REPO@REPO_ID:ref:refs/heads/main`.\n",
+              "src": "",
+              "alt": "",
+              "caption": "",
+              "href": "",
+              "label": "",
+              "variable": "",
+              "value": "",
+              "help": ""
+            }
+          ]
+        }
+      ]
     }
   ]
 }

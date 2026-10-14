@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -79,6 +80,36 @@ func TestEmbeddedClaudeTagPinsOneOrganization(t *testing.T) {
 	require.Equal(t, "wimse://identity.anthropic.com/org/{org_id}/agent/", claudeTag.Subject.Template)
 	require.True(t, claudeTag.Subject.Wildcard)
 	require.NotNil(t, claudeTag.Setup)
+}
+
+func TestEmbeddedGitHubActionsPinsOneRepositoryByID(t *testing.T) {
+	t.Parallel()
+
+	platforms, err := catalog.Embedded().Platforms(t.Context())
+	require.NoError(t, err)
+
+	var github *catalog.Platform
+	for i := range platforms {
+		if platforms[i].Key == "github-actions" {
+			github = &platforms[i]
+		}
+	}
+	require.NotNil(t, github)
+	require.Equal(t, "https://token.actions.githubusercontent.com", github.Issuer.Value)
+	require.Equal(t, "https://token.actions.githubusercontent.com/.well-known/jwks", github.JWKSURI.Value)
+	require.Equal(t, "repo:{owner}@{owner_id}/{repo}@{repo_id}:", github.Subject.Template)
+	require.True(t, github.Subject.Wildcard)
+	require.NotNil(t, github.Setup)
+
+	// A value holding a subject delimiter could move the stem past its own
+	// segment, such as an owner of "acme/app" admitting the acme/app repository
+	// under a different owner ID.
+	for _, variable := range github.Variables {
+		pattern := regexp.MustCompile("^(?:" + variable.Pattern + ")$")
+		for _, delimiter := range []string{":", "/", "@", "*"} {
+			require.False(t, pattern.MatchString("a"+delimiter+"b"), "%s admits %q", variable.Key, delimiter)
+		}
+	}
 }
 
 func TestParseAcceptsAValidPlatform(t *testing.T) {
