@@ -1,5 +1,8 @@
 name: "CLA Assistant"
-on:
+# pull_request_target is what lets the bot comment on and set statuses for PRs
+# from forks. It is safe here because no step checks out or runs PR code: the
+# only step is the CLA action, which reads PR metadata through the API.
+on: # zizmor: ignore[dangerous-triggers]
   issue_comment:
     types: [created]
   pull_request_target:
