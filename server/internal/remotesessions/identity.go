@@ -243,7 +243,8 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	if expect.subject != "" && claims.Subject != expect.subject {
 		return UpstreamIdentity{}, errIDTokenSubjectMismatch
 	}
-	// An empty expectation is a state minted before the nonce existed; bounded to the login-state TTL after rollout.
+	// An empty expectation is a login that did not request openid, so sent no
+	// nonce; the code exchange is still bound to it by PKCE.
 	if expect.nonce != "" && claimString(all, "nonce") != expect.nonce {
 		return UpstreamIdentity{}, errors.New("id token nonce does not match the authorize request")
 	}
