@@ -1,6 +1,7 @@
 package usersessions_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +11,8 @@ import (
 	projectgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -45,13 +48,7 @@ func TestGetAttachImpactBetweenPerServerIssuersOnDifferentHosts(t *testing.T) {
 	require.True(t, ok)
 	currentID := seedIssuer(t, ctx, ti, "impact-host-current")
 	candidateID := seedIssuer(t, ctx, ti, "impact-host-candidate")
-	updated, err := testrepo.New(ti.conn).SetUserSessionIssuerUseAuthenticationHostFixture(ctx, testrepo.SetUserSessionIssuerUseAuthenticationHostFixtureParams{
-		UseAuthenticationHost: true,
-		IssuerID:              candidateID,
-		OrganizationID:        authCtx.ActiveOrganizationID,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), updated)
+	useAuthenticationHost(t, ctx, ti, candidateID)
 	toolset := attachIssuerToolset(t, ctx, ti, *authCtx.ProjectID, currentID, "impact-host-toolset")
 
 	impact, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
@@ -60,6 +57,90 @@ func TestGetAttachImpactBetweenPerServerIssuersOnDifferentHosts(t *testing.T) {
 	// authentication host.
 	require.True(t, impact.ReauthorizationRequired)
 	require.True(t, impact.AuthorizationServerChanges)
+}
+
+// A custom domain keeps the server's own authorization server on the domain,
+// whichever host the issuer announces platform-host servers on.
+func TestGetAttachImpactBetweenPerServerIssuersOnCustomDomain(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	currentID := seedIssuer(t, ctx, ti, "impact-domain-current")
+	candidateID := seedIssuer(t, ctx, ti, "impact-domain-candidate")
+	useAuthenticationHost(t, ctx, ti, candidateID)
+	domainID := createCustomDomain(t, ctx, ti)
+	toolset := attachIssuerToolset(t, ctx, ti, projectID, currentID, "impact-domain-toolset")
+	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
+		CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, Slug: toolset.Slug, ProjectID: projectID,
+	}))
+
+	impact, err := ti.service.GetAttachImpact(ctx, &projectgen.GetAttachImpactPayload{ToolsetID: new(toolset.ID.String()), UserSessionIssuerID: new(candidateID.String())})
+	require.NoError(t, err)
+	require.True(t, impact.ReauthorizationRequired)
+	require.False(t, impact.AuthorizationServerChanges)
+
+	// An MCP server reached only through custom domains keeps its authorization
+	// server too, until it gains an address on the platform host.
+	serverID := attachIssuerMCPServer(t, ctx, ti, projectID, currentID, toolset, "impact-domain-server")
+	createMCPServerEndpoint(t, ctx, ti, projectID, serverID, uuid.NullUUID{UUID: domainID, Valid: true}, "impact-domain-endpoint")
+	payload := &projectgen.GetAttachImpactPayload{McpServerID: new(serverID.String()), UserSessionIssuerID: new(candidateID.String())}
+	impact, err = ti.service.GetAttachImpact(ctx, payload)
+	require.NoError(t, err)
+	require.False(t, impact.AuthorizationServerChanges)
+
+	createMCPServerEndpoint(t, ctx, ti, projectID, serverID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "impact-platform-endpoint")
+	impact, err = ti.service.GetAttachImpact(ctx, payload)
+	require.NoError(t, err)
+	require.True(t, impact.AuthorizationServerChanges)
+}
+
+// useAuthenticationHost opts an issuer in to announcing the authentication
+// host.
+func useAuthenticationHost(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	updated, err := testrepo.New(ti.conn).SetUserSessionIssuerUseAuthenticationHostFixture(ctx, testrepo.SetUserSessionIssuerUseAuthenticationHostFixtureParams{
+		UseAuthenticationHost: true,
+		IssuerID:              issuerID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), updated)
+}
+
+func createCustomDomain(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          uuid.NewString() + ".mcp.example.test",
+		IngressName:     pgtype.Text{},
+		CertSecretName:  pgtype.Text{},
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	return domain.ID
+}
+
+func createMCPServerEndpoint(t *testing.T, ctx context.Context, ti *testInstance, projectID, serverID uuid.UUID, customDomainID uuid.NullUUID, slug string) {
+	t.Helper()
+
+	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:       projectID,
+		CustomDomainID:  customDomainID,
+		McpServerID:     uuid.NullUUID{UUID: serverID, Valid: true},
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            slug,
+	})
+	require.NoError(t, err)
 }
 
 func TestGetAttachImpactOntoSharedIssuer(t *testing.T) {
