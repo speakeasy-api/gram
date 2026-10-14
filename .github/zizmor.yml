@@ -26,8 +26,6 @@ rules:
     disable: true
   github-app:
     disable: true
-  self-repository:
-    disable: true
   template-injection:
     disable: true
   undocumented-permissions:

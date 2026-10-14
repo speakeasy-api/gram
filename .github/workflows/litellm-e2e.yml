@@ -24,7 +24,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: ./.github/workflows/composite/go-mod-cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Install Go dependencies
         run: mise run install:go

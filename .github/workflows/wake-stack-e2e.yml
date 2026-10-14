@@ -83,7 +83,7 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: ./.github/workflows/composite/go-mod-cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       # `./zero --agent` would otherwise pick the ClickHouse migration engine
       # by prompting for an Atlas Pro login, on a runner with nobody to ask.
