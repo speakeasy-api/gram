@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
@@ -69,6 +70,13 @@ const (
 	// failureTTL suppresses repeated exchanges after a provider rejection,
 	// which an unconfigured tenant returns on every attempt.
 	failureTTL = 30 * time.Second
+
+	// recentKeyWindow is how long after a Speakeasy signing key is published
+	// a vendor may still verify against a key set that lacks it: the
+	// activation delay plus one vendor key set refresh. A compromise
+	// replacement signs at once, so its first assertions can be rejected for
+	// an unknown kid until the vendor refetches.
+	recentKeyWindow = internalsessionissuers.ActivationDelay + internalsessionissuers.CacheTTL
 
 	// releaseTimeout bounds the detached single-flight release.
 	releaseTimeout = 2 * time.Second
@@ -245,7 +253,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		if err := c.locks.Set(context.WithoutCancel(ctx), attemptKey, attemptResult{Outcome: outcome, FinishedAt: c.now()}, attemptResultTTL); err != nil {
 			logger.WarnContext(ctx, "record identity chaining attempt", attr.SlogCacheKey(attemptKey), attr.SlogError(err))
 		}
-		if outcome.cacheable() {
+		if outcome.cacheable() && !c.signedWithRecentKey(sel, outcome) {
 			if err := c.locks.Set(context.WithoutCancel(ctx), failureKey, outcome, failureTTL); err != nil {
 				logger.WarnContext(ctx, "record identity chaining failure", attr.SlogCacheKey(failureKey), attr.SlogError(err))
 			}
@@ -316,6 +324,14 @@ func cacheKey(prefix string, req Request, sel selection) string {
 	)
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\n")))
 	return prefix + ":" + hex.EncodeToString(digest[:])
+}
+
+// signedWithRecentKey reports a Speakeasy redemption rejection of an assertion
+// signed by a key the vendor may not have fetched yet. It is not cached, so
+// the next request retries as soon as the vendor sees the key.
+func (c *Chainer) signedWithRecentKey(sel selection, outcome Outcome) bool {
+	return sel.provider.Kind == remotesessions.EMAProviderSpeakeasy && outcome.Stage == StageRedemption &&
+		!sel.internalKeyPublishedAt.IsZero() && c.now().Sub(sel.internalKeyPublishedAt) < recentKeyWindow
 }
 
 // logAcquisitionFailure logs a failed attempt with the provider's error text.

@@ -114,6 +114,7 @@ func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Log
 	sel.email = result.Identity.Email
 	sel.internalIssuerVersion = status.Issuer.UpdatedAt.Time
 	sel.internalKeyID = status.ActiveKey.ID
+	sel.internalKeyPublishedAt = status.ActiveKey.CreatedAt.Time
 	sel.audience = sel.issuer
 	return success
 }

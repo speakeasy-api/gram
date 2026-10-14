@@ -291,6 +291,45 @@ func TestProviders_AllProvidersFailReportsEachReason(t *testing.T) {
 	require.Equal(t, 1, src.issued)
 }
 
+// publishedKeySource is a failingSource whose signing key was published at
+// publishedAt.
+type publishedKeySource struct {
+	*failingSource
+	publishedAt time.Time
+}
+
+func (s publishedKeySource) authorize(ctx context.Context, logger *slog.Logger, req Request, sel *selection) Outcome {
+	sel.internalKeyPublishedAt = s.publishedAt
+	return s.failingSource.authorize(ctx, logger, req, sel)
+}
+
+func TestProviders_RecentKeyRedemptionFailureIsNotCached(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		publishedAt time.Time
+		issues      int
+	}{
+		{name: "recent key", publishedAt: time.Now(), issues: 2},
+		{name: "key past the vendor refresh window", publishedAt: time.Now().Add(-recentKeyWindow - time.Minute), issues: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newDevIDPFixture(t, devIDPOptions{})
+			src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageRedemption, ReasonInvalidGrant, ConfidenceUnknown, false), issued: 0}
+			useSpeakeasySource(f, publishedKeySource{failingSource: src, publishedAt: tc.publishedAt})
+			setPolicy(t, f, f.req.OrganizationID, speakeasy(seedSpeakeasyIssuer(t, f, f.req.OrganizationID)))
+
+			_, first := f.chainer.Acquire(t.Context(), f.req)
+			require.Equal(t, ReasonInvalidGrant, first.Reason)
+			_, second := f.chainer.Acquire(t.Context(), f.req)
+			require.Equal(t, ReasonInvalidGrant, second.Reason)
+			require.Equal(t, tc.issues == 1, second.Cached)
+			require.Equal(t, tc.issues, src.issued)
+		})
+	}
+}
+
 func TestProviders_AnOrderWithNoServingProviderIsNotServed(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

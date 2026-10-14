@@ -13,14 +13,17 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-jose/go-jose/v4"
+	"github.com/google/uuid"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goahttp "goa.design/goa/v3/http"
 	"golang.org/x/sync/singleflight"
@@ -65,6 +68,12 @@ const (
 	documentFillLimit = 16
 	// A read gets this long whatever its callers do.
 	documentFillTimeout = 2 * time.Second
+	// A cached JWKS older than this is checked against a fingerprint of the
+	// issuer's key rows before it is served, so a replacement or revocation
+	// reaches every process within about a second while the full read still
+	// happens once per documentCacheTTL. The check shares the fill limit;
+	// when it is busy or fails, the cached document is served until its TTL.
+	keysRevalidateAfter = time.Second
 )
 
 // organizationIDPattern bounds a path organization id before it reaches a
@@ -145,6 +154,7 @@ func AttachDiscovery(mux goahttp.Muxer, db *pgxpool.Pool, logger *slog.Logger) {
 		missing: expirable.NewLRU[documentKey, struct{}](missingCacheSize, nil, documentCacheTTL),
 		flights: singleflight.Group{},
 		fills:   make(chan struct{}, documentFillLimit),
+		now:     time.Now,
 	}
 	const path = "/oauth/idp/org/{organizationID}"
 	for _, route := range []string{
@@ -172,6 +182,7 @@ type handler struct {
 	flights singleflight.Group
 	// fills bounds concurrent reads across documents.
 	fills chan struct{}
+	now   func() time.Time
 }
 
 type documentKey struct {
@@ -180,11 +191,20 @@ type documentKey struct {
 }
 
 // cachedDocument is a rendered document; a nil body means no issuer and is
-// cached in missing instead.
+// cached in missing instead. A JWKS also records the key fingerprint read
+// before its keys and when that fingerprint was last confirmed.
 type cachedDocument struct {
 	body       []byte
 	renderedAt time.Time
+	version    keysVersion
+	checkedAt  *atomic.Int64
 }
+
+// missingDocument stands for an organization with no issuer.
+var missingDocument = cachedDocument{body: nil, renderedAt: time.Time{}, version: keysVersion{JsonWebKeySetID: uuid.Nil, KeyCount: 0, KeysUpdatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}}, checkedAt: nil}
+
+// keysVersion fingerprints an issuer's key rows; any key write changes it.
+type keysVersion = repo.GetOrganizationEMAIssuerKeysVersionRow
 
 func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error {
 	ctx := r.Context()
@@ -198,9 +218,13 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 		return oops.E(oops.CodeNotFound, nil, "issuer not found")
 	}
 	cached, ok := h.cache.Get(key)
+	if ok && key.keys && !h.keysCurrent(ctx, key, cached) {
+		h.cache.Remove(key)
+		ok = false
+	}
 	if !ok {
 		if _, missing := h.missing.Get(key); missing {
-			cached, ok = cachedDocument{body: nil, renderedAt: time.Time{}}, true
+			cached, ok = missingDocument, true
 		}
 	}
 	if !ok {
@@ -210,7 +234,7 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 				return cached, nil
 			}
 			if _, missing := h.missing.Get(key); missing {
-				return cachedDocument{body: nil, renderedAt: time.Time{}}, nil
+				return missingDocument, nil
 			}
 			select {
 			case h.fills <- struct{}{}:
@@ -222,14 +246,13 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 			// cancellation but keeps its own deadline.
 			fillCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), documentFillTimeout)
 			defer cancel()
-			body, err := h.render(fillCtx, key)
+			document, err := h.render(fillCtx, key)
 			switch {
 			case errors.Is(err, ErrNotFound):
 			case err != nil:
 				return nil, err
 			}
-			document := cachedDocument{body: body, renderedAt: time.Now()}
-			if body == nil {
+			if document.body == nil {
 				h.missing.Add(key, struct{}{})
 			} else {
 				h.cache.Add(key, document)
@@ -280,35 +303,98 @@ func transientDatabaseError(err error) bool {
 	return pgconn.SafeToRetry(err)
 }
 
+// keysCurrent reports whether a cached JWKS may be served: it was confirmed
+// within keysRevalidateAfter, or its key fingerprint still matches. A busy
+// process or a failed check keeps serving it; documentCacheTTL still bounds
+// it.
+func (h *handler) keysCurrent(ctx context.Context, key documentKey, cached cachedDocument) bool {
+	now := h.now()
+	if now.Sub(time.Unix(0, cached.checkedAt.Load())) < keysRevalidateAfter {
+		return true
+	}
+	loaded, err, _ := h.flights.Do("version/"+key.organizationID, func() (any, error) {
+		select {
+		case h.fills <- struct{}{}:
+			defer func() { <-h.fills }()
+		default:
+			return nil, errDiscoveryBusy
+		}
+		checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), documentFillTimeout)
+		defer cancel()
+		version, err := repo.New(h.db).GetOrganizationEMAIssuerKeysVersion(checkCtx, key.organizationID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load issuer key version: %w", err)
+		}
+		return version, nil
+	})
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return false
+	case errors.Is(err, errDiscoveryBusy):
+		return true
+	case err != nil:
+		h.logger.WarnContext(ctx, "issuer key version check failed; serving the cached key set", attr.SlogError(err))
+		cached.checkedAt.Store(now.UnixNano())
+		return true
+	}
+	version, ok := loaded.(keysVersion)
+	if !ok || !sameKeysVersion(version, cached.version) {
+		return false
+	}
+	cached.checkedAt.Store(now.UnixNano())
+	return true
+}
+
+func sameKeysVersion(a, b keysVersion) bool {
+	return a.JsonWebKeySetID == b.JsonWebKeySetID && a.KeyCount == b.KeyCount && a.KeysUpdatedAt.Valid == b.KeysUpdatedAt.Valid && a.KeysUpdatedAt.Time.Equal(b.KeysUpdatedAt.Time)
+}
+
 // render builds a document. Metadata needs only the issuer; keys are read
-// for the JWKS document alone.
-func (h *handler) render(ctx context.Context, key documentKey) ([]byte, error) {
+// for the JWKS document alone, after their fingerprint, so a write between
+// the two reads makes the next check re-render rather than miss it.
+func (h *handler) render(ctx context.Context, key documentKey) (cachedDocument, error) {
+	none := missingDocument
 	var document any
+	var version keysVersion
 	if key.keys {
+		var err error
+		version, err = repo.New(h.db).GetOrganizationEMAIssuerKeysVersion(ctx, key.organizationID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return none, ErrNotFound
+		case err != nil:
+			return none, fmt.Errorf("load issuer key version: %w", err)
+		}
 		_, set, err := PublicKeys(ctx, h.db, key.organizationID)
 		if err != nil {
-			return nil, err
+			return none, err
 		}
 		document = set
 	} else {
 		issuer, err := repo.New(h.db).GetOrganizationInternalSessionIssuerURL(ctx, key.organizationID)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return nil, ErrNotFound
+			return none, ErrNotFound
 		case err != nil:
-			return nil, fmt.Errorf("load issuer: %w", err)
+			return none, fmt.Errorf("load issuer: %w", err)
 		}
 		jwksURI, err := JWKSURI(issuer)
 		if err != nil {
-			return nil, err
+			return none, err
 		}
 		document = discoveryDocument{Issuer: issuer, JWKSURI: jwksURI}
 	}
 	body, err := json.Marshal(document)
 	if err != nil {
-		return nil, fmt.Errorf("encode issuer document: %w", err)
+		return none, fmt.Errorf("encode issuer document: %w", err)
 	}
-	return body, nil
+	renderedAt := h.now()
+	checkedAt := new(atomic.Int64)
+	checkedAt.Store(renderedAt.UnixNano())
+	return cachedDocument{body: body, renderedAt: renderedAt, version: version, checkedAt: checkedAt}, nil
 }
 
 // PublicKeys returns the organization's pinned issuer and its published keys:

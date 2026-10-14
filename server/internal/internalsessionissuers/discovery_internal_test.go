@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -44,6 +46,7 @@ func saturatedHandler(t *testing.T) *handler {
 		missing: expirable.NewLRU[documentKey, struct{}](missingCacheSize, nil, documentCacheTTL),
 		flights: singleflight.Group{},
 		fills:   make(chan struct{}, 1),
+		now:     time.Now,
 	}
 	h.fills <- struct{}{}
 	return h
@@ -89,4 +92,35 @@ func TestDiscoveryTreatsLostDatabaseConnectionsAsRetryable(t *testing.T) {
 	}
 	require.False(t, transientDatabaseError(&pgconn.PgError{Code: "23505"}))
 	require.False(t, transientDatabaseError(errors.New("decode issuer keys")))
+}
+
+func TestDiscoveryKeepsServingACachedKeySetWhileTheCheckIsBusy(t *testing.T) {
+	t.Parallel()
+	h := saturatedHandler(t)
+	now := time.Now()
+	h.now = func() time.Time { return now }
+	checkedAt := new(atomic.Int64)
+	checkedAt.Store(now.Add(-keysRevalidateAfter).UnixNano())
+	key := documentKey{organizationID: "org_keys", keys: true}
+	h.cache.Add(key, cachedDocument{body: []byte(`{"keys":[]}`), renderedAt: now.Add(-keysRevalidateAfter), version: keysVersion{}, checkedAt: checkedAt})
+
+	response := httptest.NewRecorder()
+	require.NoError(t, h.serve(response, discoveryRequest("org_keys"), true))
+	require.Equal(t, http.StatusOK, response.Code, "a check that can't get a fill slot serves the cached key set until its TTL")
+	require.JSONEq(t, `{"keys":[]}`, response.Body.String())
+	require.Equal(t, now.Add(-keysRevalidateAfter).UnixNano(), checkedAt.Load(), "a skipped check is retried on the next request")
+}
+
+func TestDiscoveryServesARecentlyCheckedKeySetWithoutTheDatabase(t *testing.T) {
+	t.Parallel()
+	h := saturatedHandler(t)
+	now := time.Now()
+	h.now = func() time.Time { return now }
+	checkedAt := new(atomic.Int64)
+	checkedAt.Store(now.UnixNano())
+	h.cache.Add(documentKey{organizationID: "org_keys", keys: true}, cachedDocument{body: []byte(`{"keys":[]}`), renderedAt: now, version: keysVersion{}, checkedAt: checkedAt})
+
+	response := httptest.NewRecorder()
+	require.NoError(t, h.serve(response, discoveryRequest("org_keys"), true))
+	require.Equal(t, http.StatusOK, response.Code)
 }

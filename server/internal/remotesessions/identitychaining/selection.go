@@ -47,9 +47,11 @@ type selection struct {
 	// Speakeasy provenance snapshots fence issuer and sign-in changes during exchange.
 	internalIssuerVersion time.Time
 	internalKeyID         uuid.UUID
-	userSessionID         uuid.UUID
-	signInID              uuid.UUID
-	email                 string
+	// internalKeyPublishedAt is when the signing key was first published.
+	internalKeyPublishedAt time.Time
+	userSessionID          uuid.UUID
+	signInID               uuid.UUID
+	email                  string
 
 	// audience is the ID-JAG audience: an administrator-confirmed Okta
 	// resource app audience when one exists, else the resource authorization
@@ -163,7 +165,7 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		trustedClientID:       uuid.Nil,
 		provider:              remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
 		audience:              "",
-		internalIssuerVersion: time.Time{}, internalKeyID: uuid.Nil, userSessionID: uuid.Nil, signInID: uuid.Nil, email: "",
+		internalIssuerVersion: time.Time{}, internalKeyID: uuid.Nil, internalKeyPublishedAt: time.Time{}, userSessionID: uuid.Nil, signInID: uuid.Nil, email: "",
 	}, success
 }
 
