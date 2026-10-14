@@ -20,10 +20,10 @@ jobs:
   CLAAssistant:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
-      actions: write
-      contents: write
-      pull-requests: write
-      statuses: write
+      actions: write # the action re-runs this workflow after a signature
+      contents: write # commits signatures to the cla-signatures branch
+      pull-requests: write # comments on and locks pull requests
+      statuses: write # sets the CLA commit status
     steps:
       - name: "CLA Assistant"
         if: (github.event.comment.body == 'recheck' || github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA') || github.event_name == 'pull_request_target'

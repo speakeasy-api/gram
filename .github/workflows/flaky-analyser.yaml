@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: read
+  actions: read # reads past workflow runs and their logs
   contents: read
 
 jobs:
