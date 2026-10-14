@@ -126,10 +126,8 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	// A shadow request publishes exactly like an enforcing one; the marker on
 	// each finding is what keeps the rows out of every user-facing read path
 	// while the comparison query can still join them with the legacy
-	// engines' rows for the same message. Findings for the compared sources
-	// (prompt_injection) carry the marker in every mode: their legacy engine
-	// enforces, so the model's verdict is a comparison record even on an
-	// enforcing request.
+	// engines' rows for the same message. Compared-source findings carry the
+	// marker in every mode: their legacy engine enforces.
 	meta := scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
 		ChatMessageID:     m.GetChatMessageId(),
@@ -180,9 +178,8 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.LLMAnalysis, _ gcp.Messa
 	return nil
 }
 
-// splitEnforcedFindings separates the findings the request's engine mode may
-// enforce (enforced sources and the dead-letter sentinel) from those of the
-// compared sources, which are published as shadow records in every mode.
+// splitEnforcedFindings separates enforceable findings (enforced sources and
+// the sentinel) from compared-source findings, which are always shadow.
 func splitEnforcedFindings(findings []scanners.Finding) (enforced, compared []scanners.Finding) {
 	enforced = make([]scanners.Finding, 0, len(findings))
 	for _, f := range findings {

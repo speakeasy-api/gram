@@ -488,11 +488,8 @@ func TestScanner_ShadowModeDestructiveOnlyPolicyRecordsNoComparison(t *testing.T
 	require.Equal(t, map[string]int64{"ENFORCEMENT_SCANNER_LLM_ANALYZER/shadow": 1}, degradedFailModes(t, reader))
 }
 
-// TestScanner_LLMModePromptInjectionPolicyKeepsCascade pins that the
-// prompt-injection cascade enforces in the llm mode: the model's
-// prompt_injection verdict is only compared, so a prompt-injection-only policy
-// enforces from its classifier while the lane's verdict is recorded against
-// it.
+// In llm mode a prompt-injection policy enforces from its cascade; the
+// lane's verdict is only compared.
 func TestScanner_LLMModePromptInjectionPolicyKeepsCascade(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -518,18 +515,15 @@ func TestScanner_LLMModePromptInjectionPolicyKeepsCascade(t *testing.T) {
 	require.Equal(t, map[string]int64{"matched": 1}, outcomeCounts(t, reader, "risk.llm.policy_evaluations", injectionID.String()))
 }
 
-// TestScanner_LLMModeMixedPolicyComparesOnlyPromptInjection pins the llm
-// mode with both an enforced and a compared source on one policy: the lane
-// enforces secrets, the cascade enforces prompt injection, and only the
-// prompt-injection verdict is compared.
+// One policy with an enforced and a compared source: the lane enforces
+// secrets, the cascade enforces prompt injection, only the latter is compared.
 func TestScanner_LLMModeMixedPolicyComparesOnlyPromptInjection(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 	policyID := insertRealtimeEnforcingPolicy(t, ti, ctx, "everything", []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePromptInjection}, nil, "block")
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 
-	// The model flags prompt injection only; the classifier flags everything
-	// it sees, so both engines agree on prompt injection.
+	// Both engines flag prompt injection.
 	dispatcher := perLaneDispatcher(nil, func(lane enforcereply.Lane) *riskv1.EnforcementReply {
 		return okReply(lane, llmReplyFinding(llmanalyzer.RulePromptInjection, "prompt_injection", "Instruction override."))
 	})

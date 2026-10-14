@@ -3,20 +3,13 @@
 // sources and the risks the model scores.
 //
 // feature.FlagRiskLLMAnalyzer selects an organization's engine mode. In the
-// llm mode the analyzer replaces the gitleaks, Presidio, destructive-tool and
-// CLI-destructive engines (EnforcedSources) on both the realtime enforcement
-// lane and the batch flag lane; the prompt-injection cascade keeps enforcing
-// in every mode and the model's prompt_injection verdict is only compared
-// (ComparedSources). In the shadow mode every legacy engine keeps enforcing
-// and the analyzer runs on the same traffic so its verdicts can be compared,
-// never enforced. Policies keep their configured sources in every mode: each
-// covered source maps to one of the model's risk keys, a single model call
-// scores every key, and a positive score becomes a finding carrying the rule
-// id of the policy source it was scored for. Two sources may share a risk key
-// (destructive_tool and cli_destructive both score destructive_tool_call) but
-// every source has its own rule id, so the finding always lands in that
-// source's category. Categories are resolved from the rule id, so analyzer
-// findings never leak the analyzer name into the dashboard.
+// llm mode the analyzer replaces the legacy engines of EnforcedSources; the
+// prompt-injection cascade (ComparedSources) enforces in every mode and the
+// model's verdict for it is only compared. In the shadow mode every legacy
+// engine enforces and the analyzer's verdicts are compared, never enforced.
+// Each covered source maps to a model risk key; one call scores every key and
+// a positive score becomes a finding with that source's rule id, so it lands
+// in that source's category without naming the analyzer.
 package llmanalyzer
 
 import "slices"
@@ -95,8 +88,8 @@ var ruleIDsByKey = map[string]string{
 	KeyDestructiveToolCall: RuleDestructiveTool,
 }
 
-// EnforcedSources lists, in a stable order, the policy sources whose legacy
-// engine the analyzer replaces in the llm engine mode.
+// EnforcedSources are the policy sources whose legacy engine the analyzer
+// replaces in the llm mode.
 var EnforcedSources = []string{
 	"gitleaks",
 	"presidio",
@@ -104,40 +97,31 @@ var EnforcedSources = []string{
 	"cli_destructive",
 }
 
-// ComparedSources lists the policy sources the model scores and the shadow
-// comparison reads, but whose legacy engine keeps enforcing in every mode.
-// prompt_injection stays with the Jev prefilter and Sonnet confirmer
-// (scanners/promptinjection), the production detector the benchmark gate
-// scores; the model's prompt_injection verdict is recorded for comparison
-// only, as a shadow finding in the batch lane and as a shadow_comparison
-// outcome in the realtime lane.
+// ComparedSources are scored by the model but enforced by their legacy engine
+// in every mode. prompt_injection stays with the Jev → Sonnet cascade
+// (scanners/promptinjection); the model's verdict is a shadow finding in the
+// batch lane and a shadow_comparison outcome in the realtime lane.
 var ComparedSources = []string{
 	"prompt_injection",
 }
 
-// CoveredSources lists, in a stable order, every policy source the model
-// scores: EnforcedSources followed by ComparedSources. A policy with any
-// covered source dispatches the analyzer lane; only EnforcedSources read its
-// verdict for enforcement.
+// CoveredSources is every source the model scores: EnforcedSources then
+// ComparedSources. Any covered source dispatches the lane; only enforced
+// sources enforce from it.
 var CoveredSources = slices.Concat(EnforcedSources, ComparedSources)
 
-// Enforces reports whether the analyzer's verdict for source replaces the
-// legacy engine in the llm engine mode. ok is false for ComparedSources and
-// for sources the analyzer does not score at all.
+// Enforces reports whether source's legacy engine is replaced in the llm mode.
 func Enforces(source string) bool {
 	return slices.Contains(EnforcedSources, source)
 }
 
-// EnforcesAnySource reports whether at least one of sources is enforced by
-// the analyzer in the llm engine mode.
+// EnforcesAnySource reports whether any of sources is enforced in the llm mode.
 func EnforcesAnySource(sources []string) bool {
 	return slices.ContainsFunc(sources, Enforces)
 }
 
-// EnforcedRuleID reports whether a rule id the analyzer emits belongs to an
-// enforced source. The dead-letter sentinel counts as enforced: it denies
-// every enforced policy. Rule ids of compared sources, and rule ids the
-// analyzer never emits, report false.
+// EnforcedRuleID reports whether an analyzer rule id belongs to an enforced
+// source. The dead-letter sentinel counts as enforced.
 func EnforcedRuleID(ruleID string) bool {
 	if ruleID == RuleDeadLetter {
 		return true

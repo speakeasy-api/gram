@@ -227,13 +227,10 @@ func (a *AnalyzeBatch) scanStandardPolicy(ctx context.Context, args AnalyzeBatch
 		})
 	}
 
-	// In the llm mode the model's lane replaces the legacy engine of every
-	// enforced source (gitleaks, presidio, destructive_tool, cli_destructive):
-	// no inline scan, no legacy analysis request, and no Postgres rows for
-	// those sources. prompt_injection is only compared: its cascade keeps
-	// enforcing in every mode and the model's verdict for it lands as a
-	// shadow finding. In the shadow mode every legacy engine runs exactly as
-	// in the off mode.
+	// llm mode: the lane replaces the enforced sources' engines (no inline
+	// scan, no legacy request, no Postgres rows). prompt_injection is only
+	// compared, so its cascade still runs. shadow mode: everything runs as
+	// under off.
 	legacyRuns := func(source string) bool {
 		return !llmMode || !llmanalyzer.Enforces(source)
 	}

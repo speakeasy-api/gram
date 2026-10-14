@@ -406,11 +406,8 @@ func TestHandle_ShadowRequestPublishesMarkedFindings(t *testing.T) {
 	require.Equal(t, int64(0), counterValue(t, data, "risk.async_scan.handler_messages", attr.Outcome(scanners.AsyncScanOutcomeOK)))
 }
 
-// TestHandle_ComparedSourceFindingsAlwaysCarryShadowMarker pins that the
-// model's prompt_injection verdict is a comparison record in every mode: on an
-// enforcing request the enforced findings publish as enforcing while the
-// prompt-injection finding publishes marked shadow, since the cascade keeps
-// enforcing that source.
+// On an enforcing request enforced findings publish as enforcing while the
+// prompt-injection finding publishes as shadow.
 func TestHandle_ComparedSourceFindingsAlwaysCarryShadowMarker(t *testing.T) {
 	t.Parallel()
 
@@ -446,9 +443,7 @@ func TestHandle_ComparedSourceFindingsAlwaysCarryShadowMarker(t *testing.T) {
 	require.True(t, byRule[llmanalyzer.RulePromptInjection].GetShadow(), "compared findings are shadow even on an enforcing request")
 }
 
-// TestHandle_ComparedOnlyRequestPublishesShadowAndAcks pins that a request
-// whose only covered source is compared publishes its finding as shadow and
-// still acks, with nothing published as enforcing.
+// A request with only a compared source publishes shadow findings and acks.
 func TestHandle_ComparedOnlyRequestPublishesShadowAndAcks(t *testing.T) {
 	t.Parallel()
 

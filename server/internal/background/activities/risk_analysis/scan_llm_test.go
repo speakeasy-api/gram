@@ -569,11 +569,8 @@ func TestAnalyzeBatch_LLMAnalyzer_PartialPublishFailsActivityWithoutCounting(t *
 	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "shadow_publish_error"))
 }
 
-// TestAnalyzeBatch_LLMAnalyzer_LLMModeKeepsPromptInjectionCascade pins that
-// prompt injection is a compared source: in the llm mode its legacy cascade
-// still dispatches and scans inline while the enforced sources skip theirs,
-// and the LLM request still names prompt_injection so the model's verdict can
-// be recorded as a shadow finding for comparison.
+// In llm mode the prompt-injection cascade still runs while the enforced
+// engines skip, and the LLM request still names prompt_injection.
 func TestAnalyzeBatch_LLMAnalyzer_LLMModeKeepsPromptInjectionCascade(t *testing.T) {
 	t.Parallel()
 	conn := cloneDB(t)

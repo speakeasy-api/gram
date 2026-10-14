@@ -301,12 +301,8 @@ func TestScanner_LLMModeSourceExclusionSuppresses(t *testing.T) {
 	require.Nil(t, result, "a source exclusion on llm_analyzer suppresses the verdict")
 }
 
-// TestScanner_LLMModeNeverFallsBackToLegacyEngines pins that a clean verdict
-// is final for the enforced sources: content the in-process engines would
-// flag (a well-known AWS key and an email address) is allowed when the model
-// says so, because those engines are never consulted for a flagged org. The
-// prompt-injection cascade is a compared source and keeps enforcing, so it is
-// not part of this policy.
+// A clean model verdict is final for the enforced sources: content the
+// in-process engines would flag is allowed and those engines never run.
 func TestScanner_LLMModeNeverFallsBackToLegacyEngines(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
