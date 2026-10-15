@@ -118,12 +118,12 @@ var EMAService = Type("EMAService", func() {
 
 	Attribute("vendor_issuer", String, "The vendor authorization server issuer, canonicalized.")
 	Attribute("name", String, "The vendor's display name, from an issuer record that names it. Empty when none has one.")
-	Attribute("remote_session_issuer_id", String, "An issuer record in the organization that names this vendor, for setEMAProviders. Omitted when only a saved order names the vendor.", func() {
+	Attribute("remote_session_issuer_id", String, "An issuer record the organization can name for this vendor, organization-level first, to pass to setEMAProviders. Omitted only when no issuer record names the vendor any more.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("ema_providers", shared.EMAProviderOrder, "The organization-wide provider order. Each provider's last_accepted_at is the newest acceptance across every binding in the organization.")
-	Attribute("server_count", Int, "MCP servers with identity chaining turned on for this vendor, in any state after setup.")
-	Attribute("ready_server_count", Int, "Of those, how many are ready.")
+	Attribute("server_count", Int, "Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup.")
+	Attribute("ready_server_count", Int, "Of those, how many have a ready binding.")
 
 	Required("vendor_issuer", "name", "ema_providers", "server_count", "ready_server_count")
 })

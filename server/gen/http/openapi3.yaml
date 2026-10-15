@@ -45772,7 +45772,7 @@ paths:
                 name: RefreshOrganizationRemoteSessionIssuerMetadata
     /rpc/organizationRemoteSessionIssuers.setEMAProviders:
         post:
-            description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: the endpoint''s trusted external issuer, then the organization''s Speakeasy issuer when it has one. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
+            description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization''s Speakeasy issuer when it has one. Identity chaining moves to the next provider after any failure, so a saved order that lists Speakeasy after an external issuer lets Speakeasy vouch when that issuer refuses someone. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
             operationId: setOrganizationRemoteSessionIssuerEMAProviders
             parameters:
                 - allowEmptyValue: true
@@ -95976,11 +95976,11 @@ components:
                         - speakeasy
                 last_accepted_at:
                     type: string
-                    description: When the vendor last accepted an assertion from this provider for this binding, from the newest live cached credential. Omitted when none has been accepted.
+                    description: When the vendor last accepted an assertion from this provider anywhere in the organization, so the vendor already trusts it. Attributed to the exact issuer that vouched; the organization-wide default's external entry takes the newest acceptance of any external issuer. Omitted when the vendor has never accepted it.
                     format: date-time
                 remote_session_issuer_id:
                     type: string
-                    description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
+                    description: The external provider's remote session issuer. Omitted for speakeasy, and in the organization-wide default order, where an external entry stands for each endpoint's own trusted issuer.
                     format: uuid
                 unavailable_reason:
                     type: string
@@ -96021,12 +96021,12 @@ components:
             properties:
                 is_default:
                     type: boolean
-                    description: No order is saved, so the endpoint uses its configured external issuer.
+                    description: No order is saved. An endpoint whose sign-in trusts an external issuer uses that issuer alone; one that trusts none uses the organization's Speakeasy issuer when it has one.
                 providers:
                     type: array
                     items:
                         $ref: '#/components/schemas/EMAProvider'
-                    description: The saved providers in order, or the external default.
+                    description: The saved providers in order, or the derived default described by is_default.
                 vendor_issuer:
                     type: string
                     description: The vendor authorization server issuer, canonicalized.
@@ -96045,15 +96045,15 @@ components:
                     description: The vendor's display name, from an issuer record that names it. Empty when none has one.
                 ready_server_count:
                     type: integer
-                    description: Of those, how many are ready.
+                    description: Of those, how many have a ready binding.
                     format: int64
                 remote_session_issuer_id:
                     type: string
-                    description: An issuer record in the organization that names this vendor, for setEMAProviders. Omitted when only a saved order names the vendor.
+                    description: An issuer record the organization can name for this vendor, organization-level first, to pass to setEMAProviders. Omitted only when no issuer record names the vendor any more.
                     format: uuid
                 server_count:
                     type: integer
-                    description: MCP servers with identity chaining turned on for this vendor, in any state after setup.
+                    description: Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup.
                     format: int64
                 vendor_issuer:
                     type: string
@@ -99655,6 +99655,10 @@ components:
                     description: Null means unknown; an empty array means no recorded grants.
                 issuer:
                     type: string
+                last_accepted_at:
+                    type: string
+                    description: When the vendor last accepted an assertion for this binding from any provider, so chaining has worked for it. Omitted when it never has. Returned by readEMA only.
+                    format: date-time
                 remediation:
                     type: string
                     description: Safe next action without provider bodies or credentials.

@@ -55,11 +55,11 @@ export type EMAProvider = {
    */
   kind: EMAProviderKind;
   /**
-   * When the vendor last accepted an assertion from this provider for this binding, from the newest live cached credential. Omitted when none has been accepted.
+   * When the vendor last accepted an assertion from this provider anywhere in the organization, so the vendor already trusts it. Attributed to the exact issuer that vouched; the organization-wide default's external entry takes the newest acceptance of any external issuer. Omitted when the vendor has never accepted it.
    */
   lastAcceptedAt?: Date | undefined;
   /**
-   * The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
+   * The external provider's remote session issuer. Omitted for speakeasy, and in the organization-wide default order, where an external entry stands for each endpoint's own trusted issuer.
    */
   remoteSessionIssuerId?: string | undefined;
   /**

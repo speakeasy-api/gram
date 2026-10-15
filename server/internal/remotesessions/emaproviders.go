@@ -124,13 +124,14 @@ func NormalizeVendorIssuer(issuer string) (string, error) {
 
 // ResolveEMAProviders reads a vendor's saved provider order. Providers that
 // cannot serve are kept and flagged, so views can say why and runtime skips
-// them. No saved order derives the default: the endpoint's trusted external
-// issuer first, then the organization's live internal session issuer
-// (Speakeasy) when it has one. Setting up the Speakeasy issuer therefore
-// adds it after every endpoint's external issuer by default; an
-// organization-wide view, which stands for no one endpoint, keeps an
-// external placeholder with no issuer id in front of it. With neither, the
-// default is that single external placeholder.
+// them. With no saved order, an endpoint whose sign-in trusts an external
+// issuer keeps that issuer alone: setting up the Speakeasy issuer never adds
+// a second authority behind it, so an external denial is never retried with
+// Speakeasy unless an administrator saves an order that says so. An endpoint
+// that trusts no external issuer uses the organization's Speakeasy issuer
+// when it has one. The organization-wide view, which stands for no one
+// endpoint, lists both: an external placeholder with no issuer id for
+// endpoints that trust one, then Speakeasy for endpoints that don't.
 func ResolveEMAProviders(ctx context.Context, q *repo.Queries, organizationID, vendorIssuer string, scope EMAProviderScope) (EMAProviderOrder, error) {
 	order := EMAProviderOrder{VendorIssuer: vendorIssuer, IsDefault: false, Providers: []EMAProvider{}}
 	rows, err := q.ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: organizationID, VendorIssuer: vendorIssuer})
@@ -159,7 +160,11 @@ func ResolveEMAProviders(ctx context.Context, q *repo.Queries, organizationID, v
 	}
 	order.IsDefault = true
 	external := EMAProvider{Kind: EMAProviderExternal, RemoteSessionIssuerID: scope.TrustedIssuer.UUID, InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil}
-	if !scope.Endpoint || scope.TrustedIssuer.Valid {
+	if scope.Endpoint && scope.TrustedIssuer.Valid {
+		order.Providers = append(order.Providers, external)
+		return order, nil
+	}
+	if !scope.Endpoint {
 		order.Providers = append(order.Providers, external)
 	}
 	internal, err := q.GetEMAInternalSessionIssuer(ctx, organizationID)
@@ -200,7 +205,7 @@ func EndpointEMAProviders(ctx context.Context, q *repo.Queries, organizationID s
 }
 
 // EMACredentialTarget is one binding target whose cached credentials say
-// when the vendor last accepted each provider's assertion.
+// when the vendor last accepted an assertion for it.
 type EMACredentialTarget struct {
 	OrganizationID        string
 	ProjectID             uuid.UUID
@@ -209,38 +214,106 @@ type EMACredentialTarget struct {
 	Resource              string
 }
 
-// ApplyEMAProviderLastAccepted stamps a status view's providers with when the
-// vendor last accepted an assertion from each, from target's newest live
-// cached credential. The Speakeasy entry takes the speakeasy credential; an
-// external entry the endpoint trusts takes the external one.
-func ApplyEMAProviderLastAccepted(ctx context.Context, q *repo.Queries, target EMACredentialTarget, order EMAProviderOrder) (EMAProviderOrder, error) {
-	rows, err := q.ListEMACredentialLastAccepted(ctx, repo.ListEMACredentialLastAcceptedParams{
+// EMABindingLastAccepted is when the vendor last accepted an assertion for
+// target from any provider, retired credentials included; nil when never.
+func EMABindingLastAccepted(ctx context.Context, q *repo.Queries, target EMACredentialTarget) (*time.Time, error) {
+	at, err := q.GetEMABindingLastAccepted(ctx, repo.GetEMABindingLastAcceptedParams{
 		OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, UserSessionIssuerID: target.UserSessionIssuerID,
 		RemoteSessionIssuerID: target.RemoteSessionIssuerID, Resource: target.Resource,
 	})
 	if err != nil {
-		return order, fmt.Errorf("list ema credential last accepted: %w", err)
+		return nil, fmt.Errorf("read ema binding last accepted: %w", err)
 	}
-	accepted := make(map[EMAProviderKind]time.Time, len(rows))
-	for _, row := range rows {
-		if row.LastAcceptedAt.Valid {
-			accepted[EMAProviderKind(row.EmaProvider)] = row.LastAcceptedAt.Time
-		}
+	if !at.Valid {
+		return nil, nil
 	}
-	return StampEMAProviderLastAccepted(order, accepted), nil
+	return &at.Time, nil
 }
 
-// StampEMAProviderLastAccepted copies each provider kind's newest acceptance
-// onto the order's providers of that kind. An external entry the endpoint
-// does not trust is left blank: the acceptance was another issuer's.
-func StampEMAProviderLastAccepted(order EMAProviderOrder, accepted map[EMAProviderKind]time.Time) EMAProviderOrder {
-	order.Providers = append([]EMAProvider(nil), order.Providers...)
-	for i, p := range order.Providers {
-		at, ok := accepted[p.Kind]
-		if !ok || p.Unavailable == EMAProviderNotTrustedByEndpoint {
+// emaAcceptanceKey names one provider's evidence: an external issuer by its
+// remote session issuer, Speakeasy by its internal session issuer.
+type emaAcceptanceKey struct {
+	kind     EMAProviderKind
+	issuerID uuid.UUID
+}
+
+// EMAVendorAcceptance is when a vendor last accepted each provider's
+// assertion across an organization.
+type EMAVendorAcceptance map[emaAcceptanceKey]time.Time
+
+// ListEMAVendorAcceptance reads, per canonical vendor issuer, when the vendor
+// last accepted each provider across the organization.
+func ListEMAVendorAcceptance(ctx context.Context, q *repo.Queries, organizationID string) (map[string]EMAVendorAcceptance, error) {
+	rows, err := q.ListEMAVendorAcceptance(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list ema vendor acceptance: %w", err)
+	}
+	out := map[string]EMAVendorAcceptance{}
+	for _, row := range rows {
+		vendor, err := NormalizeVendorIssuer(row.Issuer)
+		if err != nil || !row.LastAcceptedAt.Valid {
 			continue
 		}
-		order.Providers[i].LastAcceptedAt = &at
+		key := emaAcceptanceKey{kind: EMAProviderKind(row.EmaProvider), issuerID: uuid.Nil}
+		switch key.kind {
+		case EMAProviderExternal:
+			key.issuerID = row.ExternalIssuerID.UUID
+		case EMAProviderSpeakeasy:
+			key.issuerID = row.InternalSessionIssuerID.UUID
+		}
+		// A credential whose vouching issuer can no longer be traced proves
+		// nothing about any one provider.
+		if key.issuerID == uuid.Nil {
+			continue
+		}
+		accepted := out[vendor]
+		if accepted == nil {
+			accepted = EMAVendorAcceptance{}
+			out[vendor] = accepted
+		}
+		if prev, ok := accepted[key]; !ok || row.LastAcceptedAt.Time.After(prev) {
+			accepted[key] = row.LastAcceptedAt.Time
+		}
+	}
+	return out, nil
+}
+
+// VendorEMAAcceptance reads one vendor's acceptance across the organization.
+func VendorEMAAcceptance(ctx context.Context, q *repo.Queries, organizationID, vendorIssuer string) (EMAVendorAcceptance, error) {
+	all, err := ListEMAVendorAcceptance(ctx, q, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	return all[vendorIssuer], nil
+}
+
+// StampEMAProviderLastAccepted sets each provider's last acceptance from the
+// vendor's organization-wide evidence for that exact provider. The default
+// order's external placeholder, which stands for each endpoint's own issuer,
+// takes the newest acceptance of any external issuer.
+func StampEMAProviderLastAccepted(order EMAProviderOrder, accepted EMAVendorAcceptance) EMAProviderOrder {
+	order.Providers = append([]EMAProvider(nil), order.Providers...)
+	for i, p := range order.Providers {
+		var at time.Time
+		found := false
+		for key, t := range accepted {
+			if key.kind != p.Kind {
+				continue
+			}
+			id := p.RemoteSessionIssuerID
+			if p.Kind == EMAProviderSpeakeasy {
+				id = p.InternalSessionIssuerID
+			}
+			if id != uuid.Nil && key.issuerID != id {
+				continue
+			}
+			if !found || t.After(at) {
+				at, found = t, true
+			}
+		}
+		if found {
+			order.Providers[i].LastAcceptedAt = &at
+		}
 	}
 	return order
 }

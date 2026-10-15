@@ -2,28 +2,32 @@ package remotesessions
 
 import (
 	"context"
+	"errors"
 	"sort"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // emaService accumulates one vendor's bindings before the view is built.
 type emaService struct {
-	vendor      string
-	name        string
-	issuerID    uuid.UUID
-	issuerIsOrg bool
-	servers     int
-	ready       int
+	name     string
+	issuerID uuid.UUID
+	servers  map[uuid.UUID]struct{}
+	ready    map[uuid.UUID]struct{}
+}
+
+func newEMAService() *emaService {
+	return &emaService{name: "", issuerID: uuid.Nil, servers: map[uuid.UUID]struct{}{}, ready: map[uuid.UUID]struct{}{}}
 }
 
 // emaBindingSetUp reports whether a binding state means identity chaining was
@@ -44,34 +48,34 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 	}
 	q := repo.New(s.db)
 
-	bindings, err := q.ListEMAServiceBindings(ctx, org)
+	rows, err := q.ListEMAServiceServers(ctx, org)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list identity chaining bindings").LogError(ctx, logger)
 	}
 	services := map[string]*emaService{}
-	for _, b := range bindings {
-		vendor, err := NormalizeVendorIssuer(b.Issuer)
+	for _, row := range rows {
+		vendor, err := NormalizeVendorIssuer(row.Issuer)
 		if err != nil {
 			continue
 		}
 		svc := services[vendor]
 		if svc == nil {
-			svc = &emaService{vendor: vendor, name: "", issuerID: uuid.Nil, issuerIsOrg: false, servers: 0, ready: 0}
+			svc = newEMAService()
 			services[vendor] = svc
 		}
-		// An organization-level issuer record is the one setEMAProviders
-		// should name; any record will do when there is none.
-		if svc.issuerID == uuid.Nil || (b.IssuerIsOrganizationLevel && !svc.issuerIsOrg) {
-			svc.issuerID, svc.issuerIsOrg = b.RemoteSessionIssuerID, b.IssuerIsOrganizationLevel
+		// Rows arrive organization-level issuer first, then oldest, so the
+		// first record seen is the one setEMAProviders should name.
+		if svc.issuerID == uuid.Nil {
+			svc.issuerID, svc.name = row.RemoteSessionIssuerID, row.Name
 		}
-		if svc.name == "" {
-			svc.name = b.Name
+		if !row.McpServerID.Valid {
+			continue
 		}
-		if emaBindingSetUp(b.State) {
-			svc.servers++
+		if emaBindingSetUp(row.State) {
+			svc.servers[row.McpServerID.UUID] = struct{}{}
 		}
-		if b.State == "ready" {
-			svc.ready++
+		if row.State == "ready" {
+			svc.ready[row.McpServerID.UUID] = struct{}{}
 		}
 	}
 	saved, err := q.ListEMAProviderVendors(ctx, org)
@@ -79,30 +83,30 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		return nil, oops.E(oops.CodeUnexpected, err, "list ema provider orders").LogError(ctx, logger)
 	}
 	for _, vendor := range saved {
-		if services[vendor] == nil {
-			services[vendor] = &emaService{vendor: vendor, name: "", issuerID: uuid.Nil, issuerIsOrg: false, servers: 0, ready: 0}
-		}
-	}
-
-	acceptedRows, err := q.ListEMACredentialLastAcceptedByOrganization(ctx, org)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list ema credential last accepted").LogError(ctx, logger)
-	}
-	accepted := map[string]map[EMAProviderKind]time.Time{}
-	for _, row := range acceptedRows {
-		vendor, err := NormalizeVendorIssuer(row.Issuer)
-		if err != nil || !row.LastAcceptedAt.Valid {
+		if services[vendor] != nil {
 			continue
 		}
-		byKind := accepted[vendor]
-		if byKind == nil {
-			byKind = map[EMAProviderKind]time.Time{}
-			accepted[vendor] = byKind
+		svc := newEMAService()
+		// A saved order outlives its last binding; find a record that names
+		// the vendor so an administrator can still change or clear it.
+		spellings := []string{vendor}
+		if canonical, err := issuerurl.Parse(vendor); err == nil {
+			spellings = canonical.MatchCandidates()
 		}
-		kind := EMAProviderKind(row.EmaProvider)
-		if at, ok := byKind[kind]; !ok || row.LastAcceptedAt.Time.After(at) {
-			byKind[kind] = row.LastAcceptedAt.Time
+		record, err := q.GetEMAVendorIssuerRecord(ctx, repo.GetEMAVendorIssuerRecordParams{Issuers: spellings, OrganizationID: org})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return nil, oops.E(oops.CodeUnexpected, err, "read ema vendor issuer").LogError(ctx, logger)
+		default:
+			svc.issuerID, svc.name = record.ID, record.Name
 		}
+		services[vendor] = svc
+	}
+
+	acceptance, err := ListEMAVendorAcceptance(ctx, q, org)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list ema vendor acceptance").LogError(ctx, logger)
 	}
 
 	vendors := make([]string, 0, len(services))
@@ -110,6 +114,9 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		vendors = append(vendors, vendor)
 	}
 	sort.Strings(vendors)
+	// Speakeasy readiness depends only on the organization's issuer, so one
+	// check serves every vendor in the request.
+	readiness := memoizedReadiness(s.speakeasyReadiness)
 	scope := EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: s.speakeasySigningAvailable}
 	items := make([]*orgissuersgen.EMAService, 0, len(vendors))
 	for _, vendor := range vendors {
@@ -118,14 +125,18 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
 		}
-		order = StampEMAProviderLastAccepted(order, accepted[vendor])
+		order = StampEMAProviderLastAccepted(order, acceptance[vendor])
+		order, err = ApplyEMAProviderReadiness(ctx, org, order, readiness)
+		if err != nil {
+			logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err), attr.SlogOAuthIssuer(vendor))
+		}
 		item := &orgissuersgen.EMAService{
 			VendorIssuer:          vendor,
 			Name:                  svc.name,
 			RemoteSessionIssuerID: nil,
-			EmaProviders:          s.liveEMAProvidersView(ctx, logger, org, order),
-			ServerCount:           svc.servers,
-			ReadyServerCount:      svc.ready,
+			EmaProviders:          EMAProviderOrderView(order),
+			ServerCount:           len(svc.servers),
+			ReadyServerCount:      len(svc.ready),
 		}
 		if svc.issuerID != uuid.Nil {
 			item.RemoteSessionIssuerID = conv.PtrEmpty(svc.issuerID.String())
@@ -133,4 +144,24 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		items = append(items, item)
 	}
 	return &orgissuersgen.ListEMAServicesResult{Items: items}, nil
+}
+
+// memoizedReadiness answers each issuer's readiness once per request.
+func memoizedReadiness(check EMAProviderReadiness) EMAProviderReadiness {
+	if check == nil {
+		return nil
+	}
+	type answer struct {
+		reason EMAProviderUnavailableReason
+		err    error
+	}
+	seen := map[uuid.UUID]answer{}
+	return func(ctx context.Context, organizationID string, issuerID uuid.UUID) (EMAProviderUnavailableReason, error) {
+		if a, ok := seen[issuerID]; ok {
+			return a.reason, a.err
+		}
+		reason, err := check(ctx, organizationID, issuerID)
+		seen[issuerID] = answer{reason: reason, err: err}
+		return reason, err
+	}
 }

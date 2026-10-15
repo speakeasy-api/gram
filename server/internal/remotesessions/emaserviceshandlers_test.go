@@ -16,16 +16,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-func TestListEMAServices_AggregatesBindingsAndAcceptanceAcrossTheOrganization(t *testing.T) {
+func TestListEMAServices_AggregatesServersAndAcceptanceAcrossTheOrganization(t *testing.T) {
 	t.Parallel()
 	ctx, ti, in := preparationFixture(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	org := auth.ActiveOrganizationID
+	list := func() []*orgissuersgen.EMAService {
+		out, err := ti.service.ListEMAServices(ctx, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
+		require.NoError(t, err)
+		return out.Items
+	}
 
-	empty, err := ti.service.ListEMAServices(ctx, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
-	require.NoError(t, err)
-	require.Empty(t, empty.Items, "no binding and no saved order means no service")
+	require.Empty(t, list(), "no binding and no saved order means no service")
 
 	prepare := func(resource string) {
 		_, err := ti.service.PrepareEMA(ctx, &clientsgen.PrepareEMAPayload{
@@ -35,55 +38,57 @@ func TestListEMAServices_AggregatesBindingsAndAcceptanceAcrossTheOrganization(t 
 		})
 		require.NoError(t, err)
 	}
+	other := in
+	other.Resource = "https://other.example.com/"
 	prepare(in.Resource)
-	prepare("https://other.example.com/")
+	prepare(other.Resource)
 
-	listed, err := ti.service.ListEMAServices(ctx, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
-	require.NoError(t, err)
-	require.Len(t, listed.Items, 1, "both bindings name the same vendor")
-	svc := listed.Items[0]
-	require.Equal(t, in.RemoteSessionIssuerID.String(), conv.PtrValOr(svc.RemoteSessionIssuerID, ""))
-	require.Equal(t, 2, svc.ServerCount)
-	require.NotNil(t, svc.EmaProviders)
-	require.True(t, svc.EmaProviders.IsDefault)
-	for _, p := range svc.EmaProviders.Providers {
+	items := list()
+	require.Len(t, items, 1, "both bindings name the same vendor")
+	require.Equal(t, in.RemoteSessionIssuerID.String(), conv.PtrValOr(items[0].RemoteSessionIssuerID, ""))
+	require.Zero(t, items[0].ServerCount, "bindings with no live MCP server count no servers")
+
+	seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-a-"+uuid.NewString()[:8], in.Resource)
+	seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-b-"+uuid.NewString()[:8], in.Resource)
+	seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-c-"+uuid.NewString()[:8], other.Resource)
+	items = list()
+	require.Len(t, items, 1)
+	require.Equal(t, 3, items[0].ServerCount, "each live MCP server counts once, even two on one binding")
+
+	internalIssuer := seedInternalSessionIssuer(t, ctx, ti, org)
+	items = list()
+	require.True(t, items[0].EmaProviders.IsDefault)
+	require.Len(t, items[0].EmaProviders.Providers, 2, "the organization-wide default lists each endpoint's own issuer, then Speakeasy")
+	for _, p := range items[0].EmaProviders.Providers {
 		require.Nil(t, p.LastAcceptedAt, "nothing accepted yet for %s", p.Kind)
 	}
 
-	older := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
-	newest := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
-	plantEMACredential(t, ctx, ti, in, remotesessions.EMAProviderExternal, older, false)
-	other := in
-	other.Resource = "https://other.example.com/"
-	plantEMACredential(t, ctx, ti, other, remotesessions.EMAProviderExternal, newest, false)
-	plantEMACredential(t, ctx, ti, other, remotesessions.EMAProviderExternal, time.Now().UTC(), true)
+	accepted := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	plantEMACredential(t, ctx, ti, other, remotesessions.EMAProviderSpeakeasy, accepted, true, internalIssuer)
+	items = list()
+	speakeasy := items[0].EmaProviders.Providers[1]
+	require.Equal(t, "speakeasy", speakeasy.Kind)
+	require.NotNil(t, speakeasy.LastAcceptedAt)
+	require.Equal(t, accepted.Format(time.RFC3339), *speakeasy.LastAcceptedAt, "a retired credential still shows the vendor accepted Speakeasy")
+	require.Nil(t, items[0].EmaProviders.Providers[0].LastAcceptedAt, "Speakeasy's acceptance is not shown under the external entry")
 
-	listed, err = ti.service.ListEMAServices(ctx, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
+	q := repo.New(ti.conn)
+	savedOnly, err := remotesessions.NormalizeVendorIssuer("https://saved-only.example.com")
 	require.NoError(t, err)
-	require.Len(t, listed.Items, 1)
-	var external *string
-	for _, p := range listed.Items[0].EmaProviders.Providers {
-		if p.Kind == "external" {
-			external = p.LastAcceptedAt
-		}
-	}
-	require.NotNil(t, external)
-	require.Equal(t, newest.Format(time.RFC3339), *external, "the newest live acceptance across every binding wins; the retired one does not count")
+	require.NoError(t, q.InsertEMAProvider(ctx, repo.InsertEMAProviderParams{OrganizationID: org, VendorIssuer: savedOnly, RemoteSessionIssuerID: uuid.NullUUID{}, InternalSessionIssuerID: conv.ToNullUUID(internalIssuer), Position: 0}))
+	named := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGText(org), "named-"+uuid.NewString()[:8], "https://named.example.com/")
+	namedVendor, err := remotesessions.NormalizeVendorIssuer("https://named.example.com")
+	require.NoError(t, err)
+	require.NoError(t, q.InsertEMAProvider(ctx, repo.InsertEMAProviderParams{OrganizationID: org, VendorIssuer: namedVendor, RemoteSessionIssuerID: uuid.NullUUID{}, InternalSessionIssuerID: conv.ToNullUUID(internalIssuer), Position: 0}))
 
-	vendor, err := remotesessions.NormalizeVendorIssuer("https://saved-only.example.com")
-	require.NoError(t, err)
-	require.NoError(t, repo.New(ti.conn).InsertEMAProvider(ctx, repo.InsertEMAProviderParams{OrganizationID: org, VendorIssuer: vendor, RemoteSessionIssuerID: conv.ToNullUUID(in.RemoteSessionIssuerID), InternalSessionIssuerID: uuid.NullUUID{}, Position: 0}))
-	listed, err = ti.service.ListEMAServices(ctx, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
-	require.NoError(t, err)
-	require.Len(t, listed.Items, 2, "a saved order lists its vendor even with no binding")
-	var savedOnly *orgissuersgen.EMAService
-	for _, item := range listed.Items {
-		if item.VendorIssuer == vendor {
-			savedOnly = item
-		}
+	byVendor := map[string]*orgissuersgen.EMAService{}
+	for _, item := range list() {
+		byVendor[item.VendorIssuer] = item
 	}
-	require.NotNil(t, savedOnly)
-	require.Nil(t, savedOnly.RemoteSessionIssuerID, "no issuer record names a saved-only vendor")
-	require.Equal(t, 0, savedOnly.ServerCount)
-	require.False(t, savedOnly.EmaProviders.IsDefault)
+	require.Len(t, byVendor, 3, "a saved order lists its vendor even with no binding")
+	require.Nil(t, byVendor[savedOnly].RemoteSessionIssuerID, "no issuer record names this vendor")
+	require.Zero(t, byVendor[savedOnly].ServerCount)
+	require.False(t, byVendor[savedOnly].EmaProviders.IsDefault)
+	require.Equal(t, named.String(), conv.PtrValOr(byVendor[namedVendor].RemoteSessionIssuerID, ""),
+		"a saved order keeps an issuer record, matched across spellings, so it can still be changed")
 }

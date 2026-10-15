@@ -267,6 +267,10 @@ type IdentityChainingPreparation struct {
 	// chaining tries the providers that can serve, in order; entries with
 	// unavailable_reason are skipped. Returned by readEMA only.
 	EmaProviders *types.EMAProviderOrder
+	// When the vendor last accepted an assertion for this binding from any
+	// provider, so chaining has worked for it. Omitted when it never has. Returned
+	// by readEMA only.
+	LastAcceptedAt *string
 }
 
 // ListRemoteSessionClientsPayload is the payload type of the

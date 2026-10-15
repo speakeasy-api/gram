@@ -25,15 +25,15 @@ export type EMAService = {
    */
   name: string;
   /**
-   * Of those, how many are ready.
+   * Of those, how many have a ready binding.
    */
   readyServerCount: number;
   /**
-   * An issuer record in the organization that names this vendor, for setEMAProviders. Omitted when only a saved order names the vendor.
+   * An issuer record the organization can name for this vendor, organization-level first, to pass to setEMAProviders. Omitted only when no issuer record names the vendor any more.
    */
   remoteSessionIssuerId?: string | undefined;
   /**
-   * MCP servers with identity chaining turned on for this vendor, in any state after setup.
+   * Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup.
    */
   serverCount: number;
   /**

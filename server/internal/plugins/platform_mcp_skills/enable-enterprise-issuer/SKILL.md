@@ -67,9 +67,10 @@ or imply that support staff may mutate the organization's issuer.
 Show the exact public issuer URI from the successful read. Explain that the
 service's administrator must register it in that service's enterprise-managed
 authorization settings: registering the URI alone changes nothing. Once the
-organization has a Speakeasy issuer, every vendor's default EMA provider order
-tries the server's trusted external identity provider first and then Speakeasy;
-no order change is needed for that. This is a separate trust change requiring
+organization has a Speakeasy issuer, servers whose sign-in trusts no external
+identity provider use it by default. Servers whose sign-in trusts one keep that
+provider alone until an organization admin saves an order that adds Speakeasy.
+This is a separate trust change requiring
 the user's explicit authorization; do not change ordinary employee SSO login
 settings or replace an existing trusted issuer automatically.
 
@@ -77,15 +78,17 @@ If the user wants to configure an MCP connection too, use `list_projects`,
 `find_mcp`, and `get_mcp` to identify an exact project and MCP server. Follow its
 supported setup handoff and obtain separate authorization for any provider or
 binding changes. This workflow cannot choose Speakeasy as an MCP server's
-enterprise authorization provider: a vendor's EMA provider order is derived (the
-server's trusted external identity provider, then the organization's Speakeasy
-issuer when it has one). An organization admin changes that order, including
-removing or reordering providers or restoring the default, on the dashboard's
-**Organization** → **IDP and SSO** → **Identity providers** → **Services**
-page for the vendor, or through the organization's `setEMAProviders` management
-API; both need the ema-providers rollout. The server's **Settings** →
-**Enterprise Managed Authorization** section turns it on or off for that server
-and shows the sign-in, who vouches, and what the vendor has to trust.
+enterprise authorization provider. With no saved order the EMA provider order is derived:
+the server's trusted external identity provider alone, or the organization's Speakeasy issuer when the sign-in trusts none.
+An organization admin changes that order on the dashboard's **Organization** →
+**IDP and SSO** → **Identity providers** → **Services** page for the vendor, or
+through the organization's `setEMAProviders` management API. Saving a provider
+list needs the provider-order rollout; restoring the default needs only
+organization admin. A saved order that lists Speakeasy after an external
+identity provider lets Speakeasy vouch when that provider refuses someone, so
+confirm that intent before suggesting it. The MCP server's **Settings** page
+turns enterprise-managed authorization on or off for that server and shows the
+sign-in, who vouches, and what the vendor has to trust.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for
 enterprise authorization readiness. Do not substitute a Platform MCP registration
 ID or generic registration readiness for this check.

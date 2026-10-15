@@ -87,12 +87,15 @@ type Service interface {
 	// authorization server this issuer names. Identity chaining tries the
 	// providers that can serve and that the endpoint's authorization server
 	// trusts, in order, retrying transient failures briefly before moving to the
-	// next, until one succeeds. An empty list restores the derived default: the
-	// endpoint's trusted external issuer, then the organization's Speakeasy issuer
-	// when it has one. The order applies organization-wide to every issuer with
-	// the same canonical issuer URL. Requires org:admin and the ema-providers
-	// rollout; restoring the default only needs org:admin. Not available from
-	// support or impersonated sessions.
+	// next, until one succeeds. An empty list restores the derived default: an
+	// endpoint whose sign-in trusts an external issuer uses that issuer alone, and
+	// one that trusts none uses the organization's Speakeasy issuer when it has
+	// one. Identity chaining moves to the next provider after any failure, so a
+	// saved order that lists Speakeasy after an external issuer lets Speakeasy
+	// vouch when that issuer refuses someone. The order applies organization-wide
+	// to every issuer with the same canonical issuer URL. Requires org:admin and
+	// the ema-providers rollout; restoring the default only needs org:admin. Not
+	// available from support or impersonated sessions.
 	SetEMAProviders(context.Context, *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error)
 	// List every service identity chaining reaches in the caller's organization:
 	// each vendor authorization server that any identity chaining binding or saved
@@ -266,16 +269,17 @@ type EMAService struct {
 	// The vendor's display name, from an issuer record that names it. Empty when
 	// none has one.
 	Name string
-	// An issuer record in the organization that names this vendor, for
-	// setEMAProviders. Omitted when only a saved order names the vendor.
+	// An issuer record the organization can name for this vendor,
+	// organization-level first, to pass to setEMAProviders. Omitted only when no
+	// issuer record names the vendor any more.
 	RemoteSessionIssuerID *string
 	// The organization-wide provider order. Each provider's last_accepted_at is
 	// the newest acceptance across every binding in the organization.
 	EmaProviders *types.EMAProviderOrder
-	// MCP servers with identity chaining turned on for this vendor, in any state
-	// after setup.
+	// Distinct live MCP servers whose identity chaining binding for this vendor
+	// has been turned on, in any state after setup.
 	ServerCount int
-	// Of those, how many are ready.
+	// Of those, how many have a ready binding.
 	ReadyServerCount int
 }
 

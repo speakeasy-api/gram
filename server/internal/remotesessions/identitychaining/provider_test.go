@@ -122,10 +122,10 @@ func useFlakyExternal(f devIDPFixture, transient int) *int {
 	return issued
 }
 
-func TestProviders_DefaultIsTheEndpointsExternalIssuerThenSpeakeasy(t *testing.T) {
+func TestProviders_DefaultIsTheEndpointsExternalIssuerAlone(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
-	internalIssuer := seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
+	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
 	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0}
 	useSpeakeasySource(f, src)
 
@@ -134,9 +134,7 @@ func TestProviders_DefaultIsTheEndpointsExternalIssuerThenSpeakeasy(t *testing.T
 	require.True(t, order.IsDefault)
 	require.Equal(t, []remotesessions.EMAProvider{
 		{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
-		// The status view's readiness check reports a stub source as unable to sign.
-		{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: internalIssuer, Unavailable: remotesessions.EMAProviderSigningUnavailable},
-	}, order.Providers, "the derived default tries the trusted external issuer, then Speakeasy")
+	}, order.Providers, "the derived default keeps the endpoint's trusted external issuer alone")
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.Equal(t, remotesessions.EMAProviderExternal, outcome.Provider)
@@ -153,23 +151,33 @@ func TestProviders_DefaultWithoutSpeakeasyIssuerIsExternalOnly(t *testing.T) {
 	require.Equal(t, []remotesessions.EMAProvider{{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}}, order.Providers)
 }
 
-func TestProviders_DefaultFallsBackToSpeakeasyWhenExternalFails(t *testing.T) {
+func TestProviders_DefaultDoesNotAddSpeakeasyWhenItCanSign(t *testing.T) {
+	t.Parallel()
+	f := newDevIDPFixture(t, devIDPOptions{})
+	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
+	useSpeakeasySource(f, &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0})
+
+	order, ok, _ := f.chainer.ProviderOrder(t.Context(), f.req)
+	require.True(t, ok)
+	require.True(t, order.IsDefault)
+	require.Equal(t, []remotesessions.EMAProvider{{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil}}, order.Providers,
+		"setting up the Speakeasy issuer never adds an authority behind an endpoint's trusted external issuer")
+}
+
+func TestProviders_DefaultNeverRetriesAnExternalDenialWithSpeakeasy(t *testing.T) {
 	t.Parallel()
 	f := newDevIDPFixture(t, devIDPOptions{})
 	seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
 	denied := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageExchange, ReasonAccessDenied, ConfidenceInferred, false), issued: 0}
 	f.chainer.sources[remotesessions.EMAProviderExternal] = func(remotesessions.EMAProvider) tokenSource { return denied }
-	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: newOutcome(StageExchange, ReasonIneligibleIdentity, ConfidenceVerified, false), issued: 0}
+	src := &failingSource{authorizeOutcome: success, reuseOutcome: success, issueOutcome: success, issued: 0}
 	useSpeakeasySource(f, src)
 
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.False(t, outcome.Succeeded(), "outcome: %+v", outcome)
+	require.Equal(t, ReasonAccessDenied, outcome.Reason)
 	require.Equal(t, 1, denied.issued)
-	require.Equal(t, 1, src.issued, "with no saved order Speakeasy is tried after the external issuer fails")
-	require.Equal(t, []ProviderFailure{
-		{Provider: remotesessions.EMAProviderExternal, Reason: ReasonAccessDenied, Unavailable: ""},
-		{Provider: remotesessions.EMAProviderSpeakeasy, Reason: ReasonIneligibleIdentity, Unavailable: ""},
-	}, outcome.Failures)
+	require.Zero(t, src.issued, "with no saved order the identity provider's denial stands")
 }
 
 func TestProviders_ManagementReadMatchesRuntime(t *testing.T) {

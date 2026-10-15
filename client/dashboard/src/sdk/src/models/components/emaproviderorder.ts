@@ -14,11 +14,11 @@ import { EMAProvider, EMAProvider$inboundSchema } from "./emaprovider.js";
  */
 export type EMAProviderOrder = {
   /**
-   * No order is saved, so the endpoint uses its configured external issuer.
+   * No order is saved. An endpoint whose sign-in trusts an external issuer uses that issuer alone; one that trusts none uses the organization's Speakeasy issuer when it has one.
    */
   isDefault: boolean;
   /**
-   * The saved providers in order, or the external default.
+   * The saved providers in order, or the derived default described by is_default.
    */
   providers: Array<EMAProvider>;
   /**

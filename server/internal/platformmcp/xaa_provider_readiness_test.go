@@ -78,6 +78,7 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 		OrganizationID: conv.ToPGText(f.organizationID), ProjectID: conv.ToNullUUID(f.projectID), UserSessionIssuerID: conv.ToNullUUID(f.userIssuer),
 		RemoteSessionIssuerID: conv.ToNullUUID(f.issuerA), RemoteSessionClientID: binding.RemoteSessionClientID, Resource: "https://upstream.example.test/mcp",
 		SubjectUrn: urn.NewUserSubject(user).String(), EmaProvider: string(remotesessions.EMAProviderSpeakeasy), Retired: false, UpdatedAt: conv.ToPGTimestamptz(accepted),
+		InternalSessionIssuerID: conv.ToNullUUID(internal.ID),
 	})
 	require.NoError(t, err)
 	_, output, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)

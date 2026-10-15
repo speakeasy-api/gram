@@ -787,9 +787,11 @@ type MigrateIssuerResponseBody struct {
 type SetEMAProvidersResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved, so the endpoint uses its configured external issuer.
+	// No order is saved. An endpoint whose sign-in trusts an external issuer uses
+	// that issuer alone; one that trusts none uses the organization's Speakeasy
+	// issuer when it has one.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The saved providers in order, or the external default.
+	// The saved providers in order, or the derived default described by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
@@ -3551,9 +3553,11 @@ type RefreshIssuerMetadataGatewayErrorResponseBody struct {
 type EMAProviderOrderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved, so the endpoint uses its configured external issuer.
+	// No order is saved. An endpoint whose sign-in trusts an external issuer uses
+	// that issuer alone; one that trusts none uses the organization's Speakeasy
+	// issuer when it has one.
 	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The saved providers in order, or the external default.
+	// The saved providers in order, or the derived default described by is_default.
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
@@ -3561,8 +3565,9 @@ type EMAProviderOrderResponseBody struct {
 type EMAProviderResponseBody struct {
 	// external or speakeasy.
 	Kind string `form:"kind" json:"kind" xml:"kind"`
-	// The external provider's remote session issuer. Omitted for speakeasy, and
-	// for the endpoint's trusted issuer in a default order with none.
+	// The external provider's remote session issuer. Omitted for speakeasy, and in
+	// the organization-wide default order, where an external entry stands for each
+	// endpoint's own trusted issuer.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization's internal session issuer, for speakeasy.
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
@@ -3572,9 +3577,11 @@ type EMAProviderResponseBody struct {
 	// readiness_unknown means the Speakeasy issuer's state could not be read just
 	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
-	// When the vendor last accepted an assertion from this provider for this
-	// binding, from the newest live cached credential. Omitted when none has been
-	// accepted.
+	// When the vendor last accepted an assertion from this provider anywhere in
+	// the organization, so the vendor already trusts it. Attributed to the exact
+	// issuer that vouched; the organization-wide default's external entry takes
+	// the newest acceptance of any external issuer. Omitted when the vendor has
+	// never accepted it.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
@@ -3757,16 +3764,17 @@ type EMAServiceResponseBody struct {
 	// The vendor's display name, from an issuer record that names it. Empty when
 	// none has one.
 	Name string `form:"name" json:"name" xml:"name"`
-	// An issuer record in the organization that names this vendor, for
-	// setEMAProviders. Omitted when only a saved order names the vendor.
+	// An issuer record the organization can name for this vendor,
+	// organization-level first, to pass to setEMAProviders. Omitted only when no
+	// issuer record names the vendor any more.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// The organization-wide provider order. Each provider's last_accepted_at is
 	// the newest acceptance across every binding in the organization.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers" json:"ema_providers" xml:"ema_providers"`
-	// MCP servers with identity chaining turned on for this vendor, in any state
-	// after setup.
+	// Distinct live MCP servers whose identity chaining binding for this vendor
+	// has been turned on, in any state after setup.
 	ServerCount int `form:"server_count" json:"server_count" xml:"server_count"`
-	// Of those, how many are ready.
+	// Of those, how many have a ready binding.
 	ReadyServerCount int `form:"ready_server_count" json:"ready_server_count" xml:"ready_server_count"`
 }
 
