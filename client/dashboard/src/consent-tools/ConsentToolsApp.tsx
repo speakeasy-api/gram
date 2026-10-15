@@ -92,6 +92,7 @@ type ConsentPhase =
   | { name: "loading" }
   | { name: "error"; conflict: boolean; message: string }
   | { name: "deferred" }
+  | { name: "unrestricted"; message: string }
   | { name: "ready"; inventory: ConsentInventory };
 
 /**
@@ -108,6 +109,9 @@ type ConsentGroup = "all" | ToolAnnotation | "none";
 type ToolAccessMode = "all" | "specific";
 
 const GENERIC_ERROR_MESSAGE = "Couldn't load this server's tools.";
+
+const UNSUPPORTED_MESSAGE =
+  "This server has too many tools to choose from here.";
 
 /**
  * The consent page script raises this, and sets the matching attribute on
@@ -242,8 +246,20 @@ function annotationsFromHints(value: unknown): ToolAnnotation[] {
   );
 }
 
-function errorPhase(err: unknown, canDefer: boolean): ConsentPhase {
+function errorPhase(
+  err: unknown,
+  canDefer: boolean,
+  hasPrefill: boolean,
+): ConsentPhase {
   const status = err instanceof StreamableHTTPError ? err.code : undefined;
+  // The server could not capture the inventory for selection (too many
+  // tools, an oversized name). Retrying fails the same way, so fall back to
+  // the all-tools grant, unless that would silently widen a stored selection.
+  if (status === 413 || status === 422) {
+    return hasPrefill
+      ? { name: "error", conflict: false, message: UNSUPPORTED_MESSAGE }
+      : { name: "unrestricted", message: UNSUPPORTED_MESSAGE };
+  }
   if (status === 409 && canDefer) {
     return { name: "deferred" };
   }
@@ -341,7 +357,13 @@ export function ConsentToolsApp({
     load().catch((err: unknown) => {
       // A stored narrower selection must never be replaced by all tools.
       if (!cancelled) {
-        setPhase(errorPhase(err, inventoryDeferred && prefill === null));
+        setPhase(
+          errorPhase(
+            err,
+            inventoryDeferred && prefill === null,
+            prefill !== null,
+          ),
+        );
       }
     });
     return () => {
@@ -367,7 +389,10 @@ export function ConsentToolsApp({
   // effect keeps the server-rendered button in step with the commit, so it is
   // never enabled while the island already shows a blocking error.
   const approveReady =
-    (phase.name === "ready" || phase.name === "deferred") && consentEnabled;
+    (phase.name === "ready" ||
+      phase.name === "deferred" ||
+      phase.name === "unrestricted") &&
+    consentEnabled;
   useLayoutEffect(() => {
     const button = document.getElementById(approveButtonId);
     if (button instanceof HTMLButtonElement) {
@@ -444,6 +469,28 @@ export function ConsentToolsApp({
     );
   }
 
+  if (phase.name === "unrestricted") {
+    return (
+      <div
+        role="status"
+        className="border-border text-muted-foreground space-y-1 border px-3 py-3 text-sm"
+      >
+        <p>
+          {phase.message} This connection starts with all tools available to
+          you.
+        </p>
+        <input type="hidden" name="tool_filtering" value="off" form={formId} />
+        <button
+          type="button"
+          onClick={() => setAttemptID(crypto.randomUUID())}
+          className="text-primary hover:underline"
+        >
+          Load tools again
+        </button>
+      </div>
+    );
+  }
+
   if (phase.name === "error") {
     return (
       <div
@@ -459,13 +506,28 @@ export function ConsentToolsApp({
             Connect the service above, then retry.
           </p>
         )}
-        <button
-          type="button"
-          onClick={() => setAttemptID(crypto.randomUUID())}
-          className="text-primary hover:underline"
-        >
-          Retry
-        </button>
+        <div className="flex flex-wrap gap-x-3">
+          <button
+            type="button"
+            onClick={() => setAttemptID(crypto.randomUUID())}
+            className="text-primary hover:underline"
+          >
+            Retry
+          </button>
+          {/* Tool selection is optional: an inventory that will not load
+              must not stop the user from giving access with all tools. */}
+          {!phase.conflict && (
+            <button
+              type="button"
+              onClick={() =>
+                setPhase({ name: "unrestricted", message: phase.message })
+              }
+              className="text-primary hover:underline"
+            >
+              Give access to all tools
+            </button>
+          )}
+        </div>
       </div>
     );
   }
