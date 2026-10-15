@@ -7,6 +7,7 @@ import { organizationsDisableWebhooks } from "../funcs/organizationsDisableWebho
 import { organizationsEnableWebhooks } from "../funcs/organizationsEnableWebhooks.js";
 import { organizationsGenerateWorkOSAdminPortalLink } from "../funcs/organizationsGenerateWorkOSAdminPortalLink.js";
 import { organizationsGet } from "../funcs/organizationsGet.js";
+import { organizationsGetGateway } from "../funcs/organizationsGetGateway.js";
 import { organizationsGetOnboardingStatus } from "../funcs/organizationsGetOnboardingStatus.js";
 import { organizationsListInvites } from "../funcs/organizationsListInvites.js";
 import { organizationsListSetupTasks } from "../funcs/organizationsListSetupTasks.js";
@@ -28,6 +29,7 @@ import { ListSetupTasksResult } from "../models/components/listsetuptasksresult.
 import { ListUsersResult } from "../models/components/listusersresult.js";
 import { OnboardingStatusResult } from "../models/components/onboardingstatusresult.js";
 import { Organization } from "../models/components/organization.js";
+import { OrganizationGateway } from "../models/components/organizationgateway.js";
 import { OrganizationInvitation } from "../models/components/organizationinvitation.js";
 import { RevokeSignInsResult } from "../models/components/revokesigninsresult.js";
 import { SendEnterpriseAdminOnboardingEmailResult } from "../models/components/sendenterpriseadminonboardingemailresult.js";
@@ -57,6 +59,10 @@ import {
   GetOrganizationRequest,
   GetOrganizationSecurity,
 } from "../models/operations/getorganization.js";
+import {
+  GetOrganizationGatewayRequest,
+  GetOrganizationGatewaySecurity,
+} from "../models/operations/getorganizationgateway.js";
 import {
   ListInvitesRequest,
   ListInvitesSecurity,
@@ -196,6 +202,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Organization> {
     return unwrapAsync(organizationsGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getGateway organizations
+   *
+   * @remarks
+   * Get the active organization's gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization's own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.
+   */
+  async getGateway(
+    request?: GetOrganizationGatewayRequest | undefined,
+    security?: GetOrganizationGatewaySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationGateway> {
+    return unwrapAsync(organizationsGetGateway(
       this,
       request,
       security,

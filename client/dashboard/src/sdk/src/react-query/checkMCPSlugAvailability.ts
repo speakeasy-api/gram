@@ -59,7 +59,11 @@ export type CheckMCPSlugAvailabilityQueryError =
  * checkMCPSlugAvailability toolsets
  *
  * @remarks
- * Check if a MCP slug is available
+ * Check if a MCP slug is taken in any scope (true means taken).
+ *
+ * Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
+ *
+ * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
  */
 export function useCheckMCPSlugAvailability(
   request: CheckMCPSlugAvailabilityRequest,
@@ -88,7 +92,11 @@ export function useCheckMCPSlugAvailability(
  * checkMCPSlugAvailability toolsets
  *
  * @remarks
- * Check if a MCP slug is available
+ * Check if a MCP slug is taken in any scope (true means taken).
+ *
+ * Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
+ *
+ * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
  */
 export function useCheckMCPSlugAvailabilitySuspense(
   request: CheckMCPSlugAvailabilityRequest,

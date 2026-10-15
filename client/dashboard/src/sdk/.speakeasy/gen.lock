@@ -456,6 +456,7 @@ trackedFiles:
   src/funcs/organizationsEnableWebhooks.ts: {}
   src/funcs/organizationsGenerateWorkOSAdminPortalLink.ts: {}
   src/funcs/organizationsGet.ts: {}
+  src/funcs/organizationsGetGateway.ts: {}
   src/funcs/organizationsGetOnboardingStatus.ts: {}
   src/funcs/organizationsListInvites.ts: {}
   src/funcs/organizationsListSetupTasks.ts: {}
@@ -798,6 +799,7 @@ trackedFiles:
   src/funcs/userSessionIssuersCreate.ts: {}
   src/funcs/userSessionIssuersDelete.ts: {}
   src/funcs/userSessionIssuersGet.ts: {}
+  src/funcs/userSessionIssuersGetAttachImpact.ts: {}
   src/funcs/userSessionIssuersList.ts: {}
   src/funcs/userSessionIssuersUpdate.ts: {}
   src/funcs/userSessionsList.ts: {}
@@ -1507,6 +1509,7 @@ trackedFiles:
   src/models/components/organizationclientdelegationstatus.ts: {}
   src/models/components/organizationclientdeletepreflight.ts: {}
   src/models/components/organizationentry.ts: {}
+  src/models/components/organizationgateway.ts: {}
   src/models/components/organizationinvitation.ts: {}
   src/models/components/organizationissuerdeletepreflight.ts: {}
   src/models/components/organizationissuermigratepreflight.ts: {}
@@ -2002,6 +2005,7 @@ trackedFiles:
   src/models/components/usersessionconsent.ts: {}
   src/models/components/usersessionfacetoption.ts: {}
   src/models/components/usersessionissuer.ts: {}
+  src/models/components/usersessionissuerattachimpact.ts: {}
   src/models/components/usersessionissuercimdclient.ts: {}
   src/models/components/usersessionissuerfieldmismatch.ts: {}
   src/models/components/usersessionissuermcpserver.ts: {}
@@ -2320,6 +2324,7 @@ trackedFiles:
   src/models/operations/getobservabilityoverview.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
+  src/models/operations/getorganizationgateway.ts: {}
   src/models/operations/getorganizationremotesessionclient.ts: {}
   src/models/operations/getorganizationremotesessionclientdelegationstatus.ts: {}
   src/models/operations/getorganizationremotesessionclientdeletepreflight.ts: {}
@@ -2394,6 +2399,7 @@ trackedFiles:
   src/models/operations/getusermetricssummary.ts: {}
   src/models/operations/getusersessionclient.ts: {}
   src/models/operations/getusersessionissuer.ts: {}
+  src/models/operations/getusersessionissuerattachimpact.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
   src/models/operations/getwidget.ts: {}
   src/models/operations/getworkloadcustomflows.ts: {}
@@ -3457,6 +3463,8 @@ trackedFiles:
   src/react-query/onboardingStatus.ts: {}
   src/react-query/organization.core.ts: {}
   src/react-query/organization.ts: {}
+  src/react-query/organizationGateway.core.ts: {}
+  src/react-query/organizationGateway.ts: {}
   src/react-query/organizationRemoteSessionClient.core.ts: {}
   src/react-query/organizationRemoteSessionClient.ts: {}
   src/react-query/organizationRemoteSessionClientDelegationStatus.core.ts: {}
@@ -3943,6 +3951,8 @@ trackedFiles:
   src/react-query/userSessionFacets.ts: {}
   src/react-query/userSessionIssuer.core.ts: {}
   src/react-query/userSessionIssuer.ts: {}
+  src/react-query/userSessionIssuerAttachImpact.core.ts: {}
+  src/react-query/userSessionIssuerAttachImpact.ts: {}
   src/react-query/userSessionIssuerCimdClient.core.ts: {}
   src/react-query/userSessionIssuerCimdClient.ts: {}
   src/react-query/userSessionIssuerCimdClients.core.ts: {}
@@ -5294,7 +5304,7 @@ examples:
         application/json: {"mode": "ordered_score", "name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2026-11-17T07:55:55.903Z", "enabled": false, "id": "9b0aba32-79a3-453e-aa22-a34624b4f576", "match_expression": "<value>", "mode": "ordered_score", "name": "<value>", "project_id": "abe56e10-dc34-4d84-b95b-2f35529523a0", "signal_ids": ["c027a78e-b0d9-499a-8bd4-0e3c18fec4fe", "776f5e85-92f4-4089-aaf2-04bc346fead1"], "slug": "<value>", "updated_at": "2026-04-20T06:53:45.466Z"}
+          application/json: {"created_at": "2026-11-17T07:55:55.903Z", "enabled": false, "id": "9b0aba32-79a3-453e-aa22-a34624b4f576", "input_strategy": "sliding_window", "match_expression": "<value>", "mode": "ordered_score", "name": "<value>", "project_id": "abe56e10-dc34-4d84-b95b-2f35529523a0", "signal_ids": ["c027a78e-b0d9-499a-8bd4-0e3c18fec4fe", "776f5e85-92f4-4089-aaf2-04bc346fead1"], "slug": "<value>", "updated_at": "2026-04-20T06:53:45.466Z", "window_size": 959244}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -6041,7 +6051,7 @@ examples:
           id: "cb4b46d2-b9eb-402c-9cf5-431c3d7285c2"
       responses:
         "200":
-          application/json: {"created_at": "2025-12-08T14:54:57.251Z", "enabled": false, "id": "1fa69653-45a6-4186-8298-368c3f2315ec", "match_expression": "<value>", "mode": "exclusive", "name": "<value>", "project_id": "50d06624-0605-4472-b70b-8da8d4e7e67d", "signal_ids": ["e4a11fad-f856-4d36-9db0-bfae59f61c0f", "ed9e31be-6e3e-4b67-a2b5-7d0f6249f4ed", "d2d4a503-5247-454b-9d06-0de1f5b8863d"], "slug": "<value>", "updated_at": "2024-12-20T06:52:43.938Z"}
+          application/json: {"created_at": "2025-12-08T14:54:57.251Z", "enabled": false, "id": "1fa69653-45a6-4186-8298-368c3f2315ec", "input_strategy": "sliding_window", "match_expression": "<value>", "mode": "exclusive", "name": "<value>", "project_id": "50d06624-0605-4472-b70b-8da8d4e7e67d", "signal_ids": ["e4a11fad-f856-4d36-9db0-bfae59f61c0f", "ed9e31be-6e3e-4b67-a2b5-7d0f6249f4ed", "d2d4a503-5247-454b-9d06-0de1f5b8863d"], "slug": "<value>", "updated_at": "2024-12-20T06:52:43.938Z", "window_size": 745948}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -7450,6 +7460,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOrganizationGateway:
+    speakeasy-default-get-organization-gateway:
+      responses:
+        "200":
+          application/json: {"available": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getOrganizationRemoteSessionClient:
     speakeasy-default-get-organization-remote-session-client:
       parameters:
@@ -7566,7 +7585,7 @@ examples:
           id: "b41af893-c72f-4a2f-8726-081b968aa81b"
       responses:
         "200":
-          application/json: {"can_delete": false, "client_count": 403058, "ema_binding_count": 749149, "live_session_count": 779104, "mcp_servers": [{"id": "69a47de3-e48a-4c25-8383-052d7c07645b", "name": "<value>", "project_id": "e25901f2-42fe-4e3d-9716-3a4e8e4b431e", "project_name": "<value>"}], "toolsets": []}
+          application/json: {"can_delete": false, "client_count": 403058, "ema_binding_count": 749149, "live_session_count": 779104, "mcp_servers": [{"id": "69a47de3-e48a-4c25-8383-052d7c07645b", "name": "<value>", "project_id": "e25901f2-42fe-4e3d-9716-3a4e8e4b431e", "project_name": "<value>"}], "toolsets": [], "withdraws_organization_gateway": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -7657,7 +7676,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "network_ingress_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "signals_intelligence_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "network_ingress_enabled": false, "organization_gateway_disabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "signals_intelligence_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -7954,7 +7973,7 @@ examples:
           id: "72bcb542-d65c-43d0-a556-7a422d22a30d"
       responses:
         "200":
-          application/json: {"created_at": "2026-03-07T13:20:55.414Z", "enabled": true, "id": "de30666c-efc0-4fc7-9b2a-493954432815", "match_expression": "<value>", "mode": "ordered_score", "name": "<value>", "project_id": "3d75568e-fff7-4958-b752-e58ae713ec4e", "signal_ids": ["3945f1d3-5702-4fcc-9e6b-e6ab6ba24520"], "slug": "<value>", "updated_at": "2024-05-05T15:10:41.876Z"}
+          application/json: {"created_at": "2026-03-07T13:20:55.414Z", "enabled": true, "id": "de30666c-efc0-4fc7-9b2a-493954432815", "input_strategy": "single_message", "match_expression": "<value>", "mode": "ordered_score", "name": "<value>", "project_id": "3d75568e-fff7-4958-b752-e58ae713ec4e", "signal_ids": ["3945f1d3-5702-4fcc-9e6b-e6ab6ba24520"], "slug": "<value>", "updated_at": "2024-05-05T15:10:41.876Z", "window_size": 171757}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -8374,6 +8393,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getUserSessionIssuerAttachImpact:
+    speakeasy-default-get-user-session-issuer-attach-impact:
+      responses:
+        "200":
+          application/json: {"authorization_server_changes": true, "reauthorization_required": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getUserSessionIssuerCimdClient:
     speakeasy-default-get-user-session-issuer-cimd-client:
       parameters:
@@ -13213,7 +13241,7 @@ examples:
         application/json: {"id": "5a4fb2a1-5c08-4df6-bf7b-f9312a0e46e8"}
       responses:
         "200":
-          application/json: {"created_at": "2024-05-03T21:42:07.872Z", "enabled": true, "id": "6e82e2bb-bede-4d68-ab5d-5a7a4665874a", "match_expression": "<value>", "mode": "exclusive", "name": "<value>", "project_id": "31ec639d-3570-4f32-9a44-7df13dc3fab2", "signal_ids": ["e7ba4ee5-80e7-46ce-9189-e3215f144598"], "slug": "<value>", "updated_at": "2025-05-25T21:10:51.226Z"}
+          application/json: {"created_at": "2024-05-03T21:42:07.872Z", "enabled": true, "id": "6e82e2bb-bede-4d68-ab5d-5a7a4665874a", "input_strategy": "single_message", "match_expression": "<value>", "mode": "exclusive", "name": "<value>", "project_id": "31ec639d-3570-4f32-9a44-7df13dc3fab2", "signal_ids": ["e7ba4ee5-80e7-46ce-9189-e3215f144598"], "slug": "<value>", "updated_at": "2025-05-25T21:10:51.226Z", "window_size": 647389}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

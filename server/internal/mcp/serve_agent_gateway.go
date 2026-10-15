@@ -102,7 +102,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		ProjectID: uuid.Nil,
 	}
 
-	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, agentID); err != nil {
+	if err := s.serveResolvedMetaMCPEndpoint(w, r, logger, endpoint, metaServer, metaMembership{agentID: agentID, organization: false}, nil); err != nil {
 		return fmt.Errorf("serve agent gateway: %w", err)
 	}
 	return nil

@@ -94,11 +94,14 @@ const statuses = ['connected', 'rejected', 'ready', 'error', 'offline'].map((id)
   return status;
 });
 const summary = element({ 'data-connected-count': '1', 'data-connected-total': '5' });
+const root = element();
+const dispatched = [];
 const posts = [];
 vm.runInNewContext(source, {
   URLSearchParams,
   Number,
   String,
+  CustomEvent: class { constructor(type) { this.type = type; } },
   fetch(url, init) {
     const body = new URLSearchParams(init.body);
     posts.push({ url, method: init.method, body: Object.fromEntries(body) });
@@ -110,6 +113,8 @@ vm.runInNewContext(source, {
   },
   document: {
     body: { hasAttribute: () => false },
+    documentElement: root,
+    dispatchEvent(event) { dispatched.push(event.type); },
     createElement: () => element(),
     createTextNode: (text) => ({ text }),
     querySelector(selector) {
@@ -141,7 +146,7 @@ setTimeout(() => {
 
   const ready = cards.ready;
   assert.equal(ready.status.getAttribute('data-chain-check'), 'ready');
-  assert.equal(ready.status.textContent, 'Ready to connect after authorization');
+  assert.equal(ready.status.textContent, 'Automatically connects when you give access');
   assert.equal(ready.fallback.className, fallbackClass, 'readiness keeps separate OAuth optional');
   assert.equal(summary.textContent, '2 of 5 connected', 'readiness does not claim a downstream token');
 
@@ -152,6 +157,8 @@ setTimeout(() => {
   assert.match(no.fallback.className, /\bbg-primary\b/);
   assert.equal(no.fallback.textContent, 'Connect');
   assert.equal(no.fallback.getAttribute('data-connect-fallback'), null);
+  assert.equal(root.getAttribute('data-consent-chain-rejected'), 'true', 'one refusal signals the tool access island');
+  assert.deepEqual(dispatched, ['gram:consent-chain-rejected']);
 
   for (const id of ['error', 'offline']) {
     const c = cards[id];

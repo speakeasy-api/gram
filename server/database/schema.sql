@@ -14538,6 +14538,8 @@ CREATE TABLE IF NOT EXISTS sigint_sensors (
   -- CEL predicate over the message; roles use lowercase domain values.
   match_expression TEXT NOT NULL DEFAULT 'message.role == "user"',
   enabled boolean NOT NULL DEFAULT true,
+  input_strategy TEXT,
+  window_size INTEGER,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -14556,6 +14558,10 @@ COMMENT ON COLUMN sigint_sensors.instructions IS '@access: opaque-restricted';
 COMMENT ON COLUMN sigint_sensors.mode IS '@access: confidential';
 COMMENT ON COLUMN sigint_sensors.match_expression IS '@access: opaque-restricted';
 COMMENT ON COLUMN sigint_sensors.enabled IS '@access: confidential';
+COMMENT ON COLUMN sigint_sensors.input_strategy IS 'Absent means single_message; sliding_window supplies preceding conversation context.
+@access: confidential';
+COMMENT ON COLUMN sigint_sensors.window_size IS 'Total messages including the target; absent means five for sliding windows.
+@access: confidential';
 COMMENT ON COLUMN sigint_sensors.created_at IS '@access: confidential';
 COMMENT ON COLUMN sigint_sensors.updated_at IS '@access: confidential';
 COMMENT ON COLUMN sigint_sensors.deleted_at IS '@access: confidential';

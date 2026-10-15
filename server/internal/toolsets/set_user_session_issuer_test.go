@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -44,6 +46,67 @@ func TestSetUserSessionIssuer_AttachesOrganizationIssuer(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, issuerID, *updated.UserSessionIssuerID)
+}
+
+func TestSetUserSessionIssuer_HonorsProjectScopedAuthorization(t *testing.T) {
+	t.Parallel()
+
+	projectGrant := func(projectID string, scope authz.Scope) authz.Grant {
+		return authz.NewGrantWithSelector(scope, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   authz.WildcardResource,
+			authz.SelectorKeyProjectID:    projectID,
+		})
+	}
+
+	for _, tc := range []struct {
+		name    string
+		grants  func(string) []authz.Grant
+		allowed bool
+	}{
+		{name: "matching project grant", grants: func(projectID string) []authz.Grant {
+			return []authz.Grant{projectGrant(projectID, authz.ScopeMCPWrite)}
+		}, allowed: true},
+		{name: "other project grant", grants: func(string) []authz.Grant {
+			return []authz.Grant{projectGrant(uuid.NewString(), authz.ScopeMCPWrite)}
+		}},
+		{name: "matching project exclusion", grants: func(projectID string) []authz.Grant {
+			return []authz.Grant{
+				authz.NewGrant(authz.ScopeMCPWrite, authz.WildcardResource),
+				projectGrant(projectID, authz.ScopeMCPBlockedWrite),
+			}
+		}},
+		{name: "other project exclusion", grants: func(string) []authz.Grant {
+			return []authz.Grant{
+				authz.NewGrant(authz.ScopeMCPWrite, authz.WildcardResource),
+				projectGrant(uuid.NewString(), authz.ScopeMCPBlockedWrite),
+			}
+		}, allowed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestToolsetsService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			toolset, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+				Name:         "Project authorization issuer toolset",
+				ToolUrns:     []string{},
+				ResourceUrns: []string{},
+			})
+			require.NoError(t, err)
+
+			ctx = authztest.WithExactGrants(t, ctx, tc.grants(authCtx.ProjectID.String())...)
+			_, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: toolset.Slug, UserSessionIssuerID: nil})
+			if tc.allowed {
+				require.NoError(t, err)
+			} else {
+				var oopsErr *oops.ShareableError
+				require.ErrorAs(t, err, &oopsErr)
+				require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+			}
+		})
+	}
 }
 
 func TestSetUserSessionIssuer_RejectsSiblingProjectIssuer(t *testing.T) {

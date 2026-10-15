@@ -305,6 +305,7 @@ func (s *Service) clientScopes(ctx context.Context, projectID uuid.UUID, orgID s
 		UserSessionIssuerID: issuerID,
 		ProjectID:           conv.ToNullUUID(projectID),
 		OrganizationID:      conv.ToPGText(orgID),
+		OrganizationWide:    false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)

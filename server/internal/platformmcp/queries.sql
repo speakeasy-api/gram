@@ -3315,7 +3315,8 @@ WHERE p.id = @plugin_id
 -- name: ListPlatformMCPPluginServers :many
 -- Member-facing compatibility projection. It deliberately omits membership and
 -- backend IDs, which are administrative identity and must not cross this path.
--- A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists.
+-- A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists;
+-- a server-keyed canonical wrapper still falls back to its toolset's MCP slug.
 SELECT
     ps.id,
     ps.display_name,
@@ -3335,7 +3336,7 @@ LEFT JOIN mcp_servers s
   AND s.deleted IS FALSE
   AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
+  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
@@ -3415,7 +3416,7 @@ LEFT JOIN mcp_servers s
   AND s.deleted IS FALSE
   AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
 LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
+  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
   AND t.project_id = p.project_id
   AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway

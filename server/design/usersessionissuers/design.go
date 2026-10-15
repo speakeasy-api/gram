@@ -131,6 +131,46 @@ var _ = Service("userSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionIssuer"}`)
 	})
 
+	Method("getAttachImpact", func() {
+		Description("Preview what attaching a user_session_issuer to an existing MCP server, toolset, or meta MCP server changes for its clients, before calling the matching update. Name exactly one of mcp_server_id, toolset_id, or meta_mcp_server_id; omit user_session_issuer_id to preview detaching the current issuer. Clients and sessions belong to an issuer, so any change of issuer requires the server's clients to authorize again. Advisory only: the update does not require it. Requires the mcp:write access the matching update requires.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The MCP server the issuer would be attached to.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("toolset_id", String, "The toolset the issuer would be attached to.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("meta_mcp_server_id", String, "The meta MCP server the issuer would be attached to.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("user_session_issuer_id", String, "The issuer to attach. Omit to preview detaching the current issuer.", func() {
+				Format(FormatUUID)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(UserSessionIssuerAttachImpact)
+
+		HTTP(func() {
+			GET("/rpc/userSessionIssuers.getAttachImpact")
+			Param("mcp_server_id")
+			Param("toolset_id")
+			Param("meta_mcp_server_id")
+			Param("user_session_issuer_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getUserSessionIssuerAttachImpact")
+		Meta("openapi:extension:x-speakeasy-name-override", "getAttachImpact")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionIssuerAttachImpact"}`)
+	})
+
 	Method("deleteUserSessionIssuer", func() {
 		Description("Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.")
 
@@ -539,6 +579,15 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	Required("id", "project_id", "organization_id", "slug", "authn_challenge_mode", "session_duration_hours", "client_id_metadata_admission_mode", "authorization_server_mode", "use_authentication_host", "issuer_url_pinned", "created_at", "updated_at")
 })
 
+var UserSessionIssuerAttachImpact = Type("UserSessionIssuerAttachImpact", func() {
+	Description("What attaching a user_session_issuer to an existing MCP server changes for its clients.")
+	Attribute("current_issuer", UserSessionIssuer, "The issuer the server uses now. Absent when it has none.")
+	Attribute("candidate_issuer", UserSessionIssuer, "The issuer that would be attached. Absent when previewing a detach.")
+	Attribute("reauthorization_required", Boolean, "True when the server has an issuer and the change replaces or removes it. Its clients' registrations and sessions belong to the current issuer, so every client must register and authorize again.")
+	Attribute("authorization_server_changes", Boolean, "True when the authorization server the server advertises to clients changes: its own per-server authorization server, a shared authorization server's issuer URL, or none. Anything configured with the current authorization server, such as an identity provider or a federated platform, must be updated.")
+	Required("reauthorization_required", "authorization_server_changes")
+})
+
 var ListUserSessionIssuersResult = Type("ListUserSessionIssuersResult", func() {
 	Description("Result type for listing user_session_issuers.")
 
@@ -594,6 +643,8 @@ var OrganizationUserSessionIssuerDeletePreflight = Type("OrganizationUserSession
 	Required("client_count", "live_session_count", "mcp_servers", "toolsets", "can_delete")
 	Attribute("ema_binding_count", Int64, "Active identity-chaining bindings that must be explicitly unlinked before deletion.")
 	Required("ema_binding_count")
+	Attribute("withdraws_organization_gateway", Boolean, "True when this is the organization's only organization-level issuer, so deleting it stops serving the organization gateway its members sign in to. Does not block deletion.")
+	Required("withdraws_organization_gateway")
 })
 
 var UserSessionIssuerFieldMismatch = Type("UserSessionIssuerFieldMismatch", func() {

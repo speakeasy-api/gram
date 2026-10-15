@@ -79,6 +79,7 @@ type Service struct {
 	networkAccessEligibility networkaccess.EligibilityChecker
 	distributionAdmission    *admission.Guard
 	publicationRequests      plugins.PublicationRequests
+	hostedServers            HostedServerWriter
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -116,6 +117,7 @@ func NewService(
 		networkAccessEligibility: networkAccessEligibility,
 		distributionAdmission:    admission.NewGuard(),
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
+		hostedServers:            nil,
 	}
 }
 
@@ -687,7 +689,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, err
 	}
-	if isCanonicalHostedWrapper(unlocked) || (ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID) {
+	if isCanonicalHostedWrapper(unlocked) {
+		return s.updateHostedServer(ctx, logger, unlocked, payload, ids)
+	}
+	if ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID {
 		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
 	}
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
@@ -964,11 +969,12 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	// Role plugins are checked by the same guard inside the attachment, so the
 	// administrator's write must be marked there too.
 	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(admissionCtx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
-		DisplayName:    ServerDisplayName(server),
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       *authCtx.ProjectID,
+		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
+		DisplayName:     ServerDisplayName(server),
+		HostedServerKey: false,
 	}, s.distributionAdmission)
 	if err != nil {
 		if errors.Is(err, admission.ErrApprovalRequired) {
@@ -1054,7 +1060,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return err
 	}
 	if isCanonicalHostedWrapper(preexisting) {
-		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
+		return s.deleteHostedServer(ctx, preexisting.ID)
 	}
 
 	dbtx, err := s.db.Begin(ctx)

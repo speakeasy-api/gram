@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "organizations" service endpoints.
 type Endpoints struct {
 	Get                                goa.Endpoint
+	GetGateway                         goa.Endpoint
 	SendInvite                         goa.Endpoint
 	RevokeInvite                       goa.Endpoint
 	UpdateInviteRole                   goa.Endpoint
@@ -42,6 +43,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		Get:                                NewGetEndpoint(s, a.APIKeyAuth),
+		GetGateway:                         NewGetGatewayEndpoint(s, a.APIKeyAuth),
 		SendInvite:                         NewSendInviteEndpoint(s, a.APIKeyAuth),
 		RevokeInvite:                       NewRevokeInviteEndpoint(s, a.APIKeyAuth),
 		UpdateInviteRole:                   NewUpdateInviteRoleEndpoint(s, a.APIKeyAuth),
@@ -66,6 +68,7 @@ func NewEndpoints(s Service) *Endpoints {
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Get = m(e.Get)
+	e.GetGateway = m(e.GetGateway)
 	e.SendInvite = m(e.SendInvite)
 	e.RevokeInvite = m(e.RevokeInvite)
 	e.UpdateInviteRole = m(e.UpdateInviteRole)
@@ -105,6 +108,29 @@ func NewGetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoin
 			return nil, err
 		}
 		return s.Get(ctx, p)
+	}
+}
+
+// NewGetGatewayEndpoint returns an endpoint function that calls the method
+// "getGateway" of service "organizations".
+func NewGetGatewayEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGatewayPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGateway(ctx, p)
 	}
 }
 

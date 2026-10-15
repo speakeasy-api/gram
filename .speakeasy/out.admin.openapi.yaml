@@ -9586,6 +9586,9 @@ components:
         network_ingress_enabled:
           type: boolean
           description: Whether the organization has the staff-managed private network ingress entitlement
+        organization_gateway_disabled:
+          type: boolean
+          description: Whether an organization admin turned the organization gateway off, so its routes answer 404
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization can use the Speakeasy Platform MCP capability
@@ -9640,6 +9643,7 @@ components:
         - session_portability_enabled
         - network_ingress_enabled
         - signals_intelligence_enabled
+        - organization_gateway_disabled
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -10135,6 +10139,7 @@ components:
             - session_portability
             - network_ingress
             - signals_intelligence
+            - organization_gateway_disabled
           maxLength: 60
         organization_id:
           type: string

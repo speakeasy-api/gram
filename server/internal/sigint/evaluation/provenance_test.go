@@ -30,7 +30,7 @@ func TestReadingIdentityPresence(t *testing.T) {
 			p := &conversationv1.MessageEvent_IngestionContext{}
 			row := storedMessage(m)
 			if tc.actor != "" {
-				row.ChatMessage.UserID = conv.ToPGText(tc.actor)
+				row.UserID = conv.ToPGText(tc.actor)
 			}
 			if tc.billing != "" {
 				p.SetBillingUserId(tc.billing)

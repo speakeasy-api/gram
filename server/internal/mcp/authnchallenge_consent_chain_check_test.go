@@ -229,7 +229,7 @@ func TestConsentChainCheck_ReadyAllowsAuthorizationWithoutPersonalOAuth(t *testi
 	}
 	w, err := postChainCheck(t, fx, nil)
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"status": "ready", "message": "Ready to connect after authorization"}, chainCheckResult(t, w))
+	require.Equal(t, map[string]string{"status": "ready", "message": "Automatically connects when you give access"}, chainCheckResult(t, w))
 	code, page, redirect := render(t, fx)
 	require.Equal(t, http.StatusOK, code)
 	require.Nil(t, redirect, "must not redirect to personal upstream OAuth")
