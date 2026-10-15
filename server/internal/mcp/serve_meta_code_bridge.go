@@ -136,6 +136,10 @@ func (b *metaCodeBackend) current(ctx context.Context) (context.Context, *metaGa
 		}
 		permitted = append(permitted, member)
 	}
+	permitted, err = codeCallableMembers(gate, permitted)
+	if err != nil {
+		return ctx, nil, nil, codemode.ErrToolUnavailable
+	}
 	return ctx, gate, permitted, nil
 }
 

@@ -314,6 +314,12 @@ func (s *SessionSelection) AllowsName(name string) bool {
 	return ok
 }
 
+// PermitsNothing reports whether a non-nil selection grants no tool by name
+// or live annotation. A nil selection means all tools and permits everything.
+func (s *SessionSelection) PermitsNothing() bool {
+	return s != nil && len(s.nameSet) == 0 && len(s.liveAnnotations) == 0
+}
+
 // LiveAnnotations returns the annotation names granted live, in document
 // order. Empty for selections with no live grants. The slice is a copy —
 // compiled authorization state is never handed out mutable.

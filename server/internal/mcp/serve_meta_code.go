@@ -88,6 +88,10 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 	if err != nil {
 		return nil, err
 	}
+	members, err = codeCallableMembers(gate, members)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "scope code tool prefixes").LogError(ctx, logger)
+	}
 	var description strings.Builder
 	description.WriteString(codeExecuteDescription)
 	for _, member := range members[:min(len(members), codePrefixLimit)] {
@@ -107,6 +111,22 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code tool catalog").LogError(ctx, logger)
 	}
 	return body, nil
+}
+
+// codeCallableMembers drops members on which the session's tool selection
+// permits nothing, so Code Mode never advertises a prefix it cannot call.
+func codeCallableMembers(gate *metaGateContext, members []metaMember) ([]metaMember, error) {
+	callable := make([]metaMember, 0, len(members))
+	for _, member := range members {
+		selection, err := gate.memberToolSelection(member)
+		if err != nil {
+			return nil, err
+		}
+		if !selection.PermitsNothing() {
+			callable = append(callable, member)
+		}
+	}
+	return callable, nil
 }
 
 func codeExecutionScope(ctx context.Context, gate *metaGateContext, id mcpjsonrpc.ID) (codemode.Scope, error) {
