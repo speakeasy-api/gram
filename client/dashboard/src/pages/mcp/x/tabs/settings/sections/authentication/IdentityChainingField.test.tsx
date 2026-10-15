@@ -23,6 +23,7 @@ const scopeChecks = vi.hoisted(() => [] as unknown[]);
 const issuerNames = vi.hoisted(() => ({
   items: [] as { id: string; name: string; issuer?: string }[],
   isLoading: false,
+  isError: false,
 }));
 const state = vi.hoisted(() => ({
   orgAdmin: true,
@@ -193,6 +194,7 @@ beforeEach(() => {
   scopeChecks.length = 0;
   issuerNames.items = [];
   issuerNames.isLoading = false;
+  issuerNames.isError = false;
   state.orgAdmin = true;
   state.calls.length = 0;
   state.prepare.mockReset();
@@ -397,6 +399,34 @@ describe("identity chaining client for this service", () => {
       />,
     );
     expect(screen.queryByText(/still on through client/)).toBeNull();
+  });
+
+  it("doesn't call a client old when its authorization server couldn't be looked up", () => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com/"] },
+    };
+    issuerNames.isError = true;
+    staleRead.byIssuer = { wiki: { ...bound("wiki-client"), generation: 4 } };
+    render(
+      <IdentityChainingField
+        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+        providers={{ external: false }}
+        linkedClients={
+          [
+            {
+              id: "wiki-client",
+              clientId: "wiki-client",
+              remoteSessionIssuerId: "wiki",
+            },
+          ] as RemoteSessionClient[]
+        }
+        resource="https://example.com/mcp"
+      />,
+    );
+    expect(screen.queryByText(/still on through client/)).toBeNull();
+    expect(
+      screen.getByText(/Couldn’t check which authorization server/),
+    ).toBeTruthy();
   });
 });
 

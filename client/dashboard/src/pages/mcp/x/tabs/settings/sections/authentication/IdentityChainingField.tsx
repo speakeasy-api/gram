@@ -288,7 +288,9 @@ export function IdentityChainingField({
         ),
       ].filter(
         (id) =>
-          !candidates.some((client) => client.remoteSessionIssuerId === id),
+          !candidates.some((client) => client.remoteSessionIssuerId === id) &&
+          // A failed lookup proves nothing about what the metadata names.
+          clientIssuers.items.some((issuer) => issuer.id === id),
       );
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   // A prepare that returned a blocker; kept until the next action.
@@ -593,17 +595,25 @@ export function IdentityChainingField({
     vendor,
   });
 
-  const staleNotices = staleBindings.map((binding) => (
-    <StaleBinding
-      key={binding.target.remoteSessionIssuerId}
-      gramProject={gramProject}
-      target={binding.target}
-      generation={binding.generation}
-      clientLabel={binding.clientLabel}
-      vendor={vendor}
-      projectId={project.id}
-    />
-  ));
+  const lookupNotice = clientIssuers.isError ? (
+    <Text key="issuer-lookup" muted small className="block">
+      Couldn’t check which authorization server some clients belong to, so they
+      aren’t offered here. Reload the page to try again.
+    </Text>
+  ) : null;
+  const staleNotices = [lookupNotice].concat(
+    staleBindings.map((binding) => (
+      <StaleBinding
+        key={binding.target.remoteSessionIssuerId}
+        gramProject={gramProject}
+        target={binding.target}
+        generation={binding.generation}
+        clientLabel={binding.clientLabel}
+        vendor={vendor}
+        projectId={project.id}
+      />
+    )),
+  );
 
   if (resolvingClients) {
     return (
