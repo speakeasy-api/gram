@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -128,9 +129,29 @@ func TestListEMAServices_SavedOrderNeverNamesAnotherTenantsIssuer(t *testing.T) 
 
 	ownProject := createProject(t, ctx, ti.conn, "own-"+uuid.NewString()[:8])
 	own := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{UUID: ownProject, Valid: true}, pgtype.Text{}, "own-"+uuid.NewString()[:8], "https://shared-vendor.example.com/")
-	out, err = ti.service.ListEMAServices(ctx, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
-	require.NoError(t, err)
-	require.Equal(t, own.String(), conv.PtrValOr(out.Items[0].RemoteSessionIssuerID, ""), "the organization's own legacy project issuer is found through its project")
+	named := func() string {
+		t.Helper()
+		out, err := ti.service.ListEMAServices(ctx, &orgissuersgen.ListEMAServicesPayload{SessionToken: nil})
+		require.NoError(t, err)
+		require.Len(t, out.Items, 1)
+		return conv.PtrValOr(out.Items[0].RemoteSessionIssuerID, "")
+	}
+	setDefault := func(id uuid.UUID) error {
+		t.Helper()
+		_, err := ti.service.SetEMAProviders(ctx, &orgissuersgen.SetEMAProvidersPayload{SessionToken: nil, RemoteSessionIssuerID: id.String(), Providers: nil, ExpectedProviders: nil})
+		if err != nil {
+			return fmt.Errorf("set ema providers: %w", err)
+		}
+		return nil
+	}
+	require.Error(t, setDefault(own), "setEMAProviders does not accept a legacy project issuer")
+	require.Empty(t, named(), "an issuer setEMAProviders rejects is never named")
+
+	global := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, pgtype.Text{}, "catalog-"+uuid.NewString()[:8], "https://shared-vendor.example.com")
+	require.Equal(t, global.String(), named(), "the platform catalog's record is accepted")
+	orgOwned := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGText(org), "org-"+uuid.NewString()[:8], "https://shared-vendor.example.com")
+	require.Equal(t, orgOwned.String(), named(), "the organization's own record wins over the catalog's, even when newer")
+	require.NoError(t, setDefault(orgOwned))
 }
 
 func listEMAServicesByVendor(t *testing.T, ctx context.Context, ti *testInstance) map[string]*orgissuersgen.EMAService {

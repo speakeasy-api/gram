@@ -96161,7 +96161,7 @@ components:
                         - speakeasy
                 last_accepted_at:
                     type: string
-                    description: When the vendor last accepted an assertion from this provider anywhere in the organization, so the vendor already trusts it, from cached credentials that still hold an access token. Attributed to the exact issuer that vouched; the organization-wide default's external entry takes the newest acceptance of any external issuer. Set on every response that returns an order; omitted when the vendor has never accepted it, or when acceptance could not be read.
+                    description: When the vendor last accepted an assertion from this provider anywhere in the organization, so the vendor already trusts it, from cached credentials that still hold an access token. Attributed to the exact issuer that vouched; the organization-wide default's external entry takes the newest acceptance of any external issuer. Set on every response that returns an order; omitted when the vendor has never accepted it, when acceptance could not be read, or on readEMA when the caller lacks org:read.
                     format: date-time
                 remote_session_issuer_id:
                     type: string
@@ -113451,7 +113451,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/EMAProviderInput'
-                    description: The saved list the caller started from, in its stored order, empty for the default. When given and the saved list no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Omit to replace the list unconditionally.
+                    description: The saved list the caller started from, in its stored order, empty for the default. When given and the saved list no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Send the list you last read when updating; on conflict, re-read and reconcile the list before retrying. Omit only to replace the list unconditionally.
                 providers:
                     type: array
                     items:

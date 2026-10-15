@@ -526,8 +526,9 @@ type SetEMAProvidersPayload struct {
 	// The saved list the caller started from, in its stored order, empty for the
 	// default. When given and the saved list no longer matches it, nothing is
 	// written and the request fails with conflict, so a stale editor never
-	// overwrites another administrator's change. Omit to replace the list
-	// unconditionally.
+	// overwrites another administrator's change. Send the list you last read when
+	// updating; on conflict, re-read and reconcile the list before retrying. Omit
+	// only to replace the list unconditionally.
 	ExpectedProviders []*types.EMAProviderInput
 	SessionToken      *string
 }

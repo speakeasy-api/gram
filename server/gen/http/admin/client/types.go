@@ -18691,8 +18691,8 @@ type EMAProviderResponseBody struct {
 	// that still hold an access token. Attributed to the exact issuer that
 	// vouched; the organization-wide default's external entry takes the newest
 	// acceptance of any external issuer. Set on every response that returns an
-	// order; omitted when the vendor has never accepted it, or when acceptance
-	// could not be read.
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 

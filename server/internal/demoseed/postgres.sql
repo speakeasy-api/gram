@@ -2039,8 +2039,9 @@ BEGIN
      demo.det_uuid('gram-demo-ema-client-wiki'), 1, 'ready',
      'administrator_declared', now() - interval '1 day', now() - interval '1 day');
 
-  -- Acme Tracker accepted an assertion that Acme Identity vouched for. Both
-  -- rows are retired and hold no token: they only date the acceptance.
+  -- Acme Tracker accepted an assertion that Acme Identity vouched for. The
+  -- delegation stays live, holding no assertion, so the acceptance stays
+  -- attributed; the cached token is expired and its ciphertext invalid.
   INSERT INTO trusted_issuer_sessions
     (id, remote_session_client_id, organization_id, project_id, subject_urn,
      created_at, updated_at, deleted_at)
@@ -2048,7 +2049,7 @@ BEGIN
     (demo.det_uuid('gram-demo-ema-trusted-session'),
      demo.det_uuid('gram-demo-ema-idp-client'), demo_org, NULL,
      'user:' || demo_user_ids[1], now() - interval '3 hours',
-     now() - interval '2 hours', now() - interval '2 hours');
+     now() - interval '2 hours', NULL);
 
   INSERT INTO remote_session_ema_credentials
     (id, organization_id, project_id, user_session_issuer_id,

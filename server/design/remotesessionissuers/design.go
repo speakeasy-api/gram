@@ -557,7 +557,7 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 			// The handler enforces the 10-provider limit; Goa's length error
 			// would print the decoded entries as Go pointers.
 			Attribute("providers", ArrayOf(shared.EMAProviderInput), "The accepted providers, at most 10; each at most once. Stored in the given order, though each endpoint uses only the one its sign-in goes through. An empty list restores the derived default.")
-			Attribute("expected_providers", ArrayOf(shared.EMAProviderInput), "The saved list the caller started from, in its stored order, empty for the default. When given and the saved list no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Omit to replace the list unconditionally.")
+			Attribute("expected_providers", ArrayOf(shared.EMAProviderInput), "The saved list the caller started from, in its stored order, empty for the default. When given and the saved list no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Send the list you last read when updating; on conflict, re-read and reconcile the list before retrying. Omit only to replace the list unconditionally.")
 			Required("remote_session_issuer_id", "providers")
 			security.SessionPayload()
 		})

@@ -5617,12 +5617,14 @@ GROUP BY c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.r
 -- the resource its cached protected resource document names, as RFC 8707 and
 -- RFC 9728 resources compare. A binding whose
 -- server was removed keeps its vendor listed with no server. Issuer records
--- come first organization-level, then oldest, so the name and record a vendor
--- shows are stable. sign_in_issuer_id is the external issuer the binding's
+-- come first those setEMAProviders accepts (the organization's own, then the
+-- platform catalog), then organization-level, then oldest, so the name and
+-- record a vendor shows are stable. sign_in_issuer_id is the external issuer the binding's
 -- user session issuer, the server's sign-in, trusts, read as identity
 -- chaining reads it; NULL means Speakeasy's own sign-in.
 SELECT i.id AS remote_session_issuer_id, i.issuer, COALESCE(i.name, '')::text AS name,
   (i.project_id IS NULL)::boolean AS issuer_is_organization_level,
+  COALESCE(i.organization_id = @organization_id::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE)::boolean AS issuer_settable,
   COALESCE(b.state, '')::text AS state,
   b.project_id, b.user_session_issuer_id, b.resource,
   m.id AS mcp_server_id, m.toolset_id AS mcp_server_toolset_id,
@@ -5651,7 +5653,8 @@ LEFT JOIN user_session_issuers u ON u.id = b.user_session_issuer_id
 LEFT JOIN remote_session_issuers si ON si.id = u.trusted_remote_session_issuer_id AND si.deleted IS FALSE
   AND (si.organization_id = @organization_id::text OR (si.organization_id IS NULL AND si.project_id IS NULL))
 WHERE b.organization_id = @organization_id::text
-ORDER BY (i.project_id IS NULL) DESC, i.created_at, i.id, p.name, m.id;
+ORDER BY COALESCE(i.organization_id = @organization_id::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE) DESC,
+  COALESCE(i.organization_id = @organization_id::text, FALSE) DESC, (i.project_id IS NULL) DESC, i.created_at, i.id, p.name, m.id;
 
 -- name: ListEMAProviderVendors :many
 -- Vendors with a saved provider order, whether or not a binding names them.
@@ -5666,8 +5669,10 @@ ORDER BY vendor_issuer;
 -- records (including legacy project-owned ones with no organization_id,
 -- resolved through their project), then the platform catalog. A record with
 -- no organization and a project belongs to that project's organization, never
--- the platform. Organization-level first.
-SELECT i.id, COALESCE(i.name, '')::text AS name
+-- the platform. Records setEMAProviders accepts come first, the organization's
+-- own before the catalog, then organization-level.
+SELECT i.id, COALESCE(i.name, '')::text AS name,
+  COALESCE(i.organization_id = @organization_id::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE)::boolean AS settable
 FROM remote_session_issuers i
 LEFT JOIN projects p ON p.id = i.project_id
 WHERE i.issuer = ANY(@issuers::text[]) AND i.deleted IS FALSE
@@ -5676,7 +5681,8 @@ WHERE i.issuer = ANY(@issuers::text[]) AND i.deleted IS FALSE
     OR (i.organization_id IS NULL AND i.project_id IS NULL)
     OR (i.organization_id IS NULL AND p.organization_id = @organization_id::text AND p.deleted IS FALSE)
   )
-ORDER BY (i.organization_id IS NULL AND i.project_id IS NULL), (i.project_id IS NULL) DESC, i.created_at, i.id
+ORDER BY COALESCE(i.organization_id = @organization_id::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE) DESC,
+  COALESCE(i.organization_id = @organization_id::text, FALSE) DESC, (i.project_id IS NULL) DESC, i.created_at, i.id
 LIMIT 1;
 
 -- name: ListEMAVendorAcceptance :many
