@@ -155,16 +155,29 @@ func (b *metaCodeBackend) refreshFailure(ctx context.Context, err error) error {
 	return codemode.ErrToolUnavailable
 }
 
-func (b *metaCodeBackend) Members(ctx context.Context) ([]codemode.Server, error) {
-	_, _, members, err := b.current(ctx)
+func (b *metaCodeBackend) Members(ctx context.Context) ([]codemode.Server, codemode.Lister, error) {
+	ctx, gate, members, err := b.current(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	servers := make([]codemode.Server, 0, len(members))
 	for _, member := range members {
 		servers = append(servers, codemode.Server{Slug: member.slug, Name: member.name})
 	}
-	return servers, nil
+	list := func(callCtx context.Context, slug string) (*codemode.Catalog, error) {
+		bound, cancel := boundToCallback(ctx, callCtx)
+		defer cancel()
+		return b.catalog(bound, gate, members, slug)
+	}
+	return servers, list, nil
+}
+
+// boundToCallback carries a refreshed context's authorization into a
+// narrower callback context, ending when either does.
+func boundToCallback(refreshed, callback context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancelCause(refreshed)
+	stop := context.AfterFunc(callback, func() { cancel(context.Cause(callback)) })
+	return ctx, func() { stop(); cancel(context.Canceled) }
 }
 
 func (b *metaCodeBackend) List(ctx context.Context, slug string) (*codemode.Catalog, error) {
@@ -172,6 +185,10 @@ func (b *metaCodeBackend) List(ctx context.Context, slug string) (*codemode.Cata
 	if err != nil {
 		return nil, err
 	}
+	return b.catalog(ctx, gate, members, slug)
+}
+
+func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, members []metaMember, slug string) (*codemode.Catalog, error) {
 	member, ok := findMetaMember(members, slug)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
@@ -193,36 +210,39 @@ func (b *metaCodeBackend) List(ctx context.Context, slug string) (*codemode.Cata
 	return result, nil
 }
 
-func (b *metaCodeBackend) Invoke(ctx context.Context, path, fingerprint string, arguments json.RawMessage) (json.RawMessage, error) {
+func (b *metaCodeBackend) Resolve(ctx context.Context, path string) (*codemode.Tool, codemode.Dispatch, error) {
 	ctx, gate, members, err := b.current(ctx)
 	if err != nil {
-		if errors.Is(err, codemode.ErrExecutionRevoked) {
-			return nil, err
-		}
-		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
+		return nil, nil, err
 	}
 	slug, name, err := metamcp.SplitQualifiedName(path)
 	if err != nil {
-		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
+		return nil, nil, codemode.ErrToolUnavailable
 	}
 	member, ok := findMetaMember(members, slug)
 	if !ok {
-		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
+		return nil, nil, codemode.ErrToolUnavailable
 	}
-	// Re-resolve the definition from the member snapshot this call dispatches
-	// to, so a changed definition or backend is refused rather than called.
 	catalog, err := b.service.describeMetaMember(ctx, b.service.logger, gate, member)
 	if err != nil {
-		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
+		return nil, nil, codemode.ErrToolUnavailable
 	}
 	entry, ok := catalog.byName[name]
 	if !ok {
-		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_unavailable"}
+		return nil, nil, codemode.ErrToolUnavailable
 	}
 	definition, err := json.Marshal(entry)
-	if err != nil || fingerprint == "" || codeToolFingerprint(member, definition) != fingerprint {
-		return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_changed"}
+	if err != nil {
+		return nil, nil, codemode.ErrToolUnavailable
 	}
+	tool := &codemode.Tool{Path: path, Name: entry.Name, Description: entry.Description, Definition: definition, Fingerprint: codeToolFingerprint(member, definition)}
+	dispatch := func(arguments json.RawMessage) (json.RawMessage, error) {
+		return b.dispatch(ctx, gate, members, path, arguments)
+	}
+	return tool, dispatch, nil
+}
+
+func (b *metaCodeBackend) dispatch(ctx context.Context, gate *metaGateContext, members []metaMember, path string, arguments json.RawMessage) (json.RawMessage, error) {
 	callGate := *gate
 	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID(uuid.NewString()), Method: "tools/call", Params: nil}
 	invocation := &metaCodeInvocation{dispatched: false}
