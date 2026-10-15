@@ -63,6 +63,11 @@ var devServerArgs = []string{
 	// cuts the per-test matching overhead fourfold.
 	"--dynamic-config-value", "matching.numTaskqueueReadPartitions=1",
 	"--dynamic-config-value", "matching.numTaskqueueWritePartitions=1",
+	// RegisterNamespace shares a 20 RPS frontend limit with the other
+	// namespace replication inducing APIs. A package whose parallel tests each
+	// register a namespace at fixture setup outruns it on an 8-CPU runner, and
+	// the excess calls fail with "service rate limit exceeded".
+	"--dynamic-config-value", "frontend.rps.namespaceReplicationInducingAPIs=10000",
 }
 
 func nextRandom() string {
