@@ -582,7 +582,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}
 	// Named as in production, so the pipeline derives the same source.
-	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GramGatewayLogScope)
+	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GatewayLogScope)
 	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings

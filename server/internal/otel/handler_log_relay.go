@@ -250,7 +250,7 @@ func withoutGatewayToolCallRecords(messages []logRelayMessage) ([]logRelayMessag
 	kept := messages[:0]
 	excluded := 0
 	for _, message := range messages {
-		if logOriginalScopeName(message.record) == dialect.GramGatewayLogScope {
+		if logOriginalScopeName(message.record) == dialect.GatewayLogScope {
 			excluded++
 			continue
 		}

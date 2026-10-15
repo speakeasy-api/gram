@@ -37,7 +37,7 @@ func publishedToolCallRecord(t *testing.T, result gcp.PublishResult, call toolCa
 	}).Return(result).Once()
 
 	var warnings bytes.Buffer
-	logger := otelpub.NewLogger(publisher, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GramGatewayLogScope)
+	logger := otelpub.NewLogger(publisher, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GatewayLogScope)
 	publishToolCallRecord(t.Context(), logger, slog.New(slog.NewTextHandler(&warnings, nil)), call, record)
 	require.Len(t, published, 1)
 	return published[0], warnings.String()
@@ -86,7 +86,7 @@ func TestToolCallRecordIsASemconvToolCallUnderTheCallID(t *testing.T) {
 	require.Equal(t, "call-1", record.GetRecordId(), "the tool call id is the record id")
 	require.Equal(t, "org-1", record.GetProvenance().GetOrganizationId())
 	require.Equal(t, "project-1", record.GetProvenance().GetProjectId())
-	require.Equal(t, dialect.GramGatewayLogScope, record.GetScope().GetName())
+	require.Equal(t, dialect.GatewayLogScope, record.GetScope().GetName())
 	require.Equal(t, "execute_tool", record.GetEventName())
 	require.Equal(t, uint64(1_700_000_001_500_000_000), record.GetTimeUnixNano())
 
@@ -100,7 +100,8 @@ func TestToolCallRecordIsASemconvToolCallUnderTheCallID(t *testing.T) {
 	require.Equal(t, "user-1", recordStringAttribute(record, "gram.auth.user_id"))
 	require.Equal(t, "github", recordStringAttribute(record, "gram.toolset.slug"))
 	require.Equal(t, "claude-code", recordStringAttribute(record, "gram.mcp.client.name"))
-	require.False(t, recordHasAttribute(record, "gen_ai.conversation.id"), "an unknown value leaves its attribute off")
+	require.Equal(t, "session-1", recordStringAttribute(record, "gen_ai.conversation.id"), "the MCP session is the conversation")
+	require.False(t, recordHasAttribute(record, "gram.chat.id"), "an unknown value leaves its attribute off")
 	require.False(t, recordHasAttribute(record, "error.type"))
 	require.False(t, recordHasAttribute(record, "error.message"))
 	for _, kv := range record.GetAttributes() {
@@ -144,6 +145,22 @@ func TestToolCallRecordPublishFailureIsOnlyAWarning(t *testing.T) {
 	require.Equal(t, 1, strings.Count(warnings, "tool call record was not published"))
 	require.Contains(t, warnings, "pubsub unavailable")
 	require.Contains(t, warnings, "call-3")
+}
+
+func TestToolCallRecordConversationFallsBackToTheChat(t *testing.T) {
+	t.Parallel()
+
+	call := toolCall{id: "call-5", start: time.Unix(1_700_000_000, 0), chatID: "chat-1"}
+
+	record := call.record(call.start, http.StatusOK, false, nil)
+	var conversationID string
+	record.WalkAttributes(func(kv log.KeyValue) bool {
+		if kv.Key == "gen_ai.conversation.id" {
+			conversationID = kv.Value.AsString()
+		}
+		return true
+	})
+	require.Equal(t, "chat-1", conversationID)
 }
 
 func TestToolCallErrorTypeIsEmptyOnlyForASuccess(t *testing.T) {

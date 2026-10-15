@@ -547,17 +547,15 @@ func TestLogRelayHandlerLeavesGatewayToolCallRecordsToTheToolCallRelay(t *testin
 	handler := newLogRelayTestHandler(t, meterProvider)
 	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, nil, true)
 
-	gatewayScope := relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), dialect.GramGatewayLogScope)
-	started := relayTestLogRecord(dialect.GramToolCallStartedEvent, testLogOrganizationID, testLogProjectID, 0)
-	started.SetAttributes([]*otelv1.LogRecord_KeyValue{gatewayScope})
-	completed := relayTestLogRecord(dialect.GramToolCallCompletedEvent, testLogOrganizationID, testLogProjectID, 0)
-	completed.SetAttributes([]*otelv1.LogRecord_KeyValue{gatewayScope})
+	gatewayScope := relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), dialect.GatewayLogScope)
+	gateway := relayTestLogRecord("execute_tool", testLogOrganizationID, testLogProjectID, 0)
+	gateway.SetAttributes([]*otelv1.LogRecord_KeyValue{gatewayScope})
 	producer := relayTestLogRecord("api_request", testLogOrganizationID, testLogProjectID, 0)
 	producer.SetAttributes([]*otelv1.LogRecord_KeyValue{
 		relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.anthropic.claude_code.events"),
 	})
 
-	messages, failures := logRelayTestMessages(started, producer, completed)
+	messages, failures := logRelayTestMessages(gateway, producer)
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	for _, failure := range failures {
 		require.NoError(t, failure)
@@ -566,5 +564,5 @@ func TestLogRelayHandlerLeavesGatewayToolCallRecordsToTheToolCallRelay(t *testin
 	requests := capture.snapshot()
 	require.Len(t, requests, 1)
 	require.Equal(t, []string{"api_request"}, relayRequestLogBodies(requests[0].request))
-	require.Equal(t, int64(2), agentEventCount(t, reader, meterLogRelayRecordsDropped, attr.ReasonKey, string(relayReasonExcluded)))
+	require.Equal(t, int64(1), agentEventCount(t, reader, meterLogRelayRecordsDropped, attr.ReasonKey, string(relayReasonExcluded)))
 }

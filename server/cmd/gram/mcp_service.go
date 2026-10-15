@@ -61,7 +61,7 @@ const gatewayRecordsServiceName = "gram-server"
 func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub.Logger {
 	return otelpub.NewLogger(publisher,
 		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
-		dialect.GramGatewayLogScope)
+		dialect.GatewayLogScope)
 }
 
 type mcpServiceDependencies struct {

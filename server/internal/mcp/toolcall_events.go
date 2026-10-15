@@ -54,6 +54,10 @@ type toolCall struct {
 }
 
 func (c toolCall) record(end time.Time, statusCode int, resultIsError bool, failure *oops.ShareableError) log.Record {
+	conversationID := c.sessionID
+	if conversationID == "" {
+		conversationID = c.chatID
+	}
 	attrs := []attribute.KeyValue{
 		attr.GenAIOperationName(executeToolOperation),
 		attr.McpMethodName(toolsCallMethod),
@@ -63,8 +67,9 @@ func (c toolCall) record(end time.Time, statusCode int, resultIsError bool, fail
 	}
 	for _, kv := range []attribute.KeyValue{
 		attr.GenAIToolName(c.toolName),
+		attr.GenAIConversationID(conversationID),
 		attr.McpSessionID(c.sessionID),
-		attr.GenAIConversationID(c.chatID),
+		attr.ChatID(c.chatID),
 		attr.UserID(c.externalUserID),
 		attr.UserEmailKey.String(c.userEmail),
 		attr.AuthUserID(c.userID),
@@ -109,7 +114,7 @@ func toolCallErrorType(statusCode int, resultIsError bool, failure *oops.Shareab
 	switch {
 	case toolCallOutcome(statusCode, resultIsError) == dialect.OutcomeOK:
 		return ""
-	case failure != nil:
+	case failure != nil && failure.Code != "":
 		return string(failure.Code)
 	case resultIsError:
 		return toolErrorType
