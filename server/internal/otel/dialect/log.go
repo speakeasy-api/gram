@@ -48,6 +48,7 @@ var logDialects = []LogDialect{
 	ClaudeCodeLog{},
 	CodexLog{},
 	GatewayLog{SemconvLog: SemconvLog{}},
+	HookLog{SemconvLog: SemconvLog{}},
 }
 
 func ForLog(record *otelv1.InboundLogRecord) LogDialect {
@@ -56,9 +57,17 @@ func ForLog(record *otelv1.InboundLogRecord) LogDialect {
 	}
 
 	for _, candidate := range logDialects {
-		if candidate.AppliesTo(record) {
-			return LogFallback{Candidates: []LogDialect{candidate, SemconvLog{}}}
+		if !candidate.AppliesTo(record) {
+			continue
 		}
+		switch candidate.(type) {
+		case GatewayLog, HookLog:
+			// These embed SemconvLog, so they already give its answer wherever
+			// they do not override one; falling back to it would undo an
+			// override that deliberately answers nothing.
+			return candidate
+		}
+		return LogFallback{Candidates: []LogDialect{candidate, SemconvLog{}}}
 	}
 
 	return SemconvLog{}
