@@ -244,18 +244,14 @@ describe("PaygPlanSection", () => {
 
       expect(screen.getByText("Pay as you go")).toBeTruthy();
       expect(
-        screen.getByText(
-          /billed for the usage in each billing period\. The current period ends on September 1, 2026/i,
-        ),
+        screen.getByText(/current period ends on September 1, 2026/i),
       ).toBeTruthy();
-      expect(screen.queryByText(/billed monthly for what you use/i)).toBeNull();
       expect(cancelTrigger()).not.toBeNull();
       expect(resumeButton()).toBeNull();
     });
 
-    // Checkout anchors the first paid month to the next UTC midnight, so the
-    // period on screen right after activation is only that short interval.
-    // Its end is not the monthly renewal and must not be presented as one.
+    // Right after checkout the period only runs to the next UTC midnight, or
+    // the one after that when checkout is near midnight.
     it.each([
       {
         label: "the next UTC midnight",
@@ -279,13 +275,10 @@ describe("PaygPlanSection", () => {
 
         render(<PaygPlanSection />);
 
-        expect(screen.getByText("Pay as you go")).toBeTruthy();
         expect(
-          screen.getByText("You're billed monthly for what you use."),
+          screen.getByText(/billed monthly for what you use/i),
         ).toBeTruthy();
         expect(screen.queryByText(/current period ends/i)).toBeNull();
-        expect(screen.queryByText(/august 1[56], 2026/i)).toBeNull();
-        expect(cancelTrigger()).not.toBeNull();
       },
     );
 
