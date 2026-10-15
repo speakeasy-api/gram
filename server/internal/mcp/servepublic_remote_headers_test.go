@@ -184,7 +184,7 @@ func TestServeConsentMCP_RemoteDoesNotForwardSpeakeasyHeaders(t *testing.T) {
 	seedRemoteHeader(t, ctx, ti.conn, issuer.ProjectID.UUID, remoteServer.ID, "x-api-key", "operator-credential", "", true)
 	seedRemoteHeader(t, ctx, ti.conn, issuer.ProjectID.UUID, remoteServer.ID, "X-Upstream-Token", "", "Gram-Key", false)
 	stateID, csrfToken := seedModernConsentChallenge(t, ctx, ti, issuer.ID, client, mcpServer.ID, endpointSlug)
-	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "x/mcp")
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, endpointSlug, "mcp")
 	require.NoError(t, err)
 
 	extra := map[string]string{"X-Client-Trace": "allowed", "X-Upstream-Token": "client-supplied"}

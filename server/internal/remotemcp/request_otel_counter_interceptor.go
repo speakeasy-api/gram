@@ -12,7 +12,7 @@ import (
 )
 
 // RequestOTELCounterInterceptor records the per-request MCP census (`mcp.request`)
-// for the remote- and tunnel-backed `/x/mcp` traffic, which bypasses the mcp
+// for the remote- and tunnel-backed `/mcp` traffic, which bypasses the mcp
 // package's JSON-RPC dispatch where the hosted and platform surfaces emit the
 // same instrument. It is a [proxy.UserRequestInterceptor] so it observes every
 // parsed inbound message regardless of method, after routing and

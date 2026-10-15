@@ -26,7 +26,7 @@ function page(withProvider = true, initialize = true) {
     <form id="approve" data-approve-form><input name="state" value="state-a"><input name="csrf_token" value="csrf-a">
       <button type="submit" data-self-label="Give access" data-agent-label="Authorize agent" data-consent-self-ready="true">Give access</button>
     </form>
-    <div data-service-connections data-action-url="/x/mcp/example/connect/remote-session">
+    <div data-service-connections data-action-url="/mcp/example/connect/remote-session">
       <li data-remote-client="client-a" data-remote-display="Example provider">
         <span>Example provider</span><span data-account-identity>Connected</span>
         <div data-agent-access hidden></div>
@@ -551,7 +551,7 @@ describe("consent actor picker", () => {
 describe("identity chaining checks", () => {
   function chainedPage() {
     document.body.innerHTML = `
-      <div data-service-connections data-action-url="/x/mcp/example/connect/remote-session">
+      <div data-service-connections data-action-url="/mcp/example/connect/remote-session">
         ${["client-a", "client-b"]
           .map(
             (id) => `

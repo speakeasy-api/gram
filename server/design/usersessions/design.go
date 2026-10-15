@@ -100,7 +100,7 @@ var _ = Service("userSessions", func() {
 		})
 
 		Result(func() {
-			Attribute("access_token", String, "The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} (or /x/mcp/{slug}) surface.")
+			Attribute("access_token", String, "The minted user-session JWT. Send as `Authorization: Bearer` on MCP requests to the bound /mcp/{slug} surface.")
 			Attribute("expires_in", Int, "Lifetime of the access token in seconds.")
 			Required("access_token", "expires_in")
 		})

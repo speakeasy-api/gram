@@ -32,7 +32,7 @@ var DurationMissingKey = attribute.Key("gram.telemetry.duration_missing")
 // from http.server.request.duration).
 //
 // One instance implements both [proxy.ToolsCallRequestInterceptor] and
-// [proxy.ToolsCallResponseInterceptor]. xmcp constructs a fresh interceptor
+// [proxy.ToolsCallResponseInterceptor]. The proxy constructs a fresh interceptor
 // per HTTP request inside [Service.buildProxy], and [proxy.Proxy.Post] fires
 // the request and response chains sequentially on a single goroutine for at
 // most one tools/call per request — so a single nilable start timestamp is

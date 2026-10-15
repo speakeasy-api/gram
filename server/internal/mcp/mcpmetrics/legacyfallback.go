@@ -44,7 +44,7 @@ const (
 	LegacyFallbackWellKnownAuthorizationServer LegacyFallbackEntryPoint = "well_known_authorization_server"
 	// LegacyFallbackOAuth: the issuer-gated OAuth handler family resolving via
 	// LoadResolvedMcpEndpointBySlug (authorize, token, register, revoke,
-	// consent — on both the /mcp and /x/mcp surfaces).
+	// consent).
 	LegacyFallbackOAuth LegacyFallbackEntryPoint = "oauth"
 	// LegacyFallbackInstallPage: the install-page resolver in mcpmetadata.
 	LegacyFallbackInstallPage LegacyFallbackEntryPoint = "install_page"

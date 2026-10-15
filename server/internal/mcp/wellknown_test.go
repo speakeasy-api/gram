@@ -3,8 +3,7 @@
 // end-to-end. Resolution tries mcp_endpoints → mcp_servers first and falls
 // back to the legacy toolsets.mcp_slug lookup, so these tests exercise the
 // full per-backend dispatch matrix on the resolved path (remote / toolset /
-// issuer-gated) plus the legacy slug fallback — mirroring the /x/mcp
-// coverage in xmcp/wellknown_test.go, but with metadata URLs rooted at
+// issuer-gated) plus the legacy slug fallback, with metadata URLs rooted at
 // /mcp/{slug}.
 //
 // The low-level response writers these handlers share
