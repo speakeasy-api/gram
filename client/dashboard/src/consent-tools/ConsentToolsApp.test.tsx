@@ -280,6 +280,18 @@ describe("ConsentToolsApp", () => {
     expect(screen.queryByText("get_thing")).toBeNull();
   });
 
+  it("warns, without blocking, when specific tools grants none", async () => {
+    const user = userEvent.setup();
+    const { button } = renderApp();
+    await openPicker(user);
+    const note = /No tools selected/;
+    expect(screen.getByText(note)).toBeTruthy();
+    expect(button.disabled).toBe(false);
+
+    await user.click(screen.getByRole("checkbox", { name: /get_thing/ }));
+    expect(screen.queryByText(note)).toBeNull();
+  });
+
   it("returning to all tools drops the narrowed grant", async () => {
     const user = userEvent.setup();
     renderApp();
@@ -413,7 +425,7 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /Other/ }));
+    await user.click(screen.getByRole("button", { name: /Unannotated/ }));
     await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
 
     expect(formFieldValues("tool_filtering")).toEqual(["on"]);
