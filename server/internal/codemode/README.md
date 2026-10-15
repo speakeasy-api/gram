@@ -220,17 +220,11 @@ member prefixes and the Python helper workflow. Tools chosen on the consent
 screen limit the underlying tools that search, describe and calls can reach, not
 the native execute tool.
 
-New choices require the `gateway_discovery_modes` organization entitlement,
-a configured code runtime, and the temporary `gateway-code-mode` PostHog flag.
-The flag is evaluated by Speakeasy with the organization ID and organization/project
-group keys; missing, indeterminate, and error results deny new selections.
-Gateway responses expose `code_mode_enabled` to authorized project readers.
-The local CSV enables rollout for the fictional development/demo organizations.
-Before merging/deploying, create the flag with organization/project **group key**
-targeting and verify evaluation reasons for the initial rollout population.
+New choices require a configured code runtime. Gateway responses expose
+`code_mode_enabled` to authorized project readers.
 
-Turning off rollout prevents new explicit choices. It does not rewrite a stored
-gateway default or issued connection policy. Ordinary connections can continue
+An unavailable runtime prevents new explicit choices. It does not rewrite a
+stored gateway default or issued connection policy. Ordinary connections can continue
 following the stored default. An unavailable runtime refuses code execution
 explicitly; it never falls back to Progressive or Direct. Deploy compatible
 readers and infrastructure before enabling issuance. The separate infra chart

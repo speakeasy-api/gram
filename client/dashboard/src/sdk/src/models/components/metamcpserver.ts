@@ -56,7 +56,7 @@ export type MetaMcpServerVisibility = ClosedEnum<
  */
 export type MetaMcpServer = {
   /**
-   * Whether this project can select Code Mode: discovery settings, rollout, and runtime must be available. Existing connections retain their mode when rollout is disabled.
+   * Whether this project can select Code Mode: a code runtime must be configured.
    */
   codeModeEnabled?: boolean | undefined;
   /**

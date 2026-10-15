@@ -564,7 +564,7 @@ that URL.
     - Select one server's heading, then a single tool from another server, and approve. The connection's tools list, Progressive `describe_tools`, and `execute_tool` only reach the chosen tools; calls to the others are refused.
     - Reconnect: the consent screen opens with the previous choice selected.
 
-32. **Python Code Gateway** (requires the local code runner and `gateway-code-mode` flag)
+32. **Python Code Gateway** (requires the local code runner)
     - Open Inspect: confirm exactly one execute tool, Python helper documentation,
       and the two permitted member prefixes. Execute `await tools.search("ticket")`.
     - Describe a returned path, then call a local read-only fixture tool and inspect
@@ -575,7 +575,7 @@ that URL.
       with Specific tools and a Code override: search and calls only reach the
       chosen tools.
     - In Settings select Code, save, and verify a new default connection. A missing
-      runtime/rollout must prevent new Code selections with a visible error or
+      runtime must prevent new Code selections with a visible error or
       unavailable option; stored policies never silently become Progressive.
     - Run the seed twice and the demoseed safety test: the third gateway, its two
       members and endpoint must survive, with no rows changed in other tenants.

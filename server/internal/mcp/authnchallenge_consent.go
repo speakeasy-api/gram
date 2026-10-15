@@ -114,7 +114,7 @@ type consentTemplateData struct {
 	PrefillDiscoveryMode metamcp.DiscoveryMode
 	// GatewayDefaultMode labels the inherited mode, even when new selections are gated.
 	GatewayDefaultMode string
-	// ShowCodeMode exposes the Python choice only when rollout and runtime allow new selections.
+	// ShowCodeMode exposes the Python choice only when the runtime allows new selections.
 	ShowCodeMode bool
 	ClientName   string
 	MCPSlug      string

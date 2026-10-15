@@ -315,7 +315,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway.")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("instructions", String, "Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Speakeasy's built-in instructions.")
-	Attribute("code_mode_enabled", Boolean, "Whether this project can select Code Mode: discovery settings, rollout, and runtime must be available. Existing connections retain their mode when rollout is disabled.")
+	Attribute("code_mode_enabled", Boolean, "Whether this project can select Code Mode: a code runtime must be configured.")
 	Attribute("discovery_mode", String, "The effective default discovery mode. Unconfigured connections follow this value.", func() { Enum("progressive", "direct", "code_mode") })
 
 	Attribute("created_at", String, func() {
