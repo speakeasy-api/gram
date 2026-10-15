@@ -68,7 +68,9 @@ afterEach(cleanup);
 describe("Services", () => {
   it("explains the once-per-service step and leads with the first action when empty", () => {
     show();
-    expect(screen.getByRole("heading", { name: "Services" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Connected services" }),
+    ).toBeTruthy();
     expect(screen.getByText(/once per service/)).toBeTruthy();
     expect(
       screen.getByText(

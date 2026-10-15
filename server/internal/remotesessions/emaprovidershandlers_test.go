@@ -476,3 +476,28 @@ func TestSetEMAProviders_RefusesAStaleExpectedOrder(t *testing.T) {
 	require.NoError(t, err, "an editor that started from the current order saves")
 	require.Len(t, order.Providers, 2)
 }
+
+func TestSetEMAProviders_StaleEditNamingADeletedProviderConflicts(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	f := newEMAProvidersFixture(t, ctx, ti)
+	_, err := setEMAProviders(ctx, ti, f.vendor, externalInput(f.external), speakeasyInput())
+	require.NoError(t, err)
+
+	// Another administrator drops the external provider and deletes its
+	// issuer while this editor still holds the two-provider order.
+	_, err = setEMAProviders(ctx, ti, f.vendor, speakeasyInput())
+	require.NoError(t, err)
+	deleted, err := repo.New(ti.conn).SoftDeleteRemoteSessionIssuerFixture(ctx, f.external)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+
+	_, err = setEMAProviders(ctx, ti, f.vendor, speakeasyInput(), externalInput(f.external))
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	_, err = ti.service.SetEMAProviders(ctx, &orgissuersgen.SetEMAProvidersPayload{
+		SessionToken: nil, RemoteSessionIssuerID: f.vendor.String(),
+		Providers:         []*types.EMAProviderInput{speakeasyInput(), externalInput(f.external)},
+		ExpectedProviders: []*types.EMAProviderInput{externalInput(f.external), speakeasyInput()},
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+}

@@ -255,12 +255,57 @@ func TestListEMAServices_MatchesServersByCachedCanonicalResource(t *testing.T) {
 	seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-same-origin", "https://alias.example.com/other")
 	require.Zero(t, listEMAServicesByVendor(t, ctx, ti)[vendor].ServerCount, "sharing an origin proves nothing")
 
-	_, err = remotemcprepo.New(ti.conn).UpsertRemoteProtectedResource(ctx, remotemcprepo.UpsertRemoteProtectedResourceParams{
-		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ResourceIdentifier: aliased,
-		Metadata: `{"resource":"https://alias.example.com/","authorization_servers":["https://idp.example.com"]}`,
-	})
-	require.NoError(t, err)
+	cacheResource := func(resource string) {
+		t.Helper()
+		_, err := remotemcprepo.New(ti.conn).UpsertRemoteProtectedResource(ctx, remotemcprepo.UpsertRemoteProtectedResourceParams{
+			ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ResourceIdentifier: aliased,
+			Metadata: `{"resource":"` + resource + `","authorization_servers":["https://idp.example.com"]}`,
+		})
+		require.NoError(t, err)
+	}
+	cacheResource("https://alias.example.com/")
+	require.Zero(t, listEMAServicesByVendor(t, ctx, ti)[vendor].ServerCount, "resources compare exactly, so a trailing slash names a different resource")
+
+	cacheResource(canonical.Resource)
 	svc := listEMAServicesByVendor(t, ctx, ti)[vendor]
 	require.Equal(t, 1, svc.ServerCount, "the server whose cached document names the binding's resource reaches the service")
 	require.Equal(t, []string{"ema-aliased"}, emaServiceServerNames(svc.Servers))
+}
+
+func TestListEMAServices_ServerWithTwoWorkingBindingsShowsTheNewestAcceptance(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ti.service.SetSpeakeasySigningAvailable(true)
+	internalIssuer := seedInternalSessionIssuer(t, ctx, ti, auth.ActiveOrganizationID)
+	vendor, err := remotesessions.NormalizeVendorIssuer("https://idp.example.com")
+	require.NoError(t, err)
+
+	byURL := in
+	byURL.Resource = "https://two.example.com/mcp"
+	byDocument := in
+	byDocument.Resource = "https://two.example.com"
+	prepareEMABinding(t, ctx, ti, byURL)
+	prepareEMABinding(t, ctx, ti, byDocument)
+	seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-two", byURL.Resource)
+	_, err = remotemcprepo.New(ti.conn).UpsertRemoteProtectedResource(ctx, remotemcprepo.UpsertRemoteProtectedResourceParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, ResourceIdentifier: byURL.Resource,
+		Metadata: `{"resource":"https://two.example.com","authorization_servers":["https://idp.example.com"]}`,
+	})
+	require.NoError(t, err)
+
+	older := time.Now().UTC().Add(-3 * time.Hour).Truncate(time.Second)
+	newer := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	newest := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	plantEMACredential(t, ctx, ti, byURL, remotesessions.EMAProviderSpeakeasy, older, false, internalIssuer)
+	plantEMACredential(t, ctx, ti, byDocument, remotesessions.EMAProviderSpeakeasy, newer, false, internalIssuer)
+	svc := listEMAServicesByVendor(t, ctx, ti)[vendor]
+	require.Len(t, svc.Servers, 1, "both bindings serve one server")
+	require.Equal(t, "working", svc.Servers[0].Status)
+	require.Equal(t, newer.Format(time.RFC3339), conv.PtrValOr(svc.Servers[0].LastAcceptedAt, ""))
+
+	plantEMACredential(t, ctx, ti, byURL, remotesessions.EMAProviderSpeakeasy, newest, false, internalIssuer)
+	svc = listEMAServicesByVendor(t, ctx, ti)[vendor]
+	require.Equal(t, newest.Format(time.RFC3339), conv.PtrValOr(svc.Servers[0].LastAcceptedAt, ""), "whichever binding was accepted last wins")
 }

@@ -211,7 +211,7 @@ type XAAEMAProvider struct {
 	Kind                  string  `json:"kind" jsonschema:"external (an external issuer such as an Okta authorization server) or speakeasy (the organization's internal session issuer)"`
 	RemoteSessionIssuerID *string `json:"remote_session_issuer_id,omitempty" jsonschema:"the external provider's remote session issuer, when it names one"`
 	UnavailableReason     *string `json:"unavailable_reason,omitempty" jsonschema:"why the provider cannot serve now, such as not_trusted_by_endpoint, sign_in_enforcement_required, signing_paused, keyless, verified_domain_required or readiness_unknown; omitted when it can"`
-	LastAcceptedAt        *string `json:"last_accepted_at,omitempty" jsonschema:"when the vendor last accepted an assertion from this exact provider anywhere in the organization, from cached credentials that still hold an access token; organization-wide evidence that the vendor trusts the provider, not proof for this server. Omitted when none has been accepted"`
+	LastAcceptedAt        *string `json:"last_accepted_at,omitempty" jsonschema:"when the vendor last accepted an assertion from this exact provider anywhere in the organization, from cached credentials that still hold an access token; organization-wide evidence that the vendor trusts the provider, not proof for this server. The vendor is read through its current issuer record, so after that record's URL changes, older acceptance may be credited to the new vendor. Omitted when none has been accepted"`
 }
 
 type XAAIdentityChainingBinding struct {

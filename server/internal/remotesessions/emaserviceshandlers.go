@@ -151,7 +151,7 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 				server.Status = emaServerNotProven
 			}
 		}
-		if prev, ok := svc.servers[row.McpServerID.UUID]; !ok || emaServerStatusRank[server.Status] > emaServerStatusRank[prev.Status] {
+		if prev, ok := svc.servers[row.McpServerID.UUID]; !ok || emaServerPreferred(server, prev) {
 			svc.servers[row.McpServerID.UUID] = server
 		}
 	}
@@ -299,4 +299,14 @@ func memoizedReadiness(check EMAProviderReadiness) EMAProviderReadiness {
 		seen[issuerID] = answer{reason: reason, err: err}
 		return reason, err
 	}
+}
+
+// emaServerPreferred reports whether next should replace prev as the binding a
+// server shows: the better status wins, then the newest acceptance. Both
+// timestamps are UTC RFC 3339, so they compare as strings.
+func emaServerPreferred(next, prev *orgissuersgen.EMAServiceServer) bool {
+	if nextRank, prevRank := emaServerStatusRank[next.Status], emaServerStatusRank[prev.Status]; nextRank != prevRank {
+		return nextRank > prevRank
+	}
+	return next.LastAcceptedAt != nil && (prev.LastAcceptedAt == nil || *next.LastAcceptedAt > *prev.LastAcceptedAt)
 }

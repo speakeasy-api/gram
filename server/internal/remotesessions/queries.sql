@@ -5215,6 +5215,13 @@ ORDER BY id;
 UPDATE trusted_issuer_sessions SET deleted_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id::text AND deleted IS FALSE;
 
+-- name: PlantTrustedIssuerSessionFixture :one
+-- TEST FIXTURE ONLY. A live delegation through one client, without the
+-- credentials a real sign-in stores.
+INSERT INTO trusted_issuer_sessions (organization_id, remote_session_client_id, subject_urn)
+VALUES (@organization_id::text, @remote_session_client_id::uuid, @subject_urn::text)
+RETURNING id;
+
 -- name: PlantSpeakeasyEMACredentialFixture :one
 -- TEST FIXTURE ONLY. A live Speakeasy slot for a provider switch, without the
 -- issuer, sign-in and grant rows a real Speakeasy publish references.
@@ -5235,11 +5242,13 @@ RETURNING id;
 -- retired, without the rows a real publish references.
 INSERT INTO remote_session_ema_credentials (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
-  resource, subject_urn, client_selection, ema_provider, internal_session_issuer_id, access_token_encrypted, access_expires_at, updated_at, deleted_at
+  resource, subject_urn, client_selection, ema_provider, internal_session_issuer_id, trusted_issuer_session_id,
+  access_token_encrypted, access_expires_at, updated_at, deleted_at
 )
 VALUES (
   @organization_id, @project_id, @user_session_issuer_id, @remote_session_issuer_id, @remote_session_client_id,
   @resource, @subject_urn, 'binding', @ema_provider::text, sqlc.narg('internal_session_issuer_id')::uuid,
+  sqlc.narg('trusted_issuer_session_id')::uuid,
   CASE WHEN @retired::boolean THEN NULL ELSE 'encrypted-fixture' END,
   clock_timestamp() + interval '1 hour', @updated_at::timestamptz,
   CASE WHEN @retired::boolean THEN clock_timestamp() ELSE NULL END
@@ -5576,7 +5585,8 @@ SELECT c.ema_provider,
   MAX(c.updated_at)::timestamptz AS last_accepted_at
 FROM remote_session_ema_credentials c
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
-LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
 WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id::uuid
   AND c.user_session_issuer_id = @user_session_issuer_id::uuid
   AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
@@ -5593,7 +5603,8 @@ SELECT c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.res
   MAX(c.updated_at)::timestamptz AS last_accepted_at
 FROM remote_session_ema_credentials c
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
-LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
 WHERE c.organization_id = @organization_id::text
   AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
 GROUP BY c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.resource, c.ema_provider,
@@ -5602,9 +5613,9 @@ GROUP BY c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.r
 -- name: ListEMAServiceServers :many
 -- Status only: every identity chaining binding in the organization with the
 -- vendor issuer record it names and each live MCP server it serves, for the
--- organization's services view. A server is matched by its URL or by the
--- resource its cached protected resource document names, trailing slash
--- aside, as identity chaining matches a binding's resource. A binding whose
+-- organization's services view. A server is matched exactly by its URL or by
+-- the resource its cached protected resource document names, as RFC 8707 and
+-- RFC 9728 resources compare. A binding whose
 -- server was removed keeps its vendor listed with no server. Issuer records
 -- come first organization-level, then oldest, so the name and record a vendor
 -- shows are stable.
@@ -5621,11 +5632,11 @@ JOIN remote_session_issuers i ON i.id = b.remote_session_issuer_id AND i.deleted
   AND (i.project_id = b.project_id OR (i.project_id IS NULL AND (i.organization_id = b.organization_id OR i.organization_id IS NULL)))
 LEFT JOIN remote_mcp_servers r ON r.project_id = b.project_id AND r.deleted IS FALSE
   AND (
-    rtrim(r.url, '/') = rtrim(b.resource, '/')
+    r.url = b.resource
     OR EXISTS (
       SELECT 1 FROM remote_protected_resources rpr
       WHERE rpr.project_id = r.project_id AND rpr.resource_identifier = r.url AND rpr.deleted IS FALSE
-        AND rtrim(rpr.metadata->>'resource', '/') = rtrim(b.resource, '/')
+        AND rpr.metadata->>'resource' = b.resource
     )
   )
 LEFT JOIN mcp_servers m ON m.remote_mcp_server_id = r.id AND m.project_id = b.project_id
@@ -5662,8 +5673,8 @@ LIMIT 1;
 -- name: ListEMAVendorAcceptance :many
 -- Status only: when each vendor last accepted an assertion from each provider
 -- across the organization. External acceptances are attributed to the issuer
--- whose sign-in vouched (through the trusted issuer session's client), and
--- Speakeasy ones to the internal session issuer that signed. Only
+-- whose sign-in vouched, through a live trusted issuer session and its live
+-- client, and Speakeasy ones to the internal session issuer that signed. Only
 -- credentials that still hold an access token count: retirement and
 -- containment purges bump updated_at without an exchange, so a retired
 -- credential's acceptance disappears with it until an accepted_at column
@@ -5676,7 +5687,8 @@ FROM remote_session_ema_credentials c
 JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
   AND (i.project_id = c.project_id OR (i.project_id IS NULL AND (i.organization_id = c.organization_id OR i.organization_id IS NULL)))
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
-LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id
+  AND t.deleted IS FALSE
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id AND rc.deleted IS FALSE
 WHERE c.organization_id = @organization_id::text
   AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
 GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;

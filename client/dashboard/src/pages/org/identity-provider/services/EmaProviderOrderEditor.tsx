@@ -84,6 +84,9 @@ export function EmaProviderOrderEditor({
   // Save instead of silently restoring what another admin removed.
   const [base, setBase] = useState<Entry[] | null>(null);
   const [conflict, setConflict] = useState(false);
+  // A refused save waits for the current order before the editor can rebase
+  // onto it, or the next save would conflict again.
+  const [refreshingOrder, setRefreshingOrder] = useState(false);
   const [adding, setAdding] = useState("");
   const saved: Entry[] = isDefault
     ? []
@@ -152,9 +155,10 @@ export function EmaProviderOrderEditor({
     onError: (error) => {
       if (error instanceof GramError && error.statusCode === 409) {
         setConflict(true);
+        setRefreshingOrder(true);
         void invalidateAllOrganizationRemoteSessionIssuerEMAServices(
           queryClient,
-        );
+        ).finally(() => setRefreshingOrder(false));
       }
     },
   });
@@ -235,9 +239,11 @@ export function EmaProviderOrderEditor({
                   <div className="flex flex-col items-start gap-2">
                     <Text small className="block">
                       This order changed since you started editing.{" "}
-                      {saved.length > 0
-                        ? `It’s now: ${saved.map((entry) => entry.name).join(", ")}.`
-                        : `${serviceName} uses the default order now.`}
+                      {refreshingOrder
+                        ? "Loading the current order…"
+                        : saved.length > 0
+                          ? `It’s now: ${saved.map((entry) => entry.name).join(", ")}.`
+                          : `${serviceName} uses the default order now.`}
                     </Text>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -250,6 +256,7 @@ export function EmaProviderOrderEditor({
                       <Button
                         variant="tertiary"
                         size="sm"
+                        disabled={refreshingOrder}
                         onClick={() => {
                           setBase(saved);
                           setConflict(false);

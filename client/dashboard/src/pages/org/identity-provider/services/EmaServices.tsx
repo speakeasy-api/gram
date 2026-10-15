@@ -25,9 +25,12 @@ import {
 export function EmaServices(): JSX.Element {
   const services = useEmaServices();
   return (
-    <section className="flex min-w-0 flex-col gap-4" aria-label="Services">
+    <section
+      className="flex min-w-0 flex-col gap-4"
+      aria-label="Connected services"
+    >
       <div className="flex flex-col gap-1">
-        <Heading variant="h3">Services</Heading>
+        <Heading variant="h3">Connected services</Heading>
         <Text muted small>
           Each service your MCP servers reach has to trust an identity provider
           above before Enterprise Managed Authorization works. Do that once per

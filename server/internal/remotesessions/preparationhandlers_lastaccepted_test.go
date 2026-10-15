@@ -100,3 +100,68 @@ func TestReadEMA_ReportsVendorAndBindingAcceptance(t *testing.T) {
 	require.NoError(t, q.InsertEMAProvider(ctx, repo.InsertEMAProviderParams{OrganizationID: auth.ActiveOrganizationID, VendorIssuer: vendor, RemoteSessionIssuerID: conv.ToNullUUID(external), InternalSessionIssuerID: uuid.NullUUID{}, Position: 0}))
 	require.Nil(t, read(other.Resource).LastAcceptedAt, "acceptance from a provider the order no longer tries proves nothing")
 }
+
+func TestEMAAcceptance_IgnoresCredentialsVouchedThroughDeletedDelegations(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org := auth.ActiveOrganizationID
+	q := repo.New(ti.conn)
+
+	plantVouched := func() uuid.UUID {
+		t.Helper()
+		subject := urn.NewUserSubject("user-" + uuid.NewString()[:8]).String()
+		session, err := q.PlantTrustedIssuerSessionFixture(ctx, repo.PlantTrustedIssuerSessionFixtureParams{OrganizationID: org, RemoteSessionClientID: in.ClientID, SubjectUrn: subject})
+		require.NoError(t, err)
+		_, err = q.PlantEMACredentialFixture(ctx, repo.PlantEMACredentialFixtureParams{
+			OrganizationID: conv.ToPGText(org), ProjectID: conv.ToNullUUID(*auth.ProjectID),
+			UserSessionIssuerID: conv.ToNullUUID(in.UserSessionIssuerID), RemoteSessionIssuerID: conv.ToNullUUID(in.RemoteSessionIssuerID),
+			RemoteSessionClientID: conv.ToNullUUID(in.ClientID), Resource: in.Resource, SubjectUrn: subject,
+			EmaProvider: string(remotesessions.EMAProviderExternal), Retired: false, UpdatedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+			InternalSessionIssuerID: uuid.NullUUID{}, TrustedIssuerSessionID: conv.ToNullUUID(session),
+		})
+		require.NoError(t, err)
+		return session
+	}
+	// attributed reports, per acceptance query, whether any external
+	// acceptance is still attributed to a vouching issuer.
+	attributed := func() []bool {
+		t.Helper()
+		binding, err := q.ListEMABindingAcceptance(ctx, repo.ListEMABindingAcceptanceParams{
+			OrganizationID: org, ProjectID: *auth.ProjectID, UserSessionIssuerID: in.UserSessionIssuerID,
+			RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource,
+		})
+		require.NoError(t, err)
+		organization, err := q.ListEMABindingAcceptanceForOrganization(ctx, org)
+		require.NoError(t, err)
+		vendor, err := q.ListEMAVendorAcceptance(ctx, org)
+		require.NoError(t, err)
+		out := []bool{false, false, false}
+		for _, row := range binding {
+			out[0] = out[0] || row.ExternalIssuerID.Valid
+		}
+		for _, row := range organization {
+			out[1] = out[1] || row.ExternalIssuerID.Valid
+		}
+		for _, row := range vendor {
+			out[2] = out[2] || row.ExternalIssuerID.Valid
+		}
+		return out
+	}
+
+	session := plantVouched()
+	require.Equal(t, []bool{true, true, true}, attributed())
+
+	deleted, err := q.SoftDeleteTrustedIssuerSessionFixture(ctx, repo.SoftDeleteTrustedIssuerSessionFixtureParams{ID: session, OrganizationID: org})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+	require.Equal(t, []bool{false, false, false}, attributed(), "a revoked delegation vouches for nothing")
+
+	plantVouched()
+	require.Equal(t, []bool{true, true, true}, attributed())
+	deleted, err = q.SoftDeleteRemoteSessionClientFixture(ctx, in.ClientID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+	require.Equal(t, []bool{false, false, false}, attributed(), "a deleted client vouches for nothing")
+}

@@ -83,16 +83,17 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "the remote session issuer's URL is not an issuer identifier")
 	}
-	if err := resolveEMAProviderIDs(ctx, logger, q, org, providers); err != nil {
-		return nil, err
-	}
-
 	beforeRows, err := q.ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: org, VendorIssuer: vendor})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
 	}
+	// A stale edit conflicts before its providers are checked, so one naming a
+	// since-deleted provider reads as changed, not invalid.
 	if payload.ExpectedProviders != nil && !savedOrderMatches(beforeRows, expected) {
 		return nil, oops.E(oops.CodeConflict, nil, "the EMA provider order changed since you started editing; review it and try again").LogInfo(ctx, logger)
+	}
+	if err := resolveEMAProviderIDs(ctx, logger, q, org, providers); err != nil {
+		return nil, err
 	}
 	before := &audit.RemoteSessionIssuerEMAProviders{VendorIssuer: vendor, Providers: make([]audit.RemoteSessionIssuerEMAProvider, 0, len(beforeRows))}
 	for _, row := range beforeRows {

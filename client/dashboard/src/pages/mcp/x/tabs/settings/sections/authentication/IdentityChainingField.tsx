@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
@@ -30,6 +30,7 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { mapWithConcurrency } from "@/lib/bounded-concurrency";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
 import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
@@ -225,6 +226,9 @@ function SettingsLink({
   );
 }
 
+/** How many stale-binding reads run at once. */
+const MAX_CONCURRENT_STALE_READS = 3;
+
 /** Rendered only for an organization issuer that an identity provider or Speakeasy can vouch for. */
 export function IdentityChainingField({
   userSessionIssuer,
@@ -313,19 +317,35 @@ export function IdentityChainingField({
     remoteSessionIssuerId,
     resource,
   }));
-  const staleReads = useQueries({
-    queries: staleTargets.map((staleTarget) => ({
-      queryKey: ["identityChaining", "readEMA", gramProject, staleTarget],
-      retry: false,
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        buildRemoteSessionClientsReadEMAMutation(core).mutationFn({
-          request: { gramProject, readEMARequestBody: staleTarget },
-          options: { fetchOptions: { signal } },
-        }),
-    })),
+  // One read per issuer that could still hold a binding, a few at a time, so
+  // a sign-in with many linked issuers doesn't fire them all at once.
+  const staleReads = useQuery({
+    queryKey: [
+      "identityChaining",
+      "readEMA",
+      gramProject,
+      "stale",
+      userSessionIssuer.id,
+      resource,
+      staleIssuerIds,
+    ],
+    enabled: staleTargets.length > 0,
+    retry: false,
+    queryFn: ({ signal }) =>
+      mapWithConcurrency(
+        staleTargets,
+        MAX_CONCURRENT_STALE_READS,
+        (staleTarget) =>
+          buildRemoteSessionClientsReadEMAMutation(core)
+            .mutationFn({
+              request: { gramProject, readEMARequestBody: staleTarget },
+              options: { fetchOptions: { signal } },
+            })
+            .catch(() => undefined),
+      ),
   });
   const staleBindings = staleTargets.flatMap((staleTarget, i) => {
-    const data = staleReads[i]?.data;
+    const data = staleReads.data?.[i];
     return data && chainingUnlinkable(data)
       ? [
           {

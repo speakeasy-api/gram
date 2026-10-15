@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   saveError: null as unknown,
   invalidate: vi.fn(),
+  servicesRefresh: null as Promise<void> | null,
   saveResult: { isDefault: false } as { isDefault: boolean },
   speakeasyIssuer: "https://speakeasy.example.com/issuer" as string | undefined,
   signIns: [] as { projectId: string; trustedRemoteSessionIssuerId?: string }[],
@@ -89,7 +90,7 @@ vi.mock(
   () => ({
     invalidateAllOrganizationRemoteSessionIssuerEMAServices: () => {
       mocks.invalidate("services");
-      return Promise.resolve();
+      return mocks.servicesRefresh ?? Promise.resolve();
     },
   }),
 );
@@ -196,6 +197,7 @@ beforeEach(() => {
   mocks.save.mockReset();
   mocks.saveError = null;
   mocks.invalidate.mockReset();
+  mocks.servicesRefresh = null;
   mocks.saveResult = { isDefault: false };
   mocks.speakeasyIssuer = "https://speakeasy.example.com/issuer";
   mocks.signIns = [{ projectId: "", trustedRemoteSessionIssuerId: "okta" }];
@@ -493,6 +495,52 @@ describe("one service", () => {
       screen.getByText(/This order changed since you started editing/),
     ).toBeTruthy();
     expect(saveButton().disabled).toBe(true);
+  });
+
+  it("waits for the current order before rebasing a refused save", async () => {
+    mocks.rows = [
+      { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
+    ];
+    let refreshed = () => {};
+    mocks.servicesRefresh = new Promise<void>((resolve) => {
+      refreshed = resolve;
+    });
+    const { rerender } = show();
+    fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move Speakeasy up" }));
+    mocks.saveError = new GramError("conflict", {
+      response: new Response("{}", { status: 409 }),
+      request: new Request("https://example.com"),
+      body: "{}",
+    });
+    fireEvent.click(saveButton());
+    expect(screen.getByText(/Loading the current order…/)).toBeTruthy();
+    const review = () =>
+      screen.getByRole<HTMLButtonElement>("button", {
+        name: "Review and keep editing",
+      });
+    expect(review().disabled).toBe(true);
+
+    // Another admin removed Speakeasy; the refetch brings that order in.
+    mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [okta] }];
+    rerender(tree());
+    refreshed();
+    await waitFor(() => expect(review().disabled).toBe(false));
+    expect(screen.getByText(/It’s now: Okta\./)).toBeTruthy();
+    fireEvent.click(review());
+    mocks.saveError = null;
+    fireEvent.click(saveButton());
+    expect(mocks.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          setEMAProvidersRequestBody: expect.objectContaining({
+            expectedProviders: [
+              { kind: "external", remoteSessionIssuerId: "okta" },
+            ],
+          }),
+        }),
+      }),
+    );
   });
 
   it("keeps a temporarily disabled Speakeasy saveable, with a note", () => {

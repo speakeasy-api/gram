@@ -32,17 +32,13 @@ const state = vi.hoisted(() => ({
   oktaIssuerId: undefined as string | undefined,
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => ({ isFetching: false, data: read.data }),
-  useQueries: ({
-    queries,
-  }: {
-    queries: {
-      queryKey: [string, string, string, { remoteSessionIssuerId: string }];
-    }[];
-  }) =>
-    queries.map((query) => ({
-      data: staleRead.byIssuer[query.queryKey[3].remoteSessionIssuerId],
-    })),
+  useQuery: ({ queryKey }: { queryKey: unknown[] }) =>
+    queryKey[3] === "stale"
+      ? {
+          isFetching: false,
+          data: (queryKey[6] as string[]).map((id) => staleRead.byIssuer[id]),
+        }
+      : { isFetching: false, data: read.data },
   useQueryClient: () => ({
     setQueryData: (
       _key: unknown,
