@@ -1911,12 +1911,12 @@ BEGIN
 
   ------------------------------------------------------------------
   -- Enterprise Managed Authorization (EMA). Acme Identity is a fictional
-  -- identity provider that shows historical acceptance on two fictional
-  -- services behind workforce servers; the workforce sign-in deliberately
-  -- does not trust it, so demo sign-in is unaffected. Acme Tracker has
-  -- accepted it (one expired cached credential with invalid ciphertext dates
-  -- "Last worked"), Acme Wiki is set up but has not accepted yet and carries
-  -- a saved provider order. Speakeasy's own issuer is not seeded: it needs a KMS signing key.
+  -- identity provider for two fictional services behind workforce servers;
+  -- the workforce sign-in deliberately does not trust it, so demo sign-in is
+  -- unaffected. Neither service has accepted a provider yet: a seeded
+  -- acceptance needs a trusted issuer session, which the hourly delegation
+  -- cleanup erases unless an organization sign-in trusts the issuer. Acme
+  -- Wiki carries a saved provider order. Speakeasy's own issuer is not seeded: it needs a KMS signing key.
   -- Reserved example hosts and invalid ciphertext keep every row inert.
   -- These servers are added after role distribution, so plugins skip them.
   ------------------------------------------------------------------
@@ -2038,37 +2038,6 @@ BEGIN
      'https://mcp.acme-wiki.example/mcp',
      demo.det_uuid('gram-demo-ema-client-wiki'), 1, 'ready',
      'administrator_declared', now() - interval '1 day', now() - interval '1 day');
-
-  -- Acme Tracker accepted an assertion that Acme Identity vouched for. The
-  -- delegation stays live, holding no assertion, so the acceptance stays
-  -- attributed; the cached token is expired and its ciphertext invalid.
-  INSERT INTO trusted_issuer_sessions
-    (id, remote_session_client_id, organization_id, project_id, subject_urn,
-     created_at, updated_at, deleted_at)
-  VALUES
-    (demo.det_uuid('gram-demo-ema-trusted-session'),
-     demo.det_uuid('gram-demo-ema-idp-client'), demo_org, NULL,
-     'user:' || demo_user_ids[1], now() - interval '3 hours',
-     now() - interval '2 hours', NULL);
-
-  INSERT INTO remote_session_ema_credentials
-    (id, organization_id, project_id, user_session_issuer_id,
-     remote_session_issuer_id, remote_session_client_id, resource, subject_urn,
-     client_selection, remote_session_ema_binding_id, ema_binding_generation,
-     trusted_issuer_session_id, ema_provider, requested_scopes, granted_scopes,
-     access_token_encrypted, access_expires_at, created_at, updated_at,
-     deleted_at)
-  VALUES
-    (demo.det_uuid('gram-demo-ema-credential-tracker'), demo_org, proj_a,
-     demo.det_uuid('gram-demo-issuer-workforce'),
-     demo.det_uuid('gram-demo-ema-vendor-tracker'),
-     demo.det_uuid('gram-demo-ema-client-tracker'),
-     'https://mcp.acme-tracker.example/mcp', 'user:' || demo_user_ids[1],
-     'binding', demo.det_uuid('gram-demo-ema-binding-tracker'), 1,
-     demo.det_uuid('gram-demo-ema-trusted-session'), 'external',
-     ARRAY['issues:read'], ARRAY['issues:read'], 'DEMO-NOT-VALID-CIPHERTEXT',
-     now() - interval '1 hour', now() - interval '2 hours',
-     now() - interval '2 hours', NULL);
 
   -- A saved order for Acme Wiki, so its service page shows "Use default".
   INSERT INTO remote_session_ema_providers
@@ -4050,7 +4019,7 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 1 organization user session issuer, found %', stray;
   END IF;
 
-  -- EMA: two ready bindings, one accepted credential, and one saved provider
+  -- EMA: two ready bindings, no cached credentials, and one saved provider
   -- order. The workforce sign-in must not trust the fictional provider.
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE id = demo.det_uuid('gram-demo-issuer-workforce')
@@ -4068,14 +4037,14 @@ Channel context stays in the Raw view.
 
   SELECT count(*) INTO stray FROM remote_session_ema_credentials
   WHERE organization_id = demo_org;
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 EMA credential, found %', stray;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected no EMA credentials, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM trusted_issuer_sessions
   WHERE organization_id = demo_org;
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 trusted issuer session, found %', stray;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected no trusted issuer sessions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM remote_session_ema_providers

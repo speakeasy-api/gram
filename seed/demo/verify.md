@@ -544,7 +544,7 @@ that URL.
 30. **Enterprise Managed Authorization**
     - Open **Team → IDP and SSO → Identity providers**. The Services table
       lists Acme Tracker (default order, "Each server's own identity
-      provider", Last worked 2h ago) and Acme Wiki (saved order: Acme
+      provider", Not accepted yet) and Acme Wiki (saved order: Acme
       Identity, Not accepted yet), one server each.
     - Open Acme Wiki's page. It shows Acme Identity's issuer URL
       `https://login.acme-identity.example` to copy, and the saved order with
