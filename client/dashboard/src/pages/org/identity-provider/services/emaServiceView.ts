@@ -227,9 +227,14 @@ export function serviceName(
   }
 }
 
-/** Where the admin pastes an issuer URL, said once, the same way everywhere. */
-export function trustInstruction(service: string): string {
-  return `In ${service}’s admin settings, find Enterprise Managed Authorization and add this issuer URL. It’s a one-time step Speakeasy can’t do for you, and not every service offers it.`;
+/** The step under an issuer URL the service hasn't accepted yet. */
+export function addIssuerStep(service: string): string {
+  return `Add this issuer URL in ${service}’s admin settings, under Enterprise Managed Authorization.`;
+}
+
+/** Why registering is the admin's job, said once on the service page. */
+export function trustCaveat(service: string): string {
+  return `Each identity provider is added once in ${service}’s admin settings. Speakeasy can’t do that for you, and not every service offers it.`;
 }
 
 /** A server's name, else its slug. */

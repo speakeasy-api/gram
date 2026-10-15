@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { ArrowLeft } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 
 import { SettingsSection } from "@/components/detail/settings-section";
 import { CopyableValue } from "@/components/setup-steps/StepBlocks";
@@ -30,7 +30,8 @@ import {
   issuerDisplayName,
   PLACEHOLDER_SCOPE,
   providerFixLink,
-  trustInstruction,
+  addIssuerStep,
+  trustCaveat,
   type ProviderView,
 } from "./emaServiceView";
 import { EmaServiceServers } from "./EmaServiceServers";
@@ -88,6 +89,7 @@ export function EmaServiceWorkspace({
 }): JSX.Element {
   const services = useEmaServices();
   const row = services.rows.find((r) => r.vendorIssuer === vendorIssuer);
+  useScrollToSection(Boolean(row));
   const permissions = useAcceptedProviderPermissions();
   const candidates = useProviderCandidates(permissions.canEdit);
   const name = row?.name ?? "Service";
@@ -147,7 +149,7 @@ export function EmaServiceWorkspace({
             <SettingsSection.Header>
               <SettingsSection.Title>What {name} trusts</SettingsSection.Title>
               <SettingsSection.Description>
-                {trustInstruction(name)}
+                {trustCaveat(name)}
               </SettingsSection.Description>
             </SettingsSection.Header>
             <SettingsSection.Panel>
@@ -158,6 +160,7 @@ export function EmaServiceWorkspace({
                       key={provider.key}
                       provider={provider}
                       isDefault={row.isDefault}
+                      service={name}
                     />
                   ))}
                 </ul>
@@ -188,9 +191,11 @@ export function EmaServiceWorkspace({
 function TrustRow({
   provider,
   isDefault,
+  service,
 }: {
   provider: ProviderView;
   isDefault: boolean;
+  service: string;
 }): JSX.Element {
   const fix = provider.fix ? providerFixLink(provider.fix) : undefined;
   return (
@@ -205,6 +210,14 @@ function TrustRow({
           {PLACEHOLDER_SCOPE}
         </Text>
       )}
+      {!provider.placeholder &&
+        provider.usable &&
+        provider.issuerUrl &&
+        !provider.lastAcceptedAt && (
+          <Text muted small className="block">
+            {addIssuerStep(service)}
+          </Text>
+        )}
       {!provider.placeholder && provider.usable && provider.issuerUrl && (
         <div className="max-w-2xl">
           <CopyableValue
@@ -277,4 +290,19 @@ function useProviderCandidates(enabled: boolean): {
       ? { retry: () => void signIns.refetch() }
       : undefined;
   return { items, ready, error };
+}
+
+// Sections mount once the service loads, so a deep link waits for it.
+function useScrollToSection(ready: boolean): void {
+  const { hash } = useLocation();
+  useEffect(() => {
+    const id = hash.replace("#", "");
+    if (!ready || !id) return;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(id)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [hash, ready]);
 }

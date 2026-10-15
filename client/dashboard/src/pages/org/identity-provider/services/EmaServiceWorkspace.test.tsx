@@ -266,7 +266,11 @@ describe("one service", () => {
 
   it("gives the issuer URL to paste once per identity provider, and says who the default entries cover", () => {
     show();
-    expect(screen.getByText(/In Linear’s admin settings/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Each identity provider is added once in Linear’s admin settings/,
+      ),
+    ).toBeTruthy();
     const rows = trustRows();
     expect(rows[0]?.textContent).toContain(
       "Each server’s own identity provider",

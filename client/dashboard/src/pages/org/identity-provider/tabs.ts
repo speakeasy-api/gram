@@ -39,12 +39,18 @@ export function speakeasyProviderHref(): string {
 }
 
 /** One service identity chaining reaches, keyed by its canonical issuer URL. */
-export function emaServiceHref(vendorIssuer: string): string {
+/** Sections of a service's page a link can land on. */
+export type EmaServiceSection = "accepted-providers" | "servers";
+
+export function emaServiceHref(
+  vendorIssuer: string,
+  section?: EmaServiceSection,
+): string {
   const search = new URLSearchParams({
     tab: "identity-providers",
     service: vendorIssuer,
   });
-  return `?${search.toString()}`;
+  return `?${search.toString()}${section ? `#${section}` : ""}`;
 }
 
 /** After a verification the form below unmounts; bring the status card back into view. */

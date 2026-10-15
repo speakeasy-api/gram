@@ -42,7 +42,7 @@ import {
   providerFixLink,
   providerView,
   serviceName,
-  trustInstruction,
+  addIssuerStep,
   type ProviderView,
 } from "@/pages/org/identity-provider/services/emaServiceView";
 import { useOktaIssuerId } from "@/pages/org/identity-provider/services/useEmaServices";
@@ -764,7 +764,12 @@ export function IdentityChainingField({
               {orgAdmin ? (
                 <Link
                   className="underline underline-offset-4"
-                  to={identityHref(emaServiceHref(emaProviders.vendorIssuer))}
+                  to={identityHref(
+                    emaServiceHref(
+                      emaProviders.vendorIssuer,
+                      "accepted-providers",
+                    ),
+                  )}
                 >
                   change which identity providers {vendor} accepts
                 </Link>
@@ -792,7 +797,10 @@ export function IdentityChainingField({
                     <Link
                       className="underline underline-offset-4"
                       to={identityHref(
-                        emaServiceHref(emaProviders.vendorIssuer),
+                        emaServiceHref(
+                          emaProviders.vendorIssuer,
+                          "accepted-providers",
+                        ),
                       )}
                     >
                       the identity providers {vendor} accepts
@@ -829,57 +837,60 @@ export function IdentityChainingField({
               vouch.
             </Text>
           ) : (
-            <>
-              {trusts.some((row) => !row.lastAcceptedAt) && (
-                <Text muted small className="block">
-                  {trustInstruction(vendor)}
-                </Text>
-              )}
-              <ul aria-label={`${vendor} trusts`} className="space-y-3">
-                {trusts.map((row) => (
-                  <li key={row.key} className="space-y-2">
-                    <div className="flex flex-wrap items-baseline gap-x-2">
-                      <Text small className="font-medium">
-                        {row.name}
-                      </Text>
-                      <Text muted small>
-                        {acceptanceLabel(row.lastAcceptedAt)}
-                      </Text>
-                    </div>
-                    {row.lastAcceptedAt ? (
-                      <Collapsible>
-                        <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-sm underline underline-offset-4">
-                          <ChevronDown
-                            aria-hidden="true"
-                            className="size-3.5 transition-transform group-data-[state=open]:rotate-180"
-                          />
-                          Issuer URL
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="pt-2">
-                          <div className="max-w-2xl">
-                            <CopyableValue
-                              label={`${row.name}’s issuer URL`}
-                              value={row.issuerUrl}
-                            />
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    ) : (
-                      <div className="max-w-2xl">
+            <ul aria-label={`${vendor} trusts`} className="space-y-3">
+              {trusts.map((row) => (
+                <li
+                  key={row.key}
+                  className="border-border max-w-2xl space-y-2 border px-4 py-3"
+                >
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <StatusDot
+                      tone={row.lastAcceptedAt ? "success" : "neutral"}
+                      className="translate-y-[-1px]"
+                    />
+                    <Text small className="font-medium">
+                      {row.name}
+                    </Text>
+                    <Text muted small>
+                      {acceptanceLabel(row.lastAcceptedAt)}
+                    </Text>
+                  </div>
+                  {row.lastAcceptedAt ? (
+                    <Collapsible>
+                      <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-sm underline underline-offset-4">
+                        <ChevronDown
+                          aria-hidden="true"
+                          className="size-3.5 transition-transform group-data-[state=open]:rotate-180"
+                        />
+                        Issuer URL
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pt-2">
                         <CopyableValue
                           label={`${row.name}’s issuer URL`}
                           value={row.issuerUrl}
                         />
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ) : (
+                    <>
+                      <Text muted small className="block">
+                        {addIssuerStep(vendor)}
+                      </Text>
+                      <CopyableValue
+                        label={`${row.name}’s issuer URL`}
+                        value={row.issuerUrl}
+                      />
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
           {emaProviders && orgAdmin && (
             <SettingsLink
-              to={identityHref(emaServiceHref(emaProviders.vendorIssuer))}
+              to={identityHref(
+                emaServiceHref(emaProviders.vendorIssuer, "servers"),
+              )}
             >
               Every server that reaches {vendor}
             </SettingsLink>

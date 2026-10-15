@@ -549,7 +549,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         })
         .getAttribute("href"),
     ).toBe(
-      "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
+      "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com#accepted-providers",
     );
     const links = within(chain()).getAllByText(
       /^(Sign-in|Vouched for by|example.com trusts|Remote session client)$/,
@@ -580,15 +580,17 @@ describe("identity chaining vouched for by Speakeasy", () => {
         url: "https://okta.example.com",
       },
     ]);
-    expect(screen.getAllByText(/In example.com’s admin settings/)).toHaveLength(
-      1,
-    );
+    expect(
+      screen.getAllByText(
+        /Add this issuer URL in example.com’s admin settings/,
+      ),
+    ).toHaveLength(1);
     expect(
       screen
         .getByRole("link", { name: "Every server that reaches example.com" })
         .getAttribute("href"),
     ).toBe(
-      "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
+      "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com#servers",
     );
   });
 
@@ -804,7 +806,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
         })
         .getAttribute("href"),
     ).toBe(
-      "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
+      "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com#accepted-providers",
     );
     expect(
       screen
