@@ -99,7 +99,7 @@ describe("Services", () => {
       "Each server’s own identity providerNot accepted yet · for servers whose people sign in through one",
       "SpeakeasyLast worked 3h ago · for servers whose people sign in with Speakeasy",
     ]);
-    expect(screen.getByText("3 servers · 2 ready")).toBeTruthy();
+    expect(screen.getByText("3 MCP servers · 2 ready")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Manage" }).getAttribute("href"),
     ).toBe("/?tab=identity-providers&service=https%3A%2F%2Flinear.example.com");
@@ -131,7 +131,7 @@ describe("Services", () => {
         "Can’t sign right now · for servers whose people sign in with Speakeasy",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("None yet")).toBeTruthy();
+    expect(screen.getByText("No MCP servers yet")).toBeTruthy();
   });
 
   it("offers a retry when the list fails to load", () => {

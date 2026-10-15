@@ -294,7 +294,10 @@ export function EmaAllowedProvidersEditor({
                           id={id}
                           className="mt-0.5"
                           checked={on}
-                          disabled={save.isPending}
+                          disabled={
+                            save.isPending ||
+                            (!on && checked.length >= MAX_ACCEPTED)
+                          }
                           onCheckedChange={(value) =>
                             toggle(row.key, value === true)
                           }

@@ -289,7 +289,11 @@ export function strandedServers<T extends ServerSignIn>(
 
 /** Why a stranded server needs attention, short enough for a table cell. */
 export function strandedReason(server: ServerSignIn, service: string): string {
-  return `${service} doesn’t accept ${signInProviderName(server)}`;
+  const provider =
+    server.signInIssuerId && !server.signInIssuerName?.trim()
+      ? "that server’s identity provider"
+      : signInProviderName(server);
+  return `${service} doesn’t accept ${provider}`;
 }
 
 /**

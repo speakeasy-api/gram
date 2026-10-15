@@ -105,8 +105,8 @@ function ServicesTable({ rows }: { rows: ServiceRow[] }): JSX.Element {
     },
     {
       key: "servers",
-      header: "Servers",
-      width: "150px",
+      header: "Reached by",
+      width: "190px",
       render: (row) => <Text small>{serversSummary(row)}</Text>,
     },
     {

@@ -154,11 +154,11 @@ function serviceRow(
   };
 }
 
-/** How many servers reach the service, and how many of those are ready. */
+/** How many MCP servers reach the service, and how many of those are ready. */
 export function serversSummary(row: ServiceRow): string {
-  if (row.serverCount === 0) return "None yet";
+  if (row.serverCount === 0) return "No MCP servers yet";
   const servers =
-    row.serverCount === 1 ? "1 server" : `${row.serverCount} servers`;
+    row.serverCount === 1 ? "1 MCP server" : `${row.serverCount} MCP servers`;
   if (row.readyServerCount === row.serverCount) return servers;
   return `${servers} · ${row.readyServerCount} ready`;
 }
