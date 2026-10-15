@@ -958,6 +958,8 @@ type resolvedToolsetInsert struct {
 	ToolsetID     uuid.UUID
 	Slug          string
 	EnvironmentID uuid.NullUUID
+	// EnablesMCP is read from the locked row: attaching would turn MCP on.
+	EnablesMCP bool
 }
 
 // resolveToolsetRefsForWrite validates that every user-supplied slug exists
@@ -1017,8 +1019,10 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 	if len(toolsetSlugs) == 0 {
 		return nil, nil
 	}
+	enablesMCP := map[uuid.UUID]bool{}
 	for _, row := range toolsetRows {
 		toolsetIDs[row.Slug] = row.ID
+		enablesMCP[row.ID] = row.EnablesMcp
 	}
 	for _, slug := range toolsetSlugs {
 		if _, ok := toolsetIDs[slug]; !ok {
@@ -1060,7 +1064,7 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 		if ref.EnvironmentSlug != nil && *ref.EnvironmentSlug != "" {
 			envID = uuid.NullUUID{UUID: envIDs[*ref.EnvironmentSlug], Valid: true}
 		}
-		out = append(out, resolvedToolsetInsert{ToolsetID: toolsetID, Slug: ref.ToolsetSlug, EnvironmentID: envID})
+		out = append(out, resolvedToolsetInsert{ToolsetID: toolsetID, Slug: ref.ToolsetSlug, EnvironmentID: envID, EnablesMCP: enablesMCP[toolsetID]})
 	}
 	return out, nil
 }
@@ -1309,9 +1313,14 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 	return nil
 }
 
-// enableAssistantToolsets turns MCP on for attached toolsets that have it off,
-// so every attached hosted server is reachable at runtime, and syncs their
-// canonical wrappers. Toolset rows are already locked FOR NO KEY UPDATE.
+// errMCPEnableForbidden rejects a write that would turn MCP on for a toolset
+// the caller cannot write.
+var errMCPEnableForbidden = errors.New("attaching a toolset with MCP disabled requires mcp:write on it")
+
+// enableAssistantToolsets turns MCP on for newly attached toolsets that have it
+// off, so every attached hosted server is reachable at runtime, and syncs their
+// canonical wrappers. Toolsets in alreadyAttached keep their MCP state. Toolset
+// rows are already locked FOR NO KEY UPDATE, so EnablesMCP is current.
 func enableAssistantToolsets(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -1319,13 +1328,21 @@ func enableAssistantToolsets(
 	actor hostedmcp.Actor,
 	projectID uuid.UUID,
 	resolved []resolvedToolsetInsert,
+	alreadyAttached map[uuid.UUID]struct{},
+	canEnableMCP func(toolsetID uuid.UUID) bool,
 ) error {
-	if len(resolved) == 0 {
-		return nil
-	}
 	toolsetIDs := make([]uuid.UUID, 0, len(resolved))
 	for _, r := range resolved {
+		if _, attached := alreadyAttached[r.ToolsetID]; attached || !r.EnablesMCP {
+			continue
+		}
+		if canEnableMCP == nil || !canEnableMCP(r.ToolsetID) {
+			return fmt.Errorf("toolset %q: %w", r.Slug, errMCPEnableForbidden)
+		}
 		toolsetIDs = append(toolsetIDs, r.ToolsetID)
+	}
+	if len(toolsetIDs) == 0 {
+		return nil
 	}
 	enabled, err := assistantrepo.New(tx).EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
 		ToolsetIds: toolsetIDs,
@@ -1557,6 +1574,7 @@ func (s *ServiceCore) CreateAssistant(
 	maxConcurrency int,
 	status string,
 	provisionIdentity bool,
+	canEnableMCP func(toolsetID uuid.UUID) bool,
 ) (assistantRecord, error) {
 	if createdByUserID == "" {
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
@@ -1591,7 +1609,7 @@ func (s *ServiceCore) CreateAssistant(
 	}
 	record := assistantRecordFromCreateRow(created)
 
-	if err := enableAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, createdByUserID), projectID, resolved); err != nil {
+	if err := enableAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, createdByUserID), projectID, resolved, nil, canEnableMCP); err != nil {
 		return assistantRecord{}, err
 	}
 	// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
@@ -1698,6 +1716,7 @@ func (s *ServiceCore) UpdateAssistant(
 	warmTTLSeconds *int,
 	maxConcurrency *int,
 	status *string,
+	canEnableMCP func(toolsetID uuid.UUID) bool,
 ) (assistantRecord, error) {
 	// Resolved before the transaction: the lookup takes its own pool connection.
 	serverKey := s.hostedServerKeyWrites(ctx, projectID)
@@ -1727,18 +1746,25 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 	record := assistantRecordFromUpdateRow(updated)
 
+	var attached []uuid.UUID
+	if toolsets != nil || mcpServers != nil {
+		// Read under the assistant row lock taken by UpdateAssistant.
+		attached, err = queries.ListAssistantAttachedServerIDs(ctx, assistantrepo.ListAssistantAttachedServerIDsParams{AssistantID: record.ID, ProjectID: projectID})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("list assistant attached servers: %w", err)
+		}
+	}
 	if toolsets != nil {
-		if err := enableAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, record.CreatedByUserID), projectID, resolved); err != nil {
+		alreadyAttached := make(map[uuid.UUID]struct{}, len(attached))
+		for _, id := range attached {
+			alreadyAttached[id] = struct{}{}
+		}
+		if err := enableAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, record.CreatedByUserID), projectID, resolved, alreadyAttached, canEnableMCP); err != nil {
 			return assistantRecord{}, err
 		}
 	}
 	var resolvedMcpServers []resolvedMcpServerInsert
 	if mcpServers != nil {
-		// Read under the assistant row lock taken by UpdateAssistant.
-		attached, listErr := queries.ListAssistantAttachedServerIDs(ctx, assistantrepo.ListAssistantAttachedServerIDsParams{AssistantID: record.ID, ProjectID: projectID})
-		if listErr != nil {
-			return assistantRecord{}, fmt.Errorf("list assistant attached servers: %w", listErr)
-		}
 		skipHosted := toolsetIDSet(resolved)
 		for _, id := range attached {
 			skipHosted[id] = struct{}{}
