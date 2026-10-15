@@ -22,6 +22,7 @@ const staleRead = vi.hoisted(() => ({
 const scopeChecks = vi.hoisted(() => [] as unknown[]);
 const issuerNames = vi.hoisted(() => ({
   items: [] as { id: string; name: string; issuer?: string }[],
+  isLoading: false,
 }));
 const state = vi.hoisted(() => ({
   orgAdmin: true,
@@ -116,7 +117,10 @@ vi.mock("@/components/setup-steps/StepBlocks", () => ({
   CopyableValue: ({ value }: { value?: string }) => <code>{value}</code>,
 }));
 const prmMock = vi.hoisted(() => ({
-  value: {} as { metadata?: { authorizationServers?: string[] } },
+  value: {} as {
+    status?: string;
+    metadata?: { authorizationServers?: string[] };
+  },
 }));
 vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
   useProtectedResourceMetadata: () => prmMock.value,
@@ -188,6 +192,7 @@ beforeEach(() => {
   staleRead.byIssuer = {};
   scopeChecks.length = 0;
   issuerNames.items = [];
+  issuerNames.isLoading = false;
   state.orgAdmin = true;
   state.calls.length = 0;
   state.prepare.mockReset();
@@ -225,36 +230,40 @@ describe("identity chaining client selection", () => {
   );
 });
 
+function trackerAndWiki() {
+  return (
+    <IdentityChainingField
+      userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+      providers={{ external: false }}
+      linkedClients={
+        [
+          {
+            id: "wiki-client",
+            clientId: "wiki-client",
+            remoteSessionIssuerId: "wiki",
+          },
+          {
+            id: "tracker-client",
+            clientId: "tracker-client",
+            remoteSessionIssuerId: "tracker",
+          },
+        ] as RemoteSessionClient[]
+      }
+      resource="https://example.com/mcp"
+    />
+  );
+}
+
 describe("identity chaining client for this service", () => {
   it("only offers clients registered with this server's authorization server", () => {
     prmMock.value = {
-      metadata: { authorizationServers: ["https://tracker.example.com/"] },
+      metadata: { authorizationServers: ["https://tracker.example.com"] },
     };
     issuerNames.items = [
       { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
       { id: "wiki", name: "Wiki", issuer: "https://wiki.example.com" },
     ];
-    render(
-      <IdentityChainingField
-        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-        providers={{ external: false }}
-        linkedClients={
-          [
-            {
-              id: "wiki-client",
-              clientId: "wiki-client",
-              remoteSessionIssuerId: "wiki",
-            },
-            {
-              id: "tracker-client",
-              clientId: "tracker-client",
-              remoteSessionIssuerId: "tracker",
-            },
-          ] as RemoteSessionClient[]
-        }
-        resource="https://example.com/mcp"
-      />,
-    );
+    render(trackerAndWiki());
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(
       screen.getByRole("link", { name: "tracker-client" }).getAttribute("href"),
@@ -262,30 +271,57 @@ describe("identity chaining client for this service", () => {
     expect(screen.queryByText("wiki-client")).toBeNull();
   });
 
-  it("matches the authorization server as the server does: case, default port and trailing slash aside", () => {
+  it("matches the authorization server exactly, as Turn on does", () => {
     prmMock.value = {
-      metadata: { authorizationServers: ["https://TRACKER.example.com:443/"] },
+      metadata: { authorizationServers: ["https://tracker.example.com/"] },
     };
     issuerNames.items = [
       { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
     ];
-    render(
-      <IdentityChainingField
-        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
-        providers={{ external: false }}
-        linkedClients={
-          [
-            {
-              id: "tracker-client",
-              clientId: "tracker-client",
-              remoteSessionIssuerId: "tracker",
-            },
-          ] as RemoteSessionClient[]
-        }
-        resource="https://example.com/mcp"
-      />,
-    );
+    render(trackerAndWiki());
+    expect(screen.queryByText("tracker-client")).toBeNull();
+    expect(
+      screen.getByText(
+        /Link a client registered with this server’s authorization server/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it.each([
+    [
+      "the metadata is loading",
+      () => {
+        prmMock.value = { status: "loading" };
+      },
+    ],
+    [
+      "client issuers are loading",
+      () => {
+        issuerNames.isLoading = true;
+      },
+    ],
+  ])("offers no client while %s", (_name, arrange) => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com"] },
+    };
+    arrange();
+    render(trackerAndWiki());
+    expect(screen.queryByText("tracker-client")).toBeNull();
+    expect(screen.queryByText("wiki-client")).toBeNull();
+    expect(screen.queryByText(/Link a client/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
+  });
+
+  it("leaves out a client whose authorization server couldn't be read", () => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com"] },
+    };
+    issuerNames.items = [
+      { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
+    ];
+    render(trackerAndWiki());
     expect(screen.getByText("tracker-client")).toBeTruthy();
+    expect(screen.queryByText("wiki-client")).toBeNull();
   });
 
   it("keeps Turn off for a binding on a client the metadata no longer names", () => {

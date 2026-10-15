@@ -18,7 +18,10 @@ import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer
 import { MCP_SESSIONS_SECTION_ID } from "../RemoteMcpSessionsSection";
 import { useMcpServerAuthTarget } from "./authTarget";
 import { IdentityChainingField } from "./IdentityChainingField";
-import { identityChainingProviders } from "./identityChainingGate";
+import {
+  chainingVouchers,
+  identityChainingProviders,
+} from "./identityChainingGate";
 import { useSpeakeasyIssuerStatus } from "./useSpeakeasyIssuerStatus";
 
 export const IDENTITY_CHAINING_SECTION_ID = "identity-chaining";
@@ -117,11 +120,12 @@ export function IdentityChainingSection({
   const speakeasyIssuer = useSpeakeasyIssuerStatus();
   const orgRoutes = useOrgRoutes();
   const speakeasyRollout = emaProvidersFlag.status === "enabled";
-  const providers = identityChainingProviders(userSessionIssuer, {
+  const rollouts = {
     externalRollout: externalFlag.status === "enabled",
     speakeasyRollout,
     speakeasyIssuer: speakeasyIssuer.data,
-  });
+  };
+  const providers = identityChainingProviders(userSessionIssuer, rollouts);
   const resource = sourceQuery.data?.url;
   const speakeasySetup =
     userSessionIssuer?.projectId === "" &&
@@ -134,11 +138,7 @@ export function IdentityChainingSection({
   const projectSignIn =
     !!userSessionIssuer &&
     userSessionIssuer.projectId !== "" &&
-    ((speakeasyRollout &&
-      !!speakeasyIssuer.data &&
-      speakeasyIssuer.data.state !== "unavailable") ||
-      (externalFlag.status === "enabled" &&
-        !!userSessionIssuer.trustedRemoteSessionIssuerId));
+    !!chainingVouchers(userSessionIssuer, rollouts);
 
   const applies = !!userSessionIssuerId && remoteMcpServerId !== "";
   const failed =

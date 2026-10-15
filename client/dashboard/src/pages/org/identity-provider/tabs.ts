@@ -38,10 +38,10 @@ export function speakeasyProviderHref(): string {
   return "?tab=identity-providers&provider=speakeasy";
 }
 
-/** One service identity chaining reaches, keyed by its canonical issuer URL. */
 /** Sections of a service's page a link can land on. */
 export type EmaServiceSection = "accepted-providers" | "servers";
 
+/** One service identity chaining reaches, keyed by its canonical issuer URL. */
 export function emaServiceHref(
   vendorIssuer: string,
   section?: EmaServiceSection,

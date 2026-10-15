@@ -24,18 +24,24 @@ function speakeasyIssuerOn(issuer: InternalSessionIssuer | undefined): boolean {
  */
 export function identityChainingProviders(
   issuer: UserSessionIssuer | undefined,
-  {
-    externalRollout,
-    speakeasyRollout,
-    speakeasyIssuer,
-  }: {
-    externalRollout: boolean;
-    /** Speakeasy vouches only where the sign-in has no identity provider. */
-    speakeasyRollout: boolean;
-    speakeasyIssuer: InternalSessionIssuer | undefined;
-  },
+  rollouts: ChainingRollouts,
 ): ChainingProviders | undefined {
   if (issuer?.projectId !== "") return undefined;
+  return chainingVouchers(issuer, rollouts);
+}
+
+type ChainingRollouts = {
+  externalRollout: boolean;
+  /** Speakeasy vouches only where the sign-in has no identity provider. */
+  speakeasyRollout: boolean;
+  speakeasyIssuer: InternalSessionIssuer | undefined;
+};
+
+/** Who would vouch for this sign-in if it belonged to the organization. */
+export function chainingVouchers(
+  issuer: UserSessionIssuer,
+  { externalRollout, speakeasyRollout, speakeasyIssuer }: ChainingRollouts,
+): ChainingProviders | undefined {
   const external =
     externalRollout &&
     !!issuer.trustedRemoteSessionIssuerId &&

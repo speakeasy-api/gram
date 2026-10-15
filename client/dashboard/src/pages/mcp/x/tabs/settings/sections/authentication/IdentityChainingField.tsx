@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusDot, type StatusDotTone } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
@@ -269,20 +270,26 @@ export function IdentityChainingField({
   ]);
   // Only clients of the server's current authorization server can be turned
   // on; a binding on one the metadata no longer names must still turn off.
-  const candidates = clientsForResource(
-    linkable,
-    clientIssuers.items,
-    prm.metadata?.authorizationServers,
-  );
-  const staleIssuerIds = [
-    ...new Set(
-      linkable
-        .filter((client) => !candidates.includes(client))
-        .map((client) => client.remoteSessionIssuerId),
-    ),
-  ].filter(
-    (id) => !candidates.some((client) => client.remoteSessionIssuerId === id),
-  );
+  const authorizationServers = prm.metadata?.authorizationServers;
+  // Offer nothing until every client's authorization server is known.
+  const resolvingClients =
+    prm.status === "loading" ||
+    (!!authorizationServers?.length && clientIssuers.isLoading);
+  const candidates = resolvingClients
+    ? []
+    : clientsForResource(linkable, clientIssuers.items, authorizationServers);
+  const staleIssuerIds = resolvingClients
+    ? []
+    : [
+        ...new Set(
+          linkable
+            .filter((client) => !candidates.includes(client))
+            .map((client) => client.remoteSessionIssuerId),
+        ),
+      ].filter(
+        (id) =>
+          !candidates.some((client) => client.remoteSessionIssuerId === id),
+      );
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   // A prepare that returned a blocker; kept until the next action.
   const [prepareOutcome, setPrepareOutcome] =
@@ -597,6 +604,15 @@ export function IdentityChainingField({
       projectId={project.id}
     />
   ));
+
+  if (resolvingClients) {
+    return (
+      <SettingsSection.Body>
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="h-4 w-full max-w-md" />
+      </SettingsSection.Body>
+    );
+  }
 
   if (candidates.length === 0) {
     return (
@@ -1121,20 +1137,6 @@ function StaleBinding({
   );
 }
 
-/** An issuer URL compared as the server does: scheme and host case, default port and trailing slash aside. */
-function canonicalIssuer(value: string): string {
-  try {
-    const url = new URL(value);
-    return `${url.origin}${url.pathname.replace(/\/+$/, "")}${url.search}`;
-  } catch {
-    return value.replace(/\/+$/, "");
-  }
-}
-
-function sameIssuer(a: string, b: string): boolean {
-  return canonicalIssuer(a) === canonicalIssuer(b);
-}
-
 /** Clients registered with the server's authorization server, when that is known. */
 function clientsForResource(
   clients: RemoteSessionClient[],
@@ -1144,10 +1146,8 @@ function clientsForResource(
   if (!authorizationServers?.length) return clients;
   const matching = clients.filter((client) => {
     const issuer = issuers.find((i) => i.id === client.remoteSessionIssuerId);
-    return (
-      !issuer ||
-      authorizationServers.some((server) => sameIssuer(server, issuer.issuer))
-    );
+    // Turn on checks the advertised value exactly.
+    return !!issuer && authorizationServers.includes(issuer.issuer);
   });
   return matching;
 }

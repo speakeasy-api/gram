@@ -195,6 +195,24 @@ describe("IdentityChainingSection", () => {
       },
     ],
     [
+      "the issuer belongs to a project and Speakeasy isn't set up",
+      () => {
+        state.issuer = { id: "issuer", projectId: "project" };
+        state.speakeasy = { state: "setup_required" };
+      },
+    ],
+    [
+      "the issuer belongs to a project whose identity provider has no client",
+      () => {
+        state.issuer = {
+          id: "issuer",
+          projectId: "project",
+          trustedRemoteSessionIssuerId: "okta",
+        };
+        state.speakeasy = { state: "verified_domain_required" };
+      },
+    ],
+    [
       "the rollouts are off",
       () => {
         state.flags = { oktaConnections: false, emaProviders: false };

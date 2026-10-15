@@ -2,6 +2,7 @@ import type { InternalSessionIssuer } from "@gram/client/models/components/inter
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { describe, expect, it } from "vitest";
 import {
+  chainingVouchers,
   identityChainingProviders,
   trustsExternalIdp,
 } from "./identityChainingGate";
@@ -127,5 +128,27 @@ describe("trustsExternalIdp", () => {
         trustedRemoteSessionClientId: "okta-client",
       } as UserSessionIssuer),
     ).toBe(true);
+  });
+});
+
+describe("chainingVouchers", () => {
+  const projectIssuer = {
+    id: "usi",
+    projectId: "project",
+  } as UserSessionIssuer;
+
+  it("applies the gate's checks to a project sign-in", () => {
+    expect(
+      chainingVouchers(projectIssuer, {
+        ...rollouts,
+        speakeasyIssuer: speakeasy("enabled"),
+      }),
+    ).toEqual({ external: false });
+    expect(
+      chainingVouchers(
+        { ...projectIssuer, trustedRemoteSessionIssuerId: "okta" },
+        { ...rollouts, speakeasyIssuer: speakeasy("setup_required") },
+      ),
+    ).toBeUndefined();
   });
 });

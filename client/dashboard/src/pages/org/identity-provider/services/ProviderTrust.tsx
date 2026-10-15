@@ -16,11 +16,11 @@ export function ProviderTrust({
   /** In the default, say which servers each entry covers. */
   isDefault?: boolean;
 }): JSX.Element {
-  const tone = provider.lastAcceptedAt
-    ? "success"
-    : provider.usable
-      ? "neutral"
-      : "warning";
+  const tone = !provider.usable
+    ? "warning"
+    : provider.lastAcceptedAt
+      ? "success"
+      : "neutral";
   const detail = provider.usable
     ? acceptanceLabel(provider.lastAcceptedAt)
     : provider.unavailable;
