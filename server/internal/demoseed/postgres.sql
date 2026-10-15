@@ -461,6 +461,10 @@ BEGIN
     (SELECT id FROM user_session_issuers WHERE project_id = proj_a OR organization_id = demo_org)
     OR remote_session_client_id IN
     (SELECT id FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org);
+  -- Cached EMA credentials and the trusted issuer sessions they cite SET NULL
+  -- on their parents, so clear them by tenant first.
+  DELETE FROM remote_session_ema_credentials WHERE organization_id = demo_org;
+  DELETE FROM trusted_issuer_sessions WHERE organization_id = demo_org;
   -- A reseed explicitly resets preparation claims before hard-deleting their
   -- parents. Do not depend on lifecycle triggers or SET NULL owner references.
   DELETE FROM remote_session_ema_bindings
@@ -1904,6 +1908,174 @@ BEGIN
      demo.det_uuid('gram-demo-mcpserver-linear'), 'acme-demo-linear'),
     (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
      demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack');
+
+  ------------------------------------------------------------------
+  -- Enterprise Managed Authorization (EMA). The workforce sign-in trusts a
+  -- fictional identity provider, Acme Identity, which vouches for people to
+  -- two fictional services behind workforce servers: Acme Tracker has
+  -- accepted it (one retired cached credential dates "Last worked"), Acme
+  -- Wiki is set up but has not accepted yet and carries a saved provider
+  -- order. Speakeasy's own issuer is not seeded: it needs a KMS signing key.
+  -- Reserved example hosts and invalid ciphertext keep every row inert.
+  -- These servers are added after role distribution, so plugins skip them.
+  ------------------------------------------------------------------
+  INSERT INTO remote_session_issuers
+    (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+     token_endpoint, jwks_uri, scopes_supported, grant_types_supported,
+     response_types_supported, token_endpoint_auth_methods_supported,
+     code_challenge_methods_supported, oidc, name)
+  VALUES
+    (demo.det_uuid('gram-demo-ema-idp'), NULL, demo_org, 'acme-identity',
+     'https://login.acme-identity.example',
+     'https://login.acme-identity.example/oauth2/v1/authorize',
+     'https://login.acme-identity.example/oauth2/v1/token',
+     'https://login.acme-identity.example/oauth2/v1/keys',
+     ARRAY['openid', 'profile', 'email'],
+     ARRAY['authorization_code', 'refresh_token'],
+     ARRAY['code'], ARRAY['client_secret_basic'], ARRAY['S256'], TRUE,
+     'Acme Identity');
+
+  INSERT INTO remote_session_clients
+    (id, project_id, organization_id, remote_session_issuer_id, client_id,
+     client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
+  VALUES
+    (demo.det_uuid('gram-demo-ema-idp-client'), NULL, demo_org,
+     demo.det_uuid('gram-demo-ema-idp'), 'demo-acme-identity-sign-in',
+     'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_basic',
+     ARRAY['authorization_code', 'refresh_token'],
+     ARRAY['openid', 'profile', 'email']);
+
+  UPDATE user_session_issuers
+  SET trusted_remote_session_issuer_id = demo.det_uuid('gram-demo-ema-idp'),
+      trusted_remote_session_client_id = demo.det_uuid('gram-demo-ema-idp-client')
+  WHERE id = demo.det_uuid('gram-demo-issuer-workforce')
+    AND organization_id = demo_org AND project_id IS NULL;
+
+  INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+    (demo.det_uuid('gram-demo-remotemcp-ema-tracker'), proj_a, 'Acme Tracker',
+     'acme-tracker', 'streamable-http', 'https://mcp.acme-tracker.example/mcp'),
+    (demo.det_uuid('gram-demo-remotemcp-ema-wiki'), proj_a, 'Acme Wiki',
+     'acme-wiki', 'streamable-http', 'https://mcp.acme-wiki.example/mcp');
+
+  INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                           remote_mcp_server_id, user_session_issuer_id,
+                           visibility) VALUES
+    (demo.det_uuid('gram-demo-mcpserver-ema-tracker'), proj_a, 'Acme Tracker',
+     'acme-tracker', NULL, demo.det_uuid('gram-demo-remotemcp-ema-tracker'),
+     demo.det_uuid('gram-demo-issuer-workforce'), 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-ema-wiki'), proj_a, 'Acme Wiki',
+     'acme-wiki', NULL, demo.det_uuid('gram-demo-remotemcp-ema-wiki'),
+     demo.det_uuid('gram-demo-issuer-workforce'), 'private');
+
+  -- Each service's authorization server accepts ID-JAGs from a confidential client.
+  INSERT INTO remote_session_issuers
+    (id, project_id, organization_id, slug, issuer, token_endpoint, name,
+     grant_types_supported, authorization_grant_profiles_supported,
+     token_endpoint_auth_methods_supported)
+  VALUES
+    (demo.det_uuid('gram-demo-ema-vendor-tracker'), proj_a, demo_org,
+     'acme-tracker-auth', 'https://auth.acme-tracker.example',
+     'https://auth.acme-tracker.example/oauth/token', 'Acme Tracker',
+     ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+     ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+     ARRAY['client_secret_basic']),
+    (demo.det_uuid('gram-demo-ema-vendor-wiki'), proj_a, demo_org,
+     'acme-wiki-auth', 'https://auth.acme-wiki.example',
+     'https://auth.acme-wiki.example/oauth/token', 'Acme Wiki',
+     ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+     ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+     ARRAY['client_secret_basic']);
+
+  INSERT INTO remote_session_clients
+    (id, project_id, organization_id, remote_session_issuer_id, client_id,
+     client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
+  VALUES
+    (demo.det_uuid('gram-demo-ema-client-tracker'), proj_a, demo_org,
+     demo.det_uuid('gram-demo-ema-vendor-tracker'), 'demo-acme-tracker-client',
+     'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_basic',
+     ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+     ARRAY['issues:read']),
+    (demo.det_uuid('gram-demo-ema-client-wiki'), proj_a, demo_org,
+     demo.det_uuid('gram-demo-ema-vendor-wiki'), 'demo-acme-wiki-client',
+     'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_basic',
+     ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+     ARRAY['pages:read']);
+
+  INSERT INTO remote_session_client_user_session_issuers
+    (remote_session_client_id, user_session_issuer_id)
+  VALUES
+    (demo.det_uuid('gram-demo-ema-client-tracker'), demo.det_uuid('gram-demo-issuer-workforce')),
+    (demo.det_uuid('gram-demo-ema-client-wiki'), demo.det_uuid('gram-demo-issuer-workforce'));
+
+  INSERT INTO remote_protected_resources
+    (id, project_id, organization_id, resource_identifier, metadata_url,
+     authorization_servers, scopes_supported, metadata_fetched_at)
+  VALUES
+    (demo.det_uuid('gram-demo-protected-resource-ema-tracker'), proj_a, demo_org,
+     'https://mcp.acme-tracker.example/mcp',
+     'https://mcp.acme-tracker.example/.well-known/oauth-protected-resource/mcp',
+     ARRAY['https://auth.acme-tracker.example'], ARRAY['issues:read'],
+     now() - interval '2 hours'),
+    (demo.det_uuid('gram-demo-protected-resource-ema-wiki'), proj_a, demo_org,
+     'https://mcp.acme-wiki.example/mcp',
+     'https://mcp.acme-wiki.example/.well-known/oauth-protected-resource/mcp',
+     ARRAY['https://auth.acme-wiki.example'], ARRAY['pages:read'],
+     now() - interval '2 hours');
+
+  INSERT INTO remote_session_ema_bindings
+    (id, project_id, organization_id, user_session_issuer_id,
+     remote_session_issuer_id, resource, remote_session_client_id, generation,
+     state, grant_source, created_at, updated_at)
+  VALUES
+    (demo.det_uuid('gram-demo-ema-binding-tracker'), proj_a, demo_org,
+     demo.det_uuid('gram-demo-issuer-workforce'),
+     demo.det_uuid('gram-demo-ema-vendor-tracker'),
+     'https://mcp.acme-tracker.example/mcp',
+     demo.det_uuid('gram-demo-ema-client-tracker'), 1, 'ready',
+     'administrator_declared', now() - interval '6 days', now() - interval '6 days'),
+    (demo.det_uuid('gram-demo-ema-binding-wiki'), proj_a, demo_org,
+     demo.det_uuid('gram-demo-issuer-workforce'),
+     demo.det_uuid('gram-demo-ema-vendor-wiki'),
+     'https://mcp.acme-wiki.example/mcp',
+     demo.det_uuid('gram-demo-ema-client-wiki'), 1, 'ready',
+     'administrator_declared', now() - interval '1 day', now() - interval '1 day');
+
+  -- Acme Tracker accepted an assertion that Acme Identity vouched for. Both
+  -- rows are retired and hold no token: they only date the acceptance.
+  INSERT INTO trusted_issuer_sessions
+    (id, remote_session_client_id, organization_id, project_id, subject_urn,
+     created_at, updated_at, deleted_at)
+  VALUES
+    (demo.det_uuid('gram-demo-ema-trusted-session'),
+     demo.det_uuid('gram-demo-ema-idp-client'), demo_org, NULL,
+     'user:' || demo_user_ids[1], now() - interval '3 hours',
+     now() - interval '2 hours', now() - interval '2 hours');
+
+  INSERT INTO remote_session_ema_credentials
+    (id, organization_id, project_id, user_session_issuer_id,
+     remote_session_issuer_id, remote_session_client_id, resource, subject_urn,
+     client_selection, remote_session_ema_binding_id, ema_binding_generation,
+     trusted_issuer_session_id, ema_provider, requested_scopes, granted_scopes,
+     access_token_encrypted, access_expires_at, created_at, updated_at,
+     deleted_at)
+  VALUES
+    (demo.det_uuid('gram-demo-ema-credential-tracker'), demo_org, proj_a,
+     demo.det_uuid('gram-demo-issuer-workforce'),
+     demo.det_uuid('gram-demo-ema-vendor-tracker'),
+     demo.det_uuid('gram-demo-ema-client-tracker'),
+     'https://mcp.acme-tracker.example/mcp', 'user:' || demo_user_ids[1],
+     'binding', demo.det_uuid('gram-demo-ema-binding-tracker'), 1,
+     demo.det_uuid('gram-demo-ema-trusted-session'), 'external',
+     ARRAY['issues:read'], ARRAY['issues:read'], NULL,
+     now() - interval '1 hour', now() - interval '2 hours',
+     now() - interval '2 hours', now() - interval '2 hours');
+
+  -- A saved order for Acme Wiki, so its service page shows "Use default".
+  INSERT INTO remote_session_ema_providers
+    (id, organization_id, vendor_issuer, remote_session_issuer_id, position)
+  VALUES
+    (demo.det_uuid('gram-demo-ema-order-wiki'), demo_org,
+     'https://auth.acme-wiki.example', demo.det_uuid('gram-demo-ema-idp'), 0);
 
   -- Live connections spread across the MCP servers, not pooled on one issuer.
   -- The identity page's connections tab groups by MCP server, and every
@@ -3878,6 +4050,41 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 1 organization user session issuer, found %', stray;
   END IF;
 
+  -- EMA: the workforce sign-in trusts Acme Identity, two ready bindings, one
+  -- accepted credential, and one saved provider order.
+  SELECT count(*) INTO stray FROM user_session_issuers
+  WHERE id = demo.det_uuid('gram-demo-issuer-workforce')
+    AND organization_id = demo_org
+    AND trusted_remote_session_issuer_id = demo.det_uuid('gram-demo-ema-idp')
+    AND trusted_remote_session_client_id = demo.det_uuid('gram-demo-ema-idp-client');
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected the workforce issuer to trust Acme Identity, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_ema_bindings
+  WHERE organization_id = demo_org AND project_id = proj_a AND state = 'ready';
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 ready EMA bindings, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_ema_credentials
+  WHERE organization_id = demo_org;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 EMA credential, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM trusted_issuer_sessions
+  WHERE organization_id = demo_org;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 trusted issuer session, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_session_ema_providers
+  WHERE organization_id = demo_org AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 saved EMA provider, found %', stray;
+  END IF;
+
   -- The workforce issuer shows a shared authorization server.
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE id = demo.det_uuid('gram-demo-issuer-workforce')
@@ -3894,12 +4101,12 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 8 registered agents, found %', stray;
   END IF;
 
-  -- Linear's remote identity provider, the identity chaining example, and
-  -- Jamf Pro.
+  -- Linear's remote identity provider, the identity chaining example, Jamf
+  -- Pro, and the two EMA services' authorization servers.
   SELECT count(*) INTO stray FROM remote_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 project remote session issuers, found %', stray;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 project remote session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM remote_session_clients
