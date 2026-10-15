@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { setTimeout } from "node:timers/promises";
 import { promisify } from "node:util";
 
 const exec = promisify(execFile);
@@ -14,7 +15,11 @@ const fakes = {
   mise: `#!/bin/sh
 if [ "$1" = env ] && [ "$2" = --json ]; then
   [ "$MISE_FAIL" = 1 ] && exit 1
-  printf '{"GRAM_OPENCODE_PLUGINS":%s}\\n' "$PLUGINS"
+  if [ -n "$PLUGINS" ]; then
+    printf '{"GRAM_OPENCODE_PLUGINS":%s}\\n' "$PLUGINS"
+  else
+    echo '{}'
+  fi
 else
   echo "mise $*" >> "$CALLS"
 fi
@@ -83,10 +88,15 @@ test("a settled turn pauses the stack through pitchfork", async (t) => {
   assert.deepEqual(await f.calls(), pausedByPitchfork);
 });
 
-test("without a supervisor the stack is paused directly", async (t) => {
+test("without a supervisor the stack is paused in the background", async (t) => {
   const f = await fixture(t);
   await f.run("Stop", "a", {}, { PITCHFORK_FAIL: "1" });
-  assert.deepEqual(await f.calls(), ["mise run pause"]);
+  let calls = await f.calls();
+  for (let i = 0; i < 100 && calls.length === 0; i++) {
+    await setTimeout(20);
+    calls = await f.calls();
+  }
+  assert.deepEqual(calls, ["mise run pause"]);
 });
 
 for (const [name, value, enabled] of [
@@ -97,18 +107,15 @@ for (const [name, value, enabled] of [
     false,
   ],
   ["an empty value disables the hook", "", false],
-  ["an unset variable disables the hook", null, false],
+  ["an unset variable disables the hook", undefined, false],
+  ["a null value disables the hook", null, false],
   ["an invalid value disables the hook", 42, false],
 ]) {
   test(name, async (t) => {
     const f = await fixture(t);
-    await f.run(
-      "UserPromptSubmit",
-      "a",
-      {},
-      { PLUGINS: JSON.stringify(value) },
-    );
-    await f.run("Stop", "a", {}, { PLUGINS: JSON.stringify(value) });
+    const env = { PLUGINS: value === undefined ? "" : JSON.stringify(value) };
+    await f.run("UserPromptSubmit", "a", {}, env);
+    await f.run("Stop", "a", {}, env);
     assert.deepEqual(await f.calls(), enabled ? pausedByPitchfork : []);
   });
 }
@@ -159,8 +166,25 @@ test("the last session in the worktree to settle pauses", async (t) => {
 
 test("a closed session no longer holds the stack up", async (t) => {
   const f = await fixture(t);
+  await f.run("UserPromptSubmit", "a");
   await f.run("UserPromptSubmit", "b");
   await f.run("SessionEnd", "b");
+  assert.deepEqual(await f.calls(), []);
+  await f.run("Stop", "a");
+  assert.deepEqual(await f.calls(), pausedByPitchfork);
+});
+
+test("closing the last session after an interrupted turn pauses", async (t) => {
+  const f = await fixture(t);
+  await f.run("UserPromptSubmit", "a");
+  await f.run("SessionEnd", "a");
+  assert.deepEqual(await f.calls(), pausedByPitchfork);
+});
+
+test("closing a session clears its marker even when disabled", async (t) => {
+  const f = await fixture(t);
+  await f.run("UserPromptSubmit", "b");
+  await f.run("SessionEnd", "b", {}, { PLUGINS: "" });
   await f.run("Stop", "a");
   assert.deepEqual(await f.calls(), pausedByPitchfork);
 });

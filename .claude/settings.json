@@ -31,8 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/session-hooks/pause-stack.sh",
-            "async": true
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/session-hooks/pause-stack.sh"
           }
         ]
       }
@@ -42,8 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/session-hooks/pause-stack.sh",
-            "async": true
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/session-hooks/pause-stack.sh"
           }
         ]
       }
