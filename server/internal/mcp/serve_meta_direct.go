@@ -15,7 +15,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -76,8 +75,8 @@ type gatewayTool struct {
 // as are members it cannot reach or has not connected, as Progressive does.
 // Any other member failure fails the whole inventory, unless unavailable is
 // non-nil: then a member that cannot be listed right now is skipped and its
-// name is appended there.
-func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, metaServerID, projectID uuid.UUID, gate *metaGateContext, unavailable *[]string) ([]gatewayTool, error) {
+// member is appended there.
+func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, metaServerID, projectID uuid.UUID, gate *metaGateContext, unavailable *[]metaMember) ([]gatewayTool, error) {
 	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, metaServerID, projectID)
 	if err != nil {
 		return nil, err
@@ -95,7 +94,7 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 			if _, memberErr := errors.AsType[*metaMemberError](err); memberErr || unavailable != nil {
 				logger.WarnContext(ctx, "gateway member tools unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
 				if unavailable != nil {
-					*unavailable = append(*unavailable, conv.Default(member.name, member.slug))
+					*unavailable = append(*unavailable, member)
 				}
 				continue
 			}
@@ -103,7 +102,7 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 		}
 		if catalog.incomplete {
 			if unavailable != nil {
-				*unavailable = append(*unavailable, conv.Default(member.name, member.slug))
+				*unavailable = append(*unavailable, member)
 				continue
 			}
 			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again").LogWarn(ctx, logger)

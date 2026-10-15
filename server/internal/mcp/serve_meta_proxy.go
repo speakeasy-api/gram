@@ -387,6 +387,11 @@ func (s *Service) executeProxiedMemberTool(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "scope meta MCP member tool selection").LogError(ctx, logger)
 	}
+	// Live grants need the member's listing, so only a call no grant could
+	// allow is refused before chaining or dialing.
+	if memberSelection != nil && !memberSelection.AllowsName(toolName) && len(memberSelection.LiveAnnotations()) == 0 {
+		return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
+	}
 	// Only a tool call may acquire a downstream token by identity chaining.
 	callGate := *gate
 	callGate.chainUpstream = s.metaMemberChainer(gate, member)

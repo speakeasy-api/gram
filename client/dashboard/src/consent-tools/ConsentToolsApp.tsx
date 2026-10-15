@@ -114,6 +114,8 @@ interface ConsentInventory {
   roleHiddenTools: RoleHiddenTools;
   /** Gateway servers whose tools could not be listed, e.g. not yet connected. */
   unavailableSources: string[];
+  /** Gateway servers reached through the organization's identity provider. */
+  managedSources: string[];
 }
 
 type ConsentPhase =
@@ -216,6 +218,7 @@ async function fetchConsentInventory(
     const seen = new Set<string>();
     const roleHiddenTools: RoleHiddenTools = { count: 0, names: [] };
     const unavailableSources: string[] = [];
+    const managedSources: string[] = [];
     let cursor: string | undefined = undefined;
     do {
       const page = await client.listTools(cursor ? { cursor } : undefined);
@@ -243,17 +246,22 @@ async function fetchConsentInventory(
           }
         }
       }
-      const unavailable = meta?.["gram.dev/unavailableSources"];
-      if (Array.isArray(unavailable)) {
-        for (const source of unavailable) {
-          if (typeof source === "string" && source !== "") {
-            unavailableSources.push(source);
+      for (const [key, into] of [
+        ["gram.dev/unavailableSources", unavailableSources],
+        ["gram.dev/managedSources", managedSources],
+      ] as const) {
+        const sources = meta?.[key];
+        if (Array.isArray(sources)) {
+          for (const source of sources) {
+            if (typeof source === "string" && source !== "") {
+              into.push(source);
+            }
           }
         }
       }
       cursor = page.nextCursor;
     } while (cursor);
-    return { tools, roleHiddenTools, unavailableSources };
+    return { tools, roleHiddenTools, unavailableSources, managedSources };
   } finally {
     await transport.terminateSession().catch(() => undefined);
     await client.close().catch(() => undefined);
@@ -888,6 +896,16 @@ export function ConsentToolsApp({
           {phase.inventory.unavailableSources.length === 1 ? "its" : "their"}{" "}
           tools can't be chosen here. Choose All tools to include them once
           connected.
+        </p>
+      )}
+      {mode === "specific" && phase.inventory.managedSources.length > 0 && (
+        <p className="text-muted-foreground text-xs">
+          {listNames(phase.inventory.managedSources)}{" "}
+          {phase.inventory.managedSources.length === 1 ? "is" : "are"} managed
+          by your identity provider, so{" "}
+          {phase.inventory.managedSources.length === 1 ? "its" : "their"} tools
+          can't be chosen here. Choose All tools to include{" "}
+          {phase.inventory.managedSources.length === 1 ? "it" : "them"}.
         </p>
       )}
       {phase.inventory.roleHiddenTools.count > 0 && (

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -107,8 +108,12 @@ func TestGatewayToolSelectionRefusesReplacedMember(t *testing.T) {
 
 func mintGatewaySelectionToken(t *testing.T, ti *testInstance, issuerID uuid.UUID, slug, userID string, policy *toolfilter.SessionPolicy) string {
 	t.Helper()
-	raw, err := json.Marshal(policy)
-	require.NoError(t, err)
+	var raw []byte
+	if policy != nil {
+		var err error
+		raw, err = json.Marshal(policy)
+		require.NoError(t, err)
+	}
 	subject := urn.NewUserSubject(userID)
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(issuerID).String(), Issuer: ti.serverURL.String() + "/mcp/" + slug, Lifetime: time.Hour})
 	require.NoError(t, err)
@@ -160,7 +165,10 @@ func TestGatewayLiveAnnotationGrantCallsStatefulMember(t *testing.T) {
 	require.Contains(t, w.Body.String(), memberSlug+"--read_docs")
 	require.NotContains(t, w.Body.String(), memberSlug+"--delete_docs")
 	require.Contains(t, callGatewayTool(t, ti, slug, direct, memberSlug+"--read_docs", map[string]any{}), "read ok")
-	require.NotContains(t, callGatewayTool(t, ti, slug, direct, memberSlug+"--delete_docs", map[string]any{}), "delete ok")
+	refused := callGatewayTool(t, ti, slug, direct, memberSlug+"--delete_docs", map[string]any{})
+	require.NotContains(t, refused, "delete ok")
+	require.Contains(t, refused, remotemcp.ToolNotApprovedMessage)
+	require.NotContains(t, refused, "rejected the call", "the gateway refused the call, not the upstream")
 
 	progressive := mint(metamcp.DiscoveryModeProgressive)
 	execute := func(name string) string {
