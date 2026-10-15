@@ -93,7 +93,7 @@ CREATE TABLE `gram`.`sigint_readings` (
   `probabilities_valid` Bool MATERIALIZED notEmpty(probabilities) AND arrayAll(p -> (isFinite(p.3) AND ((p.3) >= 0) AND ((p.3) <= 1)), probabilities) COMMENT 'Derived probability-domain guard for answered readings.
 @access: confidential',
   CONSTRAINT `sigint_reading_identity` CHECK (notEmpty(organization_id) AND (id != toUUID('00000000-0000-0000-0000-000000000000')) AND (project_id != toUUID('00000000-0000-0000-0000-000000000000')) AND (sensor_id != toUUID('00000000-0000-0000-0000-000000000000')) AND (evaluation_attempt_id != toUUID('00000000-0000-0000-0000-000000000000'))),
-  CONSTRAINT `sigint_reading_status` CHECK ((status IN ('answered'),
+  CONSTRAINT `sigint_reading_status` CHECK ((status IN ('answered', 'not_applicable', 'draft', 'failed')) AND ((status = 'failed') = notEmpty(failure_reason))),
   CONSTRAINT `sigint_reading_result` CHECK ((status = 'answered') = notEmpty(result_type)),
   CONSTRAINT `sigint_reading_probabilities` CHECK ((status != 'answered') OR probabilities_valid),
   CONSTRAINT `sigint_reading_confidence` CHECK ((confidence IS NULL) OR (isFinite(confidence) AND (confidence >= 0) AND (confidence <= 1))),
