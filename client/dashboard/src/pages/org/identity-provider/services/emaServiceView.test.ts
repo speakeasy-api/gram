@@ -18,8 +18,8 @@ const oktaServer: Server = {
 };
 const ownServer: Server = { name: "Wiki" };
 
-describe("who an order can vouch for", () => {
-  it("covers every server with no saved order", () => {
+describe("who the accepted providers can vouch for", () => {
+  it("covers every server when nothing is saved", () => {
     expect(strandedServers(null, [oktaServer, ownServer])).toEqual([]);
   });
 
@@ -46,10 +46,17 @@ describe("who an order can vouch for", () => {
         strandedServers([speakeasy], [oktaServer, another, ownServer]),
       ),
     ).toEqual([
-      "Tracker and Docs sign people in through Okta, so this order leaves them with nobody to vouch. Add Okta, or go back to the default.",
+      "Tracker and Docs sign people in through Okta, so they have nobody to vouch. Accept Okta, or go back to the default.",
     ]);
     expect(strandedNotes(strandedServers([okta], [ownServer]))).toEqual([
-      "Wiki uses Speakeasy’s own sign-in, so this order leaves it with nobody to vouch. Add Speakeasy, or go back to the default.",
+      "Wiki uses Speakeasy’s own sign-in, so it has nobody to vouch. Accept Speakeasy, or go back to the default.",
+    ]);
+    expect(
+      strandedNotes(strandedServers([speakeasy], [oktaServer]), {
+        draft: true,
+      }),
+    ).toEqual([
+      "Tracker signs people in through Okta, so it would have nobody to vouch.",
     ]);
   });
 });

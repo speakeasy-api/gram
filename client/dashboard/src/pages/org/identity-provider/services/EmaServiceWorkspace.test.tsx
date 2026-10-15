@@ -178,12 +178,28 @@ const trustRows = () =>
   within(screen.getByRole("list", { name: "Linear trusts" })).getAllByRole(
     "listitem",
   );
-const order = () =>
-  within(screen.getByRole("list", { name: "Provider order" }))
+const checkboxes = () =>
+  within(screen.getByRole("list", { name: "Identity providers to accept" }))
+    .getAllByRole("checkbox")
+    .map((box) => ({
+      name: box.closest("li")?.querySelector("label")?.textContent,
+      checked: box.getAttribute("aria-checked") === "true",
+    }));
+const accepted = () =>
+  within(screen.getByRole("list", { name: "Accepted identity providers" }))
     .getAllByRole("listitem")
-    .map((item) => item.textContent?.replace(/^\d+/, "").trim());
+    .map((item) => item.textContent);
+const box = (name: string) => screen.getByRole("checkbox", { name });
+const editButton = () =>
+  screen.getByRole("button", { name: "Edit" }) as HTMLButtonElement;
 const saveButton = () =>
-  screen.getByRole("button", { name: "Save order" }) as HTMLButtonElement;
+  screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
+const conflict = () =>
+  new GramError("conflict", {
+    response: new Response("{}", { status: 409 }),
+    request: new Request("https://example.com"),
+    body: "{}",
+  });
 const strandedNote = /nobody to vouch/;
 const oktaServer = {
   id: "server-okta",
@@ -267,34 +283,44 @@ describe("one service", () => {
     );
   });
 
-  it("explains the default and starts a custom order from it", () => {
+  it("shows the default as every identity provider accepted, with no warnings", () => {
+    mocks.rows = [{ ...linear, servers: [oktaServer, speakeasyServer] }];
     show();
     expect(
-      screen.getByText(
-        /each server is vouched for by whatever signs its people in/,
-        {
-          selector: "#order *",
-        },
-      ),
+      screen.getByRole("heading", {
+        name: "Identity providers Linear accepts",
+      }),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Save order" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Customize order" }));
-    expect(order()).toEqual(["Okta", "Speakeasy"]);
     expect(
-      screen.getByText(
-        /A saved order applies to every server that reaches Linear/,
-      ),
+      screen.getByText("Default: accepts every identity provider"),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Move Speakeasy up" }));
-    expect(order()).toEqual(["Speakeasy", "Okta"]);
+    expect(accepted()).toEqual(["OktaAccepted", "SpeakeasyAccepted"]);
+    expect(screen.queryByText(strandedNote)).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Move/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use default" })).toBeNull();
+  });
+
+  it("edits the default as checkboxes and saves the checked ones in candidate order", () => {
+    show();
+    fireEvent.click(editButton());
+    expect(checkboxes()).toEqual([
+      { name: "Okta", checked: true },
+      { name: "Speakeasy", checked: true },
+    ]);
+    expect(screen.queryByText(/^\d+$/)).toBeNull();
+    fireEvent.click(box("Okta"));
+    fireEvent.click(box("Okta"));
+    expect(saveButton().disabled).toBe(false);
     fireEvent.click(saveButton());
     expect(mocks.save).toHaveBeenCalledWith({
       request: {
         setEMAProvidersRequestBody: {
           remoteSessionIssuerId: "vendor",
           providers: [
-            { kind: "speakeasy" },
             { kind: "external", remoteSessionIssuerId: "okta" },
+            { kind: "speakeasy" },
           ],
           expectedProviders: [],
         },
@@ -304,7 +330,7 @@ describe("one service", () => {
 
   it("refreshes the services and every server's reading after a save", async () => {
     show();
-    fireEvent.click(screen.getByRole("button", { name: "Customize order" }));
+    fireEvent.click(editButton());
     fireEvent.click(saveButton());
     await waitFor(() =>
       expect(mocks.invalidate).toHaveBeenCalledWith({
@@ -314,25 +340,43 @@ describe("one service", () => {
     expect(mocks.invalidate).toHaveBeenCalledWith("services");
   });
 
-  it("names the servers a draft leaves with nobody to vouch, without blocking Save", () => {
+  it("names the servers an unchecked provider leaves with nobody to vouch, without blocking Save", () => {
     mocks.rows = [{ ...linear, servers: [oktaServer, speakeasyServer] }];
     show();
+    fireEvent.click(editButton());
     expect(screen.queryByText(strandedNote)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Customize order" }));
-    expect(order()).toEqual(["Okta", "Speakeasy"]);
-    expect(screen.queryByText(strandedNote)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Remove Okta" }));
+    fireEvent.click(box("Okta"));
     expect(
       screen.getByText(
-        "Linear (Okta team) signs people in through Okta, so this order leaves it with nobody to vouch. Add Okta, or go back to the default.",
+        "Linear (Okta team) signs people in through Okta, so it would have nobody to vouch.",
       ),
     ).toBeTruthy();
     expect(saveButton().disabled).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Remove Speakeasy" }));
-    expect(screen.queryByText(strandedNote)).toBeNull();
+    fireEvent.click(saveButton());
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          setEMAProvidersRequestBody: expect.objectContaining({
+            providers: [{ kind: "speakeasy" }],
+          }),
+        }),
+      }),
+    );
   });
 
-  it("names the servers a saved order leaves with nobody to vouch", () => {
+  it("disables Save with nothing checked", () => {
+    mocks.rows = [{ ...linear, servers: [oktaServer, speakeasyServer] }];
+    show();
+    fireEvent.click(editButton());
+    fireEvent.click(box("Okta"));
+    fireEvent.click(box("Speakeasy"));
+    expect(saveButton().disabled).toBe(true);
+    expect(
+      screen.getByText("Accept at least one identity provider."),
+    ).toBeTruthy();
+  });
+
+  it("names the servers a saved choice leaves with nobody to vouch", () => {
     mocks.rows = [
       {
         ...linear,
@@ -342,14 +386,15 @@ describe("one service", () => {
       },
     ];
     show();
+    expect(accepted()).toEqual(["OktaAccepted", "SpeakeasyNot accepted"]);
     expect(
       screen.getByText(
-        "Linear (Speakeasy) uses Speakeasy’s own sign-in, so this order leaves it with nobody to vouch. Add Speakeasy, or go back to the default.",
+        "Linear (Speakeasy) uses Speakeasy’s own sign-in, so it has nobody to vouch. Accept Speakeasy, or go back to the default.",
       ),
     ).toBeTruthy();
   });
 
-  it("restores the default from a saved order", () => {
+  it("restores the default from a saved choice", () => {
     mocks.rows = [
       { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
     ];
@@ -370,22 +415,45 @@ describe("one service", () => {
     });
   });
 
-  it("still lets an admin restore the default with custom orders turned off", () => {
+  it("keeps the saved positions as the expected list, whatever order it was saved in", () => {
+    mocks.rows = [
+      { ...linear, isDefaultOrder: false, providers: [speakeasy, okta] },
+    ];
+    show();
+    fireEvent.click(editButton());
+    expect(saveButton().disabled).toBe(true);
+    fireEvent.click(box("Speakeasy"));
+    fireEvent.click(saveButton());
+    expect(mocks.save).toHaveBeenCalledWith({
+      request: {
+        setEMAProvidersRequestBody: {
+          remoteSessionIssuerId: "vendor",
+          providers: [{ kind: "external", remoteSessionIssuerId: "okta" }],
+          expectedProviders: [
+            { kind: "speakeasy" },
+            { kind: "external", remoteSessionIssuerId: "okta" },
+          ],
+        },
+      },
+    });
+  });
+
+  it("still lets an admin restore the default when choosing is turned off", () => {
     mocks.flag = "disabled";
     mocks.rows = [
       { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
     ];
     show();
     expect(screen.getByRole("button", { name: "Use default" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Edit order" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(
       screen.getByText(
-        /Custom orders aren’t available for your organization yet/,
+        /Choosing which identity providers a service accepts isn’t available for your organization yet/,
       ),
     ).toBeTruthy();
   });
 
-  it("caps an order at ten identity providers", () => {
+  it("caps the accepted providers at ten", () => {
     const ids = Array.from({ length: 11 }, (_, i) => `idp-${i}`);
     mocks.signIns = ids.map((id) => ({
       projectId: "",
@@ -397,32 +465,27 @@ describe("one service", () => {
       issuer: `https://${id}.example.com`,
     }));
     show();
-    fireEvent.click(screen.getByRole("button", { name: "Customize order" }));
-    expect(order()).toHaveLength(10);
+    fireEvent.click(editButton());
+    expect(checkboxes()).toHaveLength(12);
+    expect(saveButton().disabled).toBe(true);
     expect(
-      screen.getByText("An order holds at most 10 identity providers."),
+      screen.getByText("A service can accept at most 10 identity providers."),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("combobox", { name: "Identity provider to add" }),
-    ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Remove IdP idp-0" }));
-    expect(
-      screen.getByRole("combobox", { name: "Identity provider to add" }),
-    ).toBeTruthy();
+    fireEvent.click(box("IdP idp-0"));
+    fireEvent.click(box("Speakeasy"));
+    expect(saveButton().disabled).toBe(false);
   });
 
   it("keeps a draft to its own service", () => {
     const { rerender } = show();
-    fireEvent.click(screen.getByRole("button", { name: "Customize order" }));
-    expect(screen.getByRole("button", { name: "Save order" })).toBeTruthy();
+    fireEvent.click(editButton());
+    expect(saveButton()).toBeTruthy();
     rerender(tree("https://notion.example.com"));
-    expect(screen.queryByRole("button", { name: "Save order" })).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Customize order" }),
-    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(editButton()).toBeTruthy();
   });
 
-  it("asks to remove a saved provider that's gone before saving", () => {
+  it("asks to uncheck a saved provider that's gone before saving", () => {
     const gone = view({
       key: "external-gone",
       kind: "external",
@@ -437,28 +500,50 @@ describe("one service", () => {
     ];
     show();
     expect(
-      screen.getByText("No longer available. Remove it to save."),
+      screen.getByText("No longer available. Uncheck it to save."),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
-    fireEvent.click(screen.getByRole("button", { name: "Move Speakeasy up" }));
+    fireEvent.click(editButton());
+    expect(checkboxes()).toEqual([
+      { name: "Okta", checked: false },
+      { name: "Speakeasy", checked: true },
+      { name: "Old IdP", checked: true },
+    ]);
+    fireEvent.click(box("Okta"));
     expect(saveButton().disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Remove Old IdP" }));
+    fireEvent.click(box("Old IdP"));
     expect(saveButton().disabled).toBe(false);
+    fireEvent.click(saveButton());
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          setEMAProvidersRequestBody: expect.objectContaining({
+            providers: [
+              { kind: "external", remoteSessionIssuerId: "okta" },
+              { kind: "speakeasy" },
+            ],
+          }),
+        }),
+      }),
+    );
   });
 
-  it("keeps the order read-only for people who can't change it", () => {
+  it("keeps the choice read-only for people who can't change it", () => {
     mocks.admin = false;
     show();
     expect(
-      screen.getByText("Only organization admins can change the order."),
+      screen.getByText(
+        "Only organization admins can change which identity providers a service accepts.",
+      ),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Customize order" }),
-    ).toBeNull();
-    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(accepted()).toEqual([
+      "Each server’s own identity providerAccepted",
+      "SpeakeasyAccepted",
+    ]);
   });
 
-  it("says why a support session can't change the order", () => {
+  it("says why a support session can't change it", () => {
     mocks.session = { impersonatorEmail: "staff@example.com" };
     mocks.rows = [
       { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
@@ -479,27 +564,28 @@ describe("one service", () => {
       screen.getByText(/No server reaches this service any more/),
     ).toBeTruthy();
   });
-  it("stops a stale draft when the saved order changes underneath it", () => {
+  it("stops a stale draft when the saved choice changes underneath it", () => {
     mocks.rows = [
       { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
     ];
     const { rerender } = show();
-    fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
-    fireEvent.click(screen.getByRole("button", { name: "Move Speakeasy up" }));
+    fireEvent.click(editButton());
+    fireEvent.click(box("Speakeasy"));
     expect(saveButton().disabled).toBe(false);
 
-    // Another admin removes Speakeasy.
+    // Another admin unchecks Speakeasy.
     mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [okta] }];
     rerender(tree());
     expect(
-      screen.getByText(/This order changed since you started editing/),
+      screen.getByText(/What Linear accepts changed since you started editing/),
     ).toBeTruthy();
-    expect(screen.getByText(/It’s now: Okta\./)).toBeTruthy();
+    expect(screen.getByText(/It now accepts Okta\./)).toBeTruthy();
     expect(saveButton().disabled).toBe(true);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Review and keep editing" }),
     );
+    fireEvent.click(box("Speakeasy"));
     expect(saveButton().disabled).toBe(false);
     fireEvent.click(saveButton());
     expect(mocks.save).toHaveBeenCalledWith({
@@ -507,8 +593,8 @@ describe("one service", () => {
         setEMAProvidersRequestBody: {
           remoteSessionIssuerId: "vendor",
           providers: [
-            { kind: "speakeasy" },
             { kind: "external", remoteSessionIssuerId: "okta" },
+            { kind: "speakeasy" },
           ],
           expectedProviders: [
             { kind: "external", remoteSessionIssuerId: "okta" },
@@ -523,31 +609,27 @@ describe("one service", () => {
       { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
     ];
     const { rerender } = show();
-    fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
+    fireEvent.click(editButton());
     mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [okta] }];
     rerender(tree());
     fireEvent.click(screen.getByRole("button", { name: "Discard my changes" }));
-    expect(screen.queryByRole("button", { name: "Save order" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Edit order" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(editButton()).toBeTruthy();
   });
 
-  it("says the order changed when the server refuses a stale save", () => {
+  it("says the choice changed when the server refuses a stale save", () => {
     show();
-    fireEvent.click(screen.getByRole("button", { name: "Customize order" }));
-    mocks.saveError = new GramError("conflict", {
-      response: new Response("{}", { status: 409 }),
-      request: new Request("https://example.com"),
-      body: "{}",
-    });
+    fireEvent.click(editButton());
+    mocks.saveError = conflict();
     fireEvent.click(saveButton());
     expect(mocks.invalidate).toHaveBeenCalledWith("services");
     expect(
-      screen.getByText(/This order changed since you started editing/),
+      screen.getByText(/What Linear accepts changed since you started editing/),
     ).toBeTruthy();
     expect(saveButton().disabled).toBe(true);
   });
 
-  it("waits for the current order before rebasing a refused save", async () => {
+  it("waits for the current choice before rebasing a refused save", async () => {
     mocks.rows = [
       { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
     ];
@@ -556,27 +638,23 @@ describe("one service", () => {
       refreshed = resolve;
     });
     const { rerender } = show();
-    fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
-    fireEvent.click(screen.getByRole("button", { name: "Move Speakeasy up" }));
-    mocks.saveError = new GramError("conflict", {
-      response: new Response("{}", { status: 409 }),
-      request: new Request("https://example.com"),
-      body: "{}",
-    });
+    fireEvent.click(editButton());
+    fireEvent.click(box("Okta"));
+    mocks.saveError = conflict();
     fireEvent.click(saveButton());
-    expect(screen.getByText(/Loading the current order…/)).toBeTruthy();
+    expect(screen.getByText(/Loading the current choice…/)).toBeTruthy();
     const review = () =>
       screen.getByRole<HTMLButtonElement>("button", {
         name: "Review and keep editing",
       });
     expect(review().disabled).toBe(true);
 
-    // Another admin removed Speakeasy; the refetch brings that order in.
+    // Another admin unchecked Speakeasy; the refetch brings that in.
     mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [okta] }];
     rerender(tree());
     refreshed();
     await waitFor(() => expect(review().disabled).toBe(false));
-    expect(screen.getByText(/It’s now: Okta\./)).toBeTruthy();
+    expect(screen.getByText(/It now accepts Okta\./)).toBeTruthy();
     fireEvent.click(review());
     mocks.saveError = null;
     fireEvent.click(saveButton());
@@ -584,6 +662,7 @@ describe("one service", () => {
       expect.objectContaining({
         request: expect.objectContaining({
           setEMAProvidersRequestBody: expect.objectContaining({
+            providers: [{ kind: "speakeasy" }],
             expectedProviders: [
               { kind: "external", remoteSessionIssuerId: "okta" },
             ],
@@ -599,32 +678,27 @@ describe("one service", () => {
       unavailable: "Not set up",
       unavailableReason: "disabled",
     });
-    mocks.rows = [
-      { ...linear, isDefaultOrder: false, providers: [paused, okta] },
-    ];
+    mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [paused] }];
     show();
     expect(
-      screen.queryByText("No longer available. Remove it to save."),
+      screen.queryByText("No longer available. Uncheck it to save."),
     ).toBeNull();
     expect(
       screen.getByText(/Not set up\. It’s skipped until it can vouch again\./),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
-    fireEvent.click(screen.getByRole("button", { name: "Move Okta up" }));
+    fireEvent.click(editButton());
+    fireEvent.click(box("Okta"));
     expect(saveButton().disabled).toBe(false);
   });
+
   it("waits for every identity provider it could add before editing", () => {
     mocks.signInsState = "pending";
     show();
+    expect(editButton().disabled).toBe(true);
     expect(
-      (
-        screen.getByRole("button", {
-          name: "Customize order",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
-    expect(
-      screen.getByText("Checking which identity providers you can add…"),
+      screen.getByText(
+        "Checking which identity providers you can choose from…",
+      ),
     ).toBeTruthy();
   });
 
@@ -632,7 +706,9 @@ describe("one service", () => {
     mocks.signInsState = "error";
     show();
     expect(
-      screen.getByText(/Couldn’t load the identity providers you can put/),
+      screen.getByText(
+        /Couldn’t load the identity providers you can choose from/,
+      ),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mocks.signInsRefetch).toHaveBeenCalled();

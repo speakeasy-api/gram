@@ -5,7 +5,7 @@ import type { UserSessionIssuer } from "@gram/client/models/components/usersessi
 export type ChainingProviders = { external: boolean };
 
 // Set-up issuers that are paused, keyless or turned off keep bindings manageable;
-// the order shows why Speakeasy can't serve.
+// the server page shows why Speakeasy can't serve.
 const SPEAKEASY_ON: ReadonlySet<InternalSessionIssuer["state"]> = new Set([
   "enabled",
   "signing_paused",
@@ -30,7 +30,7 @@ export function identityChainingProviders(
     speakeasyIssuer,
   }: {
     externalRollout: boolean;
-    /** Speakeasy vouches where the sign-in has no identity provider, or where a saved order names it. */
+    /** Speakeasy vouches only where the sign-in has no identity provider. */
     speakeasyRollout: boolean;
     speakeasyIssuer: InternalSessionIssuer | undefined;
   },

@@ -13,7 +13,7 @@ export function ProviderTrust({
   isDefaultOrder = false,
 }: {
   provider: ProviderView;
-  /** In the default order, say which servers each entry covers. */
+  /** In the default, say which servers each entry covers. */
   isDefaultOrder?: boolean;
 }): JSX.Element {
   const tone = provider.lastAcceptedAt

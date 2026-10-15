@@ -89,7 +89,7 @@ describe("Services that can use Speakeasy", () => {
     ).toBe("/?tab=identity-providers&service=https%3A%2F%2FLinear.example.com");
   });
 
-  it("leaves out services whose order can't use Speakeasy", () => {
+  it("leaves out services that can't use Speakeasy", () => {
     mocks.rows = [{ ...service("Linear", undefined), providers: [] }];
     show();
     expect(screen.queryByRole("link", { name: "Linear" })).toBeNull();

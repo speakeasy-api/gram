@@ -9,7 +9,7 @@ import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 
 import { emaServiceHref } from "../tabs";
-import { DEFAULT_ORDER_RULE } from "./emaServiceView";
+import { DEFAULT_ACCEPTS_RULE } from "./emaServiceView";
 import { ProviderTrust } from "./ProviderTrust";
 import {
   serversSummary,
@@ -34,7 +34,7 @@ export function EmaServices(): JSX.Element {
         <Text muted small>
           Each service your MCP servers reach has to trust an identity provider
           above before Enterprise Managed Authorization works. Do that once per
-          service here. {DEFAULT_ORDER_RULE}
+          service here. {DEFAULT_ACCEPTS_RULE}
         </Text>
       </div>
       {services.isPending ? (

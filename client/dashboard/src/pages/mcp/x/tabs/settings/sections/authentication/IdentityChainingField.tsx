@@ -490,7 +490,7 @@ export function IdentityChainingField({
     usableVouchers.length > 0
       ? allVouchers.filter((row) => !row.unusedBySignIn)
       : allVouchers;
-  // A saved order that leaves out the one provider this sign-in goes through.
+  // The service doesn't accept the one provider this sign-in goes through.
   const strandedByOrder =
     !!order &&
     !order.isDefault &&
@@ -715,42 +715,36 @@ export function IdentityChainingField({
             </Text>
           ) : (
             <ul aria-label="Identity providers" className="space-y-1">
-              {vouchers.map((row) => {
-                const position = usableVouchers.indexOf(row);
-                return (
-                  <li
-                    key={row.key}
-                    className="flex flex-wrap items-baseline gap-x-2"
-                  >
-                    <Text
-                      small
-                      className={cn(
-                        "font-medium",
-                        !row.usable && "text-muted-foreground",
-                      )}
-                    >
-                      {row.name}
-                    </Text>
-                    <Text muted small>
-                      {row.usable
-                        ? row.kind === "speakeasy"
-                          ? "for everyone who signs in to this server"
-                          : `for people who signed in with ${row.name}`
-                        : row.unavailable}
-                      {row.usable &&
-                        usableVouchers.length > 1 &&
-                        (position === 0 ? " · tried first" : " · then")}
-                    </Text>
-                    {row.fix && (
-                      <SettingsLink
-                        to={identityHref(providerFixLink(row.fix).href)}
-                      >
-                        {providerFixLink(row.fix).label}
-                      </SettingsLink>
+              {vouchers.map((row) => (
+                <li
+                  key={row.key}
+                  className="flex flex-wrap items-baseline gap-x-2"
+                >
+                  <Text
+                    small
+                    className={cn(
+                      "font-medium",
+                      !row.usable && "text-muted-foreground",
                     )}
-                  </li>
-                );
-              })}
+                  >
+                    {row.name}
+                  </Text>
+                  <Text muted small>
+                    {row.usable
+                      ? row.kind === "speakeasy"
+                        ? "for everyone who signs in to this server"
+                        : `for people who signed in with ${row.name}`
+                      : row.unavailable}
+                  </Text>
+                  {row.fix && (
+                    <SettingsLink
+                      to={identityHref(providerFixLink(row.fix).href)}
+                    >
+                      {providerFixLink(row.fix).label}
+                    </SettingsLink>
+                  )}
+                </li>
+              ))}
             </ul>
           )}
           {!ready && noneUsable && (
@@ -766,10 +760,10 @@ export function IdentityChainingField({
                   className="underline underline-offset-4"
                   to={identityHref(emaServiceHref(order.vendorIssuer))}
                 >
-                  change {vendor}’s order
+                  change which identity providers {vendor} accepts
                 </Link>
               ) : (
-                `ask an organization admin to change ${vendor}’s order`
+                `ask an organization admin to change which identity providers ${vendor} accepts`
               )}{" "}
               or{" "}
               <Link
@@ -793,10 +787,10 @@ export function IdentityChainingField({
                       className="underline underline-offset-4"
                       to={identityHref(emaServiceHref(order.vendorIssuer))}
                     >
-                      {vendor}’s saved order
+                      the identity providers {vendor} accepts
                     </Link>
                   ) : (
-                    `${vendor}’s saved order`
+                    `the identity providers ${vendor} accepts`
                   )}
                   .
                 </>

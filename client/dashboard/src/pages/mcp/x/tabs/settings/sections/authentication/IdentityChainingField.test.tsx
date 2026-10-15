@@ -487,37 +487,49 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(state.calls).toEqual(["prepare"]);
   });
 
-  it("names the saved order as plain text for people who can't open it", () => {
+  // On a federated sign-in only that identity provider can vouch; Speakeasy
+  // comes back as not trusted by the endpoint.
+  const speakeasyUnused = {
+    ...speakeasy,
+    unavailableReason: "not_trusted_by_endpoint",
+  };
+
+  it("names the accepted providers as plain text for people who can't open them", () => {
     state.orgAdmin = false;
     read.data = {
       ...bound("first"),
-      emaProviders: { ...order(okta, speakeasy), isDefault: false },
+      emaProviders: { ...order(okta, speakeasyUnused), isDefault: false },
     };
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(
-      screen.getByText(/Set by example\.com’s saved order\./),
+      screen.getByText(/Set by the identity providers example\.com accepts\./),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("link", { name: "example.com’s saved order" }),
+      screen.queryByRole("link", {
+        name: "the identity providers example.com accepts",
+      }),
     ).toBeNull();
   });
 
   it("walks the chain: sign-in, who vouches, what the vendor trusts, client", () => {
     read.data = {
       ...bound("first"),
-      emaProviders: { ...order(okta, speakeasy), isDefault: false },
+      emaProviders: { ...order(okta, speakeasyUnused), isDefault: false },
     };
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(
       screen.getByText(
         (_, el) =>
           el?.tagName === "P" &&
-          el.textContent === "Set by example.com’s saved order.",
+          el.textContent ===
+            "Set by the identity providers example.com accepts.",
       ),
     ).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: "example.com’s saved order" })
+        .getByRole("link", {
+          name: "the identity providers example.com accepts",
+        })
         .getAttribute("href"),
     ).toBe(
       "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
@@ -540,20 +552,12 @@ describe("identity chaining vouched for by Speakeasy", () => {
         .getByRole("link", { name: "Change in Sessions" })
         .getAttribute("href"),
     ).toBe("#sessions");
-    expect(vouchers()).toEqual([
-      "Oktafor people who signed in with Okta · tried first",
-      "Speakeasyfor everyone who signs in to this server · then",
-    ]);
+    expect(vouchers()).toEqual(["Oktafor people who signed in with Okta"]);
     expect(trusts()).toEqual([
       {
         name: "Okta",
         accepted: "Not accepted yet",
         url: "https://okta.example.com",
-      },
-      {
-        name: "Speakeasy",
-        accepted: "Not accepted yet",
-        url: "https://speakeasy.example.com/issuer",
       },
     ]);
     expect(screen.getAllByText(/In example.com’s admin settings/)).toHaveLength(
@@ -749,7 +753,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(state.calls).toEqual([]);
   });
 
-  it("shows Speakeasy greyed when a saved order leaves a federated server with nobody to vouch", () => {
+  it("shows Speakeasy greyed when the service doesn't accept a federated server's provider", () => {
     const savedSpeakeasy = {
       isDefault: false,
       vendorIssuer: "https://vendor.example.com",
@@ -771,7 +775,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
     ).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: "change example.com’s order" })
+        .getByRole("link", {
+          name: "change which identity providers example.com accepts",
+        })
         .getAttribute("href"),
     ).toBe(
       "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
@@ -785,7 +791,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(state.calls).toEqual([]);
   });
 
-  it("asks someone who isn't an org admin to have the order changed", () => {
+  it("asks someone who isn't an org admin to have the accepted providers changed", () => {
     state.orgAdmin = false;
     read.data = {
       ...unlinked,
@@ -801,15 +807,17 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(
       screen.getByText(
-        /ask an organization admin to change example\.com’s order/,
+        /ask an organization admin to change which identity providers example\.com accepts/,
       ),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("link", { name: "change example.com’s order" }),
+      screen.queryByRole("link", {
+        name: "change which identity providers example.com accepts",
+      }),
     ).toBeNull();
   });
 
-  it("says an on server stranded by the order isn't running", () => {
+  it("says an on server nobody can vouch for isn't running", () => {
     read.data = {
       ...bound("first"),
       emaProviders: {
@@ -828,7 +836,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "change example.com’s order" }),
+      screen.getByRole("link", {
+        name: "change which identity providers example.com accepts",
+      }),
     ).toBeTruthy();
   });
 
@@ -847,7 +857,9 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(vouchers()).toEqual(["Oktafor people who signed in with Okta"]);
     expect(
-      screen.queryByRole("link", { name: "change example.com’s order" }),
+      screen.queryByRole("link", {
+        name: "change which identity providers example.com accepts",
+      }),
     ).toBeNull();
   });
 

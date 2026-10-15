@@ -126,7 +126,7 @@ describe("Servers on a service page", () => {
     ).toBeTruthy();
   });
 
-  it("flags servers the saved order leaves with nobody to vouch", () => {
+  it("flags servers the accepted providers leave with nobody to vouch", () => {
     show(
       row({
         isDefaultOrder: false,
@@ -154,12 +154,12 @@ describe("Servers on a service page", () => {
       }),
     );
     expect(screen.getByText("Needs attention")).toBeTruthy();
-    expect(screen.getByText("The order leaves out Okta")).toBeTruthy();
+    expect(screen.getByText("Linear doesn’t accept Okta")).toBeTruthy();
     expect(screen.queryByText("On and working")).toBeNull();
     expect(screen.getByText("On, not proven yet")).toBeTruthy();
   });
 
-  it("never flags a server under the default order", () => {
+  it("never flags a server under the default", () => {
     show(
       row({
         serverCount: 1,
@@ -167,6 +167,6 @@ describe("Servers on a service page", () => {
       }),
     );
     expect(screen.getByText("On and working")).toBeTruthy();
-    expect(screen.queryByText(/leaves out/)).toBeNull();
+    expect(screen.queryByText(/doesn’t accept/)).toBeNull();
   });
 });

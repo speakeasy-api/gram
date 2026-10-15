@@ -42,9 +42,9 @@ export type ProviderView = {
 
 const PLACEHOLDER_PROVIDER_NAME = "Each server’s own identity provider";
 
-/** The rule that applies when no order is saved, said the same way everywhere. */
-export const DEFAULT_ORDER_RULE =
-  "By default, each server is vouched for by whatever signs its people in: their identity provider, such as Okta, or Speakeasy itself once it’s set up. Save an order to change that for a service.";
+/** Who vouches when a service accepts every identity provider, said the same way everywhere. */
+export const DEFAULT_ACCEPTS_RULE =
+  "By default, each server is vouched for by whatever signs its people in: their identity provider, such as Okta, or Speakeasy itself once it’s set up. Choose which identity providers a service accepts to narrow that.";
 
 /** What the default's Speakeasy entry covers. */
 export const SPEAKEASY_DEFAULT_SCOPE =
@@ -170,7 +170,7 @@ export function providerView(
         fix: "speakeasy",
       };
     case "not_trusted_by_endpoint":
-      // The fix is the order or the sign-in, not the Speakeasy issuer.
+      // The fix is what the service accepts or the sign-in, not the Speakeasy issuer.
       return {
         ...base,
         name,
@@ -247,7 +247,7 @@ export type ServerSignIn = {
   signInIssuerName?: string;
 };
 
-/** One entry of an order, saved or drafted. */
+/** One provider a service accepts, saved or drafted. Stored as an ordered list. */
 export type OrderEntry = {
   kind: EMAProvider["kind"];
   remoteSessionIssuerId?: string;
@@ -260,11 +260,11 @@ function signInProviderName(server: ServerSignIn): string {
 }
 
 /**
- * Whether an order has someone who can vouch for people on a server: Speakeasy
- * for a server on Speakeasy's own sign-in, the server's own identity provider
- * for one that signs people in through it. Nobody else can, whatever the order
- * says. With no saved order (null) each server's own provider vouches, so
- * every server is covered.
+ * Whether the accepted providers include the one that can vouch for people on
+ * a server: Speakeasy for a server on Speakeasy's own sign-in, the server's own
+ * identity provider for one that signs people in through it. Nobody else can.
+ * With nothing saved (null) every provider is accepted, so every server is
+ * covered.
  */
 export function orderVouchesFor(
   order: OrderEntry[] | null,
@@ -279,7 +279,7 @@ export function orderVouchesFor(
   );
 }
 
-/** The servers an order leaves with nobody to vouch for their people. */
+/** The servers the accepted providers leave with nobody to vouch for their people. */
 export function strandedServers<T extends ServerSignIn>(
   order: OrderEntry[] | null,
   servers: T[],
@@ -288,22 +288,26 @@ export function strandedServers<T extends ServerSignIn>(
 }
 
 /** Why a stranded server needs attention, short enough for a table cell. */
-export function strandedReason(server: ServerSignIn): string {
-  return `The order leaves out ${signInProviderName(server)}`;
+export function strandedReason(server: ServerSignIn, service: string): string {
+  return `${service} doesn’t accept ${signInProviderName(server)}`;
 }
 
 /**
- * What an order does to the servers it strands, one line per sign-in, e.g.
- * "Linear (Okta team) signs people in through Okta, so this order leaves it
- * with nobody to vouch. Add Okta, or go back to the default."
+ * What the accepted providers do to the servers they strand, one line per
+ * sign-in, e.g. "Linear (Okta team) signs people in through Okta, so it would
+ * have nobody to vouch." A draft says what would happen; a saved choice says
+ * what is happening and how to fix it.
  */
 export function strandedNotes(
   stranded: (ServerSignIn & { name: string })[],
+  { draft = false }: { draft?: boolean } = {},
 ): string[] {
   const groups = new Map<string, (ServerSignIn & { name: string })[]>();
   for (const server of stranded) {
     const key = server.signInIssuerId ?? "speakeasy";
-    groups.set(key, [...(groups.get(key) ?? []), server]);
+    const group = groups.get(key);
+    if (group) group.push(server);
+    else groups.set(key, [server]);
   }
   return [...groups.values()].flatMap((servers) => {
     const [first] = servers;
@@ -314,13 +318,16 @@ export function strandedNotes(
     const how = first.signInIssuerId
       ? `${one ? "signs" : "sign"} people in through ${provider}`
       : `${one ? "uses" : "use"} Speakeasy’s own sign-in`;
+    const who = one ? "it" : "they";
     return [
-      `${names} ${how}, so this order leaves ${one ? "it" : "them"} with nobody to vouch. Add ${provider}, or go back to the default.`,
+      draft
+        ? `${names} ${how}, so ${who} would have nobody to vouch.`
+        : `${names} ${how}, so ${who} ${one ? "has" : "have"} nobody to vouch. Accept ${provider}, or go back to the default.`,
     ];
   });
 }
 
-function joinNames(names: string[]): string {
+export function joinNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }

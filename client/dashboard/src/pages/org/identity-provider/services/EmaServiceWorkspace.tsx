@@ -22,9 +22,9 @@ import { SESSION_SECURITY } from "../identityProviderQueries";
 import { identityProvidersHref } from "../tabs";
 import { useEnterpriseIssuer } from "../useEnterpriseIssuer";
 import {
-  EmaProviderOrderEditor,
-  type OrderCandidate,
-} from "./EmaProviderOrderEditor";
+  EmaAllowedProvidersEditor,
+  type ProviderCandidate,
+} from "./EmaAllowedProvidersEditor";
 import { ProviderTrust } from "./ProviderTrust";
 import {
   issuerDisplayName,
@@ -36,8 +36,8 @@ import {
 import { EmaServiceServers } from "./EmaServiceServers";
 import { useEmaServices } from "./useEmaServices";
 
-/** Who may change a service's order, and why not when they can't. */
-function useOrderPermissions(): {
+/** Who may change which identity providers a service accepts, and why not when they can't. */
+function useAcceptedProviderPermissions(): {
   canEdit: boolean;
   canRestore: boolean;
   readOnlyReason?: string;
@@ -45,7 +45,7 @@ function useOrderPermissions(): {
   const organization = useOrganization();
   const session = useSession();
   const { hasScope } = useRBAC();
-  const orderFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
+  const providersFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
   if (organization.slug === DEMO_ORG_SLUG) {
     return {
       canEdit: false,
@@ -57,7 +57,8 @@ function useOrderPermissions(): {
     return {
       canEdit: false,
       canRestore: false,
-      readOnlyReason: "Only organization admins can change the order.",
+      readOnlyReason:
+        "Only organization admins can change which identity providers a service accepts.",
     };
   }
   if (session.organizationOverride || session.impersonatorEmail) {
@@ -65,21 +66,21 @@ function useOrderPermissions(): {
       canEdit: false,
       canRestore: false,
       readOnlyReason:
-        "The order can’t be changed from a support or impersonated session.",
+        "This can’t be changed from a support or impersonated session.",
     };
   }
-  if (orderFlag.status !== "enabled") {
+  if (providersFlag.status !== "enabled") {
     return {
       canEdit: false,
       canRestore: true,
       readOnlyReason:
-        "Custom orders aren’t available for your organization yet. You can still go back to the default.",
+        "Choosing which identity providers a service accepts isn’t available for your organization yet. You can still go back to the default.",
     };
   }
   return { canEdit: true, canRestore: true };
 }
 
-/** One service: what it has to trust, in which order, and who reaches it. */
+/** One service: what it has to trust, which providers it accepts, and who reaches it. */
 export function EmaServiceWorkspace({
   vendorIssuer,
 }: {
@@ -87,8 +88,8 @@ export function EmaServiceWorkspace({
 }): JSX.Element {
   const services = useEmaServices();
   const row = services.rows.find((r) => r.vendorIssuer === vendorIssuer);
-  const permissions = useOrderPermissions();
-  const candidates = useOrderCandidates(permissions.canEdit);
+  const permissions = useAcceptedProviderPermissions();
+  const candidates = useProviderCandidates(permissions.canEdit);
   const name = row?.name ?? "Service";
 
   return (
@@ -163,7 +164,7 @@ export function EmaServiceWorkspace({
               </SettingsSection.Body>
             </SettingsSection.Panel>
           </SettingsSection>
-          <EmaProviderOrderEditor
+          <EmaAllowedProvidersEditor
             key={row.vendorIssuer}
             serviceName={name}
             remoteSessionIssuerId={row.remoteSessionIssuerId}
@@ -225,11 +226,12 @@ function TrustRow({
 }
 
 /**
- * Identity providers an admin can put in an order: each organization-level
- * identity provider a sign-in trusts, and Speakeasy once it exists.
+ * Identity providers an admin can choose for a service to accept: each
+ * organization-level identity provider a sign-in trusts, and Speakeasy once it
+ * exists.
  */
-function useOrderCandidates(enabled: boolean): {
-  items: OrderCandidate[];
+function useProviderCandidates(enabled: boolean): {
+  items: ProviderCandidate[];
   ready: boolean;
   error?: { retry: () => void };
 } {
@@ -255,7 +257,7 @@ function useOrderCandidates(enabled: boolean): {
     [signIns.data],
   );
   const issuers = useRemoteSessionIssuersByIds(externalIds, { enabled });
-  const items: OrderCandidate[] = externalIds.map((id) => ({
+  const items: ProviderCandidate[] = externalIds.map((id) => ({
     key: `external-${id}`,
     kind: "external",
     name: issuerDisplayName(issuers.items.find((issuer) => issuer.id === id)),

@@ -14,7 +14,7 @@ import { useEmaServices, type ServiceRow } from "./useEmaServices";
 type Entry = { row: ServiceRow; provider: ProviderView };
 
 /**
- * On Speakeasy's page: the services whose order can use Speakeasy, split by
+ * On Speakeasy's page: the services that accept Speakeasy, split by
  * whether the service has accepted it yet.
  */
 export function TrustedByServices(): JSX.Element {

@@ -74,7 +74,7 @@ describe("Services", () => {
     expect(screen.getByText(/once per service/)).toBeTruthy();
     expect(
       screen.getByText(
-        /By default, each server is vouched for by whatever signs its people in: their identity provider, such as Okta, or Speakeasy itself once it’s set up\./,
+        /By default, each server is vouched for by whatever signs its people in: their identity provider, such as Okta, or Speakeasy itself once it’s set up\. Choose which identity providers a service accepts to narrow that\./,
       ),
     ).toBeTruthy();
     expect(screen.getByText("No services yet")).toBeTruthy();

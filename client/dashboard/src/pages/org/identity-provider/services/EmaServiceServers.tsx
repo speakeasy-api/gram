@@ -22,6 +22,7 @@ import { serverCountLabel, type ServiceRow } from "./useEmaServices";
 function serverStatus(
   server: EMAServiceServer,
   stranded: boolean,
+  service: string,
 ): {
   label: string;
   reason?: string;
@@ -30,7 +31,7 @@ function serverStatus(
   if (stranded)
     return {
       label: "Needs attention",
-      reason: strandedReason(server),
+      reason: strandedReason(server, service),
       tone: "destructive",
     };
   switch (server.status) {
@@ -86,7 +87,7 @@ export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
       header: "Status",
       width: "260px",
       render: (server) => {
-        const status = serverStatus(server, stranded.has(server.id));
+        const status = serverStatus(server, stranded.has(server.id), row.name);
         return (
           <span
             className="flex min-w-0 flex-col"
@@ -125,9 +126,9 @@ export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
         <SettingsSection.Title>Affected servers</SettingsSection.Title>
         <SettingsSection.Description>
           MCP servers that reach {row.name} through Enterprise Managed
-          Authorization. What {row.name} trusts and the identity provider order
-          on this page apply to all of them. Turn it on or off in each server’s
-          settings.
+          Authorization. What {row.name} trusts and the identity providers it
+          accepts on this page apply to all of them. Turn it on or off in each
+          server’s settings.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
