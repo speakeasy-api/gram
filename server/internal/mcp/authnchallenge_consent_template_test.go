@@ -989,6 +989,7 @@ func TestConsentTemplateCodeChoiceAndStoredDefault(t *testing.T) {
 			require.Equal(t, !tc.discovery, strings.Contains(html, `<dt class="text-eyebrow">Discovery mode</dt>`))
 			require.Equal(t, !tc.discovery, strings.Contains(html, `>Code Mode (gateway default). Connections without an override follow this setting.</dd>`))
 			require.Equal(t, tc.offered, strings.Contains(html, `<option value="code_mode">Code Mode</option>`))
+			require.Equal(t, tc.offered, strings.Contains(html, `Code Mode exposes one execute tool`))
 		})
 	}
 }
