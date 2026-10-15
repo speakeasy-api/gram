@@ -28,10 +28,12 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
 import { cn } from "@/lib/utils";
 import { useProtectedResourceMetadata } from "@/lib/remote-identity/queries/useProtectedResourceMetadata";
 import { identityProvidersHref } from "@/pages/org/identity-provider/tabs";
 import { useOrgRoutes } from "@/routes";
+import type { EMAProvider } from "@gram/client/models/components/emaprovider.js";
 import type { IdentityChainingPreparation } from "@gram/client/models/components/identitychainingpreparation.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
@@ -46,13 +48,11 @@ import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remo
 import { buildRemoteSessionClientsReadEMAMutation } from "@gram/client/react-query/remoteSessionClientsReadEMA.js";
 import { useRemoteSessionClientsUnlinkEMAMutation } from "@gram/client/react-query/remoteSessionClientsUnlinkEMA.js";
 
-import { EmaProviderOrderLine } from "./EmaProviderOrderLine";
 import { useSpeakeasyAppendCheck } from "./useSpeakeasyAppendCheck";
 import {
   trustsExternalIdp,
   type ChainingProviders,
 } from "./identityChainingGate";
-import { IdentityChainingScopesField } from "./IdentityChainingScopesField";
 import {
   chainingBound,
   chainingGrantDeclaration,
@@ -64,7 +64,6 @@ import {
   isCimdClient,
   isPublicClient,
   preparationSucceeded,
-  sameScopes,
   sanitizeChainingScopes,
 } from "./identityChainingScopes";
 
@@ -205,10 +204,6 @@ export function IdentityChainingField({
     remoteMcpServerId,
     remoteMcpServerId !== undefined,
   );
-  const [scopeDraft, setScopeDraft] = useState<{
-    clientId: string;
-    scopes: string[];
-  } | null>(null);
   // The binding is keyed by issuer and resource, so it may name another client.
   const boundClient = chainingBound(read.data)
     ? candidates.find(
@@ -225,18 +220,10 @@ export function IdentityChainingField({
   const activeScopes = bound
     ? sanitizeChainingScopes(storedScopes)
     : defaultChainingScopes(selected?.scope);
-  const scopes =
-    scopeDraft && scopeDraft.clientId === selected?.id
-      ? scopeDraft.scopes
-      : activeScopes;
+  // The connection's scopes are edited in Identity; chaining has no list of its own.
+  const scopes = activeScopes;
   const scopesValid =
     selected != null && chainingScopesAllowed(scopes, selected.scope);
-  const scopesChanged =
-    bound &&
-    !sameScopes(
-      sanitizeChainingScopes(scopes),
-      sanitizeChainingScopes(storedScopes),
-    );
   const [confirmDisable, setConfirmDisable] = useState(false);
   const trustedIssuerQuery = useRemoteSessionIssuer(
     { id: userSessionIssuer.trustedRemoteSessionIssuerId ?? "" },
@@ -340,7 +327,6 @@ export function IdentityChainingField({
       queryClient.setQueryData(readKey, result);
       // Declared grants are written onto the client row.
       void invalidateAllRemoteSessionClients(queryClient);
-      setScopeDraft(null);
       setGrantsConfirmed(false);
       toast.success("Identity chaining is on");
     },
@@ -349,7 +335,6 @@ export function IdentityChainingField({
   });
   const unlink = useRemoteSessionClientsUnlinkEMAMutation({
     onSuccess: () => {
-      setScopeDraft(null);
       toast.success("Identity chaining is off");
     },
     onError: () => undefined,
@@ -454,9 +439,33 @@ export function IdentityChainingField({
     (needsGrantConfirm && !grantsConfirmed);
 
   const vendor = vendorName(vendorIssuer.data?.name, resource);
-  const signIn = speakeasyOnly
-    ? "Speakeasy sign-in"
-    : "identity provider sign-in";
+  // Providers this server can use, in the order identity chaining tries them.
+  const usable = (order?.providers ?? []).filter(
+    (provider) =>
+      !provider.unavailableReason &&
+      (provider.kind === "speakeasy" || !!provider.remoteSessionIssuerId),
+  );
+  const issuerNames = useRemoteSessionIssuersByIds(
+    usable.flatMap((provider) =>
+      provider.kind === "external" && provider.remoteSessionIssuerId
+        ? [provider.remoteSessionIssuerId]
+        : [],
+    ),
+  );
+  function providerSignIn(provider: EMAProvider): string {
+    if (provider.kind === "speakeasy") return "Speakeasy sign-in";
+    const name = issuerNames.items.find(
+      (issuer) => issuer.id === provider.remoteSessionIssuerId,
+    )?.name;
+    return name ? `${name} sign-in` : "identity provider sign-in";
+  }
+  const signIn =
+    usable.length > 0
+      ? usable.map(providerSignIn).join(", or their ") +
+        (usable.length > 1 ? " if that fails" : "")
+      : speakeasyOnly
+        ? "Speakeasy sign-in"
+        : "identity provider sign-in";
   const status = chainingStatus({
     loading: read.isPending,
     ready,
@@ -464,11 +473,14 @@ export function IdentityChainingField({
     off:
       !prepareOutcome &&
       (!read.data || shownState === "unlinked" || switchingClient),
-    stalled: ready && needsSpeakeasy,
+    stalled: ready && (needsSpeakeasy || (!!order && usable.length === 0)),
     state: prepareOutcome?.state ?? shownState,
     remediation: prepareOutcome?.remediation ?? read.data?.remediation,
     vendor,
     signIn,
+    stalledDetail: needsSpeakeasy
+      ? "Speakeasy isn’t in this vendor’s provider order, so identity chaining can’t run."
+      : "None of the sign-ins this vendor accepts can be used by this server right now.",
   });
   const blockers = [
     !ready && speakeasyBlock ? speakeasyBlock : null,
@@ -488,9 +500,6 @@ export function IdentityChainingField({
   const setupIssuer = speakeasyOnly
     ? speakeasyIssuerUrl
     : trustedIssuerQuery.data?.issuer;
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  // An unusable scope set blocks Turn on, so its field can't stay hidden.
-  const advancedShown = advancedOpen || (!!selected && !scopesValid);
 
   if (candidates.length === 0) {
     return (
@@ -634,32 +643,22 @@ export function IdentityChainingField({
         </div>
       )}
 
-      <Collapsible
-        open={advancedShown}
-        onOpenChange={setAdvancedOpen}
-        className="border-border border-t"
-      >
-        <CollapsibleTrigger className="group hover:bg-muted/40 flex w-full items-center gap-3 px-6 py-4 text-left">
-          <ChevronDown
-            aria-hidden="true"
-            className="size-4 transition-transform group-data-[state=open]:rotate-180"
-          />
-          <Text small className="font-medium">
-            Advanced
-          </Text>
-          <Text muted small className="truncate">
-            {advancedSummary(
-              scopes,
-              candidates.length > 1 ? selected : undefined,
-            )}
-          </Text>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-4 px-6 pt-1 pb-6">
-          {candidates.length > 1 && (
-            <div className="max-w-md space-y-2">
-              <Text small className="block font-medium">
-                Client
-              </Text>
+      {candidates.length > 1 && (
+        <Collapsible className="border-border border-t">
+          <CollapsibleTrigger className="group hover:bg-muted/40 flex w-full items-center gap-3 px-6 py-4 text-left">
+            <ChevronDown
+              aria-hidden="true"
+              className="size-4 transition-transform group-data-[state=open]:rotate-180"
+            />
+            <Text small className="font-medium">
+              Client
+            </Text>
+            <Text muted small className="truncate">
+              {selected?.clientId}
+            </Text>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="px-6 pt-1 pb-6">
+            <div className="max-w-md">
               <ClientPicker
                 clients={candidates}
                 value={selected?.id ?? ""}
@@ -667,39 +666,9 @@ export function IdentityChainingField({
                 disabled={prepare.isPending || unlink.isPending}
               />
             </div>
-          )}
-          {selected && (
-            <IdentityChainingScopesField
-              client={selected}
-              resourceScopes={prm.metadata?.scopesSupported}
-              value={scopes}
-              onChange={(next) => {
-                setPrepareOutcome(null);
-                setScopeDraft({ clientId: selected.id, scopes: next });
-              }}
-              disabled={pending || !read.data}
-            />
-          )}
-          {ready && scopesChanged && (
-            <RequireScope
-              scope="project:write"
-              resourceId={project.id}
-              level="component"
-            >
-              <Button
-                size="sm"
-                disabled={pending || enableBlocked}
-                onClick={enable}
-              >
-                Save scopes
-              </Button>
-            </RequireScope>
-          )}
-          {order && (
-            <EmaProviderOrderLine order={order} speakeasyOnly={speakeasyOnly} />
-          )}
-        </CollapsibleContent>
-      </Collapsible>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
 
       <Dialog open={confirmDisable} onOpenChange={setConfirmDisable}>
         <Dialog.Content className="max-w-md">
@@ -749,6 +718,7 @@ function chainingStatus({
   remediation,
   vendor,
   signIn,
+  stalledDetail,
 }: {
   loading: boolean;
   ready: boolean;
@@ -758,13 +728,13 @@ function chainingStatus({
   remediation: string | undefined;
   vendor: string;
   signIn: string;
+  stalledDetail: string;
 }): { title: string; detail?: string; dot: string } {
   if (loading) return { title: "Checking…", dot: DOT_FOR.neutral };
   if (stalled)
     return {
       title: "On, but not running",
-      detail:
-        "Speakeasy isn’t in this vendor’s provider order, so identity chaining can’t run.",
+      detail: stalledDetail,
       dot: DOT_FOR.warning,
     };
   if (ready)
@@ -795,15 +765,4 @@ function vendorName(name: string | undefined, resource: string): string {
   } catch {
     return "the vendor";
   }
-}
-
-function advancedSummary(
-  scopes: string[],
-  client: RemoteSessionClient | undefined,
-): string {
-  const parts = [
-    scopes.length > 0 ? `Scopes: ${scopes.join(", ")}` : "No scopes",
-  ];
-  if (client) parts.push(`Client ${client.clientId}`);
-  return parts.join(" · ");
 }

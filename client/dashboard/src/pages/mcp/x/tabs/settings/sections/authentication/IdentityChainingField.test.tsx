@@ -10,7 +10,9 @@ const pending = vi.hoisted(() => ({ prepare: false, unlink: false }));
 const unlinked = { state: "unlinked", scopes: [] };
 const read = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
 const scopeChecks = vi.hoisted(() => [] as unknown[]);
-const orderLine = vi.hoisted(() => vi.fn());
+const issuerNames = vi.hoisted(() => ({
+  items: [] as { id: string; name: string }[],
+}));
 const state = vi.hoisted(() => ({
   orgAdmin: true,
   session: { organizationOverride: false, impersonatorEmail: "" },
@@ -46,6 +48,9 @@ vi.mock("react-router", () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
+}));
+vi.mock("@/lib/remote-identity", () => ({
+  useRemoteSessionIssuersByIds: () => issuerNames,
 }));
 vi.mock("./useSpeakeasyAppendCheck", () => ({
   useSpeakeasyAppendCheck: (_target: unknown, enabled: boolean) => {
@@ -83,9 +88,6 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/components/setup-steps/StepBlocks", () => ({
   CopyableValue: ({ value }: { value?: string }) => <code>{value}</code>,
 }));
-vi.mock("./IdentityChainingScopesField", () => ({
-  IdentityChainingScopesField: () => null,
-}));
 vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
   useProtectedResourceMetadata: () => ({}),
 }));
@@ -103,12 +105,6 @@ vi.mock("@gram/client/react-query/remoteSessionClientsPrepareEMA.js", () => ({
       state.prepare(variables);
     },
   }),
-}));
-vi.mock("./EmaProviderOrderLine", () => ({
-  EmaProviderOrderLine: (props: Record<string, unknown>) => {
-    orderLine(props);
-    return <div data-testid="order-line" />;
-  },
 }));
 vi.mock("@gram/client/react-query/remoteSessionClientsUnlinkEMA.js", () => ({
   useRemoteSessionClientsUnlinkEMAMutation: () => ({
@@ -154,13 +150,13 @@ const bound = (clientId: string) => ({
   scopes: [],
 });
 
-const openAdvanced = () =>
-  fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+const openClient = () =>
+  fireEvent.click(screen.getByRole("button", { name: /^Client/ }));
 
 beforeEach(() => {
   read.data = unlinked;
   scopeChecks.length = 0;
-  orderLine.mockReset();
+  issuerNames.items = [];
   state.orgAdmin = true;
   state.session = { organizationOverride: false, impersonatorEmail: "" };
   state.check = { isSuccess: true, isFetching: false, isError: false };
@@ -183,7 +179,7 @@ describe("identity chaining client selection", () => {
     "keeps the target fixed while %s is pending",
     (operation) => {
       const { rerender } = render(field());
-      openAdvanced();
+      openClient();
       expect((screen.getByRole("combobox") as HTMLButtonElement).disabled).toBe(
         false,
       );
@@ -205,7 +201,7 @@ describe("identity chaining bound client", () => {
   it("selects the client the binding uses", () => {
     read.data = bound("second");
     render(field());
-    openAdvanced();
+    openClient();
     expect(screen.getByRole("combobox").textContent).toBe("second");
     expect(screen.queryByText("Use this client instead")).toBeNull();
   });
@@ -231,7 +227,6 @@ describe("identity chaining bound client", () => {
     read.data = bound("elsewhere");
     render(field());
     expect(screen.getByText("Use this client instead")).toBeTruthy();
-    expect(screen.queryByText("Save scopes")).toBeNull();
   });
 
   it("requires the scope the API enforces", () => {
@@ -288,19 +283,18 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("offers every linked client when no sign-in client is trusted", () => {
     render(field(speakeasyOnly, plainIssuer));
-    openAdvanced();
+    openClient();
     expect(screen.getByRole("combobox")).toBeTruthy();
   });
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
     render(field({ external: true, speakeasy: false }, trusting));
-    openAdvanced();
+    expect(screen.queryByRole("button", { name: /^Client/ })).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
   it("keeps the trusted sign-in client out even when only Speakeasy applies", () => {
     render(field(speakeasyOnly, trusting));
-    openAdvanced();
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
@@ -446,16 +440,70 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(state.calls).toEqual(["unlink"]);
   });
 
-  it("keeps the order read-only under Advanced", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: withSpeakeasy };
+  it("names only the sign-ins this server can use, in order", () => {
+    issuerNames.items = [{ id: "okta", name: "Okta" }];
+    read.data = {
+      ...bound("first"),
+      emaProviders: {
+        ...withSpeakeasy,
+        providers: [
+          { kind: "external", remoteSessionIssuerId: "okta" },
+          { kind: "speakeasy", internalSessionIssuerId: "internal" },
+        ],
+      },
+    };
+    const { rerender } = render(speakeasyField());
+    expect(
+      screen.getByText(
+        "People reach example.com with their Okta sign-in, or their Speakeasy sign-in if that fails.",
+      ),
+    ).toBeTruthy();
+    read.data = {
+      ...bound("first"),
+      emaProviders: {
+        ...withSpeakeasy,
+        providers: [
+          {
+            kind: "external",
+            remoteSessionIssuerId: "okta",
+            unavailableReason: "not_trusted_by_endpoint",
+          },
+          { kind: "speakeasy", internalSessionIssuerId: "internal" },
+        ],
+      },
+    };
+    rerender(speakeasyField());
+    expect(
+      screen.getByText(
+        "People reach example.com with their Speakeasy sign-in.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Okta/)).toBeNull();
+  });
+
+  it("says when no sign-in in the order can serve this server", () => {
+    read.data = {
+      ...bound("first"),
+      emaProviders: {
+        ...withSpeakeasy,
+        providers: [
+          {
+            kind: "speakeasy",
+            internalSessionIssuerId: "internal",
+            unavailableReason: "signing_paused",
+          },
+        ],
+      },
+    };
     render(speakeasyField());
-    expect(orderLine).not.toHaveBeenCalled();
-    openAdvanced();
-    expect(orderLine).toHaveBeenCalledWith({
-      order: withSpeakeasy,
-      speakeasyOnly: true,
-    });
-    expect(screen.queryByRole("button", { name: "Add Speakeasy" })).toBeNull();
+    expect(screen.getByText("On, but not running")).toBeTruthy();
+  });
+
+  it("has no chaining scope list of its own", () => {
+    read.data = { ...bound("first"), emaProviders: withSpeakeasy };
+    render(speakeasyField());
+    expect(screen.queryByText("Requested scopes")).toBeNull();
+    expect(screen.queryByText("Save scopes")).toBeNull();
   });
 
   it("shows the vendor setup step with Speakeasy's issuer until ready", () => {
