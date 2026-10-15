@@ -428,6 +428,15 @@ describe("identity chaining client for this service", () => {
       screen.getByText(/Couldn’t check which authorization server/),
     ).toBeTruthy();
   });
+
+  it("skips the lookup notice when the metadata names no authorization server", () => {
+    prmMock.value = { metadata: { authorizationServers: [] } };
+    issuerNames.isError = true;
+    render(field());
+    expect(
+      screen.queryByText(/Couldn’t check which authorization server/),
+    ).toBeNull();
+  });
 });
 
 describe("identity chaining bound client", () => {

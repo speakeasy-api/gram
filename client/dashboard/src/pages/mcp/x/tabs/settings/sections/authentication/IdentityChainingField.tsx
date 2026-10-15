@@ -595,12 +595,13 @@ export function IdentityChainingField({
     vendor,
   });
 
-  const lookupNotice = clientIssuers.isError ? (
-    <Text key="issuer-lookup" muted small className="block">
-      Couldn’t check which authorization server some clients belong to, so they
-      aren’t offered here. Reload the page to try again.
-    </Text>
-  ) : null;
+  const lookupNotice =
+    clientIssuers.isError && !!authorizationServers?.length ? (
+      <Text key="issuer-lookup" muted small className="block">
+        Couldn’t check which authorization server some clients belong to, so
+        they aren’t offered here. Reload the page to try again.
+      </Text>
+    ) : null;
   const staleNotices = [lookupNotice].concat(
     staleBindings.map((binding) => (
       <StaleBinding
