@@ -237,9 +237,9 @@ export function crossAppAccessStep(service: string, provider: string): string {
   return `Set up ${service} in ${provider}’s Cross App Access`;
 }
 
-/** Why registering is the admin's job, said once on the service page. */
+/** Why trust is the admin's job, said once on the service page. */
 export function trustCaveat(service: string): string {
-  return `Each identity provider is added once in ${service}’s admin settings. Speakeasy can’t do that for you, and not every service offers it.`;
+  return `${service} has to trust each identity provider once. Speakeasy can’t set that up for you, and not every service offers it.`;
 }
 
 /** A server's name, else its slug. */

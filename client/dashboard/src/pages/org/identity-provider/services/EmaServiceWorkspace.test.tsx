@@ -268,7 +268,7 @@ describe("one service", () => {
     show();
     expect(
       screen.getByText(
-        /Each identity provider is added once in Linear’s admin settings/,
+        /Linear has to trust each identity provider once/,
       ),
     ).toBeTruthy();
     const rows = trustRows();
