@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -58,13 +59,14 @@ func TestStubLocalAccountProfiles(t *testing.T) {
 		checkErr     error
 		readErr      error
 		tier         billing.Tier
+		noTier       bool
 		active       bool
 		wantErr      bool
 		trialActive  bool
 		trialErr     error
 	}{
-		{name: "missing table", missingTable: true, tier: billing.TierPro, active: true},
-		{name: "missing profile", readErr: pgx.ErrNoRows, tier: billing.TierPro, active: true},
+		{name: "missing table", missingTable: true, noTier: true},
+		{name: "missing profile", readErr: pgx.ErrNoRows, noTier: true},
 		{name: "expired trial", profile: "expired-trial", anchor: validAnchor, tier: billing.TierBase},
 		{name: "enterprise", profile: "enterprise", anchor: validAnchor, tier: billing.TierEnterprise, active: true},
 		{name: "active trial", profile: "active-trial", anchor: validAnchor, tier: billing.TierEnterprise, active: true, trialActive: true},
@@ -131,6 +133,10 @@ func TestStubLocalAccountProfiles(t *testing.T) {
 			require.Error(t, err)
 			require.Nil(t, tier)
 			require.False(t, active)
+		} else if tt.noTier {
+			require.NoError(t, err)
+			require.Nil(t, tier)
+			require.False(t, active)
 		} else {
 			require.NoError(t, err)
 			require.Equal(t, &tt.tier, tier)
@@ -147,4 +153,47 @@ func TestStubWithoutLocalProfilesUnchanged(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, new(billing.TierPro), tier)
 	require.True(t, active)
+}
+
+func TestStubLocalProfilesKeepPersistedTier(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name         string
+		missingTable bool
+		persisted    billing.Tier
+		tier         billing.Tier
+		active       bool
+	}{
+		{name: "missing table keeps free", missingTable: true, persisted: billing.TierBase, tier: billing.TierBase},
+		{name: "missing profile keeps free", persisted: billing.TierBase, tier: billing.TierBase},
+		{name: "missing profile keeps existing pro", persisted: billing.TierPro, tier: billing.TierPro},
+		{name: "missing profile keeps payg", persisted: billing.TierPayg, tier: billing.TierPayg, active: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			reader := &localProfileReader{}
+			reader.Test(t)
+			schemaRow := &localProfileRow{}
+			schemaRow.On("Scan", mock.AnythingOfType("*bool")).Run(func(args mock.Arguments) {
+				value0, ok := args.Get(0).(*bool)
+				require.True(t, ok)
+				*value0 = !tt.missingTable
+			}).Return(nil).Maybe()
+			reader.On("QueryRow", mock.Anything, mock.MatchedBy(func(query string) bool {
+				return strings.HasPrefix(query, "-- name: AccountProfilesExist :one")
+			}), []any(nil)).Return(schemaRow).Maybe()
+			markerRow := &localProfileRow{}
+			markerRow.On("Scan", mock.Anything, mock.Anything).Return(pgx.ErrNoRows).Maybe()
+			reader.On("QueryRow", mock.Anything, mock.MatchedBy(func(query string) bool {
+				return strings.HasPrefix(query, "-- name: GetAccountProfile :one")
+			}), mock.Anything).Return(markerRow).Maybe()
+
+			client := billing.NewStubClientWithLocalProfiles(testenv.NewLogger(t), testenv.NewTracerProvider(t), reader)
+			for range 2 {
+				tier, active := mv.ResolveOrganizationTier(t.Context(), testenv.NewLogger(t), client, "org_placeholder", tt.persisted)
+				require.Equal(t, tt.tier, tier)
+				require.Equal(t, tt.active, active)
+			}
+		})
+	}
 }
