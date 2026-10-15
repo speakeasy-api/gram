@@ -3,6 +3,8 @@ package demoseed
 import (
 	"crypto/md5" //nolint:gosec // deterministic ids, not security
 	"encoding/hex"
+	"fmt"
+	"hash/fnv"
 	"strconv"
 	"time"
 
@@ -140,4 +142,17 @@ var riskSuppressionDraw = [16]int{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 3, 3
 // set it directly.)
 func (s *seeder) riskSuppression(n int) int {
 	return riskSuppressionDraw[hashByte(s.riskPickName(n), 6)%16]
+}
+
+// hash64 is the ClickHouse seed's source of deterministic variety (which chat
+// fails, how long a call took, ...), replacing the old script's cityHash64
+// calls. It only has to be stable per input, not equal to cityHash64: nothing
+// joins on these values.
+func hash64(parts ...any) uint64 {
+	h := fnv.New64a()
+	for _, p := range parts {
+		_, _ = fmt.Fprint(h, p)
+		_, _ = h.Write([]byte{0})
+	}
+	return h.Sum64()
 }
