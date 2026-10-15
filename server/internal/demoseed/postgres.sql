@@ -4042,11 +4042,13 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: old agent must retain recovery restriction';
   END IF;
 
-  SELECT count(*) INTO stray FROM assistants WHERE project_id = proj_a;
+  SELECT count(*) INTO stray FROM assistants
+  WHERE project_id = proj_a AND id IN (SELECT demo.det_uuid('gram-demo-fleet-assistant-' || n) FROM generate_series(1, 3) n);
   IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 assistants, found %', stray;
+    RAISE EXCEPTION 'demo seed postflight: expected 3 Fleet assistants, found %', stray;
   END IF;
-  SELECT count(*) INTO stray FROM assistant_threads WHERE project_id = proj_a;
+  SELECT count(*) INTO stray FROM assistant_threads
+  WHERE project_id = proj_a AND assistant_id IN (SELECT demo.det_uuid('gram-demo-fleet-assistant-' || n) FROM generate_series(1, 3) n);
   IF stray <> 5 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 5 explicitly linked assistant threads, found %', stray;
   END IF;
@@ -4057,14 +4059,17 @@ Channel context stays in the Raw view.
   )
   SELECT count(DISTINCT t.assistant_id) INTO stray FROM assistant_threads t
   JOIN latest ON latest.id = t.chat_id
-  WHERE t.project_id = proj_a AND t.last_event_at >= now() - interval '24 hours';
+  WHERE t.project_id = proj_a AND t.last_event_at >= now() - interval '24 hours'
+    AND t.assistant_id IN (SELECT demo.det_uuid('gram-demo-fleet-assistant-' || n) FROM generate_series(1, 3) n);
   IF stray <> 3 THEN
     RAISE EXCEPTION 'demo seed postflight: all 3 assistants must have recent evidence in the initial 50 captures';
   END IF;
   SELECT count(*) INTO stray FROM assistant_threads t
   JOIN chats c ON c.id = t.chat_id JOIN assistants a ON a.id = t.assistant_id
-  WHERE t.project_id = proj_a AND (a.project_id <> proj_a OR c.project_id <> proj_a
-    OR t.last_event_at > now() OR t.last_event_at < a.created_at);
+  WHERE t.project_id = proj_a
+    AND t.assistant_id IN (SELECT demo.det_uuid('gram-demo-fleet-assistant-' || n) FROM generate_series(1, 3) n)
+    AND (a.project_id <> proj_a OR c.project_id <> proj_a
+      OR t.last_event_at > now() OR t.last_event_at < a.created_at);
   IF stray <> 0 THEN
     RAISE EXCEPTION 'demo seed postflight: assistant thread tenancy or timestamps disagree';
   END IF;
@@ -4330,11 +4335,12 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: % MCP connections have no registration', stray;
   END IF;
 
-  -- The legacy assistant stays without a dedicated agent.
+  -- The legacy assistant stays without a dedicated agent. Two identity
+  -- fixtures plus the three Fleet assistants.
   SELECT count(*) INTO stray FROM assistants
   WHERE organization_id = demo_org AND project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 assistants, found %', stray;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 assistants, found %', stray;
   END IF;
   SELECT count(*) INTO stray FROM trigger_instances
   WHERE organization_id = demo_org AND project_id = proj_a AND deleted IS FALSE;
@@ -4346,9 +4352,10 @@ Channel context stays in the Raw view.
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 assistant binding, found %', stray;
   END IF;
+  -- Two dashboard threads plus the five Fleet threads.
   SELECT count(*) INTO stray FROM assistant_threads WHERE project_id = proj_a;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 assistant threads, found %', stray;
+  IF stray <> 7 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 7 assistant threads, found %', stray;
   END IF;
   SELECT count(*) INTO stray FROM trigger_workload_bindings
   WHERE organization_id = demo_org AND project_id = proj_a;
