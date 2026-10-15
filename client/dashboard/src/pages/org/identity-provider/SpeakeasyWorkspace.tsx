@@ -213,9 +213,8 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                     RFC 7523
                   </a>
                   . It never changes, even when signing keys are replaced.
-                  Registering it alone changes nothing: add Speakeasy to the
-                  service's EMA provider order too, from an MCP server's
-                  Settings → Authentication → Identity chaining.
+                  Registering it alone changes nothing: also turn on identity
+                  chaining in the MCP server's Settings → Identity chaining.
                 </SettingsSection.Description>
               </SettingsSection.Header>
               <SettingsSection.Panel>

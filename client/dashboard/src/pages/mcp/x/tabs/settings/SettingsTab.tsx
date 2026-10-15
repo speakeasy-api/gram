@@ -20,6 +20,7 @@ import {
   MCP_AGENT_SETUP_SECTION_ID,
 } from "./sections/AgentSetupSection";
 import { CallerIdentitySection } from "./sections/CallerIdentitySection";
+import { IdentityChainingSection } from "./sections/authentication/IdentityChainingSection";
 import { GeneralSection } from "./sections/GeneralSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
@@ -145,6 +146,7 @@ export function SettingsTab({
             Headers disclosure; they are governed by the identity choice, not
             a peer of it. */}
         <AuthenticationSection mcpServer={mcpServer} />
+        <IdentityChainingSection mcpServer={mcpServer} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
           endpoints={endpoints}

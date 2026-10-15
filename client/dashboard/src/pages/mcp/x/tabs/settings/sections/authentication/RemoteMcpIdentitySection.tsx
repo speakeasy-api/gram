@@ -9,9 +9,7 @@ import {
 } from "@/components/ui/HoverCard";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
@@ -53,9 +51,6 @@ import { useAgentCredentialDraft } from "@/lib/remote-identity";
 import { RequestedScopesSummary } from "./RequestedScopesSummary";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
-import { IdentityChainingField } from "./IdentityChainingField";
-import { identityChainingProviders } from "./identityChainingGate";
-import { useSpeakeasyIssuerStatus } from "./useSpeakeasyIssuerStatus";
 import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -126,14 +121,6 @@ export function RemoteMcpIdentitySectionBody({
   const orgSharedClient = organizationIssuer
     ? clients.find((linked) => linked.projectId === "")
     : undefined;
-  const chainingFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
-  const emaProvidersFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
-  const speakeasyIssuer = useSpeakeasyIssuerStatus();
-  const chainingProviders = identityChainingProviders(userSessionIssuer, {
-    externalRollout: chainingFlag.status === "enabled",
-    speakeasyRollout: emaProvidersFlag.status === "enabled",
-    speakeasyIssuer: speakeasyIssuer.data,
-  });
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -847,21 +834,6 @@ export function RemoteMcpIdentitySectionBody({
                 </Text>
               ) : null}
             </div>
-          ) : null}
-
-          {identityResolved &&
-          userSessionIssuer &&
-          chainingProviders &&
-          sourceQuery.data?.url ? (
-            <IdentityChainingField
-              userSessionIssuer={userSessionIssuer}
-              providers={chainingProviders}
-              speakeasyIssuerUrl={speakeasyIssuer.data?.issuer}
-              speakeasyEnabled={speakeasyIssuer.data?.state === "enabled"}
-              linkedClients={clients}
-              resource={sourceQuery.data.url}
-              remoteMcpServerId={remoteMcpServerId}
-            />
           ) : null}
 
           {identityResolved && selectedMode === "agent" ? (

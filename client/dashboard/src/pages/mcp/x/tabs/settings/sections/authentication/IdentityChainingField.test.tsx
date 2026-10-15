@@ -80,18 +80,8 @@ vi.mock("@/components/require-scope", () => ({
     return children;
   },
 }));
-vi.mock("@/components/vendor-ema-trust-notice", () => ({
-  VendorEmaTrustNotice: ({
-    issuerUrl,
-    speakeasy,
-  }: {
-    issuerUrl?: string;
-    speakeasy?: boolean;
-  }) => (
-    <div data-testid="trust-notice">
-      {speakeasy ? "speakeasy" : "idp"}:{issuerUrl ?? ""}
-    </div>
-  ),
+vi.mock("@/components/setup-steps/StepBlocks", () => ({
+  CopyableValue: ({ value }: { value?: string }) => <code>{value}</code>,
 }));
 vi.mock("./IdentityChainingScopesField", () => ({
   IdentityChainingScopesField: () => null,
@@ -164,6 +154,9 @@ const bound = (clientId: string) => ({
   scopes: [],
 });
 
+const openAdvanced = () =>
+  fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+
 beforeEach(() => {
   read.data = unlinked;
   scopeChecks.length = 0;
@@ -190,6 +183,7 @@ describe("identity chaining client selection", () => {
     "keeps the target fixed while %s is pending",
     (operation) => {
       const { rerender } = render(field());
+      openAdvanced();
       expect((screen.getByRole("combobox") as HTMLButtonElement).disabled).toBe(
         false,
       );
@@ -211,19 +205,20 @@ describe("identity chaining bound client", () => {
   it("selects the client the binding uses", () => {
     read.data = bound("second");
     render(field());
+    openAdvanced();
     expect(screen.getByRole("combobox").textContent).toBe("second");
     expect(screen.queryByText("Use this client instead")).toBeNull();
   });
 
-  it("lets the buttons show whether chaining is on", () => {
+  it("says whether chaining is on, next to the action that changes it", () => {
     read.data = bound("second");
     const { rerender } = render(field());
-    expect(screen.getByText("Disable")).toBeTruthy();
-    expect(screen.queryByText("Enabled")).toBeNull();
+    expect(screen.getByText("On")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     read.data = unlinked;
     rerender(field());
-    expect(screen.getByText("Enable identity chaining")).toBeTruthy();
-    expect(screen.queryByText("Not enabled")).toBeNull();
+    expect(screen.getByText("Off")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn on" })).toBeTruthy();
   });
 
   it("keeps the badge for states the buttons don't explain", () => {
@@ -236,7 +231,7 @@ describe("identity chaining bound client", () => {
     read.data = bound("elsewhere");
     render(field());
     expect(screen.getByText("Use this client instead")).toBeTruthy();
-    expect(screen.queryByText("Update scopes")).toBeNull();
+    expect(screen.queryByText("Save scopes")).toBeNull();
   });
 
   it("requires the scope the API enforces", () => {
@@ -288,24 +283,24 @@ describe("identity chaining vouched for by Speakeasy", () => {
   }
   const enableButton = () =>
     screen.getByRole("button", {
-      name: "Enable identity chaining",
+      name: "Turn on",
     }) as HTMLButtonElement;
 
   it("offers every linked client when no sign-in client is trusted", () => {
     render(field(speakeasyOnly, plainIssuer));
+    openAdvanced();
     expect(screen.getByRole("combobox")).toBeTruthy();
-    expect(
-      screen.getByText(/Speakeasy vouches for the person’s Speakeasy sign-in/),
-    ).toBeTruthy();
   });
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
     render(field({ external: true, speakeasy: false }, trusting));
+    openAdvanced();
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
   it("keeps the trusted sign-in client out even when only Speakeasy applies", () => {
     render(field(speakeasyOnly, trusting));
+    openAdvanced();
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
@@ -444,27 +439,40 @@ describe("identity chaining vouched for by Speakeasy", () => {
   it("disables without touching the order", () => {
     read.data = { ...bound("first"), emaProviders: withSpeakeasy };
     render(speakeasyField());
-    fireEvent.click(screen.getByRole("button", { name: "Disable" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "Disable" }).at(-1)!);
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Turn off" }).at(-1)!,
+    );
     expect(state.calls).toEqual(["unlink"]);
   });
 
-  it("shows the order read-only, with the Speakeasy trust notice until ready", () => {
+  it("keeps the order read-only under Advanced", () => {
     read.data = { ...unlinked, generation: 0, emaProviders: withSpeakeasy };
     render(speakeasyField());
+    expect(orderLine).not.toHaveBeenCalled();
+    openAdvanced();
     expect(orderLine).toHaveBeenCalledWith({
       order: withSpeakeasy,
       speakeasyOnly: true,
     });
-    expect(screen.getByTestId("trust-notice").textContent).toBe(
-      "speakeasy:https://speakeasy.example.com/issuer",
-    );
     expect(screen.queryByRole("button", { name: "Add Speakeasy" })).toBeNull();
   });
 
-  it("drops the trust notice once chaining is ready", () => {
+  it("shows the vendor setup step with Speakeasy's issuer until ready", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: withSpeakeasy };
+    const { rerender } = render(speakeasyField());
+    expect(screen.getByText(/^Set up .+ first$/)).toBeTruthy();
+    expect(
+      screen.getByText("https://speakeasy.example.com/issuer"),
+    ).toBeTruthy();
     read.data = { ...bound("first"), emaProviders: withSpeakeasy };
+    rerender(speakeasyField());
+    expect(screen.queryByText(/^Set up .+ first$/)).toBeNull();
+  });
+
+  it("names the vendor from its host when its issuer has no name", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: withSpeakeasy };
     render(speakeasyField());
-    expect(screen.queryByTestId("trust-notice")).toBeNull();
+    expect(screen.getByText("Set up example.com first")).toBeTruthy();
   });
 });

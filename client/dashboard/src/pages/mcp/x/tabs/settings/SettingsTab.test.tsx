@@ -13,6 +13,9 @@ vi.mock("./sections/authentication/AuthenticationSection", () => ({
     <h2>{mcpServer.remoteMcpServerId ? "Identity" : "Authentication"}</h2>
   ),
 }));
+vi.mock("./sections/authentication/IdentityChainingSection", () => ({
+  IdentityChainingSection: () => <h2>Identity chaining</h2>,
+}));
 vi.mock("./sections/DangerZoneSection", () => ({
   DangerZoneSection: () => <h2>Danger Zone</h2>,
 }));
@@ -122,6 +125,7 @@ describe("SettingsTab", () => {
       // Upstream headers are the Identity panel's Custom Headers disclosure
       // not a section of their own.
       "Identity",
+      "Identity chaining",
       "Server URL",
       "Network Access",
       "Sessions",

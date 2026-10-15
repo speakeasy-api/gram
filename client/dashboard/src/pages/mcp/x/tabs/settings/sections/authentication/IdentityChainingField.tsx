@@ -1,13 +1,20 @@
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
 import { RequireScope } from "@/components/require-scope";
-import { Alert } from "@/components/ui/Alert";
-import { Badge, type BadgeProps } from "@/components/ui/Badge";
+import { type BadgeProps } from "@/components/ui/Badge";
+import { SettingsSection } from "@/components/detail/settings-section";
+import { CopyableValue } from "@/components/setup-steps/StepBlocks";
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog } from "@/components/ui/Dialog";
 import {
@@ -18,10 +25,10 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
-import { VendorEmaTrustNotice } from "@/components/vendor-ema-trust-notice";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { cn } from "@/lib/utils";
 import { useProtectedResourceMetadata } from "@/lib/remote-identity/queries/useProtectedResourceMetadata";
 import { identityProvidersHref } from "@/pages/org/identity-provider/tabs";
 import { useOrgRoutes } from "@/routes";
@@ -39,7 +46,6 @@ import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remo
 import { buildRemoteSessionClientsReadEMAMutation } from "@gram/client/react-query/remoteSessionClientsReadEMA.js";
 import { useRemoteSessionClientsUnlinkEMAMutation } from "@gram/client/react-query/remoteSessionClientsUnlinkEMA.js";
 
-import { AuthRow } from "./AuthRow";
 import { EmaProviderOrderLine } from "./EmaProviderOrderLine";
 import { useSpeakeasyAppendCheck } from "./useSpeakeasyAppendCheck";
 import {
@@ -130,14 +136,6 @@ function ClientPicker({
       </SelectContent>
     </Select>
   );
-}
-
-function chainingHint(providers: ChainingProviders): string {
-  if (!providers.speakeasy)
-    return "Exchange the person’s identity provider sign-in for a token to this server, without a separate consent.";
-  if (!providers.external)
-    return "Speakeasy vouches for the person’s Speakeasy sign-in to get a token to this server, without a separate consent.";
-  return "Exchange the person’s identity provider sign-in, or have Speakeasy vouch for their Speakeasy sign-in, for a token to this server without a separate consent.";
 }
 
 /** Rendered only for an organization issuer that an identity provider or Speakeasy can vouch for. */
@@ -251,6 +249,12 @@ export function IdentityChainingField({
     },
   );
 
+  const vendorIssuer = useRemoteSessionIssuer(
+    { id: picked?.remoteSessionIssuerId ?? "" },
+    undefined,
+    { enabled: !!picked, throwOnError: false, retry: false },
+  );
+
   const { hasScope } = useRBAC();
   const organization = useOrganization();
   const project = useProject();
@@ -329,7 +333,7 @@ export function IdentityChainingField({
       if (!preparationSucceeded(result)) {
         setPrepareOutcome(result);
         toast.warning(
-          `Identity chaining not enabled: ${stateBadge(result.state).label}`,
+          `Identity chaining isn’t on: ${stateBadge(result.state).label}`,
         );
         return;
       }
@@ -338,7 +342,7 @@ export function IdentityChainingField({
       void invalidateAllRemoteSessionClients(queryClient);
       setScopeDraft(null);
       setGrantsConfirmed(false);
-      toast.success(`Identity chaining: ${stateBadge(result.state).label}`);
+      toast.success("Identity chaining is on");
     },
     onError: () => undefined,
     onSettled,
@@ -346,7 +350,7 @@ export function IdentityChainingField({
   const unlink = useRemoteSessionClientsUnlinkEMAMutation({
     onSuccess: () => {
       setScopeDraft(null);
-      toast.success("Identity chaining disabled");
+      toast.success("Identity chaining is off");
     },
     onError: () => undefined,
     onSettled,
@@ -441,10 +445,6 @@ export function IdentityChainingField({
   const ready = bound && read.data?.state === "ready";
   const shownState = read.data ? displayedChainingState(read.data) : null;
   const canUnlink = chainingUnlinkable(read.data);
-  // Enable/Disable already say whether chaining is on.
-  const badgeRedundant =
-    shownState === "unlinked" || (shownState === "ready" && canUnlink);
-  const badge = shownState && !badgeRedundant ? stateBadge(shownState) : null;
   const enableBlocked =
     !!speakeasyBlock ||
     (needsSpeakeasy && speakeasyChecking) ||
@@ -453,220 +453,261 @@ export function IdentityChainingField({
     grantsBlocked ||
     (needsGrantConfirm && !grantsConfirmed);
 
+  const vendor = vendorName(vendorIssuer.data?.name, resource);
+  const signIn = speakeasyOnly
+    ? "Speakeasy sign-in"
+    : "identity provider sign-in";
+  const status = chainingStatus({
+    loading: read.isPending,
+    ready,
+    // A refused Turn on reports why, even while the binding still reads off.
+    off:
+      !prepareOutcome &&
+      (!read.data || shownState === "unlinked" || switchingClient),
+    stalled: ready && needsSpeakeasy,
+    state: prepareOutcome?.state ?? shownState,
+    remediation: prepareOutcome?.remediation ?? read.data?.remediation,
+    vendor,
+    signIn,
+  });
+  const blockers = [
+    !ready && speakeasyBlock ? speakeasyBlock : null,
+    ready && needsSpeakeasy && speakeasyBlock ? speakeasyBlock : null,
+    publicClient && selected
+      ? {
+          reason: `Client ${selected.clientId} is a public client. Identity chaining needs a confidential client that authenticates to the provider’s token endpoint.`,
+        }
+      : null,
+    !publicClient && grantsBlocked
+      ? {
+          reason:
+            "This client belongs to the organization. An organization admin must confirm its grants first.",
+        }
+      : null,
+  ].filter((b): b is NonNullable<typeof b> => b !== null);
+  const setupIssuer = speakeasyOnly
+    ? speakeasyIssuerUrl
+    : trustedIssuerQuery.data?.issuer;
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // An unusable scope set blocks Turn on, so its field can't stay hidden.
+  const advancedShown = advancedOpen || (!!selected && !scopesValid);
+
+  if (candidates.length === 0) {
+    return (
+      <SettingsSection.Body>
+        <Text muted small>
+          {providers.external
+            ? "Link a client for this server’s identity provider in Identity above first."
+            : "Link a client registered with this server’s authorization server in Identity above first."}
+        </Text>
+      </SettingsSection.Body>
+    );
+  }
+
   return (
     <>
-      <AuthRow label="Identity chaining" hint={chainingHint(providers)}>
-        {candidates.length === 0 ? (
-          <Text muted small>
-            {providers.external
-              ? "Link a client for this server’s identity provider first."
-              : "Link a client registered with this server’s authorization server first."}
+      <SettingsSection.Body>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1 space-y-1">
+            <span className="flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className={cn("size-2 shrink-0 rounded-full", status.dot)}
+              />
+              <Text className="font-medium">{status.title}</Text>
+            </span>
+            {status.detail && (
+              <Text muted small className="block">
+                {status.detail}
+              </Text>
+            )}
+          </div>
+          <RequireScope
+            scope="project:write"
+            resourceId={project.id}
+            level="component"
+          >
+            <div className="flex items-center gap-2">
+              {ready && needsSpeakeasy && canAddSpeakeasy && (
+                <Button
+                  size="sm"
+                  disabled={pending || speakeasyChecking || !!speakeasyBlock}
+                  onClick={appendSpeakeasy}
+                >
+                  Add Speakeasy
+                </Button>
+              )}
+              {!ready && (
+                <Button
+                  size="sm"
+                  disabled={pending || !read.data || enableBlocked}
+                  onClick={enable}
+                >
+                  {switchingClient ? "Use this client instead" : "Turn on"}
+                </Button>
+              )}
+              {canUnlink && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => setConfirmDisable(true)}
+                >
+                  Turn off
+                </Button>
+              )}
+            </div>
+          </RequireScope>
+        </div>
+        {blockers.map((blocker) => (
+          <Text key={blocker.reason} muted small className="block">
+            {blocker.reason}
+            {blocker.link && (
+              <>
+                {" "}
+                <Link
+                  className="underline underline-offset-4"
+                  to={blocker.link.href}
+                >
+                  {blocker.link.label}
+                </Link>
+              </>
+            )}
           </Text>
-        ) : (
-          <>
-            {candidates.length > 1 && (
+        ))}
+        {switchingClient && (
+          <Text muted small className="block">
+            Identity chaining uses client{" "}
+            {boundClient?.clientId ?? read.data?.externalClientId}. Using this
+            client instead replaces it.
+          </Text>
+        )}
+        {!ready &&
+          !publicClient &&
+          needsGrantConfirm &&
+          !grantsBlocked &&
+          grantDeclaration &&
+          selected && (
+            <RequireScope
+              scope="project:write"
+              resourceId={project.id}
+              level="component"
+            >
+              <label className="flex items-start gap-2">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={grantsConfirmed}
+                  disabled={pending}
+                  onCheckedChange={(next) => setGrantsConfirmed(next === true)}
+                />
+                <Text small>
+                  {cimd
+                    ? "Publish these grants in the client's metadata document: "
+                    : `Declare that client ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
+                  {grantDeclaration.grants.join(", ")}
+                </Text>
+              </label>
+            </RequireScope>
+          )}
+        <ApiErrorAlert
+          error={
+            read.error ?? addSpeakeasy.error ?? prepare.error ?? unlink.error
+          }
+        />
+      </SettingsSection.Body>
+
+      {!ready && !read.isPending && (
+        <div className="border-border space-y-2 border-t px-6 py-5">
+          <Text small className="block font-medium">
+            Set up {vendor} first
+          </Text>
+          <Text muted small className="block">
+            {speakeasyOnly
+              ? `In ${vendor}’s admin settings, turn on enterprise-managed authentication and trust Speakeasy’s issuer. Speakeasy can’t do this step for you.`
+              : `In ${vendor}’s admin settings, turn on enterprise-managed authentication and trust your identity provider’s issuer. Speakeasy can’t do this step for you.`}
+          </Text>
+          {setupIssuer && (
+            <div className="max-w-2xl">
+              <CopyableValue label="issuer URL" value={setupIssuer} />
+            </div>
+          )}
+        </div>
+      )}
+
+      <Collapsible
+        open={advancedShown}
+        onOpenChange={setAdvancedOpen}
+        className="border-border border-t"
+      >
+        <CollapsibleTrigger className="group hover:bg-muted/40 flex w-full items-center gap-3 px-6 py-4 text-left">
+          <ChevronDown
+            aria-hidden="true"
+            className="size-4 transition-transform group-data-[state=open]:rotate-180"
+          />
+          <Text small className="font-medium">
+            Advanced
+          </Text>
+          <Text muted small className="truncate">
+            {advancedSummary(
+              scopes,
+              candidates.length > 1 ? selected : undefined,
+            )}
+          </Text>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 px-6 pt-1 pb-6">
+          {candidates.length > 1 && (
+            <div className="max-w-md space-y-2">
+              <Text small className="block font-medium">
+                Client
+              </Text>
               <ClientPicker
                 clients={candidates}
                 value={selected?.id ?? ""}
                 onChange={setSelectedId}
                 disabled={prepare.isPending || unlink.isPending}
               />
-            )}
-            {selected && (
-              <IdentityChainingScopesField
-                client={selected}
-                resourceScopes={prm.metadata?.scopesSupported}
-                value={scopes}
-                onChange={(next) => {
-                  setPrepareOutcome(null);
-                  setScopeDraft({ clientId: selected.id, scopes: next });
-                }}
-                disabled={pending || !read.data}
-              />
-            )}
-            <div className="flex flex-wrap items-center gap-3">
-              {badge && (
-                <Badge variant={badge.variant} size="sm">
-                  {badge.label}
-                </Badge>
-              )}
-              {read.isPending && (
-                <Text muted small>
-                  Checking…
-                </Text>
-              )}
-              <RequireScope
-                scope="project:write"
-                resourceId={project.id}
-                level="component"
-              >
-                {ready ? (
-                  scopesChanged && (
-                    <Button
-                      size="sm"
-                      disabled={pending || enableBlocked}
-                      onClick={enable}
-                    >
-                      Update scopes
-                    </Button>
-                  )
-                ) : (
-                  <Button
-                    size="sm"
-                    disabled={pending || !read.data || enableBlocked}
-                    onClick={enable}
-                  >
-                    {switchingClient
-                      ? "Use this client instead"
-                      : "Enable identity chaining"}
-                  </Button>
-                )}
-                {canUnlink && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={pending}
-                    onClick={() => setConfirmDisable(true)}
-                  >
-                    Disable
-                  </Button>
-                )}
-              </RequireScope>
             </div>
-            {!ready && speakeasyBlock && (
-              <Text muted small className="block">
-                {speakeasyBlock.reason}
-                {speakeasyBlock.link && (
-                  <>
-                    {" "}
-                    <Link
-                      className="underline underline-offset-4"
-                      to={speakeasyBlock.link.href}
-                    >
-                      {speakeasyBlock.link.label}
-                    </Link>
-                  </>
-                )}
-              </Text>
-            )}
-            {ready && needsSpeakeasy && (
-              <div className="flex flex-wrap items-center gap-3">
-                <Text warning small>
-                  Speakeasy isn’t in this vendor’s provider order, so identity
-                  chaining can’t run.
-                </Text>
-                {canAddSpeakeasy && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={pending || speakeasyChecking || !!speakeasyBlock}
-                    onClick={appendSpeakeasy}
-                  >
-                    Add Speakeasy
-                  </Button>
-                )}
-                {speakeasyBlock && (
-                  <Text muted small className="block w-full">
-                    {speakeasyBlock.reason}
-                  </Text>
-                )}
-              </div>
-            )}
-            {switchingClient && (
-              <Text muted small className="block">
-                Identity chaining uses client{" "}
-                {boundClient?.clientId ?? read.data?.externalClientId}. Using
-                this client instead replaces it.
-              </Text>
-            )}
-            {publicClient && selected && (
-              <Text muted small className="block">
-                Client {selected.clientId} is a public client. Identity chaining
-                needs a confidential client that authenticates to the provider’s
-                token endpoint.
-              </Text>
-            )}
-            {!publicClient &&
-              needsGrantConfirm &&
-              grantDeclaration &&
-              selected && (
-                <RequireScope
-                  scope="project:write"
-                  resourceId={project.id}
-                  level="component"
-                >
-                  {grantsBlocked ? (
-                    <Text muted small className="block">
-                      This client belongs to the organization. An organization
-                      admin must confirm its grants before enabling identity
-                      chaining.
-                    </Text>
-                  ) : (
-                    <label className="flex items-start gap-2">
-                      <Checkbox
-                        className="mt-0.5"
-                        checked={grantsConfirmed}
-                        disabled={pending}
-                        onCheckedChange={(next) =>
-                          setGrantsConfirmed(next === true)
-                        }
-                      />
-                      <Text small>
-                        {cimd
-                          ? "Publish these grants in the client's metadata document: "
-                          : `Declare that client ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
-                        {grantDeclaration.grants.join(", ")}
-                      </Text>
-                    </label>
-                  )}
-                </RequireScope>
-              )}
-            {!ready && providers.external && (
-              <VendorEmaTrustNotice
-                issuerUrl={trustedIssuerQuery.data?.issuer}
-              />
-            )}
-            {!ready && speakeasyOnly && (
-              <VendorEmaTrustNotice issuerUrl={speakeasyIssuerUrl} speakeasy />
-            )}
-            {prepareOutcome?.remediation ? (
-              <Alert variant="warning" dismissible={false}>
-                {prepareOutcome.remediation}
-              </Alert>
-            ) : (
-              read.data?.remediation &&
-              !ready &&
-              shownState !== "unlinked" && (
-                <Text muted small className="block">
-                  {read.data.remediation}
-                </Text>
-              )
-            )}
-            {order && (
-              <EmaProviderOrderLine
-                order={order}
-                speakeasyOnly={speakeasyOnly}
-              />
-            )}
-            <ApiErrorAlert
-              error={
-                read.error ??
-                addSpeakeasy.error ??
-                prepare.error ??
-                unlink.error
-              }
+          )}
+          {selected && (
+            <IdentityChainingScopesField
+              client={selected}
+              resourceScopes={prm.metadata?.scopesSupported}
+              value={scopes}
+              onChange={(next) => {
+                setPrepareOutcome(null);
+                setScopeDraft({ clientId: selected.id, scopes: next });
+              }}
+              disabled={pending || !read.data}
             />
-          </>
-        )}
-      </AuthRow>
+          )}
+          {ready && scopesChanged && (
+            <RequireScope
+              scope="project:write"
+              resourceId={project.id}
+              level="component"
+            >
+              <Button
+                size="sm"
+                disabled={pending || enableBlocked}
+                onClick={enable}
+              >
+                Save scopes
+              </Button>
+            </RequireScope>
+          )}
+          {order && (
+            <EmaProviderOrderLine order={order} speakeasyOnly={speakeasyOnly} />
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+
       <Dialog open={confirmDisable} onOpenChange={setConfirmDisable}>
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
-            <Dialog.Title>Disable identity chaining?</Dialog.Title>
+            <Dialog.Title>Turn off identity chaining?</Dialog.Title>
             <Dialog.Description>
-              Speakeasy stops exchanging sign-ins for tokens to this server.
-              Every person using it falls back to interactive sign-in and
-              authorizes the server themselves.
+              People will connect {vendor} themselves the next time they use
+              this server.
             </Dialog.Description>
           </Dialog.Header>
           <Dialog.Footer>
@@ -682,11 +723,87 @@ export function IdentityChainingField({
               disabled={unlink.isPending}
               onClick={disable}
             >
-              {unlink.isPending ? "Disabling…" : "Disable"}
+              {unlink.isPending ? "Turning off…" : "Turn off"}
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
     </>
   );
+}
+
+const DOT_FOR: Record<NonNullable<BadgeProps["variant"]>, string> = {
+  success: "bg-[var(--fill-success-default)]",
+  warning: "bg-[var(--fill-warning-default)]",
+  destructive: "bg-[var(--fill-destructive-default)]",
+  information: "bg-[var(--fill-information-default)]",
+  neutral: "bg-muted-foreground/40",
+};
+
+function chainingStatus({
+  loading,
+  ready,
+  off,
+  stalled,
+  state,
+  remediation,
+  vendor,
+  signIn,
+}: {
+  loading: boolean;
+  ready: boolean;
+  off: boolean;
+  stalled: boolean;
+  state: ChainingState | null;
+  remediation: string | undefined;
+  vendor: string;
+  signIn: string;
+}): { title: string; detail?: string; dot: string } {
+  if (loading) return { title: "Checking…", dot: DOT_FOR.neutral };
+  if (stalled)
+    return {
+      title: "On, but not running",
+      detail:
+        "Speakeasy isn’t in this vendor’s provider order, so identity chaining can’t run.",
+      dot: DOT_FOR.warning,
+    };
+  if (ready)
+    return {
+      title: "On",
+      detail: `People reach ${vendor} with their ${signIn}.`,
+      dot: DOT_FOR.success,
+    };
+  if (off || !state)
+    return {
+      title: "Off",
+      detail: `People connect ${vendor} themselves the first time they use this server.`,
+      dot: DOT_FOR.neutral,
+    };
+  const badge = stateBadge(state);
+  return {
+    title: badge.label,
+    detail: remediation?.trim() || undefined,
+    dot: DOT_FOR[badge.variant] ?? DOT_FOR.neutral,
+  };
+}
+
+/** The vendor's display name, else the host its MCP server runs on. */
+function vendorName(name: string | undefined, resource: string): string {
+  if (name?.trim()) return name.trim();
+  try {
+    return new URL(resource).host;
+  } catch {
+    return "the vendor";
+  }
+}
+
+function advancedSummary(
+  scopes: string[],
+  client: RemoteSessionClient | undefined,
+): string {
+  const parts = [
+    scopes.length > 0 ? `Scopes: ${scopes.join(", ")}` : "No scopes",
+  ];
+  if (client) parts.push(`Client ${client.clientId}`);
+  return parts.join(" · ");
 }

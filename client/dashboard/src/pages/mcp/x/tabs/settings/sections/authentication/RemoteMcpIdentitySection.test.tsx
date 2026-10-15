@@ -3162,27 +3162,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
   });
 });
 
-describe("identity chaining gate wiring", () => {
-  it("shows identity chaining on an organization issuer Speakeasy can vouch for", () => {
+describe("identity chaining", () => {
+  it("leaves identity chaining to its own section", () => {
     mocks.userSessionIssuer.mockReturnValue({
       data: { id: "user-session-issuer-1", projectId: "" },
     });
     mocks.speakeasyIssuer.mockReturnValue({
       data: { state: "enabled", issuer: "https://speakeasy.example.com/idp" },
-    });
-    renderIdentity();
-    expect(
-      JSON.parse(screen.getByTestId("identity-chaining").textContent!),
-    ).toEqual({
-      providers: { external: false, speakeasy: true },
-      speakeasyEnabled: true,
-      speakeasyIssuerUrl: "https://speakeasy.example.com/idp",
-    });
-  });
-
-  it("hides identity chaining when nothing can vouch", () => {
-    mocks.userSessionIssuer.mockReturnValue({
-      data: { id: "user-session-issuer-1", projectId: "" },
     });
     renderIdentity();
     expect(screen.queryByTestId("identity-chaining")).toBeNull();

@@ -77,9 +77,9 @@ supported setup handoff and obtain separate authorization for any provider or
 binding changes. This workflow cannot choose Speakeasy as an MCP server's
 enterprise authorization provider. For a server whose sign-in trusts no
 external identity provider, send an organization administrator to the server's
-**Settings** → **Authentication** → **Identity chaining** control in the
-dashboard: **Enable identity chaining** there also appends Speakeasy to the
-vendor's EMA provider order, which needs the ema-providers rollout. It never
+**Settings** → **Identity chaining** section in the dashboard: **Turn on**
+there also appends Speakeasy to the vendor's EMA provider order, which needs
+the ema-providers rollout. It never
 removes or reorders providers, and it is refused while the vendor has no saved
 order and another server has a ready binding to it through an external
 identity provider. Any other order change goes through the organization's
