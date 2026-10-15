@@ -149,11 +149,14 @@ func (s *Service) enumerateGatewayConsentInventory(w http.ResponseWriter, r *htt
 		projectID:    endpoint.ProjectID,
 		metaServerID: endpoint.MetaMcpServerID.UUID,
 		// Consent lists a stored gateway; agent gateways reach no consent page.
-		agentID:        uuid.Nil,
-		organizationID: endpoint.OrganizationID,
-		tokens:         tokens,
+		agentID:             uuid.Nil,
+		organizationGateway: false,
+		organizationID:      endpoint.OrganizationID,
+		tokens:              tokens,
+		projectTokens:       nil,
 		// Consent never acquires credentials by identity chaining.
 		userSessionIssuerID: uuid.Nil,
+		connectRoot:         "",
 		chainUpstream:       nil,
 		toolSelection:       nil,
 		selectionMembers:    nil,
@@ -165,6 +168,7 @@ func (s *Service) enumerateGatewayConsentInventory(w http.ResponseWriter, r *htt
 		externalUserID:      "",
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
+		connectURL:          "",
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
