@@ -83,9 +83,7 @@ describe("Services that use Speakeasy as their identity provider", () => {
     const waiting = within(
       screen.getByRole("list", { name: "Not accepted yet" }),
     ).getAllByRole("listitem");
-    expect(waiting.map((item) => item.textContent)).toEqual([
-      "NotionNot accepted yet",
-    ]);
+    expect(waiting.map((item) => item.textContent)).toEqual(["Notion"]);
     expect(
       screen.getByRole("link", { name: "Linear" }).getAttribute("href"),
     ).toBe("/?tab=identity-providers&service=https%3A%2F%2FLinear.example.com");

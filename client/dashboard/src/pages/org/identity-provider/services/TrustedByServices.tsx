@@ -109,11 +109,13 @@ function EntryList({
             >
               {row.name}
             </Link>
-            <Text as="span" muted small>
-              {provider.usable
-                ? acceptanceLabel(provider.lastAcceptedAt)
-                : provider.unavailable}
-            </Text>
+            {(!provider.usable || provider.lastAcceptedAt) && (
+              <Text as="span" muted small>
+                {provider.usable
+                  ? acceptanceLabel(provider.lastAcceptedAt)
+                  : provider.unavailable}
+              </Text>
+            )}
           </li>
         ))}
       </ul>
