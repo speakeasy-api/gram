@@ -100,7 +100,9 @@ WHERE s.id = $1
                     ON c.id = link.remote_session_client_id
                    AND c.deleted IS FALSE
                    AND (c.project_id = $2::uuid
-                        OR (c.project_id IS NULL AND c.organization_id = $5::text))
+                        OR (c.project_id IS NULL
+                            AND (c.organization_id IS NULL
+                                 OR c.organization_id = $5::text)))
                   JOIN remote_session_issuers AS i
                     ON i.id = c.remote_session_issuer_id
                    AND i.deleted IS FALSE
@@ -1010,7 +1012,9 @@ WHERE s.user_session_issuer_id = ANY ($2::uuid[])
                     ON c.id = link.remote_session_client_id
                    AND c.deleted IS FALSE
                    AND (c.project_id = $3::uuid
-                        OR (c.project_id IS NULL AND c.organization_id = $1::text))
+                        OR (c.project_id IS NULL
+                            AND (c.organization_id IS NULL
+                                 OR c.organization_id = $1::text)))
                   JOIN remote_session_issuers AS i
                     ON i.id = c.remote_session_issuer_id
                    AND i.deleted IS FALSE
@@ -1039,7 +1043,10 @@ type ListMCPServerRemoteSessionIssuersToClearRow struct {
 // Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
 // removal signal; the column's ON DELETE SET NULL never fires. The filters
 // mirror the serve-time credential resolver: the column must never name an
-// issuer that resolver would refuse.
+// issuer that resolver would refuse, and a client it accepts must never read
+// as absent here. That includes a platform-global client (no project and no
+// organization), which serving accepts and whose server would otherwise have
+// its working configuration cleared.
 //
 // Tenancy: the ids arrive from an untenanted join table, so each one must
 // resolve to an issuer the caller's project can see — a foreign id reaches no
@@ -1662,6 +1669,54 @@ func (q *Queries) LockMCPServersByIDs(ctx context.Context, arg LockMCPServersByI
 	return items, nil
 }
 
+const mCPServerRemoteSessionIssuerHasLiveClient = `-- name: MCPServerRemoteSessionIssuerHasLiveClient :one
+SELECT EXISTS (SELECT 1
+               FROM mcp_servers AS s
+               JOIN remote_session_client_user_session_issuers AS link
+                 ON link.user_session_issuer_id = s.user_session_issuer_id
+               JOIN remote_session_clients AS c
+                 ON c.id = link.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = $1::uuid
+                     OR (c.project_id IS NULL
+                         AND (c.organization_id IS NULL
+                              OR c.organization_id = $2::text)))
+               JOIN remote_session_issuers AS i
+                 ON i.id = c.remote_session_issuer_id
+                AND i.deleted IS FALSE
+               WHERE s.id = $3
+                 AND s.project_id = $1::uuid
+                 AND s.deleted IS FALSE
+                 AND i.id = $4)::boolean AS bound
+`
+
+type MCPServerRemoteSessionIssuerHasLiveClientParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ID                    uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// Whether the provider a server names still has a live client bound to its
+// user session issuer, under this statement's own snapshot.
+//
+// The conditional clear cannot see a binding committed after its statement
+// began — its NOT EXISTS reads the snapshot that statement started with — so
+// the reconcile runs this in a later statement of the same transaction and
+// rolls the clear back when a binding appeared. Same tenancy as the clear, so
+// the two agree on what counts as bound.
+func (q *Queries) MCPServerRemoteSessionIssuerHasLiveClient(ctx context.Context, arg MCPServerRemoteSessionIssuerHasLiveClientParams) (bool, error) {
+	row := q.db.QueryRow(ctx, mCPServerRemoteSessionIssuerHasLiveClient,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.RemoteSessionIssuerID,
+	)
+	var bound bool
+	err := row.Scan(&bound)
+	return bound, err
+}
+
 const repairMCPServerRemoteSessionIssuerIfUnchanged = `-- name: RepairMCPServerRemoteSessionIssuerIfUnchanged :execrows
 UPDATE mcp_servers AS s
 SET remote_session_issuer_id = $1,
@@ -1672,6 +1727,26 @@ WHERE s.id = $2
   AND s.remote_session_issuer_id IS NOT DISTINCT FROM $5
   AND s.updated_at = $6
   AND s.deleted IS FALSE
+  -- A provider being stamped must still have a live client bound, in this
+  -- statement's own snapshot: the decision was made from an earlier read, and
+  -- a client unbound since then would leave the server stamped with a provider
+  -- nothing can serve. Same tenancy as the clear, so the two agree on what is
+  -- bound. Clearing names no provider and has nothing to check.
+  AND ($1::uuid IS NULL
+       OR EXISTS (SELECT 1
+              FROM remote_session_client_user_session_issuers AS link
+              JOIN remote_session_clients AS c
+                ON c.id = link.remote_session_client_id
+               AND c.deleted IS FALSE
+               AND (c.project_id = $3::uuid
+                    OR (c.project_id IS NULL
+                        AND (c.organization_id IS NULL
+                             OR c.organization_id = $7::text)))
+              JOIN remote_session_issuers AS i
+                ON i.id = c.remote_session_issuer_id
+               AND i.deleted IS FALSE
+                  WHERE link.user_session_issuer_id = s.user_session_issuer_id
+                    AND i.id = $1))
 `
 
 type RepairMCPServerRemoteSessionIssuerIfUnchangedParams struct {
@@ -1681,6 +1756,7 @@ type RepairMCPServerRemoteSessionIssuerIfUnchangedParams struct {
 	UserSessionIssuerID           uuid.NullUUID
 	ObservedRemoteSessionIssuerID uuid.NullUUID
 	ObservedUpdatedAt             pgtype.Timestamptz
+	OrganizationID                string
 }
 
 // The operator backfill's write: stamps one server only while its upstream
@@ -1703,6 +1779,7 @@ func (q *Queries) RepairMCPServerRemoteSessionIssuerIfUnchanged(ctx context.Cont
 		arg.UserSessionIssuerID,
 		arg.ObservedRemoteSessionIssuerID,
 		arg.ObservedUpdatedAt,
+		arg.OrganizationID,
 	)
 	if err != nil {
 		return 0, err

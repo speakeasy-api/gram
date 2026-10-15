@@ -144,7 +144,9 @@ func backfillServerRemoteIssuers(ctx context.Context, db serverRemoteIssuersDB, 
 		// administrator configuring User Identity on the server in the
 		// meantime is the authority on it, including a save that configures
 		// the provider it already named, and this write loses that race
-		// rather than reverting it.
+		// rather than reverting it. The write also re-checks that the provider
+		// it stamps still has a live client bound, so a client unbound since
+		// the read cannot leave the server naming one nothing can serve.
 		written, err := q.RepairMCPServerRemoteSessionIssuerIfUnchanged(ctx, mcpserversrepo.RepairMCPServerRemoteSessionIssuerIfUnchangedParams{
 			RemoteSessionIssuerID:         target.provider,
 			ID:                            row.ID,
@@ -152,6 +154,7 @@ func backfillServerRemoteIssuers(ctx context.Context, db serverRemoteIssuersDB, 
 			UserSessionIssuerID:           row.UserSessionIssuerID,
 			ObservedRemoteSessionIssuerID: row.CurrentRemoteSessionIssuerID,
 			ObservedUpdatedAt:             row.ObservedUpdatedAt,
+			OrganizationID:                row.OrganizationID,
 		})
 		if err != nil {
 			return report, fmt.Errorf("repair MCP server remote session issuer: %w", err)

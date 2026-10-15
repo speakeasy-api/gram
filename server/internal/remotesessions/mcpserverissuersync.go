@@ -31,6 +31,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -64,17 +66,89 @@ func ClearUnboundMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserv
 		return fmt.Errorf("list mcp server remote session issuers to clear: %w", err)
 	}
 	for _, server := range stale {
-		if _, err := q.ClearMCPServerRemoteSessionIssuerIfUnchanged(ctx, mcpserversrepo.ClearMCPServerRemoteSessionIssuerIfUnchangedParams{
-			ID:                            server.ID,
-			ProjectID:                     projectID,
-			OrganizationID:                organizationID,
-			ObservedRemoteSessionIssuerID: server.RemoteSessionIssuerID,
-			ObservedUpdatedAt:             server.ObservedUpdatedAt,
-		}); err != nil {
-			return fmt.Errorf("clear mcp server remote session issuer: %w", err)
+		if err := clearUnboundMCPServerRemoteSessionIssuer(ctx, dbtx, organizationID, projectID, server); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// clearUnboundMCPServerRemoteSessionIssuer clears one server, and keeps the
+// clear only while the provider is still unbound.
+//
+// The conditional update cannot see a binding committed after its statement
+// began, and binding a client does not move the server's row version, so
+// neither half of that statement refuses a clear racing a client being bound
+// back. A second statement in the same transaction reads its own snapshot, so
+// it sees that binding and the clear is rolled back rather than taking the
+// sign-in off a server that has one.
+//
+// Takes no lock, so it cannot deadlock against the identity commit's
+// server-row-then-issuer ordering; a binding that commits after the re-read
+// simply leaves the clear standing, as it would have before this existed.
+func clearUnboundMCPServerRemoteSessionIssuer(ctx context.Context, dbtx mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, server mcpserversrepo.ListMCPServerRemoteSessionIssuersToClearRow) error {
+	tx, err := beginIssuerSyncTx(ctx, dbtx)
+	if err != nil {
+		return err
+	}
+	if tx == nil {
+		// Already inside a caller's transaction: its snapshot is the one that
+		// will see the binding, and committing here is not ours to do.
+		if _, err := mcpserversrepo.New(dbtx).ClearMCPServerRemoteSessionIssuerIfUnchanged(ctx, clearParams(organizationID, projectID, server)); err != nil {
+			return fmt.Errorf("clear mcp server remote session issuer: %w", err)
+		}
+		return nil
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := mcpserversrepo.New(tx)
+	cleared, err := q.ClearMCPServerRemoteSessionIssuerIfUnchanged(ctx, clearParams(organizationID, projectID, server))
+	if err != nil {
+		return fmt.Errorf("clear mcp server remote session issuer: %w", err)
+	}
+	if cleared == 0 {
+		return nil
+	}
+	bound, err := q.MCPServerRemoteSessionIssuerHasLiveClient(ctx, mcpserversrepo.MCPServerRemoteSessionIssuerHasLiveClientParams{
+		ID:                    server.ID,
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		RemoteSessionIssuerID: server.RemoteSessionIssuerID.UUID,
+	})
+	if err != nil {
+		return fmt.Errorf("re-read mcp server remote session issuer binding: %w", err)
+	}
+	if bound {
+		return nil
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit mcp server remote session issuer clear: %w", err)
+	}
+	return nil
+}
+
+func clearParams(organizationID string, projectID uuid.UUID, server mcpserversrepo.ListMCPServerRemoteSessionIssuersToClearRow) mcpserversrepo.ClearMCPServerRemoteSessionIssuerIfUnchangedParams {
+	return mcpserversrepo.ClearMCPServerRemoteSessionIssuerIfUnchangedParams{
+		ID:                            server.ID,
+		ProjectID:                     projectID,
+		OrganizationID:                organizationID,
+		ObservedRemoteSessionIssuerID: server.RemoteSessionIssuerID,
+		ObservedUpdatedAt:             server.ObservedUpdatedAt,
+	}
+}
+
+// beginIssuerSyncTx opens a transaction when the caller handed a pool, and
+// reports nil when it handed one of its own.
+func beginIssuerSyncTx(ctx context.Context, dbtx mcpserversrepo.DBTX) (pgx.Tx, error) {
+	pool, ok := dbtx.(*pgxpool.Pool)
+	if !ok {
+		return nil, nil
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin mcp server remote session issuer clear: %w", err)
+	}
+	return tx, nil
 }
 
 // BestEffortClearUnboundMCPServerRemoteSessionIssuers is the post-commit clear

@@ -445,8 +445,10 @@ func TestRepairMCPServerRemoteSessionIssuerIfUnchanged(t *testing.T) {
 
 	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-repair")
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "repair")
-	observed := seedUnboundRemoteIssuer(t, ctx, ti.conn, projectID, orgID, "rsi-repair-observed")
-	repaired := seedUnboundRemoteIssuer(t, ctx, ti.conn, projectID, orgID, "rsi-repair-target")
+	// Both providers have a live client bound: the backfill only ever stamps a
+	// provider the issuer binds, and the write refuses one it does not.
+	_, observed := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-repair-observed")
+	_, repaired := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-repair-target")
 	stampIssuer(t, ctx, ti.conn, projectID, serverID, observed)
 
 	read := func() mcpserversrepo.McpServer {
@@ -676,4 +678,93 @@ func TestClearMCPServerRemoteSessionIssuerLosesToASameProviderConfigurationCommi
 	require.NoError(t, result.err)
 	require.Equal(t, int64(0), result.rows, "the clear must lose to a commit that reconfigured the same provider")
 	require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, serverID))
+}
+
+// A platform-global client — owned by no project and no organization — is one
+// the serve-time resolver accepts, so a server configured with its provider is
+// working. Reading it as absent would clear that configuration and leave the
+// server signing nobody in.
+func TestClearUnboundMCPServerRemoteSessionIssuersKeepsAGlobalClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-global-client")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "global-client")
+
+	q := repo.New(ti.conn)
+	provider, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		Slug:                              "rsi-global-client",
+		Issuer:                            "https://issuer.example.com/rsi-global-client",
+		AuthorizationEndpoint:             conv.ToPGText("https://issuer.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://issuer.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_post"},
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		RemoteSessionIssuerID:   provider.ID,
+		ClientID:                "cid-global-client",
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
+		TokenEndpointAuthMethod: conv.ToPGText("client_secret_post"),
+	})
+	require.NoError(t, err)
+	require.False(t, client.ProjectID.Valid, "the fixture must build a client no project owns")
+	require.False(t, client.OrganizationID.Valid, "the fixture must build a client no organization owns")
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, provider.ID)
+
+	reconcile(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+	require.Equal(t, conv.ToNullUUID(provider.ID), storedIssuer(t, ctx, ti.conn, projectID, serverID),
+		"a provider whose client serving accepts must survive the reconcile")
+}
+
+// The reconcile reads its candidates, then clears. A client bound back for a
+// candidate's provider in between is invisible to the clearing statement, and
+// binding a client does not move the server's row version, so neither half of
+// the conditional update refuses it. The clear must not stand: nothing
+// reconfigures a server, so it would lose a sign-in it has.
+func TestClearUnboundMCPServerRemoteSessionIssuersRollsBackARebind(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-rebind")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "rebind")
+	clientID, provider := seedUnlinkedClient(t, ctx, ti.conn, projectID, orgID, "rsi-rebind")
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, provider)
+
+	// Read the candidates while the provider is unbound, as the reconcile does.
+	stale, err := mcpserversrepo.New(ti.conn).ListMCPServerRemoteSessionIssuersToClear(ctx, mcpserversrepo.ListMCPServerRemoteSessionIssuersToClearParams{
+		UserSessionIssuerIds: []uuid.UUID{userIssuerID},
+		OrganizationID:       orgID,
+		ProjectID:            projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, stale, 1)
+
+	// The client is bound back before the clear runs.
+	require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userIssuerID,
+	}))
+
+	reconcile(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+	require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, serverID),
+		"a provider whose client came back must keep its configuration")
 }

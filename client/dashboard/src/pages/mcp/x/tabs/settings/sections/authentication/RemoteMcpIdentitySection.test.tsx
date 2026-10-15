@@ -1460,8 +1460,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByText(/stop signing anyone in/)).toBeDefined();
     expect(mocks.commit).not.toHaveBeenCalled();
     // The preview names the mode the commit will run in. This one is an
-    // automatic setup, which reuses a client already bound for the provider
-    // rather than replacing it, and the preview must decide on the same rule.
+    // automatic setup, which registers its own client in place of the bound
+    // one, and the preview must decide on the same rule rather than inferring
+    // the mode from an absent client id.
     expect(mocks.impact).toHaveBeenLastCalledWith(
       expect.objectContaining({
         userSessionIssuerId: "user-session-issuer-1",

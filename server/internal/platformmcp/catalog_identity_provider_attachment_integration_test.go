@@ -684,3 +684,74 @@ func TestSignInRemovalRefusesAStalePreviewConfirmation(t *testing.T) {
 	_, err = service.RemoveSignIn(ctx, principal, project, registrationID, fresh.Version)
 	require.ErrorIs(t, err, ErrSignInRemovalStale, "a carried-out confirmation must not be replayable")
 }
+
+// AIM-577: a confirmation is held to everything the preview described, not
+// only the target server's own row. The preview that says the provider's
+// client stays available to other servers is what the user agreed to; the last
+// of those servers disabling its sign-in in between turns the same request
+// into one that signs everyone out, without touching the target server.
+func TestSignInRemovalRefusesWhenTheSharedClientOutcomeChanged(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_sign_in_removal_siblings")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	usi := signInRemovalIssuer(t, conn, principal, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
+	siblingID := attachmentTestMCPServer(t, conn, project.ID, usi)
+	registrationID := signInRemovalRegistration(t, ctx, conn, principal, project, usi, serverID)
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, conv.ToNullUUID(serverID), metadata, "client-a", resource.Resource, resource))
+	issuer, _, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	// The sibling signs in through the same provider, so the preview promises
+	// its OAuth client is kept.
+	stamped, err := mcpserversrepo.New(conn).StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(issuer.ID),
+		ID:                    siblingID,
+		ProjectID:             project.ID,
+		UserSessionIssuerID:   conv.ToNullUUID(usi),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped)
+
+	preview, err := service.PreviewSignInRemoval(ctx, principal, project, registrationID)
+	require.NoError(t, err)
+	require.True(t, preview.ClientStaysBound, "another server still signs in through this provider")
+
+	// The sibling stops signing in through it, so the same request would now
+	// release the client and sign out everyone holding a session through it.
+	cleared, err := mcpserversrepo.New(conn).StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ID:                    siblingID,
+		ProjectID:             project.ID,
+		UserSessionIssuerID:   conv.ToNullUUID(usi),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), cleared)
+
+	_, err = service.RemoveSignIn(ctx, principal, project, registrationID, preview.Version)
+	require.ErrorIs(t, err, ErrSignInRemovalStale)
+	after, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.True(t, after.RemoteSessionIssuerID.Valid, "the refused confirmation must change nothing")
+	bound, err := remotesessionsrepo.New(conn).ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
+		UserSessionIssuerID: usi,
+		ProjectID:           conv.ToNullUUID(project.ID),
+		OrganizationID:      conv.ToPGText(principal.OrganizationID),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, bound, "the client the user was told would be kept must still be bound")
+
+	// Previewing again describes the new outcome, and confirming that is
+	// carried out.
+	fresh, err := service.PreviewSignInRemoval(ctx, principal, project, registrationID)
+	require.NoError(t, err)
+	require.False(t, fresh.ClientStaysBound)
+	removal, err := service.RemoveSignIn(ctx, principal, project, registrationID, fresh.Version)
+	require.NoError(t, err)
+	require.True(t, removal.ClientUnbound)
+}

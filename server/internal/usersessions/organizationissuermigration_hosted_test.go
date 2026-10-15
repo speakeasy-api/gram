@@ -3,6 +3,7 @@ package usersessions_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -305,7 +306,7 @@ func TestOrganizationUserSessionIssuerMigrateFallsBackWhenHostedSyncRejects(t *t
 // migrateWithRemoteBinding migrates two hosted wrappers and a free server
 // sharing a project, each configured with the same upstream authorization
 // server, and returns the providers they name afterwards.
-func migrateWithRemoteBinding(t *testing.T) (uuid.UUID, []uuid.NullUUID) {
+func migrateWithRemoteBinding(t *testing.T) (expected, migrated []uuid.NullUUID) {
 	t.Helper()
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -347,28 +348,58 @@ func migrateWithRemoteBinding(t *testing.T) (uuid.UUID, []uuid.NullUUID) {
 	})
 	require.NoError(t, err)
 
-	// Each server's upstream authorization server is configured on it, which a
-	// seeded client binding does not do. Stamp all three so the migration has
-	// something to preserve or clear rather than three empty columns.
-	for _, id := range []uuid.UUID{first.ID, second.ID, freeID} {
+	// Each server signs its users in to its own upstream authorization server,
+	// which is what the migration has to preserve. Stamping one provider on
+	// all three would pass just as well if the migration fanned a single
+	// issuer's client out to every server, which is the defect it must not
+	// have.
+	servers := []uuid.UUID{first.ID, second.ID, freeID}
+	expected = make([]uuid.NullUUID, 0, len(servers))
+	for i, id := range servers {
+		own := seedMigrationProvider(t, ctx, ti, projectID, authCtx.ActiveOrganizationID, sourceID, fmt.Sprintf("resync-own-%d", i))
 		stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-			ID: id, ProjectID: projectID, RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuer.ID),
+			ID: id, ProjectID: projectID, RemoteSessionIssuerID: conv.ToNullUUID(own),
 		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), stamped)
+		expected = append(expected, conv.ToNullUUID(own))
 	}
 
 	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: target.ID})
 	require.NoError(t, err)
 
-	remoteIssuers := make([]uuid.NullUUID, 0, 3)
-	for _, id := range []uuid.UUID{first.ID, second.ID, freeID} {
+	migrated = make([]uuid.NullUUID, 0, len(servers))
+	for _, id := range servers {
 		server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndOrganizationID(ctx, mcpserversrepo.GetMCPServerByIDAndOrganizationIDParams{ID: id, OrganizationID: authCtx.ActiveOrganizationID})
 		require.NoError(t, err)
 		require.Equal(t, conv.ToNullUUID(uuid.MustParse(target.ID)), server.UserSessionIssuerID)
-		remoteIssuers = append(remoteIssuers, server.RemoteSessionIssuerID)
+		migrated = append(migrated, server.RemoteSessionIssuerID)
 	}
-	return remoteIssuer.ID, remoteIssuers
+	return expected, migrated
+}
+
+// seedMigrationProvider creates a provider with a live client bound to the
+// issuer, so a server configured with it is one the reconcile keeps.
+func seedMigrationProvider(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID string, userIssuerID uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
+	q := remotesessionsrepo.New(ti.conn)
+	issuer, err := q.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(organizationID),
+		Slug: slug, Issuer: "https://" + slug + ".example.com",
+		AuthorizationEndpoint: conv.ToPGText("https://" + slug + ".example.com/authorize"), TokenEndpoint: conv.ToPGText("https://" + slug + ".example.com/token"),
+		ScopesSupported: []string{"openid"}, GrantTypesSupported: []string{"authorization_code", "refresh_token"}, ResponseTypesSupported: []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"}, CodeChallengeMethodsSupported: []string{"S256"},
+	})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(organizationID), RemoteSessionIssuerID: issuer.ID,
+		ClientID: slug + "-client", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID, UserSessionIssuerID: userIssuerID,
+	}))
+	return issuer.ID
 }
 
 // Consolidating onto an organization issuer must not take any server's sign-in
@@ -378,8 +409,6 @@ func migrateWithRemoteBinding(t *testing.T) (uuid.UUID, []uuid.NullUUID) {
 func TestOrganizationUserSessionIssuerMigrateKeepsEachServersProvider(t *testing.T) {
 	t.Parallel()
 
-	remoteIssuerID, migrated := migrateWithRemoteBinding(t)
-	for _, got := range migrated {
-		require.Equal(t, conv.ToNullUUID(remoteIssuerID), got, "every server keeps the provider configured on it")
-	}
+	expected, migrated := migrateWithRemoteBinding(t)
+	require.Equal(t, expected, migrated, "every server keeps the provider configured on it, not a sibling's")
 }

@@ -7,6 +7,8 @@ import (
 	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 type TurnOffMCPSignInToolInput struct {
@@ -115,17 +117,30 @@ func registerTurnOffMCPSignInTool(reg *Registrar, registrations *RegistrationSer
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, TurnOffMCPSignInToolOutput{}, nil
 		}
 		if err != nil {
-			content, marshalErr := json.Marshal(identityProviderAttachmentErrorResult{Code: "sign_in_removal_refused", Message: err.Error()})
-			if marshalErr != nil {
-				return nil, TurnOffMCPSignInToolOutput{}, marshalErr
+			if refusal, ok := signInRemovalRefusal(err); ok {
+				return refusal, TurnOffMCPSignInToolOutput{}, nil
 			}
-			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, TurnOffMCPSignInToolOutput{}, nil
+			// Unclassified: hand it to the SDK rather than describing it, so
+			// the project's fail-safe decides what a caller may see.
+			return nil, TurnOffMCPSignInToolOutput{}, err
 		}
 		// Read back what landed rather than reporting the plan: the removal is
 		// only done when the server signs in to nothing.
 		after, err := registrations.PreviewIdentityProviderRemoval(ctx, principal, input.ProjectSlug, input.RegistrationID)
 		if err != nil {
-			return nil, TurnOffMCPSignInToolOutput{}, err
+			// The removal already committed and may have signed people out.
+			// Reporting a failed call would invite the agent to retry a change
+			// that is done, so report what was carried out and say only that
+			// reading it back afterwards did not work.
+			return nil, TurnOffMCPSignInToolOutput{
+				ProjectSlug: input.ProjectSlug, RegistrationID: input.RegistrationID,
+				SignInConfigured: false, ProviderURL: result.ProviderURL,
+				Applied: true, SignsInToNothing: result.Removed,
+				OtherServersKeepTheClient: !result.ClientUnbound,
+				PeopleMustSignInAgain:     result.ClientUnbound,
+				NextAction:                "none",
+				Message:                   "This MCP server's sign-in was turned off. Checking the result afterwards did not work, so tell the user it is done and that its current state could not be read back; do not call this tool again for it.",
+			}, nil
 		}
 		return nil, TurnOffMCPSignInToolOutput{
 			ProjectSlug: input.ProjectSlug, RegistrationID: input.RegistrationID,
@@ -137,6 +152,31 @@ func registerTurnOffMCPSignInTool(reg *Registrar, registrations *RegistrationSer
 			Message:                   "This MCP server now signs in to nothing and calls its service without anyone's account.",
 		}, nil
 	})
+}
+
+// signInRemovalRefusal projects the bounded refusals this operation can answer
+// with into messages an agent can act on. Everything else is unclassified and
+// must not be described to the caller: the underlying error carries wrapped
+// database and driver text.
+func signInRemovalRefusal(err error) (*mcp.CallToolResult, bool) {
+	var result identityProviderAttachmentErrorResult
+	switch {
+	case errors.Is(err, remotesessions.ErrIdentityConflict):
+		result = identityProviderAttachmentErrorResult{Code: "sign_in_removal_conflict", Message: "This MCP server's sign-in is in use or changed while the request was being made, so nothing was changed. Something may still be bound to its current OAuth client. Ask the user how they want to proceed."}
+	case errors.Is(err, remotesessions.ErrIdentityOrgWideBinding):
+		result = identityProviderAttachmentErrorResult{Code: "sign_in_removal_organization_wide", Message: "Turning this off would release an OAuth client every project on this organization sign-in shares, so nothing was changed. Tell the user this has to be done from the Remote Identity Provider settings."}
+	case errors.Is(err, remotesessions.ErrIdentityForbidden):
+		result = identityProviderAttachmentErrorResult{Code: "sign_in_removal_forbidden", Message: "Turning this MCP server's sign-in off is not permitted for this user, so nothing was changed."}
+	case errors.Is(err, remotesessions.ErrIdentityNotFound), errors.Is(err, remotesessions.ErrIdentityInvalid), errors.Is(err, ErrRegistrationInvalid):
+		result = identityProviderAttachmentErrorResult{Code: "sign_in_removal_invalid", Message: "This MCP server or its sign-in could not be resolved, so nothing was changed. Check the project and registration id with find_mcp or get_mcp."}
+	default:
+		return nil, false
+	}
+	content, marshalErr := json.Marshal(result)
+	if marshalErr != nil {
+		return nil, false
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
 }
 
 func signInRemovalPreviewMessage(preview SignInRemovalPreview) string {

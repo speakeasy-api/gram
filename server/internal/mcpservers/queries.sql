@@ -627,7 +627,27 @@ WHERE s.id = @id
   AND s.user_session_issuer_id = @user_session_issuer_id
   AND s.remote_session_issuer_id IS NOT DISTINCT FROM @observed_remote_session_issuer_id
   AND s.updated_at = @observed_updated_at
-  AND s.deleted IS FALSE;
+  AND s.deleted IS FALSE
+  -- A provider being stamped must still have a live client bound, in this
+  -- statement's own snapshot: the decision was made from an earlier read, and
+  -- a client unbound since then would leave the server stamped with a provider
+  -- nothing can serve. Same tenancy as the clear, so the two agree on what is
+  -- bound. Clearing names no provider and has nothing to check.
+  AND (@remote_session_issuer_id::uuid IS NULL
+       OR EXISTS (SELECT 1
+              FROM remote_session_client_user_session_issuers AS link
+              JOIN remote_session_clients AS c
+                ON c.id = link.remote_session_client_id
+               AND c.deleted IS FALSE
+               AND (c.project_id = @project_id::uuid
+                    OR (c.project_id IS NULL
+                        AND (c.organization_id IS NULL
+                             OR c.organization_id = @organization_id::text)))
+              JOIN remote_session_issuers AS i
+                ON i.id = c.remote_session_issuer_id
+               AND i.deleted IS FALSE
+                  WHERE link.user_session_issuer_id = s.user_session_issuer_id
+                    AND i.id = @remote_session_issuer_id));
 
 -- name: ListMCPServerRemoteSessionIssuersToClear :many
 -- Live MCP servers on the named user session issuers whose configured upstream
@@ -638,7 +658,10 @@ WHERE s.id = @id
 -- Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
 -- removal signal; the column's ON DELETE SET NULL never fires. The filters
 -- mirror the serve-time credential resolver: the column must never name an
--- issuer that resolver would refuse.
+-- issuer that resolver would refuse, and a client it accepts must never read
+-- as absent here. That includes a platform-global client (no project and no
+-- organization), which serving accepts and whose server would otherwise have
+-- its working configuration cleared.
 --
 -- Tenancy: the ids arrive from an untenanted join table, so each one must
 -- resolve to an issuer the caller's project can see — a foreign id reaches no
@@ -665,7 +688,9 @@ WHERE s.user_session_issuer_id = ANY (@user_session_issuer_ids::uuid[])
                     ON c.id = link.remote_session_client_id
                    AND c.deleted IS FALSE
                    AND (c.project_id = @project_id::uuid
-                        OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+                        OR (c.project_id IS NULL
+                            AND (c.organization_id IS NULL
+                                 OR c.organization_id = @organization_id::text)))
                   JOIN remote_session_issuers AS i
                     ON i.id = c.remote_session_issuer_id
                    AND i.deleted IS FALSE
@@ -702,12 +727,42 @@ WHERE s.id = @id
                     ON c.id = link.remote_session_client_id
                    AND c.deleted IS FALSE
                    AND (c.project_id = @project_id::uuid
-                        OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+                        OR (c.project_id IS NULL
+                            AND (c.organization_id IS NULL
+                                 OR c.organization_id = @organization_id::text)))
                   JOIN remote_session_issuers AS i
                     ON i.id = c.remote_session_issuer_id
                    AND i.deleted IS FALSE
                   WHERE link.user_session_issuer_id = s.user_session_issuer_id
                     AND i.id = s.remote_session_issuer_id);
+
+-- name: MCPServerRemoteSessionIssuerHasLiveClient :one
+-- Whether the provider a server names still has a live client bound to its
+-- user session issuer, under this statement's own snapshot.
+--
+-- The conditional clear cannot see a binding committed after its statement
+-- began — its NOT EXISTS reads the snapshot that statement started with — so
+-- the reconcile runs this in a later statement of the same transaction and
+-- rolls the clear back when a binding appeared. Same tenancy as the clear, so
+-- the two agree on what counts as bound.
+SELECT EXISTS (SELECT 1
+               FROM mcp_servers AS s
+               JOIN remote_session_client_user_session_issuers AS link
+                 ON link.user_session_issuer_id = s.user_session_issuer_id
+               JOIN remote_session_clients AS c
+                 ON c.id = link.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = @project_id::uuid
+                     OR (c.project_id IS NULL
+                         AND (c.organization_id IS NULL
+                              OR c.organization_id = @organization_id::text)))
+               JOIN remote_session_issuers AS i
+                 ON i.id = c.remote_session_issuer_id
+                AND i.deleted IS FALSE
+               WHERE s.id = @id
+                 AND s.project_id = @project_id::uuid
+                 AND s.deleted IS FALSE
+                 AND i.id = @remote_session_issuer_id)::boolean AS bound;
 
 -- name: ListMCPServerRemoteSessionIssuerBackfill :many
 -- Every live MCP server carrying a user session issuer, with what its own

@@ -1765,7 +1765,11 @@ func (s *Service) maybeAutoConnect(
 	// authors a stored preference.
 	resourceSiblings, err := s.listEndpointIssuerClients(ctx, endpoint, challengeState)
 	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
+		// The latch is already spent, so failing the request would leave the
+		// user with an error instead of the page. Same answer as the connect
+		// URL failure below: render, and let them connect manually.
+		logger.WarnContext(ctx, "list remote session clients; falling back to the consent page", attr.SlogError(err))
+		return false, nil
 	}
 	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, resourceSiblings, nil, focusServer)
 	if err != nil {

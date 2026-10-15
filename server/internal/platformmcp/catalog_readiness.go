@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -127,6 +128,27 @@ func (p *RemoteMCPReadinessProber) WithIdentityChaining(governor IdentityChainin
 	return p
 }
 
+// registeredServerProvider reads the upstream authorization server configured
+// on the MCP server the registration's remote source backs. Invalid when the
+// source backs no server on this issuer, or when that server signs nobody in,
+// which readiness then judges from the issuer as before.
+func (p *RemoteMCPReadinessProber) registeredServerProvider(ctx context.Context, projectID, remoteMCPServerID, userSessionIssuerID uuid.UUID) (uuid.NullUUID, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	servers, err := mcpserversrepo.New(p.db).ListMCPServersByProjectID(ctx, mcpserversrepo.ListMCPServersByProjectIDParams{
+		ProjectID:         projectID,
+		RemoteMcpServerID: uuid.NullUUID{UUID: remoteMCPServerID, Valid: true},
+	})
+	if err != nil {
+		return none, fmt.Errorf("load registered MCP server: %w", err)
+	}
+	for _, server := range servers {
+		if server.UserSessionIssuerID.Valid && server.UserSessionIssuerID.UUID == userSessionIssuerID {
+			return server.RemoteSessionIssuerID, nil
+		}
+	}
+	return none, nil
+}
+
 func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error) {
 	if p == nil || p.db == nil || p.enc == nil || p.policy == nil || p.sessions == nil || principal.UserID == "" || principal.OrganizationID == "" || projectID == uuid.Nil || registrationID == uuid.Nil || remoteMCPServerID == uuid.Nil || userSessionIssuerID == uuid.Nil || connectionID == uuid.Nil || generation == uuid.Nil {
 		return ProviderReadinessProbeResult{}, ErrReadinessInvalid
@@ -163,6 +185,24 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	clients, err := p.sessions.ListClients(ctx, projectID, principal.OrganizationID, userSessionIssuerID)
 	if err != nil {
 		return ProviderReadinessProbeResult{}, fmt.Errorf("list configured upstream identity providers: %w", err)
+	}
+	// Readiness is this server's, so it reads the provider configured on this
+	// server rather than every provider its user session issuer binds. A
+	// shared organization sign-in binds one client per server using it, and
+	// counting all of them reported a server with exactly one configured
+	// provider as having several (AIM-577).
+	configured, err := p.registeredServerProvider(ctx, projectID, remoteMCPServerID, userSessionIssuerID)
+	if err != nil {
+		return ProviderReadinessProbeResult{}, err
+	}
+	if configured.Valid {
+		scoped := make([]remotesessions.Client, 0, 1)
+		for _, client := range clients {
+			if client.RemoteSessionIssuerID == configured.UUID {
+				scoped = append(scoped, client)
+			}
+		}
+		clients = scoped
 	}
 	if len(clients) == 0 {
 		if chained, ok := ResolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url); ok {

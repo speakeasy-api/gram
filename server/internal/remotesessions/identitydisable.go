@@ -28,6 +28,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// DisableServerIdentityExpectation is the state a caller decided against, for
+// a caller whose decision was made somewhere other than this write — a
+// confirmed agent tool call, where a person agreed to a described outcome
+// before the request was sent. Each field is compared while this transaction
+// holds the lock that governs it, and a mismatch refuses with ErrIdentityStale
+// rather than carrying out an effect nobody agreed to. A zero expectation
+// compares nothing, for a caller acting on state it just read itself.
+type DisableServerIdentityExpectation struct {
+	// Version is the ServerIdentityVersion observed on the MCP server,
+	// compared under the server row lock. Empty compares nothing.
+	Version string
+
+	// ClientUnbound is whether the caller was told the provider's OAuth client
+	// would be released, compared under the user session issuer lock before
+	// any client is touched. nil compares nothing.
+	//
+	// It is its own field because it is decided by the other servers sharing
+	// the provider, not by the target row: the last sibling disabling its
+	// sign-in between the description and the request flips the outcome from
+	// "the others keep it" to signing everyone out, without moving the target
+	// server's version at all.
+	ClientUnbound *bool
+}
+
 // DisableServerIdentityResult is what turning User Identity off left in place.
 type DisableServerIdentityResult struct {
 	// Provider is the upstream authorization server the MCP server signed in
@@ -67,7 +91,7 @@ func ServerIdentityVersion(server mcpserversrepo.McpServer) string {
 //
 // The cleared state is durable: nothing derives this column on a schedule, and
 // the post-commit pass here only ever takes a provider away.
-func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope IdentityScope, userIssuerID, mcpServerID uuid.UUID, expectedVersion string) (DisableServerIdentityResult, error) {
+func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope IdentityScope, userIssuerID, mcpServerID uuid.UUID, expect DisableServerIdentityExpectation) (DisableServerIdentityResult, error) {
 	var none DisableServerIdentityResult
 	if scope.OrganizationID == "" || scope.ProjectID == uuid.Nil || userIssuerID == uuid.Nil || mcpServerID == uuid.Nil {
 		return none, fmt.Errorf("disable server identity: incomplete scope")
@@ -96,7 +120,7 @@ func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope Ide
 	// Under the row lock, so a configuration commit either committed before
 	// this read — and is seen here — or is still waiting for the row this
 	// transaction now holds and clears.
-	if expectedVersion != "" && ServerIdentityVersion(server) != expectedVersion {
+	if expect.Version != "" && ServerIdentityVersion(server) != expect.Version {
 		return none, identityRefusal(ErrIdentityStale, nil, "MCP server sign-in changed since it was read")
 	}
 	if !server.RemoteSessionIssuerID.Valid {
@@ -134,7 +158,7 @@ func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope Ide
 		return none, fmt.Errorf("lock user session issuer row: %w", err)
 	}
 
-	unbound, err := c.unbindDisabledProvider(ctx, tx, q, scope, issuer, userIssuerID, mcpServerID, provider.UUID)
+	unbound, err := c.unbindDisabledProvider(ctx, tx, q, scope, issuer, userIssuerID, mcpServerID, provider.UUID, expect.ClientUnbound)
 	if err != nil {
 		return none, err
 	}
@@ -185,7 +209,7 @@ func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope Ide
 // issuer, and only when no other live server in the organization signs in
 // through that provider: those servers route by provider, so unbinding its one
 // client would strand them.
-func (c *IdentityCommitter) unbindDisabledProvider(ctx context.Context, tx pgx.Tx, q *repo.Queries, scope IdentityScope, issuer repo.GetUserSessionIssuerForProjectRow, userIssuerID, mcpServerID, providerID uuid.UUID) (bool, error) {
+func (c *IdentityCommitter) unbindDisabledProvider(ctx context.Context, tx pgx.Tx, q *repo.Queries, scope IdentityScope, issuer repo.GetUserSessionIssuerForProjectRow, userIssuerID, mcpServerID, providerID uuid.UUID, expectUnbound *bool) (bool, error) {
 	others, err := q.CountOrganizationMCPServersWithRemoteSessionIssuer(ctx, repo.CountOrganizationMCPServersWithRemoteSessionIssuerParams{
 		UserSessionIssuerID:   uuid.NullUUID{UUID: userIssuerID, Valid: true},
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: providerID, Valid: true},
@@ -194,6 +218,13 @@ func (c *IdentityCommitter) unbindDisabledProvider(ctx context.Context, tx pgx.T
 	})
 	if err != nil {
 		return false, fmt.Errorf("count MCP servers sharing the provider: %w", err)
+	}
+	// Read under the issuer lock every identity commit takes, and compared
+	// before anything is detached: the caller was told whether this releases
+	// the provider's client, and releasing one it was told would be kept signs
+	// out everyone holding a session through it.
+	if expectUnbound != nil && *expectUnbound != (others == 0) {
+		return false, identityRefusal(ErrIdentityStale, nil, "the servers sharing this sign-in changed since it was read")
 	}
 	if others > 0 {
 		return false, nil

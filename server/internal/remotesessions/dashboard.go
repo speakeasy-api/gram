@@ -166,8 +166,8 @@ func (s *Service) DisableServerIdentityConfiguration(ctx context.Context, payloa
 		ActorDisplayName:     authCtx.Email,
 		ActorIsPlatformAdmin: authCtx.IsAdmin,
 		// The dashboard acts on the server it just read for this user, who is
-		// looking at it, so it names no expected version.
-	}, target.UserSessionIssuerID.UUID, mcpServerID, "")
+		// looking at it, so it expects nothing of its own.
+	}, target.UserSessionIssuerID.UUID, mcpServerID, DisableServerIdentityExpectation{Version: "", ClientUnbound: nil})
 	if err != nil {
 		return nil, identityOopsError(err, "disable MCP server identity").LogError(ctx, logger)
 	}
@@ -199,7 +199,11 @@ func (s *Service) authorizeServerIdentityTarget(ctx context.Context, logger *slo
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get MCP server").LogError(ctx, logger)
 	}
 
-	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, target.ID.String(), target.ProjectID.String())}
+	// A toolset-backed server's grants are held on its toolset, which is the
+	// resource every other MCP check on it uses. Configuring identity accepts
+	// every backend now, so checking the server id here would deny exactly the
+	// toolset-backed servers this opened up.
+	checks := []authz.Check{authz.MCPCheck(authz.ScopeMCPWrite, mcpGrantResourceID(target.ID, target.ToolsetID), target.ProjectID.String())}
 	if req.createProvider != nil || req.clientMode != serverIdentityClientModeExisting {
 		checks = append(checks, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
 	}

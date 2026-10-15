@@ -332,9 +332,10 @@ export function RemoteMcpIdentitySectionBody({
     setSelectedMode(next as IdentityMode);
   };
 
-  // What leaving the current mode would destroy. Identity is derived, so
-  // leaving User means unbinding the client and leaving Agent means deleting
-  // the credential; both are what Save has to do, not the card click.
+  // What leaving the current mode would destroy. Leaving User stops this
+  // server signing anyone in, and releases its provider's client only when no
+  // other server still signs in through it; leaving Agent deletes the
+  // credential. Both are what Save has to do, not the card click.
   const leavingUser = actualMode === "user" && selectedMode !== "user";
   // An OAuth client takes a static credential's place rather than sitting
   // beside it, so the confirmation says replace, not remove. Only a client
@@ -377,13 +378,16 @@ export function RemoteMcpIdentitySectionBody({
     leavingUser || leavingAgent || replacingSelf || replacingClient;
 
   // This server's upstream is configured on this server, so saving only moves
-  // this one. Removing User Identity unlinks every client the project can see
-  // on the issuer, which does reach the servers signing in through them, in any
-  // project for an organization issuer.
+  // this one.
   const savingUserIdentity = selectedMode === "user" && userDraft.canSave;
   const sharedIssuerId = target.userSessionIssuerId;
+  // Leaving User Identity for an OAuth service account binds that client in
+  // the same commit instead of disabling, so previewing a disable there would
+  // describe an operation the save never performs. Matches the condition
+  // performSave uses to call detachUserIdentity.
+  const disablingUserIdentity = leavingUser && !oauthFormat;
   let impactRequest: GetServerIdentityImpactRequest | null = null;
-  if (sharedIssuerId && leavingUser) {
+  if (sharedIssuerId && disablingUserIdentity) {
     // The disable the Save performs, not an issuer-wide detach: it unbinds
     // this server's provider's client and only when no other server signs in
     // through it, so an unrelated client cannot warn, refuse or block it.

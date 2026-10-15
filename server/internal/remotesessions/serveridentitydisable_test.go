@@ -233,7 +233,7 @@ func TestDisableServerIdentityRefusesAVersionAConfigurationCommitMoved(t *testin
 			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, "user-disable-stale"),
 			ActorDisplayName:     nil,
 			ActorIsPlatformAdmin: false,
-		}, userIssuerID, targetID, version)
+		}, userIssuerID, targetID, remotesessions.DisableServerIdentityExpectation{Version: version, ClientUnbound: nil})
 		done <- disableResult{err: derr}
 	}()
 

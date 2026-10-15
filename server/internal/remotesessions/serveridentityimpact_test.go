@@ -194,34 +194,41 @@ func TestGetServerIdentityImpactUsesTheCommitsClientMode(t *testing.T) {
 	ctx, ti := newTestService(t)
 	projectID := projectIDFromContext(t, ctx)
 	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "impact-mode-target")
-	// A sibling on the issuer signing in to its own provider, so the target's
-	// own provider is the only one a replacement here could reach.
-	siblingID := createImpactServer(t, ctx, ti, projectID, "impact-mode-sibling", userIssuerID)
-	siblingProviderID := createServerIdentityProvider(t, ctx, ti, "impact-mode-sibling-provider", "", false, []string{"none"})
-	bindServerIdentityClient(t, ctx, ti, "impact-mode-sibling-client", siblingProviderID, userIssuerID, false)
-	stampIssuer(t, ctx, ti.conn, projectID, siblingID, siblingProviderID)
-
 	providerID := createServerIdentityProvider(t, ctx, ti, "impact-mode-provider", "", false, []string{"none"})
 	bindAndStampServerIdentityClient(t, ctx, ti, "impact-mode-client", providerID, userIssuerID, targetID, false)
+	// A sibling signing in through the same provider, so the bound client is
+	// shared: what the two modes do with it is the whole difference between
+	// them, and a mode read wrongly is visible here rather than in an empty
+	// preview that says nothing either way.
+	siblingID := createImpactServer(t, ctx, ti, projectID, "impact-mode-sibling", userIssuerID)
+	stampIssuer(t, ctx, ti.conn, projectID, siblingID, providerID)
 
-	preview := func(mode *string) *gen.ServerIdentityImpactResult {
+	preview := func(mode *string) (*gen.ServerIdentityImpactResult, error) {
 		payload := impactPayload(userIssuerID, &targetID, "replace", &providerID, nil)
 		payload.ClientMode = mode
-		result, err := ti.service.GetServerIdentityImpact(ctx, payload)
-		require.NoError(t, err)
-		return result
+		return ti.service.GetServerIdentityImpact(ctx, payload)
 	}
 
-	// Manual names a client of its own, so the bound one is unbound. No other
-	// server signs in to this provider, so nothing else is reached — and the
-	// preview says so without claiming the reuse an automatic setup would do.
-	require.Empty(t, impactsByServer(preview(conv.PtrEmpty("manual"))))
-	require.Empty(t, impactsByServer(preview(conv.PtrEmpty("auto"))))
-	require.Empty(t, impactsByServer(preview(nil)))
+	// Manual names a client of its own, so the shared one would be unbound and
+	// the sibling stranded. Refused, naming the surface that covers them both.
+	_, err := preview(conv.PtrEmpty("manual"))
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "another MCP server signs in through this Remote Identity Provider's client")
 
-	// Detaching is what still reaches the sibling: it unbinds every client the
-	// project can see, including the one the sibling signs in through.
-	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "detach", nil, nil))
+	// An automatic setup reuses the bound client, so nothing is taken from the
+	// sibling and the preview reports no impact. Reading an absent mode as
+	// manual would refuse a change that is allowed; reading manual as auto
+	// would allow one that strands the sibling.
+	result, err := preview(conv.PtrEmpty("auto"))
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
+	result, err = preview(nil)
+	require.NoError(t, err)
+	require.Empty(t, impactsByServer(result))
+
+	// Detaching still reaches the sibling: it unbinds every client the project
+	// can see, including the one they share.
+	result, err = ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "detach", nil, nil))
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
 }

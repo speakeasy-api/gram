@@ -4,12 +4,14 @@ package platformmcp
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,10 +83,13 @@ type SignInRemovalPreview struct {
 	// session through it.
 	ClientStaysBound bool
 
-	// Version identifies the server state this preview describes. The removal
-	// only acts on the same version, so a confirmation that was agreed against
-	// one sign-in cannot carry out a different one after the server was
-	// reconfigured, and cannot be replayed once it has.
+	// Version identifies everything this preview describes: the server's own
+	// sign-in and whether removing it releases the provider's OAuth client.
+	// The removal only acts on a confirmation naming the same state, so a
+	// confirmation agreed against one described outcome cannot carry out a
+	// different one, and cannot be replayed once it has been carried out.
+	//
+	// Opaque to the caller: it is produced here and only ever handed back.
 	Version string
 }
 
@@ -527,9 +532,9 @@ func (s *CatalogIdentityProviderAttachmentService) PreviewSignInRemoval(ctx cont
 	if err != nil {
 		return SignInRemovalPreview{}, err
 	}
-	version := remotesessions.ServerIdentityVersion(server)
+	serverVersion := remotesessions.ServerIdentityVersion(server)
 	if !server.RemoteSessionIssuerID.Valid {
-		return SignInRemovalPreview{Configured: false, ProviderURL: "", ClientStaysBound: false, Version: version}, nil
+		return SignInRemovalPreview{Configured: false, ProviderURL: "", ClientStaysBound: false, Version: signInRemovalFingerprint(serverVersion, false)}, nil
 	}
 	provider, err := remotesessionsrepo.New(s.db).GetRemoteSessionIssuerByID(ctx, remotesessionsrepo.GetRemoteSessionIssuerByIDParams{
 		ID:                    server.RemoteSessionIssuerID.UUID,
@@ -550,7 +555,36 @@ func (s *CatalogIdentityProviderAttachmentService) PreviewSignInRemoval(ctx cont
 	if err != nil {
 		return SignInRemovalPreview{}, fmt.Errorf("count MCP servers sharing the sign-in provider: %w", err)
 	}
-	return SignInRemovalPreview{Configured: true, ProviderURL: provider.Issuer, ClientStaysBound: others > 0, Version: version}, nil
+	return SignInRemovalPreview{Configured: true, ProviderURL: provider.Issuer, ClientStaysBound: others > 0, Version: signInRemovalFingerprint(serverVersion, others > 0)}, nil
+}
+
+// signInRemovalFingerprint encodes what a preview described, so a confirmation
+// can be held to all of it rather than only the server row. The pair is
+// carried rather than hashed because the removal compares each half under the
+// lock that governs it: the server version under the server row lock, the
+// client-release outcome under the user session issuer lock.
+func signInRemovalFingerprint(serverVersion string, clientStaysBound bool) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("v1\x00%s\x00%t", serverVersion, !clientStaysBound)))
+}
+
+// signInRemovalExpectation decodes a fingerprint back into the expectation the
+// removal enforces. An unreadable one is stale rather than an error: it was
+// not produced by a preview of this server, so nothing may act on it.
+func signInRemovalExpectation(fingerprint string) (remotesessions.DisableServerIdentityExpectation, bool) {
+	var none remotesessions.DisableServerIdentityExpectation
+	raw, err := base64.RawURLEncoding.DecodeString(fingerprint)
+	if err != nil {
+		return none, false
+	}
+	parts := strings.Split(string(raw), "\x00")
+	if len(parts) != 3 || parts[0] != "v1" || parts[1] == "" {
+		return none, false
+	}
+	unbound, err := strconv.ParseBool(parts[2])
+	if err != nil {
+		return none, false
+	}
+	return remotesessions.DisableServerIdentityExpectation{Version: parts[1], ClientUnbound: &unbound}, true
 }
 
 // RemoveSignIn turns the registration's server sign-in off through the same
@@ -564,7 +598,8 @@ func (s *CatalogIdentityProviderAttachmentService) RemoveSignIn(ctx context.Cont
 	// lock here instead would be both weaker — it is keyed on this user, and
 	// the dashboard takes nothing — and held across an independently
 	// transactional call.
-	if expectedVersion == "" {
+	expect, ok := signInRemovalExpectation(expectedVersion)
+	if !ok {
 		return SignInRemovalResult{}, ErrSignInRemovalStale
 	}
 
@@ -583,7 +618,7 @@ func (s *CatalogIdentityProviderAttachmentService) RemoveSignIn(ctx context.Cont
 		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 		ActorDisplayName:     nil,
 		ActorIsPlatformAdmin: false,
-	}, issuer, server.ID, expectedVersion)
+	}, issuer, server.ID, expect)
 	if errors.Is(err, remotesessions.ErrIdentityStale) {
 		return SignInRemovalResult{}, ErrSignInRemovalStale
 	}
