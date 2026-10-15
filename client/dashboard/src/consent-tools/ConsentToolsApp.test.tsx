@@ -674,4 +674,33 @@ describe("parsePrefillBootstrap", () => {
     await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
     expect(formFieldValues("tool_annotations_live")).toEqual(["idempotent"]);
   });
+
+  it("keeps members that share a display name in separate sections", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "github-prod--create_issue",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        {
+          name: "github-sandbox--create_issue",
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        { name: "docs--search", _meta: { "gram.dev/source": "Docs" } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({ serverName: "gateway" });
+    await openPicker(user);
+
+    expect(
+      screen.getByRole("group", { name: "GitHub (github-prod)" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Docs" })).toBeTruthy();
+    await user.click(
+      screen.getByRole("checkbox", { name: /GitHub \(github-sandbox\)/ }),
+    );
+    expect(formFieldValues("tools")).toEqual(["github-sandbox--create_issue"]);
+  });
 });

@@ -53,20 +53,48 @@ function displayName(tool: ConsentTool): string {
     : tool.name;
 }
 
+/**
+ * The member server a gateway tool belongs to: its slug prefix, which is
+ * unique per gateway where the display name is not.
+ */
+function sourceKey(tool: ConsentTool): string {
+  if (!tool.source) return "";
+  const at = tool.name.indexOf(QUALIFIED_NAME_SEPARATOR);
+  return at > 0 ? tool.name.slice(0, at) : tool.source;
+}
+
+/**
+ * Section headers per source key: the member's display name, plus its slug
+ * when another member shares that name.
+ */
+function sourceLabels(tools: ConsentTool[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const tool of tools) {
+    if (tool.source) names.set(sourceKey(tool), tool.source);
+  }
+  const uses = new Map<string, number>();
+  for (const name of names.values()) uses.set(name, (uses.get(name) ?? 0) + 1);
+  const labels = new Map<string, string>();
+  for (const [key, name] of names) {
+    labels.set(key, (uses.get(name) ?? 0) > 1 ? `${name} (${key})` : name);
+  }
+  return labels;
+}
+
 /** Joins names as "A", "A and B", or "A, B and C". */
 function listNames(names: string[]): string {
   if (names.length <= 1) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-/** Groups tools by source, keeping each source in first-seen order. */
+/** Groups tools by source key, keeping each source in first-seen order. */
 function toolsBySource(tools: ConsentTool[]): [string, ConsentTool[]][] {
   const sections = new Map<string, ConsentTool[]>();
   for (const tool of tools) {
-    const source = tool.source ?? "";
-    const section = sections.get(source);
+    const key = sourceKey(tool);
+    const section = sections.get(key);
     if (section) section.push(tool);
-    else sections.set(source, [tool]);
+    else sections.set(key, [tool]);
   }
   for (const section of sections.values()) {
     section.sort((a, b) => displayName(a).localeCompare(displayName(b)));
@@ -567,6 +595,7 @@ export function ConsentToolsApp({
             (t.source ?? "").toLowerCase().includes(normalizedQuery),
         );
   const hasSources = tools.some((t) => t.source !== undefined);
+  const labels = sourceLabels(tools);
 
   const groupGranted = (id: ConsentGroup): boolean => {
     if (id === "all") {
@@ -799,7 +828,8 @@ export function ConsentToolsApp({
                 letterbox, and a cap so a 200-tool one stays scannable. */}
             <div className="max-h-[19rem] min-h-[11rem] overflow-y-auto">
               {hasSources
-                ? toolsBySource(viewed).map(([source, sectionTools]) => {
+                ? toolsBySource(viewed).map(([key, sectionTools]) => {
+                    const source = labels.get(key) ?? key;
                     const sectionInScope = sectionTools.filter((t) =>
                       scope.has(t.name),
                     ).length;
@@ -807,7 +837,7 @@ export function ConsentToolsApp({
                       sectionInScope === sectionTools.length;
                     const sectionPartial = sectionInScope > 0;
                     return (
-                      <div key={source} role="group" aria-label={source}>
+                      <div key={key} role="group" aria-label={source}>
                         <button
                           type="button"
                           role="checkbox"
