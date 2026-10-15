@@ -346,7 +346,9 @@ func (s *Service) remoteLoginConsentURL(endpoint *ResolvedMcpEndpoint, state Aut
 // elsewhere: its routes also serve on the MCP host, where the dashboard and
 // clients holding older metadata start flows.
 func (s *Service) redirectToAuthorizationServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) bool {
-	if endpoint.servingSharedAuthorizationServer() != nil {
+	// The redirect only ever targets the authentication host, so a request
+	// already there never redirects, however its base URLs compare.
+	if OnAuthenticationHost(r.Context()) || endpoint.servingSharedAuthorizationServer() != nil {
 		return false
 	}
 	resourceBaseURL := s.BaseURLForRequest(r)

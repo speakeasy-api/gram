@@ -1,6 +1,9 @@
 package mcp
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -57,6 +60,48 @@ func TestRemoteLoginConsentURL(t *testing.T) {
 			got, err := service.remoteLoginConsentURL(endpoint, state)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// A flow started on the MCP host for an issuer that opts in to the
+// authentication host moves there, and a request already on the
+// authentication host never redirects, even when its base URLs differ in form.
+func TestRedirectToAuthorizationServer(t *testing.T) {
+	t.Parallel()
+
+	const (
+		serverURL          = "https://gram.example"
+		authenticationHost = "https://id.gram.example"
+		path               = "/mcp/billing/authorize?client_id=client"
+	)
+
+	for _, tc := range []struct {
+		name               string
+		arrivedOn          string
+		wantRedirectTarget string
+	}{
+		{name: "MCP host", arrivedOn: "", wantRedirectTarget: authenticationHost + path},
+		{name: "authentication host", arrivedOn: authenticationHost, wantRedirectTarget: ""},
+		{name: "authentication host with a trailing slash", arrivedOn: authenticationHost + "/", wantRedirectTarget: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			parsed, err := url.Parse(serverURL)
+			require.NoError(t, err)
+			service := &Service{serverURL: parsed, authenticationHostBaseURL: authenticationHost}
+			endpoint := &ResolvedMcpEndpoint{RouteBase: "mcp", Slug: "billing", useAuthenticationHost: true}
+
+			ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: serverURL})
+			if tc.arrivedOn != "" {
+				ctx = context.WithValue(ctx, authenticationHostContextKey{}, tc.arrivedOn)
+			}
+			w := httptest.NewRecorder()
+			redirected := service.redirectToAuthorizationServer(w, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil), endpoint)
+
+			require.Equal(t, tc.wantRedirectTarget != "", redirected)
+			require.Equal(t, tc.wantRedirectTarget, w.Header().Get("Location"))
 		})
 	}
 }
