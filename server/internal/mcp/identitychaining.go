@@ -36,7 +36,7 @@ type identityChainer interface {
 	Serves(ctx context.Context, req identitychaining.Request) (uuid.UUID, bool)
 	Configured(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID) bool
 	HasUsableCredential(ctx context.Context, req identitychaining.Request) bool
-	Authorizes(ctx context.Context, req identitychaining.Request) bool
+	RefreshDecision(ctx context.Context, req identitychaining.Request) identitychaining.RefreshVerdict
 }
 
 // SetIdentityChainer enables identity chaining on proxied upstreams. Without
@@ -262,11 +262,7 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	if endpoint.MetaMcpServerID.Valid {
 		return s.consentChainedMetaClients(ctx, endpoint, challengeState, clients, routing)
 	}
-	tunneled, tunnelIssuer, ok := s.consentDirectBackend(ctx, endpoint, routing)
-	if !ok {
-		return nil
-	}
-	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
+	req, ok := s.directChainingRequest(ctx, endpoint, subject.ID, routing)
 	if !ok {
 		return nil
 	}
@@ -283,48 +279,16 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	return requests
 }
 
-// refreshChainingDecision is what identity chaining means for a refresh's
-// upstream reconnect check.
-type refreshChainingDecision int
-
-const (
-	// refreshChainingNone: chaining does not own the upstream.
-	refreshChainingNone refreshChainingDecision = iota
-	// refreshChainingServed: chaining serves the upstream for this grant.
-	refreshChainingServed
-	// refreshChainingUnconfirmed: chaining owns the upstream but cannot name
-	// the issuer now (ambiguous bindings, transient discovery failure).
-	refreshChainingUnconfirmed
-	// refreshChainingReauthenticate: chaining would make the human sign in
-	// again for this grant.
-	refreshChainingReauthenticate
-)
-
-// refreshChaining reports how identity chaining treats subject's grant jti on
-// the endpoint's upstream, with the remote session issuer it serves.
-func (s *Service) refreshChaining(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) (uuid.UUID, refreshChainingDecision) {
-	if s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" ||
-		!s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID) {
-		return uuid.Nil, refreshChainingNone
-	}
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil}
+// directChainingRequest builds the request the runtime makes for userID on a
+// direct endpoint's upstream, reusing resolved routing when present. Consent
+// and refresh both judge chaining with it, so they ask what the runtime asks.
+func (s *Service) directChainingRequest(ctx context.Context, endpoint *ResolvedMcpEndpoint, userID string, routing consentRouting) (identitychaining.Request, bool) {
+	var none identitychaining.Request
 	tunneled, tunnelIssuer, ok := s.consentDirectBackend(ctx, endpoint, routing)
 	if !ok {
-		return uuid.Nil, refreshChainingNone
+		return none, false
 	}
-	req, ok := identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
-	if !ok || !s.identityChainer.Governs(ctx, req) {
-		return uuid.Nil, refreshChainingNone
-	}
-	issuer, served := s.identityChainer.Serves(ctx, req)
-	if !served {
-		return uuid.Nil, refreshChainingUnconfirmed
-	}
-	req.UserSessionJTI = jti
-	if !s.identityChainer.Authorizes(ctx, req) {
-		return uuid.Nil, refreshChainingReauthenticate
-	}
-	return issuer, refreshChainingServed
+	return identitychaining.NewRequest(endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, userID, endpoint.UpstreamResource, tunneled, tunnelIssuer)
 }
 
 // consentDirectBackend reports whether a direct endpoint's backend is

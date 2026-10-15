@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/signins"
@@ -1334,35 +1335,50 @@ func (s *Service) rotateRefreshToken(
 // access token would only hit the same invalid_token from the MCP runtime,
 // while invalid_grant sends the client through the consent page that
 // reconnects the upstream. It fails open (meta MCP endpoints, check errors)
-// because many clients treat any failed refresh as a sign-out. When identity
-// chaining owns the upstream the runtime chains instead, so the reconnect
-// stands only if chaining would make the human sign in again.
+// because many clients treat any failed refresh as a sign-out.
+//
+// When identity chaining owns the upstream, refresh follows the runtime, which
+// then serves the call from the upstream's own token or by chaining and never
+// consults sibling clients on the user session issuer; the consent page
+// likewise lets a chained card stand in for a connection. So once chaining
+// serves the grant, sibling sessions need no reconnect either. The reconnect
+// stands only when the runtime would answer with a reconnect challenge itself:
+// chaining needs the human to sign in again, or no provider in the order can
+// serve. Uncertainty the runtime reports as retryable or forbidden fails open,
+// because no reconnect would change it.
 func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
 	if endpoint.MetaMcpServerID.Valid {
 		return false
 	}
-	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, uuid.Nil)
+	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
 		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
 		return false
 	}
-	if !reconnect {
-		return false
+	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" ||
+		!s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID) {
+		return reconnect
 	}
-	chained, decision := s.refreshChaining(ctx, endpoint, subject, jti)
-	switch decision {
-	case refreshChainingNone, refreshChainingReauthenticate:
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil}
+	req, ok := s.directChainingRequest(ctx, endpoint, subject.ID, routing)
+	if !ok {
 		return true
-	case refreshChainingUnconfirmed:
-		return false
-	case refreshChainingServed:
 	}
-	reconnect, err = s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, chained)
-	if err != nil {
-		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
+	req.UserSessionJTI = jti
+	verdict := s.identityChainer.RefreshDecision(ctx, req)
+	logger.InfoContext(ctx, "identity chaining decided the refresh upstream reconnect",
+		attr.SlogOutcome(string(verdict.Decision)),
+		attr.SlogReason(string(verdict.Reason)),
+		attr.SlogIdentityChainingProvider(string(verdict.Provider)),
+		attr.SlogRemoteSessionIssuerID(verdict.RemoteSessionIssuerID.String()),
+	)
+	switch verdict.Decision {
+	case identitychaining.RefreshServed, identitychaining.RefreshUnconfirmed:
 		return false
+	case identitychaining.RefreshNotChained, identitychaining.RefreshReauthenticate:
+		return true
 	}
-	return reconnect
+	return true
 }
 
 func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lockOwner string, logger *slog.Logger) {

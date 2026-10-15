@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -177,23 +178,23 @@ func TestHandleToken_RefreshProceedsWhileUpstreamUnavailable(t *testing.T) {
 
 // A grant whose only upstream identity chaining serves holds no interactive
 // remote session; refresh must not demand a reconnect the runtime never needs.
-func TestHandleToken_RefreshSkipsReconnectForChainedUpstream(t *testing.T) {
+func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 	t.Parallel()
 
 	const upstream = "https://chained-refresh.example.com/mcp"
 	cases := []struct {
 		name          string
-		served        bool
-		governs       bool
-		otherIssuer   bool
-		reauth        bool
+		configured    bool
+		decision      identitychaining.RefreshDecision
+		sibling       bool
 		wantReconnect bool
 	}{
-		{name: "served by chaining", served: true, governs: true},
-		{name: "chaining needs a fresh sign-in", served: true, governs: true, reauth: true, wantReconnect: true},
-		{name: "not chained", wantReconnect: true},
-		{name: "chaining owns the upstream but cannot name its issuer", governs: true},
-		{name: "chaining serves another issuer", served: true, governs: true, otherIssuer: true, wantReconnect: true},
+		{name: "served by chaining", configured: true, decision: identitychaining.RefreshServed},
+		{name: "served while a sibling client has no session", configured: true, decision: identitychaining.RefreshServed, sibling: true},
+		{name: "chaining unconfirmed", configured: true, decision: identitychaining.RefreshUnconfirmed},
+		{name: "chaining needs a fresh sign-in", configured: true, decision: identitychaining.RefreshReauthenticate, wantReconnect: true},
+		{name: "chaining does not serve the upstream", configured: true, decision: identitychaining.RefreshNotChained, wantReconnect: true},
+		{name: "chaining not configured", configured: false, decision: identitychaining.RefreshServed, wantReconnect: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -203,6 +204,9 @@ func TestHandleToken_RefreshSkipsReconnectForChainedUpstream(t *testing.T) {
 			authCtx := requireProjectAuthContext(t, ctx)
 			_, issuer, client, refreshToken, oldJTI := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+			if tc.sibling {
+				attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+			}
 			slug := "chained-refresh-" + uuid.NewString()[:8]
 			serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstream)
 			_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
@@ -214,11 +218,7 @@ func TestHandleToken_RefreshSkipsReconnectForChainedUpstream(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			servedIssuer := remoteClient.RemoteSessionIssuerID
-			if tc.otherIssuer {
-				servedIssuer = uuid.New()
-			}
-			g := &consentGovernor{t: t, issuer: servedIssuer, served: map[string]bool{upstream: tc.served}, governs: tc.governs, configured: true, usable: false, reauth: tc.reauth, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, authorized: nil}
+			g := &consentGovernor{t: t, issuer: remoteClient.RemoteSessionIssuerID, served: map[string]bool{}, governs: false, configured: tc.configured, usable: false, refresh: tc.decision, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
 			ti.service.SetIdentityChainer(g)
 
 			res := performRefreshRequest(ctx, ti, slug, client.ClientID, refreshToken)
@@ -231,21 +231,19 @@ func TestHandleToken_RefreshSkipsReconnectForChainedUpstream(t *testing.T) {
 				require.Equal(t, http.StatusOK, res.code, res.body)
 			}
 
-			reqs := g.seen()
-			if !tc.governs {
-				require.Empty(t, reqs, "an upstream chaining does not own is judged from stored grants alone")
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			if !tc.configured {
+				require.Empty(t, g.refreshed, "an upstream chaining is not configured for is judged from stored grants alone")
 				return
 			}
-			require.Len(t, reqs, 1)
-			require.Equal(t, upstream, reqs[0].UpstreamResource)
-			require.Equal(t, "refresh-replay-user", reqs[0].UserID)
-			require.Equal(t, issuer.ID, reqs[0].UserSessionIssuerID)
-			if tc.served {
-				g.mu.Lock()
-				require.Len(t, g.authorized, 1)
-				require.Equal(t, oldJTI, g.authorized[0].UserSessionJTI, "authorization is judged for the grant being refreshed")
-				g.mu.Unlock()
-			}
+			require.Len(t, g.refreshed, 1, "refresh asks identity chaining once")
+			req := g.refreshed[0]
+			require.Equal(t, upstream, req.UpstreamResource)
+			require.Equal(t, "refresh-replay-user", req.UserID)
+			require.Equal(t, issuer.ID, req.UserSessionIssuerID)
+			require.Equal(t, oldJTI, req.UserSessionJTI, "chaining is judged for the grant being refreshed")
+			require.False(t, req.RemoteSessionIssuerID.Valid, "a remote upstream selects by resource, as the runtime does")
 		})
 	}
 }

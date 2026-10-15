@@ -111,7 +111,7 @@ func TestResolveAccessTokens_UnauthorizedClientStaysMisconfigured(t *testing.T) 
 	}
 	require.EqualValues(t, 2, refreshAttempts.Load())
 
-	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject, uuid.Nil)
+	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.False(t, reconnect, "re-linking cannot repair a refused client request")
 }
@@ -132,7 +132,7 @@ func TestResolveAccessTokens_InvalidClientNeedsReconnect(t *testing.T) {
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 
-	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject, uuid.Nil)
+	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.True(t, reconnect)
 }
@@ -152,7 +152,7 @@ func TestResolveAccessTokens_InvalidGrantNeedsReconnect(t *testing.T) {
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 
 	// The failed refresh cleared the grant, so stored state now agrees.
-	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject, uuid.Nil)
+	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.True(t, reconnect)
 }
@@ -190,7 +190,7 @@ func TestResolveAccessTokens_UnreadableAccessTokenNeedsReconnect(t *testing.T) {
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Zero(t, refreshAttempts.Load(), "a live access token is forwarded without refreshing")
 
-	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject, uuid.Nil)
+	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.True(t, reconnect)
 }
@@ -204,7 +204,7 @@ func TestRemoteSessionsNeedReconnect_RenewableGrantDoesNotContactUpstream(t *tes
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 
-	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject, uuid.Nil)
+	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.NoError(t, err)
 	require.False(t, reconnect, "an expired access token with a refresh grant is still renewable")
 	require.Zero(t, refreshAttempts.Load(), "the reconnect check must never refresh")
@@ -217,26 +217,7 @@ func TestRemoteSessionsNeedReconnect_MissingSession(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
 
-	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, urn.NewUserSubject("never-linked-"+uuid.NewString()), uuid.Nil)
-	require.NoError(t, err)
-	require.True(t, reconnect)
-}
-
-// The runtime chains for the chained issuer's clients, so their missing
-// session needs no reconnect; any other issuer still does.
-func TestRemoteSessionsNeedReconnect_SkipsChainedIssuer(t *testing.T) {
-	t.Parallel()
-
-	ctx, env := newExpiredRefreshEnv(t, "reconnect-check-chained", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	})
-	unlinked := urn.NewUserSubject("chained-only-" + uuid.NewString())
-
-	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, unlinked, env.issuerID)
-	require.NoError(t, err)
-	require.False(t, reconnect)
-
-	reconnect, err = env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, unlinked, uuid.New())
+	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, urn.NewUserSubject("never-linked-"+uuid.NewString()))
 	require.NoError(t, err)
 	require.True(t, reconnect)
 }

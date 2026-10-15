@@ -3,6 +3,7 @@ package identitychaining
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"slices"
@@ -76,10 +77,16 @@ func GrantScopes(scopes []string) []string {
 // selection is not supported, so an upstream without a ready binding keeps the
 // interactive path.
 func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req Request) (selection, Outcome) {
+	return g.selectBindingWith(ctx, logger, req, g.ResolveResource)
+}
+
+// selectBindingWith is selectBinding over resolve, which names the endpoint's
+// authorization resource.
+func (g *Governor) selectBindingWith(ctx context.Context, logger *slog.Logger, req Request, resolve func(context.Context, Request) (protectedresource.EndpointResource, error)) (selection, Outcome) {
 	var none selection
 	// Every caller has already authenticated the human or management
 	// principal. Unconfigured endpoints perform no discovery at all.
-	resource, err := g.ResolveResource(ctx, req)
+	resource, err := resolve(ctx, req)
 	if err != nil {
 		logger.WarnContext(ctx, "resolve identity chaining resource", attr.SlogError(err))
 		// Failed discovery is never read as "no metadata". It governs only an
@@ -167,6 +174,41 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		audience:              "",
 		internalIssuerVersion: time.Time{}, internalKeyID: uuid.Nil, internalKeyPublishedAt: time.Time{}, userSessionID: uuid.Nil, signInID: uuid.Nil, email: "",
 	}, success
+}
+
+// errResourceUncached means no stored state names the endpoint's
+// authorization resource without discovery.
+var errResourceUncached = errors.New("identitychaining: endpoint resource is not cached")
+
+// storedResource is ResolveResource from stored state alone, for the token
+// endpoint, which never probes an upstream. A cached discovery answers exactly
+// as ResolveResource would. On a miss, a ready binding whose resource is the
+// upstream itself selects it undiscovered; any other miss is
+// errResourceUncached, which selection reads as transient when a binding sits
+// on the upstream's origin.
+func (g *Governor) storedResource(ctx context.Context, req Request) (protectedresource.EndpointResource, error) {
+	var none protectedresource.EndpointResource
+	undiscovered := protectedresource.EndpointResource{Resource: req.UpstreamResource, AuthorizationServers: nil, Discovered: false}
+	if g.resolveResource == nil || req.RemoteSessionIssuerID.Valid {
+		return undiscovered, nil
+	}
+	if g.cachedResource != nil {
+		if resource, ok, err := g.cachedResource(ctx, req.OrganizationID, req.ProjectID, req.UpstreamResource); ok {
+			return resource, err
+		}
+	}
+	resources, err := repo.New(g.db).ListEMAChainingResourceCandidates(ctx, repo.ListEMAChainingResourceCandidatesParams{
+		ProjectID: req.ProjectID, OrganizationID: req.OrganizationID, UserSessionIssuerID: req.UserSessionIssuerID,
+		RemoteSessionIssuerID: req.RemoteSessionIssuerID,
+	})
+	if err != nil {
+		return none, fmt.Errorf("list identity chaining resource candidates: %w", err)
+	}
+	upstream := strings.TrimRight(req.UpstreamResource, "/")
+	if slices.ContainsFunc(resources, func(resource string) bool { return strings.TrimRight(resource, "/") == upstream }) {
+		return undiscovered, nil
+	}
+	return none, errResourceUncached
 }
 
 // sameIssuer compares issuer identifiers in canonical form, so a trailing

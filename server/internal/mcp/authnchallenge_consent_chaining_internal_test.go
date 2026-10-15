@@ -44,8 +44,8 @@ func (g *funcGovernor) HasUsableCredential(context.Context, identitychaining.Req
 	return false
 }
 
-func (g *funcGovernor) Authorizes(context.Context, identitychaining.Request) bool {
-	return true
+func (g *funcGovernor) RefreshDecision(context.Context, identitychaining.Request) identitychaining.RefreshVerdict {
+	return identitychaining.RefreshVerdict{Decision: identitychaining.RefreshNotChained, RemoteSessionIssuerID: uuid.Nil, Provider: "", Reason: ""}
 }
 
 func (g *funcGovernor) Acquire(context.Context, identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {

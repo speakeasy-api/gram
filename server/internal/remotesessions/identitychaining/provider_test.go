@@ -117,7 +117,7 @@ func (s flakySource) issue(ctx context.Context, logger *slog.Logger, req Request
 func useFlakyExternal(f devIDPFixture, transient int) *int {
 	issued := new(int)
 	f.chainer.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
-		return flakySource{tokenSource: externalSource{c: f.chainer, issuer: p.RemoteSessionIssuerID}, transient: transient, issued: issued}
+		return flakySource{tokenSource: externalSource{g: &f.chainer.Governor, c: f.chainer, issuer: p.RemoteSessionIssuerID}, transient: transient, issued: issued}
 	}
 	return issued
 }
@@ -254,7 +254,7 @@ func TestProviders_UntrustedProviderIsSkipped(t *testing.T) {
 		if p.RemoteSessionIssuerID != f.trustedIssuerID {
 			return untrusted
 		}
-		return flakySource{tokenSource: externalSource{c: f.chainer, issuer: p.RemoteSessionIssuerID}, transient: 0, issued: issued}
+		return flakySource{tokenSource: externalSource{g: &f.chainer.Governor, c: f.chainer, issuer: p.RemoteSessionIssuerID}, transient: 0, issued: issued}
 	}
 	setPolicy(t, f, f.req.OrganizationID, external(f.resourceIssuerID), external(f.trustedIssuerID))
 
@@ -448,7 +448,7 @@ func TestProviders_OrderChangedMidAttemptDiscardsTheToken(t *testing.T) {
 	internalIssuer := seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
 	f.chainer.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
 		return interceptingSource{
-			tokenSource: externalSource{c: f.chainer, issuer: p.RemoteSessionIssuerID},
+			tokenSource: externalSource{g: &f.chainer.Governor, c: f.chainer, issuer: p.RemoteSessionIssuerID},
 			afterIssue:  func() { setPolicy(t, f, f.req.OrganizationID, speakeasy(internalIssuer)) },
 		}
 	}

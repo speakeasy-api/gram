@@ -34,28 +34,42 @@ type Governor struct {
 
 	// resolveResource maps a direct HTTP transport to its authorization resource.
 	resolveResource func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error)
+
+	// cachedResource is resolveResource answered from its shared cache alone,
+	// reporting false on a miss; nil reads every lookup as a miss.
+	cachedResource func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error)
 }
 
 // NewGovernor builds a configuration governor; enc verifies stored credentials
 // and delegation checks the human's retained delegation against the current
 // trusted registration.
 func NewGovernor(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, delegation *remotesessions.DelegationService) *Governor {
-	return &Governor{
+	g := &Governor{
 		logger: logger.With(attr.SlogComponent("identity_chaining")), db: db, enc: enc, delegation: delegation, now: time.Now,
 		resolveResource: nil,
-		sources: map[remotesessions.EMAProviderKind]sourceFactory{
-			remotesessions.EMAProviderExternal: func(p remotesessions.EMAProvider) tokenSource {
-				return externalSource{c: nil, issuer: p.RemoteSessionIssuerID}
-			},
-			remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return new(speakeasySource) },
-		},
+		cachedResource:  nil,
+		sources:         nil,
 	}
+	g.sources = map[remotesessions.EMAProviderKind]sourceFactory{
+		remotesessions.EMAProviderExternal: func(p remotesessions.EMAProvider) tokenSource {
+			return externalSource{g: g, c: nil, issuer: p.RemoteSessionIssuerID}
+		},
+		remotesessions.EMAProviderSpeakeasy: func(remotesessions.EMAProvider) tokenSource { return new(speakeasySource) },
+	}
+	return g
 }
 
 // SetResourceResolver installs public metadata resolution before serving any
 // authenticated runtime, consent, or management requests.
 func (g *Governor) SetResourceResolver(resolve func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error)) {
 	g.resolveResource = resolve
+}
+
+// SetCachedResourceResolver installs the cache-only view of the resource
+// resolver, which RefreshDecision reads so the token endpoint never probes an
+// upstream.
+func (g *Governor) SetCachedResourceResolver(cached func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error)) {
+	g.cachedResource = cached
 }
 
 // ResolveResource returns the resource identity used by binding selection.
@@ -194,12 +208,7 @@ func (g *Governor) hasUsableCredentialFrom(ctx context.Context, req Request, sel
 	if !g.source(p).authorize(ctx, g.logger, statusReq, &current).Succeeded() {
 		return false
 	}
-	row, err := readCredential(ctx, repo.New(g.db), req, current, g.now())
-	if err != nil || !row.Usable || g.enc == nil {
-		return false
-	}
-	value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
-	return err == nil && value != ""
+	return g.storedCredentialUsable(ctx, req, current)
 }
 
 func (g *Governor) hasExternalCredential(ctx context.Context, req Request, sel selection) bool {
@@ -240,61 +249,6 @@ func (g *Governor) hasExternalCredential(ctx context.Context, req Request, sel s
 		return false
 	}
 	return value != ""
-}
-
-// Authorizes reports whether identity chaining could serve req without the
-// human signing in again: a provider in the vendor's order that can serve
-// still accepts req's Speakeasy grant (req.UserSessionJTI) or the human's
-// retained delegation. It reads stored state only, and transient faults read
-// as authorized so a retryable outage never demands a reconnect.
-func (g *Governor) Authorizes(ctx context.Context, req Request) bool {
-	if !req.complete() || req.UserID == "" {
-		return false
-	}
-	sel, outcome := g.selectBinding(ctx, g.logger, req)
-	if !outcome.Succeeded() {
-		return false
-	}
-	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
-	if !outcome.Succeeded() {
-		return outcome.Retryable
-	}
-	for _, p := range order.Available() {
-		if p.Kind != remotesessions.EMAProviderSpeakeasy {
-			if g.delegationCurrent(ctx, req) {
-				return true
-			}
-			continue
-		}
-		if req.UserSessionJTI == "" {
-			continue
-		}
-		current := sel
-		current.provider = p
-		if outcome := g.source(p).authorize(ctx, g.logger, req, &current); outcome.Succeeded() || outcome.Retryable {
-			return true
-		}
-	}
-	return false
-}
-
-// delegationCurrent reports whether the human's retained delegation still
-// belongs to the user session issuer's current trusted registration.
-func (g *Governor) delegationCurrent(ctx context.Context, req Request) bool {
-	if g.delegation == nil {
-		return false
-	}
-	issuer, err := repo.New(g.db).GetEMAChainingUserIssuer(ctx, repo.GetEMAChainingUserIssuerParams{ID: req.UserSessionIssuerID, OrganizationID: conv.ToPGText(req.OrganizationID)})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return false
-	case err != nil:
-		g.logger.WarnContext(ctx, "read identity chaining user session issuer", attr.SlogError(err))
-		return true
-	}
-	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: issuer.TrustedRemoteSessionIssuerID.UUID, ClientID: issuer.TrustedRemoteSessionClientID.UUID, HumanID: req.UserID}
-	err = g.delegation.Check(ctx, binding, authority{db: g.db, req: req})
-	return err == nil || errors.Is(err, remotesessions.ErrDelegationTemporary)
 }
 
 // credentialForUseParams reads the live credential slot for req under sel.

@@ -119,7 +119,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challeng
 		attempts:   nil,
 	}
 	c.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
-		return externalSource{c: c, issuer: p.RemoteSessionIssuerID}
+		return externalSource{g: &c.Governor, c: c, issuer: p.RemoteSessionIssuerID}
 	}
 	c.SetMeterProvider(noop.NewMeterProvider())
 	return c

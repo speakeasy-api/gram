@@ -2,16 +2,22 @@ package identitychaining
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestGovernor_ServesOnlyAnUnambiguousBinding(t *testing.T) {
@@ -67,23 +73,146 @@ func TestGovernor_HasUsableCredential(t *testing.T) {
 	require.False(t, f.credentials(t)[0].Deleted, "a status read never retires a credential")
 }
 
-func TestGovernor_AuthorizesFollowsDelegation(t *testing.T) {
+// retainRefreshableDelegation records a retained delegation whose assertion has
+// expired but whose refresh grant can renew it without a fresh sign-in.
+func (f chainStoreFixture) retainRefreshableDelegation(t *testing.T, status string) {
+	t.Helper()
+	q := repo.New(f.db)
+	subject := urn.NewUserSubject(f.req.UserID).String()
+	current, err := q.GetTrustedDelegationCredential(t.Context(), repo.GetTrustedDelegationCredentialParams{OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: subject})
+	require.NoError(t, err)
+	refresh := pgtype.Text{String: "", Valid: false}
+	if status == "durable_credential_present" {
+		refresh = pgtype.Text{String: "encrypted-refresh", Valid: true}
+	}
+	_, err = q.UpsertTrustedDelegationCredential(t.Context(), repo.UpsertTrustedDelegationCredentialParams{
+		OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: subject, ExpectedGeneration: current.CredentialGeneration.Int64,
+		CredentialConfigHash:       pgtype.Text{String: f.configHash, Valid: true},
+		ObservationStatus:          pgtype.Text{String: status, Valid: true},
+		IdentityAssertionEncrypted: pgtype.Text{String: "encrypted-assertion", Valid: true},
+		IdentityAssertionExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted:      refresh,
+	})
+	require.NoError(t, err)
+}
+
+func TestGovernor_RefreshDecisionFollowsDelegation(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
-	require.True(t, g.Authorizes(t.Context(), f.req), "a retained delegation chains without a new sign-in")
+	external := remotesessions.EMAProviderExternal
+
+	require.Equal(t, RefreshVerdict{Decision: RefreshReauthenticate, RemoteSessionIssuerID: f.sel.remoteIssuerID, Provider: external, Reason: ReasonReauthenticationRequired}, g.RefreshDecision(t.Context(), f.req),
+		"a delegation with neither a live assertion nor a refresh grant needs a fresh sign-in")
+
+	f.retainRefreshableDelegation(t, "durable_credential_present")
+	require.Equal(t, RefreshVerdict{Decision: RefreshServed, RemoteSessionIssuerID: f.sel.remoteIssuerID, Provider: external, Reason: ReasonSuccess}, g.RefreshDecision(t.Context(), f.req),
+		"a refresh grant renews the delegation without a fresh sign-in")
 
 	unbound := f.req
 	unbound.UpstreamResource = "https://unbound.example.test"
-	require.False(t, g.Authorizes(t.Context(), unbound))
+	require.Equal(t, RefreshNotChained, g.RefreshDecision(t.Context(), unbound).Decision)
 
 	other := f.req
 	other.UserID = "user-other"
-	require.False(t, g.Authorizes(t.Context(), other))
-	require.False(t, NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, nil).Authorizes(t.Context(), f.req), "without a delegation check nothing authorizes")
+	require.Equal(t, RefreshUnconfirmed, g.RefreshDecision(t.Context(), other).Decision, "a non-member is forbidden at runtime, which no reconnect repairs")
 
 	f.deleteDelegation(t)
-	require.False(t, g.Authorizes(t.Context(), f.req), "a missing delegation needs a fresh sign-in")
+	require.Equal(t, RefreshReauthenticate, g.RefreshDecision(t.Context(), f.req).Decision, "a missing delegation needs a fresh sign-in")
+}
+
+func TestGovernor_RefreshDecisionNeedsReauthenticationRecordedOnTheDelegation(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	f.retainRefreshableDelegation(t, "reauthentication_required")
+	require.True(t, f.chainer.checkDelegation(t.Context(), f.req, f.sel).Succeeded(), "the registration itself is still current")
+	require.Equal(t, RefreshReauthenticate, g.RefreshDecision(t.Context(), f.req).Decision, "a delegation that recorded reauthentication cannot renew")
+}
+
+func TestGovernor_RefreshDecisionWithoutAServingProvider(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	f.retainRefreshableDelegation(t, "durable_credential_present")
+	fixtures := testrepo.New(f.db)
+	keys, err := fixtures.SeedJsonWebKeySetFixture(t.Context(), testrepo.SeedJsonWebKeySetFixtureParams{OrganizationID: f.req.OrganizationID, Name: "speakeasy-issuer-" + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	internal, err := fixtures.SeedInternalSessionIssuerFixture(t.Context(), testrepo.SeedInternalSessionIssuerFixtureParams{OrganizationID: f.req.OrganizationID, Issuer: "https://speakeasy.example.test/oauth/idp/org/" + f.req.OrganizationID, JsonWebKeySetID: keys})
+	require.NoError(t, err)
+	vendor, err := remotesessions.NormalizeVendorIssuer(testResourceIssuer)
+	require.NoError(t, err)
+	// Only the Speakeasy provider, which this governor cannot sign with.
+	require.NoError(t, repo.New(f.db).InsertEMAProvider(t.Context(), repo.InsertEMAProviderParams{
+		OrganizationID: f.req.OrganizationID, VendorIssuer: vendor,
+		RemoteSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		InternalSessionIssuerID: uuid.NullUUID{UUID: internal, Valid: true},
+		Position:                0,
+	}))
+
+	verdict := g.RefreshDecision(t.Context(), f.req)
+	require.Equal(t, RefreshNotChained, verdict.Decision, "a ready binding whose order cannot serve leaves the upstream on the interactive path")
+	require.Equal(t, ReasonProviderUnavailable, verdict.Reason)
+	require.Equal(t, remotesessions.EMAProviderSpeakeasy, verdict.Provider)
+}
+
+func TestGovernor_RefreshDecisionTrustedRegistrationRotated(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	f.retainRefreshableDelegation(t, "durable_credential_present")
+	require.Equal(t, RefreshServed, g.RefreshDecision(t.Context(), f.req).Decision)
+
+	rotated, err := f.chainer.enc.Encrypt([]byte("rotated-secret"))
+	require.NoError(t, err)
+	_, err = repo.New(f.db).UpdateOrganizationRemoteSessionClient(t.Context(), repo.UpdateOrganizationRemoteSessionClientParams{
+		ClientSecretEncrypted: pgtype.Text{String: rotated, Valid: true}, ID: f.sel.trustedClientID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, RefreshVerdict{Decision: RefreshReauthenticate, RemoteSessionIssuerID: f.sel.remoteIssuerID, Provider: remotesessions.EMAProviderExternal, Reason: ReasonReauthenticationRequired}, g.RefreshDecision(t.Context(), f.req),
+		"a delegation retained under the previous registration is replaced by the next sign-in")
+}
+
+func TestGovernor_RefreshDecisionUncertainty(t *testing.T) {
+	t.Parallel()
+	t.Run("discovery transiently failed", func(t *testing.T) {
+		t.Parallel()
+		f := newChainStoreFixture(t)
+		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+		g.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
+			t.Error("refresh must never probe the upstream")
+			return protectedresource.EndpointResource{}, errors.New("unexpected probe")
+		})
+		g.SetCachedResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error) {
+			return protectedresource.EndpointResource{}, true, errors.New("endpoint resource discovery temporarily unavailable")
+		})
+		verdict := g.RefreshDecision(t.Context(), f.req)
+		require.Equal(t, RefreshUnconfirmed, verdict.Decision)
+		require.Equal(t, ReasonTransientFailure, verdict.Reason)
+	})
+	t.Run("nothing cached and no exact binding", func(t *testing.T) {
+		t.Parallel()
+		f := newChainStoreFixture(t)
+		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+		g.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
+			t.Error("refresh must never probe the upstream")
+			return protectedresource.EndpointResource{}, errors.New("unexpected probe")
+		})
+		alias := f.req
+		alias.UpstreamResource = "https://api.resource.example.test/mcp"
+		require.Equal(t, RefreshUnconfirmed, g.RefreshDecision(t.Context(), alias).Decision, "an alias on a bound origin is unknown until discovery is cached")
+		f.retainRefreshableDelegation(t, "durable_credential_present")
+		require.Equal(t, RefreshServed, g.RefreshDecision(t.Context(), f.req).Decision, "a binding naming the upstream itself selects without discovery")
+	})
+	t.Run("ambiguous bindings", func(t *testing.T) {
+		t.Parallel()
+		f := newChainStoreFixture(t)
+		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+		f.addSlashVariantBinding(t, remotesessions.PreparationStateReady)
+		verdict := g.RefreshDecision(t.Context(), f.req)
+		require.Equal(t, RefreshUnconfirmed, verdict.Decision, "the runtime forbids an ambiguous upstream, which no reconnect repairs")
+		require.Equal(t, ReasonConfigurationRequired, verdict.Reason)
+	})
 }
 
 func TestGovernor_TrustedRegistrationRotationMakesCredentialUnusable(t *testing.T) {

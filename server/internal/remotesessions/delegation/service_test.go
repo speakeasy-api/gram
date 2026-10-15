@@ -1283,3 +1283,62 @@ func TestDelegationServiceCheck(t *testing.T) {
 		require.ErrorIs(t, s.Check(t.Context(), b, deny), ErrConfiguration)
 	})
 }
+
+func TestDelegationServiceCheckResolvable(t *testing.T) {
+	t.Parallel()
+	retained := func(t *testing.T, refresh string, ttl time.Duration, edit func(*delegationCredential)) (*Service, Binding, Authorizer) {
+		t.Helper()
+		s, store, p, b, allow := newDelegationUnitFixture(t)
+		signedIn := s.now()
+		require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, signedIn, "id", refresh, ttl), true))
+		s.now = func() time.Time { return signedIn.Add(10 * time.Minute) }
+		if edit != nil {
+			store.mu.Lock()
+			c := store.rows[b]
+			edit(&c)
+			store.rows[b] = c
+			store.mu.Unlock()
+		}
+		return s, b, allow
+	}
+	t.Run("live assertion", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, nil)
+		require.NoError(t, s.CheckResolvable(t.Context(), b, allow))
+	})
+	t.Run("expired assertion with a refresh grant", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, nil)
+		require.NoError(t, s.CheckResolvable(t.Context(), b, allow))
+	})
+	t.Run("expired assertion without a refresh grant", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Minute, nil)
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check alone still reads the registration as current")
+	})
+	t.Run("reauthentication recorded", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) {
+			c.status = "reauthentication_required"
+			c.refresh = ""
+		})
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+		require.NoError(t, s.Check(t.Context(), b, allow), "Check alone does not see a recorded reauthentication")
+	})
+	t.Run("reauthentication recorded with a live assertion", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.status = "reauthentication_required" })
+		require.NoError(t, s.CheckResolvable(t.Context(), b, allow), "Resolve still returns the live assertion")
+	})
+	t.Run("renewal backing off", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Minute, func(c *delegationCredential) { c.retryAfter = time.Unix(1700000000, 0).Add(time.Hour) })
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrTemporary)
+	})
+	t.Run("nothing retained", func(t *testing.T) {
+		t.Parallel()
+		s, _, _, b, allow := newDelegationUnitFixture(t)
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+	})
+}

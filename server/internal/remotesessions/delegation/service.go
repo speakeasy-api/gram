@@ -360,36 +360,67 @@ func (s *Service) RecordOfflineRefusal(ctx context.Context, p Provider, humanID 
 // releasing state derived from an earlier assertion use it so a changed
 // registration revokes that state too.
 func (s *Service) Check(ctx context.Context, b Binding, authority Authorizer) error {
+	_, err := s.check(ctx, b, authority)
+	return err
+}
+
+// CheckResolvable is Check plus whether Resolve could return an assertion now
+// without the human signing in again: a retained assertion still outside
+// Resolve's one-minute safety window, or a refresh grant it may renew with. A
+// renewal in flight or backing off is ErrTemporary. Like Check it never
+// renews, claims or rewrites the credential and never contacts the provider.
+func (s *Service) CheckResolvable(ctx context.Context, b Binding, authority Authorizer) error {
+	c, err := s.check(ctx, b, authority)
+	if err != nil {
+		return err
+	}
+	now := s.now()
+	switch {
+	case c.assertion != "" && c.assertionExpiry.After(now.Add(time.Minute)):
+		return nil
+	case c.status == "reauthentication_required":
+		return ErrReauthentication
+	case c.claim != uuid.Nil || c.retryAfter.After(now):
+		return ErrTemporary
+	case !usableRefresh(c, now):
+		return ErrReauthentication
+	}
+	return nil
+}
+
+// check is Check, returning the retained credential it judged.
+func (s *Service) check(ctx context.Context, b Binding, authority Authorizer) (delegationCredential, error) {
+	var none delegationCredential
 	if authority == nil || !validDelegationBinding(b) {
-		return ErrConfiguration
+		return none, ErrConfiguration
 	}
 	if err := authority.AuthorizeDelegation(ctx, b); err != nil {
 		if definitiveDelegationFailure(err) {
-			return ErrConfiguration
+			return none, ErrConfiguration
 		}
-		return ErrTemporary
+		return none, ErrTemporary
 	}
 	p, err := s.loadBinding(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
 		if definitiveDelegationFailure(err) {
-			return ErrConfiguration
+			return none, ErrConfiguration
 		}
-		return ErrTemporary
+		return none, ErrTemporary
 	}
 	if p == nil || p.DelegationConfigurationHash() == "" {
-		return ErrConfiguration
+		return none, ErrConfiguration
 	}
 	c, err := s.store.load(ctx, b)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrReauthentication
+		return none, ErrReauthentication
 	}
 	if err != nil {
-		return ErrTemporary
+		return none, ErrTemporary
 	}
 	if c.config != p.DelegationConfigurationHash() || c.status == "configuration_failure" {
-		return ErrConfiguration
+		return none, ErrConfiguration
 	}
-	return nil
+	return c, nil
 }
 
 // Resolve returns an assertion only after the caller proves current authority.

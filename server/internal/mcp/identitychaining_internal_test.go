@@ -42,8 +42,8 @@ func (c *recordingChainer) HasUsableCredential(context.Context, identitychaining
 	return false
 }
 
-func (c *recordingChainer) Authorizes(context.Context, identitychaining.Request) bool {
-	return true
+func (c *recordingChainer) RefreshDecision(context.Context, identitychaining.Request) identitychaining.RefreshVerdict {
+	return identitychaining.RefreshVerdict{Decision: identitychaining.RefreshNotChained, RemoteSessionIssuerID: uuid.Nil, Provider: "", Reason: ""}
 }
 
 func (c *recordingChainer) Acquire(_ context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
