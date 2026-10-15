@@ -1357,6 +1357,7 @@ var _ = Service("admin", func() {
 	supportMatrixMethods()
 	supportCoverageMethods()
 	mcpServerHealthMethods()
+	externalMcpMigrationMethods()
 	registryDesign()
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
