@@ -137,6 +137,34 @@ func TestAgentBackedTurnsRunWithPrincipalCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, engine.Require(admitted, connect))
 
+	ownerSelector := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
+	ownerSelector[authz.SelectorKeyProjectID] = project.String()
+	ownerSelectors, err := ownerSelector.MarshalJSON()
+	require.NoError(t, err)
+	removed, err := accessrepo.New(db).DeletePrincipalGrantByIdentity(t.Context(), accessrepo.DeletePrincipalGrantByIdentityParams{
+		OrganizationID: "org-test", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, "user-1"),
+		Scope: string(authz.ScopeMCPConnect), Selectors: ownerSelectors,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), removed)
+	for _, token := range []string{human, autonomous} {
+		ctx, _, err := manager.AuthorizeRuntime(t.Context(), token)
+		require.NoError(t, err, "business permission loss does not invalidate trigger authentication")
+		admitted, err := engine.PrepareContext(ctx)
+		require.NoError(t, err)
+		var denied *oops.ShareableError
+		require.ErrorAs(t, engine.Require(admitted, connect), &denied)
+		require.Equal(t, oops.CodeForbidden, denied.Code, "human and autonomous turns both follow the current owner")
+	}
+	seedMCPConnect(t, db, "user-1", project)
+	for _, token := range []string{human, autonomous} {
+		ctx, _, err := manager.AuthorizeRuntime(t.Context(), token)
+		require.NoError(t, err)
+		admitted, err := engine.PrepareContext(ctx)
+		require.NoError(t, err)
+		require.NoError(t, engine.Require(admitted, connect), "restoration permits already approved business access")
+	}
+
 	deleteAgentScope(t, db, *assistant.AgentID, authz.ScopeMCPConnect)
 	deleteAgentScope(t, db, *assistant.AgentID, authz.ScopeMCPRead)
 	for _, token := range []string{human, autonomous} {

@@ -1,5 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { GatewayCard } from "@/components/mcp/GatewayCard";
+import { OrganizationGatewayButton } from "@/components/mcp/OrganizationGatewayButton";
 import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import {
@@ -69,6 +70,9 @@ export const MCPPage = (): JSX.Element => {
               The servers your agents can reach, what they are built from, and
               the versions those arrive in.
             </Page.Section.Description>
+            <Page.Section.CTA>
+              <OrganizationGatewayButton />
+            </Page.Section.CTA>
           </Page.Section>
           <McpTabs active="servers" />
           <MCPOverview />

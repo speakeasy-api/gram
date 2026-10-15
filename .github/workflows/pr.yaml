@@ -1636,10 +1636,6 @@ jobs:
         shard: [1, 2, 3, 4, 5]
     env:
       GOMAXPROCS: 8
-      # Packages that each get the last shards to themselves, so a slow one
-      # cannot stretch a shard that also carries a normal share of the suite.
-      # Keep the matrix one shard larger than this list per entry.
-      SHARD_ISOLATE: github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis
       # The runner VM is destroyed after the job, and the reaper is the one
       # container that would still publish a host port (a recurring source of
       # "address already in use" container-start flakes).
@@ -1666,7 +1662,7 @@ jobs:
       - name: Install discovery wire-test dependencies on its shard
         shell: bash
         run: |
-          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" -isolate "$SHARD_ISOLATE" -tags=inv.debug ./...)
+          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL}" -tags=inv.debug ./...)
           if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
             aube install --frozen-lockfile --filter . --filter 'dashboard...'
           fi
@@ -1686,7 +1682,7 @@ jobs:
         # other branches) a failure fails the job as before: those runs mix
         # flakes with the branch's own breakage.
         continue-on-error: ${{ github.event_name == 'merge_group' || github.ref == 'refs/heads/main' }}
-        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} --shard-isolate="$SHARD_ISOLATE" -p=2 -race -tags=inv.debug ./...
+        run: mise run test:server --shard=${MATRIX_SHARD}/${STRATEGY_JOB_TOTAL} -p=2 -race -tags=inv.debug ./...
         env:
           STRATEGY_JOB_TOTAL: ${{ strategy.job-total }}
           MATRIX_SHARD: ${{ matrix.shard }}
@@ -2088,6 +2084,11 @@ jobs:
 
       - name: Install dependencies
         run: aube install --frozen-lockfile
+
+      # The hooks-go target's compile step resolves the root Go module's
+      # dependencies, including test dependencies.
+      - name: Restore Go module cache
+        uses: $/.github/workflows/composite/go-mod-cache
 
       - name: Test generated artifact conflict resolution
         run: mise run test:gen-resolve

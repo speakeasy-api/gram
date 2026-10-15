@@ -131,6 +131,46 @@ var _ = Service("userSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionIssuer"}`)
 	})
 
+	Method("getAttachImpact", func() {
+		Description("Preview what attaching a user_session_issuer to an existing MCP server, toolset, or meta MCP server changes for its clients, before calling the matching update. Name exactly one of mcp_server_id, toolset_id, or meta_mcp_server_id; omit user_session_issuer_id to preview detaching the current issuer. Clients and sessions belong to an issuer, so any change of issuer requires the server's clients to authorize again. Advisory only: the update does not require it. Requires the mcp:write access the matching update requires.")
+
+		Payload(func() {
+			Attribute("mcp_server_id", String, "The MCP server the issuer would be attached to.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("toolset_id", String, "The toolset the issuer would be attached to.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("meta_mcp_server_id", String, "The meta MCP server the issuer would be attached to.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("user_session_issuer_id", String, "The issuer to attach. Omit to preview detaching the current issuer.", func() {
+				Format(FormatUUID)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(UserSessionIssuerAttachImpact)
+
+		HTTP(func() {
+			GET("/rpc/userSessionIssuers.getAttachImpact")
+			Param("mcp_server_id")
+			Param("toolset_id")
+			Param("meta_mcp_server_id")
+			Param("user_session_issuer_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getUserSessionIssuerAttachImpact")
+		Meta("openapi:extension:x-speakeasy-name-override", "getAttachImpact")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionIssuerAttachImpact"}`)
+	})
+
 	Method("deleteUserSessionIssuer", func() {
 		Description("Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.")
 
@@ -264,6 +304,46 @@ var _ = Service("organizationUserSessionIssuers", func() {
 		Meta("openapi:operationId", "listOrganizationUserSessionIssuerMcpServers")
 		Meta("openapi:extension:x-speakeasy-name-override", "listMcpServers")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerMcpServers"}`)
+	})
+
+	Method("getAuthenticationHostImpact", func() {
+		Description("Preview moving a user_session_issuer in the caller's organization onto or off the deployment's authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
+			Attribute("use_authentication_host", Boolean, "True to preview moving onto the authentication host, false to preview moving off it.")
+			Required("id", "use_authentication_host")
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuerAuthenticationHostImpact)
+		HTTP(func() {
+			GET("/rpc/organizationUserSessionIssuers.getAuthenticationHostImpact")
+			Param("id")
+			Param("use_authentication_host")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationUserSessionIssuerAuthenticationHostImpact")
+		Meta("openapi:extension:x-speakeasy-name-override", "getAuthenticationHostImpact")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationUserSessionIssuerAuthenticationHostImpact"}`)
+	})
+
+	Method("setAuthenticationHost", func() {
+		Description("Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.")
+		Payload(func() {
+			Attribute("id", String, "The user_session_issuer id.", func() { Format(FormatUUID) })
+			Attribute("use_authentication_host", Boolean, "True to move onto the authentication host, false to move off it.")
+			Required("id", "use_authentication_host")
+			security.SessionPayload()
+		})
+		Result(UserSessionIssuer)
+		HTTP(func() {
+			POST("/rpc/organizationUserSessionIssuers.setAuthenticationHost")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "setOrganizationUserSessionIssuerAuthenticationHost")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAuthenticationHost")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetOrganizationUserSessionIssuerAuthenticationHost"}`)
 	})
 
 	Method("getIssuerDeletePreflight", func() {
@@ -529,6 +609,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 		Enum("pinned_issuer_url_invalid", "host_not_served")
 	})
 	Attribute("project_name", String, "The owning project's name. Present on organization-level reads of project-specific issuers.")
+	Attribute("authentication_host_available", Boolean, "Whether this deployment has an authentication host the issuer can be moved onto. Present on responses, not audit snapshots.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -537,6 +618,25 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	})
 
 	Required("id", "project_id", "organization_id", "slug", "authn_challenge_mode", "session_duration_hours", "client_id_metadata_admission_mode", "authorization_server_mode", "use_authentication_host", "issuer_url_pinned", "created_at", "updated_at")
+})
+
+var UserSessionIssuerAuthenticationHostImpact = Type("UserSessionIssuerAuthenticationHostImpact", func() {
+	Description("What moving a user_session_issuer onto or off the authentication host changes for its clients.")
+	Attribute("issuer", UserSessionIssuer, "The issuer as it is now.")
+	Attribute("authorization_server_before", String, "Where clients sign in now: the shared authorization server's issuer URL, or the origin that announces each MCP server's own authorization server. Empty for a shared issuer this deployment does not serve.")
+	Attribute("authorization_server_after", String, "Where clients sign in after the move, in the same terms.")
+	Attribute("changes", Boolean, "Whether the move changes where clients sign in. False when the issuer is already where it would move.")
+	Attribute("mcp_server_count", Int, "Live MCP servers, toolsets, and meta MCP servers attached to the issuer. Those on a custom domain keep announcing their own authorization servers there.")
+	Required("issuer", "authorization_server_before", "authorization_server_after", "changes", "mcp_server_count")
+})
+
+var UserSessionIssuerAttachImpact = Type("UserSessionIssuerAttachImpact", func() {
+	Description("What attaching a user_session_issuer to an existing MCP server changes for its clients.")
+	Attribute("current_issuer", UserSessionIssuer, "The issuer the server uses now. Absent when it has none.")
+	Attribute("candidate_issuer", UserSessionIssuer, "The issuer that would be attached. Absent when previewing a detach.")
+	Attribute("reauthorization_required", Boolean, "True when the server has an issuer and the change replaces or removes it. Its clients' registrations and sessions belong to the current issuer, so every client must register and authorize again.")
+	Attribute("authorization_server_changes", Boolean, "True when the authorization server the server advertises to clients changes: its own per-server authorization server, a shared authorization server's issuer URL, or none. Anything configured with the current authorization server, such as an identity provider or a federated platform, must be updated.")
+	Required("reauthorization_required", "authorization_server_changes")
 })
 
 var ListUserSessionIssuersResult = Type("ListUserSessionIssuersResult", func() {
@@ -594,6 +694,8 @@ var OrganizationUserSessionIssuerDeletePreflight = Type("OrganizationUserSession
 	Required("client_count", "live_session_count", "mcp_servers", "toolsets", "can_delete")
 	Attribute("ema_binding_count", Int64, "Active identity-chaining bindings that must be explicitly unlinked before deletion.")
 	Required("ema_binding_count")
+	Attribute("withdraws_organization_gateway", Boolean, "True when this is the organization's only organization-level issuer, so deleting it stops serving the organization gateway its members sign in to. Does not block deletion.")
+	Required("withdraws_organization_gateway")
 })
 
 var UserSessionIssuerFieldMismatch = Type("UserSessionIssuerFieldMismatch", func() {

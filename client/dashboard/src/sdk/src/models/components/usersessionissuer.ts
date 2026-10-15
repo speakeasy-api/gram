@@ -58,6 +58,10 @@ export type ClientIdMetadataAdmissionMode = ClosedEnum<
  */
 export type UserSessionIssuer = {
   /**
+   * Whether this deployment has an authentication host the issuer can be moved onto. Present on responses, not audit snapshots.
+   */
+  authenticationHostAvailable?: boolean | undefined;
+  /**
    * chain | interactive.
    */
   authnChallengeMode: string;
@@ -148,6 +152,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    authentication_host_available: z.optional(z.boolean()),
     authn_challenge_mode: z.string(),
     authorization_server_mode: AuthorizationServerMode$inboundSchema,
     authorization_server_unavailable_reason: z.optional(
@@ -178,6 +183,7 @@ export const UserSessionIssuer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "authentication_host_available": "authenticationHostAvailable",
       "authn_challenge_mode": "authnChallengeMode",
       "authorization_server_mode": "authorizationServerMode",
       "authorization_server_unavailable_reason":

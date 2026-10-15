@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -534,7 +536,7 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orggen.
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization user session issuer").LogError(ctx, s.logger)
 	}
 
-	return organizationIssuerDeletePreflight(ctx, s.logger, q, remotesessionsrepo.New(s.db), id, authCtx.ActiveOrganizationID)
+	return organizationIssuerDeletePreflight(ctx, s.logger, q, remotesessionsrepo.New(s.db), s.db, id, authCtx.ActiveOrganizationID)
 }
 
 // DeleteIssuer soft-deletes an organization-owned issuer once no live MCP
@@ -569,7 +571,7 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 		return oops.E(oops.CodeUnexpected, err, "lock organization user session issuer").LogError(ctx, logger)
 	}
 
-	preflight, err := organizationIssuerDeletePreflight(ctx, logger, txRepo, remotesessionsrepo.New(dbtx), id, authCtx.ActiveOrganizationID)
+	preflight, err := organizationIssuerDeletePreflight(ctx, logger, txRepo, remotesessionsrepo.New(dbtx), dbtx, id, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return err
 	}
@@ -620,7 +622,9 @@ type organizationIssuerPreflightQueries interface {
 	ListOrganizationUserSessionIssuerToolsets(context.Context, repo.ListOrganizationUserSessionIssuerToolsetsParams) ([]repo.ListOrganizationUserSessionIssuerToolsetsRow, error)
 }
 
-func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger, q organizationIssuerPreflightQueries, bindings *remotesessionsrepo.Queries, id uuid.UUID, organizationID string) (*orggen.OrganizationUserSessionIssuerDeletePreflight, error) {
+// gatewayDB reads whether the organization gateway is served, so the
+// preflight reports withdrawing it only when deleting this issuer would.
+func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger, q organizationIssuerPreflightQueries, bindings *remotesessionsrepo.Queries, gatewayDB repo.DBTX, id uuid.UUID, organizationID string) (*orggen.OrganizationUserSessionIssuerDeletePreflight, error) {
 	count, err := bindings.CountActiveEMABindingsForUserIssuer(ctx, remotesessionsrepo.CountActiveEMABindingsForUserIssuerParams{IssuerID: id, OrganizationID: organizationID, ProjectID: uuid.Nil})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings").LogError(ctx, logger)
@@ -650,12 +654,21 @@ func organizationIssuerDeletePreflight(ctx context.Context, logger *slog.Logger,
 	for _, row := range toolsetRows {
 		toolsets = append(toolsets, &orggen.OrganizationUserSessionIssuerReference{ID: row.ID.String(), Name: row.Name, ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName})
 	}
+	organization, err := orgrepo.New(gatewayDB).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load organization").LogError(ctx, logger)
+	}
+	gatewayIssuerID, _, err := orggateway.Availability(ctx, gatewayDB, organization)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway issuer").LogError(ctx, logger)
+	}
 	return &orggen.OrganizationUserSessionIssuerDeletePreflight{
-		EmaBindingCount:  count,
-		ClientCount:      int(clients),
-		LiveSessionCount: int(sessions),
-		McpServers:       mcpServers,
-		Toolsets:         toolsets,
-		CanDelete:        count == 0 && len(mcpServers) == 0 && len(toolsets) == 0,
+		EmaBindingCount:              count,
+		ClientCount:                  int(clients),
+		LiveSessionCount:             int(sessions),
+		McpServers:                   mcpServers,
+		Toolsets:                     toolsets,
+		CanDelete:                    count == 0 && len(mcpServers) == 0 && len(toolsets) == 0,
+		WithdrawsOrganizationGateway: gatewayIssuerID == id,
 	}, nil
 }

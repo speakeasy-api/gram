@@ -40,9 +40,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// testServerURL is the test service's server URL, which its shared
-// authorization servers are served on.
-const testServerURL = "http://0.0.0.0"
+const (
+	// testServerURL is the test service's server URL, which its shared
+	// authorization servers are served on.
+	testServerURL = "http://0.0.0.0"
+
+	// testAuthenticationHostURL is the test service's authentication host.
+	testAuthenticationHostURL = "https://auth.example.test"
+)
+
+// testHosts are the hosts the test service serves authorization servers on.
+var testHosts = authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil}
 
 var infra *testenv.Environment
 
@@ -91,6 +99,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
 	t.Helper()
 
+	return newTestServiceWithHosts(t, testHosts, revoker, guardianOpts...)
+}
+
+// newTestServiceWithHosts builds the service on a deployment with the given
+// hosts, such as one without an authentication host.
+func newTestServiceWithHosts(t *testing.T, hosts authserver.Hosts, revoker usersessions.TokenRevoker, guardianOpts ...func(*guardian.Policy)) (context.Context, *testInstance) {
+	t.Helper()
+
 	ctx := t.Context()
 
 	logger := testenv.NewLogger(t)
@@ -130,7 +146,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
 		testServerURL,
-		authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: "", PlatformHosts: nil},
+		hosts,
 		ratelimit.NewRedisStore(redisClient),
 	)
 

@@ -182,6 +182,7 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		FinalRedirectURI:    descriptor.ProviderSetupCompletionURL,
 		ConsentURL:          "",
+		ConsentServer:       "",
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,
 		Authority: networkingress.Authority{

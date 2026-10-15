@@ -19,6 +19,14 @@ import (
 type Service interface {
 	// Get the active organization from the session.
 	Get(context.Context, *GetPayload) (res *Organization, err error)
+	// Get the active organization's gateway: one MCP URL that gives each member
+	// every MCP server in the organization they can reach, signed in through the
+	// organization's own user session issuer. It is served while the organization
+	// owns exactly one organization-level user session issuer, on the platform
+	// host, so not for an organization whose custom domain restricts access to an
+	// IP allowlist, not while an organization admin has turned it off, and not for
+	// a disabled organization. Requires org:read.
+	GetGateway(context.Context, *GetGatewayPayload) (res *OrganizationGateway, err error)
 	// Send a WorkOS invitation for the active organization.
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)
 	// Revoke a pending WorkOS invitation.
@@ -89,7 +97,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [18]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "revokeMemberSignIns", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
+var MethodNames = [19]string{"get", "getGateway", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "revokeMemberSignIns", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -141,6 +149,12 @@ type GenerateWorkOSAdminPortalLinkPayload struct {
 type GenerateWorkOSAdminPortalLinkResult struct {
 	// URL to the WorkOS Admin Portal flow.
 	URL string
+}
+
+// GetGatewayPayload is the payload type of the organizations service
+// getGateway method.
+type GetGatewayPayload struct {
+	SessionToken *string
 }
 
 // GetOnboardingStatusPayload is the payload type of the organizations service
@@ -250,6 +264,17 @@ type Organization struct {
 	CreatedAt string
 	// The last update date of the organization.
 	UpdatedAt string
+}
+
+// OrganizationGateway is the result type of the organizations service
+// getGateway method.
+type OrganizationGateway struct {
+	// Whether the organization is served a gateway.
+	Available bool
+	// The gateway's MCP URL. Set only when available.
+	URL *string
+	// Why the gateway is not served. Set only when not available.
+	UnavailableReason *string
 }
 
 // OrganizationInvitation is the result type of the organizations service
