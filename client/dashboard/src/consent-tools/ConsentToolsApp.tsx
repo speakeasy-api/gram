@@ -597,20 +597,44 @@ export function ConsentToolsApp({
       if (granted) next.delete(t.name);
       else next.add(t.name);
     });
-    setPicked(next);
-    if (!granted) return;
+    if (!granted) {
+      setPicked(next);
+      return;
+    }
     // Dropping picks cannot revoke coverage that came from an annotation, so
-    // clear every grant that reaches into this group as well.
+    // clear every grant that reaches into this group. A grant spans the whole
+    // inventory, so the tools it covered outside the group become picks and
+    // stay in scope.
+    const memberNames = new Set(members.map((t) => t.name));
     const remaining = new Map(annGrants);
     for (const [annotation] of annGrants) {
       if (members.some((t) => t.annotations.includes(annotation))) {
         remaining.delete(annotation);
       }
     }
+    for (const tool of tools) {
+      if (
+        !memberNames.has(tool.name) &&
+        scope.has(tool.name) &&
+        !tool.annotations.some((a) => remaining.has(a))
+      ) {
+        next.add(tool.name);
+      }
+    }
+    setPicked(next);
     setAnnGrants(remaining);
   };
 
   const toggleGroupGrant = () => {
+    if (nav !== "all" && nav !== "none" && annGrants.has(nav)) {
+      const remaining = new Map(annGrants);
+      remaining.delete(nav);
+      setAnnGrants(remaining);
+      const next = new Set(picked);
+      grouped.forEach((t) => next.delete(t.name));
+      setPicked(next);
+      return;
+    }
     // A fully covered group clears, whether picks or a grant cover it, so
     // the checked header never adds a grant the user did not ask for.
     if (nav === "all" || nav === "none" || navGranted) {

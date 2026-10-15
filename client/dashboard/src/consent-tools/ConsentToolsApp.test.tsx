@@ -619,4 +619,59 @@ describe("parsePrefillBootstrap", () => {
     expect(footer).toContain("1 of 3 tools in scope on gateway");
     expect(footer).not.toMatch(/picked/);
   });
+  it("keeps another source's tools when clearing a source covered by a grant", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "github--list_issues",
+          annotations: { readOnlyHint: true },
+          _meta: { "gram.dev/source": "GitHub" },
+        },
+        {
+          name: "docs--search",
+          annotations: { readOnlyHint: true },
+          _meta: { "gram.dev/source": "Docs" },
+        },
+        { name: "docs--write", _meta: { "gram.dev/source": "Docs" } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({ serverName: "gateway" });
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 2/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual(["read_only"]);
+
+    await user.click(screen.getByRole("checkbox", { name: /GitHub/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+    expect(formFieldValues("tools")).toEqual(["docs--search"]);
+  });
+
+  it("clearing one annotation group keeps an overlapping grant", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        {
+          name: "get_thing",
+          annotations: { readOnlyHint: true, idempotentHint: true },
+        },
+        { name: "put_thing", annotations: { idempotentHint: true } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp({
+      prefill: {
+        annotations: [
+          { name: "idempotent", mode: "live" },
+          { name: "read_only", mode: "live" },
+        ],
+        tools: [],
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: /Read/ }));
+
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual(["idempotent"]);
+  });
 });
