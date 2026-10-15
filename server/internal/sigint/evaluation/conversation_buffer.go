@@ -53,7 +53,7 @@ func (b *conversationBuffer) Resolve(ctx context.Context, size int) (classifier.
 		if b.input.history == nil {
 			return empty, fmt.Errorf("%w: conversation history unavailable", ErrInvalidInput)
 		}
-		b.historyRows, b.historyErr = b.input.history.LoadHistory(ctx, b.input.message.GetOrganizationId(), uuid.MustParse(b.input.message.GetProjectId()), b.input.stored, b.maxSize-1)
+		b.historyRows, b.historyErr = b.input.history.LoadHistory(ctx, b.input.message.GetOrganizationId(), uuid.MustParse(b.input.message.GetProjectId()), b.input.stored, b.maxSize-1, maxContentBytes-b.resolvedBytes)
 		b.historyLoaded = true
 	}
 	if b.historyErr != nil {

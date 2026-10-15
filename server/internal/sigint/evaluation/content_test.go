@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +45,7 @@ func TestInputResolvesFilesystemWriterLocator(t *testing.T) {
 	require.NoError(t, w.Close())
 
 	row.ContentRaw = nil
-	row.ContentAssetUrl = conv.ToPGText(locator.String())
+	row.ContentAssetUrl = locator.String()
 
 	got, err := inputWithBudget(t.Context(), store, m.GetProjectId(), row, maxContentBytes)
 	require.NoError(t, err)
@@ -55,7 +54,7 @@ func TestInputResolvesFilesystemWriterLocator(t *testing.T) {
 	testenv.RequireYAMLGolden(t, "testdata/state/filesystem-content.golden.yaml", encoded)
 
 	for _, uri := range []string{"file:another-project/content.json", "file:" + m.GetProjectId() + "/../content.json", "file:" + m.GetProjectId() + "/%2e%2e/content.json"} {
-		row.ContentAssetUrl = conv.ToPGText(uri)
+		row.ContentAssetUrl = uri
 		_, err := inputWithBudget(t.Context(), store, m.GetProjectId(), row, maxContentBytes)
 		var failed *permanentError
 		require.ErrorAs(t, err, &failed)
@@ -94,7 +93,7 @@ func TestInputNullOriginalContentIsOmitted(t *testing.T) {
 			row := targetContent(storedMessage(m))
 			uri := "gs://test-bucket/" + m.GetProjectId() + "/content.json"
 			if spilled {
-				row.ContentAssetUrl = conv.ToPGText(uri)
+				row.ContentAssetUrl = uri
 			} else {
 				row.ContentRaw = []byte("null")
 			}

@@ -31,7 +31,7 @@ type windowMessages struct {
 	err     error
 }
 
-func (s *windowMessages) LoadHistory(_ context.Context, _ string, _ uuid.UUID, _ repo.LoadEvaluationMessagesRow, limit int) ([]repo.LoadEvaluationHistoryRow, error) {
+func (s *windowMessages) LoadHistory(_ context.Context, _ string, _ uuid.UUID, _ repo.LoadEvaluationMessagesRow, limit, _ int) ([]repo.LoadEvaluationHistoryRow, error) {
 	s.calls++
 	s.limits = append(s.limits, limit)
 	return s.history[:min(limit, len(s.history))], s.err
@@ -139,6 +139,24 @@ func TestWindowHistoryFailureRetriesAfterPublishingTargetOnly(t *testing.T) {
 	h.messages = &windowMessages{storedMessages: storedMessages{target.ID: target}, err: errors.New("history unavailable")}
 	require.ErrorContains(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}), "history unavailable")
 	require.Len(t, pub.readings, 1)
+}
+
+func TestWindowOverflowMarkerDoesNotPreventSmallerReading(t *testing.T) {
+	t.Parallel()
+	m := message()
+	definitions := partialSensors()
+	definitions[0].InputStrategy, definitions[0].WindowSize = InputStrategySlidingWindow, 5
+	definitions[1].InputStrategy, definitions[1].WindowSize = InputStrategySlidingWindow, 2
+	c := classifiertest.NewMock(t)
+	c.On("Classify", mock.Anything, mock.Anything).Return(partialResult(false)).Once()
+	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
+	target := storedMessage(m)
+	prior := targetContent(storedMessage(message()))
+	oversized := repo.LoadEvaluationHistoryRow{ID: uuid.New(), ContentTooLarge: true}
+	h.messages = &windowMessages{storedMessages: storedMessages{target.ID: target}, history: []repo.LoadEvaluationHistoryRow{prior, oversized}}
+	require.NoError(t, h.Handle(t.Context(), m, gcp.MessageMetadata{}))
+	require.Len(t, pub.readings, 1)
+	require.Equal(t, "other", pub.readings[0].GetSensorId())
 }
 
 func TestWindowAggregateContentLimit(t *testing.T) {

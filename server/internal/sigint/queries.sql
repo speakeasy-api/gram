@@ -384,7 +384,48 @@ WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
 -- name: LoadEvaluationHistory :many
 -- Anchor to the target snapshot, never to the latest message in the conversation.
 -- Filter system messages before LIMIT so they do not consume window capacity.
-SELECT m.id, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
+-- Bound the cumulative inline payload before transferring it to the application.
+-- Keep overflow rows as markers: skipping them would change window membership.
+-- Reserve eight bytes per attachment locator for array element framing.
+WITH candidates AS MATERIALIZED (
+    SELECT m.id, m.project_id, m.chat_id, m.created_at, m.seq,
+           m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls,
+           m.origin, m.external_message_id
+    FROM chat_messages m
+    JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+    JOIN projects p ON p.id = m.project_id
+    WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
+      AND p.deleted IS FALSE AND c.deleted IS FALSE
+      AND m.role <> 'system'
+      AND m.chat_id = @chat_id AND m.generation = @generation
+      AND m.id <> @target_id
+      AND (m.created_at, m.seq) < (@target_created_at::timestamptz, @target_seq::bigint)
+    ORDER BY m.created_at DESC, m.seq DESC
+    LIMIT @history_limit
+), sized AS (
+    SELECT m.*,
+           (octet_length(m.role)::bigint + octet_length(m.content)::bigint
+            + COALESCE(octet_length(m.content_raw::text), 0)::bigint
+            + COALESCE(octet_length(m.content_asset_url), 0)::bigint
+            + COALESCE(octet_length(m.tool_calls::text), 0)::bigint
+            + COALESCE((SELECT sum(octet_length(cp.content_asset_url)::bigint + 8)
+                        FROM chat_content_parts cp
+                        WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
+                          AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE), 0)
+           ) AS payload_bytes
+    FROM candidates m
+), bounded AS (
+    SELECT m.*,
+           (sum(payload_bytes) OVER (ORDER BY created_at DESC, seq DESC ROWS UNBOUNDED PRECEDING)
+            > @content_budget::bigint)::boolean AS content_too_large
+    FROM sized m
+)
+SELECT m.id,
+       (CASE WHEN m.content_too_large THEN '' ELSE m.role END)::text AS role,
+       (CASE WHEN m.content_too_large THEN '' ELSE m.content END)::text AS content,
+       (CASE WHEN m.content_too_large THEN NULL ELSE m.content_raw END)::jsonb AS content_raw,
+       (CASE WHEN m.content_too_large THEN '' ELSE COALESCE(m.content_asset_url, '') END)::text AS content_asset_url,
+       (CASE WHEN m.content_too_large THEN NULL ELSE m.tool_calls END)::jsonb AS tool_calls,
        COALESCE(m.origin = 'anthropic-inference' AND (
          m.external_message_id LIKE '%/block:%' OR EXISTS (
            SELECT 1 FROM chat_messages sibling
@@ -393,18 +434,11 @@ SELECT m.id, m.role, m.content, m.content_raw, m.content_asset_url, m.tool_calls
              AND sibling.external_message_id = m.external_message_id || '/block:0'
          )
        ), false)::boolean AS row_local_content,
-       ARRAY(SELECT cp.content_asset_url FROM chat_content_parts cp
+        CASE WHEN m.content_too_large THEN ARRAY[]::text[] ELSE
+        ARRAY(SELECT cp.content_asset_url FROM chat_content_parts cp
              WHERE cp.project_id = m.project_id AND cp.chat_id = m.chat_id
                AND cp.parent_chat_message_id = m.id AND cp.deleted IS FALSE
-             ORDER BY cp.created_at, cp.id)::text[] AS attachment_uris
-FROM chat_messages m
-JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
-JOIN projects p ON p.id = m.project_id
-WHERE m.project_id = @project_id::uuid AND p.organization_id = @organization_id
-  AND p.deleted IS FALSE AND c.deleted IS FALSE
-  AND m.role <> 'system'
-  AND m.chat_id = @chat_id AND m.generation = @generation
-  AND m.id <> @target_id
-  AND (m.created_at, m.seq) < (@target_created_at::timestamptz, @target_seq::bigint)
-ORDER BY m.created_at DESC, m.seq DESC
-LIMIT @history_limit;
+              ORDER BY cp.created_at, cp.id)::text[] END AS attachment_uris,
+        m.content_too_large
+FROM bounded m
+ORDER BY m.created_at DESC, m.seq DESC;

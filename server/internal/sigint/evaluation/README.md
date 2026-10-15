@@ -45,10 +45,14 @@ projects are acknowledged; database failures nack the affected tenant's deliveri
 The adapter owns the `{role, content, parts}` projection. Asset reads occur only
 after entitlement and runnable sensors have been established.
 
-Both message queries select explicit columns. History returns only the message
-ID, role, content representations, tool calls, row-local-content flag and attachment
-locators. The target lookup additionally selects identity, ordering and attribution
-fields needed to anchor the window and publish readings.
+Both message queries select explicit columns. History returns the message ID,
+role, content representations, tool calls, row-local-content flag, attachment
+locators and an overflow marker. PostgreSQL measures the cumulative inline payload
+of the selected predecessors against the remaining content budget before returning
+payloads. Over-budget rows retain their IDs and positions but omit content and
+locators, so larger windows fail rather than silently skipping oversized turns.
+The target lookup additionally selects identity, ordering and attribution fields
+needed to anchor the window and publish readings.
 
 `Source.Load` receives the event kind alongside organization and project. The
 repository currently selects configuration only for `conversation.message`;
@@ -115,7 +119,9 @@ among matched, runnable sensors; each group resolves its slice while preparing
 classifier state. The target is resolved before any groups run, so target errors
 are handled once. History is fetched lazily once, with a limit of buffer capacity
 minus one. Resolved content is reused across ascending window sizes within the
-16 MiB budget. Failures in older content affect only larger slices, and a history
+16 MiB payload budget. This is not an exact heap ceiling: persisted target rows,
+decoded objects, metadata and encoding copies also consume memory. Failures in
+older content affect only larger slices, and a history
 lookup failure does not prevent target-only readings. Redelivery creates a fresh
 buffer. The classifier contract remains questions plus state. Definition hashes
 include strategy, size and the versioned target-framing contract.

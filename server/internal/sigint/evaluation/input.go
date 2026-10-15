@@ -13,7 +13,8 @@ import (
 // Adapters wrap this sentinel for malformed or unsupported source payloads.
 var ErrInvalidInput = errors.New("invalid evaluation input")
 
-// maxContentBytes caps resolved classifier input at 16 MiB to bound per-event memory.
+// maxContentBytes caps resolved classifier input at 16 MiB. History transfers
+// share this payload budget; decoded objects and encoding copies add heap overhead.
 const maxContentBytes = 16 << 20
 
 // Event carries tenant scope, stable source identity, and observed attribution.

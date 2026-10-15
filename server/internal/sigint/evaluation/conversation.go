@@ -26,16 +26,18 @@ type MessageSource interface {
 }
 
 // HistorySource resolves non-system predecessors of a persisted target snapshot,
-// newest first. System messages do not consume the history limit.
+// newest first. System messages do not consume the history limit. Inline payloads
+// beyond the byte budget are replaced by ContentTooLarge markers before transfer.
 type HistorySource interface {
-	LoadHistory(context.Context, string, uuid.UUID, repo.LoadEvaluationMessagesRow, int) ([]repo.LoadEvaluationHistoryRow, error)
+	LoadHistory(context.Context, string, uuid.UUID, repo.LoadEvaluationMessagesRow, int, int) ([]repo.LoadEvaluationHistoryRow, error)
 }
 
 // LoadHistory pins context to the target's tenant, conversation, generation and timestamp.
-func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.UUID, target repo.LoadEvaluationMessagesRow, limit int) ([]repo.LoadEvaluationHistoryRow, error) {
+func (r *Repository) LoadHistory(ctx context.Context, org string, project uuid.UUID, target repo.LoadEvaluationMessagesRow, limit, budget int) ([]repo.LoadEvaluationHistoryRow, error) {
 	rows, err := repo.New(r.db).LoadEvaluationHistory(ctx, repo.LoadEvaluationHistoryParams{
 		OrganizationID: org, ProjectID: project, ChatID: target.ChatID, Generation: target.Generation,
 		TargetID: target.ID, TargetCreatedAt: target.CreatedAt, TargetSeq: target.Seq, HistoryLimit: conv.SafeInt32(limit),
+		ContentBudget: int64(budget),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("load evaluation history: %w", err)

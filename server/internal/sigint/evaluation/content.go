@@ -117,29 +117,37 @@ type messageState struct {
 // targetContent projects the target onto the same content-only shape as history.
 // Target attribution and the ordering anchor remain on the conversation input.
 func targetContent(row repo.LoadEvaluationMessagesRow) repo.LoadEvaluationHistoryRow {
+	var assetURL string
+	if row.ContentAssetUrl.Valid {
+		assetURL = row.ContentAssetUrl.String
+	}
 	return repo.LoadEvaluationHistoryRow{
 		ID:              row.ID,
 		Role:            row.Role,
 		Content:         row.Content,
 		ContentRaw:      row.ContentRaw,
-		ContentAssetUrl: row.ContentAssetUrl,
+		ContentAssetUrl: assetURL,
 		ToolCalls:       row.ToolCalls,
 		RowLocalContent: row.RowLocalContent,
 		AttachmentUris:  row.AttachmentUris,
+		ContentTooLarge: false,
 	}
 }
 
 func inputWithBudget(ctx context.Context, reader BlobReader, project string, m repo.LoadEvaluationHistoryRow, budget int) (classifier.Entry, error) {
 	var empty classifier.Entry
+	if m.ContentTooLarge {
+		return empty, permanent("content_too_large")
+	}
 	remaining := budget - len(m.Content) - len(m.ToolCalls)
 	var content any
-	hasOriginal := !m.RowLocalContent && (len(m.ContentRaw) > 0 || m.ContentAssetUrl.Valid && m.ContentAssetUrl.String != "")
+	hasOriginal := !m.RowLocalContent && (len(m.ContentRaw) > 0 || m.ContentAssetUrl != "")
 	if hasOriginal {
 		data := m.ContentRaw
 		if len(data) == 0 {
 			var err error
 
-			data, err = readReference(ctx, reader, project, m.ContentAssetUrl.String, &remaining)
+			data, err = readReference(ctx, reader, project, m.ContentAssetUrl, &remaining)
 			if err != nil {
 				return empty, err
 			}

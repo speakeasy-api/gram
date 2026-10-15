@@ -1,6 +1,7 @@
 package sigint_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -119,35 +120,112 @@ func TestEvaluationHistoryTimestampOrderingAndIsolation(t *testing.T) {
 	require.Len(t, rows, 1, "batch loading also excludes system content")
 	require.Equal(t, ids[4], rows[0].ID)
 	target := rows[0]
-	history, err := source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 9)
+	history, err := source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 9, 1024)
 	require.NoError(t, err)
 	require.Len(t, history, 4)
 	for i, want := range []uuid.UUID{ids[3], ids[0], ids[2], ids[9]} {
 		require.Equal(t, want, history[i].ID)
 	}
-	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 1)
+	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 1, 1024)
 	require.NoError(t, err)
 	require.Len(t, history, 1)
 	require.Equal(t, ids[3], history[0].ID)
-	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 4)
+	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 4, 1024)
 	require.NoError(t, err)
 	require.Len(t, history, 4, "system messages are filtered before the window limit")
 	require.Equal(t, ids[9], history[3].ID)
-	history, err = source.LoadHistory(ctx, "another-org", project, target, 9)
+	history, err = source.LoadHistory(ctx, "another-org", project, target, 9, 1024)
 	require.NoError(t, err)
 	require.Empty(t, history)
-	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, uuid.New(), target, 9)
+	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, uuid.New(), target, 9, 1024)
 	require.NoError(t, err)
 	require.Empty(t, history)
 	// A late-arriving predecessor belongs in the next evaluation, even with a newer sequence.
 	late, err := queries.CreateExternalChatMessage(ctx, chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: chat, ProjectID: project, Role: "tool", Content: "late context", CreatedAt: conv.ToPGTimestamptz(base.Add(3*time.Minute + 30*time.Second))})
 	require.NoError(t, err)
-	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 9)
+	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 9, 1024)
 	require.NoError(t, err)
 	require.Len(t, history, 5)
 	require.Equal(t, late, history[0].ID)
 	require.NoError(t, fixtures.ForceSoftDeleteChat(ctx, chat))
-	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 9)
+	history, err = source.LoadHistory(ctx, auth.ActiveOrganizationID, project, target, 9, 1024)
 	require.NoError(t, err)
 	require.Empty(t, history)
+}
+
+func TestEvaluationHistoryBoundsPayloadBeforeTransfer(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		content    string
+		raw        []byte
+		toolCalls  []byte
+		assetURL   string
+		attachment string
+		fits       bool
+	}{
+		{name: "text", content: strings.Repeat("x", 2048)},
+		{name: "raw JSON", raw: []byte(`"` + strings.Repeat("x", 2048) + `"`)},
+		{name: "tool calls", toolCalls: []byte(`"` + strings.Repeat("x", 2048) + `"`)},
+		{name: "asset locator", assetURL: strings.Repeat("x", 2048)},
+		{name: "attachment locator", attachment: strings.Repeat("x", 2048)},
+		{name: "UTF-8 bytes", content: strings.Repeat("é", 80)},
+		{name: "cumulative budget", content: strings.Repeat("x", 120)},
+		{name: "exact boundary", content: strings.Repeat("x", 116), fits: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			auth, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			project := *auth.ProjectID
+			chat, err := testrepo.New(ti.conn).SeedCapturedAgentChatFixture(ctx, testrepo.SeedCapturedAgentChatFixtureParams{ID: uuid.New(), ProjectID: project, OrganizationID: auth.ActiveOrganizationID})
+			require.NoError(t, err)
+			queries := chatrepo.New(ti.conn)
+			base := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+			var ids []uuid.UUID
+			for i := range 4 {
+				params := chatrepo.CreateExternalChatMessageParams{ID: uuid.New(), ChatID: chat, ProjectID: project, Role: "user", Content: "near", CreatedAt: conv.ToPGTimestamptz(base.Add(time.Duration(i) * time.Minute))}
+				if i == 1 {
+					params.Content, params.ContentRaw, params.ToolCalls = tc.content, tc.raw, tc.toolCalls
+					params.ContentAssetUrl = conv.ToPGText(tc.assetURL)
+				}
+				id, err := queries.CreateExternalChatMessage(ctx, params)
+				require.NoError(t, err)
+				ids = append(ids, id)
+			}
+			if tc.attachment != "" {
+				_, err := queries.CreateChatContentPart(ctx, []chatrepo.CreateChatContentPartParams{{ChatID: chat, ProjectID: project, Kind: "text", ContentAssetUrl: tc.attachment, ParentChatMessageID: uuid.NullUUID{UUID: ids[1], Valid: true}, CreatedAt: conv.ToPGTimestamptz(base)}})
+				require.NoError(t, err)
+			}
+			source := evaluation.NewRepository(ti.conn)
+			targets, err := source.LoadMessages(ctx, auth.ActiveOrganizationID, project, []uuid.UUID{ids[3]})
+			require.NoError(t, err)
+			require.Len(t, targets, 1)
+			// Nearest row costs eight bytes (role plus text); the boundary row
+			// costs 120. Older rows must remain markers once the budget is spent.
+			history, err := source.LoadHistory(ctx, auth.ActiveOrganizationID, project, targets[0], 3, 128)
+			require.NoError(t, err)
+			require.Len(t, history, 3)
+			require.Equal(t, "near", history[0].Content)
+			require.False(t, history[0].ContentTooLarge)
+			for i, row := range history {
+				require.Equal(t, ids[2-i], row.ID, "oversized turns retain their position")
+				if i == 0 || i == 1 && tc.fits {
+					require.False(t, row.ContentTooLarge)
+					continue
+				}
+				require.True(t, row.ContentTooLarge)
+				require.Empty(t, row.Role)
+				require.Empty(t, row.Content)
+				require.Empty(t, row.ContentRaw)
+				require.Empty(t, row.ToolCalls)
+				require.Empty(t, row.ContentAssetUrl)
+				require.Empty(t, row.AttachmentUris)
+			}
+			if tc.fits {
+				require.Equal(t, tc.content, history[1].Content)
+			}
+		})
+	}
 }
