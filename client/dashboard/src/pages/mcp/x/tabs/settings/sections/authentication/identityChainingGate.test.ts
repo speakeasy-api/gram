@@ -29,7 +29,6 @@ describe("identityChainingProviders", () => {
   it("shows for an issuer that trusts an identity provider sign-in client", () => {
     expect(identityChainingProviders(trusting, rollouts)).toEqual({
       external: true,
-      speakeasy: false,
     });
   });
 
@@ -39,16 +38,16 @@ describe("identityChainingProviders", () => {
         ...rollouts,
         speakeasyIssuer: speakeasy("enabled"),
       }),
-    ).toEqual({ external: false, speakeasy: true });
+    ).toEqual({ external: false });
   });
 
-  it("offers both when both can vouch", () => {
+  it("uses the identity provider when the sign-in trusts one, even with Speakeasy on", () => {
     expect(
       identityChainingProviders(trusting, {
         ...rollouts,
         speakeasyIssuer: speakeasy("signing_paused"),
       }),
-    ).toEqual({ external: true, speakeasy: true });
+    ).toEqual({ external: true });
   });
 
   it.each([
@@ -107,7 +106,7 @@ describe("identityChainingProviders", () => {
           ...rollouts,
           speakeasyIssuer: speakeasy(state),
         }),
-      ).toEqual({ external: false, speakeasy: true });
+      ).toEqual({ external: false });
     },
   );
 });

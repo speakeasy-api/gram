@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityChainingSection } from "./IdentityChainingSection";
 
@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({
   >,
   clientsLoading: false,
   url: "https://mcp.vendor.example.com/mcp" as string | undefined,
+  sourceError: false,
+  hash: "",
+  refetch: vi.fn(),
 }));
 
 vi.mock("./authTarget", () => ({
@@ -22,11 +25,19 @@ vi.mock("./authTarget", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
-  useUserSessionIssuer: () => ({ data: state.issuer }),
+  useUserSessionIssuer: () => ({
+    data: state.issuer,
+    isLoading: false,
+    isError: false,
+    refetch: state.refetch,
+  }),
 }));
 vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
   useGetRemoteMcpServer: () => ({
     data: state.url ? { url: state.url } : undefined,
+    isLoading: !state.url && !state.sourceError,
+    isError: state.sourceError,
+    refetch: state.refetch,
   }),
 }));
 vi.mock("@/lib/remote-identity", () => ({
@@ -45,6 +56,7 @@ vi.mock("react-router", () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
+  useLocation: () => ({ hash: state.hash }),
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: (flag: string) => ({
@@ -58,11 +70,11 @@ vi.mock("@/lib/featureFlags", () => ({
   },
 }));
 vi.mock("./useSpeakeasyIssuerStatus", () => ({
-  useSpeakeasyIssuerStatus: () => ({ data: state.speakeasy }),
+  useSpeakeasyIssuerStatus: () => ({ data: state.speakeasy, isLoading: false }),
 }));
 vi.mock("./IdentityChainingField", () => ({
   IdentityChainingField: (props: {
-    providers: { external: boolean; speakeasy: boolean };
+    providers: { external: boolean };
     speakeasyIssuerUrl?: string;
     resource: string;
   }) => (
@@ -91,6 +103,9 @@ beforeEach(() => {
   state.flags = { oktaConnections: true, emaProviders: true };
   state.clientsLoading = false;
   state.url = "https://mcp.vendor.example.com/mcp";
+  state.sourceError = false;
+  state.hash = "";
+  state.refetch.mockReset();
 });
 
 afterEach(cleanup);
@@ -107,7 +122,7 @@ describe("IdentityChainingSection", () => {
     expect(
       JSON.parse(screen.getByTestId("identity-chaining").textContent!),
     ).toEqual({
-      providers: { external: false, speakeasy: true },
+      providers: { external: false },
       speakeasyIssuerUrl: "https://speakeasy.example.com/idp",
       resource: "https://mcp.vendor.example.com/mcp",
     });
@@ -119,7 +134,8 @@ describe("IdentityChainingSection", () => {
     expect(screen.queryByTestId("identity-chaining")).toBeNull();
     expect(
       screen.getByText(/needs an organization-level sign-in/).textContent,
-    ).toContain("team-only, which belongs to this project");
+    ).toContain("This server’s sign-in belongs to this project.");
+    expect(screen.queryByText(/team-only/)).toBeNull();
     expect(
       screen
         .getByRole("link", { name: "Change in Sessions" })
@@ -168,6 +184,17 @@ describe("IdentityChainingSection", () => {
         state.flags = { oktaConnections: false, emaProviders: false };
       },
     ],
+  ])("is hidden when %s", (_name, arrange) => {
+    arrange();
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.queryByRole("heading", {
+        name: "Enterprise Managed Authorization",
+      }),
+    ).toBe(null);
+  });
+
+  it.each([
     [
       "the remote URL hasn't loaded",
       () => {
@@ -180,13 +207,46 @@ describe("IdentityChainingSection", () => {
         state.clientsLoading = true;
       },
     ],
-  ])("is hidden when %s", (_name, arrange) => {
+  ])("holds its place while %s", (_name, arrange) => {
     arrange();
     render(<IdentityChainingSection mcpServer={server} />);
     expect(
-      screen.queryByRole("heading", {
-        name: "Enterprise Managed Authorization",
-      }),
-    ).toBe(null);
+      screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe(
+      "Loading Enterprise Managed Authorization…",
+    );
+    expect(screen.queryByTestId("identity-chaining")).toBeNull();
+  });
+
+  it("says when it couldn't load, with a retry", () => {
+    state.url = undefined;
+    state.sourceError = true;
+    render(<IdentityChainingSection mcpServer={server} />);
+    expect(
+      screen.getByText(
+        "Couldn’t load Enterprise Managed Authorization for this server.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.refetch).toHaveBeenCalled();
+  });
+
+  it("scrolls to itself once it has loaded on a deep link", () => {
+    state.hash = "#identity-chaining";
+    state.clientsLoading = true;
+    const scroll = vi.fn<(arg?: boolean | ScrollIntoViewOptions) => void>();
+    Element.prototype.scrollIntoView = scroll;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 1;
+    });
+    const { rerender } = render(<IdentityChainingSection mcpServer={server} />);
+    expect(scroll).not.toHaveBeenCalled();
+    state.clientsLoading = false;
+    rerender(<IdentityChainingSection mcpServer={server} />);
+    expect(scroll).toHaveBeenCalledTimes(1);
+    rerender(<IdentityChainingSection mcpServer={server} />);
+    expect(scroll).toHaveBeenCalledTimes(1);
   });
 });

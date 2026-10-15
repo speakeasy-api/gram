@@ -1,8 +1,8 @@
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 
-/** Which sources can vouch for a person's sign-in on an identity chaining issuer. */
-export type ChainingProviders = { external: boolean; speakeasy: boolean };
+/** Whether an external identity provider vouches for this sign-in; otherwise Speakeasy does. */
+export type ChainingProviders = { external: boolean };
 
 // Set-up issuers that are paused, keyless or turned off keep bindings manageable;
 // the order shows why Speakeasy can't serve.
@@ -13,9 +13,7 @@ const SPEAKEASY_ON: ReadonlySet<InternalSessionIssuer["state"]> = new Set([
   "disabled",
 ]);
 
-export function speakeasyIssuerOn(
-  issuer: InternalSessionIssuer | undefined,
-): boolean {
+function speakeasyIssuerOn(issuer: InternalSessionIssuer | undefined): boolean {
   return !!issuer && SPEAKEASY_ON.has(issuer.state);
 }
 
@@ -32,7 +30,7 @@ export function identityChainingProviders(
     speakeasyIssuer,
   }: {
     externalRollout: boolean;
-    /** Speakeasy only serves vendors whose saved provider order names it. */
+    /** Speakeasy vouches where the sign-in has no identity provider, or where a saved order names it. */
     speakeasyRollout: boolean;
     speakeasyIssuer: InternalSessionIssuer | undefined;
   },
@@ -43,7 +41,7 @@ export function identityChainingProviders(
     !!issuer.trustedRemoteSessionIssuerId &&
     !!issuer.trustedRemoteSessionClientId;
   const speakeasy = speakeasyRollout && speakeasyIssuerOn(speakeasyIssuer);
-  return external || speakeasy ? { external, speakeasy } : undefined;
+  return external || speakeasy ? { external } : undefined;
 }
 
 /** Whether the issuer's sign-in trusts an external identity provider at all. */

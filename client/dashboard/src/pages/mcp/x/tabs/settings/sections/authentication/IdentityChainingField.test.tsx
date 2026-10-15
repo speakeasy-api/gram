@@ -24,11 +24,35 @@ const state = vi.hoisted(() => ({
   calls: [] as string[],
   prepare: vi.fn(),
   unlink: vi.fn(),
+  prepareResult: undefined as Record<string, unknown> | undefined,
+  oktaIssuerId: undefined as string | undefined,
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ isFetching: false, data: read.data }),
-  useQueryClient: () => ({}),
+  useQueryClient: () => ({
+    setQueryData: (
+      _key: unknown,
+      next: (prev: Record<string, unknown>) => Record<string, unknown>,
+    ) => {
+      read.data = next(read.data);
+    },
+    invalidateQueries: () => Promise.resolve(),
+  }),
 }));
+vi.mock("@/pages/org/identity-provider/services/useEmaServices", () => ({
+  useOktaIssuerId: () => state.oktaIssuerId,
+}));
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js",
+  () => ({
+    invalidateAllOrganizationRemoteSessionIssuerEMAServices: () =>
+      Promise.resolve(),
+  }),
+);
+vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
+  invalidateAllRemoteSessionClients: () => Promise.resolve(),
+}));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
 }));
@@ -71,8 +95,11 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/components/setup-steps/StepBlocks", () => ({
   CopyableValue: ({ value }: { value?: string }) => <code>{value}</code>,
 }));
+const prmMock = vi.hoisted(() => ({
+  value: {} as { metadata?: { authorizationServers?: string[] } },
+}));
 vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
-  useProtectedResourceMetadata: () => ({}),
+  useProtectedResourceMetadata: () => prmMock.value,
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -81,11 +108,14 @@ vi.mock("@gram/client/react-query/remoteSessionIssuer.js", () => ({
   useRemoteSessionIssuer: () => ({}),
 }));
 vi.mock("@gram/client/react-query/remoteSessionClientsPrepareEMA.js", () => ({
-  useRemoteSessionClientsPrepareEMAMutation: () => ({
+  useRemoteSessionClientsPrepareEMAMutation: (options: {
+    onSuccess: (result: unknown) => void;
+  }) => ({
     isPending: pending.prepare,
     mutate: (variables: unknown) => {
       state.calls.push("prepare");
       state.prepare(variables);
+      if (state.prepareResult) options.onSuccess(state.prepareResult);
     },
   }),
 }));
@@ -107,7 +137,7 @@ const clients = ["first", "second"].map((id) => ({
 })) as RemoteSessionClient[];
 
 function field(
-  providers: ChainingProviders = { external: true, speakeasy: false },
+  providers: ChainingProviders = { external: true },
   userSessionIssuer = {
     id: "session-issuer",
     trustedRemoteSessionIssuerId: "idp",
@@ -141,6 +171,9 @@ beforeEach(() => {
   state.calls.length = 0;
   state.prepare.mockReset();
   state.unlink.mockReset();
+  state.prepareResult = undefined;
+  state.oktaIssuerId = undefined;
+  prmMock.value = {};
 });
 
 afterEach(() => {
@@ -169,6 +202,42 @@ describe("identity chaining client selection", () => {
       );
     },
   );
+});
+
+describe("identity chaining client for this service", () => {
+  it("only offers clients registered with this server's authorization server", () => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com/"] },
+    };
+    issuerNames.items = [
+      { id: "tracker", name: "Tracker", issuer: "https://tracker.example.com" },
+      { id: "wiki", name: "Wiki", issuer: "https://wiki.example.com" },
+    ];
+    render(
+      <IdentityChainingField
+        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+        providers={{ external: false }}
+        linkedClients={
+          [
+            {
+              id: "wiki-client",
+              clientId: "wiki-client",
+              remoteSessionIssuerId: "wiki",
+            },
+            {
+              id: "tracker-client",
+              clientId: "tracker-client",
+              remoteSessionIssuerId: "tracker",
+            },
+          ] as RemoteSessionClient[]
+        }
+        resource="https://example.com/mcp"
+      />,
+    );
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByText("tracker-client")).toBeTruthy();
+    expect(screen.queryByText("wiki-client")).toBeNull();
+  });
 });
 
 describe("identity chaining bound client", () => {
@@ -214,7 +283,7 @@ describe("identity chaining bound client", () => {
 });
 
 describe("identity chaining vouched for by Speakeasy", () => {
-  const speakeasyOnly = { external: false, speakeasy: true };
+  const speakeasyOnly = { external: false };
   const plainIssuer = {
     id: "session-issuer",
     slug: "speakeasy-sign-in",
@@ -280,7 +349,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
     read.data = { ...unlinked, emaProviders: order(okta) };
-    render(field({ external: true, speakeasy: false }, trusting));
+    render(field({ external: true }, trusting));
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(
       within(chain()).getByText("first", { selector: "p, span" }),
@@ -307,8 +376,16 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("walks the chain: sign-in, who vouches, what the vendor trusts, client", () => {
-    read.data = { ...bound("first"), emaProviders: order(okta, speakeasy) };
+    read.data = {
+      ...bound("first"),
+      emaProviders: { ...order(okta, speakeasy), isDefault: false },
+    };
     render(speakeasyField({ userSessionIssuer: trusting }));
+    expect(
+      screen.getByText(
+        "Set by example.com’s saved order. If Okta can’t or won’t vouch for someone, Speakeasy is tried next.",
+      ),
+    ).toBeTruthy();
     const links = within(chain()).getAllByText(
       /^(Sign-in|Vouched for by|example.com trusts|Client)$/,
     );
@@ -318,9 +395,10 @@ describe("identity chaining vouched for by Speakeasy", () => {
       "example.com trusts",
       "Client",
     ]);
-    expect(screen.getByText("(okta-sign-in)").parentElement?.textContent).toBe(
-      "Okta (okta-sign-in)",
-    );
+    expect(
+      within(chain()).getByText("Okta", { selector: "[title='okta-sign-in']" }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/okta-sign-in/)).toBeNull();
     expect(
       screen
         .getByRole("link", { name: "Change in Sessions" })
@@ -354,10 +432,18 @@ describe("identity chaining vouched for by Speakeasy", () => {
     );
   });
 
-  it("waits for the vendor until an assertion has been accepted", () => {
+  it("folds the issuer URL once the vendor trusts a provider, but says Working only for this server", () => {
     read.data = { ...bound("first"), emaProviders: order(speakeasy) };
     const { rerender } = render(speakeasyField());
     expect(screen.getByText("On, not proven yet")).toBeTruthy();
+    expect(trusts()).toEqual([
+      {
+        name: "Speakeasy",
+        accepted: "Not accepted yet",
+        url: "https://speakeasy.example.com/issuer",
+      },
+    ]);
+    // Accepted elsewhere in the organization: the paste step is done.
     read.data = {
       ...bound("first"),
       emaProviders: order({
@@ -366,27 +452,104 @@ describe("identity chaining vouched for by Speakeasy", () => {
       }),
     };
     rerender(speakeasyField());
-    expect(screen.getByText("Working")).toBeTruthy();
-    expect(
-      screen.getByText("example.com accepted a sign-in 2h ago"),
-    ).toBeTruthy();
+    expect(screen.getByText("On, not proven yet")).toBeTruthy();
+    expect(screen.getByText(/already trusts Speakeasy/)).toBeTruthy();
     expect(trusts()).toEqual([
-      {
-        name: "Speakeasy",
-        accepted: "Last worked 2h ago",
-        url: undefined,
-      },
+      { name: "Speakeasy", accepted: "Last worked 2h ago", url: undefined },
     ]);
     expect(screen.queryByText(/admin settings/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Issuer URL" }));
     expect(trusts()[0]?.url).toBe("https://speakeasy.example.com/issuer");
+    // Accepted for this server's own binding.
+    read.data = {
+      ...(read.data as Record<string, unknown>),
+      lastAcceptedAt: new Date(Date.now() - 30 * 60 * 1000),
+    };
+    rerender(speakeasyField());
+    expect(screen.getByText("Working")).toBeTruthy();
+    expect(
+      screen.getByText("example.com accepted a sign-in here 30m ago"),
+    ).toBeTruthy();
   });
+
+  it("keeps the chain after Turn on succeeds", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: order(speakeasy) };
+    state.prepareResult = {
+      state: "ready",
+      bindingId: "binding",
+      clientId: "first",
+      generation: 1,
+      scopes: [],
+    };
+    const { rerender } = render(speakeasyField());
+    fireEvent.click(enableButton());
+    rerender(speakeasyField());
+    expect(screen.getByText("On, not proven yet")).toBeTruthy();
+    expect(vouchers()).toEqual([
+      "Speakeasyfor everyone who signs in to this server",
+    ]);
+    expect(trusts().map((row) => row.name)).toEqual(["Speakeasy"]);
+  });
+
+  it("explains a blocked state in plain words, with the server's detail tucked away", () => {
+    read.data = {
+      ...bound("first"),
+      state: "unknown_grants",
+      remediation: "record grant_types on remote_session_client",
+      emaProviders: order(speakeasy),
+    };
+    render(speakeasyField());
+    expect(screen.getByText("Couldn’t check the client")).toBeTruthy();
+    expect(screen.queryByText("Grants unknown")).toBeNull();
+    expect(screen.queryByText(/remote_session_client/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Technical details" }));
+    expect(screen.getByText(/remote_session_client/)).toBeTruthy();
+  });
+
+  it("only shows organization admins the link to every server", () => {
+    state.orgAdmin = false;
+    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
+    render(speakeasyField());
+    expect(
+      screen.queryByRole("link", {
+        name: "Every server that reaches example.com",
+      }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      "okta",
+      "Fix in Okta",
+      "/org/identity?tab=identity-providers&provider=okta&view=setup",
+    ],
+    [undefined, "Identity providers", "/org/identity?tab=identity-providers"],
+  ])(
+    "links a broken identity provider to where it's fixed (Okta connection %s)",
+    (oktaIssuerId, label, href) => {
+      state.oktaIssuerId = oktaIssuerId;
+      read.data = {
+        ...bound("first"),
+        emaProviders: order({ ...okta, unavailableReason: "deleted" }),
+      };
+      render(speakeasyField({ userSessionIssuer: trusting }));
+      expect(
+        screen.getByRole("link", { name: label }).getAttribute("href"),
+      ).toBe(href);
+    },
+  );
 
   it("names Speakeasy's own sign-in when no identity provider is trusted", () => {
     read.data = { ...bound("first"), emaProviders: order(speakeasy) };
     render(speakeasyField());
-    expect(screen.getByText("Speakeasy’s own sign-in")).toBeTruthy();
-    expect(screen.getByText("(speakeasy-sign-in)")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "This server’s sign-in has no identity provider, so Speakeasy vouches.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Speakeasy’s own sign-in").getAttribute("title"),
+    ).toBe("speakeasy-sign-in");
   });
 
   it("leaves out an identity provider this server's sign-in doesn't use", () => {
@@ -424,7 +587,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(screen.getByText(text)).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: "Speakeasy identity provider" })
+        .getByRole("link", { name: "Fix in Speakeasy" })
         .getAttribute("href"),
     ).toBe("/org/identity?tab=identity-providers&provider=speakeasy");
     expect(

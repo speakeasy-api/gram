@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
 import { RequireScope } from "@/components/require-scope";
-import { type BadgeProps } from "@/components/ui/Badge";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { CopyableValue } from "@/components/setup-steps/StepBlocks";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { StatusDot, type StatusDotTone } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -34,23 +34,26 @@ import { cn } from "@/lib/utils";
 import { useProtectedResourceMetadata } from "@/lib/remote-identity/queries/useProtectedResourceMetadata";
 import {
   acceptanceLabel,
+  issuerDisplayName,
+  providerFixLink,
+  providersBeforeSpeakeasy,
   providerView,
   serviceName,
+  speakeasyFallbackNote,
   trustInstruction,
   type ProviderView,
 } from "@/pages/org/identity-provider/services/emaServiceView";
+import { useOktaIssuerId } from "@/pages/org/identity-provider/services/useEmaServices";
 import {
   emaServiceHref,
   identityProvidersHref,
-  oktaViewHref,
-  speakeasyProviderHref,
 } from "@/pages/org/identity-provider/tabs";
 import { useOrgRoutes } from "@/routes";
 import type { IdentityChainingPreparation } from "@gram/client/models/components/identitychainingpreparation.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
-import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
+import { invalidateAllOrganizationRemoteSessionIssuerEMAServices } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js";
 import {
   useRemoteSessionClientsPrepareEMAMutation,
   type RemoteSessionClientsPrepareEMAMutationVariables,
@@ -77,52 +80,79 @@ import {
 } from "./identityChainingScopes";
 
 type ChainingState = IdentityChainingPreparation["state"];
-type Tone = NonNullable<BadgeProps["variant"]>;
+type Tone = StatusDotTone;
 
-function stateBadge(state: ChainingState): { label: string; variant: Tone } {
+/** A blocked state in plain words, with what to do next. */
+function stateCopy(
+  state: ChainingState,
+  vendor: string,
+): { label: string; next: string; tone: Tone } {
   switch (state) {
     case "ready":
-      return { label: "On", variant: "success" };
+      return { label: "On", next: "", tone: "success" };
     case "unlinked":
-      return { label: "Off", variant: "neutral" };
+      return { label: "Off", next: "", tone: "neutral" };
     case "in_progress":
-      return { label: "Setting up", variant: "information" };
+      return {
+        label: "Setting up",
+        next: "Speakeasy is still setting this up. Check back in a minute.",
+        tone: "information",
+      };
     case "published_acceptance_unverified":
-      return { label: "Published, not verified", variant: "information" };
+      return {
+        label: `Waiting for ${vendor}`,
+        next: `Speakeasy published the client’s settings. ${vendor} hasn’t confirmed them yet; try connecting from your MCP client.`,
+        tone: "information",
+      };
     case "configuration_required":
-      return { label: "Needs configuration", variant: "warning" };
+      return {
+        label: "Needs setup",
+        next: "This server’s client needs a change before this can turn on. Check the client in Identity above.",
+        tone: "warning",
+      };
     case "manual_setup_required":
-      return { label: "Needs manual setup", variant: "warning" };
+      return {
+        label: "Needs a manual step",
+        next: `${vendor} needs the client registered by hand. Register it in ${vendor}’s admin settings, then turn this on again.`,
+        tone: "warning",
+      };
     case "unknown_grants":
-      return { label: "Grants unknown", variant: "warning" };
+      return {
+        label: "Couldn’t check the client",
+        next: "Speakeasy couldn’t tell which sign-in methods the client allows. Confirm its grants below, then turn this on again.",
+        tone: "warning",
+      };
     case "incomplete_metadata":
-      return { label: "Incomplete metadata", variant: "warning" };
+      return {
+        label: `Couldn’t read ${vendor}’s settings`,
+        next: `${vendor} didn’t publish everything Speakeasy needs. Try again later.`,
+        tone: "warning",
+      };
     case "indeterminate":
-      return { label: "Couldn’t tell", variant: "warning" };
+      return {
+        label: "Couldn’t tell",
+        next: "Speakeasy couldn’t confirm the setup. Try again.",
+        tone: "warning",
+      };
     case "transient_failure":
-      return { label: "Temporary failure", variant: "warning" };
+      return {
+        label: "Temporary failure",
+        next: "Something failed for a moment. Try again shortly.",
+        tone: "warning",
+      };
     case "unsupported_profile":
-      return { label: "Not supported", variant: "destructive" };
+      return {
+        label: "Not supported",
+        next: `${vendor} doesn’t support Enterprise Managed Authorization the way Speakeasy needs.`,
+        tone: "destructive",
+      };
     case "provider_rejection":
-      return { label: "Provider rejected", variant: "destructive" };
+      return {
+        label: `${vendor} refused`,
+        next: `${vendor} turned the request down. Check its admin settings, then try again.`,
+        tone: "destructive",
+      };
   }
-}
-
-const DOT_FOR: Record<Tone, string> = {
-  success: "bg-[var(--fill-success-default)]",
-  warning: "bg-[var(--fill-warning-default)]",
-  destructive: "bg-[var(--fill-destructive-default)]",
-  information: "bg-[var(--fill-information-default)]",
-  neutral: "bg-muted-foreground/40",
-};
-
-function StatusDot({ tone }: { tone: Tone }): JSX.Element {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("size-2 shrink-0 rounded-full", DOT_FOR[tone])}
-    />
-  );
 }
 
 function ClientPicker({
@@ -216,8 +246,21 @@ export function IdentityChainingField({
   const gramProject = useProjectSlugForRequests();
   // The identity provider's own sign-in client is never a chaining target.
   const trustedClientId = userSessionIssuer.trustedRemoteSessionClientId;
-  const candidates = linkedClients.filter(
+  const linkable = linkedClients.filter(
     (client) => !trustedClientId || client.id !== trustedClientId,
+  );
+  const prm = useProtectedResourceMetadata(
+    remoteMcpServerId,
+    remoteMcpServerId !== undefined,
+  );
+  // One sign-in can serve many services; offer only clients of this one.
+  const clientIssuers = useRemoteSessionIssuersByIds([
+    ...new Set(linkable.map((client) => client.remoteSessionIssuerId)),
+  ]);
+  const candidates = clientsForResource(
+    linkable,
+    clientIssuers.items,
+    prm.metadata?.authorizationServers,
   );
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   // A prepare that returned a blocker; kept until the next action.
@@ -253,10 +296,6 @@ export function IdentityChainingField({
     },
   });
 
-  const prm = useProtectedResourceMetadata(
-    remoteMcpServerId,
-    remoteMcpServerId !== undefined,
-  );
   // The binding is keyed by issuer and resource, so it may name another client.
   const boundClient = chainingBound(read.data)
     ? candidates.find(
@@ -309,11 +348,20 @@ export function IdentityChainingField({
       if (!preparationSucceeded(result)) {
         setPrepareOutcome(result);
         toast.warning(
-          `Enterprise Managed Authorization isn’t on: ${stateBadge(result.state).label}`,
+          `Enterprise Managed Authorization isn’t on: ${stateCopy(result.state, vendor).label}`,
         );
         return;
       }
-      queryClient.setQueryData(readKey, result);
+      // The prepare result carries no providers or acceptance; keep the read's.
+      queryClient.setQueryData<IdentityChainingPreparation>(
+        readKey,
+        (prev) => ({
+          ...result,
+          emaProviders: result.emaProviders ?? prev?.emaProviders,
+          lastAcceptedAt: prev?.lastAcceptedAt,
+        }),
+      );
+      void invalidateAllOrganizationRemoteSessionIssuerEMAServices(queryClient);
       // Declared grants are written onto the client row.
       void invalidateAllRemoteSessionClients(queryClient);
       setGrantsConfirmed(false);
@@ -324,6 +372,7 @@ export function IdentityChainingField({
   });
   const unlink = useRemoteSessionClientsUnlinkEMAMutation({
     onSuccess: () => {
+      void invalidateAllOrganizationRemoteSessionIssuerEMAServices(queryClient);
       toast.success("Enterprise Managed Authorization is off");
     },
     onError: () => undefined,
@@ -354,17 +403,21 @@ export function IdentityChainingField({
   const vendor = serviceName(vendorIssuer.data?.name, resource);
   const signIn = {
     name: trustedIssuerId
-      ? issuerName(issuerById(trustedIssuerId))
+      ? issuerDisplayName(issuerById(trustedIssuerId))
       : "Speakeasy’s own sign-in",
     slug: userSessionIssuer.slug,
   };
   // An identity provider this sign-in doesn't use is just noise here; the
   // sign-in line already says why. Speakeasy stays listed: it can be set up.
+  const oktaIssuerId = useOktaIssuerId(
+    listed.some((provider) => !!provider.unavailableReason),
+  );
   const vouchers = listed
     .map((provider) =>
       providerView(provider, {
         issuer: issuerById(provider.remoteSessionIssuerId),
         speakeasyIssuerUrl,
+        oktaIssuerId,
       }),
     )
     .filter((row) => !row.unusedBySignIn);
@@ -373,10 +426,10 @@ export function IdentityChainingField({
     (row): row is ProviderView & { issuerUrl: string } => !!row.issuerUrl,
   );
   const noneUsable = !!order && usable.length === 0;
-  const lastAccepted = usable
-    .map((provider) => provider.lastAcceptedAt)
-    .filter((at): at is Date => at != null)
-    .sort((a, b) => b.getTime() - a.getTime())[0];
+  const orgAdmin = hasScope("org:admin", organization.id);
+  // The vendor already trusts one of these, somewhere in the organization.
+  const trusted = trusts.find((row) => row.lastAcceptedAt);
+  const fallbackFrom = providersBeforeSpeakeasy(usableVouchers);
 
   const enable = () => {
     if (
@@ -443,7 +496,9 @@ export function IdentityChainingField({
       !prepareOutcome &&
       (!read.data || shownState === "unlinked" || switchingClient),
     stalled: ready && noneUsable,
-    lastAccepted,
+    // This server's own binding, not the organization's.
+    lastAccepted: read.data?.lastAcceptedAt ?? undefined,
+    trustedName: trusted?.name,
     state: prepareOutcome?.state ?? shownState,
     remediation: prepareOutcome?.remediation ?? read.data?.remediation,
     vendor,
@@ -487,6 +542,22 @@ export function IdentityChainingField({
                 {status.detail}
               </Text>
             )}
+            {status.technical && (
+              <Collapsible>
+                <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-sm underline underline-offset-4">
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="size-3.5 transition-transform group-data-[state=open]:rotate-180"
+                  />
+                  Technical details
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <Text muted small className="block font-mono">
+                    {status.technical}
+                  </Text>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
           </div>
           <RequireScope
             scope="project:write"
@@ -525,12 +596,8 @@ export function IdentityChainingField({
       >
         <ChainLink label="Sign-in" tone="success">
           <div className="flex flex-wrap items-baseline gap-x-2">
-            <Text small>
+            <Text small title={signIn.slug}>
               {signIn.name}
-              <Text muted small as="span">
-                {" "}
-                ({signIn.slug})
-              </Text>
             </Text>
             <SettingsLink to={`#${MCP_SESSIONS_SECTION_ID}`}>
               Change in Sessions
@@ -588,15 +655,9 @@ export function IdentityChainingField({
                     </Text>
                     {row.fix && (
                       <SettingsLink
-                        to={identityHref(
-                          row.fix === "speakeasy"
-                            ? speakeasyProviderHref()
-                            : oktaViewHref("setup"),
-                        )}
+                        to={identityHref(providerFixLink(row.fix).href)}
                       >
-                        {row.fix === "speakeasy"
-                          ? "Speakeasy identity provider"
-                          : "Okta"}
+                        {providerFixLink(row.fix).label}
                       </SettingsLink>
                     )}
                   </li>
@@ -607,6 +668,17 @@ export function IdentityChainingField({
           {!ready && noneUsable && (
             <Text muted small className="block">
               No identity provider can vouch for people on this server yet.
+            </Text>
+          )}
+          {order && usableVouchers.length > 0 && (
+            <Text muted small className="block">
+              {order.isDefault
+                ? userSessionIssuer.trustedRemoteSessionIssuerId
+                  ? "This server’s sign-in uses an identity provider, so it vouches alone."
+                  : "This server’s sign-in has no identity provider, so Speakeasy vouches."
+                : fallbackFrom.length > 0
+                  ? `Set by ${vendor}’s saved order. ${speakeasyFallbackNote(fallbackFrom)}`
+                  : `Set by ${vendor}’s saved order.`}
             </Text>
           )}
         </ChainLink>
@@ -681,7 +753,7 @@ export function IdentityChainingField({
               </ul>
             </>
           )}
-          {order && (
+          {order && orgAdmin && (
             <SettingsLink to={identityHref(emaServiceHref(order.vendorIssuer))}>
               Every server that reaches {vendor}
             </SettingsLink>
@@ -786,8 +858,25 @@ export function IdentityChainingField({
   );
 }
 
-function issuerName(issuer: RemoteSessionIssuer | undefined): string {
-  return issuer?.name?.trim() || "Identity provider";
+function sameIssuer(a: string, b: string): boolean {
+  return a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
+}
+
+/** Clients registered with the server's authorization server, when that is known. */
+function clientsForResource(
+  clients: RemoteSessionClient[],
+  issuers: { id: string; issuer: string }[],
+  authorizationServers: string[] | undefined,
+): RemoteSessionClient[] {
+  if (!authorizationServers?.length) return clients;
+  const matching = clients.filter((client) => {
+    const issuer = issuers.find((i) => i.id === client.remoteSessionIssuerId);
+    return (
+      !issuer ||
+      authorizationServers.some((server) => sameIssuer(server, issuer.issuer))
+    );
+  });
+  return matching;
 }
 
 function chainingStatus({
@@ -796,6 +885,7 @@ function chainingStatus({
   off,
   stalled,
   lastAccepted,
+  trustedName,
   state,
   remediation,
   vendor,
@@ -804,11 +894,20 @@ function chainingStatus({
   ready: boolean;
   off: boolean;
   stalled: boolean;
+  /** When the vendor last accepted a sign-in for this server. */
   lastAccepted: Date | undefined;
+  /** An identity provider the vendor already accepts elsewhere in the organization. */
+  trustedName: string | undefined;
   state: ChainingState | null;
   remediation: string | undefined;
   vendor: string;
-}): { title: string; detail?: string; aside?: string; tone: Tone } {
+}): {
+  title: string;
+  detail?: string;
+  technical?: string;
+  aside?: string;
+  tone: Tone;
+} {
   if (loading) return { title: "Checking…", tone: "neutral" };
   if (stalled)
     return {
@@ -821,13 +920,15 @@ function chainingStatus({
     return {
       title: "Working",
       detail: `People reach ${vendor} through their sign-in.`,
-      aside: `${vendor} accepted a sign-in ${formatRelativeTime(lastAccepted)}`,
+      aside: `${vendor} accepted a sign-in here ${formatRelativeTime(lastAccepted)}`,
       tone: "success",
     };
   if (ready)
     return {
       title: "On, not proven yet",
-      detail: `Speakeasy’s side is set up. It starts working once ${vendor} trusts an identity provider below and someone connects through this server. Try it from your MCP client.`,
+      detail: trustedName
+        ? `Speakeasy’s side is set up and ${vendor} already trusts ${trustedName}. It shows as working once someone connects through this server. Try it from your MCP client.`
+        : `Speakeasy’s side is set up. It starts working once ${vendor} trusts an identity provider below and someone connects through this server. Try it from your MCP client.`,
       tone: "warning",
     };
   if (off || !state)
@@ -836,10 +937,14 @@ function chainingStatus({
       detail: `People connect ${vendor} themselves the first time they use this server.`,
       tone: "neutral",
     };
-  const badge = stateBadge(state);
+  const copy = stateCopy(state, vendor);
+  const technical = [`State: ${state}`, remediation?.trim()]
+    .filter(Boolean)
+    .join(" · ");
   return {
-    title: badge.label,
-    detail: remediation?.trim() || undefined,
-    tone: badge.variant,
+    title: copy.label,
+    detail: copy.next || undefined,
+    technical,
+    tone: copy.tone,
   };
 }

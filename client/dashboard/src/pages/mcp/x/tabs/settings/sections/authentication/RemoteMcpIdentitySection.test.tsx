@@ -48,7 +48,6 @@ const mocks = vi.hoisted(() => ({
   invalidateScopes: vi.fn(),
   setScopesData: vi.fn(),
   toastError: vi.fn(),
-  speakeasyIssuer: vi.fn(),
 }));
 
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
@@ -96,10 +95,6 @@ vi.mock("@/contexts/Sdk", () => ({
       discoverProtectedResourceMetadata: mocks.discoverProtectedResource,
     },
   }),
-}));
-
-vi.mock("./useSpeakeasyIssuerStatus", () => ({
-  useSpeakeasyIssuerStatus: () => mocks.speakeasyIssuer(),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -505,7 +500,6 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
-  mocks.speakeasyIssuer.mockReturnValue({ data: undefined });
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
     isLoading: false,
@@ -3148,14 +3142,18 @@ describe("RemoteMcpIdentitySectionBody", () => {
 });
 
 describe("identity chaining", () => {
-  it("leaves identity chaining to its own section", () => {
+  it("leaves identity chaining to its own section, even for a sign-in that trusts an identity provider", () => {
     mocks.userSessionIssuer.mockReturnValue({
-      data: { id: "user-session-issuer-1", projectId: "" },
-    });
-    mocks.speakeasyIssuer.mockReturnValue({
-      data: { state: "enabled", issuer: "https://speakeasy.example.com/idp" },
+      data: {
+        id: "user-session-issuer-1",
+        projectId: "",
+        trustedRemoteSessionIssuerId: "okta-issuer",
+        trustedRemoteSessionClientId: "okta-client",
+      },
     });
     renderIdentity();
-    expect(screen.queryByTestId("identity-chaining")).toBeNull();
+    expect(screen.queryByText(/Enterprise Managed Authorization/)).toBeNull();
+    expect(screen.queryByText(/Identity chaining/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Turn on" })).toBeNull();
   });
 });
