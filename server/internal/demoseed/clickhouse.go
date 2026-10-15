@@ -31,6 +31,7 @@ func (s *seeder) runClickHouse(ctx context.Context, ch driver.Conn) error {
 		{"clickhouse purge and telemetry", s.chPurgeAndTelemetry},
 		{"clickhouse detections and findings", s.chDetectionsAndFindings},
 		{"clickhouse events and postflight", s.chEventsAndPostflight},
+		{"clickhouse sensor readings", s.chSigintReadings},
 	}
 	for _, p := range phases {
 		start := time.Now()
