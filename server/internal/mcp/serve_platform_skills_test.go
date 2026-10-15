@@ -279,6 +279,7 @@ func TestServePlatformToolset_Skills_FlagOffLeavesSurfaceUnchanged(t *testing.T)
 	ctx, ti := newTestMCPService(t)
 	f := newPlatformSkillsFixture(t, ctx, ti)
 	ti.features.SetFlag(feature.FlagSkillsOverMCP, f.authCtx.ActiveOrganizationID, false)
+	grantProjectLogRead(t, ti, f.authCtx)
 	name := slices.Sorted(maps.Keys(embeddedPlatformSkills(t)))[0]
 	uri := mcpskills.SkillURI(name)
 
