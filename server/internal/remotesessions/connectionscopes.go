@@ -141,6 +141,8 @@ func ConnectionScopes(ctx context.Context, db repo.DBTX, b BindingConnection) (*
 		UserSessionIssuerID: b.UserSessionIssuerID,
 		ProjectID:           conv.ToNullUUID(b.ProjectID),
 		OrganizationID:      conv.ToPGText(b.OrganizationID),
+		// A binding always belongs to one project.
+		OrganizationWide: false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
