@@ -36,9 +36,6 @@ vi.mock("@gram/client/react-query/userSessions.js", () => ({
 vi.mock("./RemoteSessionRefreshPolicySetting", () => ({
   RemoteSessionRefreshPolicySetting: () => null,
 }));
-vi.mock("./ConsentToolFilteringSetting", () => ({
-  ConsentToolFilteringSetting: () => null,
-}));
 vi.mock("@/components/connections/ConnectionsList", () => ({
   ConnectionsList: () => null,
 }));
