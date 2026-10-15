@@ -112,7 +112,8 @@ type consentTemplateData struct {
 	// PrefillDiscoveryMode is the mode this subject chose on its previous
 	// connection; empty selects the gateway default.
 	PrefillDiscoveryMode metamcp.DiscoveryMode
-	// GatewayDefaultMode labels the inherited mode, even when new selections are gated.
+	// GatewayDefaultMode labels the gateway default: inside the discovery choice
+	// when it is offered, and as a read-only row otherwise.
 	GatewayDefaultMode string
 	// ShowCodeMode exposes the Python choice only when the runtime allows new selections.
 	ShowCodeMode bool
