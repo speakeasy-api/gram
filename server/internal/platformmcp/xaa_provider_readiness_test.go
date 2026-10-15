@@ -127,4 +127,11 @@ func TestSpeakeasyReadinessViewFollowsSignIn(t *testing.T) {
 	require.False(t, speakeasyReadinessView(order(speakeasy, external), true), "a federated sign-in is vouched for by its external issuer")
 	require.True(t, speakeasyReadinessView(order(speakeasy), true), "with no external issuer named there is no connection to describe")
 	require.False(t, speakeasyReadinessView(order(external), false))
+
+	disabled := speakeasy
+	disabled.Unavailable = remotesessions.EMAProviderDisabled
+	require.True(t, speakeasyReadinessView(order(disabled), false), "a disabled Speakeasy issuer keeps the identity-chaining view")
+	require.True(t, speakeasyReadinessView(order(disabled, external), false))
+	require.True(t, speakeasyReadinessView(order(disabled), true))
+	require.False(t, speakeasyReadinessView(order(disabled, external), true))
 }
