@@ -33,45 +33,6 @@ func TestDeploymentsService_RejectNewCatalogSelection(t *testing.T) {
 	}
 }
 
-func TestDeploymentsService_EvolveRetainsCatalogIdentityAfterFlip(t *testing.T) {
-	t.Parallel()
-	for _, upsert := range []bool{false, true} {
-		t.Run(map[bool]string{false: "carried", true: "matching upsert"}[upsert], func(t *testing.T) {
-			t.Parallel()
-			ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
-			require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
-			auth, ok := contextvalues.GetAuthContext(ctx)
-			require.True(t, ok)
-			ti.feature.SetFlag(feature.FlagGramMCPCatalog, auth.ActiveOrganizationID, true)
-			// Seed accepted work without running a network-dependent extraction workflow.
-			q := repo.New(ti.conn)
-			depID, err := q.InsertDeployment(ctx, repo.InsertDeploymentParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserID: auth.UserID, IdempotencyKey: uuid.NewString()})
-			require.NoError(t, err)
-			require.NoError(t, q.CreateDeploymentStatus(ctx, repo.CreateDeploymentStatusParams{DeploymentID: depID, Status: "completed"}))
-			_, err = q.UpsertDeploymentExternalMCP(ctx, repo.UpsertDeploymentExternalMCPParams{DeploymentID: depID, RegistryID: uuid.NullUUID{UUID: externalmcp.NativeCatalogRegistryID, Valid: true}, Name: "Test", Slug: "test", RegistryServerSpecifier: "example/server"})
-			require.NoError(t, err)
-			ti.feature.SetFlag(feature.FlagGramMCPCatalog, auth.ActiveOrganizationID, false)
-			form := &gen.EvolvePayload{NonBlocking: new(true)}
-			if upsert {
-				form.UpsertExternalMcps = []*gen.AddExternalMCPForm{{RegistryID: new(externalmcp.NativeCatalogRegistryID.String()), Name: "Renamed", Slug: "test", RegistryServerSpecifier: "example/server"}}
-			} else {
-				// An unrelated exclusion forces a clone without reselecting the saved MCP.
-				form.ExcludeExternalMcps = []string{"unrelated"}
-			}
-			result, err := ti.service.Evolve(ctx, form)
-			require.NoError(t, err)
-			attachments, err := q.ListDeploymentExternalMCPs(ctx, uuid.MustParse(result.Deployment.ID))
-			require.NoError(t, err)
-			require.Len(t, attachments, 1)
-			require.Equal(t, externalmcp.NativeCatalogRegistryID, attachments[0].RegistryID.UUID)
-			require.Equal(t, "example/server", attachments[0].RegistryServerSpecifier)
-			// The same slug must not grandfather a different catalog server.
-			_, err = ti.service.Evolve(ctx, &gen.EvolvePayload{NonBlocking: new(true), UpsertExternalMcps: []*gen.AddExternalMCPForm{{RegistryID: new(externalmcp.NativeCatalogRegistryID.String()), Name: "Other", Slug: "test", RegistryServerSpecifier: "example/other"}}})
-			require.ErrorIs(t, err, externalmcp.ErrCatalogSourceNotFound)
-		})
-	}
-}
-
 func TestDeploymentsService_RejectUnpublishedNativeAttachment(t *testing.T) {
 	t.Parallel()
 	for _, method := range []string{"create", "evolve"} {

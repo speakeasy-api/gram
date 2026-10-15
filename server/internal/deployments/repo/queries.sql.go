@@ -66,66 +66,6 @@ func (q *Queries) CloneDeployment(ctx context.Context, arg CloneDeploymentParams
 	return id, err
 }
 
-const cloneDeploymentExternalMCPs = `-- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
-SELECT
-  $1
-  , current.registry_id
-  , current.name
-  , current.slug
-  , current.registry_server_specifier
-  , current.selected_remotes
-FROM external_mcp_attachments as current
-WHERE current.deployment_id = $2
-  AND current.deleted IS FALSE
-  AND current.slug <> ALL ($3::text[])
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes
-`
-
-type CloneDeploymentExternalMCPsParams struct {
-	CloneDeploymentID    uuid.UUID
-	OriginalDeploymentID uuid.UUID
-	ExcludedSlugs        []string
-}
-
-type CloneDeploymentExternalMCPsRow struct {
-	ID                      uuid.UUID
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.NullUUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	SelectedRemotes         []string
-}
-
-func (q *Queries) CloneDeploymentExternalMCPs(ctx context.Context, arg CloneDeploymentExternalMCPsParams) ([]CloneDeploymentExternalMCPsRow, error) {
-	rows, err := q.db.Query(ctx, cloneDeploymentExternalMCPs, arg.CloneDeploymentID, arg.OriginalDeploymentID, arg.ExcludedSlugs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CloneDeploymentExternalMCPsRow
-	for rows.Next() {
-		var i CloneDeploymentExternalMCPsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.DeploymentID,
-			&i.RegistryID,
-			&i.Name,
-			&i.Slug,
-			&i.RegistryServerSpecifier,
-			&i.SelectedRemotes,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const cloneDeploymentFunctionsAssets = `-- name: CloneDeploymentFunctionsAssets :many
 INSERT INTO deployments_functions (
   deployment_id
