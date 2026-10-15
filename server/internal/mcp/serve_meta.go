@@ -225,11 +225,12 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		ctx = context.WithValue(ctx, liveSessionPolicyKey{}, true)
 		credential := sha256.Sum256([]byte(admission.bearer))
 		callerKey := hex.EncodeToString(credential[:])
-		// Anonymous callers share every identity dimension, so isolate their runners by MCP session instead.
-		if admission.bearer == "" && gate.userID == "" && gate.externalUserID == "" && gate.apiKeyID == "" {
-			callerKey = "anonymous:" + admission.sessionID
+		anonymous := admission.bearer == "" && gate.userID == "" && gate.externalUserID == "" && gate.apiKeyID == ""
+		if anonymous {
+			callerKey = anonymousCodeCallerKey(gate.metaServerID, admission.clientSessionID)
 		}
 		ctx = context.WithValue(ctx, metaCodeCredentialKey{}, callerKey)
+		ctx = context.WithValue(ctx, metaCodeSessionlessAnonymousKey{}, anonymous && admission.clientSessionID == "")
 		cancellable := metaServer.UserSessionIssuerID.Valid && admission.bearer != ""
 		sessionScope := "anonymous:" + uuid.NewString()
 		if cancellable {
