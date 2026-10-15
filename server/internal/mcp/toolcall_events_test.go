@@ -8,25 +8,19 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/attribute"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
-
-// recordPublishPoint is the counter series of one tool call record's publish outcome.
-func recordPublishPoint(eventName string, outcome o11y.Outcome) attribute.Set {
-	return attribute.NewSet(attr.Event(eventName), attr.Outcome(outcome))
-}
 
 // hostedToolFixture is a public hosted MCP server with one HTTP tool.
 type hostedToolFixture struct {
@@ -103,49 +97,50 @@ func toolCallRecordAttribute(record *otelv1.InboundLogRecord, key string) *otelv
 	return nil
 }
 
-func TestToolsCall_EmitsAStartedAndACompletedRecordForTheCall(t *testing.T) {
+// awaitToolCallRecord waits for the call's one record, published off the response path.
+func awaitToolCallRecord(t *testing.T, ti *testInstance) *otelv1.InboundLogRecord {
+	t.Helper()
+
+	var records []*otelv1.InboundLogRecord
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		records = ti.toolCallRecords.all()
+		assert.NotEmpty(c, records)
+	}, 5*time.Second, 10*time.Millisecond)
+	require.Len(t, records, 1)
+	return records[0]
+}
+
+func TestToolsCall_EmitsOneExecuteToolRecordForTheCall(t *testing.T) {
 	t.Parallel()
 
-	reader := sdkmetric.NewManualReader()
-	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	fixture := seedHostedTool(t, ctx, ti, "list_repos")
 
 	require.False(t, fixture.call(t, ctx, ti, "list_repos"))
 
-	records := ti.toolCallRecords.all()
-	require.Len(t, records, 2)
-	started, completed := records[0], records[1]
-	require.Equal(t, dialect.GramToolCallStartedEvent, started.GetEventName())
-	require.Equal(t, dialect.GramToolCallCompletedEvent, completed.GetEventName())
-
-	callID := toolCallRecordAttribute(started, "gram.tool_call.id").GetStringValue()
+	record := awaitToolCallRecord(t, ti)
+	callID := toolCallRecordAttribute(record, "gen_ai.tool.call.id").GetStringValue()
 	require.NotEmpty(t, callID)
-	for _, record := range records {
-		require.Equal(t, callID, record.GetRecordId(), "both records travel under the tool call id")
-		require.Equal(t, callID, toolCallRecordAttribute(record, "gram.tool_call.id").GetStringValue())
-		require.Equal(t, authCtx.ActiveOrganizationID, record.GetProvenance().GetOrganizationId())
-		require.Equal(t, authCtx.ProjectID.String(), record.GetProvenance().GetProjectId())
-		require.Equal(t, dialect.GramGatewayLogScope, record.GetScope().GetName())
-		require.Equal(t, "session-1", toolCallRecordAttribute(record, "gram.session.id").GetStringValue())
-		require.Equal(t, "list_repos", toolCallRecordAttribute(record, "gram.tool.name").GetStringValue())
-		require.Equal(t, fixture.slug, toolCallRecordAttribute(record, "gram.toolset.slug").GetStringValue())
-		require.Equal(t, fixture.serverID.String(), toolCallRecordAttribute(record, string(attr.McpServerIDKey)).GetStringValue())
-		require.Equal(t, "claude-code", toolCallRecordAttribute(record, "gram.mcp.client.name").GetStringValue())
-	}
-	require.Nil(t, toolCallRecordAttribute(started, "gram.outcome"))
-	require.Equal(t, dialect.OutcomeOK, toolCallRecordAttribute(completed, "gram.outcome").GetStringValue())
-	require.Equal(t, int64(http.StatusOK), toolCallRecordAttribute(completed, "http.response.status_code").GetIntValue())
-	require.Positive(t, toolCallRecordAttribute(completed, "gram.tool_call.duration").GetDoubleValue())
-	require.GreaterOrEqual(t, completed.GetTimeUnixNano(), started.GetTimeUnixNano())
-	require.Equal(t, map[attribute.Set]int64{
-		recordPublishPoint(dialect.GramToolCallStartedEvent, o11y.OutcomeSuccess):   1,
-		recordPublishPoint(dialect.GramToolCallCompletedEvent, o11y.OutcomeSuccess): 1,
-	}, collectCounterPoints(t, reader, mcpmetrics.InstrumentMCPToolCallRecordPublish), "each acked record is counted under its own name")
+	require.Equal(t, callID, record.GetRecordId(), "the record travels under the tool call id")
+	require.Equal(t, "execute_tool", record.GetEventName())
+	require.Equal(t, "execute_tool", toolCallRecordAttribute(record, "gen_ai.operation.name").GetStringValue())
+	require.Equal(t, "tools/call", toolCallRecordAttribute(record, "mcp.method.name").GetStringValue())
+	require.Equal(t, "list_repos", toolCallRecordAttribute(record, "gen_ai.tool.name").GetStringValue())
+	require.Equal(t, "session-1", toolCallRecordAttribute(record, "mcp.session.id").GetStringValue())
+	require.Equal(t, authCtx.ActiveOrganizationID, record.GetProvenance().GetOrganizationId())
+	require.Equal(t, authCtx.ProjectID.String(), record.GetProvenance().GetProjectId())
+	require.Equal(t, dialect.GramGatewayLogScope, record.GetScope().GetName())
+	require.Equal(t, fixture.slug, toolCallRecordAttribute(record, "gram.toolset.slug").GetStringValue())
+	require.Equal(t, fixture.serverID.String(), toolCallRecordAttribute(record, string(attr.McpServerIDKey)).GetStringValue())
+	require.Equal(t, "claude-code", toolCallRecordAttribute(record, "gram.mcp.client.name").GetStringValue())
+	require.Equal(t, int64(http.StatusOK), toolCallRecordAttribute(record, "http.response.status_code").GetIntValue())
+	require.Positive(t, toolCallRecordAttribute(record, "gram.tool_call.duration").GetDoubleValue())
+	require.Nil(t, toolCallRecordAttribute(record, "error.type"), "a call that went fine has no error type")
 }
 
-func TestToolsCall_CompletedRecordSaysTheToolFailed(t *testing.T) {
+func TestToolsCall_RecordSaysTheToolFailed(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -154,46 +149,37 @@ func TestToolsCall_CompletedRecordSaysTheToolFailed(t *testing.T) {
 
 	require.True(t, fixture.call(t, ctx, ti, "list_repos"))
 
-	records := ti.toolCallRecords.all()
-	require.Len(t, records, 2)
-	completed := records[1]
-	require.Equal(t, dialect.GramToolCallCompletedEvent, completed.GetEventName())
-	require.Equal(t, dialect.OutcomeError, toolCallRecordAttribute(completed, "gram.outcome").GetStringValue())
-	require.Equal(t, int64(http.StatusBadGateway), toolCallRecordAttribute(completed, "http.response.status_code").GetIntValue())
-	require.Nil(t, toolCallRecordAttribute(completed, "error.message"), "the tool's own error document is the result, not a message about it")
+	record := awaitToolCallRecord(t, ti)
+	require.Equal(t, "502", toolCallRecordAttribute(record, "error.type").GetStringValue())
+	require.Equal(t, int64(http.StatusBadGateway), toolCallRecordAttribute(record, "http.response.status_code").GetIntValue())
+	require.Nil(t, toolCallRecordAttribute(record, "error.message"), "the tool's own error document is the result, not a message about it")
 }
 
-func TestToolsCall_CompletedRecordCarriesAFailureAfterTheToolRan(t *testing.T) {
+func TestToolsCall_RecordCarriesAFailureAfterTheToolRan(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	fixture := seedHostedTool(t, ctx, ti, "list_repos")
-	// The call fails after the started record went out.
 	fixture.contentType.Store(new("application/x-unknown"))
 
 	fixture.callExpectingFailure(t, ctx, ti, "list_repos")
 
-	records := ti.toolCallRecords.all()
-	require.Len(t, records, 2)
-	completed := records[1]
-	require.Equal(t, dialect.GramToolCallCompletedEvent, completed.GetEventName())
-	require.Equal(t, dialect.OutcomeError, toolCallRecordAttribute(completed, "gram.outcome").GetStringValue())
-	require.Equal(t, int64(http.StatusInternalServerError), toolCallRecordAttribute(completed, "http.response.status_code").GetIntValue())
-	require.Equal(t, "failed format tool call result", toolCallRecordAttribute(completed, "error.message").GetStringValue())
+	record := awaitToolCallRecord(t, ti)
+	require.Equal(t, string(oops.CodeUnexpected), toolCallRecordAttribute(record, "error.type").GetStringValue())
+	require.Equal(t, int64(http.StatusInternalServerError), toolCallRecordAttribute(record, "http.response.status_code").GetIntValue())
+	require.Equal(t, "failed format tool call result", toolCallRecordAttribute(record, "error.message").GetStringValue())
 }
 
-func TestToolsCall_SucceedsWhenItsRecordsCannotBePublished(t *testing.T) {
+func TestToolsCall_SucceedsWhenItsRecordCannotBePublished(t *testing.T) {
 	t.Parallel()
 
-	reader := sdkmetric.NewManualReader()
-	ctx, ti := newTestMCPServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	ctx, ti := newTestMCPService(t)
 	fixture := seedHostedTool(t, ctx, ti, "list_repos")
 	ti.toolCallRecords.failWith(errors.New("pubsub unavailable"))
 
 	require.False(t, fixture.call(t, ctx, ti, "list_repos"))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, 1, ti.toolCallRecords.publishAttempts())
+	}, 5*time.Second, 10*time.Millisecond)
 	require.Empty(t, ti.toolCallRecords.all())
-	require.Equal(t, map[attribute.Set]int64{
-		recordPublishPoint(dialect.GramToolCallStartedEvent, o11y.OutcomeFailure):   1,
-		recordPublishPoint(dialect.GramToolCallCompletedEvent, o11y.OutcomeFailure): 1,
-	}, collectCounterPoints(t, reader, mcpmetrics.InstrumentMCPToolCallRecordPublish), "each lost record is counted while the call succeeds")
 }

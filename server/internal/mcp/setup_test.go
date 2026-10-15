@@ -165,14 +165,16 @@ func (c *testClientCredentials) use(source remotesessions.ClientCredentialSource
 
 // toolCallRecorder keeps every tool call record the gateway publishes.
 type toolCallRecorder struct {
-	mu      sync.Mutex
-	records []*otelv1.InboundLogRecord
-	err     error
+	mu       sync.Mutex
+	records  []*otelv1.InboundLogRecord
+	attempts int
+	err      error
 }
 
 func (r *toolCallRecorder) Publish(_ context.Context, record *otelv1.InboundLogRecord, _ ...gcp.PublishOption) gcp.PublishResult {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.attempts++
 	if r.err != nil {
 		return gcp.NewErrPublishResult(r.err)
 	}
@@ -186,6 +188,13 @@ func (r *toolCallRecorder) all() []*otelv1.InboundLogRecord {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.records)
+}
+
+// publishAttempts counts records handed to the publisher, refused ones included.
+func (r *toolCallRecorder) publishAttempts() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.attempts
 }
 
 func (r *toolCallRecorder) failWith(err error) {

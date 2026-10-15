@@ -397,12 +397,12 @@ func handleToolsCall(
 
 	callerID, callerEmail := toolCallCaller(ctx, payload, descriptor.OrganizationID, gramEmail)
 
-	// One id names the call on its telemetry_logs row and its agent_events rows.
-	events := newToolCallEvents(toolCallLogger, logger, metrics, toolCallTenant{
-		organizationID: descriptor.OrganizationID,
-		projectID:      descriptor.ProjectID,
-	}, toolCallIdentity{
-		callID:          uuid.NewString(),
+	// One id names the call on its telemetry_logs row and its agent_events row.
+	call := toolCall{
+		id:              uuid.NewString(),
+		start:           time.Now(),
+		organizationID:  descriptor.OrganizationID,
+		projectID:       descriptor.ProjectID,
 		sessionID:       payload.sessionID,
 		chatID:          payload.chatID,
 		toolName:        toolName,
@@ -416,7 +416,7 @@ func handleToolsCall(
 		externalUserID:  externalUserID,
 		userID:          callerID,
 		userEmail:       callerEmail,
-	}, time.Now)
+	}
 
 	logAttrs := tm.HTTPLogAttributes{}
 	defer func() {
@@ -446,9 +446,9 @@ func handleToolsCall(
 		})
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
-		logAttrs[attr.ToolCallIDKey] = events.callID
+		logAttrs[attr.ToolCallIDKey] = call.id
 		logAttrs[attr.OutcomeKey] = toolCallOutcome(rw.statusCode, rw.resultIsError)
-		logAttrs[attr.ToolCallDurationKey] = time.Since(events.start).Seconds()
+		logAttrs[attr.ToolCallDurationKey] = time.Since(call.start).Seconds()
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
@@ -490,10 +490,12 @@ func handleToolsCall(
 		telemLogger.Log(ctx, params)
 	}()
 
-	// The started record goes out before the scan, so a call the scan stops
-	// still shows. A publish that fails never fails the call.
-	events.started(ctx)
-	defer func() { events.completed(ctx, rw.statusCode, rw.resultIsError, rw.failure) }()
+	// The record is built when the call returns, so a call the scan stops still
+	// shows, and published off the response path.
+	defer func() {
+		record := call.record(time.Now(), rw.statusCode, rw.resultIsError, rw.failure)
+		go publishToolCallRecord(context.WithoutCancel(ctx), toolCallLogger, logger, call, record)
+	}()
 
 	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:         mcpriskscan.SurfaceHostedMCP,

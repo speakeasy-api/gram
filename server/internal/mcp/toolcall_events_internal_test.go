@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 
@@ -22,15 +23,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 )
 
-// toolCallEventsFixture records what was published, with a hand-moved clock.
-type toolCallEventsFixture struct {
-	events    *toolCallEvents
-	published *[]*otelv1.InboundLogRecord
-	warnings  *bytes.Buffer
-	at        *time.Time
-}
-
-func newToolCallEventsFixture(t *testing.T, result gcp.PublishResult, identity toolCallIdentity) toolCallEventsFixture {
+// publishedToolCallRecord publishes record for call and returns what reached
+// the publisher and what was logged.
+func publishedToolCallRecord(t *testing.T, result gcp.PublishResult, call toolCall, record log.Record) (*otelv1.InboundLogRecord, string) {
 	t.Helper()
 
 	var published []*otelv1.InboundLogRecord
@@ -39,13 +34,13 @@ func newToolCallEventsFixture(t *testing.T, result gcp.PublishResult, identity t
 		record, ok := args.Get(1).(*otelv1.InboundLogRecord)
 		require.True(t, ok)
 		published = append(published, record)
-	}).Return(result).Maybe()
+	}).Return(result).Once()
 
 	var warnings bytes.Buffer
-	records := otelpub.NewLogger(publisher, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GramGatewayLogScope)
-	at := time.Unix(1_700_000_000, 0)
-	events := newToolCallEvents(records, slog.New(slog.NewTextHandler(&warnings, nil)), nil, toolCallTenant{organizationID: "org-1", projectID: "project-1"}, identity, func() time.Time { return at })
-	return toolCallEventsFixture{events: events, published: &published, warnings: &warnings, at: &at}
+	logger := otelpub.NewLogger(publisher, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GramGatewayLogScope)
+	publishToolCallRecord(t.Context(), logger, slog.New(slog.NewTextHandler(&warnings, nil)), call, record)
+	require.Len(t, published, 1)
+	return published[0], warnings.String()
 }
 
 func recordStringAttribute(record *otelv1.InboundLogRecord, key string) string {
@@ -66,49 +61,49 @@ func recordHasAttribute(record *otelv1.InboundLogRecord, key string) bool {
 	return false
 }
 
-func TestToolCallEventsPairStartedAndCompletedByTheCallID(t *testing.T) {
+func TestToolCallRecordIsASemconvToolCallUnderTheCallID(t *testing.T) {
 	t.Parallel()
 
-	fixture := newToolCallEventsFixture(t, gcp.NewSuccessPublishResult(), toolCallIdentity{
-		callID:      "call-1",
-		sessionID:   "session-1",
-		toolName:    "list_repos",
-		toolURN:     "tools:http:github:list_repos",
-		toolsetSlug: "github",
-		clientName:  "claude-code",
-		userEmail:   "dev@example.com",
-	})
-
-	fixture.events.started(t.Context())
-	*fixture.at = fixture.at.Add(1500 * time.Millisecond)
-	fixture.events.completed(t.Context(), http.StatusOK, false, nil)
-
-	published := *fixture.published
-	require.Len(t, published, 2)
-	started, completed := published[0], published[1]
-
-	require.Equal(t, dialect.GramToolCallStartedEvent, started.GetEventName())
-	require.Equal(t, dialect.GramToolCallCompletedEvent, completed.GetEventName())
-	for _, record := range published {
-		require.Equal(t, "call-1", record.GetRecordId(), "the tool call id is the record id")
-		require.Equal(t, "call-1", recordStringAttribute(record, "gram.tool_call.id"))
-		require.Equal(t, "org-1", record.GetProvenance().GetOrganizationId())
-		require.Equal(t, "project-1", record.GetProvenance().GetProjectId())
-		require.Equal(t, dialect.GramGatewayLogScope, record.GetScope().GetName())
-		require.Equal(t, "session-1", recordStringAttribute(record, "gram.session.id"))
-		require.Equal(t, "list_repos", recordStringAttribute(record, "gram.tool.name"))
-		require.Equal(t, "github", recordStringAttribute(record, "gram.toolset.slug"))
-		require.Equal(t, "claude-code", recordStringAttribute(record, "gram.mcp.client.name"))
-		require.Equal(t, "dev@example.com", recordStringAttribute(record, "user.email"))
-		require.False(t, recordHasAttribute(record, "gram.chat.id"), "an unknown value leaves its attribute off")
+	start := time.Unix(1_700_000_000, 0)
+	call := toolCall{
+		id:             "call-1",
+		start:          start,
+		organizationID: "org-1",
+		projectID:      "project-1",
+		sessionID:      "session-1",
+		toolName:       "list_repos",
+		toolURN:        "tools:http:github:list_repos",
+		toolsetSlug:    "github",
+		clientName:     "claude-code",
+		externalUserID: "ext-user-1",
+		userID:         "user-1",
+		userEmail:      "dev@example.com",
 	}
-	require.Equal(t, uint64(1_700_000_000_000_000_000), started.GetTimeUnixNano())
-	require.Equal(t, uint64(1_700_000_001_500_000_000), completed.GetTimeUnixNano())
 
-	require.False(t, recordHasAttribute(started, "gram.outcome"))
-	require.Equal(t, dialect.OutcomeOK, recordStringAttribute(completed, "gram.outcome"))
-	require.False(t, recordHasAttribute(completed, "error.message"))
-	for _, kv := range completed.GetAttributes() {
+	record, warnings := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(start.Add(1500*time.Millisecond), http.StatusOK, false, nil))
+	require.Empty(t, warnings)
+
+	require.Equal(t, "call-1", record.GetRecordId(), "the tool call id is the record id")
+	require.Equal(t, "org-1", record.GetProvenance().GetOrganizationId())
+	require.Equal(t, "project-1", record.GetProvenance().GetProjectId())
+	require.Equal(t, dialect.GramGatewayLogScope, record.GetScope().GetName())
+	require.Equal(t, "execute_tool", record.GetEventName())
+	require.Equal(t, uint64(1_700_000_001_500_000_000), record.GetTimeUnixNano())
+
+	require.Equal(t, "execute_tool", recordStringAttribute(record, "gen_ai.operation.name"))
+	require.Equal(t, "tools/call", recordStringAttribute(record, "mcp.method.name"))
+	require.Equal(t, "call-1", recordStringAttribute(record, "gen_ai.tool.call.id"))
+	require.Equal(t, "list_repos", recordStringAttribute(record, "gen_ai.tool.name"))
+	require.Equal(t, "session-1", recordStringAttribute(record, "mcp.session.id"))
+	require.Equal(t, "ext-user-1", recordStringAttribute(record, "user.id"))
+	require.Equal(t, "dev@example.com", recordStringAttribute(record, "user.email"))
+	require.Equal(t, "user-1", recordStringAttribute(record, "gram.auth.user_id"))
+	require.Equal(t, "github", recordStringAttribute(record, "gram.toolset.slug"))
+	require.Equal(t, "claude-code", recordStringAttribute(record, "gram.mcp.client.name"))
+	require.False(t, recordHasAttribute(record, "gen_ai.conversation.id"), "an unknown value leaves its attribute off")
+	require.False(t, recordHasAttribute(record, "error.type"))
+	require.False(t, recordHasAttribute(record, "error.message"))
+	for _, kv := range record.GetAttributes() {
 		switch kv.GetKey() {
 		case "http.response.status_code":
 			require.Equal(t, int64(http.StatusOK), kv.GetValue().GetIntValue())
@@ -116,53 +111,48 @@ func TestToolCallEventsPairStartedAndCompletedByTheCallID(t *testing.T) {
 			require.InDelta(t, 1.5, kv.GetValue().GetDoubleValue(), 0.0001)
 		}
 	}
-	require.True(t, recordHasAttribute(completed, "gram.tool_call.duration"))
+	require.True(t, recordHasAttribute(record, "gram.tool_call.duration"))
 }
 
-func TestToolCallEventsCompletedCarriesTheGatewaysOwnFailure(t *testing.T) {
+func TestToolCallRecordCarriesTheGatewaysOwnFailure(t *testing.T) {
 	t.Parallel()
 
-	fixture := newToolCallEventsFixture(t, gcp.NewSuccessPublishResult(), toolCallIdentity{callID: "call-2"})
+	call := toolCall{id: "call-2", start: time.Unix(1_700_000_000, 0), organizationID: "org-1", projectID: "project-1"}
 	failure := oops.E(oops.CodeForbidden, errors.New("policy rule 7 matched"), "blocked by policy")
 
-	fixture.events.started(t.Context())
-	fixture.events.completed(t.Context(), http.StatusForbidden, false, failure)
-
-	completed := (*fixture.published)[1]
-	require.Equal(t, dialect.OutcomeError, recordStringAttribute(completed, "gram.outcome"))
-	require.Equal(t, "blocked by policy", recordStringAttribute(completed, "error.message"), "the client's message, never the cause")
+	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusForbidden, false, failure))
+	require.Equal(t, string(oops.CodeForbidden), recordStringAttribute(record, "error.type"))
+	require.Equal(t, "blocked by policy", recordStringAttribute(record, "error.message"), "the client's message, never the cause")
 }
 
-func TestToolCallEventsNeverFailTheCall(t *testing.T) {
+func TestToolCallRecordFollowsAPassthroughResultsOwnVerdict(t *testing.T) {
 	t.Parallel()
 
-	fixture := newToolCallEventsFixture(t, gcp.NewErrPublishResult(errors.New("pubsub unavailable")), toolCallIdentity{callID: "call-3"})
+	call := toolCall{id: "call-4", start: time.Unix(1_700_000_000, 0), organizationID: "org-1", projectID: "project-1"}
 
-	// Each lost record is a warning, never an error for the call.
-	fixture.events.started(t.Context())
-	fixture.events.completed(t.Context(), http.StatusOK, false, nil)
-	require.Len(t, *fixture.published, 2, "both records were handed to the publisher before it refused them")
-	require.Equal(t, 2, strings.Count(fixture.warnings.String(), "tool call record was not published"))
-	require.Contains(t, fixture.warnings.String(), "pubsub unavailable")
-	require.Contains(t, fixture.warnings.String(), "call-3")
+	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusOK, true, nil))
+	require.Equal(t, "tool_error", recordStringAttribute(record, "error.type"), "the upstream said isError, so the client read an error")
+	require.False(t, recordHasAttribute(record, "error.message"), "the result document is the record of it")
 }
 
-func TestToolCallEventsCompletedFollowsAPassthroughResultsOwnVerdict(t *testing.T) {
+func TestToolCallRecordPublishFailureIsOnlyAWarning(t *testing.T) {
 	t.Parallel()
 
-	fixture := newToolCallEventsFixture(t, gcp.NewSuccessPublishResult(), toolCallIdentity{callID: "call-4"})
+	call := toolCall{id: "call-3", start: time.Unix(1_700_000_000, 0), organizationID: "org-1", projectID: "project-1"}
 
-	fixture.events.started(t.Context())
-	fixture.events.completed(t.Context(), http.StatusOK, true, nil)
+	_, warnings := publishedToolCallRecord(t, gcp.NewErrPublishResult(errors.New("pubsub unavailable")), call, call.record(call.start, http.StatusOK, false, nil))
+	require.Equal(t, 1, strings.Count(warnings, "tool call record was not published"))
+	require.Contains(t, warnings, "pubsub unavailable")
+	require.Contains(t, warnings, "call-3")
+}
 
-	completed := (*fixture.published)[1]
-	require.Equal(t, dialect.OutcomeError, recordStringAttribute(completed, "gram.outcome"), "the upstream said isError, so the client read an error")
-	require.False(t, recordHasAttribute(completed, "error.message"), "the result document is the record of it")
-	for _, kv := range completed.GetAttributes() {
-		if kv.GetKey() == "http.response.status_code" {
-			require.Equal(t, int64(http.StatusOK), kv.GetValue().GetIntValue())
-		}
-	}
+func TestToolCallErrorTypeIsEmptyOnlyForASuccess(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, toolCallErrorType(http.StatusOK, false, nil))
+	require.Equal(t, "502", toolCallErrorType(http.StatusBadGateway, false, nil))
+	require.Equal(t, "tool_error", toolCallErrorType(http.StatusOK, true, nil))
+	require.Equal(t, string(oops.CodeUnexpected), toolCallErrorType(http.StatusInternalServerError, false, oops.E(oops.CodeUnexpected, nil, "boom")))
 }
 
 func TestToolCallOutcomeFollowsTheIsErrorRule(t *testing.T) {

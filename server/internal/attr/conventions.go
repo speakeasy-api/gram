@@ -679,7 +679,7 @@ const (
 	SlackEventTypeKey            = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey               = attribute.Key("gram.slack.team.id")
 	ToolCallDurationKey          = attribute.Key("gram.tool_call.duration")
-	// ToolCallIDKey is shared by the started and completed records of one call.
+	// ToolCallIDKey names one gateway tool call on its telemetry_logs row.
 	ToolCallIDKey                  = attribute.Key("gram.tool_call.id")
 	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
@@ -863,6 +863,10 @@ const (
 	GenAIToolNameKey          = semconv.GenAIToolNameKey
 	GenAIToolTypeKey          = semconv.GenAIToolTypeKey
 	GenAIToolDescriptionKey   = semconv.GenAIToolDescriptionKey
+
+	// MCP semconv keys
+	McpMethodNameKey = semconv.McpMethodNameKey
+	McpSessionIDKey  = semconv.McpSessionIDKey
 
 	// GenAI semconv keys for messages (opt-in due to PII concerns)
 	GenAIInputMessagesKey      = semconv.GenAIInputMessagesKey
@@ -3122,6 +3126,10 @@ func SlogGenAIToolCallID(v string) slog.Attr      { return slog.String(string(Ge
 
 func GenAIToolName(v string) attribute.KeyValue { return GenAIToolNameKey.String(v) }
 func SlogGenAIToolName(v string) slog.Attr      { return slog.String(string(GenAIToolNameKey), v) }
+
+func McpMethodName(v string) attribute.KeyValue { return McpMethodNameKey.String(v) }
+
+func McpSessionID(v string) attribute.KeyValue { return McpSessionIDKey.String(v) }
 
 func GenAIToolType(v string) attribute.KeyValue { return GenAIToolTypeKey.String(v) }
 func SlogGenAIToolType(v string) slog.Attr      { return slog.String(string(GenAIToolTypeKey), v) }

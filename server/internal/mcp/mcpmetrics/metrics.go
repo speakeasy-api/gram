@@ -11,20 +11,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // InstrumentMCPRequestRejected is the OTel instrument name for the counter of
 // requests rejected before dispatch, by the Session OAuth authentication gate
 // or by request validation.
 const InstrumentMCPRequestRejected = "mcp.request.rejected"
-
-// InstrumentMCPToolCallRecordPublish is the OTel instrument name for the
-// counter of gateway tool call records handed to the OTel event pipeline, by
-// record (`event`: the record's event name) and outcome. A failed publish
-// never fails the call, so this counter is the only place a lost record is
-// visible beyond the warning log.
-const InstrumentMCPToolCallRecordPublish = "mcp.tool_call.record.publish"
 
 // RequestRejectionReason is the closed set of reasons [Metrics] records on
 // mcp.request.rejected under gram.mcp.rejection_reason. It stays coarse so
@@ -125,12 +117,6 @@ type Metrics struct {
 	mcpRequestDuration metric.Float64Histogram
 	identityCoverage   *IdentityCoverageCounter
 	legacyFallback     *LegacyFallbackCounter
-
-	// mcpToolCallRecordPublishCounter counts the started and completed
-	// records of hosted tool calls by whether Pub/Sub acked them. No
-	// per-server or tenant dimension: the question is whether the pipeline
-	// is losing records, not whose.
-	mcpToolCallRecordPublishCounter metric.Int64Counter
 
 	// oauthFlow{Started,Completed,Failed,Declined}Counter instrument the
 	// user-facing OAuth flow as a unit. They decompose a flow's terminal
@@ -302,15 +288,6 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create tunnel public rejected counter", attr.SlogError(err))
 	}
 
-	mcpToolCallRecordPublishCounter, err := meter.Int64Counter(
-		InstrumentMCPToolCallRecordPublish,
-		metric.WithDescription("Gateway tool call records published into the OTel event pipeline, by record and outcome"),
-		metric.WithUnit("{record}"),
-	)
-	if err != nil {
-		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPToolCallRecordPublish), attr.SlogError(err))
-	}
-
 	return &Metrics{
 		mcpToolCallCounter:                   mcpToolCallCounter,
 		mcpRequestDuration:                   mcpRequestDuration,
@@ -329,22 +306,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
 		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
-		mcpToolCallRecordPublishCounter:      mcpToolCallRecordPublishCounter,
 	}
-}
-
-// RecordToolCallRecordPublish counts one gateway tool call record, named by
-// its event name, that the OTel event pipeline acked (success) or refused or
-// timed out on (failure).
-func (m *Metrics) RecordToolCallRecordPublish(ctx context.Context, eventName string, outcome o11y.Outcome) {
-	if m == nil || m.mcpToolCallRecordPublishCounter == nil {
-		return
-	}
-
-	m.mcpToolCallRecordPublishCounter.Add(ctx, 1, metric.WithAttributes(
-		attr.Event(eventName),
-		attr.Outcome(outcome),
-	))
 }
 
 // TunnelPublicRejectReason is the closed set of pre-proxy rejection causes on

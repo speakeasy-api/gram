@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -11,22 +12,32 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 )
 
-// toolCallTenant is the tool's own organization and project, never the caller's claim.
-type toolCallTenant struct {
+const (
+	// executeToolOperation is the GenAI semconv operation name of a tool call.
+	executeToolOperation = "execute_tool"
+
+	// toolsCallMethod is the MCP semconv method name of a tool call.
+	toolsCallMethod = "tools/call"
+
+	// toolErrorType is the MCP semconv error.type of a result that says isError.
+	toolErrorType = "tool_error"
+)
+
+// toolCall is what the gateway knows about one hosted tool call. Its record
+// is a GenAI semconv execute_tool log under the call id.
+type toolCall struct {
+	id    string
+	start time.Time
+
+	// organizationID and projectID are the tool's own, never the caller's claim.
 	organizationID string
 	projectID      string
-}
 
-// toolCallIdentity is what both records of a tool call say about it.
-type toolCallIdentity struct {
-	callID          string
 	sessionID       string
 	chatID          string
 	toolName        string
@@ -42,103 +53,69 @@ type toolCallIdentity struct {
 	userEmail       string
 }
 
-func (id toolCallIdentity) attributes() []attribute.KeyValue {
-	out := []attribute.KeyValue{attr.ToolCallID(id.callID)}
+func (c toolCall) record(end time.Time, statusCode int, resultIsError bool, failure *oops.ShareableError) log.Record {
+	attrs := []attribute.KeyValue{
+		attr.GenAIOperationName(executeToolOperation),
+		attr.McpMethodName(toolsCallMethod),
+		attr.GenAIToolCallID(c.id),
+		attr.HTTPResponseStatusCode(statusCode),
+		attr.ToolCallDuration(end.Sub(c.start)),
+	}
 	for _, kv := range []attribute.KeyValue{
-		attr.SessionID(id.sessionID),
-		attr.ChatID(id.chatID),
-		attr.ToolName(id.toolName),
-		attr.ToolURN(id.toolURN),
-		attr.ToolsetSlug(id.toolsetSlug),
-		attr.McpServerID(id.mcpServerID),
-		attr.MetaMcpServerID(id.metaMCPServerID),
-		attr.McpURL(id.mcpURL),
-		attr.McpClientName(id.clientName),
-		attr.McpClientVersion(id.clientVersion),
-		attr.ExternalUserID(id.externalUserID),
-		attr.UserID(id.userID),
-		attr.UserEmailKey.String(id.userEmail),
+		attr.GenAIToolName(c.toolName),
+		attr.McpSessionID(c.sessionID),
+		attr.GenAIConversationID(c.chatID),
+		attr.UserID(c.externalUserID),
+		attr.UserEmailKey.String(c.userEmail),
+		attr.AuthUserID(c.userID),
+		attr.ToolURN(c.toolURN),
+		attr.ToolsetSlug(c.toolsetSlug),
+		attr.McpServerID(c.mcpServerID),
+		attr.MetaMcpServerID(c.metaMCPServerID),
+		attr.McpURL(c.mcpURL),
+		attr.McpClientName(c.clientName),
+		attr.McpClientVersion(c.clientVersion),
+		attr.ErrorTypeKey.String(toolCallErrorType(statusCode, resultIsError, failure)),
 	} {
 		if kv.Value.AsString() != "" {
-			out = append(out, kv)
+			attrs = append(attrs, kv)
 		}
-	}
-	return out
-}
-
-// toolCallEvents emits the started and completed records of one tool call,
-// both under the call id so they pair up in agent_events.
-type toolCallEvents struct {
-	logger  *otelpub.Logger
-	log     *slog.Logger
-	metrics *mcpmetrics.Metrics
-	tenant  toolCallTenant
-	callID  string
-	base    []log.KeyValue
-	start   time.Time
-	now     func() time.Time
-}
-
-func newToolCallEvents(
-	logger *otelpub.Logger,
-	slogger *slog.Logger,
-	metrics *mcpmetrics.Metrics,
-	tenant toolCallTenant,
-	identity toolCallIdentity,
-	now func() time.Time,
-) *toolCallEvents {
-	return &toolCallEvents{
-		logger:  logger,
-		log:     slogger,
-		metrics: metrics,
-		tenant:  tenant,
-		callID:  identity.callID,
-		base:    logAttributes(identity.attributes()...),
-		start:   now(),
-		now:     now,
-	}
-}
-
-func (e *toolCallEvents) started(ctx context.Context) {
-	var record log.Record
-	record.SetEventName(dialect.GramToolCallStartedEvent)
-	record.SetTimestamp(e.start)
-	record.SetSeverity(log.SeverityInfo)
-	record.AddAttributes(e.base...)
-	e.emit(ctx, record)
-}
-
-func (e *toolCallEvents) completed(ctx context.Context, statusCode int, resultIsError bool, failure *oops.ShareableError) {
-	end := e.now()
-	var record log.Record
-	record.SetEventName(dialect.GramToolCallCompletedEvent)
-	record.SetTimestamp(end)
-	record.SetSeverity(log.SeverityInfo)
-	record.AddAttributes(e.base...)
-	record.AddAttributes(logAttributes(toolCallCompletedAttributes(statusCode, resultIsError, end.Sub(e.start), failure)...)...)
-	e.emit(ctx, record)
-}
-
-// emit never fails the call: a lost record is logged and counted.
-func (e *toolCallEvents) emit(ctx context.Context, record log.Record) {
-	err := e.logger.Log(otelpub.WithRecordID(otelpub.WithTenant(ctx, e.tenant.organizationID, e.tenant.projectID), e.callID), record)
-	if err != nil {
-		e.log.WarnContext(ctx, "tool call record was not published", attr.SlogToolCallID(e.callID), attr.SlogError(err))
-	}
-	e.metrics.RecordToolCallRecordPublish(ctx, record.EventName(), o11y.OutcomeFromError(err))
-}
-
-func toolCallCompletedAttributes(statusCode int, resultIsError bool, duration time.Duration, failure *oops.ShareableError) []attribute.KeyValue {
-	out := []attribute.KeyValue{
-		attr.OutcomeKey.String(toolCallOutcome(statusCode, resultIsError)),
-		attr.HTTPResponseStatusCodeKey.Int(statusCode),
-		attr.ToolCallDuration(duration),
 	}
 	if failure != nil {
 		// A shareable error's text is what the client was told.
-		out = append(out, attr.ErrorMessage(failure.Error()))
+		attrs = append(attrs, attr.ErrorMessage(failure.Error()))
 	}
-	return out
+
+	var record log.Record
+	record.SetEventName(executeToolOperation)
+	record.SetTimestamp(end)
+	record.SetSeverity(log.SeverityInfo)
+	for _, kv := range attrs {
+		record.AddAttributes(log.KeyValueFromAttribute(kv))
+	}
+	return record
+}
+
+// publishToolCallRecord never fails the call: a lost record is only logged.
+func publishToolCallRecord(ctx context.Context, logger *otelpub.Logger, slogger *slog.Logger, call toolCall, record log.Record) {
+	ctx = otelpub.WithRecordID(otelpub.WithTenant(ctx, call.organizationID, call.projectID), call.id)
+	if err := logger.Log(ctx, record); err != nil {
+		slogger.WarnContext(ctx, "tool call record was not published", attr.SlogToolCallID(call.id), attr.SlogError(err))
+	}
+}
+
+// toolCallErrorType is empty for a call the client read as a success.
+func toolCallErrorType(statusCode int, resultIsError bool, failure *oops.ShareableError) string {
+	switch {
+	case toolCallOutcome(statusCode, resultIsError) == dialect.OutcomeOK:
+		return ""
+	case failure != nil:
+		return string(failure.Code)
+	case resultIsError:
+		return toolErrorType
+	default:
+		return strconv.Itoa(statusCode)
+	}
 }
 
 // toolCallOutcome follows the verdict the client reads as isError.
@@ -168,12 +145,4 @@ func toolCallCaller(ctx context.Context, payload *mcpInputs, toolOrganizationID,
 		return "", ""
 	}
 	return payload.userID, email
-}
-
-func logAttributes(attrs ...attribute.KeyValue) []log.KeyValue {
-	out := make([]log.KeyValue, 0, len(attrs))
-	for _, kv := range attrs {
-		out = append(out, log.KeyValueFromAttribute(kv))
-	}
-	return out
 }
