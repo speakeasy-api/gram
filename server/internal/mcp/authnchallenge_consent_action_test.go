@@ -94,6 +94,30 @@ func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.
 	return rsc.ID
 }
 
+// createConsentRemoteClientAt registers another OAuth client at the upstream
+// authorization server providerID, as an MCP server with several upstream
+// bindings has: one server signs its users in to one authorization server,
+// and each of its bindings is told apart by the resource its grant records.
+func createConsentRemoteClientAt(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID, slug string, providerID uuid.UUID, userSessionIssuerIDs []uuid.UUID) uuid.UUID {
+	t.Helper()
+	q := remotesessions_repo.New(conn)
+	rsc, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        conv.ToPGTextEmpty(organizationID),
+		RemoteSessionIssuerID: providerID,
+		ClientID:              slug + "-external-client",
+		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	for _, usi := range userSessionIssuerIDs {
+		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: rsc.ID,
+			UserSessionIssuerID:   usi,
+		}))
+	}
+	return rsc.ID
+}
+
 // attachConsentRemoteMcpServer binds a remote-backed mcp_server to issuerID
 // so clients on that issuer derive serverURL as their resource.
 func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) uuid.UUID {
@@ -226,6 +250,24 @@ func postConnectAction(t *testing.T, fx consentActionFixture, clientID uuid.UUID
 	return loc
 }
 
+// requireConnectActionRefused drives one client's connect action and asserts
+// the refusal it answers with.
+func requireConnectActionRefused(t *testing.T, fx consentActionFixture, clientID uuid.UUID, want string) {
+	t.Helper()
+
+	form := url.Values{}
+	form.Set("state", fx.stateID)
+	form.Set("csrf_token", "csrf-token")
+	form.Set("action", "connect")
+	form.Set("client_id", clientID.String())
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	err := fx.ti.service.ServeConsentAction(w, req, fx.endpoint)
+	require.Error(t, err)
+	require.ErrorContains(t, err, want)
+}
+
 // mintedRemoteLoginState reads back the stored RemoteLoginState — its
 // Resource is what the code exchange records onto the grant.
 func mintedRemoteLoginState(t *testing.T, ctx context.Context, fx consentActionFixture, upstreamState string) remotesessions.RemoteLoginState {
@@ -332,6 +374,7 @@ func TestServeConsentAction_ConnectSharedClientRecordsEndpointUpstream(t *testin
 
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-sole")
 	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-sole", "", []uuid.UUID{fx.shared, other})
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, shared)
 
 	loc := postConnectAction(t, fx, shared)
 	require.Equal(t, consentUpstreamA+"/", loc.Query().Get("resource"))
@@ -347,7 +390,10 @@ func TestServeConsentAction_ConnectSharedClientDefersToOwningSibling(t *testing.
 
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-owned")
 	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-owner", "", []uuid.UUID{fx.shared})
-	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-shared", "", []uuid.UUID{fx.shared, other})
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, owner)
+	// Both bindings are the endpoint's server's own, so they sit at the
+	// authorization server it signs its users in to.
+	shared := createConsentRemoteClientAt(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-shared", fx.endpoint.RemoteSessionIssuerID.UUID, []uuid.UUID{fx.shared, other})
 
 	locOwner := postConnectAction(t, fx, owner)
 	require.Equal(t, consentUpstreamA+"/", locOwner.Query().Get("resource"))
@@ -365,7 +411,8 @@ func TestServeConsentAction_ConnectTwoSharedClientsClaimNothing(t *testing.T) {
 
 	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-two")
 	first := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-first", "", []uuid.UUID{fx.shared, other})
-	second := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-second", "", []uuid.UUID{fx.shared, other})
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, first)
+	second := createConsentRemoteClientAt(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-second", fx.endpoint.RemoteSessionIssuerID.UUID, []uuid.UUID{fx.shared, other})
 
 	for _, id := range []uuid.UUID{first, second} {
 		loc := postConnectAction(t, fx, id)

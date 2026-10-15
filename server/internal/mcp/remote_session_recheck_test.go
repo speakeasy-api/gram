@@ -210,7 +210,20 @@ func TestRemoteSessionRecheck_RateLimitedHostDoesNotStopThePass(t *testing.T) {
 	subjectB := urn.NewUserSubject(uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, fx.clientID, subjectB, "token-"+prefix+"-b", fx.member.url)
 	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, fx.clientID, subjectB, 29*time.Hour, "jti-"+prefix+"-b")
+	// The other host's client signs users in to its own authorization server,
+	// so it is another MCP server's sign-in: the pass places its grant on
+	// that server, as production does.
 	otherClient := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-other", "", []uuid.UUID{shared})
+	otherServerID := createPublicRemoteMcpServer(t, ctx, fx.ti.conn, projectID, shared, prefix+"-other-server", fx.member.url)
+	configureServerProvider(t, ctx, fx.ti, projectID, orgID, otherServerID, otherClient)
+	_, err := mcpendpoints_repo.New(fx.ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
+		ProjectID:       projectID,
+		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     conv.ToNullUUID(otherServerID),
+		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:            prefix + "-other-server",
+	})
+	require.NoError(t, err)
 	subjectC := urn.NewUserSubject(uuid.NewString())
 	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, otherClient, subjectC, "token-"+prefix+"-c", fx.member.url)
 	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, otherClient, subjectC, 28*time.Hour, "jti-"+prefix+"-c")

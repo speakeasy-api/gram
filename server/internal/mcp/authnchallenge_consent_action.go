@@ -157,7 +157,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, autoRefresh, focusServer)
+		resourceSiblings, serr := s.listEndpointIssuerClients(ctx, endpoint, challengeState)
+		if serr != nil {
+			return oops.E(oops.CodeUnexpected, serr, "list remote session clients").LogError(ctx, logger)
+		}
+		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, resourceSiblings, autoRefresh, focusServer)
 		if berr != nil {
 			return berr
 		}
@@ -274,15 +278,18 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 // identically — an auto-connect that qualified the credential differently from
 // a manual one would mint a session the runtime then rejects. hop reports a
 // URL to the remote login browser hop rather than the upstream provider.
-// bound is every client bound to the endpoint, self clients included, since
-// each one's upstream decides what client may claim.
+// resourceSiblings is every client the endpoint's user session issuer binds,
+// self clients included, since each one's upstream decides what client may
+// claim. It is deliberately the issuer-wide list rather than the server's own
+// clients: a resource one server already serves stays claimed against the
+// others, whichever provider signs them in.
 func (s *Service) buildRemoteConnectURL(
 	ctx context.Context,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
-	bound []remotesessions.Client,
+	resourceSiblings []remotesessions.Client,
 	autoRefresh *bool,
 	focusServer string,
 ) (string, bool, error) {
@@ -306,9 +313,9 @@ func (s *Service) buildRemoteConnectURL(
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 	// decided, and falling back would qualify the credential anyway.
 	if rerr == nil && !claimedByMember {
-		boundIDs := make([]uuid.UUID, 0, len(bound))
-		for i := range bound {
-			boundIDs = append(boundIDs, bound[i].ID)
+		boundIDs := make([]uuid.UUID, 0, len(resourceSiblings))
+		for i := range resourceSiblings {
+			boundIDs = append(boundIDs, resourceSiblings[i].ID)
 		}
 		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
 	}

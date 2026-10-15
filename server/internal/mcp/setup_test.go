@@ -907,3 +907,14 @@ func configureServerProvider(t *testing.T, ctx context.Context, ti *testInstance
 	require.Equal(t, int64(1), stamped, "the provider must land on exactly one live server")
 	return provider
 }
+
+// configureEndpointProvider configures the MCP server a resolved endpoint
+// fronts with the provider of clientID, and points the endpoint at it. This is
+// what the identity commit writes in production; a fixture that only binds a
+// client to the user session issuer leaves the server signing nobody in, and
+// its consent covers none of the issuer's clients.
+func configureEndpointProvider(t *testing.T, ctx context.Context, ti *testInstance, endpoint *mcp.ResolvedMcpEndpoint, clientID uuid.UUID) {
+	t.Helper()
+	require.True(t, endpoint.McpServerID.Valid, "only a server-keyed endpoint has a provider of its own")
+	endpoint.RemoteSessionIssuerID = configureServerProvider(t, ctx, ti, endpoint.ProjectID, endpoint.OrganizationID, endpoint.McpServerID.UUID, clientID)
+}

@@ -250,6 +250,7 @@ func TestServeConsent_RemoteServerLegacyGrantAsksForReconnect(t *testing.T) {
 		return server.ID
 	})
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-remote", "", []uuid.UUID{fx.shared})
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, clientID)
 
 	grant(t, ctx, fx, clientID, "")
 	expectAutoReconnect(t, fx, upstream)
@@ -270,6 +271,7 @@ func TestServeConsent_OtherResourceDisplayFallsBackToIssuer(t *testing.T) {
 		return server.ID
 	})
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-display", "", []uuid.UUID{fx.shared})
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, clientID)
 	_, err := remotesessions_repo.New(fx.ti.conn).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessions_repo.UpdateRemoteSessionClientResourceDisplayParams{
 		ResourceIdentifier:    conv.ToPGText(upstreamA),
 		ResourceName:          "Resource A",
@@ -309,21 +311,26 @@ func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
 		return serverID
 	})
 	own := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-tunnel-own", "", []uuid.UUID{fx.shared})
-	stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, own)))
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, own)
+	// A client of another authorization server is another server's sign-in,
+	// so this server's consent never renders it and the rule never sees it.
 	other := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "rt-tunnel-other", "", []uuid.UUID{fx.shared})
 
 	grant(t, ctx, fx, other, "https://unrelated.example.com/mcp")
 	grant(t, ctx, fx, own, "")
-	expect(t, fx, 2, 2, false)
+	expect(t, fx, 1, 1, false)
 	expectRechecks(t, fx, 1)
 	grant(t, ctx, fx, own, "urn:gram:tunnel:other")
-	expect(t, fx, 1, 2, true)
+	// The server's one card carries its one sign-in, so the page spends its
+	// single auto-connect on it before it renders the reconnect prompt.
+	expectAutoReconnect(t, fx, "")
+	expect(t, fx, 0, 1, true)
 	expectRechecks(t, fx, 0)
 	grant(t, ctx, fx, own, strings.TrimRight(identifier, "/"))
-	expect(t, fx, 2, 2, false)
+	expect(t, fx, 1, 1, false)
 	expectRechecks(t, fx, 1)
 	grant(t, ctx, fx, own, "https://mcp.example.test/a/b/")
-	expect(t, fx, 1, 2, true)
+	expect(t, fx, 0, 1, true)
 	expectRechecks(t, fx, 0)
 }
 

@@ -348,20 +348,53 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 }
 
 // listEndpointClients lists the remote session clients an endpoint's consent
-// covers: its project's own, or, for an organization gateway, the clients
-// behind the servers the challenge's subject can reach through it.
+// covers: for an MCP server, the clients of the upstream authorization server
+// that server signs its users in to, and nothing when it signs them in to
+// nothing. Sign-in is a per-server fact, so the clients the server's user
+// session issuer binds for the other servers sharing it are not this server's
+// to present, connect, or probe. A server still holds several upstream
+// bindings of its own provider, each qualified by its recorded resource
+// (AGE-2554), which is what the multi-binding cards and the resource-claiming
+// rules below are for; routing picks between them at serve time.
 //
-// A direct endpoint's list is deliberately not narrowed to the provider its
-// MCP server signs in to. One server may hold several upstream bindings whose
-// grants are qualified by their recorded resource (AGE-2554), which is what
-// the multi-binding cards and the resource-claiming rules below are for, and
-// routing picks between them at serve time.
+// A legacy /mcp toolset endpoint has no server identity to scope by, so it
+// stays issuer-wide, and so does an organization gateway, whose members each
+// carry their own provider and are filtered by reachability instead.
+func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
+	clients, err := s.listEndpointIssuerClients(ctx, endpoint, challengeState)
+	if err != nil {
+		return nil, err
+	}
+	provider, scoped := serverScopedProvider(endpoint)
+	if !scoped {
+		return clients, nil
+	}
+	if !provider.Valid {
+		return nil, nil
+	}
+	scopedClients := make([]remotesessions.Client, 0, len(clients))
+	for _, client := range clients {
+		if client.RemoteSessionIssuerID == provider.UUID {
+			scopedClients = append(scopedClients, client)
+		}
+	}
+	return scopedClients, nil
+}
+
+// listEndpointIssuerClients lists every client the endpoint's user session
+// issuer binds that the challenge's subject may see: its project's own, or,
+// for an organization gateway, the clients behind the servers the subject can
+// reach through it.
 //
 // An organization gateway's issuer may carry clients from every project in
 // the organization, and one person reaches only some of them. Listing the
 // rest would show a person connections, and the services behind them, for
 // servers their access does not include.
-func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
+//
+// Consent reaches this through listEndpointClients. Resource claiming weighs
+// a client against every client bound to the same issuer, so it reads this
+// list directly.
+func (s *Service) listEndpointIssuerClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
 	if endpoint.IsOrganizationGateway() {
 		clients, err := s.remoteChallengeMgr.ListOrganizationClients(ctx, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 		if err != nil {

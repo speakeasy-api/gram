@@ -221,8 +221,8 @@ func TestConsentPage_DirectTunneledServiceIsManaged(t *testing.T) {
 		return serverID
 	})
 	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim480-tunnel-chained", "", []uuid.UUID{fx.shared})
-	issuer := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.clientA)
-	stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, serverID, conv.ToNullUUID(issuer))
+	configureEndpointProvider(t, ctx, fx.ti, fx.endpoint, fx.clientA)
+	issuer := fx.endpoint.RemoteSessionIssuerID.UUID
 	g := setConsentGovernor(t, fx, issuer, identifier)
 
 	code, page, loc := render(t, fx)
