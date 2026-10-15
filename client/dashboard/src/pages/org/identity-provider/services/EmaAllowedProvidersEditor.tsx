@@ -398,13 +398,13 @@ export function EmaAllowedProvidersEditor({
         </SettingsSection.Body>
         {remoteSessionIssuerId && (canEdit || (canRestore && !isDefault)) && (
           <SettingsSection.Footer>
-            <SettingsSection.FooterHint>
-              {editing
-                ? "Takes effect for the next person who connects."
-                : custom
-                  ? "Go back to the default to accept every identity provider."
-                  : undefined}
-            </SettingsSection.FooterHint>
+            {(editing || custom) && (
+              <SettingsSection.FooterHint>
+                {editing
+                  ? "Takes effect for the next person who connects."
+                  : "Go back to the default to accept every identity provider."}
+              </SettingsSection.FooterHint>
+            )}
             <SettingsSection.FooterActions>
               {canRestore && !isDefault && (
                 <Button

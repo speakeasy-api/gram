@@ -300,6 +300,7 @@ describe("one service", () => {
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Move/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Use default" })).toBeNull();
+    expect(document.querySelector("#accepted-providers .skeleton")).toBeNull();
   });
 
   it("edits the default as checkboxes and saves the checked ones in candidate order", () => {
