@@ -36,7 +36,7 @@ type MCPServerTransactionInput struct {
 	ToolVariationsGroupID uuid.NullUUID
 }
 
-// ErrServerReferenceOutsideProject marks a create that named a backend,
+// ErrServerReferenceOutsideProject marks a create or update that named a backend,
 // environment or variation group belonging to another project. The foreign
 // keys only enforce existence, not tenancy, so this check is what keeps a
 // server and the toolset behind it in the same project.
@@ -125,6 +125,11 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		Visibility:            input.Visibility,
 		NetworkAccessMode:     networkaccess.Storage(mode),
 	})
+	// The insert's only filter is its same-project toolset guard, so no row
+	// back means the toolset belongs to another project.
+	if errors.Is(err, pgx.ErrNoRows) {
+		return repo.McpServer{}, fmt.Errorf("%w: toolset_id does not reference a resource in this project", ErrServerReferenceOutsideProject)
+	}
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("create MCP server: %w", err)
 	}
