@@ -31,10 +31,12 @@ type consentGovernor struct {
 	governs    bool
 	configured bool
 	usable     bool
+	reauth     bool
 	acquire    func(context.Context, identitychaining.Request) identitychaining.Outcome
 	mu         sync.Mutex
 	requests   []identitychaining.Request
 	acquired   []identitychaining.Request
+	authorized []identitychaining.Request
 }
 
 func (g *consentGovernor) Governs(context.Context, identitychaining.Request) bool {
@@ -54,6 +56,13 @@ func (g *consentGovernor) Configured(context.Context, string, uuid.UUID, uuid.UU
 
 func (g *consentGovernor) HasUsableCredential(context.Context, identitychaining.Request) bool {
 	return g.usable
+}
+
+func (g *consentGovernor) Authorizes(_ context.Context, req identitychaining.Request) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.authorized = append(g.authorized, req)
+	return !g.reauth
 }
 
 func (g *consentGovernor) Acquire(ctx context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
@@ -76,7 +85,7 @@ func (g *consentGovernor) seen() []identitychaining.Request {
 
 func setConsentGovernor(t *testing.T, fx consentActionFixture, issuer uuid.UUID, served ...string) *consentGovernor {
 	t.Helper()
-	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil}
+	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, reauth: false, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, authorized: nil}
 	for _, u := range served {
 		g.served[u] = true
 	}

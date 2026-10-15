@@ -67,6 +67,25 @@ func TestGovernor_HasUsableCredential(t *testing.T) {
 	require.False(t, f.credentials(t)[0].Deleted, "a status read never retires a credential")
 }
 
+func TestGovernor_AuthorizesFollowsDelegation(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	require.True(t, g.Authorizes(t.Context(), f.req), "a retained delegation chains without a new sign-in")
+
+	unbound := f.req
+	unbound.UpstreamResource = "https://unbound.example.test"
+	require.False(t, g.Authorizes(t.Context(), unbound))
+
+	other := f.req
+	other.UserID = "user-other"
+	require.False(t, g.Authorizes(t.Context(), other))
+	require.False(t, NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, nil).Authorizes(t.Context(), f.req), "without a delegation check nothing authorizes")
+
+	f.deleteDelegation(t)
+	require.False(t, g.Authorizes(t.Context(), f.req), "a missing delegation needs a fresh sign-in")
+}
+
 func TestGovernor_TrustedRegistrationRotationMakesCredentialUnusable(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)

@@ -1074,7 +1074,7 @@ func (s *Service) rotateRefreshToken(
 	if lookupErr == nil && refreshSession.SubjectUrn.Kind == urn.SessionSubjectKindUser &&
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
 		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) &&
-		s.userRefreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn) {
+		s.userRefreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required")
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
 	}
@@ -1334,34 +1334,35 @@ func (s *Service) rotateRefreshToken(
 // access token would only hit the same invalid_token from the MCP runtime,
 // while invalid_grant sends the client through the consent page that
 // reconnects the upstream. It fails open (meta MCP endpoints, check errors)
-// because many clients treat any failed refresh as a sign-out. Clients of the
-// issuer identity chaining serves for the upstream are skipped, as the runtime
-// chains for them.
-func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) bool {
+// because many clients treat any failed refresh as a sign-out. When identity
+// chaining owns the upstream the runtime chains instead, so the reconnect
+// stands only if chaining would make the human sign in again.
+func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
 	if endpoint.MetaMcpServerID.Valid {
 		return false
 	}
-	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, s.refreshChainedIssuer(ctx, endpoint, subject))
+	reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, uuid.Nil)
+	if err != nil {
+		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
+		return false
+	}
+	if !reconnect {
+		return false
+	}
+	chained, decision := s.refreshChaining(ctx, endpoint, subject, jti)
+	switch decision {
+	case refreshChainingNone, refreshChainingReauthenticate:
+		return true
+	case refreshChainingUnconfirmed:
+		return false
+	case refreshChainingServed:
+	}
+	reconnect, err = s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, chained)
 	if err != nil {
 		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
 		return false
 	}
 	return reconnect
-}
-
-// refreshChainedIssuer is the remote session issuer identity chaining serves
-// for subject on the endpoint's upstream, or uuid.Nil when it serves none.
-func (s *Service) refreshChainedIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) uuid.UUID {
-	if s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" ||
-		!s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID) {
-		return uuid.Nil
-	}
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil}
-	_, issuer, served := s.directChainServedIssuer(ctx, endpoint, subject.ID, routing)
-	if !served {
-		return uuid.Nil
-	}
-	return issuer
 }
 
 func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lockOwner string, logger *slog.Logger) {

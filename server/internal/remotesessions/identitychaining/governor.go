@@ -242,6 +242,61 @@ func (g *Governor) hasExternalCredential(ctx context.Context, req Request, sel s
 	return value != ""
 }
 
+// Authorizes reports whether identity chaining could serve req without the
+// human signing in again: a provider in the vendor's order that can serve
+// still accepts req's Speakeasy grant (req.UserSessionJTI) or the human's
+// retained delegation. It reads stored state only, and transient faults read
+// as authorized so a retryable outage never demands a reconnect.
+func (g *Governor) Authorizes(ctx context.Context, req Request) bool {
+	if !req.complete() || req.UserID == "" {
+		return false
+	}
+	sel, outcome := g.selectBinding(ctx, g.logger, req)
+	if !outcome.Succeeded() {
+		return false
+	}
+	order, outcome := g.providerOrder(ctx, g.logger, req, sel)
+	if !outcome.Succeeded() {
+		return outcome.Retryable
+	}
+	for _, p := range order.Available() {
+		if p.Kind != remotesessions.EMAProviderSpeakeasy {
+			if g.delegationCurrent(ctx, req) {
+				return true
+			}
+			continue
+		}
+		if req.UserSessionJTI == "" {
+			continue
+		}
+		current := sel
+		current.provider = p
+		if outcome := g.source(p).authorize(ctx, g.logger, req, &current); outcome.Succeeded() || outcome.Retryable {
+			return true
+		}
+	}
+	return false
+}
+
+// delegationCurrent reports whether the human's retained delegation still
+// belongs to the user session issuer's current trusted registration.
+func (g *Governor) delegationCurrent(ctx context.Context, req Request) bool {
+	if g.delegation == nil {
+		return false
+	}
+	issuer, err := repo.New(g.db).GetEMAChainingUserIssuer(ctx, repo.GetEMAChainingUserIssuerParams{ID: req.UserSessionIssuerID, OrganizationID: conv.ToPGText(req.OrganizationID)})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false
+	case err != nil:
+		g.logger.WarnContext(ctx, "read identity chaining user session issuer", attr.SlogError(err))
+		return true
+	}
+	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: issuer.TrustedRemoteSessionIssuerID.UUID, ClientID: issuer.TrustedRemoteSessionClientID.UUID, HumanID: req.UserID}
+	err = g.delegation.Check(ctx, binding, authority{db: g.db, req: req})
+	return err == nil || errors.Is(err, remotesessions.ErrDelegationTemporary)
+}
+
 // credentialForUseParams reads the live credential slot for req under sel.
 func credentialForUseParams(req Request, sel selection, now time.Time) repo.GetEMACredentialForUseParams {
 	return repo.GetEMACredentialForUseParams{

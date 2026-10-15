@@ -44,6 +44,10 @@ func (g *funcGovernor) HasUsableCredential(context.Context, identitychaining.Req
 	return false
 }
 
+func (g *funcGovernor) Authorizes(context.Context, identitychaining.Request) bool {
+	return true
+}
+
 func (g *funcGovernor) Acquire(context.Context, identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
 	panic("consent must never acquire a chained token")
 }

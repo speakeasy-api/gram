@@ -186,11 +186,13 @@ func TestHandleToken_RefreshSkipsReconnectForChainedUpstream(t *testing.T) {
 		served        bool
 		governs       bool
 		otherIssuer   bool
+		reauth        bool
 		wantReconnect bool
 	}{
 		{name: "served by chaining", served: true, governs: true},
+		{name: "chaining needs a fresh sign-in", served: true, governs: true, reauth: true, wantReconnect: true},
 		{name: "not chained", wantReconnect: true},
-		{name: "ambiguous bindings", governs: true, wantReconnect: true},
+		{name: "chaining owns the upstream but cannot name its issuer", governs: true},
 		{name: "chaining serves another issuer", served: true, governs: true, otherIssuer: true, wantReconnect: true},
 	}
 	for _, tc := range cases {
@@ -199,7 +201,7 @@ func TestHandleToken_RefreshSkipsReconnectForChainedUpstream(t *testing.T) {
 
 			ctx, ti := newTestMCPService(t)
 			authCtx := requireProjectAuthContext(t, ctx)
-			_, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+			_, issuer, client, refreshToken, oldJTI := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 			remoteClient := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
 			slug := "chained-refresh-" + uuid.NewString()[:8]
 			serverID := attachConsentRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, issuer.ID, slug, upstream)
@@ -216,7 +218,7 @@ func TestHandleToken_RefreshSkipsReconnectForChainedUpstream(t *testing.T) {
 			if tc.otherIssuer {
 				servedIssuer = uuid.New()
 			}
-			g := &consentGovernor{t: t, issuer: servedIssuer, served: map[string]bool{upstream: tc.served}, governs: tc.governs, configured: true, usable: false, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil}
+			g := &consentGovernor{t: t, issuer: servedIssuer, served: map[string]bool{upstream: tc.served}, governs: tc.governs, configured: true, usable: false, reauth: tc.reauth, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, authorized: nil}
 			ti.service.SetIdentityChainer(g)
 
 			res := performRefreshRequest(ctx, ti, slug, client.ClientID, refreshToken)
@@ -230,10 +232,20 @@ func TestHandleToken_RefreshSkipsReconnectForChainedUpstream(t *testing.T) {
 			}
 
 			reqs := g.seen()
+			if !tc.governs {
+				require.Empty(t, reqs, "an upstream chaining does not own is judged from stored grants alone")
+				return
+			}
 			require.Len(t, reqs, 1)
 			require.Equal(t, upstream, reqs[0].UpstreamResource)
 			require.Equal(t, "refresh-replay-user", reqs[0].UserID)
 			require.Equal(t, issuer.ID, reqs[0].UserSessionIssuerID)
+			if tc.served {
+				g.mu.Lock()
+				require.Len(t, g.authorized, 1)
+				require.Equal(t, oldJTI, g.authorized[0].UserSessionJTI, "authorization is judged for the grant being refreshed")
+				g.mu.Unlock()
+			}
 		})
 	}
 }
