@@ -90,15 +90,9 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		retErr = errors.Join(retErr, fmt.Errorf("release demo seed advisory lock: %w", unlockErr))
 	}()
 
-	s := &seeder{spec: spec, q: nil, logger: logger, now: time.Time{}}
-	if err := pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
-		s.q = repo.New(tx)
-		if err := s.runPostgres(ctx); err != nil {
-			return err
-		}
-		return s.uploadOpenAPIDoc(ctx, blob)
-	}); err != nil {
-		return fmt.Errorf("apply demo seed to postgres: %w", err)
+	s, err := seedPostgres(ctx, logger, db, blob, spec)
+	if err != nil {
+		return err
 	}
 	logger.InfoContext(ctx, "demo seed applied to postgres")
 
@@ -107,6 +101,23 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 	logger.InfoContext(ctx, "demo seed applied to clickhouse")
 	return nil
+}
+
+// seedPostgres runs the Postgres seed for spec in one transaction, so a failed
+// run leaves the previous data in place. It returns the seeder, whose clock
+// the ClickHouse seed reuses.
+func seedPostgres(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, spec Spec) (*seeder, error) {
+	s := &seeder{spec: spec, q: nil, logger: logger, now: time.Time{}}
+	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
+		s.q = repo.New(tx)
+		if err := s.runPostgres(ctx); err != nil {
+			return err
+		}
+		return s.uploadOpenAPIDoc(ctx, blob)
+	}); err != nil {
+		return nil, fmt.Errorf("apply demo seed to postgres: %w", err)
+	}
+	return s, nil
 }
 
 // uploadOpenAPIDoc places the Sources page's "OpenAPI Specification" blob,

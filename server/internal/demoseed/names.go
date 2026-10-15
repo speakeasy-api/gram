@@ -2,9 +2,9 @@ package demoseed
 
 import (
 	"crypto/md5" //nolint:gosec // deterministic ids, not security
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"hash/fnv"
 	"strconv"
 	"time"
 
@@ -149,10 +149,12 @@ func (s *seeder) riskSuppression(n int) int {
 // calls. It only has to be stable per input, not equal to cityHash64: nothing
 // joins on these values.
 func hash64(parts ...any) uint64 {
-	h := fnv.New64a()
+	h := md5.New() //nolint:gosec // deterministic variety, not security
 	for _, p := range parts {
 		_, _ = fmt.Fprint(h, p)
 		_, _ = h.Write([]byte{0})
 	}
-	return h.Sum64()
+	// md5's output is well mixed in every bit; FNV's low bits are not, and
+	// these values are almost always taken modulo a small number.
+	return binary.BigEndian.Uint64(h.Sum(nil))
 }

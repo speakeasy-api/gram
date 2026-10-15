@@ -107,6 +107,8 @@ var chPurgeOrgTables = []string{
 	"ai_detections",
 	"ai_scan_receipts",
 	"authz_challenges",
+	// Target of authz_challenge_bucket_summaries_mv.
+	"authz_challenge_bucket_summaries",
 	"risk_findings",
 	"skill_session_versions",
 	"skill_efficacy_scores",

@@ -51,9 +51,6 @@ func (s *seeder) userID(handle string) string { return s.spec.UserPrefix + handl
 // email is a seeded user's email: s.email("amara") is "amara@demo.getgram.ai".
 func (s *seeder) email(handle string) string { return handle + s.spec.EmailDomain }
 
-// group prefixes a workos directory group id: s.group("eng") is "demo_grp_eng".
-func (s *seeder) group(suffix string) string { return s.spec.GroupPrefix + suffix }
-
 // phase is one step of the Postgres seed, run in order inside one
 // transaction. Each statement gets its own statement_timeout, so no single
 // call has to fit the whole seed inside one timer.

@@ -1,6 +1,10 @@
 package demoseed
 
-import "github.com/google/uuid"
+import (
+	"strconv"
+
+	"github.com/google/uuid"
+)
 
 // demoUser is one member of the demo employee roster. The identity profile
 // (division, department, ...) mirrors the user.attributes.* values on the
@@ -80,7 +84,7 @@ const dsReadonlyExempt = `tool_calls.size() > 0 && tool_calls.all(t, ["get_","li
 
 // Marked as fake in the value itself. Nothing verifies these: no demo agent
 // ever presents a secret, and the seed must never carry a real hash.
-const demoSecretHash = "$2a$10$DEMOSEEDNOTAREALBCRYPTHASHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+const demoSecretHash = "$2a$10$DEMOSEEDNOTAREALBCRYPTHASHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" //nolint:gosec // inert placeholder marked fake in the value, not a credential
 
 const demoCIMDURL = "https://agents.example.com/.well-known/oauth-client"
 
@@ -132,9 +136,9 @@ func (s *seeder) ruleWeekly() uuid.UUID  { return s.fixed("0000-4000-a000-000000
 
 // skillID and skillVersionID are the three manual skills (i is 1..3).
 func (s *seeder) skillID(i int) uuid.UUID {
-	return s.fixed("0000-4000-a000-0000000051a" + string(rune('0'+i)))
+	return s.fixed("0000-4000-a000-0000000051a" + strconv.Itoa(i))
 }
 
 func (s *seeder) skillVersionID(i int) uuid.UUID {
-	return s.fixed("0000-4000-a000-0000000052a" + string(rune('0'+i)))
+	return s.fixed("0000-4000-a000-0000000052a" + strconv.Itoa(i))
 }
