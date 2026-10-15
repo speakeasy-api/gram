@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/signins"
@@ -40,7 +41,7 @@ func (g *Governor) SetSpeakeasyIssuer(gate *internalsessionissuers.Gate, signer 
 		return
 	}
 	g.sources[remotesessions.EMAProviderSpeakeasy] = func(p remotesessions.EMAProvider) tokenSource {
-		return speakeasySource{g: g, gate: gate, signer: signer, flags: flags, issuerID: p.InternalSessionIssuerID}
+		return speakeasySource{g: g, gate: gate, signer: signer, flags: flags, issuerID: p.InternalSessionIssuerID, consentSignInID: uuid.Nil}
 	}
 }
 
@@ -58,6 +59,11 @@ type speakeasySource struct {
 	signer   assertionSigner
 	flags    feature.Provider
 	issuerID uuid.UUID
+
+	// consentSignInID is the consent page's sign-in. When set, the source
+	// vouches for that sign-in before its MCP grant exists, and the
+	// credential it mints waits for the grant to adopt it.
+	consentSignInID uuid.UUID
 }
 
 func (speakeasySource) kind() remotesessions.EMAProviderKind {
@@ -68,6 +74,9 @@ func (s speakeasySource) available() bool { return s.g != nil && s.gate != nil &
 func (s speakeasySource) authorize(ctx context.Context, logger *slog.Logger, req Request, sel *selection) Outcome {
 	if !s.available() {
 		return providerUnavailable
+	}
+	if s.consentSignInID != uuid.Nil {
+		return s.checkConsent(ctx, logger, req, sel, s.consentSignInID)
 	}
 	if req.UserSessionJTI == "" {
 		return newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
@@ -93,13 +102,13 @@ func (s speakeasySource) authorize(ctx context.Context, logger *slog.Logger, req
 	return s.authorizeIdentity(ctx, logger, req, sel, result)
 }
 
-func (s speakeasySource) checkConsent(ctx context.Context, logger *slog.Logger, req Request, sel selection, signInID uuid.UUID) Outcome {
+func (s speakeasySource) checkConsent(ctx context.Context, logger *slog.Logger, req Request, sel *selection, signInID uuid.UUID) Outcome {
 	result, err := signins.CheckConsentIdentity(ctx, s.g.db, req.OrganizationID, req.UserID, signInID, s.g.now())
 	if err != nil {
 		logger.ErrorContext(ctx, "check EMA consent sign-in", attr.SlogError(err))
 		return newOutcome(StageAuthorization, ReasonTransientFailure, ConfidenceVerified, true)
 	}
-	return s.authorizeIdentity(ctx, logger, req, &sel, result)
+	return s.authorizeIdentity(ctx, logger, req, sel, result)
 }
 
 func (s speakeasySource) authorizeIdentity(ctx context.Context, logger *slog.Logger, req Request, sel *selection, result signins.Result) Outcome {
@@ -271,7 +280,13 @@ func (c *Chainer) checkSpeakeasyPublish(ctx context.Context, tx pgx.Tx, req Requ
 		}
 		return fmt.Errorf("lock EMA issuer: %w", err)
 	}
-	result, err := signins.CheckSignInIdentity(ctx, tx, req.OrganizationID, sel.userSessionID, c.now(), signins.MaxAge)
+	var result signins.Result
+	var err error
+	if sel.userSessionID == uuid.Nil {
+		result, err = signins.CheckConsentIdentity(ctx, tx, req.OrganizationID, req.UserID, sel.signInID, c.now())
+	} else {
+		result, err = signins.CheckSignInIdentity(ctx, tx, req.OrganizationID, sel.userSessionID, c.now(), signins.MaxAge)
+	}
 	if err != nil {
 		return fmt.Errorf("recheck EMA sign-in: %w", err)
 	}
@@ -289,4 +304,68 @@ func (c *Chainer) checkSpeakeasyPublish(ctx context.Context, tx pgx.Tx, req Requ
 		return errStale
 	}
 	return nil
+}
+
+// adoptConsentCredential binds the credential minted on the consent page to
+// the grant that consent created, so the first tool call reuses it instead of
+// signing again. It takes the publish locks and rechecks the grant's sign-in,
+// so a revocation or rotation since consent leaves the credential unadopted.
+func (c *Chainer) adoptConsentCredential(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, bool) {
+	var none Token
+	if sel.provider.Kind != remotesessions.EMAProviderSpeakeasy || sel.userSessionID == uuid.Nil {
+		return none, false
+	}
+	adopted, err := c.adopt(ctx, req, sel)
+	if err != nil {
+		if !errors.Is(err, errStale) {
+			logger.WarnContext(ctx, "adopt consent identity chaining credential", attr.SlogError(err))
+		}
+		return none, false
+	}
+	if !adopted {
+		return none, false
+	}
+	return c.cachedToken(ctx, logger, req, sel)
+}
+
+func (c *Chainer) adopt(ctx context.Context, req Request, sel selection) (bool, error) {
+	tx, err := c.db.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("begin consent credential adoption: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	q := repo.New(tx)
+	if err := q.LockEMAProvidersShared(ctx, req.OrganizationID); err != nil {
+		return false, fmt.Errorf("lock ema provider order: %w", err)
+	}
+	if outcome := c.stillServesWith(ctx, q, c.logger, req, sel); !outcome.Succeeded() {
+		return false, errStale
+	}
+	if _, err := q.LockEMABindingForPublish(ctx, repo.LockEMABindingForPublishParams{ID: sel.bindingID, OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, Generation: sel.generation}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, errStale
+		}
+		return false, fmt.Errorf("lock ema binding: %w", err)
+	}
+	if err := c.checkSpeakeasyPublish(ctx, tx, req, sel); err != nil {
+		return false, err
+	}
+	_, err = q.AdoptSpeakeasyConsentEMACredential(ctx, repo.AdoptSpeakeasyConsentEMACredentialParams{
+		UserSessionID: sel.userSessionID, OrganizationID: req.OrganizationID, ProjectID: req.ProjectID,
+		UserSessionIssuerID: req.UserSessionIssuerID, RemoteSessionIssuerID: sel.remoteIssuerID, RemoteSessionClientID: sel.clientID,
+		Resource: sel.resource, SubjectUrn: urn.NewUserSubject(req.UserID).String(), SignInID: sel.signInID,
+		BindingID: sel.bindingID, BindingGeneration: sel.generation, RequestedScopes: storedScopes(sel.scopes),
+		InternalSessionIssuerID: sel.provider.InternalSessionIssuerID, InternalSessionIssuerUpdatedAt: conv.ToPGTimestamptz(sel.internalIssuerVersion),
+		InternalSessionIssuerKeyID: sel.internalKeyID, UsableAfter: conv.ToPGTimestamptz(c.now().Add(accessExpirySkew)),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("adopt consent credential: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("commit consent credential adoption: %w", err)
+	}
+	return true, nil
 }

@@ -120,10 +120,9 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-// checkIdentityChaining checks every request under one deadline. External
-// providers retain their live exchange; Speakeasy checks local eligibility
-// until the user authorizes the MCP grant. Neither is claimed connected
-// without a downstream token.
+// checkIdentityChaining checks every request under one deadline. Every
+// provider runs its live exchange, so a card is claimed connected only with a
+// downstream token.
 func (s *Service) checkIdentityChaining(ctx context.Context, requests []identitychaining.Request, service string, signInID uuid.UUID) consentChainCheckResult {
 	ctx, cancel := context.WithTimeout(ctx, consentChainCheckTimeout)
 	defer cancel()

@@ -5411,7 +5411,7 @@ SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.gran
     AND c.internal_session_issuer_updated_at = @internal_session_issuer_updated_at::timestamptz
     AND c.internal_session_issuer_key_id = @internal_session_issuer_key_id::uuid
     AND c.sign_in_id = @sign_in_id::uuid
-    AND c.user_session_id = @user_session_id::uuid
+    AND c.user_session_id IS NOT DISTINCT FROM sqlc.narg('user_session_id')::uuid
     AND c.access_token_encrypted IS NOT NULL
     AND c.access_expires_at > @usable_after::timestamptz
     AND EXISTS (
@@ -5427,13 +5427,19 @@ FROM remote_session_ema_credentials c
 WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id
   AND c.user_session_issuer_id = @user_session_issuer_id
   AND c.remote_session_client_id = @remote_session_client_id AND c.resource = @resource
-  AND c.subject_urn = @subject_urn AND c.user_session_id = @user_session_id::uuid
-  AND c.deleted IS FALSE AND c.ema_provider = 'speakeasy';
+  AND c.subject_urn = @subject_urn
+  AND c.user_session_id IS NOT DISTINCT FROM sqlc.narg('user_session_id')::uuid
+  -- A consent credential (no grant yet) belongs to the sign-in that minted it.
+  AND (c.user_session_id IS NOT NULL OR c.sign_in_id = @sign_in_id::uuid)
+  AND c.deleted IS FALSE AND c.ema_provider = 'speakeasy'
+ORDER BY c.updated_at DESC
+LIMIT 1;
 
 -- name: UpsertSpeakeasyEMACredential :one
 -- The caller locks the binding, sign-in and issuer and checks the exact
 -- grant before this statement. Client changes during redemption still fence
--- publication. Each authenticated MCP grant keeps its own slot.
+-- publication. Each authenticated MCP grant keeps its own slot; a consent
+-- credential has no grant yet and a NULL user_session_id.
 INSERT INTO remote_session_ema_credentials AS c (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
   resource, subject_urn, client_selection, remote_session_ema_binding_id, ema_binding_generation,
@@ -5444,7 +5450,7 @@ INSERT INTO remote_session_ema_credentials AS c (
 SELECT @organization_id::text, @project_id::uuid, @user_session_issuer_id::uuid, @remote_session_issuer_id::uuid, @remote_session_client_id::uuid,
   @resource::text, @subject_urn::text, 'binding', @binding_id::uuid, @binding_generation::bigint,
   'speakeasy', @internal_session_issuer_id::uuid, @internal_session_issuer_updated_at::timestamptz, @internal_session_issuer_key_id::uuid,
-  @sign_in_id::uuid, @user_session_id::uuid, @requested_scopes::text[], @granted_scopes::text[], @access_token_encrypted::text,
+  @sign_in_id::uuid, sqlc.narg('user_session_id')::uuid, @requested_scopes::text[], @granted_scopes::text[], @access_token_encrypted::text,
   @access_expires_at::timestamptz, @downstream_refresh_token_observed::boolean, clock_timestamp()
 WHERE EXISTS (
   SELECT 1 FROM remote_session_ema_bindings b
@@ -5482,6 +5488,36 @@ DO UPDATE SET
   last_used_at = EXCLUDED.last_used_at,
   updated_at = clock_timestamp()
 RETURNING id, updated_at;
+
+-- name: AdoptSpeakeasyConsentEMACredential :one
+-- Binds the credential minted on the consent page to the grant that consent
+-- created. The caller holds the publish locks and has checked the grant's
+-- sign-in; only a usable credential with identical provenance is adopted.
+UPDATE remote_session_ema_credentials AS t
+SET user_session_id = @user_session_id::uuid, updated_at = clock_timestamp()
+WHERE t.id = (
+  SELECT c.id FROM remote_session_ema_credentials c
+  WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id::uuid
+    AND c.user_session_issuer_id = @user_session_issuer_id::uuid
+    AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
+    AND c.remote_session_client_id = @remote_session_client_id::uuid AND c.resource = @resource::text
+    AND c.subject_urn = @subject_urn::text AND c.user_session_id IS NULL
+    AND c.sign_in_id = @sign_in_id::uuid
+    AND c.ema_provider = 'speakeasy' AND c.client_selection = 'binding'
+    AND c.remote_session_ema_binding_id = @binding_id::uuid
+    AND c.ema_binding_generation = @binding_generation::bigint
+    AND c.requested_scopes = @requested_scopes::text[]
+    AND c.internal_session_issuer_id = @internal_session_issuer_id::uuid
+    AND c.internal_session_issuer_updated_at = @internal_session_issuer_updated_at::timestamptz
+    AND c.internal_session_issuer_key_id = @internal_session_issuer_key_id::uuid
+    AND c.access_token_encrypted IS NOT NULL
+    AND c.access_expires_at > @usable_after::timestamptz
+    AND c.deleted IS FALSE
+  ORDER BY c.updated_at DESC
+  LIMIT 1
+  FOR UPDATE
+)
+RETURNING t.id;
 
 -- name: GetSpeakeasyEMAIssuerVersion :one
 -- Used through the publishing transaction, never via a second pool connection.

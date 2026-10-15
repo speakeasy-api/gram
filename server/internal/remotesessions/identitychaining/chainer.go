@@ -182,8 +182,13 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 // acquireFrom obtains a token for sel from one source: a still-valid stored
 // credential, or a fresh issue and redemption under single flight.
 func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider) (Token, Outcome) {
+	return c.acquireWith(ctx, logger, req, sel, p, c.source(p))
+}
+
+// acquireWith is acquireFrom with an explicit source, so the consent page can
+// run the Speakeasy source for its sign-in before the grant exists.
+func (c *Chainer) acquireWith(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider, src tokenSource) (Token, Outcome) {
 	var none Token
-	src := c.source(p)
 	sel.provider = p
 	release := func(token Token) (Token, Outcome) { return c.release(ctx, logger, req, sel, src, token) }
 	if outcome := src.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
@@ -200,6 +205,9 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	// Stored credentials are checked against their issuing provider and exact
 	// provenance.
 	if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
+		return release(token)
+	}
+	if token, ok := c.adoptConsentCredential(ctx, logger, req, sel); ok {
 		return release(token)
 	}
 	failureKey := cacheKey("identityChainingFailure", req, sel)

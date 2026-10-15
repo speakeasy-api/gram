@@ -13,6 +13,80 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const adoptSpeakeasyConsentEMACredential = `-- name: AdoptSpeakeasyConsentEMACredential :one
+UPDATE remote_session_ema_credentials AS t
+SET user_session_id = $1::uuid, updated_at = clock_timestamp()
+WHERE t.id = (
+  SELECT c.id FROM remote_session_ema_credentials c
+  WHERE c.organization_id = $2::text AND c.project_id = $3::uuid
+    AND c.user_session_issuer_id = $4::uuid
+    AND c.remote_session_issuer_id = $5::uuid
+    AND c.remote_session_client_id = $6::uuid AND c.resource = $7::text
+    AND c.subject_urn = $8::text AND c.user_session_id IS NULL
+    AND c.sign_in_id = $9::uuid
+    AND c.ema_provider = 'speakeasy' AND c.client_selection = 'binding'
+    AND c.remote_session_ema_binding_id = $10::uuid
+    AND c.ema_binding_generation = $11::bigint
+    AND c.requested_scopes = $12::text[]
+    AND c.internal_session_issuer_id = $13::uuid
+    AND c.internal_session_issuer_updated_at = $14::timestamptz
+    AND c.internal_session_issuer_key_id = $15::uuid
+    AND c.access_token_encrypted IS NOT NULL
+    AND c.access_expires_at > $16::timestamptz
+    AND c.deleted IS FALSE
+  ORDER BY c.updated_at DESC
+  LIMIT 1
+  FOR UPDATE
+)
+RETURNING t.id
+`
+
+type AdoptSpeakeasyConsentEMACredentialParams struct {
+	UserSessionID                  uuid.UUID
+	OrganizationID                 string
+	ProjectID                      uuid.UUID
+	UserSessionIssuerID            uuid.UUID
+	RemoteSessionIssuerID          uuid.UUID
+	RemoteSessionClientID          uuid.UUID
+	Resource                       string
+	SubjectUrn                     string
+	SignInID                       uuid.UUID
+	BindingID                      uuid.UUID
+	BindingGeneration              int64
+	RequestedScopes                []string
+	InternalSessionIssuerID        uuid.UUID
+	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
+	InternalSessionIssuerKeyID     uuid.UUID
+	UsableAfter                    pgtype.Timestamptz
+}
+
+// Binds the credential minted on the consent page to the grant that consent
+// created. The caller holds the publish locks and has checked the grant's
+// sign-in; only a usable credential with identical provenance is adopted.
+func (q *Queries) AdoptSpeakeasyConsentEMACredential(ctx context.Context, arg AdoptSpeakeasyConsentEMACredentialParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adoptSpeakeasyConsentEMACredential,
+		arg.UserSessionID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+		arg.SignInID,
+		arg.BindingID,
+		arg.BindingGeneration,
+		arg.RequestedScopes,
+		arg.InternalSessionIssuerID,
+		arg.InternalSessionIssuerUpdatedAt,
+		arg.InternalSessionIssuerKeyID,
+		arg.UsableAfter,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const attachPrincipalRemoteSessionBinding = `-- name: AttachPrincipalRemoteSessionBinding :one
 INSERT INTO principal_remote_session_bindings
 (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
@@ -5583,7 +5657,7 @@ SELECT c.id, c.updated_at, c.access_token_encrypted, c.access_expires_at, c.gran
     AND c.internal_session_issuer_updated_at = $6::timestamptz
     AND c.internal_session_issuer_key_id = $7::uuid
     AND c.sign_in_id = $8::uuid
-    AND c.user_session_id = $9::uuid
+    AND c.user_session_id IS NOT DISTINCT FROM $9::uuid
     AND c.access_token_encrypted IS NOT NULL
     AND c.access_expires_at > $10::timestamptz
     AND EXISTS (
@@ -5599,8 +5673,13 @@ FROM remote_session_ema_credentials c
 WHERE c.organization_id = $11::text AND c.project_id = $12
   AND c.user_session_issuer_id = $13
   AND c.remote_session_client_id = $14 AND c.resource = $15
-  AND c.subject_urn = $16 AND c.user_session_id = $9::uuid
+  AND c.subject_urn = $16
+  AND c.user_session_id IS NOT DISTINCT FROM $9::uuid
+  -- A consent credential (no grant yet) belongs to the sign-in that minted it.
+  AND (c.user_session_id IS NOT NULL OR c.sign_in_id = $8::uuid)
   AND c.deleted IS FALSE AND c.ema_provider = 'speakeasy'
+ORDER BY c.updated_at DESC
+LIMIT 1
 `
 
 type GetSpeakeasyEMACredentialForUseParams struct {
@@ -5612,7 +5691,7 @@ type GetSpeakeasyEMACredentialForUseParams struct {
 	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
 	InternalSessionIssuerKeyID     uuid.UUID
 	SignInID                       uuid.UUID
-	UserSessionID                  uuid.UUID
+	UserSessionID                  uuid.NullUUID
 	UsableAfter                    pgtype.Timestamptz
 	OrganizationID                 string
 	ProjectID                      uuid.NullUUID
@@ -15153,7 +15232,7 @@ type UpsertSpeakeasyEMACredentialParams struct {
 	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
 	InternalSessionIssuerKeyID     uuid.UUID
 	SignInID                       uuid.UUID
-	UserSessionID                  uuid.UUID
+	UserSessionID                  uuid.NullUUID
 	RequestedScopes                []string
 	GrantedScopes                  []string
 	AccessTokenEncrypted           string
@@ -15168,7 +15247,8 @@ type UpsertSpeakeasyEMACredentialRow struct {
 
 // The caller locks the binding, sign-in and issuer and checks the exact
 // grant before this statement. Client changes during redemption still fence
-// publication. Each authenticated MCP grant keeps its own slot.
+// publication. Each authenticated MCP grant keeps its own slot; a consent
+// credential has no grant yet and a NULL user_session_id.
 func (q *Queries) UpsertSpeakeasyEMACredential(ctx context.Context, arg UpsertSpeakeasyEMACredentialParams) (UpsertSpeakeasyEMACredentialRow, error) {
 	row := q.db.QueryRow(ctx, upsertSpeakeasyEMACredential,
 		arg.OrganizationID,
