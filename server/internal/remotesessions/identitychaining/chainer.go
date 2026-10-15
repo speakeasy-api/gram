@@ -193,7 +193,14 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	var none Token
 	src := c.source(p)
 	sel.provider = p
-	release := func(token Token) (Token, Outcome) { return c.release(ctx, logger, req, sel, src, token) }
+	// release logs a credential's source only once release lets it out.
+	release := func(token Token, source credentialSource) (Token, Outcome) {
+		token, outcome := c.release(ctx, logger, req, sel, src, token)
+		if outcome.Succeeded() && source != credentialNone {
+			logCredentialSource(ctx, logger, sel, source)
+		}
+		return token, outcome
+	}
 	if outcome := src.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
 		return none, outcome
 	}
@@ -208,14 +215,13 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 	// Stored credentials are checked against their issuing provider and exact
 	// provenance.
 	if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-		logCredentialSource(ctx, logger, sel, credentialCached)
-		return release(token)
+		return release(token, credentialCached)
 	}
-	if token, ok := c.adoptConsentCredential(ctx, logger, req, sel); ok {
-		return release(token)
+	if token, source, ok := c.adoptConsentCredential(ctx, logger, req, sel); ok {
+		return release(token, source)
 	}
 	if c.consentAccepted(ctx, req, sel) {
-		return release(none)
+		return release(none, credentialNone)
 	}
 	failureKey := cacheKey("identityChainingFailure", req, sel)
 	var cached Outcome
@@ -236,7 +242,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		if !outcome.Succeeded() {
 			return none, outcome
 		}
-		return release(token)
+		return release(token, credentialNone)
 	default:
 		lockedAt := c.now()
 		defer o11y.LogDefer(ctx, logger, "release identity chaining lock", func() error {
@@ -251,10 +257,10 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		// A holder that finished while this request waited for the lock
 		// already published its credential.
 		if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-			return release(token)
+			return release(token, credentialCached)
 		}
 		if c.consentAccepted(ctx, req, sel) {
-			return release(none)
+			return release(none, credentialNone)
 		}
 	}
 
@@ -281,7 +287,8 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 				logger.WarnContext(ctx, "record identity chaining failure", attr.SlogCacheKey(failureKey), attr.SlogError(err))
 			}
 		}
-	} else {
+	} else if !req.consent() {
+		// The consent page only records the outcome; nothing is released there.
 		logCredentialSource(ctx, logger, sel, credentialMinted)
 	}
 	// After publishing to waiters; the caller waits at most observeTimeout.
@@ -382,8 +389,8 @@ func (c *Chainer) signedWithRecentKey(sel selection, outcome Outcome, signed boo
 	return !sel.internalKeyPublishedAt.IsZero() && c.now().Sub(sel.internalKeyPublishedAt) < recentKeyWindow
 }
 
-// logCredentialSource records where a Speakeasy credential came from. Reuse is
-// logged at debug: it happens on every proxied call.
+// logCredentialSource records where a Speakeasy credential released to a tool
+// call came from. Reuse is logged at debug: it happens on every proxied call.
 func logCredentialSource(ctx context.Context, logger *slog.Logger, sel selection, source credentialSource) {
 	if sel.provider.Kind != remotesessions.EMAProviderSpeakeasy {
 		return

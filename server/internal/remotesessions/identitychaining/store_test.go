@@ -454,9 +454,11 @@ func TestStore_RetireSparesConcurrentPublish(t *testing.T) {
 	judged := f.credentials(t)[0]
 	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("fresh-token")))
 
-	require.NoError(t, repo.New(f.db).RetireEMACredential(t.Context(), repo.RetireEMACredentialParams{
+	retired, err := repo.New(f.db).RetireEMACredential(t.Context(), repo.RetireEMACredentialParams{
 		ID: judged.ID, OrganizationID: pgtype.Text{String: f.req.OrganizationID, Valid: true}, ProjectID: uuid.NullUUID{UUID: f.req.ProjectID, Valid: true}, ExpectedUpdatedAt: judged.UpdatedAt,
-	}))
+	})
+	require.NoError(t, err)
+	require.Zero(t, retired)
 	token, ok := f.chainer.cachedToken(t.Context(), testenv.NewLogger(t), f.req, f.sel)
 	require.True(t, ok, "retiring a stale read never erases a newer publish into the same slot")
 	require.Equal(t, "fresh-token", token.Value())

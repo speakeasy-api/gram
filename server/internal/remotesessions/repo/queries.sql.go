@@ -11815,7 +11815,7 @@ func (q *Queries) ReprojectRemoteSessionIssuerMetadataCapabilities(ctx context.C
 	return i, err
 }
 
-const retireEMACredential = `-- name: RetireEMACredential :exec
+const retireEMACredential = `-- name: RetireEMACredential :execrows
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = $1 AND organization_id = $2 AND project_id = $3 AND deleted IS FALSE
@@ -11831,15 +11831,19 @@ type RetireEMACredentialParams struct {
 
 // Soft deletes one credential slot and erases its ciphertext in the same write.
 // expected_updated_at is the version the caller judged unusable, so a
-// concurrent publish into the same slot is never erased.
-func (q *Queries) RetireEMACredential(ctx context.Context, arg RetireEMACredentialParams) error {
-	_, err := q.db.Exec(ctx, retireEMACredential,
+// concurrent publish into the same slot is never erased; it then retires
+// nothing and reports zero rows.
+func (q *Queries) RetireEMACredential(ctx context.Context, arg RetireEMACredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, retireEMACredential,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ExpectedUpdatedAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const retireLegacyEMACredentialSlot = `-- name: RetireLegacyEMACredentialSlot :exec

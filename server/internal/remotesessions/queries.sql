@@ -5119,10 +5119,11 @@ DO UPDATE SET
   updated_at = clock_timestamp()
 RETURNING id, updated_at;
 
--- name: RetireEMACredential :exec
+-- name: RetireEMACredential :execrows
 -- Soft deletes one credential slot and erases its ciphertext in the same write.
 -- expected_updated_at is the version the caller judged unusable, so a
--- concurrent publish into the same slot is never erased.
+-- concurrent publish into the same slot is never erased; it then retires
+-- nothing and reports zero rows.
 UPDATE remote_session_ema_credentials
 SET access_token_encrypted = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id AND project_id = @project_id AND deleted IS FALSE

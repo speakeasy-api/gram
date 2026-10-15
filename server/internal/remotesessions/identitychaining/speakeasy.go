@@ -309,6 +309,9 @@ func (c *Chainer) checkSpeakeasyPublish(ctx context.Context, tx pgx.Tx, req Requ
 type credentialSource string
 
 const (
+	// credentialNone marks a release with no source worth logging: a
+	// consent acceptance without a token, or a waiter adopting a holder's.
+	credentialNone         credentialSource = ""
 	credentialCached       credentialSource = "cached"
 	credentialAdopted      credentialSource = "adopted"
 	credentialMinted       credentialSource = "minted"
@@ -320,53 +323,72 @@ const (
 // of signing again. The ID-JAG names no MCP client, so any such grant could
 // mint the identical token itself. It takes the publish locks and rechecks the
 // grant's sign-in, so a revocation or rotation since consent leaves the
-// credential unadopted.
-func (c *Chainer) adoptConsentCredential(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, bool) {
+// credential unadopted. The source is credentialCached when a concurrent
+// first use adopted it first.
+func (c *Chainer) adoptConsentCredential(ctx context.Context, logger *slog.Logger, req Request, sel selection) (Token, credentialSource, bool) {
 	var none Token
 	if sel.provider.Kind != remotesessions.EMAProviderSpeakeasy || req.consent() || sel.userSessionID == uuid.Nil {
-		return none, false
+		return none, credentialNone, false
 	}
 	pending := req
 	pending.UserSessionJTI = ""
 	pending.consentSignInID = sel.signInID
 	// Most misses have no consent credential; skip the locks for them.
-	if _, err := readCredential(ctx, repo.New(c.db), pending, sel, c.now()); err != nil {
+	judged, err := readCredential(ctx, repo.New(c.db), pending, sel, c.now())
+	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			logger.ErrorContext(ctx, "read consent identity chaining credential", attr.SlogError(err))
 		}
-		return none, false
+		return none, credentialNone, false
 	}
-	adopted, err := c.adopt(ctx, logger, req, pending, sel)
+	adopted, err := c.adopt(ctx, logger, req, pending, sel, judged)
 	switch {
 	case errors.Is(err, errStale):
 		logger.InfoContext(ctx, "consent identity chaining credential not adopted under current provenance", attr.SlogIdentityChainingCredentialSource(credentialStaleDropped))
-		return none, false
+		return none, credentialNone, false
 	case err != nil:
 		logger.WarnContext(ctx, "adopt consent identity chaining credential", attr.SlogError(err))
-		return none, false
+		return none, credentialNone, false
 	}
 	// A concurrent first use of the same grant may have adopted it first.
 	token, ok := c.cachedToken(ctx, logger, req, sel)
-	if ok && adopted {
-		logger.InfoContext(ctx, "identity chaining credential adopted from consent", attr.SlogIdentityChainingCredentialSource(credentialAdopted))
+	source := credentialCached
+	if adopted {
+		source = credentialAdopted
 	}
-	return token, ok
+	return token, source, ok
 }
 
 // adopt rereads the consent credential under the publish fence and binds it
-// to sel's grant. One that current provenance no longer admits is retired and
-// errStale returned. It reports false when a concurrent adoption or
-// retirement won.
-func (c *Chainer) adopt(ctx context.Context, logger *slog.Logger, req, pending Request, sel selection) (bool, error) {
+// to sel's grant. judged is the version read before the fence. A credential
+// that current provenance no longer admits is retired and errStale returned.
+// It reports false when a concurrent adoption or retirement won.
+func (c *Chainer) adopt(ctx context.Context, logger *slog.Logger, req, pending Request, sel selection, judged repo.GetEMACredentialForUseRow) (bool, error) {
 	tx, err := c.db.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("begin consent credential adoption: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	q := repo.New(tx)
+	retireStale := func(row repo.GetEMACredentialForUseRow) (bool, error) {
+		retired, err := q.RetireEMACredential(ctx, repo.RetireEMACredentialParams{ID: row.ID, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: row.UpdatedAt})
+		if err != nil {
+			return false, fmt.Errorf("retire stale consent credential: %w", err)
+		}
+		if retired == 0 {
+			return false, nil
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return false, fmt.Errorf("commit stale consent credential retirement: %w", err)
+		}
+		return false, errStale
+	}
 	if err := c.lockPublishFence(ctx, tx, logger, req, sel); err != nil {
+		if errors.Is(err, errStale) {
+			return retireStale(judged)
+		}
 		return false, err
 	}
-	q := repo.New(tx)
 	row, err := readCredential(ctx, q, pending, sel, c.now())
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -374,13 +396,7 @@ func (c *Chainer) adopt(ctx context.Context, logger *slog.Logger, req, pending R
 	case err != nil:
 		return false, err
 	case !row.Usable:
-		if err := q.RetireEMACredential(ctx, repo.RetireEMACredentialParams{ID: row.ID, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: row.UpdatedAt}); err != nil {
-			return false, fmt.Errorf("retire stale consent credential: %w", err)
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return false, fmt.Errorf("commit stale consent credential retirement: %w", err)
-		}
-		return false, errStale
+		return retireStale(row)
 	}
 	adopted, err := q.AdoptSpeakeasyConsentEMACredential(ctx, repo.AdoptSpeakeasyConsentEMACredentialParams{
 		UserSessionID: sel.userSessionID, ID: row.ID, OrganizationID: req.OrganizationID, ProjectID: req.ProjectID, SignInID: sel.signInID,

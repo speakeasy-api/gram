@@ -15,6 +15,7 @@ import (
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -99,8 +100,16 @@ func TestSpeakeasyConsent_BindingGenerationChangeBlocksAdoption(t *testing.T) {
 func TestSpeakeasyConsent_KeyRotationBlocksAdoption(t *testing.T) {
 	t.Parallel()
 	lf := newSpeakeasyLiveFixture(t)
-	ctx := t.Context()
 	lf.consent(t, lf.signIn.ID.UUID, true)
+	lf.rotateKey(t)
+	lf.acquire(t, lf.newGrant(t, lf.signIn.ID), true)
+	require.EqualValues(t, 2, lf.calls.Load(), "a key rotated since consent leaves the consent credential unadopted")
+}
+
+// rotateKey retires the issuer's active signing key and activates another.
+func (lf *speakeasyLiveFixture) rotateKey(t *testing.T) {
+	t.Helper()
+	ctx := t.Context()
 	q := jwksrepo.New(lf.f.db)
 	_, err := q.RetireJsonWebKey(ctx, jwksrepo.RetireJsonWebKeyParams{ID: lf.status.ActiveKey.ID, OrganizationID: lf.f.req.OrganizationID})
 	require.NoError(t, err)
@@ -111,8 +120,58 @@ func TestSpeakeasyConsent_KeyRotationBlocksAdoption(t *testing.T) {
 	require.NoError(t, err)
 	_, err = q.CreateJsonWebKey(ctx, jwksrepo.CreateJsonWebKeyParams{OrganizationID: lf.f.req.OrganizationID, JsonWebKeySetID: lf.status.ActiveKey.JsonWebKeySetID, ExternalKeyID: lf.status.ActiveKey.ExternalKeyID, State: "active", Kid: key.KeyID, PublicJwk: rotated})
 	require.NoError(t, err)
-	lf.acquire(t, lf.newGrant(t, lf.signIn.ID), true)
-	require.EqualValues(t, 2, lf.calls.Load(), "a key rotated since consent leaves the consent credential unadopted")
+}
+
+// speakeasySelection is grant's selection, authorized for the Speakeasy
+// provider as Acquire authorizes it.
+func (lf *speakeasyLiveFixture) speakeasySelection(t *testing.T, grant Request) selection {
+	t.Helper()
+	sel, outcome := lf.chainer.selectBinding(t.Context(), lf.logger, grant)
+	require.True(t, outcome.Succeeded(), "%+v", outcome)
+	order, outcome := lf.chainer.providerOrder(t.Context(), lf.logger, grant, sel)
+	require.True(t, outcome.Succeeded(), "%+v", outcome)
+	for _, p := range order.Providers {
+		if p.Kind != remotesessions.EMAProviderSpeakeasy {
+			continue
+		}
+		sel.provider = p
+		outcome := lf.chainer.source(p).authorize(t.Context(), lf.logger, grant, &sel)
+		require.True(t, outcome.Succeeded(), "%+v", outcome)
+		return sel
+	}
+	require.FailNow(t, "no Speakeasy provider in the order")
+	return sel
+}
+
+func TestSpeakeasyConsent_StaleFenceRetiresJudgedCredential(t *testing.T) {
+	t.Parallel()
+	lf := newSpeakeasyLiveFixture(t)
+	lf.consent(t, lf.signIn.ID.UUID, true)
+	grant := lf.newGrant(t, lf.signIn.ID)
+	sel := lf.speakeasySelection(t, grant)
+	pending := grant
+	pending.UserSessionJTI = ""
+	pending.consentSignInID = sel.signInID
+	judged, err := readCredential(t.Context(), repo.New(lf.f.db), pending, sel, time.Now())
+	require.NoError(t, err)
+
+	lf.rotateKey(t)
+	moved := judged
+	moved.UpdatedAt = conv.ToPGTimestamptz(judged.UpdatedAt.Time.Add(-time.Second))
+	adopted, err := lf.chainer.adopt(t.Context(), lf.logger, grant, pending, sel, moved)
+	require.NoError(t, err, "a version that moved since it was judged is not reported dropped")
+	require.False(t, adopted)
+	rows := lf.f.credentials(t)
+	require.Len(t, rows, 1)
+	require.False(t, rows[0].Deleted, "a version that moved since it was judged is left alone")
+
+	adopted, err = lf.chainer.adopt(t.Context(), lf.logger, grant, pending, sel, judged)
+	require.ErrorIs(t, err, errStale)
+	require.False(t, adopted)
+	rows = lf.f.credentials(t)
+	require.Len(t, rows, 1)
+	require.True(t, rows[0].Deleted, "a credential the fence no longer admits is retired before it is reported dropped")
+	require.False(t, rows[0].AccessTokenEncrypted.Valid, "retirement erases the ciphertext")
 }
 
 func TestSpeakeasyConsent_OtherSignInKeepsPendingConsent(t *testing.T) {

@@ -50,7 +50,7 @@ func (c *Chainer) cachedToken(ctx context.Context, logger *slog.Logger, req Requ
 		return none, false
 	}
 	if !row.Usable {
-		if err := q.RetireEMACredential(context.WithoutCancel(ctx), repo.RetireEMACredentialParams{ID: row.ID, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: row.UpdatedAt}); err != nil {
+		if _, err := q.RetireEMACredential(context.WithoutCancel(ctx), repo.RetireEMACredentialParams{ID: row.ID, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: row.UpdatedAt}); err != nil {
 			logger.WarnContext(ctx, "retire stale identity chaining credential", attr.SlogError(err))
 		}
 		return none, false
@@ -83,7 +83,7 @@ type publishedSlot struct {
 func (c *Chainer) retire(ctx context.Context, logger *slog.Logger, req Request, slot publishedSlot) {
 	retireCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
 	defer cancel()
-	if err := repo.New(c.db).RetireEMACredential(retireCtx, repo.RetireEMACredentialParams{
+	if _, err := repo.New(c.db).RetireEMACredential(retireCtx, repo.RetireEMACredentialParams{
 		ID: slot.id, OrganizationID: conv.ToPGText(req.OrganizationID), ProjectID: uuid.NullUUID{UUID: req.ProjectID, Valid: true}, ExpectedUpdatedAt: slot.updatedAt,
 	}); err != nil {
 		logger.WarnContext(ctx, "retire identity chaining credential after a failed recheck", attr.SlogError(err))
