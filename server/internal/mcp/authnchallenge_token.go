@@ -1359,7 +1359,7 @@ func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger 
 	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
 		return reconnect
 	}
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil}
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil, projectScoped: false}
 	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing)
 	switch {
 	case err != nil:
