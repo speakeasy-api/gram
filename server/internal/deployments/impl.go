@@ -777,7 +777,6 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			openapiv3ToExclude,
 			functionsToExclude,
 			packagesToExclude,
-			externalMCPsToExclude,
 		)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").LogError(ctx, logger)
@@ -893,7 +892,6 @@ func (s *Service) PrepareRedeploy(ctx context.Context, dbtx pgx.Tx, payload *gen
 		[]uuid.UUID{},
 		[]uuid.UUID{},
 		[]uuid.UUID{},
-		[]string{},
 	)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").LogError(ctx, logger)

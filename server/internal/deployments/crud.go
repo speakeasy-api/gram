@@ -161,7 +161,6 @@ func cloneDeployment(
 	openAPIv3ToExclude []uuid.UUID,
 	functionsToExclude []uuid.UUID,
 	packagesToExclude []uuid.UUID,
-	externalMCPsToExclude []string,
 ) (uuid.UUID, error) {
 	ctx, span := tracer.Start(ctx, "cloneDeployment")
 	defer span.End()
@@ -212,15 +211,6 @@ func cloneDeployment(
 	})
 	if err != nil {
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment functions assets").LogError(ctx, logger)
-	}
-
-	_, err = depRepo.CloneDeploymentExternalMCPs(ctx, repo.CloneDeploymentExternalMCPsParams{
-		OriginalDeploymentID: srcDepID,
-		CloneDeploymentID:    newID,
-		ExcludedSlugs:        externalMCPsToExclude,
-	})
-	if err != nil {
-		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment external mcps").LogError(ctx, logger)
 	}
 
 	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, functionsToUpsert, packagesToUpsert, externalMCPsToUpsert)
