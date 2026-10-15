@@ -34,7 +34,7 @@ import {
   type ProviderView,
 } from "./emaServiceView";
 import { EmaServiceServers } from "./EmaServiceServers";
-import { serverCountLabel, useEmaServices } from "./useEmaServices";
+import { useEmaServices } from "./useEmaServices";
 
 /** Who may change a service's order, and why not when they can't. */
 function useOrderPermissions(): {
@@ -102,21 +102,9 @@ export function EmaServiceWorkspace({
           All identity providers
         </Link>
         {services.isPending ? (
-          <>
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-5 w-96 max-w-full" />
-          </>
+          <Skeleton className="h-8 w-48" />
         ) : (
-          <>
-            <Heading variant="h2">{name}</Heading>
-            <Text muted>
-              {!row
-                ? "A service Enterprise Managed Authorization reaches."
-                : row.serverCount === 0
-                  ? `No servers reach ${name} through Enterprise Managed Authorization yet.`
-                  : `${serverCountLabel(row.serverCount)} ${row.serverCount === 1 ? "reaches" : "reach"} ${name} through Enterprise Managed Authorization.`}
-            </Text>
-          </>
+          <Heading variant="h2">{name}</Heading>
         )}
       </div>
       {services.isPending && (

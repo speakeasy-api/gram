@@ -208,14 +208,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("one service", () => {
-  it("names the service, how many servers reach it, and the way back", () => {
+  it("names the service and the way back, leaving the count to the server list", () => {
     show();
     expect(screen.getByRole("heading", { name: "Linear" })).toBeTruthy();
-    expect(
-      screen.getByText(
-        "2 servers reach Linear through Enterprise Managed Authorization.",
-      ),
-    ).toBeTruthy();
+    expect(screen.queryByText(/reach Linear through/)).toBeNull();
     expect(
       screen
         .getByRole("link", { name: "All identity providers" })
