@@ -37,7 +37,7 @@ const row = (overrides: Partial<ServiceRow>): ServiceRow => ({
   key: "https://linear.example.com",
   vendorIssuer: "https://linear.example.com",
   name: "Linear",
-  isDefaultOrder: true,
+  isDefault: true,
   providers: [],
   serverCount: 0,
   readyServerCount: 0,
@@ -129,7 +129,7 @@ describe("Servers on a service page", () => {
   it("flags servers the accepted providers leave with nobody to vouch", () => {
     show(
       row({
-        isDefaultOrder: false,
+        isDefault: false,
         providers: [
           {
             key: "speakeasy",

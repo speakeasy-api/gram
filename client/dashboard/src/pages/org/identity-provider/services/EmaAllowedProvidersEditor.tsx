@@ -36,8 +36,6 @@ export type ProviderCandidate = {
   remoteSessionIssuerId?: string;
 };
 
-type Entry = ProviderCandidate;
-
 /**
  * Which identity providers a service accepts. Each server is vouched for only
  * by the provider its sign-in goes through, so the saved list works as a set:
@@ -81,12 +79,12 @@ export function EmaAllowedProvidersEditor({
   const [draft, setDraft] = useState<string[] | null>(null);
   // The saved list the draft started from, so a change underneath it stops
   // Save instead of silently restoring what another admin removed.
-  const [base, setBase] = useState<Entry[] | null>(null);
+  const [base, setBase] = useState<ProviderCandidate[] | null>(null);
   const [conflict, setConflict] = useState(false);
   // A refused save waits for the current list before the editor can rebase
   // onto it, or the next save would conflict again.
   const [refreshing, setRefreshing] = useState(false);
-  const saved: Entry[] = isDefault
+  const saved: ProviderCandidate[] = isDefault
     ? []
     : current.map((provider) => {
         const candidate = candidates.find((c) => c.key === provider.key);
@@ -99,14 +97,14 @@ export function EmaAllowedProvidersEditor({
       });
   // Every candidate in its stable order, then any saved entry that is no
   // longer one, so it can be unchecked.
-  const rows: Entry[] = [
+  const rows: ProviderCandidate[] = [
     ...candidates,
     ...saved.filter((entry) => !candidates.some((c) => c.key === entry.key)),
   ];
   // Judged on every render, so a draft started before the candidates loaded
   // is checked against them once they have. An entry that is only paused or
   // disabled stays valid and gets a readiness note instead.
-  const available = (entry: Entry): boolean =>
+  const available = (entry: ProviderCandidate): boolean =>
     !candidatesReady ||
     (candidates.some((c) => c.key === entry.key) &&
       current.find((p) => p.key === entry.key)?.unavailableReason !==
@@ -184,7 +182,7 @@ export function EmaAllowedProvidersEditor({
       }
     },
   });
-  const submit = (entries: Entry[]) => {
+  const submit = (entries: ProviderCandidate[]) => {
     if (!remoteSessionIssuerId) return;
     save.mutate({
       request: {
@@ -521,7 +519,7 @@ function providerInput(entry: ProviderCandidate): EMAProviderInput {
     : { kind: "external", remoteSessionIssuerId: entry.remoteSessionIssuerId };
 }
 
-function sameOrder(a: Entry[], b: Entry[]): boolean {
+function sameOrder(a: ProviderCandidate[], b: ProviderCandidate[]): boolean {
   return (
     a.length === b.length && a.every((entry, i) => entry.key === b[i]?.key)
   );

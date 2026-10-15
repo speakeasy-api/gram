@@ -149,7 +149,7 @@ const linear: ServiceRow = {
   vendorIssuer: "https://linear.example.com",
   name: "Linear",
   remoteSessionIssuerId: "vendor",
-  isDefaultOrder: true,
+  isDefault: true,
   providers: [placeholder, speakeasy],
   serverCount: 2,
   readyServerCount: 2,
@@ -381,7 +381,7 @@ describe("one service", () => {
     mocks.rows = [
       {
         ...linear,
-        isDefaultOrder: false,
+        isDefault: false,
         providers: [okta],
         servers: [oktaServer, speakeasyServer],
       },
@@ -397,7 +397,7 @@ describe("one service", () => {
 
   it("restores the default from a saved choice", () => {
     mocks.rows = [
-      { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
+      { ...linear, isDefault: false, providers: [okta, speakeasy] },
     ];
     show();
     expect(screen.getByText("Last worked 1h ago")).toBeTruthy();
@@ -418,7 +418,7 @@ describe("one service", () => {
 
   it("keeps the saved positions as the expected list, whatever order it was saved in", () => {
     mocks.rows = [
-      { ...linear, isDefaultOrder: false, providers: [speakeasy, okta] },
+      { ...linear, isDefault: false, providers: [speakeasy, okta] },
     ];
     show();
     fireEvent.click(editButton());
@@ -442,7 +442,7 @@ describe("one service", () => {
   it("still lets an admin restore the default when choosing is turned off", () => {
     mocks.flag = "disabled";
     mocks.rows = [
-      { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
+      { ...linear, isDefault: false, providers: [okta, speakeasy] },
     ];
     show();
     expect(screen.getByRole("button", { name: "Use default" })).toBeTruthy();
@@ -497,7 +497,7 @@ describe("one service", () => {
       unavailableReason: "deleted",
     });
     mocks.rows = [
-      { ...linear, isDefaultOrder: false, providers: [gone, speakeasy] },
+      { ...linear, isDefault: false, providers: [gone, speakeasy] },
     ];
     show();
     expect(
@@ -547,7 +547,7 @@ describe("one service", () => {
   it("says why a support session can't change it", () => {
     mocks.session = { impersonatorEmail: "staff@example.com" };
     mocks.rows = [
-      { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
+      { ...linear, isDefault: false, providers: [okta, speakeasy] },
     ];
     show();
     expect(
@@ -567,7 +567,7 @@ describe("one service", () => {
   });
   it("stops a stale draft when the saved choice changes underneath it", () => {
     mocks.rows = [
-      { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
+      { ...linear, isDefault: false, providers: [okta, speakeasy] },
     ];
     const { rerender } = show();
     fireEvent.click(editButton());
@@ -575,7 +575,7 @@ describe("one service", () => {
     expect(saveButton().disabled).toBe(false);
 
     // Another admin unchecks Speakeasy.
-    mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [okta] }];
+    mocks.rows = [{ ...linear, isDefault: false, providers: [okta] }];
     rerender(tree());
     expect(
       screen.getByText(/What Linear accepts changed since you started editing/),
@@ -607,11 +607,11 @@ describe("one service", () => {
 
   it("discards a stale draft on request", () => {
     mocks.rows = [
-      { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
+      { ...linear, isDefault: false, providers: [okta, speakeasy] },
     ];
     const { rerender } = show();
     fireEvent.click(editButton());
-    mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [okta] }];
+    mocks.rows = [{ ...linear, isDefault: false, providers: [okta] }];
     rerender(tree());
     fireEvent.click(screen.getByRole("button", { name: "Discard my changes" }));
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
@@ -632,7 +632,7 @@ describe("one service", () => {
 
   it("waits for the current choice before rebasing a refused save", async () => {
     mocks.rows = [
-      { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
+      { ...linear, isDefault: false, providers: [okta, speakeasy] },
     ];
     let refreshed = () => {};
     mocks.servicesRefresh = new Promise<void>((resolve) => {
@@ -651,7 +651,7 @@ describe("one service", () => {
     expect(review().disabled).toBe(true);
 
     // Another admin unchecked Speakeasy; the refetch brings that in.
-    mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [okta] }];
+    mocks.rows = [{ ...linear, isDefault: false, providers: [okta] }];
     rerender(tree());
     refreshed();
     await waitFor(() => expect(review().disabled).toBe(false));
@@ -679,7 +679,7 @@ describe("one service", () => {
       unavailable: "Not set up",
       unavailableReason: "disabled",
     });
-    mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [paused] }];
+    mocks.rows = [{ ...linear, isDefault: false, providers: [paused] }];
     show();
     expect(
       screen.queryByText("No longer available. Uncheck it to save."),

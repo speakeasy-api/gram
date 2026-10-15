@@ -21,7 +21,7 @@ const linear: ServiceRow = {
   vendorIssuer: "https://linear.example.com",
   name: "Linear",
   remoteSessionIssuerId: "vendor",
-  isDefaultOrder: true,
+  isDefault: true,
   providers: [
     {
       key: "external-default",

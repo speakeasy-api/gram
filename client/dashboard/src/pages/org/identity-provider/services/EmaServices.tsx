@@ -94,10 +94,7 @@ function ServicesTable({ rows }: { rows: ServiceRow[] }): JSX.Element {
         >
           {row.providers.map((provider) => (
             <li key={provider.key}>
-              <ProviderTrust
-                provider={provider}
-                isDefaultOrder={row.isDefaultOrder}
-              />
+              <ProviderTrust provider={provider} isDefault={row.isDefault} />
             </li>
           ))}
         </ul>

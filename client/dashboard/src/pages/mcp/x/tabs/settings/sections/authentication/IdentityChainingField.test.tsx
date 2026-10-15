@@ -402,7 +402,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   } as UserSessionIssuer;
   const okta = { kind: "external", remoteSessionIssuerId: "okta" };
   const speakeasy = { kind: "speakeasy", internalSessionIssuerId: "internal" };
-  const order = (...providers: Record<string, unknown>[]) => ({
+  const providersOf = (...providers: Record<string, unknown>[]) => ({
     isDefault: true,
     vendorIssuer: "https://vendor.example.com",
     providers,
@@ -460,7 +460,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
-    read.data = { ...unlinked, emaProviders: order(okta) };
+    read.data = { ...unlinked, emaProviders: providersOf(okta) };
     render(field({ external: true }, trusting));
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(
@@ -481,7 +481,11 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("only prepares the binding; who vouches is derived, never written", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: order(speakeasy) };
+    read.data = {
+      ...unlinked,
+      generation: 0,
+      emaProviders: providersOf(speakeasy),
+    };
     render(speakeasyField());
     fireEvent.click(enableButton());
     expect(state.calls).toEqual(["prepare"]);
@@ -498,7 +502,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     state.orgAdmin = false;
     read.data = {
       ...bound("first"),
-      emaProviders: { ...order(okta, speakeasyUnused), isDefault: false },
+      emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
     };
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(
@@ -514,7 +518,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   it("walks the chain: sign-in, who vouches, what the vendor trusts, client", () => {
     read.data = {
       ...bound("first"),
-      emaProviders: { ...order(okta, speakeasyUnused), isDefault: false },
+      emaProviders: { ...providersOf(okta, speakeasyUnused), isDefault: false },
     };
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(
@@ -573,7 +577,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("folds the issuer URL once the vendor trusts a provider, but says Working only for this server", () => {
-    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
     const { rerender } = render(speakeasyField());
     expect(screen.getByText("On, not proven yet")).toBeTruthy();
     expect(trusts()).toEqual([
@@ -586,7 +590,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     // Accepted elsewhere in the organization: the paste step is done.
     read.data = {
       ...bound("first"),
-      emaProviders: order({
+      emaProviders: providersOf({
         ...speakeasy,
         lastAcceptedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
       }),
@@ -613,7 +617,11 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("keeps the chain after Turn on succeeds", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: order(speakeasy) };
+    read.data = {
+      ...unlinked,
+      generation: 0,
+      emaProviders: providersOf(speakeasy),
+    };
     state.prepareResult = {
       state: "ready",
       bindingId: "binding",
@@ -636,7 +644,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       ...bound("first"),
       state: "unknown_grants",
       remediation: "record grant_types on remote_session_client",
-      emaProviders: order(speakeasy),
+      emaProviders: providersOf(speakeasy),
     };
     render(speakeasyField());
     expect(screen.getByText("Couldn’t check the client")).toBeTruthy();
@@ -648,7 +656,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
 
   it("only shows organization admins the link to every server", () => {
     state.orgAdmin = false;
-    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
     render(speakeasyField());
     expect(
       screen.queryByRole("link", {
@@ -670,7 +678,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       state.oktaIssuerId = oktaIssuerId;
       read.data = {
         ...bound("first"),
-        emaProviders: order({ ...okta, unavailableReason: "deleted" }),
+        emaProviders: providersOf({ ...okta, unavailableReason: "deleted" }),
       };
       render(speakeasyField({ userSessionIssuer: trusting }));
       expect(
@@ -680,7 +688,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   );
 
   it("names Speakeasy's own sign-in when no identity provider is trusted", () => {
-    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
     render(speakeasyField());
     expect(
       screen.getByText(
@@ -695,7 +703,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   it("leaves out an identity provider this server's sign-in doesn't use", () => {
     read.data = {
       ...bound("first"),
-      emaProviders: order(
+      emaProviders: providersOf(
         { ...okta, unavailableReason: "not_trusted_by_endpoint" },
         speakeasy,
       ),
@@ -721,7 +729,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     read.data = {
       ...unlinked,
       generation: 0,
-      emaProviders: order({ ...speakeasy, unavailableReason: reason }),
+      emaProviders: providersOf({ ...speakeasy, unavailableReason: reason }),
     };
     render(speakeasyField());
     expect(screen.getByText(text)).toBeTruthy();
@@ -740,7 +748,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     read.data = {
       ...unlinked,
       generation: 0,
-      emaProviders: order({ ...speakeasy, unavailableReason: "keyless" }),
+      emaProviders: providersOf({ ...speakeasy, unavailableReason: "keyless" }),
     };
     render(speakeasyField());
     expect(enableButton().disabled).toBe(true);
@@ -866,7 +874,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   it("says when chaining is on but nobody can vouch right now", () => {
     read.data = {
       ...bound("first"),
-      emaProviders: order({
+      emaProviders: providersOf({
         ...speakeasy,
         unavailableReason: "signing_paused",
       }),
@@ -876,7 +884,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("points at the organization's identity settings when nobody is listed", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: order() };
+    read.data = { ...unlinked, generation: 0, emaProviders: providersOf() };
     render(speakeasyField());
     expect(
       screen
@@ -888,7 +896,11 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("shows what Turn on will do before it's on", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: order(speakeasy) };
+    read.data = {
+      ...unlinked,
+      generation: 0,
+      emaProviders: providersOf(speakeasy),
+    };
     render(speakeasyField());
     expect(screen.getByText("Off")).toBeTruthy();
     expect(vouchers()).toEqual([
@@ -900,7 +912,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("disables without touching who vouches", () => {
-    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
     render(speakeasyField());
     fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
     fireEvent.click(
@@ -910,7 +922,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
   });
 
   it("has no chaining scope list of its own", () => {
-    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
+    read.data = { ...bound("first"), emaProviders: providersOf(speakeasy) };
     render(speakeasyField());
     expect(screen.queryByText("Requested scopes")).toBeNull();
     expect(screen.queryByText("Save scopes")).toBeNull();

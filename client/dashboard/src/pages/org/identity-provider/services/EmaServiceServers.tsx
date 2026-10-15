@@ -6,6 +6,7 @@ import { StatusDot, type StatusDotTone } from "@/components/ui/StatusDot";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
+import { pluralize } from "@/lib/format";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { EMAServiceServer } from "@gram/client/models/components/emaserviceserver.js";
@@ -16,7 +17,7 @@ import {
   strandedReason,
   strandedServers,
 } from "./emaServiceView";
-import { serverCountLabel, type ServiceRow } from "./useEmaServices";
+import { type ServiceRow } from "./useEmaServices";
 
 /** A server's state, in the words its own settings use. */
 function serverStatus(
@@ -62,7 +63,7 @@ function ServerLink({ server }: { server: EMAServiceServer }): JSX.Element {
 /** Which servers reach a service, each linking to where it is turned on or off. */
 export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
   const stranded = new Set(
-    strandedServers(row.isDefaultOrder ? null : row.providers, row.servers).map(
+    strandedServers(row.isDefault ? null : row.providers, row.servers).map(
       (server) => server.id,
     ),
   );
@@ -143,7 +144,7 @@ export function EmaServiceServers({ row }: { row: ServiceRow }): JSX.Element {
               }
               description={
                 hidden > 0
-                  ? `${serverCountLabel(hidden)} you don’t have access to ${hidden === 1 ? "reaches" : "reach"} it.`
+                  ? `${pluralize(hidden, "server")} you don’t have access to ${hidden === 1 ? "reaches" : "reach"} it.`
                   : "Turn on Enterprise Managed Authorization in an MCP server’s settings and it shows up here."
               }
             />

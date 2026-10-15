@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  orderVouchesFor,
+  vouchedFor,
   strandedNotes,
   strandedServers,
   type ServerSignIn,
@@ -24,15 +24,15 @@ describe("who the accepted providers can vouch for", () => {
   });
 
   it("lets only Speakeasy vouch on Speakeasy's own sign-in", () => {
-    expect(orderVouchesFor([speakeasy], ownServer)).toBe(true);
-    expect(orderVouchesFor([okta], ownServer)).toBe(false);
+    expect(vouchedFor([speakeasy], ownServer)).toBe(true);
+    expect(vouchedFor([okta], ownServer)).toBe(false);
   });
 
   it("lets only the sign-in's own identity provider vouch on a federated server", () => {
-    expect(orderVouchesFor([okta], oktaServer)).toBe(true);
-    expect(orderVouchesFor([speakeasy], oktaServer)).toBe(false);
+    expect(vouchedFor([okta], oktaServer)).toBe(true);
+    expect(vouchedFor([speakeasy], oktaServer)).toBe(false);
     expect(
-      orderVouchesFor(
+      vouchedFor(
         [{ kind: "external", remoteSessionIssuerId: "entra" }],
         oktaServer,
       ),

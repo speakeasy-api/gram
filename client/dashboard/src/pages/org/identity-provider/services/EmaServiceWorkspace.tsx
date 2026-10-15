@@ -157,7 +157,7 @@ export function EmaServiceWorkspace({
                     <TrustRow
                       key={provider.key}
                       provider={provider}
-                      isDefaultOrder={row.isDefaultOrder}
+                      isDefault={row.isDefault}
                     />
                   ))}
                 </ul>
@@ -169,7 +169,7 @@ export function EmaServiceWorkspace({
             serviceName={name}
             remoteSessionIssuerId={row.remoteSessionIssuerId}
             current={row.providers}
-            isDefault={row.isDefaultOrder}
+            isDefault={row.isDefault}
             candidates={candidates.items}
             candidatesReady={candidates.ready}
             candidatesError={candidates.error}
@@ -187,10 +187,10 @@ export function EmaServiceWorkspace({
 
 function TrustRow({
   provider,
-  isDefaultOrder,
+  isDefault,
 }: {
   provider: ProviderView;
-  isDefaultOrder: boolean;
+  isDefault: boolean;
 }): JSX.Element {
   const fix = provider.fix ? providerFixLink(provider.fix) : undefined;
   return (
@@ -198,7 +198,7 @@ function TrustRow({
       {/* The placeholder's full scope follows below, so its short one would repeat it. */}
       <ProviderTrust
         provider={provider}
-        isDefaultOrder={isDefaultOrder && !provider.placeholder}
+        isDefault={isDefault && !provider.placeholder}
       />
       {provider.placeholder && (
         <Text muted small className="block">

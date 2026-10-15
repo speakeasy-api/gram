@@ -38,7 +38,7 @@ import { useProtectedResourceMetadata } from "@/lib/remote-identity/queries/useP
 import {
   acceptanceLabel,
   issuerDisplayName,
-  orderVouchesFor,
+  vouchedFor,
   providerFixLink,
   providerView,
   serviceName,
@@ -446,8 +446,8 @@ export function IdentityChainingField({
 
   // Who can vouch for people on this server follows from its sign-in and the
   // organization's Speakeasy issuer; nothing is chosen here.
-  const order = read.data?.emaProviders;
-  const listed = (order?.providers ?? []).filter(
+  const emaProviders = read.data?.emaProviders;
+  const listed = (emaProviders?.providers ?? []).filter(
     (provider) =>
       provider.kind === "speakeasy" || !!provider.remoteSessionIssuerId,
   );
@@ -491,16 +491,16 @@ export function IdentityChainingField({
       ? allVouchers.filter((row) => !row.unusedBySignIn)
       : allVouchers;
   // The service doesn't accept the one provider this sign-in goes through.
-  const strandedByOrder =
-    !!order &&
-    !order.isDefault &&
-    !orderVouchesFor(order.providers, {
+  const notAccepted =
+    !!emaProviders &&
+    !emaProviders.isDefault &&
+    !vouchedFor(emaProviders.providers, {
       signInIssuerId: trustedIssuerId || undefined,
     });
   const trusts = usableVouchers.filter(
     (row): row is ProviderView & { issuerUrl: string } => !!row.issuerUrl,
   );
-  const noneUsable = !!order && usable.length === 0;
+  const noneUsable = !!emaProviders && usable.length === 0;
   const orgAdmin = hasScope("org:admin", organization.id);
   // The vendor already trusts one of these, somewhere in the organization.
   const trusted = trusts.find((row) => row.lastAcceptedAt);
@@ -697,7 +697,7 @@ export function IdentityChainingField({
           label="Vouched for by"
           tone={usableVouchers.length > 0 ? "success" : "warning"}
         >
-          {!order ? (
+          {!emaProviders ? (
             <Text muted small>
               Checking…
             </Text>
@@ -752,13 +752,13 @@ export function IdentityChainingField({
               {NO_VOUCHER}
             </Text>
           )}
-          {noneUsable && strandedByOrder && (
+          {noneUsable && notAccepted && (
             <Text small className="block">
               To fix it,{" "}
               {orgAdmin ? (
                 <Link
                   className="underline underline-offset-4"
-                  to={identityHref(emaServiceHref(order.vendorIssuer))}
+                  to={identityHref(emaServiceHref(emaProviders.vendorIssuer))}
                 >
                   change which identity providers {vendor} accepts
                 </Link>
@@ -775,9 +775,9 @@ export function IdentityChainingField({
               .
             </Text>
           )}
-          {order && usableVouchers.length > 0 && (
+          {emaProviders && usableVouchers.length > 0 && (
             <Text muted small className="block">
-              {order.isDefault ? (
+              {emaProviders.isDefault ? (
                 defaultVoucherLine(trustedIssuerId ? signIn.name : undefined)
               ) : (
                 <>
@@ -785,7 +785,9 @@ export function IdentityChainingField({
                   {orgAdmin ? (
                     <Link
                       className="underline underline-offset-4"
-                      to={identityHref(emaServiceHref(order.vendorIssuer))}
+                      to={identityHref(
+                        emaServiceHref(emaProviders.vendorIssuer),
+                      )}
                     >
                       the identity providers {vendor} accepts
                     </Link>
@@ -811,7 +813,7 @@ export function IdentityChainingField({
                   : "neutral"
           }
         >
-          {!order ? (
+          {!emaProviders ? (
             <Text muted small>
               Checking…
             </Text>
@@ -869,8 +871,10 @@ export function IdentityChainingField({
               </ul>
             </>
           )}
-          {order && orgAdmin && (
-            <SettingsLink to={identityHref(emaServiceHref(order.vendorIssuer))}>
+          {emaProviders && orgAdmin && (
+            <SettingsLink
+              to={identityHref(emaServiceHref(emaProviders.vendorIssuer))}
+            >
               Every server that reaches {vendor}
             </SettingsLink>
           )}

@@ -28,7 +28,7 @@ const service = (
   key: `https://${name}.example.com`,
   vendorIssuer: `https://${name}.example.com`,
   name,
-  isDefaultOrder: true,
+  isDefault: true,
   providers: [
     {
       key: "speakeasy",

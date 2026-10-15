@@ -10,11 +10,11 @@ import {
 /** Whether the service has accepted this provider, as a dot plus a few words. */
 export function ProviderTrust({
   provider,
-  isDefaultOrder = false,
+  isDefault = false,
 }: {
   provider: ProviderView;
   /** In the default, say which servers each entry covers. */
-  isDefaultOrder?: boolean;
+  isDefault?: boolean;
 }): JSX.Element {
   const tone = provider.lastAcceptedAt
     ? "success"
@@ -24,7 +24,7 @@ export function ProviderTrust({
   const detail = provider.usable
     ? acceptanceLabel(provider.lastAcceptedAt)
     : provider.unavailable;
-  const scope = !isDefaultOrder
+  const scope = !isDefault
     ? undefined
     : provider.kind === "speakeasy"
       ? SPEAKEASY_DEFAULT_SCOPE.charAt(0).toLowerCase() +

@@ -9,7 +9,7 @@ import {
 } from "../tabs";
 
 /** Where an admin fixes a provider that can't vouch. */
-export type ProviderFix = "speakeasy" | "okta" | "identity-providers";
+type ProviderFix = "speakeasy" | "okta" | "identity-providers";
 
 /**
  * One identity provider as it appears wherever identity chaining is explained:
@@ -248,7 +248,7 @@ export type ServerSignIn = {
 };
 
 /** One provider a service accepts, saved or drafted. Stored as an ordered list. */
-export type OrderEntry = {
+export type AcceptedProvider = {
   kind: EMAProvider["kind"];
   remoteSessionIssuerId?: string;
 };
@@ -266,12 +266,12 @@ function signInProviderName(server: ServerSignIn): string {
  * With nothing saved (null) every provider is accepted, so every server is
  * covered.
  */
-export function orderVouchesFor(
-  order: OrderEntry[] | null,
+export function vouchedFor(
+  accepted: AcceptedProvider[] | null,
   server: ServerSignIn,
 ): boolean {
-  if (order === null) return true;
-  return order.some((entry) =>
+  if (accepted === null) return true;
+  return accepted.some((entry) =>
     server.signInIssuerId
       ? entry.kind === "external" &&
         entry.remoteSessionIssuerId === server.signInIssuerId
@@ -281,10 +281,10 @@ export function orderVouchesFor(
 
 /** The servers the accepted providers leave with nobody to vouch for their people. */
 export function strandedServers<T extends ServerSignIn>(
-  order: OrderEntry[] | null,
+  accepted: AcceptedProvider[] | null,
   servers: T[],
 ): T[] {
-  return servers.filter((server) => !orderVouchesFor(order, server));
+  return servers.filter((server) => !vouchedFor(accepted, server));
 }
 
 /** Why a stranded server needs attention, short enough for a table cell. */

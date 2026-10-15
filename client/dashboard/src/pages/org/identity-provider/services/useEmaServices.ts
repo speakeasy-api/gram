@@ -6,6 +6,7 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildIdentityProviderConnectionQuery } from "@gram/client/react-query/identityProviderConnection.core.js";
 import { buildOrganizationRemoteSessionIssuerEMAServicesQuery } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.core.js";
 import { useOrganization } from "@/contexts/Auth";
+import { pluralize } from "@/lib/format";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
 
 import { SESSION_SECURITY } from "../identityProviderQueries";
@@ -17,7 +18,7 @@ export type ServiceRow = {
   vendorIssuer: string;
   name: string;
   remoteSessionIssuerId?: string;
-  isDefaultOrder: boolean;
+  isDefault: boolean;
   providers: ProviderView[];
   /** Every server that reaches the service, including ones the viewer can't see. */
   serverCount: number;
@@ -139,7 +140,7 @@ function serviceRow(
     vendorIssuer: service.vendorIssuer,
     name: serviceName(service.name, service.vendorIssuer),
     remoteSessionIssuerId: service.remoteSessionIssuerId,
-    isDefaultOrder: service.emaProviders.isDefault,
+    isDefault: service.emaProviders.isDefault,
     providers: service.emaProviders.providers.map((provider) =>
       providerView(provider, {
         issuer: issuerById(provider.remoteSessionIssuerId),
@@ -157,13 +158,7 @@ function serviceRow(
 /** How many MCP servers reach the service, and how many of those are ready. */
 export function serversSummary(row: ServiceRow): string {
   if (row.serverCount === 0) return "No MCP servers yet";
-  const servers =
-    row.serverCount === 1 ? "1 MCP server" : `${row.serverCount} MCP servers`;
+  const servers = pluralize(row.serverCount, "MCP server");
   if (row.readyServerCount === row.serverCount) return servers;
   return `${servers} · ${row.readyServerCount} ready`;
-}
-
-/** "1 server" or "3 servers". */
-export function serverCountLabel(count: number): string {
-  return count === 1 ? "1 server" : `${count} servers`;
 }
