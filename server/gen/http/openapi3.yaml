@@ -2955,6 +2955,82 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.repairInferenceKey:
+        post:
+            tags:
+                - admin
+            summary: repairInferenceKey admin
+            description: Removes explicitly selected known disable causes without changing tier, credits, or runtime. Staff confirmation and reason required.
+            operationId: adminRepairInferenceKey
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RepairInferenceKeyRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminInferenceKeyRepairResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.resumeStripeSubscription:
         post:
             tags:
@@ -20396,6 +20472,93 @@ paths:
             x-speakeasy-name-override: logout
             x-speakeasy-react-hook:
                 name: Logout
+    /rpc/auth.logoutEverywhere:
+        post:
+            description: 'Signs the caller out everywhere: ends every dashboard and identity provider session, revokes their sign-ins in every organization, and revokes every MCP grant made from them.'
+            operationId: logoutEverywhere
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokeSignInsResult'
+                    description: OK response.
+                    headers:
+                        Set-Cookie:
+                            description: Empty string to clear the session
+                            schema:
+                                description: Empty string to clear the session
+                                type: string
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: logoutEverywhere auth
+            tags:
+                - auth
+            x-speakeasy-name-override: logoutEverywhere
+            x-speakeasy-react-hook:
+                name: LogoutEverywhere
     /rpc/auth.register:
         post:
             description: Register a new org for a user with their session information.
@@ -25273,6 +25436,216 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateDeployment
+    /rpc/deployments.evaluateOpenAPIv3:
+        post:
+            description: Compare an uploaded OpenAPI document with the version of the same source in the active deployment. Reports changes to tools, inputs and security without deploying anything.
+            operationId: evaluateOpenAPIv3
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/EvaluateOpenAPIv3Form'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OpenAPIv3Evaluation'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: evaluateOpenAPIv3 deployments
+            tags:
+                - deployments
+            x-speakeasy-name-override: evaluateOpenAPIv3
+            x-speakeasy-react-hook:
+                name: EvaluateOpenAPIv3
+    /rpc/deployments.evaluation:
+        get:
+            description: Compare the OpenAPI documents in a deployment with the deployment it was created from.
+            operationId: getDeploymentEvaluation
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the deployment to evaluate.
+                  in: query
+                  name: deployment_id
+                  required: true
+                  schema:
+                    description: The ID of the deployment to evaluate.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetDeploymentEvaluationResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getDeploymentEvaluation deployments
+            tags:
+                - deployments
+            x-speakeasy-name-override: evaluation
+            x-speakeasy-react-hook:
+                name: DeploymentEvaluation
     /rpc/deployments.evolve:
         post:
             description: Create a new deployment with additional or updated tool sources.
@@ -33540,6 +33913,261 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListIntegrations
+    /rpc/internalSessionIssuers.get:
+        get:
+            description: 'Read the organization''s internal session issuer: its state, the issuer URI to register with supported services and its published keys. Requires org:read.'
+            operationId: getInternalSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InternalSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: get internalSessionIssuers
+            tags:
+                - internalSessionIssuers
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: InternalSessionIssuer
+    /rpc/internalSessionIssuers.rotate:
+        post:
+            description: 'Rotate the issuer''s signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. The hourly sweep also activates a ready key on its own while the issuer is enabled and not paused, so a later second call may find the rotation already done and change nothing; a paused issuer can still be activated with the second call. With compromised set, every current key is revoked and withdrawn from the key set first, leaving the issuer keyless; the revoked keys'' signing material is then disabled and, while the issuer is rolled out and the organization has a verified email domain, a fresh key activated. If either later step fails the issuer stays keyless or reports kms_cleanup_pending, and repeating the call retries it. Repeats naming a key that a compromised rotation already replaced change nothing; naming a key the sweep revoked after a routine rotation still contains its successor. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and its revocation is never rate limited.'
+            operationId: rotateInternalSessionIssuer
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RotateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InternalSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: rotate internalSessionIssuers
+            tags:
+                - internalSessionIssuers
+            x-speakeasy-name-override: rotate
+            x-speakeasy-react-hook:
+                name: RotateInternalSessionIssuer
+    /rpc/internalSessionIssuers.setEnabled:
+        post:
+            description: Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin; enabling also needs a verified email domain and the issuer rollout, while disabling never does.
+            operationId: setInternalSessionIssuerEnabled
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetEnabledRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/InternalSessionIssuer'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setEnabled internalSessionIssuers
+            tags:
+                - internalSessionIssuers
+            x-speakeasy-name-override: setEnabled
+            x-speakeasy-react-hook:
+                name: SetInternalSessionIssuerEnabled
     /rpc/jsonWebKeySets.activateKey:
         post:
             description: Make a published key the set's active signing key, retiring the previously active key in the same operation. The key must be pending or retired; activating the already-active key is a no-op. Requires org:admin.
@@ -37842,7 +38470,7 @@ paths:
                 name: UpdateMcpEndpoint
     /rpc/mcpMetadata.export:
         post:
-            description: Export MCP server details as JSON for documentation and integration purposes.
+            description: Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.
             operationId: exportMcpMetadata
             parameters:
                 - allowEmptyValue: true
@@ -38931,7 +39559,7 @@ paths:
                 name: CreateMcpServer
     /rpc/mcpServers.delete:
         delete:
-            description: Delete an MCP server
+            description: Delete an MCP server. A toolset's own hosted server (its id equals the toolset id) is disabled instead, as turning MCP off on the toolset does, and stays listed with visibility disabled. Other servers, including other toolset-backed ones, are deleted.
             operationId: deleteMcpServer
             parameters:
                 - allowEmptyValue: true
@@ -45061,6 +45689,93 @@ paths:
             x-speakeasy-name-override: refreshMetadata
             x-speakeasy-react-hook:
                 name: RefreshOrganizationRemoteSessionIssuerMetadata
+    /rpc/organizationRemoteSessionIssuers.setEMAProviders:
+        post:
+            description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint''s configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
+            operationId: setOrganizationRemoteSessionIssuerEMAProviders
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetEMAProvidersRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/EMAProviderOrder'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: setEMAProviders organizationRemoteSessionIssuers
+            tags:
+                - organizationRemoteSessionIssuers
+            x-speakeasy-name-override: setEMAProviders
+            x-speakeasy-react-hook:
+                name: SetOrganizationRemoteSessionIssuerEMAProviders
     /rpc/organizationRemoteSessionIssuers.update:
         post:
             description: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.
@@ -47289,6 +48004,87 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: Organization
+    /rpc/organizations.getGateway:
+        get:
+            description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.'
+            operationId: getOrganizationGateway
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OrganizationGateway'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: getGateway organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: getGateway
+            x-speakeasy-react-hook:
+                name: OrganizationGateway
     /rpc/organizations.getOnboardingStatus:
         get:
             description: Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
@@ -47790,6 +48586,93 @@ paths:
             x-speakeasy-name-override: revokeInvite
             x-speakeasy-react-hook:
                 name: RevokeInvite
+    /rpc/organizations.revokeMemberSignIns:
+        post:
+            description: Revoke a member's sign-ins in the active organization, end their identity provider sessions, and revoke every MCP grant made from those sign-ins. Requires organization admin.
+            operationId: revokeOrganizationMemberSignIns
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokeMemberSignInsRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokeSignInsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: revokeMemberSignIns organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: revokeMemberSignIns
+            x-speakeasy-react-hook:
+                name: RevokeOrganizationMemberSignIns
     /rpc/organizations.sendEnterpriseAdminOnboardingEmail:
         post:
             description: Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.
@@ -75556,7 +76439,11 @@ paths:
                 name: AddExternalOAuthServer
     /rpc/toolsets.checkMCPSlugAvailability:
         get:
-            description: Check if a MCP slug is available
+            deprecated: true
+            description: |-
+                Check if a MCP slug is taken in any scope (true means taken).
+
+                Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
             operationId: checkMCPSlugAvailability
             parameters:
                 - allowEmptyValue: true
@@ -76706,7 +77593,11 @@ paths:
                 name: SetToolsetToolVariationsGroup
     /rpc/toolsets.setUserSessionIssuer:
         post:
-            description: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
+            deprecated: true
+            description: |-
+                Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
+
+                Deprecated: use mcpServers.update instead.
             operationId: setToolsetUserSessionIssuer
             parameters:
                 - allowEmptyValue: true
@@ -79055,113 +79946,6 @@ paths:
             x-speakeasy-name-override: listServers
             x-speakeasy-react-hook:
                 name: UnproxiedMcpServers
-    /rpc/unproxiedMcp.listTools:
-        get:
-            description: Best-effort discovery of the tools available on the vendor's MCP server. Connects live to the server's URL and issues an MCP tools/list call; the result is never cached and the connection is never reused for actual tool execution.
-            operationId: listUnproxiedMcpServerTools
-            parameters:
-                - allowEmptyValue: true
-                  description: The ID of the unproxied MCP server
-                  in: query
-                  name: id
-                  required: true
-                  schema:
-                    description: The ID of the unproxied MCP server
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
-            responses:
-                "200":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/ListUnproxiedMcpServerToolsResult'
-                    description: OK response.
-                "400":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'bad_request: request is invalid'
-                "401":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unauthorized: unauthorized access'
-                "403":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'forbidden: permission denied'
-                "404":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'not_found: resource not found'
-                "409":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'conflict: resource already exists'
-                "415":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unsupported_media: unsupported media type'
-                "422":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'invalid: request contains one or more invalidation fields'
-                "500":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'unexpected: an unexpected error occurred'
-                "502":
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                    description: 'gateway_error: an unexpected error occurred'
-            security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-            summary: listTools unproxiedMcp
-            tags:
-                - unproxiedMcp
-            x-speakeasy-name-override: listTools
-            x-speakeasy-react-hook:
-                name: UnproxiedMcpServerTools
     /rpc/usage.cancelStripeSubscription:
         post:
             description: Schedule the organization's Stripe PAYG subscription to cancel at the end of its current period
@@ -85963,7 +86747,7 @@ components:
                         - allowed
                         - blocked
                         - unreviewed
-            description: The enforcement verdict for one detected AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
+            description: The enforcement verdict for one AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.
             required:
                 - state
                 - decision
@@ -86358,7 +87142,7 @@ components:
                     description: Display name for the server. Defaults to the backing server name when omitted.
                 mcp_server_id:
                     type: string
-                    description: Speakeasy MCP server ID. Provide exactly one backend ID.
+                    description: Speakeasy MCP server ID. Provide exactly one backend ID; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.
                     format: uuid
                 meta_mcp_server_id:
                     type: string
@@ -86379,7 +87163,7 @@ components:
                     format: int32
                 toolset_id:
                     type: string
-                    description: Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
+                    description: Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id; a hosted MCP server's toolset_id and mcp_server_id may both be sent when equal.
                     format: uuid
             required:
                 - plugin_id
@@ -86578,6 +87362,10 @@ components:
         AdminInferenceKey:
             type: object
             properties:
+                cause_diagnostics:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminInferenceKeyCause'
                 credits_used:
                     type: number
                     description: Credits spent this month in USD.
@@ -86604,6 +87392,21 @@ components:
                 - monthly_credits
                 - disabled
                 - disable_causes_classified
+        AdminInferenceKeyCause:
+            type: object
+            properties:
+                blocked_reason:
+                    type: string
+                cause:
+                    type: string
+                description:
+                    type: string
+                removable:
+                    type: boolean
+            required:
+                - cause
+                - description
+                - removable
         AdminInferenceKeyLimit:
             type: object
             properties:
@@ -86616,6 +87419,44 @@ components:
             required:
                 - key_type
                 - monthly_credits
+        AdminInferenceKeyRepairResult:
+            type: object
+            properties:
+                key:
+                    $ref: '#/components/schemas/AdminInferenceKeyRepairState'
+                reconciliation_pending:
+                    type: boolean
+            required:
+                - key
+                - reconciliation_pending
+        AdminInferenceKeyRepairState:
+            type: object
+            properties:
+                cause_diagnostics:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminInferenceKeyCause'
+                disable_causes:
+                    type: array
+                    items:
+                        type: string
+                disable_causes_classified:
+                    type: boolean
+                disabled:
+                    type: boolean
+                key_type:
+                    type: string
+                monthly_credits:
+                    type: integer
+                    format: int64
+            description: Committed local key policy, without provider usage or credentials.
+            required:
+                - key_type
+                - monthly_credits
+                - disabled
+                - disable_causes
+                - disable_causes_classified
+                - cause_diagnostics
         AdminInferenceSpendMonth:
             type: object
             properties:
@@ -88539,6 +89380,8 @@ components:
         AiScanTarget:
             type: object
             properties:
+                access:
+                    $ref: '#/components/schemas/AIToolAccessSummary'
                 category:
                     type: string
                     description: 'Target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally).'
@@ -89292,7 +90135,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AssistantMCPServerRef'
-                    description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+                    description: MCP servers attached to the assistant that are not hosted (toolset-backed); hosted servers are listed under toolsets.
                 model:
                     type: string
                     description: The model identifier used by the assistant.
@@ -89318,7 +90161,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AssistantToolsetRef'
-                    description: Toolsets available to the assistant.
+                    description: Hosted (toolset-backed) MCP servers attached to the assistant, by toolset slug.
                 updated_at:
                     type: string
                     description: Last update timestamp.
@@ -89352,7 +90195,7 @@ components:
                     description: Optional environment slug used when connecting to the MCP server.
                 mcp_server_slug:
                     type: string
-                    description: The MCP server slug exposed to the assistant. Covers remote- and tunnelled-backed MCP servers, which have no toolset to attach.
+                    description: The MCP server slug exposed to the assistant. Covers every backend, including hosted (toolset-backed) servers.
             required:
                 - mcp_server_slug
         AssistantMemory:
@@ -91565,7 +92408,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AssistantMCPServerRef'
-                    description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+                    description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.
                 model:
                     type: string
                     description: The model identifier used by the assistant.
@@ -91582,7 +92425,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AssistantToolsetRef'
-                    description: Toolsets available to the assistant.
+                    description: Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.
                 warm_ttl_seconds:
                     type: integer
                     description: Optional warm runtime TTL in seconds.
@@ -95025,6 +95868,76 @@ components:
                     format: uuid
             required:
                 - id
+        EMAProvider:
+            type: object
+            properties:
+                internal_session_issuer_id:
+                    type: string
+                    description: The organization's internal session issuer, for speakeasy.
+                    format: uuid
+                kind:
+                    type: string
+                    description: external or speakeasy.
+                    enum:
+                        - external
+                        - speakeasy
+                remote_session_issuer_id:
+                    type: string
+                    description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
+                    format: uuid
+                unavailable_reason:
+                    type: string
+                    description: Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+                    enum:
+                        - deleted
+                        - disabled
+                        - not_trusted_by_endpoint
+                        - signing_unavailable
+                        - not_rolled_out
+                        - verified_domain_required
+                        - setup_required
+                        - keyless
+                        - signing_paused
+                        - sign_in_enforcement_required
+                        - readiness_unknown
+            description: One EMA provider in a vendor's order.
+            required:
+                - kind
+        EMAProviderInput:
+            type: object
+            properties:
+                kind:
+                    type: string
+                    description: external is an organization-level remote session issuer that exchanges the user's identity for an ID-JAG, such as an Okta authorization server; speakeasy is the organization's internal session issuer.
+                    enum:
+                        - external
+                        - speakeasy
+                remote_session_issuer_id:
+                    type: string
+                    description: 'Required for external, omitted for speakeasy: an organization-level issuer that an organization user session issuer trusts.'
+                    format: uuid
+            description: One EMA provider allowed to issue ID-JAGs for a vendor.
+            required:
+                - kind
+        EMAProviderOrder:
+            type: object
+            properties:
+                is_default:
+                    type: boolean
+                    description: No order is saved, so the endpoint uses its configured external issuer.
+                providers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EMAProvider'
+                    description: The saved providers in order, or the external default.
+                vendor_issuer:
+                    type: string
+                    description: The vendor authorization server issuer, canonicalized.
+            description: The EMA providers for one vendor authorization server, in the order identity chaining tries them. Each provider that can serve is tried in turn, with short bounded retries for transient failures, until one succeeds.
+            required:
+                - vendor_issuer
+                - is_default
+                - providers
         EmployeeDataFlowEdge:
             type: object
             properties:
@@ -95244,6 +96157,21 @@ components:
                 - temporary
                 - timeout
                 - fault
+        EvaluateOpenAPIv3Form:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the uploaded OpenAPI document asset to evaluate.
+                name:
+                    type: string
+                    description: The display name of the source. Defaults to the deployed name or the slug.
+                slug:
+                    type: string
+                    description: The slug of the OpenAPI source the document will replace. A slug that is not in the active deployment is evaluated as a new source.
+            required:
+                - asset_id
+                - slug
         EvaluatePromptGuardrailRequestBody:
             type: object
             properties:
@@ -95625,13 +96553,15 @@ components:
         ExportMcpMetadataRequestBody:
             type: object
             properties:
+                mcp_server_id:
+                    type: string
+                    description: The ID of a toolset-backed MCP server. Mutually exclusive with mcp_slug.
+                    format: uuid
                 mcp_slug:
                     type: string
-                    description: The MCP server slug (from the install URL)
+                    description: The MCP server slug (from the install URL). Mutually exclusive with mcp_server_id.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
-            required:
-                - mcp_slug
         ExprCompileResult:
             type: object
             properties:
@@ -96623,6 +97553,23 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        GetDeploymentEvaluationResult:
+            type: object
+            properties:
+                base_deployment_id:
+                    type: string
+                    description: The ID of the deployment it is compared with. Absent for the first deployment in a project.
+                deployment_id:
+                    type: string
+                    description: The ID of the evaluated deployment.
+                documents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OpenAPIv3Evaluation'
+                    description: One evaluation per OpenAPI source that was added, changed or removed.
+            required:
+                - deployment_id
+                - documents
         GetDeploymentForm:
             type: object
             properties:
@@ -98563,6 +99510,8 @@ components:
                 client_id:
                     type: string
                     description: Exact selected remote_session_client row ID, when available.
+                ema_providers:
+                    $ref: '#/components/schemas/EMAProviderOrder'
                 external_client_id:
                     type: string
                     description: Public OAuth client identifier, never a secret.
@@ -99185,6 +100134,66 @@ components:
             required:
                 - version
                 - created_at
+        InternalSessionIssuer:
+            type: object
+            properties:
+                can_enable:
+                    type: boolean
+                    description: Whether deployment readiness, rollout and a verified email domain currently allow enabling this issuer. The caller still needs organization administrator access.
+                issuer:
+                    type: string
+                    description: Issuer URI to register with supported services. It never changes.
+                jwks_uri:
+                    type: string
+                    description: Public verification keys.
+                keys:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InternalSessionIssuerKey'
+                    description: Published keys.
+                kms_cleanup_pending:
+                    type: integer
+                    description: Revoked keys whose signing material is not yet disabled. Speakeasy retries until it is.
+                    format: int64
+                replacement_error:
+                    type: string
+                    description: 'Set only by a compromised rotation whose replacement key could not be activated: the keys are contained, the issuer stays keyless, and repeating the call retries the replacement.'
+                rotation_ready_at:
+                    type: string
+                    description: When a pending rotation can be activated.
+                    format: date-time
+                state:
+                    type: string
+                    description: 'unavailable: not offered to this organization yet. verified_domain_required: needs at least one verified email domain. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.'
+                    enum:
+                        - unavailable
+                        - verified_domain_required
+                        - setup_required
+                        - enabled
+                        - disabled
+                        - signing_paused
+                        - keyless
+            required:
+                - state
+                - can_enable
+                - keys
+                - kms_cleanup_pending
+        InternalSessionIssuerKey:
+            type: object
+            properties:
+                kid:
+                    type: string
+                    description: Key ID.
+                state:
+                    type: string
+                    description: Lifecycle state.
+                    enum:
+                        - pending
+                        - active
+                        - retired
+            required:
+                - kid
+                - state
         InterruptTurnRequestBody:
             type: object
             properties:
@@ -102133,28 +103142,6 @@ components:
             description: A page of terminal skill activations without exact version attribution.
             required:
                 - activations
-        ListUnproxiedMcpServerToolsResult:
-            type: object
-            properties:
-                message:
-                    type: string
-                    description: Human-readable detail, present for non-success statuses
-                status:
-                    type: string
-                    description: Outcome of the discovery attempt
-                    enum:
-                        - success
-                        - auth_required
-                        - unreachable
-                        - error
-                tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/UnproxiedMcpServerTool'
-            description: Result of a live tool-discovery probe against an unproxied MCP server
-            required:
-                - status
-                - tools
         ListUnproxiedMcpServersResult:
             type: object
             properties:
@@ -102995,17 +103982,17 @@ components:
                     format: uuid
                 mcp_server_id:
                     type: string
-                    description: The MCP server associated with this install page metadata. Mutually exclusive with toolset_id.
+                    description: The MCP server associated with this install page metadata. Also set with toolset_id, to the same id, for a hosted MCP server with a live canonical MCP server.
                     format: uuid
                 toolset_id:
                     type: string
-                    description: The toolset associated with this install page metadata. Mutually exclusive with mcp_server_id.
+                    description: The toolset associated with this install page metadata. Also set with mcp_server_id, to the same id, for a hosted MCP server with a live canonical MCP server.
                     format: uuid
                 updated_at:
                     type: string
                     description: When the metadata entry was last updated
                     format: date-time
-            description: Metadata used to configure the MCP install page. Exactly one of toolset_id or mcp_server_id identifies which backend the metadata belongs to.
+            description: Metadata used to configure the MCP install page. toolset_id or mcp_server_id identifies which backend the metadata belongs to; a hosted MCP server with a live canonical MCP server carries both, set to the same id.
             required:
                 - id
                 - created_at
@@ -104497,6 +105484,43 @@ components:
                 - dsync_configured
                 - domain_verified
                 - verified_domains
+        OpenAPIv3AffectedToolset:
+            type: object
+            properties:
+                affected_tool_count:
+                    type: integer
+                    description: The number of those tools with breaking changes or changes that need attention.
+                    format: int64
+                id:
+                    type: string
+                    description: The ID of the toolset.
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is served as an MCP server.
+                mcp_slug:
+                    type: string
+                    description: The MCP slug of the toolset, when it is served as an MCP server.
+                name:
+                    type: string
+                    description: The name of the toolset.
+                oauth_configured:
+                    type: boolean
+                    description: Whether the MCP server has OAuth configured.
+                slug:
+                    type: string
+                    description: The slug of the toolset.
+                tool_count:
+                    type: integer
+                    description: The number of tools from this source in the toolset.
+                    format: int64
+            required:
+                - id
+                - name
+                - slug
+                - mcp_enabled
+                - oauth_configured
+                - tool_count
+                - affected_tool_count
         OpenAPIv3DeploymentAsset:
             type: object
             properties:
@@ -104519,6 +105543,154 @@ components:
                 - asset_id
                 - name
                 - slug
+        OpenAPIv3DocumentSnapshot:
+            type: object
+            properties:
+                default_security:
+                    type: string
+                    description: The document-level security requirement.
+                security_schemes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OpenAPIv3SecuritySchemeSummary'
+                    description: The security schemes tools can use.
+                server_url:
+                    type: string
+                    description: The default server URL tools call.
+                skipped_operation_count:
+                    type: integer
+                    description: The number of operations that cannot be turned into tools.
+                    format: int64
+                tool_count:
+                    type: integer
+                    description: The number of tools the document produces.
+                    format: int64
+            required:
+                - tool_count
+                - skipped_operation_count
+                - security_schemes
+                - default_security
+        OpenAPIv3Evaluation:
+            type: object
+            properties:
+                affected_toolsets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OpenAPIv3AffectedToolset'
+                    description: Toolsets (MCP servers) that include tools from this source.
+                asset_id:
+                    type: string
+                    description: The asset ID of the evaluated document. Absent when the source was removed.
+                base:
+                    $ref: '#/components/schemas/OpenAPIv3DocumentSnapshot'
+                base_asset_id:
+                    type: string
+                    description: The asset ID of the deployed document. Absent for a new source.
+                breaking_count:
+                    type: integer
+                    description: The number of breaking changes.
+                    format: int64
+                changes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OpenAPIv3EvaluationChange'
+                    description: Every change found, most severe first.
+                info_count:
+                    type: integer
+                    description: The number of informational changes.
+                    format: int64
+                name:
+                    type: string
+                    description: The display name of the OpenAPI source.
+                next:
+                    $ref: '#/components/schemas/OpenAPIv3DocumentSnapshot'
+                slug:
+                    type: string
+                    description: The slug of the OpenAPI source.
+                status:
+                    type: string
+                    description: Whether the source is new, changed, unchanged or removed.
+                    enum:
+                        - new
+                        - changed
+                        - unchanged
+                        - removed
+                warning_count:
+                    type: integer
+                    description: The number of changes that need attention.
+                    format: int64
+            description: The changes an OpenAPI document introduces compared with the deployed version of the same source.
+            required:
+                - slug
+                - name
+                - status
+                - changes
+                - breaking_count
+                - warning_count
+                - info_count
+                - affected_toolsets
+        OpenAPIv3EvaluationChange:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: The part of the MCP an OpenAPI change affects.
+                    enum:
+                        - security
+                        - tools
+                        - server
+                code:
+                    type: string
+                    description: A stable identifier for the kind of change.
+                details:
+                    type: array
+                    items:
+                        type: string
+                    description: Supporting lines, such as before and after values.
+                severity:
+                    type: string
+                    description: How likely an OpenAPI change is to break existing MCP servers.
+                    enum:
+                        - breaking
+                        - warning
+                        - info
+                title:
+                    type: string
+                    description: A one-line summary of the change.
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: The names of the tools the change affects.
+            required:
+                - severity
+                - category
+                - code
+                - title
+                - details
+                - tools
+        OpenAPIv3SecuritySchemeSummary:
+            type: object
+            properties:
+                env_variables:
+                    type: array
+                    items:
+                        type: string
+                    description: The environment variables that supply credentials for the scheme.
+                key:
+                    type: string
+                    description: The name of the scheme under components.securitySchemes.
+                summary:
+                    type: string
+                    description: A short description of the scheme.
+                type:
+                    type: string
+                    description: The OpenAPI security scheme type.
+            required:
+                - key
+                - type
+                - summary
+                - env_variables
         Organization:
             type: object
             properties:
@@ -104647,6 +105819,27 @@ components:
                 - name
                 - slug
                 - projects
+        OrganizationGateway:
+            type: object
+            properties:
+                available:
+                    type: boolean
+                    description: Whether the organization is served a gateway.
+                unavailable_reason:
+                    type: string
+                    description: Why the gateway is not served. Set only when not available.
+                    enum:
+                        - no_organization_issuer
+                        - multiple_organization_issuers
+                        - custom_domain_only
+                        - organization_disabled
+                        - turned_off
+                url:
+                    type: string
+                    description: The gateway's MCP URL. Set only when available.
+            description: The active organization's gateway, or why it is not served.
+            required:
+                - available
         OrganizationInvitation:
             type: object
             properties:
@@ -104926,6 +106119,9 @@ components:
                     items:
                         $ref: '#/components/schemas/OrganizationUserSessionIssuerReference'
                     description: Live toolsets that block deletion.
+                withdraws_organization_gateway:
+                    type: boolean
+                    description: True when this is the organization's only organization-level issuer, so deleting it stops serving the organization gateway its members sign in to. Does not block deletion.
             description: Authoritative impact summary for deleting an organization-owned user_session_issuer.
             required:
                 - client_count
@@ -104934,6 +106130,7 @@ components:
                 - toolsets
                 - can_delete
                 - ema_binding_count
+                - withdraws_organization_gateway
         OrganizationUserSessionIssuerMigratePreflight:
             type: object
             properties:
@@ -105742,11 +106939,11 @@ components:
                     format: uuid
                 mcp_server_id:
                     type: string
-                    description: Speakeasy MCP server ID. Exactly one backend ID is set.
+                    description: Speakeasy MCP server ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.
                     format: uuid
                 meta_mcp_server_id:
                     type: string
-                    description: MCP gateway ID. Exactly one backend ID is set.
+                    description: MCP gateway ID. When set, no other backend ID is set.
                     format: uuid
                 policy:
                     type: string
@@ -105760,7 +106957,7 @@ components:
                     format: int32
                 toolset_id:
                     type: string
-                    description: Speakeasy toolset ID. Exactly one backend ID is set.
+                    description: Speakeasy toolset ID. A hosted MCP server with a live canonical MCP server sets toolset_id and mcp_server_id to the same id; otherwise exactly one backend ID is set.
                     format: uuid
             required:
                 - id
@@ -106068,6 +107265,9 @@ components:
                 network_ingress_enabled:
                     type: boolean
                     description: Whether the organization has the staff-managed private network ingress entitlement
+                organization_gateway_disabled:
+                    type: boolean
+                    description: Whether an organization admin turned the organization gateway off, so its routes answer 404
                 platform_mcp_enabled:
                     type: boolean
                     description: Whether the organization can use the Speakeasy Platform MCP capability
@@ -106122,6 +107322,7 @@ components:
                 - session_portability_enabled
                 - network_ingress_enabled
                 - signals_intelligence_enabled
+                - organization_gateway_disabled
                 - device_agent
         Project:
             type: object
@@ -107655,6 +108856,8 @@ components:
                 created_at:
                     type: string
                     format: date-time
+                ema_providers:
+                    $ref: '#/components/schemas/EMAProviderOrder'
                 grant_types_supported:
                     type: array
                     items:
@@ -108032,6 +109235,42 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        RepairInferenceKeyRequestBody:
+            type: object
+            properties:
+                confirmation:
+                    type: string
+                    description: 'Exact staff confirmation: I know what I''m doing'
+                    enum:
+                        - I know what I'm doing
+                key_type:
+                    type: string
+                    enum:
+                        - chat
+                        - internal
+                organization_id:
+                    type: string
+                reason:
+                    type: string
+                    description: Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+                    minLength: 1
+                remove_causes:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - admin_lock
+                            - trial_demotion
+                            - billing_inactive
+                    description: Unique known disable causes to remove.
+                    minItems: 1
+                    maxItems: 3
+            required:
+                - organization_id
+                - key_type
+                - remove_causes
+                - confirmation
+                - reason
         ReplaceIdentityProviderConnectionClientSecretRequestBody:
             type: object
             properties:
@@ -108596,6 +109835,14 @@ components:
                     format: uuid
             required:
                 - id
+        RevokeMemberSignInsRequestBody:
+            type: object
+            properties:
+                user_id:
+                    type: string
+                    description: Speakeasy user ID of the member.
+            required:
+                - user_id
         RevokeSessionRequestBody:
             type: object
             properties:
@@ -108609,6 +109856,21 @@ components:
             required:
                 - agent_id
                 - session_id
+        RevokeSignInsResult:
+            type: object
+            properties:
+                revoked_sessions:
+                    type: integer
+                    description: Number of MCP grants revoked.
+                    format: int64
+                revoked_sign_ins:
+                    type: integer
+                    description: Number of sign-ins revoked.
+                    format: int64
+            description: What a sign-in revocation revoked.
+            required:
+                - revoked_sign_ins
+                - revoked_sessions
         RiskAnalysisStatusResult:
             type: object
             properties:
@@ -110414,6 +111676,16 @@ components:
                 - previous_keys
                 - previous_keys_retired
                 - marketplace_republished
+        RotateRequestBody:
+            type: object
+            properties:
+                active_kid:
+                    type: string
+                    description: The key ID currently active, as last read. Required unless the issuer has no active key.
+                compromised:
+                    type: boolean
+                    description: Revoke every current key immediately instead of rotating gradually.
+                    default: false
         RotateTunneledMcpServerKeyForm:
             type: object
             properties:
@@ -111767,6 +113039,29 @@ components:
             required:
                 - source_kind
                 - role_urn
+        SetEMAProvidersRequestBody:
+            type: object
+            properties:
+                providers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/EMAProviderInput'
+                    description: Providers in the order they are tried, at most 10; each at most once. An empty list restores the external default.
+                remote_session_issuer_id:
+                    type: string
+                    description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.
+                    format: uuid
+            required:
+                - remote_session_issuer_id
+                - providers
+        SetEnabledRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether Speakeasy may sign with the issuer.
+            required:
+                - enabled
         SetIdentityProviderConnectionSetupMethodRequestBody:
             type: object
             properties:
@@ -111902,6 +113197,7 @@ components:
                         - session_portability
                         - network_ingress
                         - signals_intelligence
+                        - organization_gateway_disabled
                     maxLength: 60
                 organization_id:
                     type: string
@@ -112016,6 +113312,7 @@ components:
                         - session_portability
                         - network_ingress
                         - signals_intelligence
+                        - organization_gateway_disabled
                     maxLength: 60
                 organization_id:
                     type: string
@@ -117804,18 +119101,6 @@ components:
             required:
                 - client
                 - call_count
-        UnproxiedMcpServerTool:
-            type: object
-            properties:
-                description:
-                    type: string
-                    description: Tool description
-                name:
-                    type: string
-                    description: Tool name
-            description: A tool discovered on the vendor's MCP server
-            required:
-                - name
         UnproxiedMcpServerToolUsageRow:
             type: object
             properties:
@@ -117953,7 +119238,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AssistantMCPServerRef'
-                    description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+                    description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.
                 model:
                     type: string
                     description: The model identifier used by the assistant.
@@ -117970,7 +119255,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AssistantToolsetRef'
-                    description: Toolsets available to the assistant.
+                    description: Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.
                 warm_ttl_seconds:
                     type: integer
                     description: Warm runtime TTL in seconds.
@@ -119517,8 +120802,9 @@ components:
             type: object
             properties:
                 custom_domain_id:
+                    description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
                     type: string
-                    description: The ID of the custom domain to use for the toolset
+                    x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -119528,11 +120814,13 @@ components:
                     type: string
                     description: The new description of the toolset
                 mcp_enabled:
+                    description: 'Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP'
                     type: boolean
-                    description: Whether the toolset is enabled for MCP
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_is_public:
+                    description: 'Deprecated: use mcpServers.update. Whether the toolset is public in MCP'
                     type: boolean
-                    description: Whether the toolset is public in MCP
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -119579,8 +120867,9 @@ components:
             type: object
             properties:
                 custom_domain_id:
+                    description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset'
                     type: string
-                    description: The ID of the custom domain to use for the toolset
+                    x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
                 default_environment_slug:
                     type: string
                     description: The slug of the environment to use as the default for the toolset
@@ -119590,26 +120879,30 @@ components:
                     type: string
                     description: The new description of the toolset
                 mcp_enabled:
+                    description: 'Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP'
                     type: boolean
-                    description: Whether the toolset is enabled for MCP
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_is_public:
+                    description: 'Deprecated: use mcpServers.update. Whether the toolset is public in MCP'
                     type: boolean
-                    description: Whether the toolset is public in MCP
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 mcp_slug:
-                    type: string
-                    description: The slug of the MCP to use for the toolset
-                    pattern: ^[a-z0-9_-]{1,128}$
+                    description: 'Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset'
                     maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                    x-speakeasy-deprecation-message: Use mcpEndpoints.create or mcpEndpoints.update instead
                 name:
                     type: string
                     description: The new name of the toolset
                 network_access_mode:
-                    type: string
-                    description: 'Where the hosted MCP is accessible: public_only, dual, or private_only'
+                    description: 'Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only'
                     enum:
                         - public_only
                         - dual
                         - private_only
+                    type: string
+                    x-speakeasy-deprecation-message: Use mcpServers.update instead
                 prompt_template_names:
                     type: array
                     items:
@@ -121907,6 +123200,8 @@ tags:
       description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
     - name: integrations
       description: Explore third-party tools in Speakeasy.
+    - name: internalSessionIssuers
+      description: 'Manage the organization''s internal session issuer: the permanent issuer URI Speakeasy signs enterprise-managed authorization assertions with, and its signing keys.'
     - name: jsonWebKeySets
       description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
     - name: keys

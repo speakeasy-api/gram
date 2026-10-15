@@ -2400,6 +2400,10 @@ type InternalSessionIssuer struct {
 	// @access: confidential
 	DisabledAt pgtype.Timestamptz
 	// @access: confidential
+	AllowedSignInMethods []string
+	// @access: opaque-confidential
+	AllowedMicrosoftTenantIds []string
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -5017,6 +5021,18 @@ type RemoteSessionEmaCredential struct {
 	EmaBindingGeneration pgtype.Int8
 	// @access: confidential
 	TrustedIssuerSessionID uuid.NullUUID
+	// @access: confidential
+	EmaProvider string
+	// @access: confidential
+	InternalSessionIssuerID uuid.NullUUID
+	// @access: confidential
+	InternalSessionIssuerUpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	InternalSessionIssuerKeyID uuid.NullUUID
+	// @access: confidential
+	SignInID uuid.NullUUID
+	// @access: confidential
+	UserSessionID uuid.NullUUID
 	// @access: opaque-restricted
 	RequestedScopes []string
 	// @access: opaque-restricted
@@ -5577,6 +5593,12 @@ type SigintSensor struct {
 	MatchExpression string
 	// @access: confidential
 	Enabled bool
+	// Absent means single_message; sliding_window supplies preceding conversation context.
+	// @access: confidential
+	InputStrategy pgtype.Text
+	// Total messages including the target; absent means five for sliding windows.
+	// @access: confidential
+	WindowSize pgtype.Int4
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -5606,6 +5628,79 @@ type SigintSensorSignal struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type SignIn struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: restricted
+	WorkosSessionID string
+	// @access: confidential
+	AuthenticationMethod string
+	// @access: restricted
+	IdpHostedDomain pgtype.Text
+	// @access: opaque-confidential
+	IdpTenantID pgtype.Text
+	// @access: confidential-pii
+	VerifiedEmail pgtype.Text
+	// @access: confidential
+	IdpAuthenticatedAt pgtype.Timestamptz
+	// @access: confidential
+	AuthenticatedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	RevokeReason pgtype.Text
+	// @access: confidential
+	SessionSignedOutAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type SignInRevocationCutoff struct {
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	UserID string
+	// @access: confidential
+	CutoffAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type SignInRevocationDelivery struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Kind string
+	// @access: secret-restricted
+	Target string
+	// @access: confidential
+	EffectiveAt pgtype.Timestamptz
+	// @access: confidential
+	Attempts int32
+	// @access: opaque-restricted
+	LastError pgtype.Text
+	// @access: confidential
+	ClaimedUntil pgtype.Timestamptz
+	// @access: confidential
+	NextAttemptAt pgtype.Timestamptz
+	// @access: confidential
+	DeliveredAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 type Skill struct {
@@ -7169,6 +7264,8 @@ type UserSession struct {
 	LastUsedAt pgtype.Timestamptz
 	// @access: restricted
 	Resource pgtype.Text
+	// @access: confidential
+	SignInID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

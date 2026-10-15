@@ -30,14 +30,6 @@ const (
 	// keeps the default limit.
 	FlagRiskEnforcementMaxContentBytes Flag = "risk-enforcement-max-content-bytes"
 
-	// FlagAgentManagement gates the first-class agent management API. It is
-	// evaluated per organization and fails closed unless explicitly on.
-	FlagAgentManagement Flag = "agent-management"
-	// FlagAgentIdentityCredentials gates agent credential issuance, management,
-	// and agent identity selection in MCP OAuth authorization.
-	// It is evaluated per organization and fails closed unless explicitly on.
-	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
-
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
 	// its hardware serial against device-keyed ones, falling back to email
@@ -77,6 +69,12 @@ const (
 	// like FlagBudgets. Evaluated server-side only; removed once the toolset
 	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
+	// FlagHostedMCPServerKeyWrites switches hosted MCP writers (plugin entries,
+	// install page metadata, assistant attachments) to the canonical MCP server
+	// key (AIM-16 phase B). Evaluated server-side; targeted by PostHog
+	// organization group (org slug), rolled out to everyone once no phase A pods
+	// remain. Fails closed to the toolset key. Removed once the AIM-507 move ships.
+	FlagHostedMCPServerKeyWrites Flag = "hosted-mcp-server-key-writes"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.
@@ -123,14 +121,6 @@ const (
 	// traffic before FlagCanonicalIdentityFold enables it anywhere. Ignored
 	// when the fold flag is on. Same targeting; removed with the fold flag.
 	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
-
-	// FlagRemoteSessionLiveResourceScopes lets a remote-session login consult
-	// its protected resource row (the last WWW-Authenticate challenge's
-	// scopes, the operator's pin, else the RFC 9728 scopes_supported read
-	// live or from the cached row) ahead of the issuer's whole
-	// scopes_supported catalogue. Client scopes and issuer overrides apply
-	// either way.
-	FlagRemoteSessionLiveResourceScopes Flag = "remote-session-live-resource-scopes"
 
 	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
 	// Targeted by PostHog organization group (org slug) and removed once PAYG
@@ -189,6 +179,30 @@ const (
 	// FlagOktaConnections gates the Okta integration while it is dogfooded:
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
+
+	// FlagSignInEnforcement turns on, per organization (keyed by its id),
+	// linking MCP grants to sign-ins, sign-in evidence lookups, sign out
+	// everywhere, member sign-in revocation and revocation on deprovisioning.
+	// Enable it only once every pod runs the code that honours it. It is
+	// evaluated with the organization id as the distinct id and no groups, so
+	// the PostHog flag must be person-aggregated and match distinct_id in a
+	// list of organization ids; a group-aggregated flag never matches.
+	FlagSignInEnforcement Flag = "sign-in-enforcement"
+
+	// FlagEMAProviders gates changing a vendor's EMA provider order while the
+	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.
+	FlagEMAProviders Flag = "ema-providers"
+
+	// FlagInternalSessionIssuer gates an organization's internal session issuer
+	// while it rolls out: enabling it, signing with it and its Platform MCP tool.
+	// Server-evaluated, targeted by the organization group.
+	FlagInternalSessionIssuer Flag = "internal-session-issuer"
+
+	// FlagInternalSessionIssuerSigningPaused pauses every internal session
+	// issuer signature without a redeploy, for incident response. Discovery
+	// keeps serving. Server-evaluated; target everyone to pause the platform,
+	// or an organization group to pause one organization.
+	FlagInternalSessionIssuerSigningPaused Flag = "internal-session-issuer-signing-paused"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

@@ -62,7 +62,7 @@ func consentChainingFixture(t *testing.T, g *funcGovernor) (*Service, *ResolvedM
 }
 
 func directRouting(backend consentBackend, issuer uuid.NullUUID) consentRouting {
-	return consentRouting{backend: backend, upstream: "", issuer: issuer, members: nil, grants: nil}
+	return consentRouting{backend: backend, upstream: "", issuer: issuer, members: nil, grants: nil, projectScoped: false}
 }
 
 func TestConsentChainedClients_RequestMatchesRuntime(t *testing.T) {
@@ -86,7 +86,9 @@ func TestConsentChainedClients_RequestMatchesRuntime(t *testing.T) {
 
 			runtime, ok := s.identityChainingRequest(humanChainingContext(t, "user-1", chainingTestOrg), endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, endpoint.UpstreamResource, tc.tunneled, uuid.NullUUID{UUID: tunnelIssuer, Valid: true})
 			require.True(t, ok)
-			require.Equal(t, []identitychaining.Request{runtime}, g.requests, "consent judges with the runtime's own request")
+			require.NotEmpty(t, runtime.UserSessionJTI)
+			runtime.UserSessionJTI = "" // Consent precedes grant creation and carries no validated grant identifier.
+			require.Equal(t, []identitychaining.Request{runtime}, g.requests, "consent selects the same endpoint without asserting runtime SSO provenance")
 		})
 	}
 }
@@ -208,11 +210,16 @@ func TestConsentChainedMetaClients_ServesEachRequestOnce(t *testing.T) {
 	endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	clientA := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: issuer}
 	clientB := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: issuer}
-	member := metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{McpServerID: uuid.New(), McpServerVisibility: "private", UpstreamUrl: "https://upstream.example.test/mcp", Tunneled: false}
-	routing := consentRouting{backend: consentBackendMeta, upstream: "", issuer: uuid.NullUUID{}, members: map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{issuer: {member, member}}, grants: nil}
+	member := metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{McpServerID: uuid.New(), ProjectID: endpoint.ProjectID, McpServerVisibility: "private", UpstreamUrl: "https://upstream.example.test/mcp", Tunneled: false}
+	members := []metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{member, member}
+	routing := consentRouting{backend: consentBackendMeta, upstream: "", issuer: uuid.NullUUID{}, members: map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionIssuerRow{clientA.ID: members, clientB.ID: members}, grants: nil, projectScoped: false}
 
 	chained := s.consentChainedClients(t.Context(), endpoint, state, []remotesessions.Client{clientA, clientB}, routing)
 	require.True(t, chained[clientA.ID])
 	require.True(t, chained[clientB.ID])
 	require.Len(t, g.requests, 1, "one render judges each distinct request once")
+}
+
+func (g *funcGovernor) CheckConsent(context.Context, identitychaining.Request, uuid.UUID) identitychaining.Outcome {
+	return identitychaining.Outcome{}
 }

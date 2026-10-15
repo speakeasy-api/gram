@@ -266,6 +266,7 @@ JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 WHERE ek.id = $1
   AND ek.organization_id = $2
   AND ek.provider = 'gcp_kms'
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE
 `
 
@@ -328,6 +329,7 @@ LEFT JOIN gcp_iam_credentials AS gic
 WHERE ek.id = $1
   AND ek.organization_id = $2
   AND ek.provider = 'gcp_kms'
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ek.deleted IS FALSE
 `
 
@@ -403,6 +405,7 @@ SELECT id, organization_id, project_id, external_credential_id, provider, algori
 FROM external_keys AS ek
 WHERE ek.organization_id = $1
   AND ek.deleted IS FALSE
+  AND NOT is_internal_session_issuer_external_key(ek.organization_id, ek.id)
   AND ($2::text IS NULL OR ek.provider = $2::text)
   AND NOT EXISTS (
     SELECT 1
@@ -456,13 +459,14 @@ func (q *Queries) ListExternalKeys(ctx context.Context, arg ListExternalKeysPara
 }
 
 const lockExternalKeyForDelete = `-- name: LockExternalKeyForDelete :one
-SELECT id, identity_provider_connection_id
+SELECT external_keys.id, external_keys.identity_provider_connection_id
 FROM external_keys
-WHERE id = $1
-  AND organization_id = $2
-  AND provider = $3
-  AND deleted IS FALSE
-FOR UPDATE
+WHERE external_keys.id = $1
+  AND external_keys.organization_id = $2
+  AND external_keys.provider = $3
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
+  AND external_keys.deleted IS FALSE
+FOR UPDATE OF external_keys
 `
 
 type LockExternalKeyForDeleteParams struct {
@@ -494,10 +498,11 @@ func (q *Queries) LockExternalKeyForDelete(ctx context.Context, arg LockExternal
 const softDeleteExternalKey = `-- name: SoftDeleteExternalKey :one
 UPDATE external_keys
 SET deleted_at = clock_timestamp()
-WHERE id = $1
-  AND organization_id = $2
-  AND provider = $3
-  AND deleted IS FALSE
+WHERE external_keys.id = $1
+  AND external_keys.organization_id = $2
+  AND external_keys.provider = $3
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
+  AND external_keys.deleted IS FALSE
 RETURNING id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 
@@ -534,9 +539,10 @@ SET external_credential_id = $1,
     name = $2,
     customer_grant_reference = $3,
     updated_at = clock_timestamp()
-WHERE id = $4
-  AND organization_id = $5
-  AND deleted IS FALSE
+WHERE external_keys.id = $4
+  AND external_keys.organization_id = $5
+  AND NOT is_internal_session_issuer_external_key(external_keys.organization_id, external_keys.id)
+  AND external_keys.deleted IS FALSE
 RETURNING id, organization_id, project_id, external_credential_id, provider, algorithm, name, customer_grant_reference, identity_provider_connection_id, created_at, updated_at, deleted_at, deleted
 `
 

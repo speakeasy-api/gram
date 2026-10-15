@@ -22,6 +22,23 @@ var mcpOpenAccessControlRoutes = []string{
 func CORSMiddleware(env string, serverURL string, platformOrigins []string, chatSessionValidator ChatSessionValidator) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if method, shared := sharedOAuthCORSMethod(r.URL.Path); shared {
+				// OAuth browser navigation and unknown shared routes receive no
+				// CORS policy. Public endpoints never inherit platform credentials.
+				if method != "" {
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+					w.Header().Set("Access-Control-Allow-Methods", method)
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+					w.Header().Set("Access-Control-Expose-Headers", "x-trace-id")
+				}
+				if r.Method == http.MethodOptions {
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			switch env {
 			case "local":
 				origin := r.Header.Get("Origin")

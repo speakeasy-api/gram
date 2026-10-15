@@ -79,6 +79,7 @@ type Service struct {
 	networkAccessEligibility networkaccess.EligibilityChecker
 	distributionAdmission    *admission.Guard
 	publicationRequests      plugins.PublicationRequests
+	hostedServers            HostedServerWriter
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -116,6 +117,7 @@ func NewService(
 		networkAccessEligibility: networkAccessEligibility,
 		distributionAdmission:    admission.NewGuard(),
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
+		hostedServers:            nil,
 	}
 }
 
@@ -274,7 +276,9 @@ func (s *Service) ScheduleDefaultRemoteServerIcon(ctx context.Context, projectID
 // transaction commits. It uses a detached bounded context so the request can
 // complete without waiting for a vendor favicon.
 func (s *Service) scheduleDefaultServerIcon(ctx context.Context, projectID, mcpServerID uuid.UUID, ids serverIDs) {
-	if !ids.UnproxiedMcpServerID.Valid && !ids.RemoteMcpServerID.Valid {
+	// Unproxied servers are skipped: Speakeasy never connects to them, and
+	// their host is often reachable only from the client's network.
+	if !ids.RemoteMcpServerID.Valid {
 		return
 	}
 	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
@@ -292,16 +296,6 @@ func (s *Service) scheduleDefaultServerIcon(ctx context.Context, projectID, mcpS
 func (s *Service) setDefaultServerIcon(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, mcpServerID uuid.UUID, ids serverIDs) {
 	var sourceURL string
 	switch {
-	case ids.UnproxiedMcpServerID.Valid:
-		source, err := unproxiedmcprepo.New(s.db).GetServerByID(ctx, unproxiedmcprepo.GetServerByIDParams{
-			ID:        ids.UnproxiedMcpServerID.UUID,
-			ProjectID: projectID,
-		})
-		if err != nil {
-			logger.ErrorContext(ctx, "load unproxied mcp server for default icon", attr.SlogError(err))
-			return
-		}
-		sourceURL = source.Url
 	case ids.RemoteMcpServerID.Valid:
 		source, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
 			ID:        ids.RemoteMcpServerID.UUID,
@@ -695,7 +689,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err != nil {
 		return nil, err
 	}
-	if isCanonicalHostedWrapper(unlocked) || (ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID) {
+	if isCanonicalHostedWrapper(unlocked) {
+		return s.updateHostedServer(ctx, logger, unlocked, payload, ids)
+	}
+	if ids.ToolsetID.Valid && ids.ToolsetID.UUID == serverID {
 		return nil, oops.E(oops.CodeInvalid, nil, "manage hosted MCP network access through the toolset")
 	}
 	preflightMode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, unlocked.NetworkAccessMode)
@@ -972,11 +969,12 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	// Role plugins are checked by the same guard inside the attachment, so the
 	// administrator's write must be marked there too.
 	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(admissionCtx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
-		DisplayName:    ServerDisplayName(server),
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		ProjectID:       *authCtx.ProjectID,
+		ToolsetID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		McpServerID:     uuid.NullUUID{UUID: server.ID, Valid: true},
+		DisplayName:     ServerDisplayName(server),
+		HostedServerKey: false,
 	}, s.distributionAdmission)
 	if err != nil {
 		if errors.Is(err, admission.ErrApprovalRequired) {
@@ -1062,7 +1060,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return err
 	}
 	if isCanonicalHostedWrapper(preexisting) {
-		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
+		return s.deleteHostedServer(ctx, preexisting.ID)
 	}
 
 	dbtx, err := s.db.Begin(ctx)

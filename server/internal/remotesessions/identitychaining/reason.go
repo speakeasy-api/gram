@@ -6,6 +6,10 @@ type Reason string
 const (
 	ReasonSuccess Reason = "success"
 
+	// ReasonConsentRequired means local eligibility passed, but no MCP grant
+	// exists yet and no downstream token has been issued.
+	ReasonConsentRequired Reason = "consent_required"
+
 	// ReasonNotApplicable: no ready binding names the upstream, so the
 	// interactive path applies unchanged.
 	ReasonNotApplicable Reason = "not_applicable"
@@ -26,6 +30,15 @@ const (
 	ReasonInsufficientScope        Reason = "insufficient_scope"
 	ReasonTransientFailure         Reason = "transient_failure"
 	ReasonUnknownRejection         Reason = "unknown_rejection"
+
+	// ReasonProviderUnavailable: no EMA provider in the vendor's order can
+	// serve the request, so the interactive path applies unchanged.
+	ReasonProviderUnavailable Reason = "provider_unavailable"
+
+	// ReasonIneligibleIdentity: the Speakeasy issuer will not vouch for this
+	// human, such as an email outside the organization's verified domains.
+	// Signing in again does not change it; an administrator must.
+	ReasonIneligibleIdentity Reason = "ineligible_identity"
 
 	// ReasonStaleConfiguration: the binding, delegation or tenant changed
 	// during the attempt, so its result was discarded.

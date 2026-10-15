@@ -314,7 +314,7 @@ func TestIdentityCommit_DynamicRegistrationRecordsRegistrationOrigin(t *testing.
 			userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dcr-origin-usi")
 			providerID := createServerIdentityProvider(t, ctx, ti, "dcr-origin-provider", registrationServer.URL, false, []string{"client_secret_basic"})
 			plan := linkPlan(t, ctx, userIssuerID, providerID, uuid.Nil)
-			plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
+			plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, RegistrationResource: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
 			commit := committer.Prepare(plan)
 			require.NoError(t, commit.Preflight(ctx))
 			reg, err := commit.Register(ctx)

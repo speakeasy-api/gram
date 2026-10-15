@@ -131,6 +131,15 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
 
+12a. **Organization gateway** — open **MCP** (`/<org>/projects/default/mcp`).
+The title row shows **Connect all servers**, because `acme-workforce` is the
+organization's only organization-wide authorization server. Clicking it opens
+**Connect all your servers at once** with the URL `<server>/mcp/gateway/<org>`
+and a copy button, where `<org>` is the organization's slug (`acme-demo` in the
+demo org, your own org's slug after `mise run seed`);
+`organizations.getGateway` in the network panel returns `available: true` with
+that URL.
+
 13. **Killswitches on the identity Access tab (local rewritten seed only)** —
     Killswitch management intentionally rejects demo/support sessions. Verify this
     contract in the local organization after `mise run seed`, not through the
@@ -211,8 +220,7 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     view all agents and authorize credentials (for example, the local seeded
     admin). Shared demo impersonation remains intentionally restricted by the
     ordinary-human authorization requirement; it is not the browser verification
-    target. Enable `agent-management` for inventory and
-    `agent-identity-credentials` for API key management.
+    target.
     - Open **Agents**. Confirm **Release assistant** is Active, **Support triage**
       is Suspended, and **Retired documentation bot** is Revoked. Confirm
       **Release notes assistant** is Active with its attachment-backed session. List and detail
@@ -221,13 +229,11 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
       avatars. Local seeded fixtures must be visible to the authorized human.
     - Open Release assistant's sessions. Its one display-only session is
       expired; suspended/revoked agents have no seeded sessions. This fixture has no signing token, an invalid refresh
-      hash, and empty delegation: it must not authenticate or refresh. The
-      `agent-identity-credentials` flag gates live MCP authorization, not
-      the inventory check; no live connection is promised by these fixtures.
-    - API keys are empty after the shared SQL runs. With the credentials flag
-      enabled, only the active agent permits key creation; suspended/revoked
-      agents must not offer usable credentials. With the flag disabled, confirm
-      the unavailable-rollout state, not a misleading empty-key success state.
+      hash, and empty delegation: it must not authenticate or refresh. No live
+      connection is promised by these fixtures.
+    - API keys are empty after the shared SQL runs. Only the active agent
+      permits key creation; suspended/revoked agents must not offer usable
+      credentials.
       Never add usable keys to shared SQL.
     - Both active release agents have one direct `mcp:connect` grant scoped to
       the demo project and Linear MCP server. Release assistant also inherits
@@ -309,9 +315,7 @@ remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
     - **Allowed and denied usage (local only):** use a private standalone MCP
       endpoint without a session issuer and a locally executable harmless tool.
       Send the UI-issued key in `Authorization: Bearer <key>` to its `/mcp/…`
-      endpoint. Issuer-gated gateways require OAuth/session credentials instead;
-      `agent-identity-credentials` controls OAuth agent selection and agent
-      API-key issuance and management, not standalone API-key admission.
+      endpoint. Issuer-gated gateways require OAuth/session credentials instead.
       Display-only seeded tools cannot prove
       successful tool execution; filtered `tools/list` proves discovery only.
       Create a short-lived key from the UI's narrowed candidate. Confirm the
@@ -546,6 +550,19 @@ and exact remote-session attachment checks, or
 and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
+
+## Enterprise authorization
+
+Open Organization Identity > Identity providers. The Speakeasy card shows a
+not-configured or unavailable state in the fresh demo; no synthetic signing key
+is presented as working. The Single sign-on tab no longer shows the issuer. In a
+local organization with signing configured and a verified email domain, open
+Manage Speakeasy, enable the issuer and copy its URI. Without a verified domain,
+the page links to the Single sign-on tab. Disable the issuer and confirm the URI
+remains visible. Disabling must remain possible after removing the last verified
+domain; re-enabling requires one. Read-only and support sessions show
+the URI without mutation controls; check status messages in states that render one. At a 400px viewport, the URI wraps
+and the copy control remains visible.
 
 ## Slack workspaces
 

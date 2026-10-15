@@ -11052,7 +11052,7 @@ func NewSetAIToolDecisionResultOK(body *SetAIToolDecisionResponseBody) *access.S
 	v := &access.SetAIToolDecisionResult{
 		TargetID: *body.TargetID,
 	}
-	v.Access = unmarshalAIToolAccessSummaryResponseBodyToAccessAIToolAccessSummary(body.Access)
+	v.Access = unmarshalAIToolAccessSummaryResponseBodyToTypesAIToolAccessSummary(body.Access)
 
 	return v
 }

@@ -327,7 +327,7 @@ func (m *ChallengeManager) ResolveAuthorization(
 		return ResolvedAuthorization{}, ErrInvalidAuthorizationRequest
 	}
 
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return ResolvedAuthorization{}, fmt.Errorf("list remote_session_clients: %w", err)
 	}
@@ -531,7 +531,7 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 	subject urn.SessionSubject,
 	skipUnusable bool,
 ) (map[uuid.UUID]UpstreamToken, error) {
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return nil, fmt.Errorf("list remote_session_clients: %w", err)
 	}
@@ -684,7 +684,7 @@ func (m *ChallengeManager) RemoteSessionsNeedReconnect(
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (bool, error) {
-	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return false, fmt.Errorf("list remote_session_clients: %w", err)
 	}

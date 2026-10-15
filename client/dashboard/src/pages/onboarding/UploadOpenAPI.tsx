@@ -9,6 +9,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
+import ReviewChangesStep from "@/components/upload-asset/review-changes-step";
 import UploadAssetStep from "@/components/upload-asset/step";
 import UploadAssetStepper from "@/components/upload-asset/stepper";
 import type { ExistingDocument } from "@/components/upload-asset/stepper/use-stepper";
@@ -33,8 +34,9 @@ function pageCopy(existing: ExistingDocument | null): {
       description:
         "Upload the document that replaces the current version. Tools are regenerated from it on the next deployment.",
       nameStep: {
-        title: "Confirm the document",
-        description: "The new version keeps the document's name and slug.",
+        title: "Review changes",
+        description:
+          "What the new version changes for the MCP servers that use it, before it deploys.",
       },
     };
   }
@@ -129,15 +131,15 @@ export default function UploadOpenAPI(): JSX.Element {
                     description={copy.nameStep.description}
                   />
                   <UploadAssetStep.Content>
-                    <NameDeploymentStep />
+                    {existing ? <ReviewChangesStep /> : <NameDeploymentStep />}
                   </UploadAssetStep.Content>
                 </UploadAssetStep>
 
                 <UploadAssetStep step={3}>
                   <UploadAssetStep.Indicator />
                   <UploadAssetStep.Header
-                    title="Generate Tools"
-                    description="The platform will generate tools for your API."
+                    title="Deploy"
+                    description="Deploys your API so its tools are available to MCP servers."
                   />
                   <UploadAssetStep.Content>
                     <DeployStep

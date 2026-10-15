@@ -238,6 +238,9 @@ type Service struct {
 
 	// metaRuntime bounds the gateway's per-member upstream work.
 	metaRuntime MetaRuntimeConfig
+	// replayLiveness overrides the refresh-replay session check in unit tests
+	// that run without a database.
+	replayLiveness func(ctx context.Context, endpoint *ResolvedMcpEndpoint, jti string) (string, bool)
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -492,6 +495,7 @@ func NewService(
 	)
 
 	service := &Service{
+		replayLiveness:            nil,
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
 		consentBindings:           nil,
@@ -776,6 +780,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 
 	attachSharedAuthorizationServers(mux, service)
+	attachOrganizationGateway(mux, service)
 }
 
 // HandleRemoteLoginCallback is the chi handler at
@@ -1071,7 +1076,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if metaServer != nil {
-			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, uuid.Nil)
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case mcpendpoints.IsAddressMiss(err):
@@ -1409,7 +1414,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	// Load header display names for remapping
-	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ID)
+	headerDisplayNames := s.loadHeaderDisplayNames(ctx, toolset.ProjectID, toolset.ID)
 
 	// Extract user IDs for telemetry
 	var userID, externalUserID, apiKeyID string
@@ -1743,10 +1748,10 @@ func (s *Service) recordToolsetSlugFallback(ctx context.Context, logger *slog.Lo
 
 // loadHeaderDisplayNames loads the header display names mapping from MCP metadata.
 // Returns an empty map if no metadata exists or on error (non-critical operation).
-func (s *Service) loadHeaderDisplayNames(ctx context.Context, toolsetID uuid.UUID) map[string]string {
+func (s *Service) loadHeaderDisplayNames(ctx context.Context, projectID, toolsetID uuid.UUID) map[string]string {
 	result := make(map[string]string)
 
-	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, uuid.NullUUID{UUID: toolsetID, Valid: true})
+	displayNamesJSON, err := s.mcpMetadataRepo.GetHeaderDisplayNames(ctx, metadata_repo.GetHeaderDisplayNamesParams{ProjectID: projectID, BackendID: toolsetID})
 	if err != nil {
 		// Not found or error - return empty map, this is non-critical
 		return result

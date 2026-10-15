@@ -81,6 +81,7 @@ import {
   type RuleCategory,
   type PolicyAction,
 } from "./policy-data";
+import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
@@ -99,7 +100,15 @@ import {
   getPolicyRuleGroupNamesForDeleteDialog,
 } from "./policy-delete-dialog";
 import { DetectionRulesTab } from "./DetectionRules";
-import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
+import {
+  POLICY_CENTER_TABS,
+  policyCenterTabLabel,
+  policyCenterTabs,
+  type PolicyCenterTab,
+} from "./policy-center-tabs";
+import { MCPApprovalsTab } from "./MCPApprovalsTab";
+import { ShadowAITargetsTab } from "./ShadowAITargetsTab";
+import { detectionRulesTabRuleIds } from "./detection-rules-data";
 import { SeverityBadge } from "./risk-ui";
 import { policySummary } from "./policy-summary";
 import { policyEnabledActionLabel } from "./policy-enabled";
@@ -503,6 +512,29 @@ function PolicyNameCell({ row }: { row: PolicyRow }): JSX.Element {
   );
 }
 
+/** How the policy decides, for the Type column: Built-in, Prompt-based or
+ *  Shadow AI. */
+function PolicyTypeBadge({ policy }: { policy: RiskPolicy }): JSX.Element {
+  return (
+    <Badge variant="neutral">
+      <Badge.Text>{POLICY_TYPE_LABEL[policyTypeOf(policy)]}</Badge.Text>
+    </Badge>
+  );
+}
+
+const POLICY_TYPE_COLUMN: Column<PolicyRow> = {
+  key: "type",
+  header: "Type",
+  // Wide enough for the longest badge ("SHADOW AI") at the table's
+  // narrowest supported width; the Action column already clips at 0.7fr.
+  width: "1fr",
+  render: (row) => (
+    <span className="inline-flex">
+      <PolicyTypeBadge policy={row.policy} />
+    </span>
+  ),
+};
+
 /** Compact relative date for the policy table's Created/Updated columns, with
  *  the exact timestamp on hover. */
 function PolicyDateCell({ date }: { date: Date }): JSX.Element {
@@ -520,32 +552,23 @@ function truncateSessionID(sessionID: string): string {
   return `${sessionID.slice(0, 8)}...${sessionID.slice(-6)}`;
 }
 
-// Suppressed findings used to be a third tab here; they now live in the
-// Watchdog page's Suppressed section. `tab` is parsed as a string literal
-// union, so a stale `?tab=dismissed` link falls back to "policies" rather
-// than rendering an empty page.
-const POLICY_CENTER_TABS = [
-  "policies",
-  "detection-rules",
-  "exclusions",
-  "quarantines",
-] as const;
-
 /** Assistant context for the Detection Rules tab: assembled from the static
  *  client-side rule catalog so the other tabs pay no extra queries for it.
  *  Rule-activity questions route through the finding-level tools. */
-const DETECTION_RULES_INSIGHTS_CONTEXT = [
-  "Page: Guardrails, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
-  `Built-in rule ids: ${BUILTIN_RULE_ID_LIST.join(", ")}.`,
-  "Custom rules are organization-defined CEL expressions with ids prefixed 'custom.'; list them with listCustomDetectionRules.",
-  "For rule activity, query findings by rule_id via listRiskResultsForAgent (match content is redacted).",
-  "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
-].join(" ");
+function detectionRulesInsightsContext(): string {
+  return [
+    "Page: Guardrails, Detection Rules tab — the catalog of built-in and custom detection rules that policies compose.",
+    `Built-in rule ids: ${detectionRulesTabRuleIds().join(", ")}.`,
+    "Custom rules are organization-defined CEL expressions with ids prefixed 'custom.'; list them with listCustomDetectionRules.",
+    "For rule activity, query findings by rule_id via listRiskResultsForAgent (match content is redacted).",
+    "Never echo match_redacted values verbatim. Refer to findings by rule_id and source.",
+  ].join(" ");
+}
 
 /** The page-level primary action follows the active tab: each tab creates its
  *  own kind of resource. */
 function policyCenterHeaderAction(
-  activeTab: (typeof POLICY_CENTER_TABS)[number],
+  activeTab: PolicyCenterTab,
   actions: {
     newPolicy: () => void;
     newDetectionRule: () => void;
@@ -560,6 +583,13 @@ function policyCenterHeaderAction(
         label: "Custom Detection Rule",
         onClick: actions.newDetectionRule,
       };
+    // The targets library carries its own add button in its toolbar.
+    case "shadow-ai-targets":
+      return null;
+    // Access is decided per server, on the row or the server page; the queue
+    // itself is fed by requests and observed traffic.
+    case "mcp-approvals":
+      return null;
     case "exclusions":
       return { label: "Set up Exclusion Rule", onClick: actions.newExclusion };
     // Quarantines are event-driven; the tab has no creation affordance.
@@ -779,7 +809,7 @@ function PolicyCenterContent() {
   );
 
   const insightsContext = [
-    `Page: Guardrails, ${activeTab === "exclusions" ? "Exclusion Rules" : "Policies"} tab.`,
+    `Page: Guardrails, ${policyCenterTabLabel(activeTab)} tab.`,
     `Total policies: ${policyRows.length}.`,
     `Active policies: ${policyRows.filter((r) => r.policy.enabled).length}.`,
     `Policy actions: ${policyRows.map((r) => `${r.policy.name} (${r.policy.action}${r.policy.enabled ? "" : ", inactive"})`).join(", ") || "none"}.`,
@@ -794,6 +824,7 @@ function PolicyCenterContent() {
       width: "3fr",
       render: (row) => <PolicyNameCell row={row} />,
     },
+    POLICY_TYPE_COLUMN,
     {
       key: "action",
       header: "Action",
@@ -1102,35 +1133,21 @@ function PolicyCenterContent() {
       description="Configure the policies, detection rules, and exclusion rules that govern risk detection in agent session interactions."
       primaryAction={primaryAction}
       activeTab={activeTab}
-      tabs={[
-        { value: "policies", label: "Policies", href: "?tab=policies" },
-        {
-          value: "detection-rules",
-          label: "Detection Rules",
-          href: "?tab=detection-rules",
-        },
-        {
-          value: "exclusions",
-          label: "Exclusion Rules",
-          href: "?tab=exclusions",
-        },
-        {
-          value: "quarantines",
-          label: "Quarantines",
-          href: "?tab=quarantines",
-        },
-      ]}
+      tabs={policyCenterTabs()}
     >
       {/* The dock follows the active tab: the Detection Rules tab took over
-          the standalone page whose URL used to select these suggestions. */}
+          the standalone page whose URL used to select these suggestions, and
+          the Shadow AI targets and MCP approvals tabs mount their own config
+          from their own data. */}
       {activeTab === "detection-rules" ? (
         <InsightsConfig
-          contextInfo={DETECTION_RULES_INSIGHTS_CONTEXT}
+          contextInfo={detectionRulesInsightsContext()}
           suggestions={INSIGHTS_SUGGESTIONS["detection-rules"]}
           title="Detection rule insights"
           subtitle="Ask about rule activity, noisy rules, and coverage gaps. Match content is redacted before it reaches the assistant."
         />
-      ) : (
+      ) : activeTab === "shadow-ai-targets" ||
+        activeTab === "mcp-approvals" ? null : (
         <InsightsConfig
           contextInfo={insightsContext}
           suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
@@ -1145,6 +1162,8 @@ function PolicyCenterContent() {
           onCreateOpenChange={setRuleCreateOpen}
         />
       )}
+      {activeTab === "shadow-ai-targets" && <ShadowAITargetsTab />}
+      {activeTab === "mcp-approvals" && <MCPApprovalsTab />}
       {activeTab === "exclusions" && (
         <ExclusionsTab
           policies={data?.policies ?? []}

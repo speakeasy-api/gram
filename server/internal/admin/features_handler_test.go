@@ -85,7 +85,7 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
+func TestGetOrganizationFeatures_ReturnsEveryField(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -116,7 +116,7 @@ func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
 		"platform_mcp_enabled": {}, "customer_managed_encryption_keys_enabled": {},
 		"remote_session_auto_refresh_enabled": {}, "remote_session_auto_refresh_enforced_enabled": {},
 		"consent_tool_filtering_enabled": {}, "network_ingress_enabled": {}, "session_portability_enabled": {}, "device_agent": {},
-		"signals_intelligence_enabled": {},
+		"signals_intelligence_enabled": {}, "organization_gateway_disabled": {},
 	}
 	gotKeys := make(map[string]struct{}, len(result))
 	for key := range result {

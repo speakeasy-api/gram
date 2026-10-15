@@ -10,6 +10,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -161,13 +162,25 @@ func (s *Service) resolveMetaMemberSnapshot(
 	return s.admitMetaMembers(ctx, logger, candidates)
 }
 
-// resolveAgentMemberSnapshot derives an agent gateway's members from the
+// resolveEndpointMemberSnapshot resolves the members an OAuth flow for a
+// gateway endpoint authorizes against: a stored gateway's membership rows, or
+// an organization gateway's derived members.
+func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
+	if endpoint.IsOrganizationGateway() {
+		return s.resolveOrganizationMemberSnapshot(ctx, logger, endpoint.OrganizationID)
+	}
+	return s.resolveMetaMemberSnapshot(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+}
+
+// resolveOrganizationMemberSnapshot derives a gateway's members from the
 // caller's own access rather than from stored membership rows: every servable
-// server in the organization is a candidate, and the grants carried by the
-// agent key decide which survive admission. Nothing is persisted, so a grant
-// revoked in the dashboard stops appearing on the agent's very next request
-// with nothing to redistribute or re-install.
-func (s *Service) resolveAgentMemberSnapshot(
+// server in the organization is a candidate, and the caller's grants decide
+// which survive admission. It serves both derived gateways, the agent gateway
+// (grants carried by the agent key) and the organization gateway (grants of
+// the signed-in user). Nothing is persisted, so a grant revoked in the
+// dashboard stops appearing on the caller's very next request with nothing to
+// redistribute or re-install.
+func (s *Service) resolveOrganizationMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
 	organizationID string,
@@ -180,7 +193,7 @@ func (s *Service) resolveAgentMemberSnapshot(
 
 	rows, err := mcpserversrepo.New(s.db).ListServableMCPServersByOrganizationID(ctx, organizationID)
 	if err != nil {
-		return ctx, nil, oops.E(oops.CodeUnexpected, err, "list agent gateway members").LogError(ctx, logger)
+		return ctx, nil, oops.E(oops.CodeUnexpected, err, "list derived gateway members").LogError(ctx, logger)
 	}
 
 	// The gateway is mounted on both the public and the private listener, but a
@@ -189,17 +202,11 @@ func (s *Service) resolveAgentMemberSnapshot(
 	// (mcpendpoints.Resolve); a derived snapshot resolves nothing by slug, so
 	// the same rule has to be applied to each candidate here or a private_only
 	// server would list and dispatch over the public ingress.
-	surface := networkaccess.SurfacePublic
-	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
-		surface = networkaccess.SurfacePrivate
-	}
+	surface := requestNetworkSurface(ctx)
 
 	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
-		// A mode this build cannot parse is not a mode it can serve: fail
-		// closed, exactly as the endpoint resolver does.
-		mode, err := networkaccess.Effective(row.McpServerNetworkAccessMode)
-		if err != nil || !mode.Allows(surface) {
+		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
 			continue
 		}
 		candidates = append(candidates, metaMemberCandidate{
@@ -228,18 +235,34 @@ func (s *Service) resolveAgentMemberSnapshot(
 	if err != nil {
 		return ctx, nil, err
 	}
-	return ctx, qualifyAgentMemberSlugs(members), nil
+	return ctx, qualifyMemberSlugsByProject(members), nil
 }
 
-// qualifyAgentMemberSlugs prefixes every member slug with its project's.
+// requestNetworkSurface is the ingress surface the request arrived on.
+func requestNetworkSurface(ctx context.Context) networkaccess.Surface {
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		return networkaccess.SurfacePrivate
+	}
+	return networkaccess.SurfacePublic
+}
+
+// servableOnSurface reports whether a server with the given network access
+// mode may be reached on surface. A mode this build cannot parse is not a mode
+// it can serve: fail closed, exactly as the endpoint resolver does.
+func servableOnSurface(networkAccessMode pgtype.Text, surface networkaccess.Surface) bool {
+	mode, err := networkaccess.Effective(networkAccessMode)
+	return err == nil && mode.Allows(surface)
+}
+
+// qualifyMemberSlugsByProject prefixes every member slug with its project's.
 //
-// Slugs are unique per project, not per organization, and an agent gateway can
+// Slugs are unique per project, not per organization, and a derived gateway can
 // span projects — so two members could answer to the same slug, and the
 // qualified serverslug--toolname contract would resolve to whichever came
 // first. Qualifying every member, rather than only the colliding ones, keeps a
 // member's name stable: an unrelated project adding a server must not rename
-// anything an agent already holds.
-func qualifyAgentMemberSlugs(members []metaMember) []metaMember {
+// anything a caller already holds.
+func qualifyMemberSlugsByProject(members []metaMember) []metaMember {
 	qualified := make([]metaMember, 0, len(members))
 	for _, member := range members {
 		if member.projectSlug != "" {

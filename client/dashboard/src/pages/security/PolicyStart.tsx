@@ -20,11 +20,19 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRiskPresets } from "@gram/client/react-query/riskPresets.js";
 import { useRiskSuggestPolicyMutation } from "@gram/client/react-query/riskSuggestPolicy.js";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { type ReactNode, useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useQueryState } from "nuqs";
 import { ruleCategoryMeta, type DetectorMode } from "./policy-data";
+import {
+  isShadowAIUseCase,
+  presentShadowAIUseCase,
+} from "./shadow-ai-use-case";
+import {
+  useShadowAIPolicySlot,
+  type ShadowAIPolicySlot,
+} from "./use-shadow-ai-policy-slot";
 import {
   actionBadgeVariant,
   draftFromPreset,
@@ -179,7 +187,10 @@ export function PolicyStartChooser(): JSX.Element {
     savePolicyStartSession(gramProject, { description, review });
   }, [gramProject, description, review]);
   const { data, isLoading, isError, refetch } = useRiskPresets();
-  const allPresets = data?.presets ?? [];
+  // The server's "Unapproved MCP servers" use case is presented as Shadow AI
+  // and opens the Shadow AI editor instead of seeding the standard one.
+  const allPresets = (data?.presets ?? []).map(presentShadowAIUseCase);
+  const shadowAISlot = useShadowAIPolicySlot();
   const presets = allPresets.filter(
     (preset) => promptPoliciesEnabled || preset.policyType !== "prompt_based",
   );
@@ -202,6 +213,23 @@ export function PolicyStartChooser(): JSX.Element {
     );
   };
 
+  // The Shadow AI editor, or the policy already holding the project's one
+  // slot. The use-case row disables itself while the slot is unknown; the
+  // draft review's Continue cannot, so it reports instead.
+  const openShadowAI = () => {
+    if (shadowAISlot.pending || shadowAISlot.failed) {
+      toast.error(
+        "This project's policies could not be checked yet, so the Shadow AI policy cannot be opened. Try again.",
+      );
+      return;
+    }
+    if (shadowAISlot.href) {
+      void navigate(shadowAISlot.href);
+      return;
+    }
+    void setKind("shadow-ai");
+  };
+
   const continueFromReview = (state: ReviewState) => {
     const override = state.overridePresetId
       ? allPresets.find((preset) => preset.id === state.overridePresetId)
@@ -210,6 +238,10 @@ export function PolicyStartChooser(): JSX.Element {
       ? draftFromPreset(override)
       : draftFromSuggestion(state.suggestion);
     const preset = allPresets.find((p) => p.id === base.presetId);
+    if (preset && isShadowAIUseCase(preset)) {
+      openShadowAI();
+      return;
+    }
     const matched = sessionOnlyReason(base.sources)
       ? []
       : matchMCPServers(description, mcpServers);
@@ -306,7 +338,9 @@ export function PolicyStartChooser(): JSX.Element {
                 onRetry={() => void refetch()}
                 mode={mode}
                 promptPoliciesEnabled={promptPoliciesEnabled}
+                shadowAISlot={shadowAISlot}
                 onSelect={(preset) => openDraft(draftFromPreset(preset))}
+                onShadowAI={openShadowAI}
                 onScratch={(kind) => void setKind(kind)}
               />
               <DescribePanel
@@ -331,7 +365,9 @@ function UseCaseTable({
   onRetry,
   mode,
   promptPoliciesEnabled,
+  shadowAISlot,
   onSelect,
+  onShadowAI,
   onScratch,
 }: {
   presets: RiskPreset[];
@@ -340,8 +376,10 @@ function UseCaseTable({
   onRetry: () => void;
   mode: DetectorMode;
   promptPoliciesEnabled: boolean;
+  shadowAISlot: ShadowAIPolicySlot;
   onSelect: (preset: RiskPreset) => void;
-  onScratch: (kind: "standard" | "prompt") => void;
+  onShadowAI: () => void;
+  onScratch: (kind: "standard" | "prompt" | "shadow-ai") => void;
 }): JSX.Element {
   return (
     <div className="bg-card border">
@@ -367,48 +405,64 @@ function UseCaseTable({
           </div>
         ))
       ) : (
-        presets.map((preset) => (
-          <button
-            key={preset.id}
-            type="button"
-            onClick={() => onSelect(preset)}
-            className="hover:bg-muted/40 group grid w-full grid-cols-[minmax(0,1fr)_16px] items-center gap-4 border-b p-4 text-left transition-colors sm:grid-cols-[minmax(0,1fr)_80px_128px_16px]"
-          >
-            <span className="flex min-w-0 gap-3">
-              <Icon
-                name={presetIcon(preset.id, preset.policyType)}
-                className="text-muted-foreground mt-0.5 size-5 shrink-0"
-              />
-              <span className="min-w-0 space-y-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">{preset.label}</span>
-                  {preset.requiresApprovedEmailDomains ? (
-                    <Badge variant="warning">
-                      <Badge.Text>Needs approved domains</Badge.Text>
-                    </Badge>
-                  ) : null}
-                </span>
-                <span className="text-muted-foreground block max-w-[560px] text-[13px] leading-[18px]">
-                  {preset.description}
-                </span>
-                <span className="text-muted-foreground block font-mono text-[11px] leading-4">
-                  Detected by {detectsSummary(preset, mode)}
-                </span>
-                <span className="flex items-center gap-2 pt-1 sm:hidden">
-                  <ActionBadge action={preset.action} />
-                  <Severity score={preset.score} />
+        presets.map((preset) => {
+          // The Shadow AI use case follows the project's one slot: it opens
+          // the existing policy when there is one, and waits while that is
+          // unknown, the same as the from-scratch option below.
+          const shadowAI = isShadowAIUseCase(preset);
+          const slotMessage = shadowAI
+            ? shadowAISlotMessage(shadowAISlot)
+            : undefined;
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              disabled={slotMessage !== undefined}
+              onClick={() => (shadowAI ? onShadowAI() : onSelect(preset))}
+              className="hover:bg-muted/40 group grid w-full grid-cols-[minmax(0,1fr)_16px] items-center gap-4 border-b p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 sm:grid-cols-[minmax(0,1fr)_80px_128px_16px]"
+            >
+              <span className="flex min-w-0 gap-3">
+                <Icon
+                  name={presetIcon(preset.id, preset.policyType)}
+                  className="text-muted-foreground mt-0.5 size-5 shrink-0"
+                />
+                <span className="min-w-0 space-y-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">{preset.label}</span>
+                    {preset.requiresApprovedEmailDomains ? (
+                      <Badge variant="warning">
+                        <Badge.Text>Needs approved domains</Badge.Text>
+                      </Badge>
+                    ) : null}
+                    {shadowAI && shadowAISlot.existing ? (
+                      <Badge variant="neutral">
+                        <Badge.Text>Already set up</Badge.Text>
+                      </Badge>
+                    ) : null}
+                  </span>
+                  <span className="text-muted-foreground block max-w-[560px] text-[13px] leading-[18px]">
+                    {preset.description}
+                  </span>
+                  <span className="text-muted-foreground block font-mono text-[11px] leading-4">
+                    {slotMessage ??
+                      `Detected by ${detectsSummary(preset, mode)}`}
+                  </span>
+                  <span className="flex items-center gap-2 pt-1 sm:hidden">
+                    <ActionBadge action={preset.action} />
+                    <Severity score={preset.score} />
+                  </span>
                 </span>
               </span>
-            </span>
-            <span className="hidden sm:block">
-              <ActionBadge action={preset.action} />
-            </span>
-            <span className="hidden sm:block">
-              <Severity score={preset.score} />
-            </span>
-            <ArrowRight className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
-          </button>
-        ))
+              <span className="hidden sm:block">
+                <ActionBadge action={preset.action} />
+              </span>
+              <span className="hidden sm:block">
+                <Severity score={preset.score} />
+              </span>
+              <ArrowRight className="text-muted-foreground group-hover:text-foreground size-4 transition-colors" />
+            </button>
+          );
+        })
       )}
       <div className="bg-muted/30 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
         <Eyebrow>From scratch</Eyebrow>
@@ -430,8 +484,69 @@ function UseCaseTable({
             Prompt-based
           </Button>
         ) : null}
+        <ShadowAIScratchOption onPick={() => onScratch("shadow-ai")} />
       </div>
     </div>
+  );
+}
+
+/** Why a Shadow AI policy cannot be opened right now, or undefined when the
+ *  slot is known: a pending or failed read is not proof that it is free. */
+function shadowAISlotMessage(slot: ShadowAIPolicySlot): string | undefined {
+  if (slot.failed) {
+    return "This project's policies could not be loaded, so a Shadow AI policy cannot be created yet.";
+  }
+  if (slot.pending) return "Checking this project's policies…";
+  return undefined;
+}
+
+/** Why the Shadow AI from-scratch option cannot be picked right now, or
+ *  undefined when it can. The option points at the policy already holding the
+ *  slot instead of a doomed create. */
+function shadowAIScratchNote(slot: ShadowAIPolicySlot): ReactNode {
+  const message = shadowAISlotMessage(slot);
+  if (message !== undefined) {
+    return (
+      <Text small muted>
+        {message}
+      </Text>
+    );
+  }
+  if (slot.existing && slot.href) {
+    return (
+      <Text small muted>
+        This project already has one.{" "}
+        <Link to={slot.href} className="underline underline-offset-2">
+          Open {slot.existing.name}
+        </Link>
+      </Text>
+    );
+  }
+  return undefined;
+}
+
+/** The "from scratch" entry for a Shadow AI policy: the blocking Shadow MCP
+ *  policy re-presented as the place that decides which AI tools and MCP
+ *  servers may connect. Exported for its test. */
+export function ShadowAIScratchOption({
+  onPick,
+}: {
+  onPick: () => void;
+}): JSX.Element {
+  const note = shadowAIScratchNote(useShadowAIPolicySlot());
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="tertiary"
+        disabled={note !== undefined}
+        onClick={onPick}
+      >
+        Shadow AI
+      </Button>
+      {note}
+    </span>
   );
 }
 
