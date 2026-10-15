@@ -64,7 +64,7 @@ VALUES (
     $8,
     $9
 )
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSensorParams struct {
@@ -102,6 +102,8 @@ func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (Sig
 		&i.Mode,
 		&i.MatchExpression,
 		&i.Enabled,
+		&i.InputStrategy,
+		&i.WindowSize,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -171,7 +173,7 @@ SET deleted_at = clock_timestamp(),
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteSensorParams struct {
@@ -192,6 +194,8 @@ func (q *Queries) DeleteSensor(ctx context.Context, arg DeleteSensorParams) (Sig
 		&i.Mode,
 		&i.MatchExpression,
 		&i.Enabled,
+		&i.InputStrategy,
+		&i.WindowSize,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -976,7 +980,7 @@ SET name = $1,
 WHERE id = $8
   AND project_id = $9
   AND deleted IS FALSE
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, input_strategy, window_size, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateSensorParams struct {
@@ -1014,6 +1018,8 @@ func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (Sig
 		&i.Mode,
 		&i.MatchExpression,
 		&i.Enabled,
+		&i.InputStrategy,
+		&i.WindowSize,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
