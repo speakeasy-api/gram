@@ -1,9 +1,8 @@
 package remotesessions
 
 import (
-	"time"
-
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
@@ -87,8 +86,9 @@ func (s *Service) ReadEMA(ctx context.Context, p *gen.ReadEMAPayload) (*gen.Iden
 
 // endpointEMAProviders is the order identity chaining resolves for the
 // endpoint, with each provider's organization-wide acceptance by the vendor,
-// and when the vendor last accepted an assertion for this binding. Both are
-// nil when the vendor issuer is not an issuer identifier.
+// and when the vendor last accepted an assertion for this binding from a
+// provider the order tries and that can serve now. Both are nil when the
+// vendor issuer is not an issuer identifier.
 func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput, issuer string) (*types.EMAProviderOrder, *string, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	vendor, err := NormalizeVendorIssuer(issuer)
@@ -102,21 +102,25 @@ func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput,
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
 	}
+	order, err = ApplyEMAProviderReadiness(ctx, org, order, s.speakeasyReadiness)
+	if err != nil {
+		logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err))
+	}
 	// Acceptance is status evidence: a failed read leaves it out rather than
 	// failing the whole read.
-	var bindingAccepted *string
 	if accepted, err := VendorEMAAcceptance(ctx, q, org, vendor); err != nil {
 		logger.WarnContext(ctx, "read ema vendor acceptance", attr.SlogError(err))
 	} else {
 		order = StampEMAProviderLastAccepted(order, accepted)
 	}
+	var bindingAccepted *string
 	target := EMACredentialTarget{OrganizationID: org, ProjectID: *authCtx.ProjectID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource}
-	if at, err := EMABindingLastAccepted(ctx, q, target); err != nil {
-		logger.WarnContext(ctx, "read ema binding last accepted", attr.SlogError(err))
-	} else if at != nil {
+	if accepted, err := EMABindingAcceptance(ctx, q, target); err != nil {
+		logger.WarnContext(ctx, "read ema binding acceptance", attr.SlogError(err))
+	} else if at := ServingLastAccepted(order, accepted); at != nil {
 		bindingAccepted = conv.PtrEmpty(at.UTC().Format(time.RFC3339))
 	}
-	return s.liveEMAProvidersView(ctx, logger, org, order), bindingAccepted, nil
+	return EMAProviderOrderView(order), bindingAccepted, nil
 }
 
 func (s *Service) UnlinkEMA(ctx context.Context, p *gen.UnlinkEMAPayload) (*gen.IdentityChainingPreparation, error) {

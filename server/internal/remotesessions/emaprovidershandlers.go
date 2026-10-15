@@ -46,6 +46,12 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	if err != nil {
 		return nil, err
 	}
+	var expected []EMAProvider
+	if payload.ExpectedProviders != nil {
+		if expected, err = parseEMAProviders(payload.ExpectedProviders); err != nil {
+			return nil, err
+		}
+	}
 	// Restoring the external default stays possible with the rollout off, so
 	// a saved order can always be undone.
 	if len(providers) > 0 {
@@ -84,6 +90,9 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	beforeRows, err := q.ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: org, VendorIssuer: vendor})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
+	}
+	if payload.ExpectedProviders != nil && !savedOrderMatches(beforeRows, expected) {
+		return nil, oops.E(oops.CodeConflict, nil, "the EMA provider order changed since you started editing; review it and try again").LogInfo(ctx, logger)
 	}
 	before := &audit.RemoteSessionIssuerEMAProviders{VendorIssuer: vendor, Providers: make([]audit.RemoteSessionIssuerEMAProvider, 0, len(beforeRows))}
 	for _, row := range beforeRows {
@@ -162,6 +171,27 @@ func (s *Service) requireEMAProviders(ctx context.Context, logger *slog.Logger, 
 		return oops.E(oops.CodeForbidden, nil, "the EMA provider order is not enabled for this organization")
 	}
 	return nil
+}
+
+// savedOrderMatches reports whether the saved rows are the order a caller
+// expected, entry by entry. The organization has one Speakeasy issuer, so a
+// Speakeasy entry matches by kind.
+func savedOrderMatches(rows []repo.ListEMAProvidersRow, expected []EMAProvider) bool {
+	if len(rows) != len(expected) {
+		return false
+	}
+	for i, row := range rows {
+		want := expected[i]
+		switch {
+		case row.RemoteSessionIssuerID.Valid:
+			if want.Kind != EMAProviderExternal || want.RemoteSessionIssuerID != row.RemoteSessionIssuerID.UUID {
+				return false
+			}
+		case want.Kind != EMAProviderSpeakeasy:
+			return false
+		}
+	}
+	return true
 }
 
 // maxEMAProviders bounds an order's length; the API documents it.

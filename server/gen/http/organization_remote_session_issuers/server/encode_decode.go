@@ -3329,9 +3329,40 @@ func marshalOrganizationremotesessionissuersEMAServiceToEMAServiceResponseBody(v
 		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
 		ServerCount:           v.ServerCount,
 		ReadyServerCount:      v.ReadyServerCount,
+		HiddenServerCount:     v.HiddenServerCount,
 	}
 	if v.EmaProviders != nil {
 		res.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(v.EmaProviders)
+	}
+	if v.Servers != nil {
+		res.Servers = make([]*EMAServiceServerResponseBody, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = marshalOrganizationremotesessionissuersEMAServiceServerToEMAServiceServerResponseBody(val)
+		}
+	} else {
+		res.Servers = []*EMAServiceServerResponseBody{}
+	}
+
+	return res
+}
+
+// marshalOrganizationremotesessionissuersEMAServiceServerToEMAServiceServerResponseBody
+// builds a value of type *EMAServiceServerResponseBody from a value of type
+// *organizationremotesessionissuers.EMAServiceServer.
+func marshalOrganizationremotesessionissuersEMAServiceServerToEMAServiceServerResponseBody(v *organizationremotesessionissuers.EMAServiceServer) *EMAServiceServerResponseBody {
+	res := &EMAServiceServerResponseBody{
+		ID:             v.ID,
+		Name:           v.Name,
+		Slug:           v.Slug,
+		ProjectID:      v.ProjectID,
+		ProjectSlug:    v.ProjectSlug,
+		ProjectName:    v.ProjectName,
+		Status:         v.Status,
+		LastAcceptedAt: v.LastAcceptedAt,
 	}
 
 	return res

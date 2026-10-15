@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
@@ -214,20 +215,43 @@ type EMACredentialTarget struct {
 	Resource              string
 }
 
-// EMABindingLastAccepted is when the vendor last accepted an assertion for
-// target from any provider, retired credentials included; nil when never.
-func EMABindingLastAccepted(ctx context.Context, q *repo.Queries, target EMACredentialTarget) (*time.Time, error) {
-	at, err := q.GetEMABindingLastAccepted(ctx, repo.GetEMABindingLastAcceptedParams{
+// EMABindingAcceptance is when the vendor last accepted an assertion for
+// target from each provider. Only credentials that still hold an access token
+// count, so the evidence for one goes when it is retired or purged.
+func EMABindingAcceptance(ctx context.Context, q *repo.Queries, target EMACredentialTarget) (EMAVendorAcceptance, error) {
+	rows, err := q.ListEMABindingAcceptance(ctx, repo.ListEMABindingAcceptanceParams{
 		OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, UserSessionIssuerID: target.UserSessionIssuerID,
 		RemoteSessionIssuerID: target.RemoteSessionIssuerID, Resource: target.Resource,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("read ema binding last accepted: %w", err)
+		return nil, fmt.Errorf("list ema binding acceptance: %w", err)
 	}
-	if !at.Valid {
-		return nil, nil
+	accepted := EMAVendorAcceptance{}
+	for _, row := range rows {
+		accepted.record(row.EmaProvider, row.ExternalIssuerID, row.InternalSessionIssuerID, row.LastAcceptedAt)
 	}
-	return &at.Time, nil
+	return accepted, nil
+}
+
+// ServingLastAccepted is the newest acceptance among the providers in order
+// that can serve now, matched exactly; nil when none of them has any. Evidence
+// from a provider the order no longer tries says nothing about whether the
+// configuration works today.
+func ServingLastAccepted(order EMAProviderOrder, accepted EMAVendorAcceptance) *time.Time {
+	var newest *time.Time
+	for _, p := range order.Available() {
+		key := emaAcceptanceKey{kind: p.Kind, issuerID: p.RemoteSessionIssuerID}
+		if p.Kind == EMAProviderSpeakeasy {
+			key.issuerID = p.InternalSessionIssuerID
+		}
+		if key.issuerID == uuid.Nil {
+			continue
+		}
+		if at, ok := accepted[key]; ok && (newest == nil || at.After(*newest)) {
+			newest = &at
+		}
+	}
+	return newest
 }
 
 // emaAcceptanceKey names one provider's evidence: an external issuer by its
@@ -251,19 +275,7 @@ func ListEMAVendorAcceptance(ctx context.Context, q *repo.Queries, organizationI
 	out := map[string]EMAVendorAcceptance{}
 	for _, row := range rows {
 		vendor, err := NormalizeVendorIssuer(row.Issuer)
-		if err != nil || !row.LastAcceptedAt.Valid {
-			continue
-		}
-		key := emaAcceptanceKey{kind: EMAProviderKind(row.EmaProvider), issuerID: uuid.Nil}
-		switch key.kind {
-		case EMAProviderExternal:
-			key.issuerID = row.ExternalIssuerID.UUID
-		case EMAProviderSpeakeasy:
-			key.issuerID = row.InternalSessionIssuerID.UUID
-		}
-		// A credential whose vouching issuer can no longer be traced proves
-		// nothing about any one provider.
-		if key.issuerID == uuid.Nil {
+		if err != nil {
 			continue
 		}
 		accepted := out[vendor]
@@ -271,11 +283,31 @@ func ListEMAVendorAcceptance(ctx context.Context, q *repo.Queries, organizationI
 			accepted = EMAVendorAcceptance{}
 			out[vendor] = accepted
 		}
-		if prev, ok := accepted[key]; !ok || row.LastAcceptedAt.Time.After(prev) {
-			accepted[key] = row.LastAcceptedAt.Time
-		}
+		accepted.record(row.EmaProvider, row.ExternalIssuerID, row.InternalSessionIssuerID, row.LastAcceptedAt)
 	}
 	return out, nil
+}
+
+// record keeps the newest acceptance for the provider a credential row
+// names. A credential whose vouching issuer can no longer be traced proves
+// nothing about any one provider.
+func (a EMAVendorAcceptance) record(provider string, externalIssuer, internalIssuer uuid.NullUUID, at pgtype.Timestamptz) {
+	if !at.Valid {
+		return
+	}
+	key := emaAcceptanceKey{kind: EMAProviderKind(provider), issuerID: uuid.Nil}
+	switch key.kind {
+	case EMAProviderExternal:
+		key.issuerID = externalIssuer.UUID
+	case EMAProviderSpeakeasy:
+		key.issuerID = internalIssuer.UUID
+	}
+	if key.issuerID == uuid.Nil {
+		return
+	}
+	if prev, ok := a[key]; !ok || at.Time.After(prev) {
+		a[key] = at.Time
+	}
 }
 
 // VendorEMAAcceptance reads one vendor's acceptance across the organization.

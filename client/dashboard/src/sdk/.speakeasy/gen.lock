@@ -1093,6 +1093,7 @@ trackedFiles:
   src/models/components/emaproviderinput.ts: {}
   src/models/components/emaproviderorder.ts: {}
   src/models/components/emaservice.ts: {}
+  src/models/components/emaserviceserver.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
   src/models/components/enableopenrouterkeyrequestbody.ts: {}
@@ -9672,7 +9673,7 @@ examples:
     speakeasy-default-list-organization-remote-session-issuer-EMA-services:
       responses:
         "200":
-          application/json: {"items": [{"ema_providers": {"is_default": true, "providers": [], "vendor_issuer": "<value>"}, "name": "<value>", "ready_server_count": 963537, "server_count": 791091, "vendor_issuer": "<value>"}]}
+          application/json: {"items": [{"ema_providers": {"is_default": true, "providers": [], "vendor_issuer": "<value>"}, "hidden_server_count": 607303, "name": "<value>", "ready_server_count": 963537, "server_count": 791091, "servers": [], "vendor_issuer": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

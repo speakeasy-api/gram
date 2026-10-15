@@ -5565,35 +5565,73 @@ WHERE c.organization_id = @organization_id AND c.project_id = @project_id
 ORDER BY c.updated_at DESC, c.id DESC
 LIMIT 1;
 
--- name: GetEMABindingLastAccepted :one
+-- name: ListEMABindingAcceptance :many
 -- Status only: when the vendor last accepted an assertion for one binding
--- target, from any provider, retired credentials included.
-SELECT MAX(updated_at)::timestamptz AS last_accepted_at
-FROM remote_session_ema_credentials
-WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
-  AND user_session_issuer_id = @user_session_issuer_id::uuid
-  AND remote_session_issuer_id = @remote_session_issuer_id::uuid
-  AND resource = @resource::text;
+-- target, per provider, attributed as ListEMAVendorAcceptance does. Only
+-- credentials that still hold an access token count, so retiring or purging
+-- one is never read as an acceptance; the evidence goes when they do.
+SELECT c.ema_provider,
+  rc.remote_session_issuer_id AS external_issuer_id,
+  c.internal_session_issuer_id,
+  MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id
+WHERE c.organization_id = @organization_id::text AND c.project_id = @project_id::uuid
+  AND c.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND c.remote_session_issuer_id = @remote_session_issuer_id::uuid
+  AND c.resource = @resource::text
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
+
+-- name: ListEMABindingAcceptanceForOrganization :many
+-- ListEMABindingAcceptance for every binding target in the organization, for
+-- the services view.
+SELECT c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.resource, c.ema_provider,
+  rc.remote_session_issuer_id AS external_issuer_id,
+  c.internal_session_issuer_id,
+  MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
+LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id
+WHERE c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY c.project_id, c.user_session_issuer_id, c.remote_session_issuer_id, c.resource, c.ema_provider,
+  rc.remote_session_issuer_id, c.internal_session_issuer_id;
 
 -- name: ListEMAServiceServers :many
 -- Status only: every identity chaining binding in the organization with the
--- vendor issuer record it names and the live MCP server it serves, for the
--- organization's services view. A binding whose server was removed keeps its
--- vendor listed with no server. Issuer records come first organization-level,
--- then oldest, so the name and record a vendor shows are stable.
+-- vendor issuer record it names and each live MCP server it serves, for the
+-- organization's services view. A server is matched by its URL or by the
+-- resource its cached protected resource document names, trailing slash
+-- aside, as identity chaining matches a binding's resource. A binding whose
+-- server was removed keeps its vendor listed with no server. Issuer records
+-- come first organization-level, then oldest, so the name and record a vendor
+-- shows are stable.
 SELECT i.id AS remote_session_issuer_id, i.issuer, COALESCE(i.name, '')::text AS name,
   (i.project_id IS NULL)::boolean AS issuer_is_organization_level,
   COALESCE(b.state, '')::text AS state,
-  m.id AS mcp_server_id
+  b.project_id, b.user_session_issuer_id, b.resource,
+  m.id AS mcp_server_id, m.toolset_id AS mcp_server_toolset_id,
+  COALESCE(m.name, '')::text AS mcp_server_name, COALESCE(m.slug, '')::text AS mcp_server_slug,
+  p.slug AS project_slug, p.name AS project_name
 FROM remote_session_ema_bindings b
 JOIN projects p ON p.id = b.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
 JOIN remote_session_issuers i ON i.id = b.remote_session_issuer_id AND i.deleted IS FALSE
   AND (i.project_id = b.project_id OR (i.project_id IS NULL AND (i.organization_id = b.organization_id OR i.organization_id IS NULL)))
-LEFT JOIN remote_mcp_servers r ON r.project_id = b.project_id AND r.url = b.resource AND r.deleted IS FALSE
+LEFT JOIN remote_mcp_servers r ON r.project_id = b.project_id AND r.deleted IS FALSE
+  AND (
+    rtrim(r.url, '/') = rtrim(b.resource, '/')
+    OR EXISTS (
+      SELECT 1 FROM remote_protected_resources rpr
+      WHERE rpr.project_id = r.project_id AND rpr.resource_identifier = r.url AND rpr.deleted IS FALSE
+        AND rtrim(rpr.metadata->>'resource', '/') = rtrim(b.resource, '/')
+    )
+  )
 LEFT JOIN mcp_servers m ON m.remote_mcp_server_id = r.id AND m.project_id = b.project_id
   AND m.user_session_issuer_id = b.user_session_issuer_id AND m.deleted IS FALSE
 WHERE b.organization_id = @organization_id::text
-ORDER BY (i.project_id IS NULL) DESC, i.created_at, i.id;
+ORDER BY (i.project_id IS NULL) DESC, i.created_at, i.id, p.name, m.id;
 
 -- name: ListEMAProviderVendors :many
 -- Vendors with a saved provider order, whether or not a binding names them.
@@ -5625,8 +5663,11 @@ LIMIT 1;
 -- Status only: when each vendor last accepted an assertion from each provider
 -- across the organization. External acceptances are attributed to the issuer
 -- whose sign-in vouched (through the trusted issuer session's client), and
--- Speakeasy ones to the internal session issuer that signed. Retired
--- credentials count: the vendor accepted them, which is what trust means.
+-- Speakeasy ones to the internal session issuer that signed. Only
+-- credentials that still hold an access token count: retirement and
+-- containment purges bump updated_at without an exchange, so a retired
+-- credential's acceptance disappears with it until an accepted_at column
+-- records exchanges on their own.
 SELECT i.issuer, c.ema_provider,
   rc.remote_session_issuer_id AS external_issuer_id,
   c.internal_session_issuer_id,
@@ -5637,6 +5678,7 @@ JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id AND i.deleted
 LEFT JOIN trusted_issuer_sessions t ON t.id = c.trusted_issuer_session_id AND t.organization_id = c.organization_id
 LEFT JOIN remote_session_clients rc ON rc.id = t.remote_session_client_id
 WHERE c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
 GROUP BY i.issuer, c.ema_provider, rc.remote_session_issuer_id, c.internal_session_issuer_id;
 
 -- name: RetireLegacyEMACredentialSlot :exec

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listEMAServices organizationRemoteSessionIssuers
  *
  * @remarks
- * List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and how many MCP servers chain through it. Requires org:read.
+ * List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and the MCP servers that chain through it: counts include every server, the list only those the caller has mcp:read on. Requires org:read.
  */
 export function organizationRemoteSessionIssuersListEMAServices(
   client: GramCore,

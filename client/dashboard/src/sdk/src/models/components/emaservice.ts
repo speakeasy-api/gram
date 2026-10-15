@@ -11,6 +11,10 @@ import {
   EMAProviderOrder,
   EMAProviderOrder$inboundSchema,
 } from "./emaproviderorder.js";
+import {
+  EMAServiceServer,
+  EMAServiceServer$inboundSchema,
+} from "./emaserviceserver.js";
 
 /**
  * One service identity chaining reaches in the organization: a vendor authorization server, the identity providers that can vouch for people to it with whether the vendor has accepted each, and the MCP servers that chain through it.
@@ -21,11 +25,15 @@ export type EMAService = {
    */
   emaProviders: EMAProviderOrder;
   /**
+   * Counted servers the caller cannot read; they are not named.
+   */
+  hiddenServerCount: number;
+  /**
    * The vendor's display name, from an issuer record that names it. Empty when none has one.
    */
   name: string;
   /**
-   * Of those, how many have a ready binding.
+   * Of those, how many have a ready binding, including servers the caller cannot read.
    */
   readyServerCount: number;
   /**
@@ -33,9 +41,13 @@ export type EMAService = {
    */
   remoteSessionIssuerId?: string | undefined;
   /**
-   * Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup.
+   * Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup, including servers the caller cannot read.
    */
   serverCount: number;
+  /**
+   * The counted servers the caller can read (mcp:read), ordered by project and name.
+   */
+  servers: Array<EMAServiceServer>;
   /**
    * The vendor authorization server issuer, canonicalized.
    */
@@ -47,15 +59,18 @@ export const EMAService$inboundSchema: z.ZodMiniType<EMAService, unknown> = z
   .pipe(
     z.object({
       ema_providers: EMAProviderOrder$inboundSchema,
+      hidden_server_count: z.int(),
       name: z.string(),
       ready_server_count: z.int(),
       remote_session_issuer_id: z.optional(z.string()),
       server_count: z.int(),
+      servers: z.array(EMAServiceServer$inboundSchema),
       vendor_issuer: z.string(),
     }),
     z.transform((v) => {
       return remap$(v, {
         "ema_providers": "emaProviders",
+        "hidden_server_count": "hiddenServerCount",
         "ready_server_count": "readyServerCount",
         "remote_session_issuer_id": "remoteSessionIssuerId",
         "server_count": "serverCount",

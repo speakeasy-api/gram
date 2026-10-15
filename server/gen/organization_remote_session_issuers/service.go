@@ -93,15 +93,17 @@ type Service interface {
 	// one. Identity chaining moves to the next provider after any failure, so a
 	// saved order that lists Speakeasy after an external issuer lets Speakeasy
 	// vouch when that issuer refuses someone. The order applies organization-wide
-	// to every issuer with the same canonical issuer URL. Requires org:admin and
-	// the ema-providers rollout; restoring the default only needs org:admin. Not
-	// available from support or impersonated sessions.
+	// to every issuer with the same canonical issuer URL. With expected_providers,
+	// the write happens only while the saved order still matches it. Requires
+	// org:admin and the ema-providers rollout; restoring the default only needs
+	// org:admin. Not available from support or impersonated sessions.
 	SetEMAProviders(context.Context, *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error)
 	// List every service identity chaining reaches in the caller's organization:
 	// each vendor authorization server that any identity chaining binding or saved
 	// EMA provider order names, with the organization-wide provider order, when
 	// the vendor last accepted an assertion from each provider across every
-	// binding, and how many MCP servers chain through it. Requires org:read.
+	// binding, and the MCP servers that chain through it: counts include every
+	// server, the list only those the caller has mcp:read on. Requires org:read.
 	ListEMAServices(context.Context, *ListEMAServicesPayload) (res *ListEMAServicesResult, err error)
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for
@@ -277,10 +279,41 @@ type EMAService struct {
 	// the newest acceptance across every binding in the organization.
 	EmaProviders *types.EMAProviderOrder
 	// Distinct live MCP servers whose identity chaining binding for this vendor
-	// has been turned on, in any state after setup.
+	// has been turned on, in any state after setup, including servers the caller
+	// cannot read.
 	ServerCount int
-	// Of those, how many have a ready binding.
+	// Of those, how many have a ready binding, including servers the caller cannot
+	// read.
 	ReadyServerCount int
+	// The counted servers the caller can read (mcp:read), ordered by project and
+	// name.
+	Servers []*EMAServiceServer
+	// Counted servers the caller cannot read; they are not named.
+	HiddenServerCount int
+}
+
+// One live MCP server whose identity chaining binding for the service has been
+// turned on.
+type EMAServiceServer struct {
+	// The MCP server id.
+	ID string
+	// The MCP server name. Empty when it has none.
+	Name string
+	// The MCP server slug. Empty when it has none.
+	Slug string
+	// The owning project.
+	ProjectID string
+	// The owning project's slug.
+	ProjectSlug string
+	// The owning project's name.
+	ProjectName string
+	// working: on, and the vendor accepted an assertion for this server from a
+	// provider that can vouch now. not_proven: on, with no such acceptance yet.
+	// needs_attention: on but blocked, or no provider can vouch for it right now.
+	Status string
+	// When the vendor last accepted an assertion for this server from a provider
+	// that can vouch now. Omitted when never.
+	LastAcceptedAt *string
 }
 
 // FetchIssuerMetadataPayload is the payload type of the
@@ -479,8 +512,13 @@ type SetEMAProvidersPayload struct {
 	RemoteSessionIssuerID string
 	// Providers in the order they are tried, at most 10; each at most once. An
 	// empty list restores the derived default.
-	Providers    []*types.EMAProviderInput
-	SessionToken *string
+	Providers []*types.EMAProviderInput
+	// The saved order the caller started from, empty for the default. When given
+	// and the saved order no longer matches it, nothing is written and the request
+	// fails with conflict, so a stale editor never overwrites another
+	// administrator's change. Omit to replace the order unconditionally.
+	ExpectedProviders []*types.EMAProviderInput
+	SessionToken      *string
 }
 
 // An organization-owned user_session_issuer that uses a remote_session_issuer

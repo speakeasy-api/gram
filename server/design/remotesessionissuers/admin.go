@@ -122,10 +122,32 @@ var EMAService = Type("EMAService", func() {
 		Format(FormatUUID)
 	})
 	Attribute("ema_providers", shared.EMAProviderOrder, "The organization-wide provider order. Each provider's last_accepted_at is the newest acceptance across every binding in the organization.")
-	Attribute("server_count", Int, "Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup.")
-	Attribute("ready_server_count", Int, "Of those, how many have a ready binding.")
+	Attribute("server_count", Int, "Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup, including servers the caller cannot read.")
+	Attribute("ready_server_count", Int, "Of those, how many have a ready binding, including servers the caller cannot read.")
+	Attribute("servers", ArrayOf(EMAServiceServer), "The counted servers the caller can read (mcp:read), ordered by project and name.")
+	Attribute("hidden_server_count", Int, "Counted servers the caller cannot read; they are not named.")
 
-	Required("vendor_issuer", "name", "ema_providers", "server_count", "ready_server_count")
+	Required("vendor_issuer", "name", "ema_providers", "server_count", "ready_server_count", "servers", "hidden_server_count")
+})
+
+// EMAServiceServer is one MCP server that reaches a service through identity chaining.
+var EMAServiceServer = Type("EMAServiceServer", func() {
+	Description("One live MCP server whose identity chaining binding for the service has been turned on.")
+
+	Attribute("id", String, "The MCP server id.", func() { Format(FormatUUID) })
+	Attribute("name", String, "The MCP server name. Empty when it has none.")
+	Attribute("slug", String, "The MCP server slug. Empty when it has none.")
+	Attribute("project_id", String, "The owning project.", func() { Format(FormatUUID) })
+	Attribute("project_slug", String, "The owning project's slug.")
+	Attribute("project_name", String, "The owning project's name.")
+	Attribute("status", String, "working: on, and the vendor accepted an assertion for this server from a provider that can vouch now. not_proven: on, with no such acceptance yet. needs_attention: on but blocked, or no provider can vouch for it right now.", func() {
+		Enum("working", "not_proven", "needs_attention")
+	})
+	Attribute("last_accepted_at", String, "When the vendor last accepted an assertion for this server from a provider that can vouch now. Omitted when never.", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("id", "name", "slug", "project_id", "project_slug", "project_name", "status")
 })
 
 var ListEMAServicesResult = Type("ListEMAServicesResult", func() {

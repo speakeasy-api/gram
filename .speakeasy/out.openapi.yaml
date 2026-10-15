@@ -38644,7 +38644,7 @@ paths:
         name: OrganizationRemoteSessionIssuers
   /rpc/organizationRemoteSessionIssuers.listEMAServices:
     get:
-      description: 'List every service identity chaining reaches in the caller''s organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and how many MCP servers chain through it. Requires org:read.'
+      description: 'List every service identity chaining reaches in the caller''s organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and the MCP servers that chain through it: counts include every server, the list only those the caller has mcp:read on. Requires org:read.'
       operationId: listOrganizationRemoteSessionIssuerEMAServices
       parameters:
         - allowEmptyValue: true
@@ -39014,7 +39014,7 @@ paths:
         name: RefreshOrganizationRemoteSessionIssuerMetadata
   /rpc/organizationRemoteSessionIssuers.setEMAProviders:
     post:
-      description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization''s Speakeasy issuer when it has one. Identity chaining moves to the next provider after any failure, so a saved order that lists Speakeasy after an external issuer lets Speakeasy vouch when that issuer refuses someone. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
+      description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization''s Speakeasy issuer when it has one. Identity chaining moves to the next provider after any failure, so a saved order that lists Speakeasy after an external issuer lets Speakeasy vouch when that issuer refuses someone. The order applies organization-wide to every issuer with the same canonical issuer URL. With expected_providers, the write happens only while the saved order still matches it. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
       operationId: setOrganizationRemoteSessionIssuerEMAProviders
       parameters:
         - allowEmptyValue: true
@@ -87414,12 +87414,16 @@ components:
       properties:
         ema_providers:
           $ref: '#/components/schemas/EMAProviderOrder'
+        hidden_server_count:
+          type: integer
+          description: Counted servers the caller cannot read; they are not named.
+          format: int64
         name:
           type: string
           description: The vendor's display name, from an issuer record that names it. Empty when none has one.
         ready_server_count:
           type: integer
-          description: Of those, how many have a ready binding.
+          description: Of those, how many have a ready binding, including servers the caller cannot read.
           format: int64
         remote_session_issuer_id:
           type: string
@@ -87427,8 +87431,13 @@ components:
           format: uuid
         server_count:
           type: integer
-          description: Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup.
+          description: Distinct live MCP servers whose identity chaining binding for this vendor has been turned on, in any state after setup, including servers the caller cannot read.
           format: int64
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAServiceServer'
+          description: The counted servers the caller can read (mcp:read), ordered by project and name.
         vendor_issuer:
           type: string
           description: The vendor authorization server issuer, canonicalized.
@@ -87439,6 +87448,51 @@ components:
         - ema_providers
         - server_count
         - ready_server_count
+        - servers
+        - hidden_server_count
+    EMAServiceServer:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The MCP server id.
+          format: uuid
+        last_accepted_at:
+          type: string
+          description: When the vendor last accepted an assertion for this server from a provider that can vouch now. Omitted when never.
+          format: date-time
+        name:
+          type: string
+          description: The MCP server name. Empty when it has none.
+        project_id:
+          type: string
+          description: The owning project.
+          format: uuid
+        project_name:
+          type: string
+          description: The owning project's name.
+        project_slug:
+          type: string
+          description: The owning project's slug.
+        slug:
+          type: string
+          description: The MCP server slug. Empty when it has none.
+        status:
+          type: string
+          description: 'working: on, and the vendor accepted an assertion for this server from a provider that can vouch now. not_proven: on, with no such acceptance yet. needs_attention: on but blocked, or no provider can vouch for it right now.'
+          enum:
+            - working
+            - not_proven
+            - needs_attention
+      description: One live MCP server whose identity chaining binding for the service has been turned on.
+      required:
+        - id
+        - name
+        - slug
+        - project_id
+        - project_slug
+        - project_name
+        - status
     EmployeeDataFlowEdge:
       type: object
       properties:
@@ -103919,6 +103973,11 @@ components:
     SetEMAProvidersRequestBody:
       type: object
       properties:
+        expected_providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAProviderInput'
+          description: The saved order the caller started from, empty for the default. When given and the saved order no longer matches it, nothing is written and the request fails with conflict, so a stale editor never overwrites another administrator's change. Omit to replace the order unconditionally.
         providers:
           type: array
           items:

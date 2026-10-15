@@ -450,3 +450,29 @@ func TestResolveEMAProviders_DerivedDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []remotesessions.EMAProvider{placeholder}, order.Providers, "a deleted Speakeasy issuer leaves the default")
 }
+
+func TestSetEMAProviders_RefusesAStaleExpectedOrder(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	f := newEMAProvidersFixture(t, ctx, ti)
+	setExpecting := func(expected []*types.EMAProviderInput, providers ...*types.EMAProviderInput) (*types.EMAProviderOrder, error) {
+		return ti.service.SetEMAProviders(ctx, &orgissuersgen.SetEMAProvidersPayload{SessionToken: nil, RemoteSessionIssuerID: f.vendor.String(), Providers: providers, ExpectedProviders: expected})
+	}
+
+	_, err := setExpecting([]*types.EMAProviderInput{}, externalInput(f.external), speakeasyInput())
+	require.NoError(t, err, "the default is the empty expected order")
+
+	// Another administrator removes Speakeasy while this editor still holds
+	// the two-provider order it started from.
+	_, err = setEMAProviders(ctx, ti, f.vendor, externalInput(f.external))
+	require.NoError(t, err)
+	_, err = setExpecting([]*types.EMAProviderInput{externalInput(f.external), speakeasyInput()}, speakeasyInput(), externalInput(f.external))
+	requireOopsCode(t, err, oops.CodeConflict)
+	rows, err := repo.New(ti.conn).ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: f.org, VendorIssuer: "https://vendor.example.com"})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "a stale editor writes nothing")
+
+	order, err := setExpecting([]*types.EMAProviderInput{externalInput(f.external)}, externalInput(f.external), speakeasyInput())
+	require.NoError(t, err, "an editor that started from the current order saves")
+	require.Len(t, order.Providers, 2)
+}

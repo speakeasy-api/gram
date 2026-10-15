@@ -40,6 +40,7 @@ func TestReadEMA_ReportsVendorAndBindingAcceptance(t *testing.T) {
 	ctx, ti, in := preparationFixture(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	ti.service.SetSpeakeasySigningAvailable(true)
 	internalIssuer := seedInternalSessionIssuer(t, ctx, ti, auth.ActiveOrganizationID)
 	vendor, err := remotesessions.NormalizeVendorIssuer("https://idp.example.com")
 	require.NoError(t, err)
@@ -77,9 +78,18 @@ func TestReadEMA_ReportsVendorAndBindingAcceptance(t *testing.T) {
 	first = read(in.Resource)
 	require.Nil(t, first.LastAcceptedAt, "this binding has never been accepted")
 	require.NotNil(t, first.EmaProviders.Providers[0].LastAcceptedAt)
-	require.Equal(t, newest.Format(time.RFC3339), *first.EmaProviders.Providers[0].LastAcceptedAt,
-		"the vendor trusts this Speakeasy issuer because another server's assertion was accepted; a retired credential still counts and an unattributed one does not")
+	require.Equal(t, older.Format(time.RFC3339), *first.EmaProviders.Providers[0].LastAcceptedAt,
+		"the vendor trusts this Speakeasy issuer because another server's assertion was accepted; only a live, attributed credential counts")
 
 	second := read(other.Resource)
 	require.NotNil(t, second.LastAcceptedAt)
+	require.Equal(t, older.Format(time.RFC3339), *second.LastAcceptedAt)
+
+	// Moving the vendor to a provider that has never been accepted, and that
+	// this sign-in can't use, leaves the binding unproven.
+	external := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, auth.ActiveOrganizationID, "idp-"+uuid.NewString()[:8])
+	_, err = q.DeleteEMAProviders(ctx, repo.DeleteEMAProvidersParams{OrganizationID: auth.ActiveOrganizationID, VendorIssuer: vendor})
+	require.NoError(t, err)
+	require.NoError(t, q.InsertEMAProvider(ctx, repo.InsertEMAProviderParams{OrganizationID: auth.ActiveOrganizationID, VendorIssuer: vendor, RemoteSessionIssuerID: conv.ToNullUUID(external), InternalSessionIssuerID: uuid.NullUUID{}, Position: 0}))
+	require.Nil(t, read(other.Resource).LastAcceptedAt, "acceptance from a provider the order no longer tries proves nothing")
 }

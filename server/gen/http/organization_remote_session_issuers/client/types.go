@@ -248,6 +248,11 @@ type SetEMAProvidersRequestBody struct {
 	// Providers in the order they are tried, at most 10; each at most once. An
 	// empty list restores the derived default.
 	Providers []*EMAProviderInputRequestBody `form:"providers" json:"providers" xml:"providers"`
+	// The saved order the caller started from, empty for the default. When given
+	// and the saved order no longer matches it, nothing is written and the request
+	// fails with conflict, so a stale editor never overwrites another
+	// administrator's change. Omit to replace the order unconditionally.
+	ExpectedProviders []*EMAProviderInputRequestBody `form:"expected_providers,omitempty" json:"expected_providers,omitempty" xml:"expected_providers,omitempty"`
 }
 
 // FetchIssuerMetadataRequestBody is the type of the
@@ -3783,10 +3788,40 @@ type EMAServiceResponseBody struct {
 	// the newest acceptance across every binding in the organization.
 	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers,omitempty" json:"ema_providers,omitempty" xml:"ema_providers,omitempty"`
 	// Distinct live MCP servers whose identity chaining binding for this vendor
-	// has been turned on, in any state after setup.
+	// has been turned on, in any state after setup, including servers the caller
+	// cannot read.
 	ServerCount *int `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
-	// Of those, how many have a ready binding.
+	// Of those, how many have a ready binding, including servers the caller cannot
+	// read.
 	ReadyServerCount *int `form:"ready_server_count,omitempty" json:"ready_server_count,omitempty" xml:"ready_server_count,omitempty"`
+	// The counted servers the caller can read (mcp:read), ordered by project and
+	// name.
+	Servers []*EMAServiceServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+	// Counted servers the caller cannot read; they are not named.
+	HiddenServerCount *int `form:"hidden_server_count,omitempty" json:"hidden_server_count,omitempty" xml:"hidden_server_count,omitempty"`
+}
+
+// EMAServiceServerResponseBody is used to define fields on response body types.
+type EMAServiceServerResponseBody struct {
+	// The MCP server id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The MCP server name. Empty when it has none.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The MCP server slug. Empty when it has none.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The owning project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The owning project's slug.
+	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	// The owning project's name.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// working: on, and the vendor accepted an assertion for this server from a
+	// provider that can vouch now. not_proven: on, with no such acceptance yet.
+	// needs_attention: on but blocked, or no provider can vouch for it right now.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// When the vendor last accepted an assertion for this server from a provider
+	// that can vouch now. Omitted when never.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // NewCreateIssuerRequestBody builds the HTTP request body from the payload of
@@ -4014,6 +4049,16 @@ func NewSetEMAProvidersRequestBody(p *organizationremotesessionissuers.SetEMAPro
 		}
 	} else {
 		body.Providers = []*EMAProviderInputRequestBody{}
+	}
+	if p.ExpectedProviders != nil {
+		body.ExpectedProviders = make([]*EMAProviderInputRequestBody, len(p.ExpectedProviders))
+		for i, val := range p.ExpectedProviders {
+			if val == nil {
+				body.ExpectedProviders[i] = nil
+				continue
+			}
+			body.ExpectedProviders[i] = marshalTypesEMAProviderInputToEMAProviderInputRequestBody(val)
+		}
 	}
 	return body
 }
@@ -10887,6 +10932,12 @@ func ValidateEMAServiceResponseBody(body *EMAServiceResponseBody) (err error) {
 	if body.ReadyServerCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ready_server_count", "body"))
 	}
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	if body.HiddenServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("hidden_server_count", "body"))
+	}
 	if body.RemoteSessionIssuerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
 	}
@@ -10894,6 +10945,54 @@ func ValidateEMAServiceResponseBody(body *EMAServiceResponseBody) (err error) {
 		if err2 := ValidateEMAProviderOrderResponseBody(body.EmaProviders); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateEMAServiceServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateEMAServiceServerResponseBody runs the validations defined on
+// EMAServiceServerResponseBody
+func ValidateEMAServiceServerResponseBody(body *EMAServiceServerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ProjectSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_slug", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.ProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "working" || *body.Status == "not_proven" || *body.Status == "needs_attention") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"working", "not_proven", "needs_attention"}))
+		}
+	}
+	if body.LastAcceptedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_accepted_at", *body.LastAcceptedAt, goa.FormatDateTime))
 	}
 	return
 }

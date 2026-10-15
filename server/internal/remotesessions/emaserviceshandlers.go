@@ -3,7 +3,9 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,12 +24,38 @@ import (
 type emaService struct {
 	name     string
 	issuerID uuid.UUID
-	servers  map[uuid.UUID]struct{}
+	servers  map[uuid.UUID]*orgissuersgen.EMAServiceServer
 	ready    map[uuid.UUID]struct{}
 }
 
 func newEMAService() *emaService {
-	return &emaService{name: "", issuerID: uuid.Nil, servers: map[uuid.UUID]struct{}{}, ready: map[uuid.UUID]struct{}{}}
+	return &emaService{name: "", issuerID: uuid.Nil, servers: map[uuid.UUID]*orgissuersgen.EMAServiceServer{}, ready: map[uuid.UUID]struct{}{}}
+}
+
+// EMA server statuses, as the services view reports them.
+const (
+	emaServerWorking        = "working"
+	emaServerNotProven      = "not_proven"
+	emaServerNeedsAttention = "needs_attention"
+)
+
+// emaServerStatusRank orders statuses so a server with several bindings for
+// one vendor shows its best one.
+var emaServerStatusRank = map[string]int{emaServerNeedsAttention: 0, emaServerNotProven: 1, emaServerWorking: 2}
+
+// emaBindingTarget keys a binding's credentials.
+type emaBindingTarget struct {
+	projectID           uuid.UUID
+	userSessionIssuerID uuid.UUID
+	remoteIssuerID      uuid.UUID
+	resource            string
+}
+
+// emaEndpointOrderKey keys an endpoint's order: the sign-in decides its
+// external provider, the vendor its saved order.
+type emaEndpointOrderKey struct {
+	userSessionIssuerID uuid.UUID
+	vendor              string
 }
 
 // emaBindingSetUp reports whether a binding state means identity chaining was
@@ -52,7 +80,33 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list identity chaining bindings").LogError(ctx, logger)
 	}
+	bindingAcceptance, err := s.listEMABindingAcceptance(ctx, q, org)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list ema binding acceptance").LogError(ctx, logger)
+	}
+	// Speakeasy readiness depends only on the organization's issuer, so one
+	// check serves every vendor and endpoint in the request.
+	readiness := memoizedReadiness(s.speakeasyReadiness)
+	endpointOrders := map[emaEndpointOrderKey]EMAProviderOrder{}
+	endpointOrder := func(userSessionIssuerID uuid.UUID, vendor string) (EMAProviderOrder, error) {
+		key := emaEndpointOrderKey{userSessionIssuerID: userSessionIssuerID, vendor: vendor}
+		if order, ok := endpointOrders[key]; ok {
+			return order, nil
+		}
+		order, err := EndpointEMAProviders(ctx, q, org, userSessionIssuerID, vendor, s.speakeasySigningAvailable)
+		if err != nil {
+			return order, err
+		}
+		order, err = ApplyEMAProviderReadiness(ctx, org, order, readiness)
+		if err != nil {
+			logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err), attr.SlogOAuthIssuer(vendor))
+		}
+		endpointOrders[key] = order
+		return order, nil
+	}
+
 	services := map[string]*emaService{}
+	serverChecks := map[string]authz.Check{}
 	for _, row := range rows {
 		vendor, err := NormalizeVendorIssuer(row.Issuer)
 		if err != nil {
@@ -68,14 +122,33 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		if svc.issuerID == uuid.Nil {
 			svc.issuerID, svc.name = row.RemoteSessionIssuerID, row.Name
 		}
-		if !row.McpServerID.Valid {
+		if !row.McpServerID.Valid || !emaBindingSetUp(row.State) {
 			continue
 		}
-		if emaBindingSetUp(row.State) {
-			svc.servers[row.McpServerID.UUID] = struct{}{}
+		serverChecks[row.McpServerID.UUID.String()] = authz.MCPCheck(authz.ScopeMCPRead, mcpGrantResourceID(row.McpServerID.UUID, row.McpServerToolsetID), row.ProjectID.String())
+		server := &orgissuersgen.EMAServiceServer{
+			ID: row.McpServerID.UUID.String(), Name: row.McpServerName, Slug: row.McpServerSlug,
+			ProjectID: row.ProjectID.String(), ProjectSlug: row.ProjectSlug, ProjectName: row.ProjectName,
+			Status: emaServerNeedsAttention, LastAcceptedAt: nil,
 		}
-		if row.State == "ready" {
+		if row.State == PreparationStateReady {
 			svc.ready[row.McpServerID.UUID] = struct{}{}
+			order, err := endpointOrder(row.UserSessionIssuerID, vendor)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
+			}
+			target := emaBindingTarget{projectID: row.ProjectID, userSessionIssuerID: row.UserSessionIssuerID, remoteIssuerID: row.RemoteSessionIssuerID, resource: row.Resource}
+			switch at := ServingLastAccepted(order, bindingAcceptance[target]); {
+			case len(order.Available()) == 0:
+			case at != nil:
+				server.Status = emaServerWorking
+				server.LastAcceptedAt = conv.PtrEmpty(at.UTC().Format(time.RFC3339))
+			default:
+				server.Status = emaServerNotProven
+			}
+		}
+		if prev, ok := svc.servers[row.McpServerID.UUID]; !ok || emaServerStatusRank[server.Status] > emaServerStatusRank[prev.Status] {
+			svc.servers[row.McpServerID.UUID] = server
 		}
 	}
 	saved, err := q.ListEMAProviderVendors(ctx, org)
@@ -114,9 +187,35 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		vendors = append(vendors, vendor)
 	}
 	sort.Strings(vendors)
-	// Speakeasy readiness depends only on the organization's issuer, so one
-	// check serves every vendor in the request.
-	readiness := memoizedReadiness(s.speakeasyReadiness)
+
+	// One batched read check for every counted server, so a service never
+	// names a server the caller cannot read.
+	type candidate struct {
+		vendor string
+		server *orgissuersgen.EMAServiceServer
+	}
+	var candidates []candidate
+	var checks []authz.Check
+	for _, vendor := range vendors {
+		for _, server := range services[vendor].servers {
+			candidates = append(candidates, candidate{vendor: vendor, server: server})
+			checks = append(checks, serverChecks[server.ID])
+		}
+	}
+	readable, err := s.authz.FindMatched(ctx, checks)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check MCP server read access").LogError(ctx, logger)
+	}
+	listed := map[string][]*orgissuersgen.EMAServiceServer{}
+	hidden := map[string]int{}
+	for i, c := range candidates {
+		if !readable[i] {
+			hidden[c.vendor]++
+			continue
+		}
+		listed[c.vendor] = append(listed[c.vendor], c.server)
+	}
+
 	scope := EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: s.speakeasySigningAvailable}
 	items := make([]*orgissuersgen.EMAService, 0, len(vendors))
 	for _, vendor := range vendors {
@@ -130,6 +229,16 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		if err != nil {
 			logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err), attr.SlogOAuthIssuer(vendor))
 		}
+		servers := listed[vendor]
+		if servers == nil {
+			servers = []*orgissuersgen.EMAServiceServer{}
+		}
+		sort.SliceStable(servers, func(a, b int) bool {
+			if servers[a].ProjectName != servers[b].ProjectName {
+				return servers[a].ProjectName < servers[b].ProjectName
+			}
+			return servers[a].Name < servers[b].Name
+		})
 		item := &orgissuersgen.EMAService{
 			VendorIssuer:          vendor,
 			Name:                  svc.name,
@@ -137,6 +246,8 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 			EmaProviders:          EMAProviderOrderView(order),
 			ServerCount:           len(svc.servers),
 			ReadyServerCount:      len(svc.ready),
+			Servers:               servers,
+			HiddenServerCount:     hidden[vendor],
 		}
 		if svc.issuerID != uuid.Nil {
 			item.RemoteSessionIssuerID = conv.PtrEmpty(svc.issuerID.String())
@@ -144,6 +255,26 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		items = append(items, item)
 	}
 	return &orgissuersgen.ListEMAServicesResult{Items: items}, nil
+}
+
+// listEMABindingAcceptance reads every binding target's acceptance in the
+// organization, per provider.
+func (s *Service) listEMABindingAcceptance(ctx context.Context, q *repo.Queries, organizationID string) (map[emaBindingTarget]EMAVendorAcceptance, error) {
+	rows, err := q.ListEMABindingAcceptanceForOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("list ema binding acceptance: %w", err)
+	}
+	out := map[emaBindingTarget]EMAVendorAcceptance{}
+	for _, row := range rows {
+		target := emaBindingTarget{projectID: row.ProjectID.UUID, userSessionIssuerID: row.UserSessionIssuerID.UUID, remoteIssuerID: row.RemoteSessionIssuerID.UUID, resource: row.Resource}
+		accepted := out[target]
+		if accepted == nil {
+			accepted = EMAVendorAcceptance{}
+			out[target] = accepted
+		}
+		accepted.record(row.EmaProvider, row.ExternalIssuerID, row.InternalSessionIssuerID, row.LastAcceptedAt)
+	}
+	return out, nil
 }
 
 // memoizedReadiness answers each issuer's readiness once per request.

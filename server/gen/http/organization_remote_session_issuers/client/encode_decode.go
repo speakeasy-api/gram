@@ -3594,8 +3594,35 @@ func unmarshalEMAServiceResponseBodyToOrganizationremotesessionissuersEMAService
 		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
 		ServerCount:           *v.ServerCount,
 		ReadyServerCount:      *v.ReadyServerCount,
+		HiddenServerCount:     *v.HiddenServerCount,
 	}
 	res.EmaProviders = unmarshalEMAProviderOrderResponseBodyToTypesEMAProviderOrder(v.EmaProviders)
+	res.Servers = make([]*organizationremotesessionissuers.EMAServiceServer, len(v.Servers))
+	for i, val := range v.Servers {
+		if val == nil {
+			res.Servers[i] = nil
+			continue
+		}
+		res.Servers[i] = unmarshalEMAServiceServerResponseBodyToOrganizationremotesessionissuersEMAServiceServer(val)
+	}
+
+	return res
+}
+
+// unmarshalEMAServiceServerResponseBodyToOrganizationremotesessionissuersEMAServiceServer
+// builds a value of type *organizationremotesessionissuers.EMAServiceServer
+// from a value of type *EMAServiceServerResponseBody.
+func unmarshalEMAServiceServerResponseBodyToOrganizationremotesessionissuersEMAServiceServer(v *EMAServiceServerResponseBody) *organizationremotesessionissuers.EMAServiceServer {
+	res := &organizationremotesessionissuers.EMAServiceServer{
+		ID:             *v.ID,
+		Name:           *v.Name,
+		Slug:           *v.Slug,
+		ProjectID:      *v.ProjectID,
+		ProjectSlug:    *v.ProjectSlug,
+		ProjectName:    *v.ProjectName,
+		Status:         *v.Status,
+		LastAcceptedAt: v.LastAcceptedAt,
+	}
 
 	return res
 }

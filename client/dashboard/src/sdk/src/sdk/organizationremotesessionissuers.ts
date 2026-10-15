@@ -260,7 +260,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * listEMAServices organizationRemoteSessionIssuers
    *
    * @remarks
-   * List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and how many MCP servers chain through it. Requires org:read.
+   * List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and the MCP servers that chain through it: counts include every server, the list only those the caller has mcp:read on. Requires org:read.
    */
   async listEMAServices(
     request?: ListOrganizationRemoteSessionIssuerEMAServicesRequest | undefined,
@@ -340,7 +340,7 @@ export class OrganizationRemoteSessionIssuers extends ClientSDK {
    * setEMAProviders organizationRemoteSessionIssuers
    *
    * @remarks
-   * Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization's Speakeasy issuer when it has one. Identity chaining moves to the next provider after any failure, so a saved order that lists Speakeasy after an external issuer lets Speakeasy vouch when that issuer refuses someone. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.
+   * Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: an endpoint whose sign-in trusts an external issuer uses that issuer alone, and one that trusts none uses the organization's Speakeasy issuer when it has one. Identity chaining moves to the next provider after any failure, so a saved order that lists Speakeasy after an external issuer lets Speakeasy vouch when that issuer refuses someone. The order applies organization-wide to every issuer with the same canonical issuer URL. With expected_providers, the write happens only while the saved order still matches it. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.
    */
   async setEMAProviders(
     request: SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
