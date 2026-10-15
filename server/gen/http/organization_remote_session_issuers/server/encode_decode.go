@@ -2449,44 +2449,23 @@ func EncodeSetEMAProvidersError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
-// EncodeAddSpeakeasyEMAProviderResponse returns an encoder for responses
-// returned by the organizationRemoteSessionIssuers addSpeakeasyEMAProvider
-// endpoint.
-func EncodeAddSpeakeasyEMAProviderResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListEMAServicesResponse returns an encoder for responses returned by
+// the organizationRemoteSessionIssuers listEMAServices endpoint.
+func EncodeListEMAServicesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*types.EMAProviderOrder)
+		res, _ := v.(*organizationremotesessionissuers.ListEMAServicesResult)
 		enc := encoder(ctx, w)
-		body := NewAddSpeakeasyEMAProviderResponseBody(res)
+		body := NewListEMAServicesResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeAddSpeakeasyEMAProviderRequest returns a decoder for requests sent to
-// the organizationRemoteSessionIssuers addSpeakeasyEMAProvider endpoint.
-func DecodeAddSpeakeasyEMAProviderRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload, error) {
-	return func(r *http.Request) (*organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload, error) {
-		var payload *organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload
-		var (
-			body AddSpeakeasyEMAProviderRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidateAddSpeakeasyEMAProviderRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
-
+// DecodeListEMAServicesRequest returns a decoder for requests sent to the
+// organizationRemoteSessionIssuers listEMAServices endpoint.
+func DecodeListEMAServicesRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*organizationremotesessionissuers.ListEMAServicesPayload, error) {
+	return func(r *http.Request) (*organizationremotesessionissuers.ListEMAServicesPayload, error) {
+		var payload *organizationremotesessionissuers.ListEMAServicesPayload
 		var (
 			sessionToken *string
 		)
@@ -2494,7 +2473,7 @@ func DecodeAddSpeakeasyEMAProviderRequest(mux goahttp.Muxer, decoder func(*http.
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewAddSpeakeasyEMAProviderPayload(&body, sessionToken)
+		payload = NewListEMAServicesPayload(sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2507,9 +2486,9 @@ func DecodeAddSpeakeasyEMAProviderRequest(mux goahttp.Muxer, decoder func(*http.
 	}
 }
 
-// EncodeAddSpeakeasyEMAProviderError returns an encoder for errors returned by
-// the addSpeakeasyEMAProvider organizationRemoteSessionIssuers endpoint.
-func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListEMAServicesError returns an encoder for errors returned by the
+// listEMAServices organizationRemoteSessionIssuers endpoint.
+func EncodeListEMAServicesError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2526,7 +2505,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderUnauthorizedResponseBody(res)
+				body = NewListEMAServicesUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -2540,7 +2519,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderForbiddenResponseBody(res)
+				body = NewListEMAServicesForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -2554,7 +2533,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderBadRequestResponseBody(res)
+				body = NewListEMAServicesBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -2568,7 +2547,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderNotFoundResponseBody(res)
+				body = NewListEMAServicesNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -2582,7 +2561,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderConflictResponseBody(res)
+				body = NewListEMAServicesConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -2596,7 +2575,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderUnsupportedMediaResponseBody(res)
+				body = NewListEMAServicesUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -2610,7 +2589,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderInvalidResponseBody(res)
+				body = NewListEMAServicesInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -2624,7 +2603,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderInvariantViolationResponseBody(res)
+				body = NewListEMAServicesInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2638,7 +2617,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderUnexpectedResponseBody(res)
+				body = NewListEMAServicesUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -2652,7 +2631,7 @@ func EncodeAddSpeakeasyEMAProviderError(encoder func(context.Context, http.Respo
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewAddSpeakeasyEMAProviderGatewayErrorResponseBody(res)
+				body = NewListEMAServicesGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -3149,6 +3128,7 @@ func marshalTypesEMAProviderToEMAProviderResponseBody(v *types.EMAProvider) *EMA
 		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
 		InternalSessionIssuerID: v.InternalSessionIssuerID,
 		UnavailableReason:       v.UnavailableReason,
+		LastAcceptedAt:          v.LastAcceptedAt,
 	}
 
 	return res
@@ -3334,6 +3314,24 @@ func unmarshalEMAProviderInputRequestBodyToTypesEMAProviderInput(v *EMAProviderI
 	res := &types.EMAProviderInput{
 		Kind:                  *v.Kind,
 		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
+	}
+
+	return res
+}
+
+// marshalOrganizationremotesessionissuersEMAServiceToEMAServiceResponseBody
+// builds a value of type *EMAServiceResponseBody from a value of type
+// *organizationremotesessionissuers.EMAService.
+func marshalOrganizationremotesessionissuersEMAServiceToEMAServiceResponseBody(v *organizationremotesessionissuers.EMAService) *EMAServiceResponseBody {
+	res := &EMAServiceResponseBody{
+		VendorIssuer:          v.VendorIssuer,
+		Name:                  v.Name,
+		RemoteSessionIssuerID: v.RemoteSessionIssuerID,
+		ServerCount:           v.ServerCount,
+		ReadyServerCount:      v.ReadyServerCount,
+	}
+	if v.EmaProviders != nil {
+		res.EmaProviders = marshalTypesEMAProviderOrderToEMAProviderOrderResponseBody(v.EmaProviders)
 	}
 
 	return res

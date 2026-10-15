@@ -3580,31 +3580,6 @@ func (q *Queries) GetEMAProjectOrganization(ctx context.Context, projectID uuid.
 	return organization_id, err
 }
 
-const getEMASpeakeasyUserIssuer = `-- name: GetEMASpeakeasyUserIssuer :one
-SELECT trusted_remote_session_issuer_id, trusted_remote_session_client_id
-FROM user_session_issuers
-WHERE id = $1 AND organization_id = $2 AND project_id IS NULL
-  AND deleted IS FALSE
-`
-
-type GetEMASpeakeasyUserIssuerParams struct {
-	ID             uuid.UUID
-	OrganizationID pgtype.Text
-}
-
-type GetEMASpeakeasyUserIssuerRow struct {
-	TrustedRemoteSessionIssuerID uuid.NullUUID
-	TrustedRemoteSessionClientID uuid.NullUUID
-}
-
-// An organization user session issuer and its external identity provider trust.
-func (q *Queries) GetEMASpeakeasyUserIssuer(ctx context.Context, arg GetEMASpeakeasyUserIssuerParams) (GetEMASpeakeasyUserIssuerRow, error) {
-	row := q.db.QueryRow(ctx, getEMASpeakeasyUserIssuer, arg.ID, arg.OrganizationID)
-	var i GetEMASpeakeasyUserIssuerRow
-	err := row.Scan(&i.TrustedRemoteSessionIssuerID, &i.TrustedRemoteSessionClientID)
-	return i, err
-}
-
 const getGlobalRemoteSessionClientByID = `-- name: GetGlobalRemoteSessionClientByID :one
 SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
@@ -6746,6 +6721,95 @@ func (q *Queries) ListEMAChainingResourceCandidates(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listEMACredentialLastAccepted = `-- name: ListEMACredentialLastAccepted :many
+SELECT ema_provider, MAX(updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials
+WHERE organization_id = $1::text AND project_id = $2::uuid
+  AND user_session_issuer_id = $3::uuid
+  AND remote_session_issuer_id = $4::uuid
+  AND resource = $5::text
+  AND deleted IS FALSE AND access_token_encrypted IS NOT NULL
+GROUP BY ema_provider
+`
+
+type ListEMACredentialLastAcceptedParams struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+}
+
+type ListEMACredentialLastAcceptedRow struct {
+	EmaProvider    string
+	LastAcceptedAt pgtype.Timestamptz
+}
+
+// Status only: when the vendor last accepted an assertion from each provider
+// for a binding target, from its newest live cached credential.
+func (q *Queries) ListEMACredentialLastAccepted(ctx context.Context, arg ListEMACredentialLastAcceptedParams) ([]ListEMACredentialLastAcceptedRow, error) {
+	rows, err := q.db.Query(ctx, listEMACredentialLastAccepted,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMACredentialLastAcceptedRow
+	for rows.Next() {
+		var i ListEMACredentialLastAcceptedRow
+		if err := rows.Scan(&i.EmaProvider, &i.LastAcceptedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMACredentialLastAcceptedByOrganization = `-- name: ListEMACredentialLastAcceptedByOrganization :many
+SELECT i.issuer, c.ema_provider, MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id
+WHERE c.organization_id = $1::text
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY i.issuer, c.ema_provider
+`
+
+type ListEMACredentialLastAcceptedByOrganizationRow struct {
+	Issuer         string
+	EmaProvider    string
+	LastAcceptedAt pgtype.Timestamptz
+}
+
+// Status only: when each vendor last accepted an assertion from each provider,
+// across every binding in the organization, from live cached credentials.
+func (q *Queries) ListEMACredentialLastAcceptedByOrganization(ctx context.Context, organizationID string) ([]ListEMACredentialLastAcceptedByOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listEMACredentialLastAcceptedByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMACredentialLastAcceptedByOrganizationRow
+	for rows.Next() {
+		var i ListEMACredentialLastAcceptedByOrganizationRow
+		if err := rows.Scan(&i.Issuer, &i.EmaProvider, &i.LastAcceptedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEMACredentialsFixture = `-- name: ListEMACredentialsFixture :many
 SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at
 FROM remote_session_ema_credentials
@@ -6832,46 +6896,6 @@ func (q *Queries) ListEMAExternalProviderCandidates(ctx context.Context, organiz
 	return items, nil
 }
 
-const listEMAExternalReadyBindingIssuers = `-- name: ListEMAExternalReadyBindingIssuers :many
-SELECT DISTINCT r.issuer
-FROM remote_session_ema_bindings AS b
-JOIN user_session_issuers AS u
-  ON u.id = b.user_session_issuer_id
- AND u.organization_id = b.organization_id
- AND u.project_id IS NULL
- AND u.deleted IS FALSE
-JOIN remote_session_issuers AS r
-  ON r.id = b.remote_session_issuer_id
- AND (r.organization_id = b.organization_id OR r.organization_id IS NULL)
- AND r.deleted IS FALSE
-WHERE b.organization_id = $1
-  AND b.state = 'ready'
-  AND u.trusted_remote_session_issuer_id IS NOT NULL
-  AND u.trusted_remote_session_client_id IS NOT NULL
-`
-
-// Vendor issuer URLs that some endpoint reaches through a ready binding whose
-// organization user session issuer trusts an external identity provider.
-func (q *Queries) ListEMAExternalReadyBindingIssuers(ctx context.Context, organizationID string) ([]string, error) {
-	rows, err := q.db.Query(ctx, listEMAExternalReadyBindingIssuers, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var issuer string
-		if err := rows.Scan(&issuer); err != nil {
-			return nil, err
-		}
-		items = append(items, issuer)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listEMAIssuerPurgeCredentialsFixture = `-- name: ListEMAIssuerPurgeCredentialsFixture :many
 SELECT ema_provider, deleted, access_token_encrypted
 FROM remote_session_ema_credentials
@@ -6899,6 +6923,34 @@ func (q *Queries) ListEMAIssuerPurgeCredentialsFixture(ctx context.Context, proj
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAProviderVendors = `-- name: ListEMAProviderVendors :many
+SELECT DISTINCT vendor_issuer
+FROM remote_session_ema_providers
+WHERE organization_id = $1::text AND deleted IS FALSE
+ORDER BY vendor_issuer
+`
+
+// Vendors with a saved provider order, whether or not a binding names them.
+func (q *Queries) ListEMAProviderVendors(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listEMAProviderVendors, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var vendor_issuer string
+		if err := rows.Scan(&vendor_issuer); err != nil {
+			return nil, err
+		}
+		items = append(items, vendor_issuer)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -6959,6 +7011,51 @@ func (q *Queries) ListEMAProviders(ctx context.Context, arg ListEMAProvidersPara
 			&i.Position,
 			&i.ProviderDeleted,
 			&i.ProviderDisabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAServiceBindings = `-- name: ListEMAServiceBindings :many
+SELECT b.remote_session_issuer_id, i.issuer, COALESCE(i.name, '')::text AS name,
+  (i.project_id IS NULL)::boolean AS issuer_is_organization_level,
+  COALESCE(b.state, '')::text AS state
+FROM remote_session_ema_bindings b
+JOIN remote_session_issuers i ON i.id = b.remote_session_issuer_id AND i.deleted IS FALSE
+WHERE b.organization_id = $1::text
+`
+
+type ListEMAServiceBindingsRow struct {
+	RemoteSessionIssuerID     uuid.UUID
+	Issuer                    string
+	Name                      string
+	IssuerIsOrganizationLevel bool
+	State                     string
+}
+
+// Status only: every identity chaining binding in the organization with the
+// vendor issuer record it names, for the organization's services view.
+func (q *Queries) ListEMAServiceBindings(ctx context.Context, organizationID string) ([]ListEMAServiceBindingsRow, error) {
+	rows, err := q.db.Query(ctx, listEMAServiceBindings, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAServiceBindingsRow
+	for rows.Next() {
+		var i ListEMAServiceBindingsRow
+		if err := rows.Scan(
+			&i.RemoteSessionIssuerID,
+			&i.Issuer,
+			&i.Name,
+			&i.IssuerIsOrganizationLevel,
+			&i.State,
 		); err != nil {
 			return nil, err
 		}
@@ -11160,6 +11257,54 @@ func (q *Queries) OktaIdentityProviderConnectionReferencesIssuer(ctx context.Con
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const plantEMACredentialFixture = `-- name: PlantEMACredentialFixture :one
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
+  resource, subject_urn, client_selection, ema_provider, access_token_encrypted, access_expires_at, updated_at, deleted_at
+)
+VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7, 'binding', $8::text,
+  CASE WHEN $9::boolean THEN NULL ELSE 'encrypted-fixture' END,
+  clock_timestamp() + interval '1 hour', $10::timestamptz,
+  CASE WHEN $9::boolean THEN clock_timestamp() ELSE NULL END
+)
+RETURNING id
+`
+
+type PlantEMACredentialFixtureParams struct {
+	OrganizationID        pgtype.Text
+	ProjectID             uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
+	Resource              string
+	SubjectUrn            string
+	EmaProvider           string
+	Retired               bool
+	UpdatedAt             pgtype.Timestamptz
+}
+
+// TEST FIXTURE ONLY. A cached credential slot for either provider, live or
+// retired, without the rows a real publish references.
+func (q *Queries) PlantEMACredentialFixture(ctx context.Context, arg PlantEMACredentialFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, plantEMACredentialFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.RemoteSessionClientID,
+		arg.Resource,
+		arg.SubjectUrn,
+		arg.EmaProvider,
+		arg.Retired,
+		arg.UpdatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const plantSpeakeasyEMACredentialFixture = `-- name: PlantSpeakeasyEMACredentialFixture :one

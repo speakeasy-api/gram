@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  EMAProviderOrder,
-  EMAProviderOrder$inboundSchema,
-} from "../models/components/emaproviderorder.js";
+  ListEMAServicesResult,
+  ListEMAServicesResult$inboundSchema,
+} from "../models/components/listemaservicesresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,29 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  AddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderRequest,
-  AddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderRequest$outboundSchema,
-  AddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderSecurity,
-} from "../models/operations/addorganizationremotesessionissuerspeakeasyemaprovider.js";
+  ListOrganizationRemoteSessionIssuerEMAServicesRequest,
+  ListOrganizationRemoteSessionIssuerEMAServicesRequest$outboundSchema,
+  ListOrganizationRemoteSessionIssuerEMAServicesSecurity,
+} from "../models/operations/listorganizationremotesessionissueremaservices.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * addSpeakeasyEMAProvider organizationRemoteSessionIssuers
+ * listEMAServices organizationRemoteSessionIssuers
  *
  * @remarks
- * Append the organization's Speakeasy issuer to the EMA provider order for the vendor authorization server this issuer names, for one organization user session issuer that trusts no external identity provider. Existing entries are never removed or reordered, and a vendor whose order already names Speakeasy is left unchanged. A vendor with no saved order is refused while another endpoint holds a ready identity chaining binding to it through an external identity provider, since saving any order would replace that endpoint's default. dry_run runs every check without saving. Requires org:admin and the ema-providers rollout. Not available from support or impersonated sessions.
+ * List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and how many MCP servers chain through it. Requires org:read.
  */
-export function organizationRemoteSessionIssuersAddSpeakeasyEMAProvider(
+export function organizationRemoteSessionIssuersListEMAServices(
   client: GramCore,
-  request: AddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderRequest,
-  security?:
-    | AddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderSecurity
-    | undefined,
+  request?: ListOrganizationRemoteSessionIssuerEMAServicesRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuerEMAServicesSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    EMAProviderOrder,
+    ListEMAServicesResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -75,15 +73,13 @@ export function organizationRemoteSessionIssuersAddSpeakeasyEMAProvider(
 
 async function $do(
   client: GramCore,
-  request: AddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderRequest,
-  security?:
-    | AddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderSecurity
-    | undefined,
+  request?: ListOrganizationRemoteSessionIssuerEMAServicesRequest | undefined,
+  security?: ListOrganizationRemoteSessionIssuerEMAServicesSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      EMAProviderOrder,
+      ListEMAServicesResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -101,7 +97,9 @@ async function $do(
     request,
     (value) =>
       z.parse(
-        AddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderRequest$outboundSchema,
+        z.optional(
+          ListOrganizationRemoteSessionIssuerEMAServicesRequest$outboundSchema,
+        ),
         value,
       ),
     "Input validation failed",
@@ -110,18 +108,15 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.AddSpeakeasyEMAProviderRequestBody, {
-    explode: true,
-  });
+  const body = null;
 
   const path = pathToFunc(
-    "/rpc/organizationRemoteSessionIssuers.addSpeakeasyEMAProvider",
+    "/rpc/organizationRemoteSessionIssuers.listEMAServices",
   )();
 
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -140,7 +135,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider",
+    operationID: "listOrganizationRemoteSessionIssuerEMAServices",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -154,7 +149,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -184,7 +179,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    EMAProviderOrder,
+    ListEMAServicesResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -195,7 +190,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, EMAProviderOrder$inboundSchema),
+    M.json(200, ListEMAServicesResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

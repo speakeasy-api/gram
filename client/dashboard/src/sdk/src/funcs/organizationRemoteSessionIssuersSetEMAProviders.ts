@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * setEMAProviders organizationRemoteSessionIssuers
  *
  * @remarks
- * Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint's configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.
+ * Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: the endpoint's trusted external issuer, then the organization's Speakeasy issuer when it has one. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.
  */
 export function organizationRemoteSessionIssuersSetEMAProviders(
   client: GramCore,

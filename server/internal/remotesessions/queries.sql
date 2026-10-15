@@ -5190,6 +5190,22 @@ VALUES (
 )
 RETURNING id;
 
+-- name: PlantEMACredentialFixture :one
+-- TEST FIXTURE ONLY. A cached credential slot for either provider, live or
+-- retired, without the rows a real publish references.
+INSERT INTO remote_session_ema_credentials (
+  organization_id, project_id, user_session_issuer_id, remote_session_issuer_id, remote_session_client_id,
+  resource, subject_urn, client_selection, ema_provider, access_token_encrypted, access_expires_at, updated_at, deleted_at
+)
+VALUES (
+  @organization_id, @project_id, @user_session_issuer_id, @remote_session_issuer_id, @remote_session_client_id,
+  @resource, @subject_urn, 'binding', @ema_provider::text,
+  CASE WHEN @retired::boolean THEN NULL ELSE 'encrypted-fixture' END,
+  clock_timestamp() + interval '1 hour', @updated_at::timestamptz,
+  CASE WHEN @retired::boolean THEN clock_timestamp() ELSE NULL END
+)
+RETURNING id;
+
 -- name: ListEMACredentialsFixture :many
 -- TEST FIXTURE ONLY. Every credential slot in a project, live and retired.
 SELECT id, deleted, access_token_encrypted, ema_binding_generation, subject_urn, updated_at
@@ -5319,32 +5335,6 @@ WHERE r.organization_id = @organization_id
   AND r.project_id IS NULL
   AND r.deleted IS FALSE
 ORDER BY r.created_at, r.id;
-
--- name: GetEMASpeakeasyUserIssuer :one
--- An organization user session issuer and its external identity provider trust.
-SELECT trusted_remote_session_issuer_id, trusted_remote_session_client_id
-FROM user_session_issuers
-WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL
-  AND deleted IS FALSE;
-
--- name: ListEMAExternalReadyBindingIssuers :many
--- Vendor issuer URLs that some endpoint reaches through a ready binding whose
--- organization user session issuer trusts an external identity provider.
-SELECT DISTINCT r.issuer
-FROM remote_session_ema_bindings AS b
-JOIN user_session_issuers AS u
-  ON u.id = b.user_session_issuer_id
- AND u.organization_id = b.organization_id
- AND u.project_id IS NULL
- AND u.deleted IS FALSE
-JOIN remote_session_issuers AS r
-  ON r.id = b.remote_session_issuer_id
- AND (r.organization_id = b.organization_id OR r.organization_id IS NULL)
- AND r.deleted IS FALSE
-WHERE b.organization_id = @organization_id
-  AND b.state = 'ready'
-  AND u.trusted_remote_session_issuer_id IS NOT NULL
-  AND u.trusted_remote_session_client_id IS NOT NULL;
 
 -- name: GetEMAInternalSessionIssuer :one
 -- The organization's live internal session issuer, and whether it is off.
@@ -5534,6 +5524,45 @@ WHERE c.organization_id = @organization_id AND c.project_id = @project_id
   AND s.deleted IS FALSE AND s.refresh_expires_at > clock_timestamp()
 ORDER BY c.updated_at DESC, c.id DESC
 LIMIT 1;
+
+-- name: ListEMACredentialLastAccepted :many
+-- Status only: when the vendor last accepted an assertion from each provider
+-- for a binding target, from its newest live cached credential.
+SELECT ema_provider, MAX(updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials
+WHERE organization_id = @organization_id::text AND project_id = @project_id::uuid
+  AND user_session_issuer_id = @user_session_issuer_id::uuid
+  AND remote_session_issuer_id = @remote_session_issuer_id::uuid
+  AND resource = @resource::text
+  AND deleted IS FALSE AND access_token_encrypted IS NOT NULL
+GROUP BY ema_provider;
+
+-- name: ListEMAServiceBindings :many
+-- Status only: every identity chaining binding in the organization with the
+-- vendor issuer record it names, for the organization's services view.
+SELECT b.remote_session_issuer_id, i.issuer, COALESCE(i.name, '')::text AS name,
+  (i.project_id IS NULL)::boolean AS issuer_is_organization_level,
+  COALESCE(b.state, '')::text AS state
+FROM remote_session_ema_bindings b
+JOIN remote_session_issuers i ON i.id = b.remote_session_issuer_id AND i.deleted IS FALSE
+WHERE b.organization_id = @organization_id::text;
+
+-- name: ListEMAProviderVendors :many
+-- Vendors with a saved provider order, whether or not a binding names them.
+SELECT DISTINCT vendor_issuer
+FROM remote_session_ema_providers
+WHERE organization_id = @organization_id::text AND deleted IS FALSE
+ORDER BY vendor_issuer;
+
+-- name: ListEMACredentialLastAcceptedByOrganization :many
+-- Status only: when each vendor last accepted an assertion from each provider,
+-- across every binding in the organization, from live cached credentials.
+SELECT i.issuer, c.ema_provider, MAX(c.updated_at)::timestamptz AS last_accepted_at
+FROM remote_session_ema_credentials c
+JOIN remote_session_issuers i ON i.id = c.remote_session_issuer_id
+WHERE c.organization_id = @organization_id::text
+  AND c.deleted IS FALSE AND c.access_token_encrypted IS NOT NULL
+GROUP BY i.issuer, c.ema_provider;
 
 -- name: RetireLegacyEMACredentialSlot :exec
 -- Only while remote_session_ema_credentials_subject_key still exists: it allows

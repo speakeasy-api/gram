@@ -27,14 +27,14 @@ type Client struct {
 	GetIssuerMigratePreflightEndpoint   goa.Endpoint
 	MigrateIssuerEndpoint               goa.Endpoint
 	SetEMAProvidersEndpoint             goa.Endpoint
-	AddSpeakeasyEMAProviderEndpoint     goa.Endpoint
+	ListEMAServicesEndpoint             goa.Endpoint
 	FetchIssuerMetadataEndpoint         goa.Endpoint
 	RefreshIssuerMetadataEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "organizationRemoteSessionIssuers" service client
 // given the endpoints.
-func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, getIssuerDuplicatePreflight, updateIssuer, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer, setEMAProviders, addSpeakeasyEMAProvider, fetchIssuerMetadata, refreshIssuerMetadata goa.Endpoint) *Client {
+func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, getIssuerDuplicatePreflight, updateIssuer, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer, setEMAProviders, listEMAServices, fetchIssuerMetadata, refreshIssuerMetadata goa.Endpoint) *Client {
 	return &Client{
 		CreateIssuerEndpoint:                createIssuer,
 		ListIssuersEndpoint:                 listIssuers,
@@ -47,7 +47,7 @@ func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, g
 		GetIssuerMigratePreflightEndpoint:   getIssuerMigratePreflight,
 		MigrateIssuerEndpoint:               migrateIssuer,
 		SetEMAProvidersEndpoint:             setEMAProviders,
-		AddSpeakeasyEMAProviderEndpoint:     addSpeakeasyEMAProvider,
+		ListEMAServicesEndpoint:             listEMAServices,
 		FetchIssuerMetadataEndpoint:         fetchIssuerMetadata,
 		RefreshIssuerMetadataEndpoint:       refreshIssuerMetadata,
 	}
@@ -302,9 +302,9 @@ func (c *Client) SetEMAProviders(ctx context.Context, p *SetEMAProvidersPayload)
 	return ires.(*types.EMAProviderOrder), nil
 }
 
-// AddSpeakeasyEMAProvider calls the "addSpeakeasyEMAProvider" endpoint of the
+// ListEMAServices calls the "listEMAServices" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-// AddSpeakeasyEMAProvider may return the following errors:
+// ListEMAServices may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -316,13 +316,13 @@ func (c *Client) SetEMAProviders(ctx context.Context, p *SetEMAProvidersPayload)
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) AddSpeakeasyEMAProvider(ctx context.Context, p *AddSpeakeasyEMAProviderPayload) (res *types.EMAProviderOrder, err error) {
+func (c *Client) ListEMAServices(ctx context.Context, p *ListEMAServicesPayload) (res *ListEMAServicesResult, err error) {
 	var ires any
-	ires, err = c.AddSpeakeasyEMAProviderEndpoint(ctx, p)
+	ires, err = c.ListEMAServicesEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*types.EMAProviderOrder), nil
+	return ires.(*ListEMAServicesResult), nil
 }
 
 // FetchIssuerMetadata calls the "fetchIssuerMetadata" endpoint of the

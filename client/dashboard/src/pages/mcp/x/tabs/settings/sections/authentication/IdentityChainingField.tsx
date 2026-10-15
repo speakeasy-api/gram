@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
@@ -25,20 +25,32 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
-import { useOrganization, useProject, useSession } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
+import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useProtectedResourceMetadata } from "@/lib/remote-identity/queries/useProtectedResourceMetadata";
-import { identityProvidersHref } from "@/pages/org/identity-provider/tabs";
+import {
+  acceptanceLabel,
+  providerView,
+  serviceName,
+  trustInstruction,
+  type ProviderView,
+} from "@/pages/org/identity-provider/services/emaServiceView";
+import {
+  emaServiceHref,
+  identityProvidersHref,
+  oktaViewHref,
+  speakeasyProviderHref,
+} from "@/pages/org/identity-provider/tabs";
 import { useOrgRoutes } from "@/routes";
-import type { EMAProvider } from "@gram/client/models/components/emaprovider.js";
 import type { IdentityChainingPreparation } from "@gram/client/models/components/identitychainingpreparation.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useAddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderMutation } from "@gram/client/react-query/addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider.js";
 import {
   useRemoteSessionClientsPrepareEMAMutation,
   type RemoteSessionClientsPrepareEMAMutationVariables,
@@ -48,11 +60,8 @@ import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remo
 import { buildRemoteSessionClientsReadEMAMutation } from "@gram/client/react-query/remoteSessionClientsReadEMA.js";
 import { useRemoteSessionClientsUnlinkEMAMutation } from "@gram/client/react-query/remoteSessionClientsUnlinkEMA.js";
 
-import { useSpeakeasyAppendCheck } from "./useSpeakeasyAppendCheck";
-import {
-  trustsExternalIdp,
-  type ChainingProviders,
-} from "./identityChainingGate";
+import { MCP_SESSIONS_SECTION_ID } from "../RemoteMcpSessionsSection";
+import { type ChainingProviders } from "./identityChainingGate";
 import {
   chainingBound,
   chainingGrantDeclaration,
@@ -68,31 +77,28 @@ import {
 } from "./identityChainingScopes";
 
 type ChainingState = IdentityChainingPreparation["state"];
-type BadgeVariant = NonNullable<BadgeProps["variant"]>;
+type Tone = NonNullable<BadgeProps["variant"]>;
 
-function stateBadge(state: ChainingState): {
-  label: string;
-  variant: BadgeVariant;
-} {
+function stateBadge(state: ChainingState): { label: string; variant: Tone } {
   switch (state) {
     case "ready":
-      return { label: "Enabled", variant: "success" };
+      return { label: "On", variant: "success" };
     case "unlinked":
-      return { label: "Not enabled", variant: "neutral" };
+      return { label: "Off", variant: "neutral" };
     case "in_progress":
-      return { label: "In progress", variant: "information" };
+      return { label: "Setting up", variant: "information" };
     case "published_acceptance_unverified":
-      return { label: "Published, unverified", variant: "information" };
+      return { label: "Published, not verified", variant: "information" };
     case "configuration_required":
-      return { label: "Configuration required", variant: "warning" };
+      return { label: "Needs configuration", variant: "warning" };
     case "manual_setup_required":
-      return { label: "Manual setup required", variant: "warning" };
+      return { label: "Needs manual setup", variant: "warning" };
     case "unknown_grants":
       return { label: "Grants unknown", variant: "warning" };
     case "incomplete_metadata":
       return { label: "Incomplete metadata", variant: "warning" };
     case "indeterminate":
-      return { label: "Indeterminate", variant: "warning" };
+      return { label: "Couldn’t tell", variant: "warning" };
     case "transient_failure":
       return { label: "Temporary failure", variant: "warning" };
     case "unsupported_profile":
@@ -102,12 +108,21 @@ function stateBadge(state: ChainingState): {
   }
 }
 
-/** A server refusal as a sentence. */
-function sentence(message: string): string {
-  const text = message.trim();
-  if (!text) return text;
-  const capitalized = text[0]!.toUpperCase() + text.slice(1);
-  return /[.!?]$/.test(capitalized) ? capitalized : `${capitalized}.`;
+const DOT_FOR: Record<Tone, string> = {
+  success: "bg-[var(--fill-success-default)]",
+  warning: "bg-[var(--fill-warning-default)]",
+  destructive: "bg-[var(--fill-destructive-default)]",
+  information: "bg-[var(--fill-information-default)]",
+  neutral: "bg-muted-foreground/40",
+};
+
+function StatusDot({ tone }: { tone: Tone }): JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("size-2 shrink-0 rounded-full", DOT_FOR[tone])}
+    />
+  );
 }
 
 function ClientPicker({
@@ -123,7 +138,7 @@ function ClientPicker({
 }): JSX.Element {
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger>
+      <SelectTrigger className="max-w-md">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -137,12 +152,52 @@ function ClientPicker({
   );
 }
 
+/**
+ * One link in the chain that gets a person from their sign-in to the
+ * service: who it is, whether it holds, and where to fix it.
+ */
+function ChainLink({
+  label,
+  tone,
+  children,
+}: {
+  label: string;
+  tone: Tone;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <li className="grid items-start gap-x-6 gap-y-2 px-6 py-4 sm:grid-cols-[170px_minmax(0,1fr)]">
+      <div className="flex items-center gap-2 sm:pt-0.5">
+        <StatusDot tone={tone} />
+        <span className="text-eyebrow">{label}</span>
+      </div>
+      <div className="min-w-0 space-y-2">{children}</div>
+    </li>
+  );
+}
+
+function SettingsLink({
+  to,
+  children,
+}: {
+  to: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <Link
+      className="text-muted-foreground text-sm underline underline-offset-4"
+      to={to}
+    >
+      {children}
+    </Link>
+  );
+}
+
 /** Rendered only for an organization issuer that an identity provider or Speakeasy can vouch for. */
 export function IdentityChainingField({
   userSessionIssuer,
   providers,
   speakeasyIssuerUrl,
-  speakeasyEnabled = false,
   linkedClients,
   resource,
   remoteMcpServerId,
@@ -151,8 +206,6 @@ export function IdentityChainingField({
   providers: ChainingProviders;
   /** Speakeasy's issuer URL, which vendors trust for Speakeasy-signed grants. */
   speakeasyIssuerUrl?: string;
-  /** Speakeasy's issuer is turned on and can sign. */
-  speakeasyEnabled?: boolean;
   linkedClients: RemoteSessionClient[];
   /** The remote MCP server URL; the executor matches it exactly. */
   resource: string;
@@ -217,24 +270,13 @@ export function IdentityChainingField({
     chainingBound(read.data) && read.data?.clientId !== selected?.id;
   const bound = chainingBound(read.data) && !switchingClient;
   const storedScopes = bound && read.data ? read.data.scopes : [];
-  const activeScopes = bound
+  // The connection's scopes are edited in Identity; chaining has no list of its own.
+  const scopes = bound
     ? sanitizeChainingScopes(storedScopes)
     : defaultChainingScopes(selected?.scope);
-  // The connection's scopes are edited in Identity; chaining has no list of its own.
-  const scopes = activeScopes;
   const scopesValid =
     selected != null && chainingScopesAllowed(scopes, selected.scope);
   const [confirmDisable, setConfirmDisable] = useState(false);
-  const trustedIssuerQuery = useRemoteSessionIssuer(
-    { id: userSessionIssuer.trustedRemoteSessionIssuerId ?? "" },
-    undefined,
-    {
-      enabled:
-        providers.external && !!userSessionIssuer.trustedRemoteSessionIssuerId,
-      throwOnError: false,
-      retry: false,
-    },
-  );
 
   const vendorIssuer = useRemoteSessionIssuer(
     { id: picked?.remoteSessionIssuerId ?? "" },
@@ -259,68 +301,15 @@ export function IdentityChainingField({
 
   const onSettled = () => void read.refetch();
 
-  // A sign-in that trusts no external identity provider can only be vouched
-  // for by Speakeasy, so enabling also puts Speakeasy in the vendor's order.
-  const speakeasyOnly =
-    providers.speakeasy && !trustsExternalIdp(userSessionIssuer);
-  const session = useSession();
   const orgRoutes = useOrgRoutes();
-  const order = read.data?.emaProviders;
-  const speakeasyInOrder =
-    !!order &&
-    !order.isDefault &&
-    order.providers.some((provider) => provider.kind === "speakeasy");
-  const needsSpeakeasy = speakeasyOnly && !!order && !speakeasyInOrder;
-  const orgAdmin = hasScope("org:admin", organization.id);
-  const supportSession =
-    session.organizationOverride || !!session.impersonatorEmail;
-  const canAddSpeakeasy =
-    needsSpeakeasy && speakeasyEnabled && orgAdmin && !supportSession;
-  const appendTarget = picked && {
-    remoteSessionIssuerId: picked.remoteSessionIssuerId,
-    userSessionIssuerId: userSessionIssuer.id,
-  };
-  const appendCheck = useSpeakeasyAppendCheck(
-    appendTarget ?? { remoteSessionIssuerId: "", userSessionIssuerId: "" },
-    canAddSpeakeasy && !!appendTarget && !read.isFetching,
-  );
-  const addSpeakeasy =
-    useAddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderMutation({
-      onError: () => undefined,
-    });
-  const identitySettingsHref = `${orgRoutes.identity.href()}${identityProvidersHref()}`;
-  let speakeasyBlock: {
-    reason: string;
-    link?: { href: string; label: string };
-  } | null = null;
-  if (speakeasyOnly && !speakeasyEnabled)
-    speakeasyBlock = {
-      reason: "Turn on Speakeasy’s issuer first.",
-      link: {
-        href: identitySettingsHref,
-        label: "Speakeasy identity provider",
-      },
-    };
-  else if (needsSpeakeasy && !orgAdmin)
-    speakeasyBlock = {
-      reason:
-        "An organization admin needs to add Speakeasy for this vendor first.",
-    };
-  else if (needsSpeakeasy && supportSession)
-    speakeasyBlock = {
-      reason:
-        "The provider order can’t be changed from a support or impersonated session.",
-    };
-  else if (needsSpeakeasy && appendCheck.isError)
-    speakeasyBlock = { reason: sentence(appendCheck.error.message) };
-  const speakeasyChecking =
-    canAddSpeakeasy && (appendCheck.isFetching || !appendCheck.isSuccess);
+  const identityHref = (search: string) =>
+    `${orgRoutes.identity.href()}${search}`;
   const prepare = useRemoteSessionClientsPrepareEMAMutation({
     onSuccess: (result) => {
       if (!preparationSucceeded(result)) {
         setPrepareOutcome(result);
         toast.warning(
-          `Identity chaining isn’t on: ${stateBadge(result.state).label}`,
+          `Enterprise Managed Authorization isn’t on: ${stateBadge(result.state).label}`,
         );
         return;
       }
@@ -328,18 +317,66 @@ export function IdentityChainingField({
       // Declared grants are written onto the client row.
       void invalidateAllRemoteSessionClients(queryClient);
       setGrantsConfirmed(false);
-      toast.success("Identity chaining is on");
+      toast.success("Enterprise Managed Authorization is on");
     },
     onError: () => undefined,
     onSettled,
   });
   const unlink = useRemoteSessionClientsUnlinkEMAMutation({
     onSuccess: () => {
-      toast.success("Identity chaining is off");
+      toast.success("Enterprise Managed Authorization is off");
     },
     onError: () => undefined,
     onSettled,
   });
+
+  // Who can vouch for people on this server follows from its sign-in and the
+  // organization's Speakeasy issuer; nothing is chosen here.
+  const order = read.data?.emaProviders;
+  const listed = (order?.providers ?? []).filter(
+    (provider) =>
+      provider.kind === "speakeasy" || !!provider.remoteSessionIssuerId,
+  );
+  const usable = listed.filter((provider) => !provider.unavailableReason);
+  const trustedIssuerId = userSessionIssuer.trustedRemoteSessionIssuerId;
+  const issuers = useRemoteSessionIssuersByIds([
+    ...(trustedIssuerId ? [trustedIssuerId] : []),
+    ...listed.flatMap((provider) =>
+      provider.kind === "external" &&
+      provider.remoteSessionIssuerId &&
+      provider.remoteSessionIssuerId !== trustedIssuerId
+        ? [provider.remoteSessionIssuerId]
+        : [],
+    ),
+  ]);
+  const issuerById = (id: string | undefined) =>
+    issuers.items.find((issuer) => issuer.id === id);
+  const vendor = serviceName(vendorIssuer.data?.name, resource);
+  const signIn = {
+    name: trustedIssuerId
+      ? issuerName(issuerById(trustedIssuerId))
+      : "Speakeasy’s own sign-in",
+    slug: userSessionIssuer.slug,
+  };
+  // An identity provider this sign-in doesn't use is just noise here; the
+  // sign-in line already says why. Speakeasy stays listed: it can be set up.
+  const vouchers = listed
+    .map((provider) =>
+      providerView(provider, {
+        issuer: issuerById(provider.remoteSessionIssuerId),
+        speakeasyIssuerUrl,
+      }),
+    )
+    .filter((row) => !row.unusedBySignIn);
+  const usableVouchers = vouchers.filter((row) => row.usable);
+  const trusts = usableVouchers.filter(
+    (row): row is ProviderView & { issuerUrl: string } => !!row.issuerUrl,
+  );
+  const noneUsable = !!order && usable.length === 0;
+  const lastAccepted = usable
+    .map((provider) => provider.lastAcceptedAt)
+    .filter((at): at is Date => at != null)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
 
   const enable = () => {
     if (
@@ -348,7 +385,8 @@ export function IdentityChainingField({
       !read.data ||
       !scopesValid ||
       !grantDeclaration ||
-      publicClient
+      publicClient ||
+      noneUsable
     )
       return;
     if (grantsBlocked || (needsGrantConfirm && !grantsConfirmed)) return;
@@ -367,43 +405,7 @@ export function IdentityChainingField({
         },
       },
     };
-    if (!needsSpeakeasy) {
-      prepare.mutate(prepareRequest);
-      return;
-    }
-    // Add first: a failed prepare leaves Speakeasy in the order, which is
-    // harmless and makes a retry's add a no-op.
-    if (!appendTarget || speakeasyBlock) return;
-    addSpeakeasy.mutate(
-      {
-        request: {
-          addSpeakeasyEMAProviderRequestBody: {
-            ...appendTarget,
-            dryRun: false,
-          },
-        },
-      },
-      { onSuccess: () => prepare.mutate(prepareRequest) },
-    );
-  };
-  const appendSpeakeasy = () => {
-    if (!appendTarget || speakeasyBlock) return;
-    addSpeakeasy.mutate(
-      {
-        request: {
-          addSpeakeasyEMAProviderRequestBody: {
-            ...appendTarget,
-            dryRun: false,
-          },
-        },
-      },
-      {
-        onSuccess: () => {
-          toast.success("Speakeasy added to the provider order");
-        },
-        onSettled,
-      },
-    );
+    prepare.mutate(prepareRequest);
   };
   const disable = () => {
     if (!target || !read.data) return;
@@ -422,48 +424,17 @@ export function IdentityChainingField({
     );
   };
 
-  const pending =
-    read.isFetching ||
-    prepare.isPending ||
-    unlink.isPending ||
-    addSpeakeasy.isPending;
+  const pending = read.isFetching || prepare.isPending || unlink.isPending;
   const ready = bound && read.data?.state === "ready";
   const shownState = read.data ? displayedChainingState(read.data) : null;
   const canUnlink = chainingUnlinkable(read.data);
   const enableBlocked =
-    !!speakeasyBlock ||
-    (needsSpeakeasy && speakeasyChecking) ||
+    noneUsable ||
     publicClient ||
     !scopesValid ||
     grantsBlocked ||
     (needsGrantConfirm && !grantsConfirmed);
 
-  const vendor = vendorName(vendorIssuer.data?.name, resource);
-  // Providers this server can use, in the order identity chaining tries them.
-  const usable = (order?.providers ?? []).filter(
-    (provider) =>
-      !provider.unavailableReason &&
-      (provider.kind === "speakeasy" || !!provider.remoteSessionIssuerId),
-  );
-  const issuerNames = useRemoteSessionIssuersByIds(
-    usable.flatMap((provider) =>
-      provider.kind === "external" && provider.remoteSessionIssuerId
-        ? [provider.remoteSessionIssuerId]
-        : [],
-    ),
-  );
-  function providerName(provider: EMAProvider): string {
-    if (provider.kind === "speakeasy") return "Speakeasy";
-    return (
-      issuerNames.items.find(
-        (issuer) => issuer.id === provider.remoteSessionIssuerId,
-      )?.name || "Identity provider"
-    );
-  }
-  const providerNames =
-    usable.length > 0
-      ? usable.map(providerName)
-      : [speakeasyOnly ? "Speakeasy" : "Identity provider"];
   const status = chainingStatus({
     loading: read.isPending,
     ready,
@@ -471,32 +442,12 @@ export function IdentityChainingField({
     off:
       !prepareOutcome &&
       (!read.data || shownState === "unlinked" || switchingClient),
-    stalled: ready && (needsSpeakeasy || (!!order && usable.length === 0)),
+    stalled: ready && noneUsable,
+    lastAccepted,
     state: prepareOutcome?.state ?? shownState,
     remediation: prepareOutcome?.remediation ?? read.data?.remediation,
     vendor,
-    stalledDetail: needsSpeakeasy
-      ? "Speakeasy isn’t in this vendor’s provider order, so identity chaining can’t run."
-      : "None of the sign-ins this vendor accepts can be used by this server right now.",
   });
-  const blockers = [
-    !ready && speakeasyBlock ? speakeasyBlock : null,
-    ready && needsSpeakeasy && speakeasyBlock ? speakeasyBlock : null,
-    publicClient && selected
-      ? {
-          reason: `Client ${selected.clientId} is a public client. Identity chaining needs a confidential client that authenticates to the provider’s token endpoint.`,
-        }
-      : null,
-    !publicClient && grantsBlocked
-      ? {
-          reason:
-            "This client belongs to the organization. An organization admin must confirm its grants first.",
-        }
-      : null,
-  ].filter((b): b is NonNullable<typeof b> => b !== null);
-  const setupIssuer = speakeasyOnly
-    ? speakeasyIssuerUrl
-    : trustedIssuerQuery.data?.issuer;
 
   if (candidates.length === 0) {
     return (
@@ -510,44 +461,31 @@ export function IdentityChainingField({
     );
   }
 
+  const clientTone: Tone =
+    publicClient || grantsBlocked
+      ? "warning"
+      : needsGrantConfirm && !ready
+        ? "information"
+        : "success";
+
   return (
     <>
       <SettingsSection.Body>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1 space-y-1">
             <span className="flex items-center gap-2">
-              <span
-                aria-hidden="true"
-                className={cn("size-2 shrink-0 rounded-full", status.dot)}
-              />
+              <StatusDot tone={status.tone} />
               <Text className="font-medium">{status.title}</Text>
+              {status.aside && (
+                <Text muted small className="ml-auto">
+                  {status.aside}
+                </Text>
+              )}
             </span>
             {status.detail && (
               <Text muted small className="block">
                 {status.detail}
               </Text>
-            )}
-            {ready && !status.stalled && (
-              <ol
-                aria-label="Identity providers"
-                className="flex flex-wrap items-center gap-2 pt-1"
-              >
-                {providerNames.map((name, index) => (
-                  <li
-                    key={`${name}-${index}`}
-                    className="flex items-center gap-2"
-                  >
-                    {index > 0 && (
-                      <Text muted small aria-hidden="true">
-                        then
-                      </Text>
-                    )}
-                    <span className="border-border bg-muted/40 border px-2 py-0.5 text-sm">
-                      {name}
-                    </span>
-                  </li>
-                ))}
-              </ol>
             )}
           </div>
           <RequireScope
@@ -556,15 +494,6 @@ export function IdentityChainingField({
             level="component"
           >
             <div className="flex items-center gap-2">
-              {ready && needsSpeakeasy && canAddSpeakeasy && (
-                <Button
-                  size="sm"
-                  disabled={pending || speakeasyChecking || !!speakeasyBlock}
-                  onClick={appendSpeakeasy}
-                >
-                  Add Speakeasy
-                </Button>
-              )}
               {!ready && (
                 <Button
                   size="sm"
@@ -587,112 +516,249 @@ export function IdentityChainingField({
             </div>
           </RequireScope>
         </div>
-        {blockers.map((blocker) => (
-          <Text key={blocker.reason} muted small className="block">
-            {blocker.reason}
-            {blocker.link && (
-              <>
-                {" "}
-                <Link
-                  className="underline underline-offset-4"
-                  to={blocker.link.href}
-                >
-                  {blocker.link.label}
-                </Link>
-              </>
-            )}
-          </Text>
-        ))}
-        {switchingClient && (
-          <Text muted small className="block">
-            Identity chaining uses client{" "}
-            {boundClient?.clientId ?? read.data?.externalClientId}. Using this
-            client instead replaces it.
-          </Text>
-        )}
-        {!ready &&
-          !publicClient &&
-          needsGrantConfirm &&
-          !grantsBlocked &&
-          grantDeclaration &&
-          selected && (
-            <RequireScope
-              scope="project:write"
-              resourceId={project.id}
-              level="component"
-            >
-              <label className="flex items-start gap-2">
-                <Checkbox
-                  className="mt-0.5"
-                  checked={grantsConfirmed}
-                  disabled={pending}
-                  onCheckedChange={(next) => setGrantsConfirmed(next === true)}
-                />
-                <Text small>
-                  {cimd
-                    ? "Publish these grants in the client's metadata document: "
-                    : `Declare that client ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
-                  {grantDeclaration.grants.join(", ")}
-                </Text>
-              </label>
-            </RequireScope>
-          )}
-        <ApiErrorAlert
-          error={
-            read.error ?? addSpeakeasy.error ?? prepare.error ?? unlink.error
-          }
-        />
+        <ApiErrorAlert error={read.error ?? prepare.error ?? unlink.error} />
       </SettingsSection.Body>
 
-      {!ready && !read.isPending && (
-        <div className="border-border space-y-2 border-t px-6 py-5">
-          <Text small className="block font-medium">
-            Set up {vendor} first
-          </Text>
-          <Text muted small className="block">
-            {speakeasyOnly
-              ? `In ${vendor}’s admin settings, turn on enterprise-managed authentication and trust Speakeasy’s issuer. Speakeasy can’t do this step for you.`
-              : `In ${vendor}’s admin settings, turn on enterprise-managed authentication and trust your identity provider’s issuer. Speakeasy can’t do this step for you.`}
-          </Text>
-          {setupIssuer && (
-            <div className="max-w-2xl">
-              <CopyableValue label="issuer URL" value={setupIssuer} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {candidates.length > 1 && (
-        <Collapsible className="border-border border-t">
-          <CollapsibleTrigger className="group hover:bg-muted/40 flex w-full items-center gap-3 px-6 py-4 text-left">
-            <ChevronDown
-              aria-hidden="true"
-              className="size-4 transition-transform group-data-[state=open]:rotate-180"
-            />
-            <Text small className="font-medium">
-              Client
+      <ol
+        aria-label="How people get in"
+        className="border-border divide-border divide-y border-t"
+      >
+        <ChainLink label="Sign-in" tone="success">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <Text small>
+              {signIn.name}
+              <Text muted small as="span">
+                {" "}
+                ({signIn.slug})
+              </Text>
             </Text>
-            <Text muted small className="truncate">
+            <SettingsLink to={`#${MCP_SESSIONS_SECTION_ID}`}>
+              Change in Sessions
+            </SettingsLink>
+          </div>
+        </ChainLink>
+
+        <ChainLink
+          label="Vouched for by"
+          tone={usableVouchers.length > 0 ? "success" : "warning"}
+        >
+          {!order ? (
+            <Text muted small>
+              Checking…
+            </Text>
+          ) : vouchers.length === 0 ? (
+            <Text small>
+              Nobody yet.{" "}
+              <Link
+                className="underline underline-offset-4"
+                to={identityHref(identityProvidersHref())}
+              >
+                Set up Speakeasy as an identity provider
+              </Link>
+              , or have people sign in through an identity provider you’ve
+              connected.
+            </Text>
+          ) : (
+            <ul aria-label="Identity providers" className="space-y-1">
+              {vouchers.map((row) => {
+                const position = usableVouchers.indexOf(row);
+                return (
+                  <li
+                    key={row.key}
+                    className="flex flex-wrap items-baseline gap-x-2"
+                  >
+                    <Text
+                      small
+                      className={cn(
+                        "font-medium",
+                        !row.usable && "text-muted-foreground",
+                      )}
+                    >
+                      {row.name}
+                    </Text>
+                    <Text muted small>
+                      {row.usable
+                        ? row.kind === "speakeasy"
+                          ? "for everyone who signs in to this server"
+                          : `for people who signed in with ${row.name}`
+                        : row.unavailable}
+                      {row.usable &&
+                        usableVouchers.length > 1 &&
+                        (position === 0 ? " · tried first" : " · then")}
+                    </Text>
+                    {row.fix && (
+                      <SettingsLink
+                        to={identityHref(
+                          row.fix === "speakeasy"
+                            ? speakeasyProviderHref()
+                            : oktaViewHref("setup"),
+                        )}
+                      >
+                        {row.fix === "speakeasy"
+                          ? "Speakeasy identity provider"
+                          : "Okta"}
+                      </SettingsLink>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {!ready && noneUsable && (
+            <Text muted small className="block">
+              No identity provider can vouch for people on this server yet.
+            </Text>
+          )}
+        </ChainLink>
+
+        <ChainLink
+          label={`${vendor} trusts`}
+          tone={
+            trusts.length === 0
+              ? "neutral"
+              : trusts.some((row) => row.lastAcceptedAt)
+                ? "success"
+                : ready
+                  ? "warning"
+                  : "neutral"
+          }
+        >
+          {!order ? (
+            <Text muted small>
+              Checking…
+            </Text>
+          ) : trusts.length === 0 ? (
+            <Text muted small>
+              Nothing to set up at {vendor} until an identity provider can
+              vouch.
+            </Text>
+          ) : (
+            <>
+              {trusts.some((row) => !row.lastAcceptedAt) && (
+                <Text muted small className="block">
+                  {trustInstruction(vendor)}
+                </Text>
+              )}
+              <ul aria-label={`${vendor} trusts`} className="space-y-3">
+                {trusts.map((row) => (
+                  <li key={row.key} className="space-y-2">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <Text small className="font-medium">
+                        {row.name}
+                      </Text>
+                      <Text muted small>
+                        {acceptanceLabel(row.lastAcceptedAt)}
+                      </Text>
+                    </div>
+                    {row.lastAcceptedAt ? (
+                      <Collapsible>
+                        <CollapsibleTrigger className="group text-muted-foreground flex items-center gap-1 text-sm underline underline-offset-4">
+                          <ChevronDown
+                            aria-hidden="true"
+                            className="size-3.5 transition-transform group-data-[state=open]:rotate-180"
+                          />
+                          Issuer URL
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pt-2">
+                          <div className="max-w-2xl">
+                            <CopyableValue
+                              label={`${row.name}’s issuer URL`}
+                              value={row.issuerUrl}
+                            />
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ) : (
+                      <div className="max-w-2xl">
+                        <CopyableValue
+                          label={`${row.name}’s issuer URL`}
+                          value={row.issuerUrl}
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {order && (
+            <SettingsLink to={identityHref(emaServiceHref(order.vendorIssuer))}>
+              Every server that reaches {vendor}
+            </SettingsLink>
+          )}
+        </ChainLink>
+
+        <ChainLink label="Client" tone={clientTone}>
+          {candidates.length > 1 ? (
+            <ClientPicker
+              clients={candidates}
+              value={selected?.id ?? ""}
+              onChange={setSelectedId}
+              disabled={prepare.isPending || unlink.isPending}
+            />
+          ) : (
+            <Text small className="truncate">
               {selected?.clientId}
             </Text>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="px-6 pt-1 pb-6">
-            <div className="max-w-md">
-              <ClientPicker
-                clients={candidates}
-                value={selected?.id ?? ""}
-                onChange={setSelectedId}
-                disabled={prepare.isPending || unlink.isPending}
-              />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
+          )}
+          {switchingClient && (
+            <Text muted small className="block">
+              Enterprise Managed Authorization uses client{" "}
+              {boundClient?.clientId ?? read.data?.externalClientId}. Using this
+              client instead replaces it.
+            </Text>
+          )}
+          {publicClient && selected && (
+            <Text muted small className="block">
+              Client {selected.clientId} is a public client. Enterprise Managed
+              Authorization needs a confidential client that authenticates to
+              the provider’s token endpoint.
+            </Text>
+          )}
+          {!publicClient && grantsBlocked && (
+            <Text muted small className="block">
+              This client belongs to the organization. An organization admin
+              must confirm its grants first.
+            </Text>
+          )}
+          {!ready &&
+            !publicClient &&
+            needsGrantConfirm &&
+            !grantsBlocked &&
+            grantDeclaration &&
+            selected && (
+              <RequireScope
+                scope="project:write"
+                resourceId={project.id}
+                level="component"
+              >
+                <label className="flex items-start gap-2">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={grantsConfirmed}
+                    disabled={pending}
+                    onCheckedChange={(next) =>
+                      setGrantsConfirmed(next === true)
+                    }
+                  />
+                  <Text small>
+                    {cimd
+                      ? "Publish these grants in the client's metadata document: "
+                      : `Declare that client ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
+                    {grantDeclaration.grants.join(", ")}
+                  </Text>
+                </label>
+              </RequireScope>
+            )}
+        </ChainLink>
+      </ol>
 
       <Dialog open={confirmDisable} onOpenChange={setConfirmDisable}>
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
-            <Dialog.Title>Turn off identity chaining?</Dialog.Title>
+            <Dialog.Title>
+              Turn off Enterprise Managed Authorization?
+            </Dialog.Title>
             <Dialog.Description>
               People will connect {vendor} themselves the next time they use
               this server.
@@ -720,67 +786,60 @@ export function IdentityChainingField({
   );
 }
 
-const DOT_FOR: Record<NonNullable<BadgeProps["variant"]>, string> = {
-  success: "bg-[var(--fill-success-default)]",
-  warning: "bg-[var(--fill-warning-default)]",
-  destructive: "bg-[var(--fill-destructive-default)]",
-  information: "bg-[var(--fill-information-default)]",
-  neutral: "bg-muted-foreground/40",
-};
+function issuerName(issuer: RemoteSessionIssuer | undefined): string {
+  return issuer?.name?.trim() || "Identity provider";
+}
 
 function chainingStatus({
   loading,
   ready,
   off,
   stalled,
+  lastAccepted,
   state,
   remediation,
   vendor,
-  stalledDetail,
 }: {
   loading: boolean;
   ready: boolean;
   off: boolean;
   stalled: boolean;
+  lastAccepted: Date | undefined;
   state: ChainingState | null;
   remediation: string | undefined;
   vendor: string;
-  stalledDetail: string;
-}): { title: string; detail?: string; dot: string; stalled?: boolean } {
-  if (loading) return { title: "Checking…", dot: DOT_FOR.neutral };
+}): { title: string; detail?: string; aside?: string; tone: Tone } {
+  if (loading) return { title: "Checking…", tone: "neutral" };
   if (stalled)
     return {
       title: "On, but not running",
-      detail: stalledDetail,
-      dot: DOT_FOR.warning,
-      stalled: true,
+      detail:
+        "No identity provider can vouch for people on this server right now.",
+      tone: "warning",
+    };
+  if (ready && lastAccepted)
+    return {
+      title: "Working",
+      detail: `People reach ${vendor} through their sign-in.`,
+      aside: `${vendor} accepted a sign-in ${formatRelativeTime(lastAccepted)}`,
+      tone: "success",
     };
   if (ready)
     return {
-      title: "On",
-      detail: `People can authenticate to ${vendor} with these identity providers:`,
-      dot: DOT_FOR.success,
+      title: "On, not proven yet",
+      detail: `Speakeasy’s side is set up. It starts working once ${vendor} trusts an identity provider below and someone connects through this server. Try it from your MCP client.`,
+      tone: "warning",
     };
   if (off || !state)
     return {
       title: "Off",
       detail: `People connect ${vendor} themselves the first time they use this server.`,
-      dot: DOT_FOR.neutral,
+      tone: "neutral",
     };
   const badge = stateBadge(state);
   return {
     title: badge.label,
     detail: remediation?.trim() || undefined,
-    dot: DOT_FOR[badge.variant] ?? DOT_FOR.neutral,
+    tone: badge.variant,
   };
-}
-
-/** The vendor's display name, else the host its MCP server runs on. */
-function vendorName(name: string | undefined, resource: string): string {
-  if (name?.trim()) return name.trim();
-  try {
-    return new URL(resource).host;
-  } catch {
-    return "the vendor";
-  }
 }

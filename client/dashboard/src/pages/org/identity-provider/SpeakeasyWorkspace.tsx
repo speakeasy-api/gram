@@ -20,6 +20,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Heading } from "@/components/ui/Heading";
 import { SkeletonParagraph } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { TrustedByServices } from "./services/TrustedByServices";
 import { IssuerUri } from "./SpeakeasyProviderCard";
 import { ISSUER_STATE_BADGE, KEY_STATE_BADGE } from "./speakeasyIssuerView";
 import { identityProvidersHref } from "./tabs";
@@ -213,8 +214,8 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                     RFC 7523
                   </a>
                   . It never changes, even when signing keys are replaced.
-                  Registering it alone changes nothing: also turn on identity
-                  chaining in the MCP server's Settings → Identity chaining.
+                  Registering it alone changes nothing: also turn on Enterprise
+                  Managed Authorization in the MCP server's Settings.
                 </SettingsSection.Description>
               </SettingsSection.Header>
               <SettingsSection.Panel>
@@ -224,6 +225,8 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
               </SettingsSection.Panel>
             </SettingsSection>
           )}
+
+          {issuer.issuer && <TrustedByServices providerKey="speakeasy" />}
 
           {issuer.issuer && (
             <SettingsSection id="signing-keys">

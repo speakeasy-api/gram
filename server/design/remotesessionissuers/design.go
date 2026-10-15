@@ -546,7 +546,7 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 	})
 
 	Method("setEMAProviders", func() {
-		Description("Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint's configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.")
+		Description("Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint's authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: the endpoint's trusted external issuer, then the organization's Speakeasy issuer when it has one. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.")
 
 		Security(security.Session)
 
@@ -556,7 +556,7 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 			})
 			// The handler enforces the 10-provider limit; Goa's length error
 			// would print the decoded entries as Go pointers.
-			Attribute("providers", ArrayOf(shared.EMAProviderInput), "Providers in the order they are tried, at most 10; each at most once. An empty list restores the external default.")
+			Attribute("providers", ArrayOf(shared.EMAProviderInput), "Providers in the order they are tried, at most 10; each at most once. An empty list restores the derived default.")
 			Required("remote_session_issuer_id", "providers")
 			security.SessionPayload()
 		})
@@ -574,36 +574,26 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetOrganizationRemoteSessionIssuerEMAProviders"}`)
 	})
 
-	Method("addSpeakeasyEMAProvider", func() {
-		Description("Append the organization's Speakeasy issuer to the EMA provider order for the vendor authorization server this issuer names, for one organization user session issuer that trusts no external identity provider. Existing entries are never removed or reordered, and a vendor whose order already names Speakeasy is left unchanged. A vendor with no saved order is refused while another endpoint holds a ready identity chaining binding to it through an external identity provider, since saving any order would replace that endpoint's default. dry_run runs every check without saving. Requires org:admin and the ema-providers rollout. Not available from support or impersonated sessions.")
+	Method("listEMAServices", func() {
+		Description("List every service identity chaining reaches in the caller's organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and how many MCP servers chain through it. Requires org:read.")
 
 		Security(security.Session)
 
 		Payload(func() {
-			Attribute("remote_session_issuer_id", String, "Any remote_session_issuer in the caller's organization that names the vendor authorization server.", func() {
-				Format(FormatUUID)
-			})
-			Attribute("user_session_issuer_id", String, "The organization user session issuer Speakeasy vouches for. It must trust no external identity provider.", func() {
-				Format(FormatUUID)
-			})
-			Attribute("dry_run", Boolean, "Check without saving.", func() {
-				Default(false)
-			})
-			Required("remote_session_issuer_id", "user_session_issuer_id")
 			security.SessionPayload()
 		})
 
-		Result(shared.EMAProviderOrder)
+		Result(ListEMAServicesResult)
 
 		HTTP(func() {
-			POST("/rpc/organizationRemoteSessionIssuers.addSpeakeasyEMAProvider")
+			GET("/rpc/organizationRemoteSessionIssuers.listEMAServices")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider")
-		Meta("openapi:extension:x-speakeasy-name-override", "addSpeakeasyEMAProvider")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOrganizationRemoteSessionIssuerSpeakeasyEMAProvider"}`)
+		Meta("openapi:operationId", "listOrganizationRemoteSessionIssuerEMAServices")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEMAServices")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuerEMAServices"}`)
 	})
 
 	Method("fetchIssuerMetadata", func() {

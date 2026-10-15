@@ -41,6 +41,11 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ setQueryData: mocks.setData }),
 }));
+vi.mock("./services/TrustedByServices", () => ({
+  TrustedByServices: ({ providerKey }: { providerKey: string }) => (
+    <div>Trusted by: {providerKey}</div>
+  ),
+}));
 vi.mock("./useEnterpriseIssuer", () => ({
   enterpriseIssuerQueryKey: (organizationId: string) => [
     "@gram/client",
@@ -515,6 +520,12 @@ describe("Speakeasy identity provider page", () => {
     expect(keys.getByText("Active")).toBeTruthy();
     expect(keys.getByText("Pending")).toBeTruthy();
     expect(screen.getByText(/2 withdrawn keys/)).toBeTruthy();
+  });
+
+  it("shows which services trust the issuer once it exists", () => {
+    mocks.issuer = enabledIssuer;
+    show();
+    expect(screen.getByText("Trusted by: speakeasy")).toBeTruthy();
   });
 
   it("links back to all identity providers", () => {

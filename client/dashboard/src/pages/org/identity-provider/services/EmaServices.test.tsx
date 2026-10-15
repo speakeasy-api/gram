@@ -1,0 +1,124 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { EmaServices } from "./EmaServices";
+import type { ServiceRow } from "./useEmaServices";
+
+const mocks = vi.hoisted(() => ({
+  rows: [] as unknown[],
+  isPending: false,
+  isError: false,
+  isFetching: false,
+  refetch: vi.fn(),
+}));
+vi.mock("./useEmaServices", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./useEmaServices")>()),
+  useEmaServices: () => mocks,
+}));
+
+const linear: ServiceRow = {
+  key: "https://linear.example.com",
+  vendorIssuer: "https://linear.example.com",
+  name: "Linear",
+  remoteSessionIssuerId: "vendor",
+  isDefaultOrder: true,
+  providers: [
+    {
+      key: "external-trusted",
+      kind: "external",
+      name: "Identity provider",
+      usable: true,
+      unavailable: "",
+      unusedBySignIn: false,
+    },
+    {
+      key: "speakeasy",
+      kind: "speakeasy",
+      name: "Speakeasy",
+      issuerUrl: "https://speakeasy.example.com/issuer",
+      usable: true,
+      unavailable: "",
+      lastAcceptedAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      unusedBySignIn: false,
+    },
+  ],
+  serverCount: 3,
+  readyServerCount: 2,
+};
+
+function show() {
+  render(
+    <MemoryRouter>
+      <EmaServices />
+    </MemoryRouter>,
+  );
+}
+
+beforeEach(() => {
+  mocks.rows = [];
+  mocks.isPending = false;
+  mocks.isError = false;
+});
+afterEach(cleanup);
+
+describe("Services", () => {
+  it("explains the once-per-service step and leads with the first action when empty", () => {
+    show();
+    expect(screen.getByRole("heading", { name: "Services" })).toBeTruthy();
+    expect(screen.getByText(/once per service/)).toBeTruthy();
+    expect(screen.getByText("No services yet")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Turn on Enterprise Managed Authorization on an MCP server/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows each service with who it trusts and how many servers reach it", () => {
+    mocks.rows = [linear];
+    show();
+    expect(screen.getByText("Linear")).toBeTruthy();
+    expect(screen.getByText("https://linear.example.com")).toBeTruthy();
+    const providers = within(
+      screen.getByRole("list", { name: "Linear identity providers" }),
+    ).getAllByRole("listitem");
+    expect(providers.map((item) => item.textContent)).toEqual([
+      "SpeakeasyLast worked 3h ago",
+    ]);
+    expect(screen.getByText("3 servers · 2 ready")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Manage" }).getAttribute("href"),
+    ).toBe("/?tab=identity-providers&service=https%3A%2F%2Flinear.example.com");
+  });
+
+  it("says why an identity provider can't vouch, in the row", () => {
+    mocks.rows = [
+      {
+        ...linear,
+        providers: [
+          {
+            key: "speakeasy",
+            kind: "speakeasy",
+            name: "Speakeasy",
+            usable: false,
+            unavailable: "Can’t sign right now",
+            fix: "speakeasy",
+            unusedBySignIn: false,
+          },
+        ],
+        serverCount: 0,
+        readyServerCount: 0,
+      },
+    ];
+    show();
+    expect(screen.getByText("Can’t sign right now")).toBeTruthy();
+    expect(screen.getByText("None yet")).toBeTruthy();
+  });
+
+  it("offers a retry when the list fails to load", () => {
+    mocks.isError = true;
+    show();
+    screen.getByRole("button", { name: "Retry" }).click();
+    expect(mocks.refetch).toHaveBeenCalled();
+  });
+});

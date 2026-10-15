@@ -2,6 +2,8 @@ package remotesessionissuers
 
 import (
 	. "goa.design/goa/v3/dsl"
+
+	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
 // Org-admin types — the read/aggregate shapes that power the organization
@@ -108,4 +110,28 @@ var MigrateOrganizationRemoteSessionIssuerResult = Type("MigrateOrganizationRemo
 	Attribute("source_deleted", Boolean, "TRUE when the source issuer was soft-deleted.")
 
 	Required("issuer", "clients_migrated", "source_deleted")
+})
+
+// EMAService is one service identity chaining reaches in the organization.
+var EMAService = Type("EMAService", func() {
+	Description("One service identity chaining reaches in the organization: a vendor authorization server, the identity providers that can vouch for people to it with whether the vendor has accepted each, and the MCP servers that chain through it.")
+
+	Attribute("vendor_issuer", String, "The vendor authorization server issuer, canonicalized.")
+	Attribute("name", String, "The vendor's display name, from an issuer record that names it. Empty when none has one.")
+	Attribute("remote_session_issuer_id", String, "An issuer record in the organization that names this vendor, for setEMAProviders. Omitted when only a saved order names the vendor.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("ema_providers", shared.EMAProviderOrder, "The organization-wide provider order. Each provider's last_accepted_at is the newest acceptance across every binding in the organization.")
+	Attribute("server_count", Int, "MCP servers with identity chaining turned on for this vendor, in any state after setup.")
+	Attribute("ready_server_count", Int, "Of those, how many are ready.")
+
+	Required("vendor_issuer", "name", "ema_providers", "server_count", "ready_server_count")
+})
+
+var ListEMAServicesResult = Type("ListEMAServicesResult", func() {
+	Description("Every service identity chaining reaches in the organization.")
+
+	Attribute("items", ArrayOf(EMAService))
+
+	Required("items")
 })

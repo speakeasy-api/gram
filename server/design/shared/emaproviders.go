@@ -33,6 +33,9 @@ var EMAProvider = Type("EMAProvider", func() {
 	Attribute("unavailable_reason", String, "Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.", func() {
 		Enum("deleted", "disabled", "not_trusted_by_endpoint", "signing_unavailable", "not_rolled_out", "verified_domain_required", "setup_required", "keyless", "signing_paused", "sign_in_enforcement_required", "readiness_unknown")
 	})
+	Attribute("last_accepted_at", String, "When the vendor last accepted an assertion from this provider for this binding, from the newest live cached credential. Omitted when none has been accepted.", func() {
+		Format(FormatDateTime)
+	})
 	Required("kind")
 })
 

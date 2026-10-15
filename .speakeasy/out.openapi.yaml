@@ -37823,94 +37823,6 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateOrganizationRemoteSessionClient
-  /rpc/organizationRemoteSessionIssuers.addSpeakeasyEMAProvider:
-    post:
-      description: Append the organization's Speakeasy issuer to the EMA provider order for the vendor authorization server this issuer names, for one organization user session issuer that trusts no external identity provider. Existing entries are never removed or reordered, and a vendor whose order already names Speakeasy is left unchanged. A vendor with no saved order is refused while another endpoint holds a ready identity chaining binding to it through an external identity provider, since saving any order would replace that endpoint's default. dry_run runs every check without saving. Requires org:admin and the ema-providers rollout. Not available from support or impersonated sessions.
-      operationId: addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AddSpeakeasyEMAProviderRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EMAProviderOrder'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: addSpeakeasyEMAProvider organizationRemoteSessionIssuers
-      tags:
-        - organizationRemoteSessionIssuers
-      x-speakeasy-name-override: addSpeakeasyEMAProvider
-      x-speakeasy-react-hook:
-        name: AddOrganizationRemoteSessionIssuerSpeakeasyEMAProvider
   /rpc/organizationRemoteSessionIssuers.create:
     post:
       description: Create a remote_session_issuer in the caller's organization. With no project_id the issuer is organization-level (project_id NULL, inherited by every project); with a project_id (which must belong to the organization) it is project-specific. Requires org:admin.
@@ -38730,6 +38642,88 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: OrganizationRemoteSessionIssuers
+  /rpc/organizationRemoteSessionIssuers.listEMAServices:
+    get:
+      description: 'List every service identity chaining reaches in the caller''s organization: each vendor authorization server that any identity chaining binding or saved EMA provider order names, with the organization-wide provider order, when the vendor last accepted an assertion from each provider across every binding, and how many MCP servers chain through it. Requires org:read.'
+      operationId: listOrganizationRemoteSessionIssuerEMAServices
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListEMAServicesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listEMAServices organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: listEMAServices
+      x-speakeasy-react-hook:
+        name: OrganizationRemoteSessionIssuerEMAServices
   /rpc/organizationRemoteSessionIssuers.migrate:
     post:
       description: 'Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller''s organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.'
@@ -39020,7 +39014,7 @@ paths:
         name: RefreshOrganizationRemoteSessionIssuerMetadata
   /rpc/organizationRemoteSessionIssuers.setEMAProviders:
     post:
-      description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the default: the endpoint''s configured external issuer. Speakeasy is used only for vendors whose list names it. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
+      description: 'Replace the ordered list of EMA providers that issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries the providers that can serve and that the endpoint''s authorization server trusts, in order, retrying transient failures briefly before moving to the next, until one succeeds. An empty list restores the derived default: the endpoint''s trusted external issuer, then the organization''s Speakeasy issuer when it has one. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout; restoring the default only needs org:admin. Not available from support or impersonated sessions.'
       operationId: setOrganizationRemoteSessionIssuerEMAProviders
       parameters:
         - allowEmptyValue: true
@@ -80649,24 +80643,6 @@ components:
       required:
         - id
         - content
-    AddSpeakeasyEMAProviderRequestBody:
-      type: object
-      properties:
-        dry_run:
-          type: boolean
-          description: Check without saving.
-          default: false
-        remote_session_issuer_id:
-          type: string
-          description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.
-          format: uuid
-        user_session_issuer_id:
-          type: string
-          description: The organization user session issuer Speakeasy vouches for. It must trust no external identity provider.
-          format: uuid
-      required:
-        - remote_session_issuer_id
-        - user_session_issuer_id
     AddToolMetadataBatchResult:
       type: object
       properties:
@@ -87139,6 +87115,10 @@ components:
           enum:
             - external
             - speakeasy
+        last_accepted_at:
+          type: string
+          description: When the vendor last accepted an assertion from this provider for this binding, from the newest live cached credential. Omitted when none has been accepted.
+          format: date-time
         remote_session_issuer_id:
           type: string
           description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
@@ -87196,6 +87176,36 @@ components:
         - vendor_issuer
         - is_default
         - providers
+    EMAService:
+      type: object
+      properties:
+        ema_providers:
+          $ref: '#/components/schemas/EMAProviderOrder'
+        name:
+          type: string
+          description: The vendor's display name, from an issuer record that names it. Empty when none has one.
+        ready_server_count:
+          type: integer
+          description: Of those, how many are ready.
+          format: int64
+        remote_session_issuer_id:
+          type: string
+          description: An issuer record in the organization that names this vendor, for setEMAProviders. Omitted when only a saved order names the vendor.
+          format: uuid
+        server_count:
+          type: integer
+          description: MCP servers with identity chaining turned on for this vendor, in any state after setup.
+          format: int64
+        vendor_issuer:
+          type: string
+          description: The vendor authorization server issuer, canonicalized.
+      description: 'One service identity chaining reaches in the organization: a vendor authorization server, the identity providers that can vouch for people to it with whether the vendor has accepted each, and the MCP servers that chain through it.'
+      required:
+        - vendor_issuer
+        - name
+        - ema_providers
+        - server_count
+        - ready_server_count
     EmployeeDataFlowEdge:
       type: object
       properties:
@@ -92563,6 +92573,16 @@ components:
             $ref: '#/components/schemas/DistributionPlugin'
       required:
         - plugins
+    ListEMAServicesResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAService'
+      description: Every service identity chaining reaches in the organization.
+      required:
+        - items
     ListEnvironmentsResult:
       type: object
       properties:
@@ -103632,7 +103652,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EMAProviderInput'
-          description: Providers in the order they are tried, at most 10; each at most once. An empty list restores the external default.
+          description: Providers in the order they are tried, at most 10; each at most once. An empty list restores the derived default.
         remote_session_issuer_id:
           type: string
           description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.

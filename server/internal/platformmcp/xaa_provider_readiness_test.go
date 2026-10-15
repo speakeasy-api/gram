@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -66,8 +67,24 @@ func TestXAAReadinessSpeakeasyVendorWithoutOktaConnection(t *testing.T) {
 	require.NotNil(t, output.IdentityChaining)
 	require.True(t, output.IdentityChaining.Served)
 	require.Equal(t, string(remotesessions.EMAProviderSpeakeasy), output.IdentityChaining.Providers[0].Kind)
+	require.Nil(t, output.IdentityChaining.Providers[0].LastAcceptedAt, "no credential has been accepted yet")
 	require.Len(t, output.IdentityChaining.Bindings, 1)
 	require.Equal(t, 1, okta.calls, "the Okta reader reported no connection before the fallback")
+
+	binding, err := remotesessionsrepo.New(conn).GetEMABinding(ctx, remotesessionsrepo.GetEMABindingParams{ProjectID: f.projectID, OrganizationID: f.organizationID, UserSessionIssuerID: f.userIssuer, RemoteSessionIssuerID: f.issuerA, Resource: "https://upstream.example.test/mcp"})
+	require.NoError(t, err)
+	accepted := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	_, err = remotesessionsrepo.New(conn).PlantEMACredentialFixture(ctx, remotesessionsrepo.PlantEMACredentialFixtureParams{
+		OrganizationID: conv.ToPGText(f.organizationID), ProjectID: conv.ToNullUUID(f.projectID), UserSessionIssuerID: conv.ToNullUUID(f.userIssuer),
+		RemoteSessionIssuerID: conv.ToNullUUID(f.issuerA), RemoteSessionClientID: binding.RemoteSessionClientID, Resource: "https://upstream.example.test/mcp",
+		SubjectUrn: urn.NewUserSubject(user).String(), EmaProvider: string(remotesessions.EMAProviderSpeakeasy), Retired: false, UpdatedAt: conv.ToPGTimestamptz(accepted),
+	})
+	require.NoError(t, err)
+	_, output, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin, authz.NewGrant(authz.ScopeMCPRead, f.serverID.String())}), f.organizationID, f.projectID, f.serverID)
+	require.NoError(t, err)
+	require.NotNil(t, output.IdentityChaining)
+	require.NotNil(t, output.IdentityChaining.Providers[0].LastAcceptedAt)
+	require.Equal(t, accepted.Format(time.RFC3339), *output.IdentityChaining.Providers[0].LastAcceptedAt, "the readiness view reports when the vendor last accepted a Speakeasy assertion")
 
 	result, _, err = service.read(authz.GrantsToContext(actor, []authz.Grant{admin}), f.organizationID, f.projectID, f.serverID)
 	require.NoError(t, err)

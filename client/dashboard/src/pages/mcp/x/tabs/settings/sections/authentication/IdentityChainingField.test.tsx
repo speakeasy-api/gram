@@ -1,7 +1,13 @@
 import type { ReactNode } from "react";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityChainingField } from "./IdentityChainingField";
 import type { ChainingProviders } from "./identityChainingGate";
@@ -11,17 +17,12 @@ const unlinked = { state: "unlinked", scopes: [] };
 const read = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
 const scopeChecks = vi.hoisted(() => [] as unknown[]);
 const issuerNames = vi.hoisted(() => ({
-  items: [] as { id: string; name: string }[],
+  items: [] as { id: string; name: string; issuer?: string }[],
 }));
 const state = vi.hoisted(() => ({
   orgAdmin: true,
-  session: { organizationOverride: false, impersonatorEmail: "" },
-  check: {} as Record<string, unknown>,
-  checkEnabled: [] as boolean[],
-  addSucceeds: true,
   calls: [] as string[],
   prepare: vi.fn(),
-  add: vi.fn(),
   unlink: vi.fn(),
 }));
 vi.mock("@tanstack/react-query", () => ({
@@ -34,7 +35,6 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org" }),
   useProject: () => ({ id: "project-id" }),
-  useSession: () => state.session,
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -52,26 +52,9 @@ vi.mock("react-router", () => ({
 vi.mock("@/lib/remote-identity", () => ({
   useRemoteSessionIssuersByIds: () => issuerNames,
 }));
-vi.mock("./useSpeakeasyAppendCheck", () => ({
-  useSpeakeasyAppendCheck: (_target: unknown, enabled: boolean) => {
-    state.checkEnabled.push(enabled);
-    return state.check;
-  },
+vi.mock("../RemoteMcpSessionsSection", () => ({
+  MCP_SESSIONS_SECTION_ID: "sessions",
 }));
-vi.mock(
-  "@gram/client/react-query/addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider.js",
-  () => ({
-    useAddOrganizationRemoteSessionIssuerSpeakeasyEMAProviderMutation: () => ({
-      isPending: false,
-      error: null,
-      mutate: (variables: unknown, options?: { onSuccess?: () => void }) => {
-        state.calls.push("add");
-        state.add(variables);
-        if (state.addSucceeds) options?.onSuccess?.();
-      },
-    }),
-  }),
-);
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({
     children,
@@ -150,21 +133,13 @@ const bound = (clientId: string) => ({
   scopes: [],
 });
 
-const openClient = () =>
-  fireEvent.click(screen.getByRole("button", { name: /^Client/ }));
-
 beforeEach(() => {
   read.data = unlinked;
   scopeChecks.length = 0;
   issuerNames.items = [];
   state.orgAdmin = true;
-  state.session = { organizationOverride: false, impersonatorEmail: "" };
-  state.check = { isSuccess: true, isFetching: false, isError: false };
-  state.checkEnabled.length = 0;
-  state.addSucceeds = true;
   state.calls.length = 0;
   state.prepare.mockReset();
-  state.add.mockReset();
   state.unlink.mockReset();
 });
 
@@ -179,7 +154,6 @@ describe("identity chaining client selection", () => {
     "keeps the target fixed while %s is pending",
     (operation) => {
       const { rerender } = render(field());
-      openClient();
       expect((screen.getByRole("combobox") as HTMLButtonElement).disabled).toBe(
         false,
       );
@@ -201,7 +175,6 @@ describe("identity chaining bound client", () => {
   it("selects the client the binding uses", () => {
     read.data = bound("second");
     render(field());
-    openClient();
     expect(screen.getByRole("combobox").textContent).toBe("second");
     expect(screen.queryByText("Use this client instead")).toBeNull();
   });
@@ -209,7 +182,7 @@ describe("identity chaining bound client", () => {
   it("says whether chaining is on, next to the action that changes it", () => {
     read.data = bound("second");
     const { rerender } = render(field());
-    expect(screen.getByText("On")).toBeTruthy();
+    expect(screen.getByText("On, not proven yet")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Turn off" })).toBeTruthy();
     read.data = unlinked;
     rerender(field());
@@ -242,22 +215,21 @@ describe("identity chaining bound client", () => {
 
 describe("identity chaining vouched for by Speakeasy", () => {
   const speakeasyOnly = { external: false, speakeasy: true };
-  const plainIssuer = { id: "session-issuer" } as UserSessionIssuer;
-  const oktaOrder = {
-    isDefault: false,
+  const plainIssuer = {
+    id: "session-issuer",
+    slug: "speakeasy-sign-in",
+  } as UserSessionIssuer;
+  const okta = { kind: "external", remoteSessionIssuerId: "okta" };
+  const speakeasy = { kind: "speakeasy", internalSessionIssuerId: "internal" };
+  const order = (...providers: Record<string, unknown>[]) => ({
+    isDefault: true,
     vendorIssuer: "https://vendor.example.com",
-    providers: [{ kind: "external", remoteSessionIssuerId: "okta" }],
-  };
-  const withSpeakeasy = {
-    ...oktaOrder,
-    providers: [
-      ...oktaOrder.providers,
-      { kind: "speakeasy", internalSessionIssuerId: "internal" },
-    ],
-  };
+    providers,
+  });
   const trusting = {
     id: "session-issuer",
-    trustedRemoteSessionIssuerId: "idp",
+    slug: "okta-sign-in",
+    trustedRemoteSessionIssuerId: "okta",
     trustedRemoteSessionClientId: "second",
   } as UserSessionIssuer;
 
@@ -268,7 +240,6 @@ describe("identity chaining vouched for by Speakeasy", () => {
       <IdentityChainingField
         userSessionIssuer={plainIssuer}
         providers={speakeasyOnly}
-        speakeasyEnabled
         speakeasyIssuerUrl="https://speakeasy.example.com/issuer"
         linkedClients={clients}
         resource="https://example.com/mcp"
@@ -280,17 +251,40 @@ describe("identity chaining vouched for by Speakeasy", () => {
     screen.getByRole("button", {
       name: "Turn on",
     }) as HTMLButtonElement;
+  const chain = () => screen.getByRole("list", { name: "How people get in" });
+  const vouchers = () =>
+    within(screen.getByRole("list", { name: "Identity providers" }))
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+  const trusts = () =>
+    within(screen.getByRole("list", { name: "example.com trusts" }))
+      .getAllByRole("listitem")
+      .map((item) => ({
+        name: within(item).getAllByText(/./)[0]?.textContent,
+        accepted: item.textContent?.match(
+          /Last worked [^I]*|Not accepted yet/,
+        )?.[0],
+        url: item.querySelector("code")?.textContent,
+      }));
+
+  beforeEach(() => {
+    issuerNames.items = [
+      { id: "okta", name: "Okta", issuer: "https://okta.example.com" },
+    ];
+  });
 
   it("offers every linked client when no sign-in client is trusted", () => {
     render(field(speakeasyOnly, plainIssuer));
-    openClient();
     expect(screen.getByRole("combobox")).toBeTruthy();
   });
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
+    read.data = { ...unlinked, emaProviders: order(okta) };
     render(field({ external: true, speakeasy: false }, trusting));
-    expect(screen.queryByRole("button", { name: /^Client/ })).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
+    expect(
+      within(chain()).getByText("first", { selector: "p, span" }),
+    ).toBeTruthy();
   });
 
   it("keeps the trusted sign-in client out even when only Speakeasy applies", () => {
@@ -305,133 +299,195 @@ describe("identity chaining vouched for by Speakeasy", () => {
     ).toBeTruthy();
   });
 
-  it("adds Speakeasy to the order, then prepares the binding", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
-    render(speakeasyField());
-    fireEvent.click(enableButton());
-    expect(state.calls).toEqual(["add", "prepare"]);
-    expect(state.add).toHaveBeenCalledWith({
-      request: {
-        addSpeakeasyEMAProviderRequestBody: {
-          remoteSessionIssuerId: "issuer",
-          userSessionIssuerId: "session-issuer",
-          dryRun: false,
-        },
-      },
-    });
-  });
-
-  it("doesn't prepare when adding Speakeasy fails", () => {
-    state.addSucceeds = false;
-    read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
-    render(speakeasyField());
-    fireEvent.click(enableButton());
-    expect(state.calls).toEqual(["add"]);
-  });
-
-  it("skips the add when Speakeasy is already in the order", () => {
-    state.orgAdmin = false;
-    read.data = { ...unlinked, generation: 0, emaProviders: withSpeakeasy };
+  it("only prepares the binding; who vouches is derived, never written", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: order(speakeasy) };
     render(speakeasyField());
     fireEvent.click(enableButton());
     expect(state.calls).toEqual(["prepare"]);
-    expect(state.checkEnabled).not.toContain(true);
   });
 
-  it("never writes the order for a server that trusts an external identity provider", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
-    render(
-      speakeasyField({
-        userSessionIssuer: trusting,
-        providers: { external: true, speakeasy: true },
-      }),
+  it("walks the chain: sign-in, who vouches, what the vendor trusts, client", () => {
+    read.data = { ...bound("first"), emaProviders: order(okta, speakeasy) };
+    render(speakeasyField({ userSessionIssuer: trusting }));
+    const links = within(chain()).getAllByText(
+      /^(Sign-in|Vouched for by|example.com trusts|Client)$/,
     );
-    fireEvent.click(enableButton());
-    expect(state.calls).toEqual(["prepare"]);
-    expect(state.checkEnabled).not.toContain(true);
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Sign-in",
+      "Vouched for by",
+      "example.com trusts",
+      "Client",
+    ]);
+    expect(screen.getByText("(okta-sign-in)").parentElement?.textContent).toBe(
+      "Okta (okta-sign-in)",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "Change in Sessions" })
+        .getAttribute("href"),
+    ).toBe("#sessions");
+    expect(vouchers()).toEqual([
+      "Oktafor people who signed in with Okta · tried first",
+      "Speakeasyfor everyone who signs in to this server · then",
+    ]);
+    expect(trusts()).toEqual([
+      {
+        name: "Okta",
+        accepted: "Not accepted yet",
+        url: "https://okta.example.com",
+      },
+      {
+        name: "Speakeasy",
+        accepted: "Not accepted yet",
+        url: "https://speakeasy.example.com/issuer",
+      },
+    ]);
+    expect(screen.getAllByText(/In example.com’s admin settings/)).toHaveLength(
+      1,
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "Every server that reaches example.com" })
+        .getAttribute("href"),
+    ).toBe(
+      "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
+    );
+  });
+
+  it("waits for the vendor until an assertion has been accepted", () => {
+    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
+    const { rerender } = render(speakeasyField());
+    expect(screen.getByText("On, not proven yet")).toBeTruthy();
+    read.data = {
+      ...bound("first"),
+      emaProviders: order({
+        ...speakeasy,
+        lastAcceptedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      }),
+    };
+    rerender(speakeasyField());
+    expect(screen.getByText("Working")).toBeTruthy();
+    expect(
+      screen.getByText("example.com accepted a sign-in 2h ago"),
+    ).toBeTruthy();
+    expect(trusts()).toEqual([
+      {
+        name: "Speakeasy",
+        accepted: "Last worked 2h ago",
+        url: undefined,
+      },
+    ]);
+    expect(screen.queryByText(/admin settings/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Issuer URL" }));
+    expect(trusts()[0]?.url).toBe("https://speakeasy.example.com/issuer");
+  });
+
+  it("names Speakeasy's own sign-in when no identity provider is trusted", () => {
+    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
+    render(speakeasyField());
+    expect(screen.getByText("Speakeasy’s own sign-in")).toBeTruthy();
+    expect(screen.getByText("(speakeasy-sign-in)")).toBeTruthy();
+  });
+
+  it("leaves out an identity provider this server's sign-in doesn't use", () => {
+    read.data = {
+      ...bound("first"),
+      emaProviders: order(
+        { ...okta, unavailableReason: "not_trusted_by_endpoint" },
+        speakeasy,
+      ),
+    };
+    render(speakeasyField());
+    expect(vouchers()).toEqual([
+      "Speakeasyfor everyone who signs in to this server",
+    ]);
+    expect(screen.queryByText(/Okta/)).toBeNull();
+    expect(trusts().map((row) => row.name)).toEqual(["Speakeasy"]);
   });
 
   it.each([
+    ["setup_required", "Not set up"],
+    ["disabled", "Not set up"],
+    ["signing_paused", "Can’t sign right now"],
+    ["keyless", "Can’t sign right now"],
     [
-      "the server refuses the add",
-      (): void => {
-        state.check = {
-          isSuccess: false,
-          isFetching: false,
-          isError: true,
-          error: new Error("other servers chain to this vendor"),
-        };
-      },
-      {},
-      "Other servers chain to this vendor.",
+      "sign_in_enforcement_required",
+      "Needs sign-in enforcement for the organization",
     ],
-    [
-      "Speakeasy's issuer is off",
-      (): void => undefined,
-      { speakeasyEnabled: false },
-      "Turn on Speakeasy’s issuer first.",
-    ],
-    [
-      "the person isn't an organization admin",
-      (): void => {
-        state.orgAdmin = false;
-      },
-      {},
-      "An organization admin needs to add Speakeasy for this vendor first.",
-    ],
-    [
-      "the session is a support session",
-      (): void => {
-        state.session = { organizationOverride: true, impersonatorEmail: "" };
-      },
-      {},
-      "The provider order can’t be changed from a support or impersonated session.",
-    ],
-  ] as const)(
-    "disables Enable with a reason when %s",
-    (_name, arrange, overrides, reason) => {
-      arrange();
-      read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
-      render(speakeasyField(overrides));
-      expect(enableButton().disabled).toBe(true);
-      expect(screen.getByText(reason, { exact: false })).toBeTruthy();
-      fireEvent.click(enableButton());
-      expect(state.calls).toEqual([]);
-    },
-  );
-
-  it("links a refusal for an off issuer to the identity settings", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: oktaOrder };
-    render(speakeasyField({ speakeasyEnabled: false }));
+  ])("explains why Speakeasy can't vouch when %s", (reason, text) => {
+    read.data = {
+      ...unlinked,
+      generation: 0,
+      emaProviders: order({ ...speakeasy, unavailableReason: reason }),
+    };
+    render(speakeasyField());
+    expect(screen.getByText(text)).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: "Speakeasy identity provider" })
         .getAttribute("href"),
+    ).toBe("/org/identity?tab=identity-providers&provider=speakeasy");
+    expect(
+      screen.queryByRole("list", { name: "example.com trusts" }),
+    ).toBeNull();
+    expect(screen.getByText(/Nothing to set up at example.com/)).toBeTruthy();
+  });
+
+  it("blocks Turn on while nobody can vouch", () => {
+    read.data = {
+      ...unlinked,
+      generation: 0,
+      emaProviders: order({ ...speakeasy, unavailableReason: "keyless" }),
+    };
+    render(speakeasyField());
+    expect(enableButton().disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "No identity provider can vouch for people on this server yet.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(enableButton());
+    expect(state.calls).toEqual([]);
+  });
+
+  it("says when chaining is on but nobody can vouch right now", () => {
+    read.data = {
+      ...bound("first"),
+      emaProviders: order({
+        ...speakeasy,
+        unavailableReason: "signing_paused",
+      }),
+    };
+    render(speakeasyField());
+    expect(screen.getByText("On, but not running")).toBeTruthy();
+  });
+
+  it("points at the organization's identity settings when nobody is listed", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: order() };
+    render(speakeasyField());
+    expect(
+      screen
+        .getByRole("link", {
+          name: "Set up Speakeasy as an identity provider",
+        })
+        .getAttribute("href"),
     ).toBe("/org/identity?tab=identity-providers");
   });
 
-  it("offers to add Speakeasy for a ready server whose order lacks it", () => {
-    read.data = { ...bound("first"), emaProviders: oktaOrder };
+  it("shows what Turn on will do before it's on", () => {
+    read.data = { ...unlinked, generation: 0, emaProviders: order(speakeasy) };
     render(speakeasyField());
+    expect(screen.getByText("Off")).toBeTruthy();
+    expect(vouchers()).toEqual([
+      "Speakeasyfor everyone who signs in to this server",
+    ]);
     expect(
-      screen.getByText(/Speakeasy isn’t in this vendor’s provider order/),
+      screen.getByText("https://speakeasy.example.com/issuer"),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Add Speakeasy" }));
-    expect(state.calls).toEqual(["add"]);
   });
 
-  it("leaves the recovery action to organization admins", () => {
-    state.orgAdmin = false;
-    read.data = { ...bound("first"), emaProviders: oktaOrder };
-    render(speakeasyField());
-    expect(
-      screen.getByText(/Speakeasy isn’t in this vendor’s provider order/),
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Add Speakeasy" })).toBeNull();
-  });
-
-  it("disables without touching the order", () => {
-    read.data = { ...bound("first"), emaProviders: withSpeakeasy };
+  it("disables without touching who vouches", () => {
+    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
     render(speakeasyField());
     fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
     fireEvent.click(
@@ -440,86 +496,10 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(state.calls).toEqual(["unlink"]);
   });
 
-  it("names only the sign-ins this server can use, in order", () => {
-    issuerNames.items = [{ id: "okta", name: "Okta" }];
-    read.data = {
-      ...bound("first"),
-      emaProviders: {
-        ...withSpeakeasy,
-        providers: [
-          { kind: "external", remoteSessionIssuerId: "okta" },
-          { kind: "speakeasy", internalSessionIssuerId: "internal" },
-        ],
-      },
-    };
-    const { rerender } = render(speakeasyField());
-    expect(
-      screen.getByText(
-        "People can authenticate to example.com with these identity providers:",
-      ),
-    ).toBeTruthy();
-    const providers = () =>
-      screen.getAllByRole("listitem").map((item) => item.textContent);
-    expect(providers()).toEqual(["Okta", "thenSpeakeasy"]);
-    read.data = {
-      ...bound("first"),
-      emaProviders: {
-        ...withSpeakeasy,
-        providers: [
-          {
-            kind: "external",
-            remoteSessionIssuerId: "okta",
-            unavailableReason: "not_trusted_by_endpoint",
-          },
-          { kind: "speakeasy", internalSessionIssuerId: "internal" },
-        ],
-      },
-    };
-    rerender(speakeasyField());
-    expect(providers()).toEqual(["Speakeasy"]);
-    expect(screen.queryByText(/Okta/)).toBeNull();
-  });
-
-  it("says when no sign-in in the order can serve this server", () => {
-    read.data = {
-      ...bound("first"),
-      emaProviders: {
-        ...withSpeakeasy,
-        providers: [
-          {
-            kind: "speakeasy",
-            internalSessionIssuerId: "internal",
-            unavailableReason: "signing_paused",
-          },
-        ],
-      },
-    };
-    render(speakeasyField());
-    expect(screen.getByText("On, but not running")).toBeTruthy();
-  });
-
   it("has no chaining scope list of its own", () => {
-    read.data = { ...bound("first"), emaProviders: withSpeakeasy };
+    read.data = { ...bound("first"), emaProviders: order(speakeasy) };
     render(speakeasyField());
     expect(screen.queryByText("Requested scopes")).toBeNull();
     expect(screen.queryByText("Save scopes")).toBeNull();
-  });
-
-  it("shows the vendor setup step with Speakeasy's issuer until ready", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: withSpeakeasy };
-    const { rerender } = render(speakeasyField());
-    expect(screen.getByText(/^Set up .+ first$/)).toBeTruthy();
-    expect(
-      screen.getByText("https://speakeasy.example.com/issuer"),
-    ).toBeTruthy();
-    read.data = { ...bound("first"), emaProviders: withSpeakeasy };
-    rerender(speakeasyField());
-    expect(screen.queryByText(/^Set up .+ first$/)).toBeNull();
-  });
-
-  it("names the vendor from its host when its issuer has no name", () => {
-    read.data = { ...unlinked, generation: 0, emaProviders: withSpeakeasy };
-    render(speakeasyField());
-    expect(screen.getByText("Set up example.com first")).toBeTruthy();
   });
 });

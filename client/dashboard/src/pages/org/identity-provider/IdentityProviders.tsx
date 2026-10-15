@@ -1,10 +1,12 @@
-import { parseAsStringLiteral, useQueryState } from "nuqs";
+import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
 
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 
 import { PROVIDERS } from "./providers";
+import { EmaServices } from "./services/EmaServices";
+import { EmaServiceWorkspace } from "./services/EmaServiceWorkspace";
 import { SpeakeasyProviderCard } from "./SpeakeasyProviderCard";
 import { SpeakeasyWorkspace } from "./SpeakeasyWorkspace";
 import { PROVIDER_IDS } from "./tabs";
@@ -33,12 +35,15 @@ function ProviderContent({
     "provider",
     parseAsStringLiteral(PROVIDER_IDS),
   );
+  const [serviceIssuer] = useQueryState("service", parseAsString);
   const provider = showExternal
     ? PROVIDERS.find((provider) => provider.id === providerId)
     : undefined;
   if (provider) return <provider.Workspace />;
   if (providerId === "speakeasy" && showSpeakeasy)
     return <SpeakeasyWorkspace />;
+  if (serviceIssuer)
+    return <EmaServiceWorkspace vendorIssuer={serviceIssuer} />;
   return (
     <section
       className="flex min-w-0 flex-col gap-6"
@@ -61,6 +66,7 @@ function ProviderContent({
         {showExternal &&
           PROVIDERS.map((provider) => <provider.Card key={provider.id} />)}
       </div>
+      <EmaServices />
     </section>
   );
 }

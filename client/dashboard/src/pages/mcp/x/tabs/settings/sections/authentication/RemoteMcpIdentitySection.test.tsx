@@ -102,22 +102,6 @@ vi.mock("./useSpeakeasyIssuerStatus", () => ({
   useSpeakeasyIssuerStatus: () => mocks.speakeasyIssuer(),
 }));
 
-vi.mock("./IdentityChainingField", () => ({
-  IdentityChainingField: (props: {
-    providers: { external: boolean; speakeasy: boolean };
-    speakeasyEnabled?: boolean;
-    speakeasyIssuerUrl?: string;
-  }) => (
-    <div data-testid="identity-chaining">
-      {JSON.stringify({
-        providers: props.providers,
-        speakeasyEnabled: props.speakeasyEnabled,
-        speakeasyIssuerUrl: props.speakeasyIssuerUrl,
-      })}
-    </div>
-  ),
-}));
-
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => mocks.rbac(),
 }));

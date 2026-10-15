@@ -66,24 +66,23 @@ or imply that support staff may mutate the organization's issuer.
 
 Show the exact public issuer URI from the successful read. Explain that the
 service's administrator must register it in that service's enterprise-managed
-authorization settings, and that Speakeasy must then be added to that
-service's EMA provider order: registering the URI alone changes nothing. This is a separate trust change requiring the user's
-explicit authorization; do not change ordinary employee SSO login settings or
-replace an existing trusted issuer automatically.
+authorization settings: registering the URI alone changes nothing. Once the
+organization has a Speakeasy issuer, every vendor's default EMA provider order
+tries the server's trusted external identity provider first and then Speakeasy;
+no order change is needed for that. This is a separate trust change requiring
+the user's explicit authorization; do not change ordinary employee SSO login
+settings or replace an existing trusted issuer automatically.
 
 If the user wants to configure an MCP connection too, use `list_projects`,
 `find_mcp`, and `get_mcp` to identify an exact project and MCP server. Follow its
 supported setup handoff and obtain separate authorization for any provider or
 binding changes. This workflow cannot choose Speakeasy as an MCP server's
-enterprise authorization provider. For a server whose sign-in trusts no
-external identity provider, send an organization administrator to the server's
-**Settings** → **Identity chaining** section in the dashboard: **Turn on**
-there also appends Speakeasy to the vendor's EMA provider order, which needs
-the ema-providers rollout. It never
-removes or reorders providers, and it is refused while the vendor has no saved
-order and another server has a ready binding to it through an external
-identity provider. Any other order change goes through the organization's
-management API.
+enterprise authorization provider, and neither can the dashboard: a vendor's
+EMA provider order is derived (the server's trusted external identity provider,
+then the organization's Speakeasy issuer when it has one), and only the
+organization's `setEMAProviders` management API changes it, behind the
+ema-providers rollout. The server's **Settings** → **Identity chaining** section
+in the dashboard turns chaining on or off and shows the sign-ins it uses.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for
 enterprise authorization readiness. Do not substitute a Platform MCP registration
 ID or generic registration readiness for this check.

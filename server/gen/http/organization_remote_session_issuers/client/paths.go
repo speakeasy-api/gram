@@ -62,9 +62,9 @@ func SetEMAProvidersOrganizationRemoteSessionIssuersPath() string {
 	return "/rpc/organizationRemoteSessionIssuers.setEMAProviders"
 }
 
-// AddSpeakeasyEMAProviderOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service addSpeakeasyEMAProvider HTTP endpoint.
-func AddSpeakeasyEMAProviderOrganizationRemoteSessionIssuersPath() string {
-	return "/rpc/organizationRemoteSessionIssuers.addSpeakeasyEMAProvider"
+// ListEMAServicesOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service listEMAServices HTTP endpoint.
+func ListEMAServicesOrganizationRemoteSessionIssuersPath() string {
+	return "/rpc/organizationRemoteSessionIssuers.listEMAServices"
 }
 
 // FetchIssuerMetadataOrganizationRemoteSessionIssuersPath returns the URL path to the organizationRemoteSessionIssuers service fetchIssuerMetadata HTTP endpoint.

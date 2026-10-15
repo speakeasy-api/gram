@@ -62,9 +62,9 @@ type Client struct {
 	// setEMAProviders endpoint.
 	SetEMAProvidersDoer goahttp.Doer
 
-	// AddSpeakeasyEMAProvider Doer is the HTTP client used to make requests to the
-	// addSpeakeasyEMAProvider endpoint.
-	AddSpeakeasyEMAProviderDoer goahttp.Doer
+	// ListEMAServices Doer is the HTTP client used to make requests to the
+	// listEMAServices endpoint.
+	ListEMAServicesDoer goahttp.Doer
 
 	// FetchIssuerMetadata Doer is the HTTP client used to make requests to the
 	// fetchIssuerMetadata endpoint.
@@ -106,7 +106,7 @@ func NewClient(
 		GetIssuerMigratePreflightDoer:   doer,
 		MigrateIssuerDoer:               doer,
 		SetEMAProvidersDoer:             doer,
-		AddSpeakeasyEMAProviderDoer:     doer,
+		ListEMAServicesDoer:             doer,
 		FetchIssuerMetadataDoer:         doer,
 		RefreshIssuerMetadataDoer:       doer,
 		RestoreResponseBody:             restoreBody,
@@ -383,15 +383,15 @@ func (c *Client) SetEMAProviders() goa.Endpoint {
 	}
 }
 
-// AddSpeakeasyEMAProvider returns an endpoint that makes HTTP requests to the
-// organizationRemoteSessionIssuers service addSpeakeasyEMAProvider server.
-func (c *Client) AddSpeakeasyEMAProvider() goa.Endpoint {
+// ListEMAServices returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service listEMAServices server.
+func (c *Client) ListEMAServices() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeAddSpeakeasyEMAProviderRequest(c.encoder)
-		decodeResponse = DecodeAddSpeakeasyEMAProviderResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListEMAServicesRequest(c.encoder)
+		decodeResponse = DecodeListEMAServicesResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildAddSpeakeasyEMAProviderRequest(ctx, v)
+		req, err := c.BuildListEMAServicesRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -399,9 +399,9 @@ func (c *Client) AddSpeakeasyEMAProvider() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.AddSpeakeasyEMAProviderDoer.Do(req)
+		resp, err := c.ListEMAServicesDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "listEMAServices", err)
 		}
 		return decodeResponse(resp)
 	}

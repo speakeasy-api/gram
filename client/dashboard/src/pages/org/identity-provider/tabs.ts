@@ -38,6 +38,15 @@ export function speakeasyProviderHref(): string {
   return "?tab=identity-providers&provider=speakeasy";
 }
 
+/** One service identity chaining reaches, keyed by its canonical issuer URL. */
+export function emaServiceHref(vendorIssuer: string): string {
+  const search = new URLSearchParams({
+    tab: "identity-providers",
+    service: vendorIssuer,
+  });
+  return `?${search.toString()}`;
+}
+
 /** After a verification the form below unmounts; bring the status card back into view. */
 export function scrollToConnectionCard(): void {
   document

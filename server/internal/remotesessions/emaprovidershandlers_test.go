@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type emaProvidersFixture struct {
@@ -132,7 +133,10 @@ func TestSetEMAProviders_SavesOrderAndAudits(t *testing.T) {
 	restored, err := setEMAProviders(ctx, ti, f.vendor)
 	require.NoError(t, err)
 	require.True(t, restored.IsDefault)
-	require.Equal(t, []*types.EMAProvider{{Kind: "external", RemoteSessionIssuerID: nil, InternalSessionIssuerID: nil, UnavailableReason: nil}}, restored.Providers, "an empty order restores the endpoint's external provider")
+	require.Equal(t, []*types.EMAProvider{
+		{Kind: "external", RemoteSessionIssuerID: nil, InternalSessionIssuerID: nil, UnavailableReason: nil},
+		{Kind: "speakeasy", RemoteSessionIssuerID: nil, InternalSessionIssuerID: conv.PtrEmpty(f.internalIssuer.String()), UnavailableReason: conv.PtrEmpty("signing_unavailable")},
+	}, restored.Providers, "an empty order restores the derived default: the endpoint's external provider, then Speakeasy")
 	record, err = audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdateEMAProviders)
 	require.NoError(t, err)
 	snapshot, err = audittest.DecodeAuditData(record.AfterSnapshot)
@@ -379,4 +383,70 @@ func TestSetEMAProviders_ReadinessRunsAfterCommitAndNeverFailsIt(t *testing.T) {
 	view, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{SessionToken: nil, ApikeyToken: nil, ID: f.vendor.String()})
 	require.NoError(t, err, "the issuer view reads with readiness unknown")
 	require.Equal(t, "readiness_unknown", *view.EmaProviders.Providers[0].UnavailableReason)
+}
+
+func TestResolveEMAProviders_DerivedDefault(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org := authCtx.ActiveOrganizationID
+	q := repo.New(ti.conn)
+	vendor := "https://vendor.example.com"
+	external := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, org, "idp-"+uuid.NewString()[:8])
+	client := seedOrgLevelRemoteClient(t, ctx, ti.conn, org, external, "client-"+uuid.NewString()[:8])
+	trusting := createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-"+uuid.NewString()[:8], external, client)
+	untrusting, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(org),
+		Slug:                         "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TrustedRemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	placeholder := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}
+	trusted := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: external, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}
+
+	order, err := remotesessions.EndpointEMAProviders(ctx, q, org, trusting, vendor, true)
+	require.NoError(t, err)
+	require.True(t, order.IsDefault)
+	require.Equal(t, []remotesessions.EMAProvider{trusted}, order.Providers, "without a Speakeasy issuer the default is the trusted external issuer")
+	order, err = remotesessions.EndpointEMAProviders(ctx, q, org, untrusting.ID, vendor, true)
+	require.NoError(t, err)
+	require.Equal(t, []remotesessions.EMAProvider{placeholder}, order.Providers, "neither issuer keeps the external placeholder")
+
+	internalIssuer := seedInternalSessionIssuer(t, ctx, ti, org)
+	speakeasy := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: internalIssuer, Unavailable: ""}
+	order, err = remotesessions.EndpointEMAProviders(ctx, q, org, trusting, vendor, true)
+	require.NoError(t, err)
+	require.True(t, order.IsDefault)
+	require.Equal(t, []remotesessions.EMAProvider{trusted, speakeasy}, order.Providers, "Speakeasy follows the trusted external issuer")
+	order, err = remotesessions.EndpointEMAProviders(ctx, q, org, untrusting.ID, vendor, true)
+	require.NoError(t, err)
+	require.Equal(t, []remotesessions.EMAProvider{speakeasy}, order.Providers, "a sign-in that trusts no external identity provider defaults to Speakeasy alone")
+	order, err = remotesessions.ResolveEMAProviders(ctx, q, org, vendor, remotesessions.EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: true})
+	require.NoError(t, err)
+	require.Equal(t, []remotesessions.EMAProvider{placeholder, speakeasy}, order.Providers, "the organization-wide view keeps the external placeholder in front")
+
+	cannotSign := speakeasy
+	cannotSign.Unavailable = remotesessions.EMAProviderSigningUnavailable
+	order, err = remotesessions.EndpointEMAProviders(ctx, q, org, trusting, vendor, false)
+	require.NoError(t, err)
+	require.Equal(t, []remotesessions.EMAProvider{trusted, cannotSign}, order.Providers, "a deployment that cannot sign keeps Speakeasy flagged")
+	require.Equal(t, []remotesessions.EMAProvider{trusted}, order.Available())
+
+	rows, err := testrepo.New(ti.conn).DisableInternalSessionIssuerFixture(ctx, testrepo.DisableInternalSessionIssuerFixtureParams{OrganizationID: org, ID: internalIssuer})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+	disabled := speakeasy
+	disabled.Unavailable = remotesessions.EMAProviderDisabled
+	order, err = remotesessions.EndpointEMAProviders(ctx, q, org, trusting, vendor, true)
+	require.NoError(t, err)
+	require.Equal(t, []remotesessions.EMAProvider{trusted, disabled}, order.Providers, "a disabled Speakeasy issuer stays in the default, flagged")
+
+	require.NoError(t, testrepo.New(ti.conn).TombstoneInternalSessionIssuerFixture(ctx, org))
+	order, err = remotesessions.EndpointEMAProviders(ctx, q, org, trusting, vendor, true)
+	require.NoError(t, err)
+	require.Equal(t, []remotesessions.EMAProvider{trusted}, order.Providers, "a deleted Speakeasy issuer leaves the default")
 }

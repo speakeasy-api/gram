@@ -8,6 +8,8 @@ import { UserSessionIssuerField } from "./authentication/UserSessionIssuerField"
 import { useSelectableUserSessionIssuers } from "./authentication/useSelectableUserSessionIssuers";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 
+export const MCP_SESSIONS_SECTION_ID = "sessions";
+
 export function RemoteMcpSessionsSection({
   mcpServer,
 }: {
@@ -55,7 +57,7 @@ export function RemoteMcpSessionsSection({
   }
 
   return (
-    <SettingsSection>
+    <SettingsSection id={MCP_SESSIONS_SECTION_ID}>
       <SettingsSection.Header>
         <SettingsSection.Title>Sessions</SettingsSection.Title>
         <SettingsSection.Description>

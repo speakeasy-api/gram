@@ -55,6 +55,10 @@ export type EMAProvider = {
    */
   kind: EMAProviderKind;
   /**
+   * When the vendor last accepted an assertion from this provider for this binding, from the newest live cached credential. Omitted when none has been accepted.
+   */
+  lastAcceptedAt?: Date | undefined;
+  /**
    * The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
    */
   remoteSessionIssuerId?: string | undefined;
@@ -80,12 +84,16 @@ export const EMAProvider$inboundSchema: z.ZodMiniType<EMAProvider, unknown> = z
     z.object({
       internal_session_issuer_id: z.optional(z.string()),
       kind: EMAProviderKind$inboundSchema,
+      last_accepted_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       remote_session_issuer_id: z.optional(z.string()),
       unavailable_reason: z.optional(UnavailableReason$inboundSchema),
     }),
     z.transform((v) => {
       return remap$(v, {
         "internal_session_issuer_id": "internalSessionIssuerId",
+        "last_accepted_at": "lastAcceptedAt",
         "remote_session_issuer_id": "remoteSessionIssuerId",
         "unavailable_reason": "unavailableReason",
       });

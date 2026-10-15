@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -55,6 +56,9 @@ type EMAProvider struct {
 	RemoteSessionIssuerID   uuid.UUID
 	InternalSessionIssuerID uuid.UUID
 	Unavailable             EMAProviderUnavailableReason
+	// LastAcceptedAt is when the vendor last accepted an assertion from the
+	// provider for one binding target. Status views set it; runtime never does.
+	LastAcceptedAt *time.Time
 }
 
 // Available reports whether the provider can serve now.
@@ -120,8 +124,13 @@ func NormalizeVendorIssuer(issuer string) (string, error) {
 
 // ResolveEMAProviders reads a vendor's saved provider order. Providers that
 // cannot serve are kept and flagged, so views can say why and runtime skips
-// them. No saved order keeps the endpoint's external issuer; enabling the
-// Speakeasy issuer alone never changes an existing integration's authority.
+// them. No saved order derives the default: the endpoint's trusted external
+// issuer first, then the organization's live internal session issuer
+// (Speakeasy) when it has one. Setting up the Speakeasy issuer therefore
+// adds it after every endpoint's external issuer by default; an
+// organization-wide view, which stands for no one endpoint, keeps an
+// external placeholder with no issuer id in front of it. With neither, the
+// default is that single external placeholder.
 func ResolveEMAProviders(ctx context.Context, q *repo.Queries, organizationID, vendorIssuer string, scope EMAProviderScope) (EMAProviderOrder, error) {
 	order := EMAProviderOrder{VendorIssuer: vendorIssuer, IsDefault: false, Providers: []EMAProvider{}}
 	rows, err := q.ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: organizationID, VendorIssuer: vendorIssuer})
@@ -129,7 +138,7 @@ func ResolveEMAProviders(ctx context.Context, q *repo.Queries, organizationID, v
 		return order, fmt.Errorf("list ema providers: %w", err)
 	}
 	for _, row := range rows {
-		p := EMAProvider{Kind: EMAProviderSpeakeasy, RemoteSessionIssuerID: row.RemoteSessionIssuerID.UUID, InternalSessionIssuerID: row.InternalSessionIssuerID.UUID, Unavailable: ""}
+		p := EMAProvider{Kind: EMAProviderSpeakeasy, RemoteSessionIssuerID: row.RemoteSessionIssuerID.UUID, InternalSessionIssuerID: row.InternalSessionIssuerID.UUID, Unavailable: "", LastAcceptedAt: nil}
 		if row.RemoteSessionIssuerID.Valid {
 			p.Kind = EMAProviderExternal
 		}
@@ -149,7 +158,28 @@ func ResolveEMAProviders(ctx context.Context, q *repo.Queries, organizationID, v
 		return order, nil
 	}
 	order.IsDefault = true
-	order.Providers = append(order.Providers, EMAProvider{Kind: EMAProviderExternal, RemoteSessionIssuerID: scope.TrustedIssuer.UUID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""})
+	external := EMAProvider{Kind: EMAProviderExternal, RemoteSessionIssuerID: scope.TrustedIssuer.UUID, InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil}
+	if !scope.Endpoint || scope.TrustedIssuer.Valid {
+		order.Providers = append(order.Providers, external)
+	}
+	internal, err := q.GetEMAInternalSessionIssuer(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return order, fmt.Errorf("read internal session issuer: %w", err)
+	default:
+		p := EMAProvider{Kind: EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: internal.ID, Unavailable: "", LastAcceptedAt: nil}
+		switch {
+		case internal.Disabled:
+			p.Unavailable = EMAProviderDisabled
+		case !scope.SpeakeasySigns:
+			p.Unavailable = EMAProviderSigningUnavailable
+		}
+		order.Providers = append(order.Providers, p)
+	}
+	if len(order.Providers) == 0 {
+		order.Providers = append(order.Providers, external)
+	}
 	return order, nil
 }
 
@@ -167,6 +197,52 @@ func EndpointEMAProviders(ctx context.Context, q *repo.Queries, organizationID s
 		trusted = issuer.TrustedRemoteSessionIssuerID
 	}
 	return ResolveEMAProviders(ctx, q, organizationID, vendorIssuer, EMAProviderScope{Endpoint: true, TrustedIssuer: trusted, SpeakeasySigns: speakeasySigns})
+}
+
+// EMACredentialTarget is one binding target whose cached credentials say
+// when the vendor last accepted each provider's assertion.
+type EMACredentialTarget struct {
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
+	Resource              string
+}
+
+// ApplyEMAProviderLastAccepted stamps a status view's providers with when the
+// vendor last accepted an assertion from each, from target's newest live
+// cached credential. The Speakeasy entry takes the speakeasy credential; an
+// external entry the endpoint trusts takes the external one.
+func ApplyEMAProviderLastAccepted(ctx context.Context, q *repo.Queries, target EMACredentialTarget, order EMAProviderOrder) (EMAProviderOrder, error) {
+	rows, err := q.ListEMACredentialLastAccepted(ctx, repo.ListEMACredentialLastAcceptedParams{
+		OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, UserSessionIssuerID: target.UserSessionIssuerID,
+		RemoteSessionIssuerID: target.RemoteSessionIssuerID, Resource: target.Resource,
+	})
+	if err != nil {
+		return order, fmt.Errorf("list ema credential last accepted: %w", err)
+	}
+	accepted := make(map[EMAProviderKind]time.Time, len(rows))
+	for _, row := range rows {
+		if row.LastAcceptedAt.Valid {
+			accepted[EMAProviderKind(row.EmaProvider)] = row.LastAcceptedAt.Time
+		}
+	}
+	return StampEMAProviderLastAccepted(order, accepted), nil
+}
+
+// StampEMAProviderLastAccepted copies each provider kind's newest acceptance
+// onto the order's providers of that kind. An external entry the endpoint
+// does not trust is left blank: the acceptance was another issuer's.
+func StampEMAProviderLastAccepted(order EMAProviderOrder, accepted map[EMAProviderKind]time.Time) EMAProviderOrder {
+	order.Providers = append([]EMAProvider(nil), order.Providers...)
+	for i, p := range order.Providers {
+		at, ok := accepted[p.Kind]
+		if !ok || p.Unavailable == EMAProviderNotTrustedByEndpoint {
+			continue
+		}
+		order.Providers[i].LastAcceptedAt = &at
+	}
+	return order
 }
 
 // EMAProviderReadiness checks live signing eligibility for an organization

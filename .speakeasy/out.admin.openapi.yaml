@@ -9210,6 +9210,10 @@ components:
           enum:
             - external
             - speakeasy
+        last_accepted_at:
+          type: string
+          description: When the vendor last accepted an assertion from this provider for this binding, from the newest live cached credential. Omitted when none has been accepted.
+          format: date-time
         remote_session_issuer_id:
           type: string
           description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.

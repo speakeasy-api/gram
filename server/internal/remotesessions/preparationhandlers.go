@@ -90,9 +90,14 @@ func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput,
 	if err != nil || authCtx == nil {
 		return nil, nil //nolint:nilnil // No order for an issuer that is not an identifier.
 	}
-	order, err := EndpointEMAProviders(ctx, repo.New(s.db), authCtx.ActiveOrganizationID, in.UserSessionIssuerID, vendor, s.speakeasySigningAvailable)
+	q := repo.New(s.db)
+	order, err := EndpointEMAProviders(ctx, q, authCtx.ActiveOrganizationID, in.UserSessionIssuerID, vendor, s.speakeasySigningAvailable)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, s.logger)
+	}
+	target := EMACredentialTarget{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource}
+	if order, err = ApplyEMAProviderLastAccepted(ctx, q, target, order); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider last accepted").LogError(ctx, s.logger)
 	}
 	return s.liveEMAProvidersView(ctx, s.logger, authCtx.ActiveOrganizationID, order), nil
 }

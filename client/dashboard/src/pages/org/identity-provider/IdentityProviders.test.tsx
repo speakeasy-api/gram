@@ -57,6 +57,14 @@ vi.mock("./useEnterpriseIssuer", () => ({
 vi.mock("./SpeakeasyWorkspace", () => ({
   SpeakeasyWorkspace: () => <div>Speakeasy page</div>,
 }));
+vi.mock("./services/EmaServices", () => ({
+  EmaServices: () => <div>Services table</div>,
+}));
+vi.mock("./services/EmaServiceWorkspace", () => ({
+  EmaServiceWorkspace: ({ vendorIssuer }: { vendorIssuer: string }) => (
+    <div>Service page: {vendorIssuer}</div>
+  ),
+}));
 function show(
   query = "",
   props = { showExternal: true, showSpeakeasy: false },
@@ -154,6 +162,17 @@ describe("Identity providers", () => {
     expect(
       screen.getByRole("heading", { name: "Identity providers" }),
     ).toBeTruthy();
+  });
+  it("lists the services identity chaining reaches below the providers", () => {
+    show();
+    expect(screen.getByText("Services table")).toBeTruthy();
+  });
+  it("opens one service from its link", () => {
+    show("&service=https%3A%2F%2Flinear.example.com");
+    expect(
+      screen.getByText("Service page: https://linear.example.com"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Services table")).toBeNull();
   });
   it("shows the provider list for unknown providers", () => {
     show("&provider=unsupported");

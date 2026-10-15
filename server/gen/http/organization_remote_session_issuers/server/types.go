@@ -246,22 +246,8 @@ type SetEMAProvidersRequestBody struct {
 	// authorization server.
 	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Providers in the order they are tried, at most 10; each at most once. An
-	// empty list restores the external default.
+	// empty list restores the derived default.
 	Providers []*EMAProviderInputRequestBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
-}
-
-// AddSpeakeasyEMAProviderRequestBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP request body.
-type AddSpeakeasyEMAProviderRequestBody struct {
-	// Any remote_session_issuer in the caller's organization that names the vendor
-	// authorization server.
-	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
-	// The organization user session issuer Speakeasy vouches for. It must trust no
-	// external identity provider.
-	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
-	// Check without saving.
-	DryRun *bool `form:"dry_run,omitempty" json:"dry_run,omitempty" xml:"dry_run,omitempty"`
 }
 
 // FetchIssuerMetadataRequestBody is the type of the
@@ -807,16 +793,11 @@ type SetEMAProvidersResponseBody struct {
 	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
 }
 
-// AddSpeakeasyEMAProviderResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body.
-type AddSpeakeasyEMAProviderResponseBody struct {
-	// The vendor authorization server issuer, canonicalized.
-	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
-	// No order is saved, so the endpoint uses its configured external issuer.
-	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
-	// The saved providers in order, or the external default.
-	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+// ListEMAServicesResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body.
+type ListEMAServicesResponseBody struct {
+	Items []*EMAServiceResponseBody `form:"items" json:"items" xml:"items"`
 }
 
 // FetchIssuerMetadataResponseBody is the type of the
@@ -2996,10 +2977,10 @@ type SetEMAProvidersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderUnauthorizedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "unauthorized" error.
-type AddSpeakeasyEMAProviderUnauthorizedResponseBody struct {
+// ListEMAServicesUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "unauthorized" error.
+type ListEMAServicesUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3015,10 +2996,10 @@ type AddSpeakeasyEMAProviderUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderForbiddenResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "forbidden" error.
-type AddSpeakeasyEMAProviderForbiddenResponseBody struct {
+// ListEMAServicesForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "forbidden" error.
+type ListEMAServicesForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3034,10 +3015,10 @@ type AddSpeakeasyEMAProviderForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderBadRequestResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "bad_request" error.
-type AddSpeakeasyEMAProviderBadRequestResponseBody struct {
+// ListEMAServicesBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "bad_request" error.
+type ListEMAServicesBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3053,10 +3034,10 @@ type AddSpeakeasyEMAProviderBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderNotFoundResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "not_found" error.
-type AddSpeakeasyEMAProviderNotFoundResponseBody struct {
+// ListEMAServicesNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "not_found" error.
+type ListEMAServicesNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3072,10 +3053,10 @@ type AddSpeakeasyEMAProviderNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderConflictResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "conflict" error.
-type AddSpeakeasyEMAProviderConflictResponseBody struct {
+// ListEMAServicesConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "conflict" error.
+type ListEMAServicesConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3091,10 +3072,10 @@ type AddSpeakeasyEMAProviderConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderUnsupportedMediaResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "unsupported_media" error.
-type AddSpeakeasyEMAProviderUnsupportedMediaResponseBody struct {
+// ListEMAServicesUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "unsupported_media" error.
+type ListEMAServicesUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3110,10 +3091,10 @@ type AddSpeakeasyEMAProviderUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderInvalidResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "invalid" error.
-type AddSpeakeasyEMAProviderInvalidResponseBody struct {
+// ListEMAServicesInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "invalid" error.
+type ListEMAServicesInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3129,10 +3110,10 @@ type AddSpeakeasyEMAProviderInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderInvariantViolationResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "invariant_violation" error.
-type AddSpeakeasyEMAProviderInvariantViolationResponseBody struct {
+// ListEMAServicesInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "invariant_violation" error.
+type ListEMAServicesInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3148,10 +3129,10 @@ type AddSpeakeasyEMAProviderInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderUnexpectedResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "unexpected" error.
-type AddSpeakeasyEMAProviderUnexpectedResponseBody struct {
+// ListEMAServicesUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "unexpected" error.
+type ListEMAServicesUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3167,10 +3148,10 @@ type AddSpeakeasyEMAProviderUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AddSpeakeasyEMAProviderGatewayErrorResponseBody is the type of the
-// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
-// endpoint HTTP response body for the "gateway_error" error.
-type AddSpeakeasyEMAProviderGatewayErrorResponseBody struct {
+// ListEMAServicesGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "listEMAServices" endpoint HTTP
+// response body for the "gateway_error" error.
+type ListEMAServicesGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3591,6 +3572,10 @@ type EMAProviderResponseBody struct {
 	// readiness_unknown means the Speakeasy issuer's state could not be read just
 	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+	// When the vendor last accepted an assertion from this provider for this
+	// binding, from the newest live cached credential. Omitted when none has been
+	// accepted.
+	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 
 // OrganizationRemoteSessionIssuerResponseBody is used to define fields on
@@ -3763,6 +3748,26 @@ type IssuerFieldMismatchResponseBody struct {
 	// The target issuer's entries for a list-valued field. Absent for a scalar
 	// field, and absent when the target's list is empty.
 	TargetValues []string `form:"target_values,omitempty" json:"target_values,omitempty" xml:"target_values,omitempty"`
+}
+
+// EMAServiceResponseBody is used to define fields on response body types.
+type EMAServiceResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// The vendor's display name, from an issuer record that names it. Empty when
+	// none has one.
+	Name string `form:"name" json:"name" xml:"name"`
+	// An issuer record in the organization that names this vendor, for
+	// setEMAProviders. Omitted when only a saved order names the vendor.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization-wide provider order. Each provider's last_accepted_at is
+	// the newest acceptance across every binding in the organization.
+	EmaProviders *EMAProviderOrderResponseBody `form:"ema_providers" json:"ema_providers" xml:"ema_providers"`
+	// MCP servers with identity chaining turned on for this vendor, in any state
+	// after setup.
+	ServerCount int `form:"server_count" json:"server_count" xml:"server_count"`
+	// Of those, how many are ready.
+	ReadyServerCount int `form:"ready_server_count" json:"ready_server_count" xml:"ready_server_count"`
 }
 
 // EMAProviderInputRequestBody is used to define fields on request body types.
@@ -4355,25 +4360,22 @@ func NewSetEMAProvidersResponseBody(res *types.EMAProviderOrder) *SetEMAProvider
 	return body
 }
 
-// NewAddSpeakeasyEMAProviderResponseBody builds the HTTP response body from
-// the result of the "addSpeakeasyEMAProvider" endpoint of the
-// "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderResponseBody(res *types.EMAProviderOrder) *AddSpeakeasyEMAProviderResponseBody {
-	body := &AddSpeakeasyEMAProviderResponseBody{
-		VendorIssuer: res.VendorIssuer,
-		IsDefault:    res.IsDefault,
-	}
-	if res.Providers != nil {
-		body.Providers = make([]*EMAProviderResponseBody, len(res.Providers))
-		for i, val := range res.Providers {
+// NewListEMAServicesResponseBody builds the HTTP response body from the result
+// of the "listEMAServices" endpoint of the "organizationRemoteSessionIssuers"
+// service.
+func NewListEMAServicesResponseBody(res *organizationremotesessionissuers.ListEMAServicesResult) *ListEMAServicesResponseBody {
+	body := &ListEMAServicesResponseBody{}
+	if res.Items != nil {
+		body.Items = make([]*EMAServiceResponseBody, len(res.Items))
+		for i, val := range res.Items {
 			if val == nil {
-				body.Providers[i] = nil
+				body.Items[i] = nil
 				continue
 			}
-			body.Providers[i] = marshalTypesEMAProviderToEMAProviderResponseBody(val)
+			body.Items[i] = marshalOrganizationremotesessionissuersEMAServiceToEMAServiceResponseBody(val)
 		}
 	} else {
-		body.Providers = []*EMAProviderResponseBody{}
+		body.Items = []*EMAServiceResponseBody{}
 	}
 	return body
 }
@@ -6141,11 +6143,11 @@ func NewSetEMAProvidersGatewayErrorResponseBody(res *goa.ServiceError) *SetEMAPr
 	return body
 }
 
-// NewAddSpeakeasyEMAProviderUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// NewListEMAServicesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listEMAServices" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderUnauthorizedResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderUnauthorizedResponseBody {
-	body := &AddSpeakeasyEMAProviderUnauthorizedResponseBody{
+func NewListEMAServicesUnauthorizedResponseBody(res *goa.ServiceError) *ListEMAServicesUnauthorizedResponseBody {
+	body := &ListEMAServicesUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6156,11 +6158,11 @@ func NewAddSpeakeasyEMAProviderUnauthorizedResponseBody(res *goa.ServiceError) *
 	return body
 }
 
-// NewAddSpeakeasyEMAProviderForbiddenResponseBody builds the HTTP response
-// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// NewListEMAServicesForbiddenResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderForbiddenResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderForbiddenResponseBody {
-	body := &AddSpeakeasyEMAProviderForbiddenResponseBody{
+func NewListEMAServicesForbiddenResponseBody(res *goa.ServiceError) *ListEMAServicesForbiddenResponseBody {
+	body := &ListEMAServicesForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6171,11 +6173,11 @@ func NewAddSpeakeasyEMAProviderForbiddenResponseBody(res *goa.ServiceError) *Add
 	return body
 }
 
-// NewAddSpeakeasyEMAProviderBadRequestResponseBody builds the HTTP response
-// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// NewListEMAServicesBadRequestResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderBadRequestResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderBadRequestResponseBody {
-	body := &AddSpeakeasyEMAProviderBadRequestResponseBody{
+func NewListEMAServicesBadRequestResponseBody(res *goa.ServiceError) *ListEMAServicesBadRequestResponseBody {
+	body := &ListEMAServicesBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6186,11 +6188,11 @@ func NewAddSpeakeasyEMAProviderBadRequestResponseBody(res *goa.ServiceError) *Ad
 	return body
 }
 
-// NewAddSpeakeasyEMAProviderNotFoundResponseBody builds the HTTP response body
-// from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// NewListEMAServicesNotFoundResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderNotFoundResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderNotFoundResponseBody {
-	body := &AddSpeakeasyEMAProviderNotFoundResponseBody{
+func NewListEMAServicesNotFoundResponseBody(res *goa.ServiceError) *ListEMAServicesNotFoundResponseBody {
+	body := &ListEMAServicesNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6201,11 +6203,11 @@ func NewAddSpeakeasyEMAProviderNotFoundResponseBody(res *goa.ServiceError) *AddS
 	return body
 }
 
-// NewAddSpeakeasyEMAProviderConflictResponseBody builds the HTTP response body
-// from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// NewListEMAServicesConflictResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderConflictResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderConflictResponseBody {
-	body := &AddSpeakeasyEMAProviderConflictResponseBody{
+func NewListEMAServicesConflictResponseBody(res *goa.ServiceError) *ListEMAServicesConflictResponseBody {
+	body := &ListEMAServicesConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6216,26 +6218,11 @@ func NewAddSpeakeasyEMAProviderConflictResponseBody(res *goa.ServiceError) *AddS
 	return body
 }
 
-// NewAddSpeakeasyEMAProviderUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "addSpeakeasyEMAProvider" endpoint of
-// the "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderUnsupportedMediaResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderUnsupportedMediaResponseBody {
-	body := &AddSpeakeasyEMAProviderUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAddSpeakeasyEMAProviderInvalidResponseBody builds the HTTP response body
-// from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// NewListEMAServicesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "listEMAServices" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderInvalidResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderInvalidResponseBody {
-	body := &AddSpeakeasyEMAProviderInvalidResponseBody{
+func NewListEMAServicesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListEMAServicesUnsupportedMediaResponseBody {
+	body := &ListEMAServicesUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6246,26 +6233,11 @@ func NewAddSpeakeasyEMAProviderInvalidResponseBody(res *goa.ServiceError) *AddSp
 	return body
 }
 
-// NewAddSpeakeasyEMAProviderInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "addSpeakeasyEMAProvider" endpoint of
-// the "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderInvariantViolationResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderInvariantViolationResponseBody {
-	body := &AddSpeakeasyEMAProviderInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAddSpeakeasyEMAProviderUnexpectedResponseBody builds the HTTP response
-// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// NewListEMAServicesInvalidResponseBody builds the HTTP response body from the
+// result of the "listEMAServices" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderUnexpectedResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderUnexpectedResponseBody {
-	body := &AddSpeakeasyEMAProviderUnexpectedResponseBody{
+func NewListEMAServicesInvalidResponseBody(res *goa.ServiceError) *ListEMAServicesInvalidResponseBody {
+	body := &ListEMAServicesInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6276,11 +6248,41 @@ func NewAddSpeakeasyEMAProviderUnexpectedResponseBody(res *goa.ServiceError) *Ad
 	return body
 }
 
-// NewAddSpeakeasyEMAProviderGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// NewListEMAServicesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listEMAServices" endpoint of the
 // "organizationRemoteSessionIssuers" service.
-func NewAddSpeakeasyEMAProviderGatewayErrorResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderGatewayErrorResponseBody {
-	body := &AddSpeakeasyEMAProviderGatewayErrorResponseBody{
+func NewListEMAServicesInvariantViolationResponseBody(res *goa.ServiceError) *ListEMAServicesInvariantViolationResponseBody {
+	body := &ListEMAServicesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesUnexpectedResponseBody(res *goa.ServiceError) *ListEMAServicesUnexpectedResponseBody {
+	body := &ListEMAServicesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListEMAServicesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listEMAServices" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewListEMAServicesGatewayErrorResponseBody(res *goa.ServiceError) *ListEMAServicesGatewayErrorResponseBody {
+	body := &ListEMAServicesGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6897,19 +6899,10 @@ func NewSetEMAProvidersPayload(body *SetEMAProvidersRequestBody, sessionToken *s
 	return v
 }
 
-// NewAddSpeakeasyEMAProviderPayload builds a organizationRemoteSessionIssuers
-// service addSpeakeasyEMAProvider endpoint payload.
-func NewAddSpeakeasyEMAProviderPayload(body *AddSpeakeasyEMAProviderRequestBody, sessionToken *string) *organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload {
-	v := &organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload{
-		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
-		UserSessionIssuerID:   *body.UserSessionIssuerID,
-	}
-	if body.DryRun != nil {
-		v.DryRun = *body.DryRun
-	}
-	if body.DryRun == nil {
-		v.DryRun = false
-	}
+// NewListEMAServicesPayload builds a organizationRemoteSessionIssuers service
+// listEMAServices endpoint payload.
+func NewListEMAServicesPayload(sessionToken *string) *organizationremotesessionissuers.ListEMAServicesPayload {
+	v := &organizationremotesessionissuers.ListEMAServicesPayload{}
 	v.SessionToken = sessionToken
 
 	return v
@@ -7023,24 +7016,6 @@ func ValidateSetEMAProvidersRequestBody(body *SetEMAProvidersRequestBody) (err e
 				err = goa.MergeErrors(err, err2)
 			}
 		}
-	}
-	return
-}
-
-// ValidateAddSpeakeasyEMAProviderRequestBody runs the validations defined on
-// AddSpeakeasyEMAProviderRequestBody
-func ValidateAddSpeakeasyEMAProviderRequestBody(body *AddSpeakeasyEMAProviderRequestBody) (err error) {
-	if body.RemoteSessionIssuerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
-	}
-	if body.UserSessionIssuerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
-	}
-	if body.RemoteSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
-	}
-	if body.UserSessionIssuerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	return
 }
