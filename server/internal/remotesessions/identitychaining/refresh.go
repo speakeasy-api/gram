@@ -153,7 +153,9 @@ func (g *Governor) RefreshDecision(ctx context.Context, req Request) RefreshVerd
 // the human's next sign-in retains a delegation under the current
 // registration, so a reconnect is exactly what repairs it. Every other
 // configuration failure, such as a renewal the provider refused for the
-// configured client, stays configuration: signing in again cannot repair it.
+// configured client or a retained secret that no longer decrypts, stays
+// configuration: signing in again cannot repair it. A sign-in decrypts the
+// retained subject before replacing anything and refuses when it cannot.
 func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider) Outcome {
 	src := g.source(p)
 	current := sel

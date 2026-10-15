@@ -84,17 +84,23 @@ func (f chainStoreFixture) retainRefreshableDelegation(t *testing.T, status stri
 	subject := urn.NewUserSubject(f.req.UserID).String()
 	current, err := q.GetTrustedDelegationCredential(t.Context(), repo.GetTrustedDelegationCredentialParams{OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: subject})
 	require.NoError(t, err)
+	sealed := func(plain string) pgtype.Text {
+		ciphertext, err := f.chainer.enc.Encrypt([]byte(plain))
+		require.NoError(t, err)
+		return pgtype.Text{String: ciphertext, Valid: true}
+	}
 	refresh := pgtype.Text{String: "", Valid: false}
 	if status == "durable_credential_present" {
-		refresh = pgtype.Text{String: "encrypted-refresh", Valid: true}
+		refresh = sealed("refresh")
 	}
 	_, err = q.UpsertTrustedDelegationCredential(t.Context(), repo.UpsertTrustedDelegationCredentialParams{
 		OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID, IssuerID: f.sel.trustedIssuerID, SubjectUrn: subject, ExpectedGeneration: current.CredentialGeneration.Int64,
 		CredentialConfigHash:       pgtype.Text{String: f.configHash, Valid: true},
 		ObservationStatus:          pgtype.Text{String: status, Valid: true},
-		IdentityAssertionEncrypted: pgtype.Text{String: "encrypted-assertion", Valid: true},
+		IdentityAssertionEncrypted: sealed("assertion"),
 		IdentityAssertionExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true, InfinityModifier: pgtype.Finite},
 		RefreshTokenEncrypted:      refresh,
+		UpstreamSubjectEncrypted:   sealed("upstream-subject"),
 	})
 	require.NoError(t, err)
 }

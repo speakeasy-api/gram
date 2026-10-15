@@ -382,8 +382,10 @@ func (s *Service) Check(ctx context.Context, b Binding, authority Authorizer) er
 // CheckResolvable is Check plus whether Resolve could return an assertion now
 // without the human signing in again: a retained assertion still outside
 // Resolve's one-minute safety window, or a refresh grant it may renew with. A
-// renewal in flight or backing off is ErrTemporary. Like Check it never
-// renews, claims or rewrites the credential and never contacts the provider.
+// renewal in flight or backing off is ErrTemporary. Secrets Resolve would
+// need that no longer decrypt are ErrConfiguration, as in Resolve. Like Check
+// it never renews, claims or rewrites the credential and never contacts the
+// provider.
 func (s *Service) CheckResolvable(ctx context.Context, b Binding, authority Authorizer) error {
 	c, err := s.check(ctx, b, authority)
 	if err != nil {
@@ -391,16 +393,20 @@ func (s *Service) CheckResolvable(ctx context.Context, b Binding, authority Auth
 	}
 	now := s.now()
 	switch {
+	case c.claim != uuid.Nil:
+		return ErrTemporary
 	case c.assertion != "" && c.assertionExpiry.After(now.Add(time.Minute)):
-		return nil
+		_, err := s.assertion(c)
+		return err
 	case c.status == "reauthentication_required":
 		return ErrReauthentication
-	case c.claim != uuid.Nil || c.retryAfter.After(now):
+	case c.retryAfter.After(now):
 		return ErrTemporary
 	case !usableRefresh(c, now):
 		return ErrReauthentication
 	}
-	return nil
+	_, _, _, err = s.refreshSecrets(c)
+	return err
 }
 
 // check is Check, returning the retained credential it judged.
@@ -532,20 +538,9 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	if p == nil || p.DelegationConfigurationHash() != c.config {
 		return Assertion{}, ErrConfiguration
 	}
-	refresh, err := s.decrypt(c.refresh)
+	refresh, subject, nonce, err := s.refreshSecrets(c)
 	if err != nil {
 		return Assertion{}, err
-	}
-	subject, err := s.decrypt(c.subject)
-	if err != nil {
-		return Assertion{}, err
-	}
-	nonce, err := s.decrypt(c.nonce)
-	if err != nil {
-		return Assertion{}, err
-	}
-	if refresh == "" || subject == "" {
-		return Assertion{}, ErrConfiguration
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())
 	if err != nil || !marked {
@@ -685,6 +680,24 @@ func (s *Service) assertion(c delegationCredential) (Assertion, error) {
 		return Assertion{}, err
 	}
 	return Assertion{value: value, expiresAt: c.assertionExpiry, subject: subject, sessionID: c.id, obtainedAt: c.obtainedAt}, nil
+}
+
+// refreshSecrets decrypts what a renewal of c sends. A secret that does not
+// decrypt, or a missing refresh token or subject, is ErrConfiguration.
+func (s *Service) refreshSecrets(c delegationCredential) (refresh, subject, nonce string, err error) {
+	if refresh, err = s.decrypt(c.refresh); err != nil {
+		return "", "", "", err
+	}
+	if subject, err = s.decrypt(c.subject); err != nil {
+		return "", "", "", err
+	}
+	if nonce, err = s.decrypt(c.nonce); err != nil {
+		return "", "", "", err
+	}
+	if refresh == "" || subject == "" {
+		return "", "", "", ErrConfiguration
+	}
+	return refresh, subject, nonce, nil
 }
 func clearDelegationSecrets(c delegationCredential) delegationCredential {
 	c.assertion = ""
