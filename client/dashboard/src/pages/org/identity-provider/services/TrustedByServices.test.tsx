@@ -43,6 +43,8 @@ const service = (
   ],
   serverCount: 1,
   readyServerCount: 1,
+  servers: [],
+  hiddenServerCount: 0,
 });
 
 function show() {
@@ -98,7 +100,7 @@ describe("Services that can use Speakeasy", () => {
     show();
     expect(
       screen.getByText(
-        /Once an MCP server whose sign-in has no identity provider turns on Enterprise Managed Authorization/,
+        /Once an MCP server whose people sign in with Speakeasy turns on Enterprise Managed Authorization/,
       ),
     ).toBeTruthy();
   });

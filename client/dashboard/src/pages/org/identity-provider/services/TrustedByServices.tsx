@@ -60,9 +60,9 @@ export function TrustedByServices(): JSX.Element {
             </Alert>
           ) : entries.length === 0 ? (
             <Text small muted>
-              None yet. Once an MCP server whose sign-in has no identity
-              provider turns on Enterprise Managed Authorization, its service
-              shows up here.
+              None yet. Once an MCP server whose people sign in with Speakeasy
+              turns on Enterprise Managed Authorization, its service shows up
+              here.
             </Text>
           ) : (
             <div className="space-y-5">

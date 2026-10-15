@@ -33,7 +33,8 @@ import {
   trustInstruction,
   type ProviderView,
 } from "./emaServiceView";
-import { serversSummary, useEmaServices } from "./useEmaServices";
+import { EmaServiceServers } from "./EmaServiceServers";
+import { serverCountLabel, useEmaServices } from "./useEmaServices";
 
 /** Who may change a service's order, and why not when they can't. */
 function useOrderPermissions(): {
@@ -109,9 +110,11 @@ export function EmaServiceWorkspace({
           <>
             <Heading variant="h2">{name}</Heading>
             <Text muted>
-              {row
-                ? `${serversSummary(row)} reach ${name} through Enterprise Managed Authorization.`
-                : "A service Enterprise Managed Authorization reaches."}
+              {!row
+                ? "A service Enterprise Managed Authorization reaches."
+                : row.serverCount === 0
+                  ? `No servers reach ${name} through Enterprise Managed Authorization yet.`
+                  : `${serverCountLabel(row.serverCount)} ${row.serverCount === 1 ? "reaches" : "reach"} ${name} through Enterprise Managed Authorization.`}
             </Text>
           </>
         )}
@@ -184,6 +187,7 @@ export function EmaServiceWorkspace({
             canRestore={permissions.canRestore}
             readOnlyReason={permissions.readOnlyReason}
           />
+          <EmaServiceServers row={row} />
         </div>
       )}
     </section>

@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { EmaServiceWorkspace } from "./EmaServiceWorkspace";
 import type { ProviderView } from "./emaServiceView";
 import type { ServiceRow } from "./useEmaServices";
@@ -23,11 +24,15 @@ const mocks = vi.hoisted(() => ({
   flag: "enabled",
   session: {} as Record<string, unknown>,
   save: vi.fn(),
+  saveError: null as unknown,
   invalidate: vi.fn(),
   saveResult: { isDefault: false } as { isDefault: boolean },
   speakeasyIssuer: "https://speakeasy.example.com/issuer" as string | undefined,
   signIns: [] as { projectId: string; trustedRemoteSessionIssuerId?: string }[],
   issuers: [] as { id: string; name: string; issuer: string }[],
+}));
+vi.mock("./EmaServiceServers", () => ({
+  EmaServiceServers: () => <h3>Servers</h3>,
 }));
 vi.mock("./useEmaServices", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./useEmaServices")>()),
@@ -87,11 +92,19 @@ vi.mock(
   () => ({
     useSetOrganizationRemoteSessionIssuerEMAProvidersMutation: (options: {
       onSuccess: (result: unknown) => unknown;
+      onError: (error: unknown) => unknown;
     }) => ({
       isPending: false,
-      error: null,
+      error: mocks.saveError,
+      reset: () => {
+        mocks.saveError = null;
+      },
       mutate: (variables: unknown) => {
         mocks.save(variables);
+        if (mocks.saveError) {
+          void options.onError(mocks.saveError);
+          return;
+        }
         void options.onSuccess(mocks.saveResult);
       },
     }),
@@ -133,6 +146,8 @@ const linear: ServiceRow = {
   providers: [placeholder, speakeasy],
   serverCount: 2,
   readyServerCount: 2,
+  servers: [],
+  hiddenServerCount: 0,
 };
 const notion: ServiceRow = {
   ...linear,
@@ -173,6 +188,7 @@ beforeEach(() => {
   mocks.flag = "enabled";
   mocks.session = {};
   mocks.save.mockReset();
+  mocks.saveError = null;
   mocks.invalidate.mockReset();
   mocks.saveResult = { isDefault: false };
   mocks.speakeasyIssuer = "https://speakeasy.example.com/issuer";
@@ -220,7 +236,7 @@ describe("one service", () => {
     );
     expect(rows[1]?.textContent).toContain("Speakeasy");
     expect(rows[1]?.textContent).toContain(
-      "for servers whose sign-in has no identity provider",
+      "for servers whose people sign in with Speakeasy",
     );
     expect(rows[1]?.querySelector("code")?.textContent).toBe(
       "https://speakeasy.example.com/issuer",
@@ -230,9 +246,12 @@ describe("one service", () => {
   it("explains the default and starts a custom order from it", () => {
     show();
     expect(
-      screen.getByText(/relies on that provider alone/, {
-        selector: "#order *",
-      }),
+      screen.getByText(
+        /each server is vouched for by whatever signs its people in/,
+        {
+          selector: "#order *",
+        },
+      ),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save order" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Customize order" }));
@@ -255,6 +274,7 @@ describe("one service", () => {
             { kind: "speakeasy" },
             { kind: "external", remoteSessionIssuerId: "okta" },
           ],
+          expectedProviders: [],
         },
       },
     });
@@ -285,6 +305,10 @@ describe("one service", () => {
         setEMAProvidersRequestBody: {
           remoteSessionIssuerId: "vendor",
           providers: [],
+          expectedProviders: [
+            { kind: "external", remoteSessionIssuerId: "okta" },
+            { kind: "speakeasy" },
+          ],
         },
       },
     });
@@ -398,5 +422,93 @@ describe("one service", () => {
     expect(
       screen.getByText(/No server reaches this service any more/),
     ).toBeTruthy();
+  });
+  it("stops a stale draft when the saved order changes underneath it", () => {
+    mocks.rows = [
+      { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
+    ];
+    const { rerender } = show();
+    fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move Speakeasy up" }));
+    expect(saveButton().disabled).toBe(false);
+
+    // Another admin removes Speakeasy.
+    mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [okta] }];
+    rerender(tree());
+    expect(
+      screen.getByText(/This order changed since you started editing/),
+    ).toBeTruthy();
+    expect(screen.getByText(/It’s now: Okta\./)).toBeTruthy();
+    expect(saveButton().disabled).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review and keep editing" }),
+    );
+    expect(saveButton().disabled).toBe(false);
+    fireEvent.click(saveButton());
+    expect(mocks.save).toHaveBeenCalledWith({
+      request: {
+        setEMAProvidersRequestBody: {
+          remoteSessionIssuerId: "vendor",
+          providers: [
+            { kind: "speakeasy" },
+            { kind: "external", remoteSessionIssuerId: "okta" },
+          ],
+          expectedProviders: [
+            { kind: "external", remoteSessionIssuerId: "okta" },
+          ],
+        },
+      },
+    });
+  });
+
+  it("discards a stale draft on request", () => {
+    mocks.rows = [
+      { ...linear, isDefaultOrder: false, providers: [okta, speakeasy] },
+    ];
+    const { rerender } = show();
+    fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
+    mocks.rows = [{ ...linear, isDefaultOrder: false, providers: [okta] }];
+    rerender(tree());
+    fireEvent.click(screen.getByRole("button", { name: "Discard my changes" }));
+    expect(screen.queryByRole("button", { name: "Save order" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Edit order" })).toBeTruthy();
+  });
+
+  it("says the order changed when the server refuses a stale save", () => {
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "Customize order" }));
+    mocks.saveError = new GramError("conflict", {
+      response: new Response("{}", { status: 409 }),
+      request: new Request("https://example.com"),
+      body: "{}",
+    });
+    fireEvent.click(saveButton());
+    expect(mocks.invalidate).toHaveBeenCalledWith("services");
+    expect(
+      screen.getByText(/This order changed since you started editing/),
+    ).toBeTruthy();
+    expect(saveButton().disabled).toBe(true);
+  });
+
+  it("keeps a temporarily disabled Speakeasy saveable, with a note", () => {
+    const paused = view({
+      usable: false,
+      unavailable: "Not set up",
+      unavailableReason: "disabled",
+    });
+    mocks.rows = [
+      { ...linear, isDefaultOrder: false, providers: [paused, okta] },
+    ];
+    show();
+    expect(
+      screen.queryByText("No longer available. Remove it to save."),
+    ).toBeNull();
+    expect(
+      screen.getByText(/Not set up\. It’s skipped until it can vouch again\./),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit order" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move Okta up" }));
+    expect(saveButton().disabled).toBe(false);
   });
 });

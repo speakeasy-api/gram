@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { toast } from "sonner";
 
@@ -14,7 +14,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
+import { Alert } from "@/components/ui/Alert";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Dialog } from "@/components/ui/Dialog";
 import {
   Select,
@@ -257,10 +259,21 @@ export function IdentityChainingField({
   const clientIssuers = useRemoteSessionIssuersByIds([
     ...new Set(linkable.map((client) => client.remoteSessionIssuerId)),
   ]);
+  // Only clients of the server's current authorization server can be turned
+  // on; a binding on one the metadata no longer names must still turn off.
   const candidates = clientsForResource(
     linkable,
     clientIssuers.items,
     prm.metadata?.authorizationServers,
+  );
+  const staleIssuerIds = [
+    ...new Set(
+      linkable
+        .filter((client) => !candidates.includes(client))
+        .map((client) => client.remoteSessionIssuerId),
+    ),
+  ].filter(
+    (id) => !candidates.some((client) => client.remoteSessionIssuerId === id),
   );
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   // A prepare that returned a blocker; kept until the next action.
@@ -294,6 +307,36 @@ export function IdentityChainingField({
         options: { fetchOptions: { signal } },
       });
     },
+  });
+  const staleTargets = staleIssuerIds.map((remoteSessionIssuerId) => ({
+    userSessionIssuerId: userSessionIssuer.id,
+    remoteSessionIssuerId,
+    resource,
+  }));
+  const staleReads = useQueries({
+    queries: staleTargets.map((staleTarget) => ({
+      queryKey: ["identityChaining", "readEMA", gramProject, staleTarget],
+      retry: false,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        buildRemoteSessionClientsReadEMAMutation(core).mutationFn({
+          request: { gramProject, readEMARequestBody: staleTarget },
+          options: { fetchOptions: { signal } },
+        }),
+    })),
+  });
+  const staleBindings = staleTargets.flatMap((staleTarget, i) => {
+    const data = staleReads[i]?.data;
+    return data && chainingUnlinkable(data)
+      ? [
+          {
+            target: staleTarget,
+            generation: data.generation,
+            clientLabel:
+              linkable.find((client) => client.id === data.clientId)
+                ?.clientId ?? data.externalClientId,
+          },
+        ]
+      : [];
   });
 
   // The binding is keyed by issuer and resource, so it may name another client.
@@ -504,9 +547,22 @@ export function IdentityChainingField({
     vendor,
   });
 
+  const staleNotices = staleBindings.map((binding) => (
+    <StaleBinding
+      key={binding.target.remoteSessionIssuerId}
+      gramProject={gramProject}
+      target={binding.target}
+      generation={binding.generation}
+      clientLabel={binding.clientLabel}
+      vendor={vendor}
+      projectId={project.id}
+    />
+  ));
+
   if (candidates.length === 0) {
     return (
       <SettingsSection.Body>
+        {staleNotices}
         <Text muted small>
           {providers.external
             ? "Link a client for this server’s identity provider in Identity above first."
@@ -588,6 +644,7 @@ export function IdentityChainingField({
           </RequireScope>
         </div>
         <ApiErrorAlert error={read.error ?? prepare.error ?? unlink.error} />
+        {staleNotices}
       </SettingsSection.Body>
 
       <ol
@@ -673,11 +730,7 @@ export function IdentityChainingField({
           {order && usableVouchers.length > 0 && (
             <Text muted small className="block">
               {order.isDefault ? (
-                userSessionIssuer.trustedRemoteSessionIssuerId ? (
-                  "This server’s sign-in uses an identity provider, so it vouches alone."
-                ) : (
-                  "This server’s sign-in has no identity provider, so Speakeasy vouches."
-                )
+                defaultVoucherLine(trustedIssuerId ? signIn.name : undefined)
               ) : (
                 <>
                   Set by{" "}
@@ -871,6 +924,105 @@ export function IdentityChainingField({
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
+    </>
+  );
+}
+
+/** Who vouches on this server by default, in the words the Services page uses. */
+function defaultVoucherLine(identityProvider: string | undefined): string {
+  return identityProvider
+    ? `People sign in to this server through ${identityProvider}, so ${identityProvider} vouches for them.`
+    : "People sign in to this server with Speakeasy, so Speakeasy vouches for them.";
+}
+
+/**
+ * A binding on a client of an authorization server this server's metadata no
+ * longer names. It can't be turned on again, but it must turn off: the
+ * client can't be replaced while the binding holds it.
+ */
+function StaleBinding({
+  gramProject,
+  target,
+  generation,
+  clientLabel,
+  vendor,
+  projectId,
+}: {
+  gramProject: string;
+  target: {
+    userSessionIssuerId: string;
+    remoteSessionIssuerId: string;
+    resource: string;
+  };
+  generation: number;
+  clientLabel: string | undefined;
+  vendor: string;
+  projectId: string;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const unlink = useRemoteSessionClientsUnlinkEMAMutation({
+    onSuccess: () => {
+      setConfirming(false);
+      void invalidateAllOrganizationRemoteSessionIssuerEMAServices(queryClient);
+      void queryClient.invalidateQueries({
+        queryKey: ["identityChaining", "readEMA"],
+      });
+      toast.success(
+        "Enterprise Managed Authorization is off for the old client",
+      );
+    },
+    onError: () => undefined,
+  });
+  return (
+    <>
+      <Alert variant="warning" alignTop>
+        <div className="flex flex-col items-start gap-2">
+          <Text small className="block">
+            Enterprise Managed Authorization is still on through client{" "}
+            {clientLabel ?? "an earlier client"}, which belongs to an
+            authorization server this server no longer uses. Turn it off before
+            you replace or remove that client.
+          </Text>
+          <RequireScope
+            scope="project:write"
+            resourceId={projectId}
+            level="component"
+          >
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={unlink.isPending}
+              onClick={() => setConfirming(true)}
+            >
+              Turn off
+            </Button>
+          </RequireScope>
+        </div>
+      </Alert>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Turn off Enterprise Managed Authorization for the old client?"
+        description={`People will connect ${vendor} themselves until it’s turned on for this server’s current client.`}
+        confirmLabel="Turn off"
+        pendingLabel="Turning off…"
+        isPending={unlink.isPending}
+        error={
+          unlink.error ? <ApiErrorAlert error={unlink.error} /> : undefined
+        }
+        onConfirm={() =>
+          unlink.mutate({
+            request: {
+              gramProject,
+              unlinkEMARequestBody: {
+                ...target,
+                expectedGeneration: generation,
+              },
+            },
+          })
+        }
+      />
     </>
   );
 }

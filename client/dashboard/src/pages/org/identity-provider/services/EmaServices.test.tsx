@@ -46,6 +46,8 @@ const linear: ServiceRow = {
   ],
   serverCount: 3,
   readyServerCount: 2,
+  servers: [],
+  hiddenServerCount: 0,
 };
 
 function show() {
@@ -70,7 +72,7 @@ describe("Services", () => {
     expect(screen.getByText(/once per service/)).toBeTruthy();
     expect(
       screen.getByText(
-        /a server whose sign-in uses an identity provider relies on that provider alone/,
+        /By default, each server is vouched for by whatever signs its people in: their identity provider, such as Okta, or Speakeasy itself once it’s set up\./,
       ),
     ).toBeTruthy();
     expect(screen.getByText("No services yet")).toBeTruthy();
@@ -92,8 +94,8 @@ describe("Services", () => {
       screen.getByRole("list", { name: "Linear identity providers" }),
     ).getAllByRole("listitem");
     expect(providers.map((item) => item.textContent)).toEqual([
-      "Each server’s own identity providerNot accepted yet · for servers whose sign-in uses one",
-      "SpeakeasyLast worked 3h ago · for servers whose sign-in has no identity provider",
+      "Each server’s own identity providerNot accepted yet · for servers whose people sign in through one",
+      "SpeakeasyLast worked 3h ago · for servers whose people sign in with Speakeasy",
     ]);
     expect(screen.getByText("3 servers · 2 ready")).toBeTruthy();
     expect(

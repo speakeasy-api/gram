@@ -15,6 +15,10 @@ import type { ChainingProviders } from "./identityChainingGate";
 const pending = vi.hoisted(() => ({ prepare: false, unlink: false }));
 const unlinked = { state: "unlinked", scopes: [] };
 const read = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
+// Reads of bindings on clients the metadata filter dropped, by issuer.
+const staleRead = vi.hoisted(() => ({
+  byIssuer: {} as Record<string, Record<string, unknown>>,
+}));
 const scopeChecks = vi.hoisted(() => [] as unknown[]);
 const issuerNames = vi.hoisted(() => ({
   items: [] as { id: string; name: string; issuer?: string }[],
@@ -29,6 +33,16 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ isFetching: false, data: read.data }),
+  useQueries: ({
+    queries,
+  }: {
+    queries: {
+      queryKey: [string, string, string, { remoteSessionIssuerId: string }];
+    }[];
+  }) =>
+    queries.map((query) => ({
+      data: staleRead.byIssuer[query.queryKey[3].remoteSessionIssuerId],
+    })),
   useQueryClient: () => ({
     setQueryData: (
       _key: unknown,
@@ -165,6 +179,7 @@ const bound = (clientId: string) => ({
 
 beforeEach(() => {
   read.data = unlinked;
+  staleRead.byIssuer = {};
   scopeChecks.length = 0;
   issuerNames.items = [];
   state.orgAdmin = true;
@@ -237,6 +252,81 @@ describe("identity chaining client for this service", () => {
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.getByText("tracker-client")).toBeTruthy();
     expect(screen.queryByText("wiki-client")).toBeNull();
+  });
+
+  it("keeps Turn off for a binding on a client the metadata no longer names", () => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com/"] },
+    };
+    issuerNames.items = [
+      { id: "wiki", name: "Wiki", issuer: "https://wiki.example.com" },
+    ];
+    staleRead.byIssuer = { wiki: { ...bound("wiki-client"), generation: 4 } };
+    render(
+      <IdentityChainingField
+        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+        providers={{ external: false }}
+        linkedClients={
+          [
+            {
+              id: "wiki-client",
+              clientId: "wiki-client",
+              remoteSessionIssuerId: "wiki",
+            },
+          ] as RemoteSessionClient[]
+        }
+        resource="https://example.com/mcp"
+      />,
+    );
+    expect(
+      screen.getByText(/still on through client wiki-client/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Link a client registered with this server’s authorization server/,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Turn off" }));
+    expect(state.unlink).toHaveBeenCalledWith({
+      request: {
+        gramProject: "project",
+        unlinkEMARequestBody: {
+          userSessionIssuerId: "session-issuer",
+          remoteSessionIssuerId: "wiki",
+          resource: "https://example.com/mcp",
+          expectedGeneration: 4,
+        },
+      },
+    });
+  });
+
+  it("says nothing about the metadata filter when no dropped client is bound", () => {
+    prmMock.value = {
+      metadata: { authorizationServers: ["https://tracker.example.com/"] },
+    };
+    issuerNames.items = [
+      { id: "wiki", name: "Wiki", issuer: "https://wiki.example.com" },
+    ];
+    staleRead.byIssuer = { wiki: unlinked };
+    render(
+      <IdentityChainingField
+        userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
+        providers={{ external: false }}
+        linkedClients={
+          [
+            {
+              id: "wiki-client",
+              clientId: "wiki-client",
+              remoteSessionIssuerId: "wiki",
+            },
+          ] as RemoteSessionClient[]
+        }
+        resource="https://example.com/mcp"
+      />,
+    );
+    expect(screen.queryByText(/still on through client/)).toBeNull();
   });
 });
 
@@ -569,7 +659,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField());
     expect(
       screen.getByText(
-        "This server’s sign-in has no identity provider, so Speakeasy vouches.",
+        "People sign in to this server with Speakeasy, so Speakeasy vouches for them.",
       ),
     ).toBeTruthy();
     expect(

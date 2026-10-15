@@ -44,15 +44,15 @@ const PLACEHOLDER_PROVIDER_NAME = "Each server’s own identity provider";
 
 /** The rule that applies when no order is saved, said the same way everywhere. */
 export const DEFAULT_ORDER_RULE =
-  "With no saved order, a server whose sign-in uses an identity provider relies on that provider alone. A server whose sign-in has no identity provider relies on Speakeasy.";
+  "By default, each server is vouched for by whatever signs its people in: their identity provider, such as Okta, or Speakeasy itself once it’s set up. Save an order to change that for a service.";
 
 /** What the default's Speakeasy entry covers. */
 export const SPEAKEASY_DEFAULT_SCOPE =
-  "For servers whose sign-in has no identity provider";
+  "For servers whose people sign in with Speakeasy";
 
 /** What the default's external placeholder covers. */
 export const PLACEHOLDER_SCOPE =
-  "For servers whose sign-in uses an identity provider. Its issuer URL is on that server’s Enterprise Managed Authorization settings.";
+  "For servers whose people sign in through an identity provider. Its issuer URL is on that server’s Enterprise Managed Authorization settings.";
 
 function providerKey(provider: EMAProvider): string {
   return provider.kind === "speakeasy"

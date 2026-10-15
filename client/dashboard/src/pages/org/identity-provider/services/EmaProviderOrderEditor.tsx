@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
 import { SettingsSection } from "@/components/detail/settings-section";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import {
   Select,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import type { EMAProviderInput } from "@gram/client/models/components/emaproviderinput.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { invalidateAllOrganizationRemoteSessionIssuerEMAServices } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js";
 import { useSetOrganizationRemoteSessionIssuerEMAProvidersMutation } from "@gram/client/react-query/setOrganizationRemoteSessionIssuerEMAProviders.js";
 
@@ -40,16 +42,19 @@ export type OrderCandidate = {
 };
 
 type Entry = OrderCandidate & {
-  /** False when a saved entry can no longer be saved: deleted, or no sign-in trusts it. */
+  /**
+   * False when a saved entry can no longer be referenced: deleted, or no
+   * organization sign-in trusts it. One that is only paused or disabled
+   * stays valid and gets a readiness note instead.
+   */
   available: boolean;
 };
 
 /**
- * Which identity providers are tried for a service, in what order. With no
- * order saved, each server's own identity provider vouches alone, and
- * Speakeasy vouches on servers whose sign-in has none. A saved order applies
- * to every server that reaches the service. Key it by service so a draft
- * never carries over to another one.
+ * Which identity providers are tried for a service, in what order. By
+ * default each server is vouched for by whatever signs its people in. A
+ * saved order applies to every server that reaches the service. Key it by
+ * service so a draft never carries over to another one.
  */
 export function EmaProviderOrderEditor({
   serviceName,
@@ -79,6 +84,10 @@ export function EmaProviderOrderEditor({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Entry[] | null>(null);
+  // The saved order the draft started from, so a change underneath it stops
+  // Save instead of silently restoring what another admin removed.
+  const [base, setBase] = useState<Entry[] | null>(null);
+  const [conflict, setConflict] = useState(false);
   const [adding, setAdding] = useState("");
   const saved: Entry[] = isDefault
     ? []
@@ -91,13 +100,29 @@ export function EmaProviderOrderEditor({
           remoteSessionIssuerId: provider.remoteSessionIssuerId,
           available:
             !candidatesReady ||
-            (!!candidate &&
-              provider.unavailableReason !== "deleted" &&
-              provider.unavailableReason !== "disabled"),
+            (!!candidate && provider.unavailableReason !== "deleted"),
         };
       });
+  const readiness = (key: string): string | undefined => {
+    const provider = current.find((p) => p.key === key);
+    return provider && !provider.usable && !provider.placeholder
+      ? provider.unavailable
+      : undefined;
+  };
+  const startEditing = (entries: Entry[]) => {
+    setBase(saved);
+    setConflict(false);
+    setDraft(entries);
+  };
+  const stopEditing = () => {
+    setDraft(null);
+    setBase(null);
+    setConflict(false);
+  };
   const editing = draft !== null;
   const order = draft ?? saved;
+  const changedUnderneath =
+    editing && (conflict || (base !== null && !sameOrder(base, saved)));
   const custom = editing || !isDefault;
   const dirty = editing && (isDefault || !sameOrder(draft, saved));
   const full = order.length >= MAX_ORDER_LENGTH;
@@ -116,14 +141,21 @@ export function EmaProviderOrderEditor({
           queryKey: ["identityChaining", "readEMA"],
         }),
       ]);
-      setDraft(null);
+      stopEditing();
       toast.success(
         result.isDefault
           ? `${serviceName} uses the default order`
           : `Saved the order for ${serviceName}`,
       );
     },
-    onError: () => undefined,
+    onError: (error) => {
+      if (error instanceof GramError && error.statusCode === 409) {
+        setConflict(true);
+        void invalidateAllOrganizationRemoteSessionIssuerEMAServices(
+          queryClient,
+        );
+      }
+    },
   });
   const submit = (entries: Entry[]) => {
     if (!remoteSessionIssuerId) return;
@@ -132,10 +164,13 @@ export function EmaProviderOrderEditor({
         setEMAProvidersRequestBody: {
           remoteSessionIssuerId,
           providers: entries.map(providerInput),
+          expectedProviders: (base ?? saved).map(providerInput),
         },
       },
     });
   };
+  const conflictError =
+    save.error instanceof GramError && save.error.statusCode === 409;
   const move = (index: number, by: -1 | 1) => {
     const next = [...order];
     const [entry] = next.splice(index, 1);
@@ -146,7 +181,7 @@ export function EmaProviderOrderEditor({
   // Start from what runs today: each identity provider a sign-in trusts,
   // then Speakeasy when it exists.
   const customize = () =>
-    setDraft(
+    startEditing(
       [
         ...candidates.filter((c) => c.kind === "external"),
         ...candidates.filter((c) => c.kind === "speakeasy"),
@@ -192,8 +227,40 @@ export function EmaProviderOrderEditor({
             <>
               <Text muted small>
                 A saved order applies to every server that reaches {serviceName}
-                , in place of each server’s own identity provider.
+                , in place of whatever signs each server’s people in.
               </Text>
+              {changedUnderneath && (
+                <Alert variant="warning" alignTop>
+                  <div className="flex flex-col items-start gap-2">
+                    <Text small className="block">
+                      This order changed since you started editing.{" "}
+                      {saved.length > 0
+                        ? `It’s now: ${saved.map((entry) => entry.name).join(", ")}.`
+                        : `${serviceName} uses the default order now.`}
+                    </Text>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={stopEditing}
+                      >
+                        Discard my changes
+                      </Button>
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        onClick={() => {
+                          setBase(saved);
+                          setConflict(false);
+                          save.reset();
+                        }}
+                      >
+                        Review and keep editing
+                      </Button>
+                    </div>
+                  </div>
+                </Alert>
+              )}
               {order.length === 0 ? (
                 <Text small>Add at least one identity provider.</Text>
               ) : (
@@ -212,7 +279,7 @@ export function EmaProviderOrderEditor({
                         <Text as="span" small className="truncate font-medium">
                           {entry.name}
                         </Text>
-                        {!entry.available && (
+                        {!entry.available ? (
                           <Text
                             as="span"
                             small
@@ -220,6 +287,13 @@ export function EmaProviderOrderEditor({
                           >
                             No longer available. Remove it to save.
                           </Text>
+                        ) : (
+                          readiness(entry.key) && (
+                            <Text as="span" muted small>
+                              {readiness(entry.key)}. It’s skipped until it can
+                              vouch again.
+                            </Text>
+                          )
                         )}
                       </span>
                       {showEditControls && (
@@ -336,7 +410,7 @@ export function EmaProviderOrderEditor({
               {readOnlyReason}
             </Text>
           )}
-          <ApiErrorAlert error={save.error} />
+          <ApiErrorAlert error={conflictError ? null : save.error} />
         </SettingsSection.Body>
         {remoteSessionIssuerId && (canEdit || (canRestore && !isDefault)) && (
           <SettingsSection.Footer>
@@ -344,7 +418,7 @@ export function EmaProviderOrderEditor({
               {editing
                 ? "Takes effect for the next person who connects."
                 : custom
-                  ? "Go back to the default to let each server use its own identity provider."
+                  ? "Go back to the default to let whatever signs each server’s people in vouch for them."
                   : undefined}
             </SettingsSection.FooterHint>
             <SettingsSection.FooterActions>
@@ -363,7 +437,7 @@ export function EmaProviderOrderEditor({
                   variant={custom ? "secondary" : "primary"}
                   size="sm"
                   disabled={save.isPending}
-                  onClick={() => (custom ? setDraft(saved) : customize())}
+                  onClick={() => (custom ? startEditing(saved) : customize())}
                 >
                   {custom ? "Edit order" : "Customize order"}
                 </Button>
@@ -374,7 +448,7 @@ export function EmaProviderOrderEditor({
                     variant="secondary"
                     size="sm"
                     disabled={save.isPending}
-                    onClick={() => setDraft(null)}
+                    onClick={stopEditing}
                   >
                     Cancel
                   </Button>
@@ -383,6 +457,7 @@ export function EmaProviderOrderEditor({
                     size="sm"
                     disabled={
                       save.isPending ||
+                      changedUnderneath ||
                       !dirty ||
                       order.length === 0 ||
                       order.length > MAX_ORDER_LENGTH ||

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { EMAService } from "@gram/client/models/components/emaservice.js";
+import type { EMAServiceServer } from "@gram/client/models/components/emaserviceserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useIdentityProviderConnection } from "@gram/client/react-query/identityProviderConnection.js";
@@ -18,8 +19,13 @@ export type ServiceRow = {
   remoteSessionIssuerId?: string;
   isDefaultOrder: boolean;
   providers: ProviderView[];
+  /** Every server that reaches the service, including ones the viewer can't see. */
   serverCount: number;
   readyServerCount: number;
+  /** The servers the viewer can see. */
+  servers: EMAServiceServer[];
+  /** Servers the viewer can't see; counted, never named. */
+  hiddenServerCount: number;
 };
 
 /** Keyed by organization so switching organizations never shows the last one's services. */
@@ -129,6 +135,8 @@ function serviceRow(
     ),
     serverCount: service.serverCount,
     readyServerCount: service.readyServerCount,
+    servers: service.servers,
+    hiddenServerCount: service.hiddenServerCount,
   };
 }
 
@@ -139,4 +147,9 @@ export function serversSummary(row: ServiceRow): string {
     row.serverCount === 1 ? "1 server" : `${row.serverCount} servers`;
   if (row.readyServerCount === row.serverCount) return servers;
   return `${servers} · ${row.readyServerCount} ready`;
+}
+
+/** "1 server" or "3 servers". */
+export function serverCountLabel(count: number): string {
+  return count === 1 ? "1 server" : `${count} servers`;
 }
