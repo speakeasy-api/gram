@@ -483,7 +483,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// The mint-time origin puts the consent page back on the host the user
 	// started on, without a fresh custom_domains lookup, or on the
 	// authentication host when the endpoint's issuer lives there.
-	consentURL, err := s.consentURL(endpoint, s.authorizationServerBaseURL(endpoint, baseURL), challengeState.ID)
+	consentURL, err := s.challengeConsentURL(endpoint, challengeState)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)

@@ -54,6 +54,9 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // the flow lands on that server's connect page. A gateway tool call links here
 // when a server cannot be reached without the user's sign-in.
 func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
+	if s.redirectToAuthorizationServer(w, r, endpoint) {
+		return nil
+	}
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
