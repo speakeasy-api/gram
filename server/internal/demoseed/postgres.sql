@@ -1267,7 +1267,7 @@ BEGIN
   -- above.
   ------------------------------------------------------------------
   INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
-  VALUES (us_issuer, proj_a, demo_org, 'acme-partner-gateway', 'interactive', interval '30 days');
+  VALUES (us_issuer, proj_a, demo_org, 'acme-partner-gateway', 'interactive', make_interval(secs => 30 * 24 * 60 * 60));
 
   UPDATE toolsets SET user_session_issuer_id = us_issuer WHERE id = toolset_3;
 
