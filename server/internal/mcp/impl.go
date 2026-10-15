@@ -780,6 +780,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 
 	attachSharedAuthorizationServers(mux, service)
+	attachOrganizationGateway(mux, service)
 }
 
 // HandleRemoteLoginCallback is the chi handler at
@@ -1075,7 +1076,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if metaServer != nil {
-			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, uuid.Nil)
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, metaMembership{agentID: uuid.Nil, organization: false}, nil)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case mcpendpoints.IsAddressMiss(err):

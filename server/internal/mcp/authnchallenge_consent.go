@@ -1348,13 +1348,36 @@ type resourceDisplayOwner struct {
 	load     func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error)
 	loaded   bool
 	// upstreams is each issuer's member resources, keyed by remote_session_issuer_id.
-	upstreams map[uuid.UUID][]string
+	upstreams map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow
 }
 
-func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint) *resourceDisplayOwner {
+func (s *Service) newResourceDisplayOwner(endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) *resourceDisplayOwner {
 	return &resourceDisplayOwner{
 		endpoint: endpoint,
 		load: func(ctx context.Context) ([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, error) {
+			if endpoint.IsOrganizationGateway() {
+				rows, err := metamcprepo.New(s.db).ListOrganizationProxiedMCPServerResources(ctx, endpoint.OrganizationID)
+				if err != nil {
+					return nil, fmt.Errorf("list organization proxied MCP server resources: %w", err)
+				}
+				// Only servers the subject reaches lend a card their resource;
+				// another server's would say it exists.
+				members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+				if err != nil {
+					return nil, err
+				}
+				admitted := make(map[uuid.UUID]bool, len(members))
+				for _, member := range members {
+					admitted[member.serverID] = true
+				}
+				converted := make([]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, 0, len(rows))
+				for _, row := range rows {
+					if admitted[row.McpServerID] {
+						converted = append(converted, metamcprepo.ListMetaMCPProxiedMemberResourcesRow(row))
+					}
+				}
+				return converted, nil
+			}
 			return metamcprepo.New(s.db).ListMetaMCPProxiedMemberResources(ctx, metamcprepo.ListMetaMCPProxiedMemberResourcesParams{
 				MetaMcpServerID: endpoint.MetaMcpServerID.UUID,
 				ProjectID:       endpoint.ProjectID,
@@ -1377,16 +1400,22 @@ func (o *resourceDisplayOwner) owns(ctx context.Context, c remotesessions.Client
 		if err != nil {
 			return false, fmt.Errorf("list meta MCP member resources for resource display: %w", err)
 		}
-		o.upstreams = make(map[uuid.UUID][]string, len(rows))
+		o.upstreams = make(map[uuid.UUID][]metamcprepo.ListMetaMCPProxiedMemberResourcesRow, len(rows))
 		for _, row := range rows {
 			if row.RemoteSessionIssuerID.Valid {
-				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row.UpstreamUrl)
+				o.upstreams[row.RemoteSessionIssuerID.UUID] = append(o.upstreams[row.RemoteSessionIssuerID.UUID], row)
 			}
 		}
 		o.loaded = true
 	}
-	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(upstream string) bool {
-		return wellknown.SameResource(c.ResourceIdentifier, upstream)
+	// A client a project owns routes only to its own project's servers, so
+	// only they can lend it their resource. A stored gateway's members all
+	// share its project.
+	return slices.ContainsFunc(o.upstreams[c.RemoteSessionIssuerID], func(row metamcprepo.ListMetaMCPProxiedMemberResourcesRow) bool {
+		if c.ProjectID.Valid && c.ProjectID.UUID != row.ProjectID {
+			return false
+		}
+		return wellknown.SameResource(c.ResourceIdentifier, row.UpstreamUrl)
 	}), nil
 }
 
@@ -1413,7 +1442,7 @@ func (s *Service) buildRemoteSessionCards(
 	challengeState AuthnChallengeState,
 	policy autoRefreshPolicy,
 ) ([]remoteSessionCard, error) {
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	clients, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -1468,7 +1497,7 @@ func (s *Service) buildRemoteSessionCards(
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
-	owner := s.newResourceDisplayOwner(endpoint)
+	owner := s.newResourceDisplayOwner(endpoint, challengeState)
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
 		unroutable := hasSession && state.Status == remotesessions.RemoteSessionActive && routing.unroutable(c, state.Resource)
@@ -1641,7 +1670,7 @@ func (s *Service) maybeAutoConnect(
 		return false, nil
 	}
 
-	bound, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}

@@ -302,6 +302,11 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	grantType := r.PostForm.Get("grant_type")
 	creds := extractClientCredentials(r)
 	grant, ok := s.tokenGrantFor(r, grantType, creds)
+	// A workload's assertion signs in a workload, and an organization gateway
+	// serves users only.
+	if ok && grant.clientless != nil && endpoint.IsOrganizationGateway() {
+		ok = false
+	}
 	if !ok {
 		clientID, _ := resolvePresentedClientID(creds)
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token request rejected", clientID, creds.method, grantType, oautherr.CodeUnsupportedGrantType)
@@ -525,7 +530,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, result.Subject, "id-jag:"+result.Claims.JTI, clientRow.ClientID)
 	if err == nil && endpoint.MetaMcpServerID.Valid {
 		var members []metaMember
-		authorizationCtx, members, err = s.resolveMetaMemberSnapshot(authorizationCtx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+		authorizationCtx, members, err = s.resolveEndpointMemberSnapshot(authorizationCtx, logger, endpoint)
 		if err == nil && len(members) == 0 {
 			err = oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any meta MCP members")
 		}

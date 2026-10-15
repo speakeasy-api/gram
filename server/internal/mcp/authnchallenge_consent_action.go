@@ -101,7 +101,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return s.serveIdentityChainingCheck(w, r, endpoint, challengeState)
 	}
 
-	bound, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
@@ -164,7 +164,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID); err != nil {
+		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.clientProjectID(*client), endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "disconnect remote session").LogError(ctx, logger)
 		}
 		// Latch auto-connect off. Without this the redirect back to the consent
@@ -196,7 +196,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
 			ctx,
 			subject,
-			endpoint.ProjectID,
+			endpoint.clientProjectID(*client),
 			endpoint.OrganizationID,
 			endpoint.UserSessionIssuerID,
 			client.ID,
@@ -247,7 +247,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		enabled := r.PostForm.Get("auto_refresh") == "on"
 		for i := range clients {
-			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
+			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.clientProjectID(clients[i]), endpoint.OrganizationID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "set remote session auto refresh").LogError(ctx, logger)
 			}
 		}
@@ -283,7 +283,7 @@ func (s *Service) buildRemoteConnectURL(
 	var clientResource string
 	var rerr error
 	claimedByMember := false
-	resourceMember := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	resourceMember := chosenMetaMember{serverID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, projectID: uuid.Nil}
 	if endpoint.MetaMcpServerID.Valid {
 		// Member visibility is judged against the consent subject, as the runtime
 		// request the minted session will make will be.
@@ -291,7 +291,7 @@ func (s *Service) buildRemoteConnectURL(
 		if cerr != nil {
 			return "", false, oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 		}
-		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
 	}
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 	// decided, and falling back would qualify the credential anyway.
@@ -317,9 +317,16 @@ func (s *Service) buildRemoteConnectURL(
 		}
 		consentURL = sharedConsentURL
 	}
+	// The login runs in the client's own project. An organization-level client
+	// on an organization gateway belongs to none, so it runs in the project of
+	// the member it was qualified to, whose resource the login reads.
+	loginProjectID := endpoint.clientProjectID(client)
+	if loginProjectID == uuid.Nil && resourceMember.serverID.Valid {
+		loginProjectID = resourceMember.projectID
+	}
 	parent := remotesessions.ParentChallenge{
 		ID:                  challengeState.ID,
-		ProjectID:           endpoint.ProjectID,
+		ProjectID:           loginProjectID,
 		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Subject:             challengeState.Subject,
@@ -327,7 +334,7 @@ func (s *Service) buildRemoteConnectURL(
 		RouteBase:           endpoint.RouteBase,
 		McpServerID:         endpoint.McpServerID,
 		MetaMcpServerID:     endpoint.MetaMcpServerID,
-		ResourceMcpServerID: resourceMember,
+		ResourceMcpServerID: resourceMember.serverID,
 		FinalRedirectURI:    "",
 		ConsentURL:          consentURL,
 		Resource:            clientResource,

@@ -168,6 +168,10 @@ func (s *Service) routeMetaMember(
 	if err != nil {
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
 	}
+	tokens, err := gate.memberTokens(ctx, member)
+	if err != nil {
+		return memberDial{}, "", err
+	}
 
 	// gate.toolSelection is provably nil today: meta endpoints mint no tool
 	// selections. If they ever do, its names are meta-MCP-qualified and would
@@ -191,7 +195,7 @@ func (s *Service) routeMetaMember(
 		if herr != nil {
 			return memberDial{}, "remote", fmt.Errorf("load meta MCP member upstream headers: %w", herr)
 		}
-		routed, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(remoteServer.Url, "/"))
+		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(remoteServer.Url, "/"))
 		upstreamToken := routed.Token
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
 			upstreamToken, terr = gate.chainUpstream(ctx, remoteServer.Url)
@@ -211,7 +215,7 @@ func (s *Service) routeMetaMember(
 		}}, "remote", nil
 
 	case member.tunneledServerID.Valid:
-		routed, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
+		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
 		upstreamToken := routed.Token
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
 			upstreamToken, terr = gate.chainUpstream(ctx, member.tunneledResourceIdentifier)
@@ -356,9 +360,6 @@ func (s *Service) executeProxiedMemberTool(
 	// A proxied member's tool-call log is written by the remotemcp interceptor,
 	// which never sees the gate, so carry the caller's identity down to it.
 	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
-		// The member's project, not the gate's: an agent gateway's members can
-		// sit in different projects, and this record belongs with the one the
-		// call actually reached.
 		projectID:       member.projectID,
 		sessionID:       gate.sessionID,
 		clientInfoScope: metaClientInfoScope(gate.metaServerID),

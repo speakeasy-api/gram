@@ -455,6 +455,7 @@ trackedFiles:
   src/funcs/organizationsEnableWebhooks.ts: {}
   src/funcs/organizationsGenerateWorkOSAdminPortalLink.ts: {}
   src/funcs/organizationsGet.ts: {}
+  src/funcs/organizationsGetGateway.ts: {}
   src/funcs/organizationsGetOnboardingStatus.ts: {}
   src/funcs/organizationsListInvites.ts: {}
   src/funcs/organizationsListSetupTasks.ts: {}
@@ -1504,6 +1505,7 @@ trackedFiles:
   src/models/components/organizationclientdelegationstatus.ts: {}
   src/models/components/organizationclientdeletepreflight.ts: {}
   src/models/components/organizationentry.ts: {}
+  src/models/components/organizationgateway.ts: {}
   src/models/components/organizationinvitation.ts: {}
   src/models/components/organizationissuerdeletepreflight.ts: {}
   src/models/components/organizationissuermigratepreflight.ts: {}
@@ -2317,6 +2319,7 @@ trackedFiles:
   src/models/operations/getobservabilityoverview.ts: {}
   src/models/operations/getonboardingstatus.ts: {}
   src/models/operations/getorganization.ts: {}
+  src/models/operations/getorganizationgateway.ts: {}
   src/models/operations/getorganizationremotesessionclient.ts: {}
   src/models/operations/getorganizationremotesessionclientdelegationstatus.ts: {}
   src/models/operations/getorganizationremotesessionclientdeletepreflight.ts: {}
@@ -3453,6 +3456,8 @@ trackedFiles:
   src/react-query/onboardingStatus.ts: {}
   src/react-query/organization.core.ts: {}
   src/react-query/organization.ts: {}
+  src/react-query/organizationGateway.core.ts: {}
+  src/react-query/organizationGateway.ts: {}
   src/react-query/organizationRemoteSessionClient.core.ts: {}
   src/react-query/organizationRemoteSessionClient.ts: {}
   src/react-query/organizationRemoteSessionClientDelegationStatus.core.ts: {}
@@ -7433,6 +7438,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOrganizationGateway:
+    speakeasy-default-get-organization-gateway:
+      responses:
+        "200":
+          application/json: {"available": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getOrganizationRemoteSessionClient:
     speakeasy-default-get-organization-remote-session-client:
       parameters:
@@ -7549,7 +7563,7 @@ examples:
           id: "b41af893-c72f-4a2f-8726-081b968aa81b"
       responses:
         "200":
-          application/json: {"can_delete": false, "client_count": 403058, "ema_binding_count": 749149, "live_session_count": 779104, "mcp_servers": [{"id": "69a47de3-e48a-4c25-8383-052d7c07645b", "name": "<value>", "project_id": "e25901f2-42fe-4e3d-9716-3a4e8e4b431e", "project_name": "<value>"}], "toolsets": []}
+          application/json: {"can_delete": false, "client_count": 403058, "ema_binding_count": 749149, "live_session_count": 779104, "mcp_servers": [{"id": "69a47de3-e48a-4c25-8383-052d7c07645b", "name": "<value>", "project_id": "e25901f2-42fe-4e3d-9716-3a4e8e4b431e", "project_name": "<value>"}], "toolsets": [], "withdraws_organization_gateway": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

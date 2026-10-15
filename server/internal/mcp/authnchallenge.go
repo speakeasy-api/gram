@@ -541,6 +541,13 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	if acceptedAudience == userSessionAudienceLegacy {
 		s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
 	}
+	// An organization gateway serves the organization's users, each with the
+	// servers their own access reaches; an agent, workload, or anonymous
+	// session has no such access to derive, so it is refused before any of
+	// its session state is read.
+	if endpoint.IsOrganizationGateway() && session.Subject().Kind != urn.SessionSubjectKindUser {
+		return ctx, nil, nil, false, fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
+	}
 
 	// The consent-screen tool selection loads for every subject kind —
 	// including anonymous, which early-returns below before AuthContext is
@@ -779,8 +786,13 @@ func (s *Service) contextForSessionSubject(
 		return ctx, nil
 	}
 
-	projectID := endpoint.ProjectID
-	authCtx, err := s.sessionAuthContext(ctx, endpoint.OrganizationID, &projectID, sessionID)
+	// An organization gateway belongs to no project; its members carry their
+	// own into every check.
+	var projectID *uuid.UUID
+	if id := endpoint.ProjectID; id != uuid.Nil {
+		projectID = &id
+	}
+	authCtx, err := s.sessionAuthContext(ctx, endpoint.OrganizationID, projectID, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -982,13 +994,21 @@ func (s *Service) authenticateIssuerGate(
 		refreshable   bool
 		valErr        error
 	)
-	if principalcredential.IsToken(authToken) {
+	// An organization gateway serves the organization's users, each with the
+	// servers their own access reaches. Principal credentials, agent keys,
+	// assistant tokens, and workload sessions are all bound to a project or a
+	// workload's own policy, so none of them signs in to it.
+	organizationGateway := endpoint.IsOrganizationGateway()
+	switch {
+	case principalcredential.IsToken(authToken) && !organizationGateway:
 		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
-	} else {
+	case principalcredential.IsToken(authToken):
+		valErr = fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
+	default:
 		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
 	}
 	refreshableUserSession := subject != nil && refreshable
-	if subject == nil {
+	if subject == nil && !organizationGateway {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted
 		// in project A could resolve a remote_session linked under
@@ -1002,7 +1022,7 @@ func (s *Service) authenticateIssuerGate(
 			newCtx, subject = s.identityValidator.StampAssistant(assistCtx), &ssubj
 		}
 	}
-	if subject == nil && strings.HasPrefix(authToken, "gram_") {
+	if subject == nil && !organizationGateway && strings.HasPrefix(authToken, "gram_") {
 		newCtx, subject, valErr = s.authenticateIssuerGateAgentKey(ctx, authToken, endpoint)
 		var denied *oops.ShareableError
 		if errors.As(valErr, &denied) && denied.Code == oops.CodeNotFound {
