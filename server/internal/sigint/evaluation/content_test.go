@@ -84,3 +84,25 @@ func TestInputAttachmentFailureAndSizeLimit(t *testing.T) {
 	require.ErrorAs(t, err, &failed)
 	require.Equal(t, "invalid_content", failed.reason)
 }
+
+func TestInputNullOriginalContentIsOmitted(t *testing.T) {
+	t.Parallel()
+	for _, spilled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("spilled=%t", spilled), func(t *testing.T) {
+			t.Parallel()
+			m := message()
+			row := targetContent(storedMessage(m))
+			uri := "gs://test-bucket/" + m.GetProjectId() + "/content.json"
+			if spilled {
+				row.ContentAssetUrl = conv.ToPGText(uri)
+			} else {
+				row.ContentRaw = []byte("null")
+			}
+			state, err := inputWithBudget(t.Context(), memoryBlobs{uri: []byte("null")}, m.GetProjectId(), row, maxContentBytes)
+			require.NoError(t, err)
+			data, err := json.Marshal(state)
+			require.NoError(t, err)
+			testenv.RequireYAMLGolden(t, "testdata/state/null-original-content.golden.yaml", data)
+		})
+	}
+}

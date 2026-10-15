@@ -55,7 +55,6 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, &pub, c)
 	require.NoError(t, err)
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
-	testenv.RequireYAMLGolden(t, "testdata/requests/independent-event.golden.yaml", requests.snapshot(t))
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
 	require.Len(t, pub.readings, 2)
 
@@ -83,6 +82,7 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	require.NotEqual(t, a.GetId(), pub.readings[2].GetId(), "event kinds namespace otherwise identical identities")
 	require.Equal(t, "mcp.tool_call", a.GetEvent().GetKind(), "published metadata is an independent snapshot")
 	require.Equal(t, 3, in.resolved)
+	testenv.RequireYAMLGolden(t, "testdata/requests/independent-event.golden.yaml", requests.snapshot(t))
 }
 
 func TestEvaluatorDefersContentUntilEligible(t *testing.T) {

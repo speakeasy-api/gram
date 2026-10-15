@@ -66,11 +66,19 @@ type Input interface {
 	Resolve(context.Context) (classifier.Entry, error)
 }
 
-// WindowInput supports target-focused context resolution after sensor selection.
-// Resolutions on one input are sequential; adapters may cache content between sizes.
+// WindowInput prepares target-focused context after sensor selection.
 type WindowInput interface {
 	Input
 
-	// ResolveWindow returns up to size messages, including the target exactly once.
-	ResolveWindow(ctx context.Context, size int) (classifier.Entry, error)
+	// NewBuffer creates an I/O-free, per-evaluation buffer bounded by the largest
+	// window among matched, runnable sensors. Content is loaded lazily on resolution.
+	NewBuffer(maxSize int) InputBuffer
+}
+
+// InputBuffer owns shared source content for one evaluation. Resolutions are
+// sequential; a new evaluation must create a fresh buffer to retry source reads.
+type InputBuffer interface {
+	// Resolve returns the target alone for size 1, or a window of up to size
+	// messages including the target. Sizes cannot exceed the buffer's capacity.
+	Resolve(ctx context.Context, size int) (classifier.Entry, error)
 }

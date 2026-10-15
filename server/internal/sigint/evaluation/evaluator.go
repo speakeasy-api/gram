@@ -110,6 +110,7 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	}
 
 	var compiled []compiledSensor
+	maxSize := 1
 	matchMessage := in.MatchingMessage()
 	for _, sensor := range sensors {
 		matched, err := matching.Match(ctx, sensor.MatchExpression, matchMessage)
@@ -143,15 +144,31 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 			continue
 		}
 		compiled = append(compiled, item)
+		maxSize = max(maxSize, item.windowSize)
 	}
 	if len(compiled) == 0 {
 		return nil
 	}
 
+	resolveTarget := in.Resolve
+	var buffer InputBuffer
+	if window, ok := in.(WindowInput); ok && maxSize > 1 {
+		buffer = window.NewBuffer(maxSize)
+		resolveTarget = func(ctx context.Context) (classifier.Entry, error) {
+			return buffer.Resolve(ctx, 1)
+		}
+	}
+	// Every group needs the target. Resolve it once before processing groups so
+	// failed target reads are neither repeated nor counted once per window size.
+	target, err := resolveTarget(ctx)
+	if err != nil {
+		return h.evaluateGroup(ctx, event, compiled, target, err)
+	}
+
 	// Ascending sizes let small windows succeed even when older content is invalid
 	// or a larger window exceeds the aggregate content budget.
 	var retry error
-	for size := 1; size <= MaxWindowSize; size++ {
+	for size := 1; size <= maxSize; size++ {
 		var sensors []compiledSensor
 		for _, sensor := range compiled {
 			if sensor.windowSize == size {
@@ -164,9 +181,9 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		var state classifier.Entry
 		var err error
 		if size == 1 {
-			state, err = in.Resolve(ctx)
-		} else if window, ok := in.(WindowInput); ok {
-			state, err = window.ResolveWindow(ctx, size)
+			state = target
+		} else if buffer != nil {
+			state, err = buffer.Resolve(ctx, size)
 		} else {
 			err = ErrInvalidInput
 		}

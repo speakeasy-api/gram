@@ -98,21 +98,25 @@ evaluate immediately. Late imports and timestamp corrections affect subsequent
 evaluations; retries resolve current history under the same target reading identity.
 
 State is `{messages: [{role, content, parts}, ...], target_message_index: N-1}`,
-where N is the actual message count. The `content` field is omitted when no original
-structured payload is present; row-local text, tool calls and attachments use `parts`.
-Messages run oldest to newest with the target
-last. Every question explicitly instructs the classifier to classify only that
+where N is the actual message count. The `content` field is omitted when original
+content is absent or JSON null; row-local text, tool calls and attachments use `parts`.
+Messages run oldest to newest with the target last. For sliding-window inputs,
+every question explicitly instructs the classifier to classify only that
 target and use the preceding messages as evidence. Initial eligibility checks the
 incoming event's creation type and user/assistant role; the persisted target must
 also have a user/assistant role. Sensor matching evaluates the persisted target
 role. Non-system context roles do not need to match the target's sensor predicate.
 
 The evaluator groups sensors by effective input strategy and size. Compatible
-sensors share one request. History is fetched lazily once per target, and resolved
-content is reused across ascending window sizes within the 16 MiB budget. A failed
-group does not prevent other groups from publishing. The classifier contract
-remains questions plus state. Definition hashes include strategy, size and the
-versioned target-framing contract.
+sensors share one request. A per-evaluation buffer is sized to the largest window
+among matched, runnable sensors; each group resolves its slice while preparing
+classifier state. The target is resolved before any groups run, so target errors
+are handled once. History is fetched lazily once, with a limit of buffer capacity
+minus one. Resolved content is reused across ascending window sizes within the
+16 MiB budget. Failures in older content affect only larger slices, and a history
+lookup failure does not prevent target-only readings. Redelivery creates a fresh
+buffer. The classifier contract remains questions plus state. Definition hashes
+include strategy, size and the versioned target-framing contract.
 
 ### Request goldens
 
@@ -126,9 +130,9 @@ fixture also pins role order, the target marker and exclusion of archival siblin
 and messages outside the window.
 
 Other HTTP-request goldens cover matching, grouped redelivery and independent
-events under `testdata/requests/`. Input-state goldens for filesystem content and
-empty history live under `testdata/state/`; they pin resolved state before Jev
-request compilation. These use `testenv.RequireYAMLGolden` with explicit fixture
+events under `testdata/requests/`. Input-state goldens for filesystem content,
+empty history and omitted null payloads live under `testdata/state/`; they pin
+resolved state before Jev request compilation. These use `testenv.RequireYAMLGolden` with explicit fixture
 paths. Normal runs only compare against the committed fixtures and
 fail when a fixture is missing or differs. Regenerate explicitly from captured
 output with:
@@ -143,6 +147,9 @@ Generated goldens retain the YAML encoder's formatting and are excluded from oxf
 The grouped-redelivery fixture contains three initial requests (target-only, a
 shared two-message window, and a five-message window using short history), followed
 by the same groups after the history changes.
+The independent-event fixture captures all three evaluations, including redelivery
+and a changed event kind. The null-content fixture is shared by inline and spilled
+JSON null payloads; both intentionally omit `content`.
 
 Fixtures use readable YAML, including multiline instructions, while captured
 requests remain JSON. Comparison parses YAML strictly and ignores object-key order

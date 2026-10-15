@@ -106,7 +106,8 @@ type messageState struct {
 	// Role preserves the source message's role without elevating it to instructions.
 	Role string `json:"role"`
 
-	// Content preserves the original structured payload when available; nil is omitted.
+	// Content preserves non-null original payloads. Absent content and JSON null
+	// are omitted because neither adds classification evidence.
 	Content any `json:"content,omitempty"`
 
 	// Parts contains row-local text, tool calls, and resolved textual attachments.
