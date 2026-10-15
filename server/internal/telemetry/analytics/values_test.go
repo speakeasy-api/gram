@@ -19,8 +19,8 @@ func TestCompileValues(t *testing.T) {
 
 	plan, err := CompileValues(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, nil, ValuesRequest{Dataset: "tool_calls", Dimension: "tool_name", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: 0})
 	require.NoError(t, err)
-	require.Contains(t, plan.SQL, "SELECT tool_name AS value, count() AS n FROM (")
-	require.Contains(t, plan.SQL, "LIMIT 1 BY organization_id, project_id, record_id", "values come from the collapsed rows")
+	require.Contains(t, plan.SQL, "SELECT tool_name AS value, uniqExact(event_id) AS n FROM (SELECT * FROM agent_events WHERE")
+	require.NotContains(t, plan.SQL, "argMaxIf", "values come from the observations, not the folded rows")
 	require.Contains(t, plan.SQL, "WHERE tool_name <> ?")
 	require.Contains(t, plan.SQL, "GROUP BY value ORDER BY n DESC, value ASC LIMIT 50")
 
@@ -61,7 +61,7 @@ func TestDimensionValues(t *testing.T) {
 	}
 	require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
 		row("v1", "s1", "claude-sonnet-4", base),
-		// A later observation of s1 settles the model on the collapsed row.
+		// A later observation of s1 changes its model; both stay listed.
 		row("v2", "s1", "claude-opus-4", base.Add(time.Minute)),
 		row("v3", "s2", "claude-opus-4", base.Add(2*time.Minute)),
 		row("v4", "s3", "gpt-5", base.Add(3*time.Minute)),
@@ -76,11 +76,11 @@ func TestDimensionValues(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "sessions", result.Dataset)
 	require.Equal(t, "model", result.Dimension)
-	require.Len(t, result.Values, 2, "the empty model is never offered")
-	require.Equal(t, "claude-opus-4", result.Values[0].Value)
-	require.EqualValues(t, 2, result.Values[0].Count, "s1 settled on opus, s2 is opus")
-	require.Equal(t, "gpt-5", result.Values[1].Value)
-	require.EqualValues(t, 1, result.Values[1].Count)
+	require.Equal(t, []*gen.AnalyticsDimensionValue{
+		{Value: "claude-opus-4", Count: 2},
+		{Value: "claude-sonnet-4", Count: 1},
+		{Value: "gpt-5", Count: 1},
+	}, result.Values, "every model a session stated, counted in sessions, and never the empty one")
 
 	t.Run("it offers the skills a window saw", func(t *testing.T) {
 		t.Parallel()
@@ -107,6 +107,16 @@ func TestDimensionValues(t *testing.T) {
 		require.EqualValues(t, 2, result.Values[0].Count)
 		require.Equal(t, "review", result.Values[1].Value)
 		require.EqualValues(t, 1, result.Values[1].Count)
+
+		calls, err := ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{
+			Dataset: "skills", Dimension: "tool_call", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
+		})
+		require.NoError(t, err)
+		ids := make([]string, 0, len(calls.Values))
+		for _, v := range calls.Values {
+			ids = append(ids, v.Value)
+		}
+		require.ElementsMatch(t, []string{"k1", "k2", "k3"}, ids, "only calls that named a skill are invocations")
 	})
 
 	t.Run("it offers MCP servers under the project's display names", func(t *testing.T) {
@@ -139,6 +149,34 @@ func TestDimensionValues(t *testing.T) {
 		require.EqualValues(t, 2, result.Values[0].Count)
 		require.Equal(t, "linear", result.Values[1].Value, "a raw name with no override shows as reported")
 		require.EqualValues(t, 1, result.Values[1].Count)
+	})
+
+	t.Run("it counts a redelivered call once", func(t *testing.T) {
+		t.Parallel()
+		call := func(recordID, eventID, eventType string, at time.Time) chrepo.AgentEventRow {
+			r := agentEventFixture(ti.organizationID, recordID, "", "", eventID, eventType, at.UnixNano())
+			r.ProjectID = ti.projectID
+			r.ToolName = "redelivered_tool"
+			return r
+		}
+		redelivered := call("d1", "call-d", "tool_call_result", base.Add(20*time.Minute))
+		require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+			call("d0", "call-d", "tool_call", base.Add(19*time.Minute)),
+			redelivered,
+			redelivered,
+		}))
+
+		result, err := ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{
+			Dataset: "tool_calls", Dimension: "tool_name", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
+		})
+		require.NoError(t, err)
+		var count int64
+		for _, v := range result.Values {
+			if v.Value == "redelivered_tool" {
+				count = v.Count
+			}
+		}
+		require.EqualValues(t, 1, count, "one call, observed twice and redelivered once, is one call")
 	})
 
 	t.Run("it names an unknown dimension", func(t *testing.T) {
