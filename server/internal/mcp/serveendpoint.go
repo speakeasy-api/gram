@@ -859,7 +859,7 @@ func (s *Service) prepareProxyBackendContext(
 	// ResolveMCPEndpointAndServer.
 	//
 	// Issuer-gated requests have already been authenticated by
-	// ApplyIssuerGate in serveResolvedMCPEndpoint: the bearer is a
+	// authenticateIssuerGate in serveResolvedMCPEndpoint: the bearer is a
 	// user-session JWT validated against the issuer's audience, and the
 	// AuthContext on ctx is stamped from it. Re-running the legacy identity-auth chain here
 	// would only know how to validate API keys / OAuth tokens / chat

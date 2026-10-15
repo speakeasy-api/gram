@@ -230,8 +230,8 @@ type Service struct {
 	// remoteSessionRecheck sweeps idle grants with no refresh token; runs only where StartRemoteSessionRecheck is called.
 	remoteSessionRecheck *remoteSessionRecheck
 	// remoteProxyManager builds configured remotemcp proxies wired with the
-	// MCP-aware interceptor stack. Only consulted by the endpoint
-	// dispatcher's remote-backed branch; may be nil in non-HTTP contexts (e.g. the
+	// MCP-aware interceptor stack. Used by the endpoint dispatcher's
+	// remote-backed branch, the consent transport and meta servers; may be nil in non-HTTP contexts (e.g. the
 	// Temporal worker, which constructs *Service for its programmatic
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager

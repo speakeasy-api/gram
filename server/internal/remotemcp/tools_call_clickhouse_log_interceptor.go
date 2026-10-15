@@ -33,7 +33,7 @@ var DurationMissingKey = attribute.Key("gram.telemetry.duration_missing")
 //
 // One instance implements both [proxy.ToolsCallRequestInterceptor] and
 // [proxy.ToolsCallResponseInterceptor]. The proxy constructs a fresh interceptor
-// per HTTP request inside [Service.buildProxy], and [proxy.Proxy.Post] fires
+// per HTTP request inside [ProxyManager.BuildTarget], and [proxy.Proxy.Post] fires
 // the request and response chains sequentially on a single goroutine for at
 // most one tools/call per request — so a single nilable start timestamp is
 // enough state to compute duration, no map or mutex required. If a future
