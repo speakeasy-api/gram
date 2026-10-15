@@ -660,7 +660,9 @@ export function ConsentToolsApp({
       remaining.delete(nav);
       setAnnGrants(remaining);
       const next = new Set(picked);
-      grouped.forEach((t) => next.delete(t.name));
+      grouped.forEach((t) => {
+        next.delete(t.name);
+      });
       setPicked(next);
       return;
     }
