@@ -1519,6 +1519,73 @@ GROUP BY
     unit,
     measurement_method;
 
+-- One row per logical reading: one sensor's evaluation outcome for one source
+-- event. Source-event time is immutable for a logical reading, so attempts
+-- replace the complete row within its monthly partition and the latest
+-- evaluation wins. Readers deduplicate by id before counting. Only answered rows
+-- carry a result. Other statuses record why an evaluated message has no answer,
+-- so coverage can account for them instead of dropping them.
+CREATE TABLE IF NOT EXISTS sigint_readings (
+    id UUID COMMENT 'Producer-assigned logical reading UUID, preserved across attempts.\n@access: confidential',
+    evaluation_attempt_id UUID COMMENT 'Evaluation attempt UUID, not the replacement key.\n@access: confidential',
+    organization_id String COMMENT 'Organization owning the source event.\n@access: confidential',
+    project_id UUID COMMENT 'Project owning the source event and sensor.\n@access: confidential',
+    sensor_id UUID COMMENT 'Stable sensor resource identity.\n@access: confidential',
+    sensor_slug String COMMENT 'Evaluation-time customer-defined sensor slug.\n@access: opaque-confidential',
+    event_kind LowCardinality(String) COMMENT 'Producer-defined source event namespace.\n@access: opaque-confidential',
+    event_id String COMMENT 'Opaque source event identity, not necessarily a UUID.\n@access: opaque-confidential',
+    event_occurred_at DateTime64(9, 'UTC') COMMENT 'Immutable source occurrence time.\n@access: confidential',
+    evaluated_at DateTime64(9, 'UTC') COMMENT 'Producer completion time and replacement version.\n@access: confidential',
+    inserted_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'ClickHouse ingestion time for delivery diagnostics.\n@access: confidential',
+    status LowCardinality(String) DEFAULT 'answered' COMMENT 'Evaluation outcome: answered, not_applicable, draft or failed.\n@access: confidential',
+    failure_reason LowCardinality(String) DEFAULT '' COMMENT 'Bounded evaluator reason for failed outcomes, otherwise empty.\n@access: confidential',
+    definition_hash String COMMENT 'Semantic classifier-definition fingerprint.\n@access: confidential',
+    configured_model LowCardinality(String) COMMENT 'Requested classifier model identifier.\n@access: opaque-confidential',
+    models Array(String) COMMENT 'Provider-reported model identifiers.\n@access: opaque-confidential',
+    compiler_version LowCardinality(String) COMMENT 'Classification compilation version.\n@access: confidential',
+    provider LowCardinality(String) COMMENT 'Configured inference transport.\n@access: confidential',
+    input_strategy LowCardinality(String) DEFAULT '' COMMENT 'Configured message context, or empty when no input was supplied.\n@access: confidential',
+    input_requested_message_count UInt8 DEFAULT 0 COMMENT 'Configured message count including the target.\n@access: confidential',
+    input_message_count UInt8 DEFAULT 0 COMMENT 'Messages supplied including the target, after short history or budget truncation.\n@access: confidential',
+    input_truncated Bool DEFAULT false COMMENT 'Whether the content budget excluded available history.\n@access: confidential',
+    event_context_type LowCardinality(String) DEFAULT '' COMMENT 'Source-context variant.\n@access: confidential',
+    conversation_id Nullable(UUID) COMMENT 'Associated Speakeasy conversation identity.\n@access: confidential',
+    conversation_role LowCardinality(String) DEFAULT '' COMMENT 'Source message role.\n@access: confidential',
+    tool_name String DEFAULT '' COMMENT 'Producer-defined tool name.\n@access: opaque-confidential',
+    tool_call_id String DEFAULT '' COMMENT 'Producer protocol call identifier.\n@access: opaque-confidential',
+    mcp_server_id Nullable(UUID) COMMENT 'Associated Speakeasy MCP server identity.\n@access: confidential',
+    actor_user_id String DEFAULT '' COMMENT 'Observed Speakeasy actor identity.\n@access: confidential',
+    actor_external_user_id String DEFAULT '' COMMENT 'Observed source-system person identity.\n@access: confidential-pii',
+    actor_user_email String DEFAULT '' COMMENT 'Email explicitly observed by ingestion.\n@access: confidential-pii',
+    billing_user_id String DEFAULT '' COMMENT 'Explicit Speakeasy usage allocation identity.\n@access: confidential',
+    source LowCardinality(String) DEFAULT '' COMMENT 'Canonical ingestion surface.\n@access: confidential',
+    user_account_id Nullable(UUID) COMMENT 'Resolved external-account resource identity.\n@access: confidential',
+    account_type LowCardinality(String) DEFAULT '' COMMENT 'Ingestion-time account classification.\n@access: confidential',
+    billing_mode LowCardinality(String) DEFAULT '' COMMENT 'External account billing classification.\n@access: confidential',
+    assistant_id Nullable(UUID) COMMENT 'Associated Speakeasy assistant resource identity.\n@access: confidential',
+    replayed Nullable(Bool) COMMENT 'Historical-ingestion evidence with explicit absence.\n@access: confidential',
+    attributes Map(String, String) COMMENT 'Customer string labels captured with this attempt.\n@access: opaque-restricted' CODEC(ZSTD),
+    result_type LowCardinality(String) DEFAULT '' COMMENT 'Sensor result variant, empty unless answered.\n@access: confidential',
+    probabilities Array(Tuple(signal_id UUID, signal_slug String, probability Float64)) COMMENT 'Complete configured order, including customer signal slugs and probabilities.\n@access: opaque-confidential' CODEC(ZSTD),
+    selected_signal_id Nullable(UUID) COMMENT 'Selected signal identity for choice results.\n@access: confidential',
+    selected_signal_slug String DEFAULT '' COMMENT 'Customer-defined slug of the selected signal.\n@access: opaque-confidential',
+    expected_index Nullable(Float64) COMMENT 'Probability-weighted ordered-score index.\n@access: confidential',
+    confidence Nullable(Float64) COMMENT 'Optional classifier confidence.\n@access: confidential',
+    probabilities_valid Bool MATERIALIZED notEmpty(probabilities) AND arrayAll(p -> isFinite(p.3) AND p.3 >= 0 AND p.3 <= 1, probabilities) COMMENT 'Derived probability-domain guard for answered readings.\n@access: confidential',
+    CONSTRAINT sigint_reading_identity CHECK notEmpty(organization_id) AND id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND sensor_id != toUUID('00000000-0000-0000-0000-000000000000') AND evaluation_attempt_id != toUUID('00000000-0000-0000-0000-000000000000'),
+    CONSTRAINT sigint_reading_status CHECK status IN ('answered', 'not_applicable', 'draft', 'failed') AND (status = 'failed') = notEmpty(failure_reason),
+    CONSTRAINT sigint_reading_result CHECK (status = 'answered') = notEmpty(result_type),
+    CONSTRAINT sigint_reading_probabilities CHECK status != 'answered' OR probabilities_valid,
+    CONSTRAINT sigint_reading_confidence CHECK confidence IS NULL OR (isFinite(confidence) AND confidence >= 0 AND confidence <= 1),
+    CONSTRAINT sigint_reading_input CHECK input_message_count <= input_requested_message_count
+) ENGINE = ReplacingMergeTree(evaluated_at)
+PARTITION BY toYYYYMM(event_occurred_at)
+PRIMARY KEY (organization_id, project_id, sensor_id, event_occurred_at)
+ORDER BY (organization_id, project_id, sensor_id, event_occurred_at, id)
+TTL toDateTime(event_occurred_at, 'UTC') + INTERVAL 2 YEAR
+SETTINGS index_granularity = 8192
+COMMENT 'Sensor evaluation outcomes with monthly, source-time-stable replacement and two-year retention';
+
 CREATE TABLE IF NOT EXISTS authz_challenges (
     -- Identity
     id UUID DEFAULT generateUUIDv7() COMMENT 'Unique identifier for the challenge entry.\n@access: confidential',
