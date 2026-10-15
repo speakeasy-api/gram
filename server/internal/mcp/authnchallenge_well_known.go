@@ -456,7 +456,7 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	baseURL := s.BaseURLForRequest(r)
-	if !s.servesAuthorizationServerMetadata(ctx, endpoint, baseURL) {
+	if !s.arrivedAtAuthorizationServer(ctx, endpoint, baseURL) {
 		return oops.E(oops.CodeNotFound, nil, "authorization server metadata is served on the issuer's host")
 	}
 	urls, err := endpoint.AuthorizationServerURLs(s.authorizationServerBaseURL(endpoint, baseURL))

@@ -42,6 +42,35 @@
     }, 2000);
   }
 
+  // A gateway's server list keeps the open state the person left it in, so
+  // a Connect from the list, which leaves for the provider and comes back,
+  // returns to the list rather than to its collapsed summary.
+  var gatewayList = document.querySelector("details[data-gateway-list]");
+  if (gatewayList) {
+    var listKey =
+      "consent-gateway-list:" + gatewayList.getAttribute("data-state");
+    try {
+      var remembered = window.sessionStorage.getItem(listKey);
+      if (remembered === "open") {
+        gatewayList.open = true;
+      } else if (remembered === "closed") {
+        gatewayList.open = false;
+      }
+    } catch (_) {
+      // Storage can be unavailable; the server's default stands.
+    }
+    gatewayList.addEventListener("toggle", function () {
+      try {
+        window.sessionStorage.setItem(
+          listKey,
+          gatewayList.open ? "open" : "closed",
+        );
+      } catch (_) {
+        // Storage can be unavailable; nothing to remember then.
+      }
+    });
+  }
+
   // Replace an element's contents with a spinner + label.
   function showPending(el, label) {
     el.textContent = "";
@@ -502,7 +531,7 @@
     }
     if (state === "ready") {
       status.className = "text-xs text-muted-foreground";
-      status.textContent = "Ready to connect after authorization";
+      status.textContent = "Automatically connects when you give access";
       return;
     }
     if (state === "rejected") {

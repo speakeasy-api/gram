@@ -264,8 +264,7 @@ func (d *Deliverer) push(ctx context.Context, row repo.ClaimPendingRevocationDel
 
 // statusCode is the HTTP status behind a WorkOS error, or 0.
 func statusCode(err error) int {
-	var apiErr *workos.APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[*workos.APIError](err); ok {
 		return apiErr.StatusCode
 	}
 	if httpErr, ok := errors.AsType[workos_errors.HTTPError](err); ok {

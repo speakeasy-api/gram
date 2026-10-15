@@ -57,7 +57,7 @@ func TestConversationBatchLoadsCreatedMessagesByTenant(t *testing.T) {
 	source := &countingMessages{rows: storedMessages{}, requests: map[string][]uuid.UUID{}}
 	for _, m := range []*conversationv1.MessageEvent{first, second, other} {
 		row := storedMessage(m)
-		source.rows[row.ChatMessage.ID] = row
+		source.rows[row.ID] = row
 	}
 	h := NewConversationHandler(evaluator, nil, source)
 	var batch []streams.BatchMessage[*conversationv1.MessageEvent]

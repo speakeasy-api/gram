@@ -106,6 +106,17 @@ type GetResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// GetGatewayResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body.
+type GetGatewayResponseBody struct {
+	// Whether the organization is served a gateway.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// The gateway's MCP URL. Set only when available.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Why the gateway is not served. Set only when not available.
+	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
+}
+
 // SendInviteResponseBody is the type of the "organizations" service
 // "sendInvite" endpoint HTTP response body.
 type SendInviteResponseBody struct {
@@ -438,6 +449,190 @@ type GetUnexpectedResponseBody struct {
 // GetGatewayErrorResponseBody is the type of the "organizations" service "get"
 // endpoint HTTP response body for the "gateway_error" error.
 type GetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayUnauthorizedResponseBody is the type of the "organizations"
+// service "getGateway" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetGatewayUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayForbiddenResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "forbidden" error.
+type GetGatewayForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayBadRequestResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "bad_request" error.
+type GetGatewayBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayNotFoundResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "not_found" error.
+type GetGatewayNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayConflictResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "conflict" error.
+type GetGatewayConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayUnsupportedMediaResponseBody is the type of the "organizations"
+// service "getGateway" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetGatewayUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayInvalidResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "invalid" error.
+type GetGatewayInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayInvariantViolationResponseBody is the type of the "organizations"
+// service "getGateway" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetGatewayInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayUnexpectedResponseBody is the type of the "organizations" service
+// "getGateway" endpoint HTTP response body for the "unexpected" error.
+type GetGatewayUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetGatewayGatewayErrorResponseBody is the type of the "organizations"
+// service "getGateway" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetGatewayGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3812,6 +4007,17 @@ func NewGetResponseBody(res *organizations.Organization) *GetResponseBody {
 	return body
 }
 
+// NewGetGatewayResponseBody builds the HTTP response body from the result of
+// the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayResponseBody(res *organizations.OrganizationGateway) *GetGatewayResponseBody {
+	body := &GetGatewayResponseBody{
+		Available:         res.Available,
+		URL:               res.URL,
+		UnavailableReason: res.UnavailableReason,
+	}
+	return body
+}
+
 // NewSendInviteResponseBody builds the HTTP response body from the result of
 // the "sendInvite" endpoint of the "organizations" service.
 func NewSendInviteResponseBody(res *organizations.OrganizationInvitation) *SendInviteResponseBody {
@@ -4165,6 +4371,146 @@ func NewGetUnexpectedResponseBody(res *goa.ServiceError) *GetUnexpectedResponseB
 // of the "get" endpoint of the "organizations" service.
 func NewGetGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayErrorResponseBody {
 	body := &GetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayUnauthorizedResponseBody(res *goa.ServiceError) *GetGatewayUnauthorizedResponseBody {
+	body := &GetGatewayUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayForbiddenResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayForbiddenResponseBody(res *goa.ServiceError) *GetGatewayForbiddenResponseBody {
+	body := &GetGatewayForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayBadRequestResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayBadRequestResponseBody(res *goa.ServiceError) *GetGatewayBadRequestResponseBody {
+	body := &GetGatewayBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayNotFoundResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayNotFoundResponseBody(res *goa.ServiceError) *GetGatewayNotFoundResponseBody {
+	body := &GetGatewayNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayConflictResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayConflictResponseBody(res *goa.ServiceError) *GetGatewayConflictResponseBody {
+	body := &GetGatewayConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayUnsupportedMediaResponseBody(res *goa.ServiceError) *GetGatewayUnsupportedMediaResponseBody {
+	body := &GetGatewayUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayInvalidResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayInvalidResponseBody(res *goa.ServiceError) *GetGatewayInvalidResponseBody {
+	body := &GetGatewayInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayInvariantViolationResponseBody(res *goa.ServiceError) *GetGatewayInvariantViolationResponseBody {
+	body := &GetGatewayInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayUnexpectedResponseBody(res *goa.ServiceError) *GetGatewayUnexpectedResponseBody {
+	body := &GetGatewayUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetGatewayGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getGateway" endpoint of the "organizations" service.
+func NewGetGatewayGatewayErrorResponseBody(res *goa.ServiceError) *GetGatewayGatewayErrorResponseBody {
+	body := &GetGatewayGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6646,6 +6992,15 @@ func NewSubmitOnboardingSurveyGatewayErrorResponseBody(res *goa.ServiceError) *S
 // NewGetPayload builds a organizations service get endpoint payload.
 func NewGetPayload(sessionToken *string) *organizations.GetPayload {
 	v := &organizations.GetPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetGatewayPayload builds a organizations service getGateway endpoint
+// payload.
+func NewGetGatewayPayload(sessionToken *string) *organizations.GetGatewayPayload {
+	v := &organizations.GetGatewayPayload{}
 	v.SessionToken = sessionToken
 
 	return v

@@ -43,6 +43,9 @@ type consentActionFixture struct {
 	clientB uuid.UUID
 	clientC uuid.UUID
 	clientD uuid.UUID
+	// server is the gateway server whose connect page a render opens, empty
+	// for the endpoint's own consent page.
+	server string
 }
 
 const (
@@ -208,6 +211,9 @@ func postConnectAction(t *testing.T, fx consentActionFixture, clientID uuid.UUID
 	form.Set("csrf_token", "csrf-token")
 	form.Set("action", "connect")
 	form.Set("client_id", clientID.String())
+	if fx.server != "" {
+		form.Set("server", fx.server)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

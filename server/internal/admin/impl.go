@@ -288,7 +288,8 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		CustomerManagedEncryptionKeysEnabled: snapshot.CustomerManagedEncryptionKeysEnabled, RemoteSessionAutoRefreshEnabled: snapshot.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled, ConsentToolFilteringEnabled: snapshot.ConsentToolFilteringEnabled,
 		NetworkIngressEnabled: snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
-		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, DeviceAgent: snapshot.DeviceAgent,
+		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
+		DeviceAgent: snapshot.DeviceAgent,
 	}
 }
 

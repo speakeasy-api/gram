@@ -700,3 +700,42 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *
 	require.True(t, isError)
 	require.Contains(t, text, "rejected the stored credential")
 }
+
+// A member that signs in through a service the caller has not connected
+// answers with the URL of its connect page on the gateway, for the agent to
+// hand the person, rather than pointing them at the gateway's sign-in.
+func TestServePublic_MetaEndpoint_ExecuteTool_UnconnectedMemberLinksItsConnectPage(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-connect-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(deny.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-connect", "", []uuid.UUID{sharedIssuerID})
+	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	subject := createTestUser(t, ctx, ti, "meta-connect-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, `server "member" is not connected for this user`)
+	require.Contains(t, text, "/mcp/"+metaSlug+"/connect/first-party?server=member")
+
+	// A refused credential links the same page, to reconnect it.
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
+	text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "rejected the user's credential")
+	require.Contains(t, text, "/mcp/"+metaSlug+"/connect/first-party?server=member")
+}

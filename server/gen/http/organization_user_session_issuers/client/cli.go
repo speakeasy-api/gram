@@ -245,6 +245,70 @@ func BuildListMcpServersPayload(organizationUserSessionIssuersListMcpServersUser
 	return v, nil
 }
 
+// BuildGetAuthenticationHostImpactPayload builds the payload for the
+// organizationUserSessionIssuers getAuthenticationHostImpact endpoint from CLI
+// flags.
+func BuildGetAuthenticationHostImpactPayload(organizationUserSessionIssuersGetAuthenticationHostImpactID string, organizationUserSessionIssuersGetAuthenticationHostImpactUseAuthenticationHost string, organizationUserSessionIssuersGetAuthenticationHostImpactSessionToken string) (*organizationusersessionissuers.GetAuthenticationHostImpactPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationUserSessionIssuersGetAuthenticationHostImpactID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var useAuthenticationHost bool
+	{
+		useAuthenticationHost, err = strconv.ParseBool(organizationUserSessionIssuersGetAuthenticationHostImpactUseAuthenticationHost)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for useAuthenticationHost, must be BOOL")
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersGetAuthenticationHostImpactSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersGetAuthenticationHostImpactSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.GetAuthenticationHostImpactPayload{}
+	v.ID = id
+	v.UseAuthenticationHost = useAuthenticationHost
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetAuthenticationHostPayload builds the payload for the
+// organizationUserSessionIssuers setAuthenticationHost endpoint from CLI flags.
+func BuildSetAuthenticationHostPayload(organizationUserSessionIssuersSetAuthenticationHostBody string, organizationUserSessionIssuersSetAuthenticationHostSessionToken string) (*organizationusersessionissuers.SetAuthenticationHostPayload, error) {
+	var err error
+	var body SetAuthenticationHostRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationUserSessionIssuersSetAuthenticationHostBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"use_authentication_host\": false\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersSetAuthenticationHostSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersSetAuthenticationHostSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.SetAuthenticationHostPayload{
+		ID:                    body.ID,
+		UseAuthenticationHost: body.UseAuthenticationHost,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetIssuerDeletePreflightPayload builds the payload for the
 // organizationUserSessionIssuers getIssuerDeletePreflight endpoint from CLI
 // flags.

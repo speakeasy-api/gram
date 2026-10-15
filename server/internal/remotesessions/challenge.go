@@ -103,6 +103,10 @@ type ParentChallenge struct {
 	// server. Unlike FinalRedirectURI it changes only where the browser goes:
 	// the login keeps its consent parent and that parent's browser binding.
 	ConsentURL string
+	// ConsentServer is the gateway server whose connect page started the
+	// login, so the callback returns to that page rather than to the
+	// gateway's own. Empty for every other login.
+	ConsentServer string
 	// Resource is the RFC 8707 resource indicator sent on the authorize
 	// redirect and code exchange. Empty omits the parameter.
 	Resource string
@@ -158,6 +162,8 @@ type RemoteLoginState struct {
 	// for a consent parent whose page is not at /<RouteBase>/{slug}/connect.
 	// Empty for every other login, including states minted before it existed.
 	ConsentURL string `json:"consent_url,omitempty"`
+	// ConsentServer is the gateway server page the callback returns to.
+	ConsentServer string `json:"consent_server,omitempty"`
 	// AutoRefresh is the subject's consent-screen auto-refresh choice. Nil
 	// (including in-flight states minted before this field) defers to the
 	// client capability's default at persist time.
@@ -198,6 +204,7 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		RouteBase:           s.RouteBase,
 		FinalRedirectURI:    s.FinalRedirectURI,
 		ConsentURL:          s.ConsentURL,
+		ConsentServer:       s.ConsentServer,
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
@@ -429,7 +436,12 @@ func NewChallengeManager(
 // renderer. Kept as a package value type so mcp/ can pass it back to us
 // without re-querying.
 type Client struct {
-	ID                    uuid.UUID
+	ID uuid.UUID
+
+	// ProjectID is the project that owns the client, invalid for an
+	// organization-level or catalog client.
+	ProjectID uuid.NullUUID
+
 	RemoteSessionIssuerID uuid.UUID
 	ExternalClientID      string
 	ClientSecretEncrypted *string
@@ -848,7 +860,34 @@ func (m *ChallengeManager) ListClients(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) ([]Client, error) {
-	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	return m.listClients(ctx, projectID, organizationID, userSessionIssuerID, false)
+}
+
+// ListOrganizationClients is ListClients for a caller that belongs to no
+// project, the organization gateway: it returns the clients of every live
+// project in the organization, plus organization-level and catalog clients,
+// that are linked to the organization-level userSessionIssuerID. Each
+// client's ProjectID names the project whose tenancy operations on it run
+// under.
+//
+// Unlike a single project's, this set may hold two clients for one remote
+// session issuer, one per project, so it must not be keyed by remote issuer.
+func (m *ChallengeManager) ListOrganizationClients(
+	ctx context.Context,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+) ([]Client, error) {
+	return m.listClients(ctx, uuid.Nil, organizationID, userSessionIssuerID, true)
+}
+
+func (m *ChallengeManager) listClients(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	organizationWide bool,
+) ([]Client, error) {
+	rows, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, organizationWide)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
@@ -861,6 +900,7 @@ func (m *ChallengeManager) ListClients(
 		}
 		out = append(out, Client{
 			ID:                               r.ClientID,
+			ProjectID:                        r.ClientProjectID,
 			RemoteSessionIssuerID:            r.RemoteSessionIssuerID,
 			ExternalClientID:                 r.ExternalClientID,
 			ClientSecretEncrypted:            conv.FromPGText[string](r.ClientSecretEncrypted),
@@ -976,6 +1016,28 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) (map[uuid.UUID]RemoteSessionState, error) {
+	return m.remoteSessionStatuses(ctx, subject, projectID, organizationID, userSessionIssuerID, false)
+}
+
+// OrganizationRemoteSessionStatuses is RemoteSessionStatuses over the clients
+// ListOrganizationClients returns.
+func (m *ChallengeManager) OrganizationRemoteSessionStatuses(
+	ctx context.Context,
+	subject urn.SessionSubject,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+) (map[uuid.UUID]RemoteSessionState, error) {
+	return m.remoteSessionStatuses(ctx, subject, uuid.Nil, organizationID, userSessionIssuerID, true)
+}
+
+func (m *ChallengeManager) remoteSessionStatuses(
+	ctx context.Context,
+	subject urn.SessionSubject,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	organizationWide bool,
+) (map[uuid.UUID]RemoteSessionState, error) {
 	if subject.IsZero() {
 		return map[uuid.UUID]RemoteSessionState{}, nil
 	}
@@ -984,6 +1046,7 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 		UserSessionIssuerID: userSessionIssuerID,
 		ProjectID:           projectID,
 		OrganizationID:      organizationID,
+		OrganizationWide:    organizationWide,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
@@ -1327,6 +1390,7 @@ func (m *ChallengeManager) mintAuthorization(
 		MetaMcpServerID:       parent.MetaMcpServerID,
 		FinalRedirectURI:      parent.FinalRedirectURI,
 		ConsentURL:            parent.ConsentURL,
+		ConsentServer:         parent.ConsentServer,
 		AutoRefresh:           parent.AutoRefresh,
 		Authority:             parent.Authority,
 		Scopes:                scopes,
@@ -1751,6 +1815,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(redirectBaseURL, "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
 	if state.ConsentURL != "" {
 		redirect = state.ConsentURL
+	}
+	if state.ConsentServer != "" {
+		redirect += "&server=" + url.QueryEscape(state.ConsentServer)
 	}
 	if state.FinalRedirectURI != "" {
 		redirect = state.FinalRedirectURI
