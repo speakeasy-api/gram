@@ -2,27 +2,60 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCodeModeRefusesMissingRuntime(t *testing.T) {
+// TestCodeModeWithoutRuntimeServesProgressive pins the kill switch: with no
+// runtime, a code_mode gateway and a connection that chose code_mode at
+// consent both keep working in progressive mode.
+func TestCodeModeWithoutRuntimeServesProgressive(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	slug := "code-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
 	setGatewayMode(t, ctx, ti, gateway.ID, "code_mode")
-	_, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
-	require.ErrorContains(t, err, "code mode runtime is unavailable")
+	requireProgressive := func(t *testing.T, slug, token string) {
+		t.Helper()
+		for _, method := range []string{"initialize", "tools/list"} {
+			params := map[string]any{}
+			if method == "initialize" {
+				params = map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "test", "version": "1"}}
+			}
+			w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, method, params), token, nil)
+			require.NoError(t, err, method)
+			require.Equal(t, http.StatusOK, w.Code, method)
+			require.NotContains(t, w.Body.String(), "Code Mode", method)
+			if method == "tools/list" {
+				require.Contains(t, w.Body.String(), `"name":"execute_tool"`)
+			}
+		}
+	}
+	requireProgressive(t, slug, "")
+
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gatedSlug := "code-" + uuid.NewString()
+	gated := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, gatedSlug, issuer)
+	token := mintGatewayTestSession(t, ctx, ti, gated.ID, issuer, gatedSlug, metamcp.DiscoveryModeCode, nil, nil)
+	requireProgressive(t, gatedSlug, token)
 }
 
 func TestCodeModeUnknownStoredModeFailsClosed(t *testing.T) {
@@ -124,4 +157,19 @@ func TestCodeModeUnverifiedBearerStaysAnonymous(t *testing.T) {
 	callers := executor.callers()
 	require.NotEmpty(t, callers)
 	require.LessOrEqual(t, len(callers), 4, "unverified bearers share the anonymous runners")
+}
+
+// mintGatewayTestSession stores a gateway session with an explicit discovery
+// mode and an optional tool selection, returning its bearer token.
+func mintGatewayTestSession(t *testing.T, ctx context.Context, ti *testInstance, gatewayID, issuerID uuid.UUID, slug string, mode metamcp.DiscoveryMode, selection *toolfilter.SessionSelection, members map[string]uuid.UUID) string {
+	t.Helper()
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	policy, err := json.Marshal(&toolfilter.SessionPolicy{Resource: "meta_mcp_server:" + gatewayID.String(), Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: &mode}, Members: members})
+	require.NoError(t, err)
+	subject := urn.NewUserSubject(authCtx.UserID)
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(issuerID).String(), Issuer: ti.serverURL.JoinPath("mcp", slug).String(), Lifetime: time.Hour})
+	require.NoError(t, err)
+	_, err = usersessionsrepo.New(ti.conn).CreateUserSession(ctx, usersessionsrepo.CreateUserSessionParams{UserSessionIssuerID: issuerID, SubjectUrn: subject, Jti: jti, RefreshTokenHash: conv.ToPGText(uuid.NewString()), RefreshExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, ToolSelection: policy})
+	require.NoError(t, err)
+	return token
 }

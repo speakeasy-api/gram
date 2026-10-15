@@ -99,8 +99,8 @@ The setup task configures `GRAM_CODE_RUNTIME_PROVIDER=local` and
 derived URL to preserve worktree port remapping. The dedicated runner receives the same token
 as `GRAM_CODE_RUNNER_TOKEN`; use at least 32 random bytes. The local provider
 accepts literal loopback addresses only and refuses non-local environments.
-The default provider is disabled and stored code-mode gateways fail closed when
-the runtime is unavailable. New choices additionally require the selection gates
+The default provider is disabled. While the runtime is unavailable, stored
+code-mode gateways and connections are served in progressive mode. New choices additionally require the selection gates
 described below. Set `GRAM_LOCAL_FEATURE_FLAGS_CSV` in `mise.local.toml` to the
 absolute path of `server/flags.csv` (or a dedicated CSV **inside server/**), then
 restart the local server. The local flag provider rejects paths outside its
