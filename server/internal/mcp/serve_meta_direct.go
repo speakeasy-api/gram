@@ -29,16 +29,17 @@ type memberDescribeResult struct {
 	err     error
 }
 
-// describeMetaMembers describes members concurrently under one overall
-// deadline and returns results in member order.
+// describeMetaMembers describes members concurrently and returns results in
+// member order. Each describe gets its own deadline from when it starts, so
+// members queued behind slow ones are not starved.
 func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
-	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
-	defer cancel()
 	results := make([]memberDescribeResult, len(members))
 	var group errgroup.Group
 	group.SetLimit(maxConcurrentMemberDescribes)
 	for i, member := range members {
 		group.Go(func() error {
+			ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
+			defer cancel()
 			results[i].catalog, results[i].err = s.describeMetaMember(ctx, logger, gate, member)
 			return nil
 		})
