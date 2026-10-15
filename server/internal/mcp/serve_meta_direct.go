@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -18,8 +19,9 @@ import (
 )
 
 // listDirectGatewayTools exposes qualified member tools through the same
-// permission-filtered catalogs used by Progressive discovery. An incomplete
-// inventory is an error, so clients never cache a partial catalog as complete.
+// permission-filtered catalogs used by Progressive discovery. A member that
+// cannot be reached or is not connected for the caller is left out, as
+// Progressive does; a malformed member catalog fails the whole listing.
 func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logger, endpoint *mcpendpointsrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, req *rawRequest) (json.RawMessage, error) {
 	var params struct {
 		Cursor string `json:"cursor"`
@@ -43,6 +45,10 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 		if err != nil {
 			var denied *oops.ShareableError
 			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
+				continue
+			}
+			if _, ok := errors.AsType[*metaMemberError](err); ok {
+				logger.WarnContext(ctx, "gateway member tools unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
 				continue
 			}
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)

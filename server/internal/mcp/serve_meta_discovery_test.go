@@ -157,6 +157,25 @@ func TestDirectRejectsMalformedCatalogWhileProgressiveRemainsUsable(t *testing.T
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	upstream := newListingUpstream(t, []any{map[string]any{"name": "valid", "inputSchema": map[string]any{"type": "object"}}, map[string]any{"description": "missing name", "inputSchema": map[string]any{"type": "object"}}}, nil)
+	memberSlug := "catalog-member"
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Catalog member", memberSlug, 1, upstream)
+	result := callMetaTool(t, t.Context(), ti, slug, "describe_tools", map[string]any{"tools": []string{memberSlug + "--valid"}})
+	require.NotContains(t, result, "error")
+	require.Contains(t, string(result["result"]), memberSlug+"--valid")
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "invalid definitions")
+	require.NotContains(t, w.Body.String(), memberSlug+"--valid")
+}
+
+// newListingUpstream serves a minimal streamable-HTTP MCP server whose
+// tools/list returns tools. beforeList, when set, runs first and can fail the
+// listing by returning false.
+func newListingUpstream(t *testing.T, tools []any, beforeList func() bool) string {
+	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
 			ID     json.RawMessage `json:"id"`
@@ -175,30 +194,45 @@ func TestDirectRejectsMalformedCatalogWhileProgressiveRemainsUsable(t *testing.T
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
 		var result any
 		switch request.Method {
 		case "initialize":
 			result = map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]string{"name": "catalog-test", "version": "1"}}
 		case "tools/list":
-			result = map[string]any{"tools": []any{map[string]any{"name": "valid", "inputSchema": map[string]any{"type": "object"}}, map[string]any{"description": "missing name", "inputSchema": map[string]any{"type": "object"}}}}
+			if beforeList != nil && !beforeList() {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			result = map[string]any{"tools": tools}
 		default:
 			result = map[string]any{}
 		}
+		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": result}); err != nil {
 			t.Errorf("encode upstream response: %v", err)
 		}
 	}))
 	t.Cleanup(upstream.Close)
-	memberSlug := "catalog-member"
-	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Catalog member", memberSlug, 1, upstream.URL)
-	result := callMetaTool(t, t.Context(), ti, slug, "describe_tools", map[string]any{"tools": []string{memberSlug + "--valid"}})
-	require.NotContains(t, result, "error")
-	require.Contains(t, string(result["result"]), memberSlug+"--valid")
+	return upstream.URL
+}
+
+func TestGatewayDirectListsReachableMembersWhenOneIsDown(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
+	down := httptest.NewServer(http.NotFoundHandler())
+	downURL := down.URL
+	down.Close()
+	downSlug := "down-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Down tools", downSlug, 2, downURL)
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "invalid definitions")
-	require.NotContains(t, w.Body.String(), memberSlug+"--valid")
+	require.Contains(t, w.Body.String(), member.slug+"--alpha")
+	require.NotContains(t, w.Body.String(), downSlug+"--")
+	require.NotContains(t, w.Body.String(), `"error"`)
 }
