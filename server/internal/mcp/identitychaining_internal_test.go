@@ -262,3 +262,7 @@ func (g *recordingChainer) CheckConsent(ctx context.Context, req identitychainin
 	_, outcome := g.Acquire(ctx, req)
 	return outcome
 }
+
+func (c *recordingChainer) RetireConsentCredentials(context.Context, string, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
+	return nil
+}

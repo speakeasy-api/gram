@@ -802,6 +802,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 		}
 		s.evictConsentToolInventory(ctx, stateID)
+		s.retireDeniedConsentCredentials(ctx, logger, endpoint, challengeState)
 		denyURL, err := buildClientRedirect(clientRedirectParams{
 			RedirectURI:      challengeState.RedirectURI,
 			Issuer:           issuer,

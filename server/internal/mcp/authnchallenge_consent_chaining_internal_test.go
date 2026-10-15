@@ -222,3 +222,7 @@ func TestConsentChainedMetaClients_ServesEachRequestOnce(t *testing.T) {
 func (g *funcGovernor) CheckConsent(context.Context, identitychaining.Request, uuid.UUID) identitychaining.Outcome {
 	return identitychaining.Outcome{}
 }
+
+func (g *funcGovernor) RetireConsentCredentials(context.Context, string, uuid.UUID, uuid.UUID, string, uuid.UUID) error {
+	return nil
+}

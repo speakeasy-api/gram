@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -78,6 +77,12 @@ const (
 	// replacement signs at once, so its first assertions can be rejected for
 	// an unknown kid until the vendor refetches.
 	recentKeyWindow = internalsessionissuers.ActivationDelay + internalsessionissuers.CacheTTL
+
+	// consentAcceptedTTL is how long a consent page reports a vendor's
+	// acceptance it could not store, because the subject's one credential
+	// slot is held, instead of redeeming again on every reload. Short, so a
+	// vendor-side refusal still shows within minutes.
+	consentAcceptedTTL = 5 * time.Minute
 
 	// releaseTimeout bounds the detached single-flight release.
 	releaseTimeout = 2 * time.Second
@@ -183,13 +188,8 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 // acquireFrom obtains a token for sel from one source: a still-valid stored
 // credential, or a fresh issue and redemption under single flight.
 func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider) (Token, Outcome) {
-	return c.acquireWith(ctx, logger, req, sel, p, c.source(p))
-}
-
-// acquireWith is acquireFrom with an explicit source, so the consent page can
-// run the Speakeasy source for its sign-in before the grant exists.
-func (c *Chainer) acquireWith(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider, src tokenSource) (Token, Outcome) {
 	var none Token
+	src := c.source(p)
 	sel.provider = p
 	release := func(token Token) (Token, Outcome) { return c.release(ctx, logger, req, sel, src, token) }
 	if outcome := src.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
@@ -206,10 +206,18 @@ func (c *Chainer) acquireWith(ctx context.Context, logger *slog.Logger, req Requ
 	// Stored credentials are checked against their issuing provider and exact
 	// provenance.
 	if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
+		logCredentialSource(ctx, logger, sel, credentialCached)
 		return release(token)
 	}
 	if token, ok := c.adoptConsentCredential(ctx, logger, req, sel); ok {
 		return release(token)
+	}
+	if req.consent() {
+		var accepted bool
+		if err := c.locks.Get(ctx, cacheKey("identityChainingConsentAccepted", req, sel), &accepted); err == nil && accepted {
+			// The consent page only reports the outcome; no token is released.
+			return release(none)
+		}
 	}
 	failureKey := cacheKey("identityChainingFailure", req, sel)
 	var cached Outcome
@@ -257,7 +265,7 @@ func (c *Chainer) acquireWith(ctx context.Context, logger *slog.Logger, req Requ
 	if !outcome.Succeeded() {
 		// A consent page has no later retry, so a vendor that may not have
 		// fetched a new key yet reads as unknown there, never as a refusal.
-		if consent, ok := src.(speakeasySource); ok && consent.consentSignInID != uuid.Nil && c.signedWithRecentKey(sel, outcome) {
+		if req.consent() && c.signedWithRecentKey(sel, outcome) {
 			outcome.Retryable = true
 		}
 		logAcquisitionFailure(ctx, logger, outcome)
@@ -272,6 +280,8 @@ func (c *Chainer) acquireWith(ctx context.Context, logger *slog.Logger, req Requ
 				logger.WarnContext(ctx, "record identity chaining failure", attr.SlogCacheKey(failureKey), attr.SlogError(err))
 			}
 		}
+	} else {
+		logCredentialSource(ctx, logger, sel, credentialMinted)
 	}
 	// After publishing to waiters; the caller waits at most observeTimeout.
 	c.observe(ctx, logger, Observation{
@@ -346,6 +356,19 @@ func cacheKey(prefix string, req Request, sel selection) string {
 func (c *Chainer) signedWithRecentKey(sel selection, outcome Outcome) bool {
 	return sel.provider.Kind == remotesessions.EMAProviderSpeakeasy && outcome.Stage == StageRedemption &&
 		!sel.internalKeyPublishedAt.IsZero() && c.now().Sub(sel.internalKeyPublishedAt) < recentKeyWindow
+}
+
+// logCredentialSource records where a Speakeasy credential came from. Reuse is
+// logged at debug: it happens on every proxied call.
+func logCredentialSource(ctx context.Context, logger *slog.Logger, sel selection, source credentialSource) {
+	if sel.provider.Kind != remotesessions.EMAProviderSpeakeasy {
+		return
+	}
+	level := slog.LevelInfo
+	if source == credentialCached {
+		level = slog.LevelDebug
+	}
+	logger.Log(ctx, level, "identity chaining credential released", attr.SlogIdentityChainingCredentialSource(source))
 }
 
 // logAcquisitionFailure logs a failed attempt with the provider's error text.

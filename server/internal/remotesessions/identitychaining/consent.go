@@ -2,22 +2,27 @@ package identitychaining
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // CheckConsent tries the vendor's providers in order, as Acquire does, and
 // each runs its live exchange. The Speakeasy provider vouches for the consent
-// page's sign-in; its credential has no MCP grant yet, and a grant backed by
+// page's sign-in; its credential has no MCP grant yet, and any grant backed by
 // that sign-in adopts it on first use (adoptConsentCredential).
 func (c *Chainer) CheckConsent(ctx context.Context, req Request, signInID uuid.UUID) Outcome {
 	if !req.complete() || req.UserID == "" {
 		return notApplicable
 	}
+	req.UserSessionJTI = ""
+	req.consentSignInID = signInID
 	logger := c.logger.With(attr.SlogOrganizationID(req.OrganizationID), attr.SlogProjectID(req.ProjectID.String()), attr.SlogUserSessionIssuerID(req.UserSessionIssuerID.String()), attr.SlogUserID(req.UserID))
 	sel, outcome := c.selectBinding(ctx, logger, req)
 	if !outcome.Succeeded() {
@@ -31,19 +36,27 @@ func (c *Chainer) CheckConsent(ctx context.Context, req Request, signInID uuid.U
 	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
 	_, attempt := c.tryProviders(ctx, logger, "consent", order, func(ctx context.Context, logger *slog.Logger, p remotesessions.EMAProvider) (Token, Outcome) {
-		if p.Kind != remotesessions.EMAProviderSpeakeasy {
-			return c.acquireFrom(ctx, logger, req, sel, p)
-		}
-		var none Token
-		source, ok := c.source(p).(speakeasySource)
-		if !ok || !source.available() {
-			return none, unavailableBecause(remotesessions.EMAProviderSigningUnavailable)
-		}
-		if signInID == uuid.Nil {
+		if p.Kind == remotesessions.EMAProviderSpeakeasy && !req.consent() {
+			var none Token
 			return none, newOutcome(StageAuthorization, ReasonReauthenticationRequired, ConfidenceVerified, false)
 		}
-		source.consentSignInID = signInID
-		return c.acquireWith(ctx, logger, req, sel, p, source)
+		return c.acquireFrom(ctx, logger, req, sel, p)
 	})
 	return attempt
+}
+
+// RetireConsentCredentials erases the credentials the sign-in's consent pages
+// minted for the issuer's endpoints that no grant has adopted. The consent
+// flow calls it when the user denies access.
+func (c *Chainer) RetireConsentCredentials(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID, userID string, signInID uuid.UUID) error {
+	if signInID == uuid.Nil || userID == "" {
+		return nil
+	}
+	if _, err := repo.New(c.db).RetireSpeakeasySignInConsentEMACredentials(ctx, repo.RetireSpeakeasySignInConsentEMACredentialsParams{
+		OrganizationID: organizationID, ProjectID: projectID, UserSessionIssuerID: userSessionIssuerID,
+		SubjectUrn: urn.NewUserSubject(userID).String(), SignInID: signInID,
+	}); err != nil {
+		return fmt.Errorf("retire consent EMA credentials: %w", err)
+	}
+	return nil
 }

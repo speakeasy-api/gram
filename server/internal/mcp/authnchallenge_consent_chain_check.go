@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Chained card check states, shared by the template and the page script.
@@ -109,7 +111,12 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	if challengeState.SignInID != nil {
 		signInID = *challengeState.SignInID
 	}
-	result := s.checkIdentityChaining(ctx, requests, display, signInID)
+	result, outcome := s.checkIdentityChaining(ctx, requests, display, signInID)
+	logger.InfoContext(ctx, "identity chaining consent check",
+		attr.SlogOutcome(result.Status),
+		attr.SlogReason(string(outcome.Reason)),
+		attr.SlogIdentityChainingProvider(string(outcome.Provider)),
+	)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -119,24 +126,43 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
+// retireDeniedConsentCredentials erases the vendor credentials this sign-in's
+// consent pages minted that no grant adopted, once the user denies access.
+// Best effort: a remaining credential expires within the hour and only a
+// grant of the same sign-in could adopt it.
+func (s *Service) retireDeniedConsentCredentials(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) {
+	subject := challengeState.Subject
+	if s.identityChainer == nil || challengeState.SignInID == nil || subject == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
+		return
+	}
+	if err := s.identityChainer.RetireConsentCredentials(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, subject.ID, *challengeState.SignInID); err != nil {
+		logger.WarnContext(ctx, "retire denied consent identity chaining credentials", attr.SlogError(err))
+	}
+}
+
 // checkIdentityChaining checks every request under one deadline. Every
 // provider runs its live exchange, so a card is claimed connected only with a
-// downstream token.
-func (s *Service) checkIdentityChaining(ctx context.Context, requests []identitychaining.Request, service string, signInID uuid.UUID) consentChainCheckResult {
+// downstream token. It also returns the outcome that decided the result.
+func (s *Service) checkIdentityChaining(ctx context.Context, requests []identitychaining.Request, service string, signInID uuid.UUID) (consentChainCheckResult, identitychaining.Outcome) {
 	ctx, cancel := context.WithTimeout(ctx, consentChainCheckTimeout)
 	defer cancel()
 	result := chainCheckConnectedResult
+	var decided identitychaining.Outcome
 	for _, req := range requests {
 		outcome := s.identityChainer.CheckConsent(ctx, req, signInID)
 		checked := classifyChainCheck(outcome, service)
 		switch checked.Status {
 		case chainCheckRejected:
-			return checked
+			return checked, outcome
 		case chainCheckUnknown:
-			result = checked
+			result, decided = checked, outcome
+		case chainCheckConnected:
+			if result.Status == chainCheckConnected {
+				decided = outcome
+			}
 		}
 	}
-	return result
+	return result, decided
 }
 
 // classifyChainCheck maps an outcome to page copy. Only definitive refusals
