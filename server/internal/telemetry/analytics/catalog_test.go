@@ -3,6 +3,7 @@ package analytics
 import (
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -281,10 +282,24 @@ func TestDimensionValuesSkipTheCollapse(t *testing.T) {
 			if field.Role != RoleDimension {
 				continue
 			}
-			require.NotEmpty(t, field.Typeahead, "%s.%s", ds.Name, field.Name)
+			require.NotEmpty(t, field.Typeahead, "%s.%s falls back to the collapsed rows", ds.Name, field.Name)
 			plan, err := CompileValues(Default, tenant, nil, ValuesRequest{Dataset: ds.Name, Dimension: field.Name, FromUnixNano: 1, ToUnixNano: 2, Limit: 0})
 			require.NoError(t, err)
 			require.NotContains(t, plan.SQL, "LIMIT 1 BY", "%s.%s", ds.Name, field.Name)
 		}
 	}
+}
+
+func TestDimensionValuesWithoutTypeaheadReadTheRows(t *testing.T) {
+	t.Parallel()
+
+	ds := *Sessions
+	ds.Fields = slices.Clone(Sessions.Fields)
+	for i := range ds.Fields {
+		ds.Fields[i].Typeahead = ""
+	}
+	plan, err := CompileValues(MustCatalog(nil, &ds), Tenant{OrganizationID: "org", ProjectID: "proj"}, nil, ValuesRequest{Dataset: ds.Name, Dimension: "model", FromUnixNano: 1, ToUnixNano: 2, Limit: 0})
+	require.NoError(t, err)
+	require.Contains(t, plan.SQL, "SELECT model AS value, count() AS n FROM (")
+	require.Contains(t, plan.SQL, "LIMIT 1 BY")
 }
