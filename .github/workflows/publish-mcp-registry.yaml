@@ -3,6 +3,8 @@ name: Publish MCP Registry Listing
 # Publishes mcp-registry/platform/server.json to the official MCP registry
 # (registry.modelcontextprotocol.io). Manual only: the registry rejects a
 # version it already has, so bump "version" in server.json before each run.
+# MCP_REGISTRY_PRIVATE_KEY is a secret of the `mcp-registry` environment, which
+# must restrict deployments to `main`; runs from other branches are skipped.
 
 on:
   workflow_dispatch:
@@ -24,6 +26,8 @@ env:
 jobs:
   publish:
     name: publish
+    if: github.ref == 'refs/heads/main'
+    environment: mcp-registry
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
