@@ -110,10 +110,10 @@ func TestResolveClientBindingsRespectLoginIssuer(t *testing.T) {
 
 func TestResolveClientUsesConnectionScopesForBindings(t *testing.T) {
 	t.Parallel()
-	issuer, project, clientID := uuid.New(), uuid.New(), uuid.New()
+	issuer, project, clientID, login := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project}
-	client := repo.ListIssuerClientsRow{ID: clientID, RemoteSessionIssuerID: issuer, ClientID: "bound", Scope: []string{"read"}, IssuerScopesSupported: []string{"openid"}}
-	binding := repo.ListEMABindingsRow{ProjectID: project, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example/", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}, RequestedScopes: []string{"write", "read"}}
+	client := repo.ListIssuerClientsRow{ID: clientID, RemoteSessionIssuerID: issuer, ClientID: "bound", Scope: []string{"read"}, IssuerScopesSupported: []string{"openid"}, UserSessionIssuerIds: []uuid.UUID{login}}
+	binding := repo.ListEMABindingsRow{ProjectID: project, UserSessionIssuerID: login, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example/", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}, RequestedScopes: []string{"write", "read"}}
 	fallback := binding
 	fallback.RequestedScopes = nil
 	fallback.Resource = "https://mcp.example"
@@ -123,6 +123,18 @@ func TestResolveClientUsesConnectionScopesForBindings(t *testing.T) {
 		require.Equal(t, ClientBindingBound, state)
 		require.Equal(t, []string{"read"}, scopes, "recorded binding scopes are not requested")
 	}
+}
+
+func TestResolveClientKeepsRecordedScopesForAnUnlinkedClient(t *testing.T) {
+	t.Parallel()
+	issuer, project, clientID, login := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	server := repo.ListEligibleServersRow{IssuerID: issuer, ProjectID: project}
+	client := repo.ListIssuerClientsRow{ID: clientID, RemoteSessionIssuerID: issuer, ClientID: "bound", Scope: []string{"read"}, UserSessionIssuerIds: []uuid.UUID{uuid.New()}}
+	binding := repo.ListEMABindingsRow{ProjectID: project, UserSessionIssuerID: login, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example", RemoteSessionClientID: uuid.NullUUID{UUID: clientID, Valid: true}, RequestedScopes: []string{"openid", "write", "files:read"}}
+	id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, []repo.ListEMABindingsRow{binding}, allClients(remotesessions.ResourceScopes{}))
+	require.Equal(t, "bound", id)
+	require.Equal(t, ClientBindingBound, state)
+	require.Equal(t, []string{"files:read", "write"}, scopes, "a client no sign-in uses keeps the binding's recorded scopes, without OIDC scopes")
 }
 
 func TestResolveClientIgnoresBindingsToAnotherProjectsClient(t *testing.T) {

@@ -90566,7 +90566,7 @@ components:
           type: array
           items:
             type: string
-          description: 'Scopes identity chaining requests: what an interactive sign-in through the selected client requests for this resource, from the server connection''s scope settings. Empty until a client is selected.'
+          description: 'Scopes identity chaining requests before dropping OpenID Connect scopes: what an interactive sign-in through the selected client requests for this resource, from the server connection''s scope settings. The scopes recorded at preparation are kept when no client is selected or the selected client is not linked to the user session issuer.'
         stage:
           type: string
           enum:

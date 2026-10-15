@@ -202,9 +202,11 @@ type PrepareEMAResponseBody struct {
 	Resource         string  `form:"resource" json:"resource" xml:"resource"`
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	// Scopes identity chaining requests: what an interactive sign-in through the
-	// selected client requests for this resource, from the server connection's
-	// scope settings. Empty until a client is selected.
+	// Scopes identity chaining requests before dropping OpenID Connect scopes:
+	// what an interactive sign-in through the selected client requests for this
+	// resource, from the server connection's scope settings. The scopes recorded
+	// at preparation are kept when no client is selected or the selected client is
+	// not linked to the user session issuer.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
@@ -233,9 +235,11 @@ type ReadEMAResponseBody struct {
 	Resource         string  `form:"resource" json:"resource" xml:"resource"`
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	// Scopes identity chaining requests: what an interactive sign-in through the
-	// selected client requests for this resource, from the server connection's
-	// scope settings. Empty until a client is selected.
+	// Scopes identity chaining requests before dropping OpenID Connect scopes:
+	// what an interactive sign-in through the selected client requests for this
+	// resource, from the server connection's scope settings. The scopes recorded
+	// at preparation are kept when no client is selected or the selected client is
+	// not linked to the user session issuer.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`
@@ -264,9 +268,11 @@ type UnlinkEMAResponseBody struct {
 	Resource         string  `form:"resource" json:"resource" xml:"resource"`
 	// Null means unknown; an empty array means no recorded grants.
 	GrantTypes []string `json:"grant_types"`
-	// Scopes identity chaining requests: what an interactive sign-in through the
-	// selected client requests for this resource, from the server connection's
-	// scope settings. Empty until a client is selected.
+	// Scopes identity chaining requests before dropping OpenID Connect scopes:
+	// what an interactive sign-in through the selected client requests for this
+	// resource, from the server connection's scope settings. The scopes recorded
+	// at preparation are kept when no client is selected or the selected client is
+	// not linked to the user session issuer.
 	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 	// Provenance of recorded grants, not provider trust.
 	GrantSource string `form:"grant_source" json:"grant_source" xml:"grant_source"`

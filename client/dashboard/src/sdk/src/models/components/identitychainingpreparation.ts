@@ -79,7 +79,7 @@ export type IdentityChainingPreparation = {
   resource: string;
   retryable: boolean;
   /**
-   * Scopes identity chaining requests: what an interactive sign-in through the selected client requests for this resource, from the server connection's scope settings. Empty until a client is selected.
+   * Scopes identity chaining requests before dropping OpenID Connect scopes: what an interactive sign-in through the selected client requests for this resource, from the server connection's scope settings. The scopes recorded at preparation are kept when no client is selected or the selected client is not linked to the user session issuer.
    */
   scopes: Array<string>;
   stage: IdentityChainingPreparationStage;

@@ -202,7 +202,7 @@ type XAAIdentityChainingBinding struct {
 	Retryable        bool     `json:"retryable"`
 	GrantSource      string   `json:"grant_source"`
 	RequestedScopes  []string `json:"requested_scopes" jsonschema:"scopes identity chaining requests, after dropping OpenID Connect scopes"`
-	ConfiguredScopes []string `json:"configured_scopes" jsonschema:"scopes an interactive sign-in through the bound client requests for this server, which identity chaining uses before dropping OpenID Connect scopes"`
+	ConfiguredScopes []string `json:"configured_scopes" jsonschema:"scopes identity chaining uses before dropping OpenID Connect scopes: what an interactive sign-in through the bound client requests for this server, or the scopes recorded on the binding when its client is not linked to the user session issuer"`
 }
 
 type OktaSignInStatus struct {

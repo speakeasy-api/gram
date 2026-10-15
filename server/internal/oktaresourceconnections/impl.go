@@ -493,7 +493,12 @@ func resolveClient(sv repo.ListEligibleServersRow, resource string, clients []re
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		for _, scope := range requestedScopes(c, resourceScopes(c.ID)) {
+		// A client no sign-in through this issuer uses has no connection to follow.
+		scopes := requestedScopes(c, resourceScopes(c.ID))
+		if !slices.Contains(c.UserSessionIssuerIds, b.UserSessionIssuerID) {
+			scopes = identitychaining.GrantScopes(b.RequestedScopes)
+		}
+		for _, scope := range scopes {
 			if !slices.Contains(boundScopes, scope) {
 				boundScopes = append(boundScopes, scope)
 			}
