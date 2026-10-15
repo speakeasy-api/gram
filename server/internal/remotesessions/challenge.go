@@ -1880,7 +1880,11 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 	var none RemoteLoginResult
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
-		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger)
+		var attrs []slog.Attr
+		if endpointErr, ok := errors.AsType[*tokenEndpointError](cause); ok {
+			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(endpointErr.statusCode))
+		}
+		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger, attrs...)
 	}
 
 	clients, err := m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
@@ -1974,13 +1978,13 @@ func (m *ChallengeManager) exchangeCode(
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return tokenResponse{}, fmt.Errorf("decode token response: %w", err)
+		return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, err: fmt.Errorf("decode token response: %w", err)}
 	}
 	if tok.AccessToken == "" {
 		if _, ok := oautherr.ParseTokenError(body); ok {
 			return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
 		}
-		return tokenResponse{}, errors.New("token endpoint returned no access_token")
+		return tokenResponse{}, &tokenEndpointError{statusCode: resp.StatusCode, err: errors.New("token endpoint returned no access_token")}
 	}
 	tok.raw = body
 	return tok, nil

@@ -70,6 +70,13 @@ func TestRemoteLoginCallback_ExchangeFailureNamesProviderReason(t *testing.T) {
 			want:        "token exchange with the identity provider failed",
 		},
 		{
+			name:        "malformed body under 200",
+			status:      http.StatusOK,
+			contentType: "text/html",
+			body:        `<html>OK</html>`,
+			want:        "token exchange with the identity provider failed",
+		},
+		{
 			name:        "no access token under 200",
 			status:      http.StatusOK,
 			contentType: "application/json",
