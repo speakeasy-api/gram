@@ -165,7 +165,9 @@ func (s *Service) DisableServerIdentityConfiguration(ctx context.Context, payloa
 		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName:     authCtx.Email,
 		ActorIsPlatformAdmin: authCtx.IsAdmin,
-	}, target.UserSessionIssuerID.UUID, mcpServerID)
+		// The dashboard acts on the server it just read for this user, who is
+		// looking at it, so it names no expected version.
+	}, target.UserSessionIssuerID.UUID, mcpServerID, "")
 	if err != nil {
 		return nil, identityOopsError(err, "disable MCP server identity").LogError(ctx, logger)
 	}

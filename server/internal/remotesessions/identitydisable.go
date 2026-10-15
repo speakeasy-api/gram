@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -40,9 +41,24 @@ type DisableServerIdentityResult struct {
 	ClientUnbound bool
 }
 
+// ServerIdentityVersion is the server state a caller decided against, which
+// every write to the row moves. Opaque: it is only ever compared, and only
+// ever produced here, so a caller that shows a user one sign-in cannot turn
+// off another.
+func ServerIdentityVersion(server mcpserversrepo.McpServer) string {
+	return server.UpdatedAt.Time.UTC().Format(time.RFC3339Nano)
+}
+
 // DisableServerIdentity clears mcpServerID's upstream authorization server and
 // unbinds that provider's client when this was the last server using it. It is
 // idempotent: a server already signing in to nothing is left alone.
+//
+// expectedVersion is the ServerIdentityVersion the caller decided against, and
+// is compared once this transaction holds the server row, so no configuration
+// commit can land between the comparison and the clear. Empty skips the
+// comparison, for a caller acting on the state it just read under the user's
+// eyes; a caller whose decision was made elsewhere, as a confirmed agent tool
+// call is, passes it and is refused with ErrIdentityStale when it moved.
 //
 // Locks in the order every identity write takes: the MCP server row, then the
 // user session issuer, then the client rows a detach touches. Taking the
@@ -51,7 +67,7 @@ type DisableServerIdentityResult struct {
 //
 // The cleared state is durable: nothing derives this column on a schedule, and
 // the post-commit pass here only ever takes a provider away.
-func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope IdentityScope, userIssuerID, mcpServerID uuid.UUID) (DisableServerIdentityResult, error) {
+func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope IdentityScope, userIssuerID, mcpServerID uuid.UUID, expectedVersion string) (DisableServerIdentityResult, error) {
 	var none DisableServerIdentityResult
 	if scope.OrganizationID == "" || scope.ProjectID == uuid.Nil || userIssuerID == uuid.Nil || mcpServerID == uuid.Nil {
 		return none, fmt.Errorf("disable server identity: incomplete scope")
@@ -76,6 +92,12 @@ func (c *IdentityCommitter) DisableServerIdentity(ctx context.Context, scope Ide
 	}
 	if !server.UserSessionIssuerID.Valid || server.UserSessionIssuerID.UUID != userIssuerID {
 		return none, identityRefusal(ErrIdentityInvalid, nil, "MCP server does not use this user session issuer")
+	}
+	// Under the row lock, so a configuration commit either committed before
+	// this read — and is seen here — or is still waiting for the row this
+	// transaction now holds and clears.
+	if expectedVersion != "" && ServerIdentityVersion(server) != expectedVersion {
+		return none, identityRefusal(ErrIdentityStale, nil, "MCP server sign-in changed since it was read")
 	}
 	if !server.RemoteSessionIssuerID.Valid {
 		// Nothing to clear and no client of this server's to unbind. Commit so

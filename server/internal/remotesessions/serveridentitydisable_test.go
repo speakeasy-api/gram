@@ -6,6 +6,7 @@ package remotesessions_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -13,8 +14,10 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func disablePayload(mcpServerID uuid.UUID) *gen.DisableServerIdentityConfigurationPayload {
@@ -176,4 +179,75 @@ func TestDisableServerIdentityRefusesUnbindingAnOrgClientOnAnOrgIssuer(t *testin
 	requireClientBound(t, ctx, ti, orgClientID, userIssuerID, true)
 	require.Equal(t, conv.ToNullUUID(providerID), storedIssuer(t, ctx, ti.conn, projectID, targetID),
 		"a refused disable must leave the server configured")
+}
+
+// AIM-577: an agent confirms a disable against a version it read and showed
+// the user. The comparison has to belong to the write, under the server row
+// lock: checked before the write instead, a configuration commit waiting for
+// that same row lands between the check and the clear, and the disable wipes a
+// sign-in nobody was asked about.
+func TestDisableServerIdentityRefusesAVersionAConfigurationCommitMoved(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+	orgID := activeOrganizationID(t, ctx)
+	targetID, userIssuerID := createServerIdentityTarget(t, ctx, ti, "disable-stale-target")
+	providerID := createServerIdentityProvider(t, ctx, ti, "disable-stale-provider", "", false, []string{"none"})
+	bindAndStampServerIdentityClient(t, ctx, ti, "disable-stale-client", providerID, userIssuerID, targetID, false)
+
+	read, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        targetID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	version := remotesessions.ServerIdentityVersion(read)
+	require.NotEmpty(t, version)
+
+	secondProviderID := createServerIdentityProvider(t, ctx, ti, "disable-stale-second", "", false, []string{"none"})
+	secondClientID := bindServerIdentityClient(t, ctx, ti, "disable-stale-second-client", secondProviderID, userIssuerID, false)
+
+	// A configuration commit holds the server row while it configures the
+	// second provider, as the dashboard does. It takes none of the Platform
+	// MCP tool's own serialization, which is why only the row lock orders them.
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary only, so the disable blocks on a row this commit still holds; every read and write below uses generated SQLc methods.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	configured, err := mcpserversrepo.New(tx).StampMCPServerRemoteSessionIssuer(ctx, mcpserversrepo.StampMCPServerRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(secondProviderID),
+		ID:                    targetID,
+		ProjectID:             projectID,
+		UserSessionIssuerID:   conv.ToNullUUID(userIssuerID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), configured)
+
+	type disableResult struct {
+		err error
+	}
+	done := make(chan disableResult, 1)
+	go func() {
+		_, derr := identityCommitter(t, ti).DisableServerIdentity(ctx, remotesessions.IdentityScope{
+			OrganizationID:       orgID,
+			ProjectID:            projectID,
+			Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, "user-disable-stale"),
+			ActorDisplayName:     nil,
+			ActorIsPlatformAdmin: false,
+		}, userIssuerID, targetID, version)
+		done <- disableResult{err: derr}
+	}()
+
+	requireBlockedOnMCPServers(t, ctx, ti.conn, "FOR UPDATE")
+	require.NoError(t, tx.Commit(ctx))
+
+	var result disableResult
+	select {
+	case result = <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the disable never finished after the configuration commit released the row")
+	}
+	require.ErrorIs(t, result.err, remotesessions.ErrIdentityStale)
+	require.Equal(t, conv.ToNullUUID(secondProviderID), storedIssuer(t, ctx, ti.conn, projectID, targetID),
+		"the refused disable must leave the configuration the commit made")
+	requireClientBound(t, ctx, ti, secondClientID, userIssuerID, true)
 }

@@ -527,7 +527,7 @@ func (s *CatalogIdentityProviderAttachmentService) PreviewSignInRemoval(ctx cont
 	if err != nil {
 		return SignInRemovalPreview{}, err
 	}
-	version := signInRemovalVersion(server)
+	version := remotesessions.ServerIdentityVersion(server)
 	if !server.RemoteSessionIssuerID.Valid {
 		return SignInRemovalPreview{Configured: false, ProviderURL: "", ClientStaysBound: false, Version: version}, nil
 	}
@@ -553,44 +553,25 @@ func (s *CatalogIdentityProviderAttachmentService) PreviewSignInRemoval(ctx cont
 	return SignInRemovalPreview{Configured: true, ProviderURL: provider.Issuer, ClientStaysBound: others > 0, Version: version}, nil
 }
 
-// signInRemovalVersion is the server row's version, which every write to the
-// row moves. Opaque to the caller: it is only ever compared.
-func signInRemovalVersion(server mcpserversrepo.McpServer) string {
-	return server.UpdatedAt.Time.UTC().Format(time.RFC3339Nano)
-}
-
 // RemoveSignIn turns the registration's server sign-in off through the same
 // operation the dashboard runs, so its refusals, audit and client-preservation
 // rules are the ones that apply.
 func (s *CatalogIdentityProviderAttachmentService) RemoveSignIn(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, expectedVersion string) (SignInRemovalResult, error) {
+	// The agent decided against a preview it showed the user, so the version
+	// is required. The comparison itself belongs to the write: it runs inside
+	// the transaction that holds the server row and clears the provider, so a
+	// dashboard commit cannot land between the check and the clear. Taking a
+	// lock here instead would be both weaker — it is keyed on this user, and
+	// the dashboard takes nothing — and held across an independently
+	// transactional call.
 	if expectedVersion == "" {
 		return SignInRemovalResult{}, ErrSignInRemovalStale
 	}
 
-	// The same serialization the attach takes, so two confirmations cannot
-	// decide against the same state, and the version is read and compared
-	// while this operation holds it rather than before.
-	lockTx, err := s.db.Begin(ctx)
-	if err != nil {
-		return SignInRemovalResult{}, fmt.Errorf("begin sign-in removal lock: %w", err)
-	}
-	defer func() { _ = lockTx.Rollback(ctx) }()
-	if err := platformrepo.New(lockTx).LockPlatformMCPOperationReceipt(ctx, platformrepo.LockPlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID,
-		SubjectUrn:     userSubjectURN(principal.UserID),
-		ProjectID:      project.ID.String(),
-		Operation:      "remove_identity_provider",
-		IdempotencyKey: registrationID.String(),
-	}); err != nil {
-		return SignInRemovalResult{}, fmt.Errorf("lock sign-in removal: %w", err)
-	}
-
+	// Read for the provider URL the result reports, not to decide anything.
 	preview, err := s.PreviewSignInRemoval(ctx, principal, project, registrationID)
 	if err != nil {
 		return SignInRemovalResult{}, err
-	}
-	if preview.Version != expectedVersion {
-		return SignInRemovalResult{}, ErrSignInRemovalStale
 	}
 	server, issuer, err := s.signInRemovalTarget(ctx, principal, project, registrationID)
 	if err != nil {
@@ -602,12 +583,12 @@ func (s *CatalogIdentityProviderAttachmentService) RemoveSignIn(ctx context.Cont
 		Actor:                urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 		ActorDisplayName:     nil,
 		ActorIsPlatformAdmin: false,
-	}, issuer, server.ID)
+	}, issuer, server.ID, expectedVersion)
+	if errors.Is(err, remotesessions.ErrIdentityStale) {
+		return SignInRemovalResult{}, ErrSignInRemovalStale
+	}
 	if err != nil {
 		return SignInRemovalResult{}, attachmentCommitError("turn off MCP server sign-in", err)
-	}
-	if err := lockTx.Commit(ctx); err != nil {
-		return SignInRemovalResult{}, fmt.Errorf("commit sign-in removal lock: %w", err)
 	}
 	return SignInRemovalResult{Removed: true, ProviderURL: preview.ProviderURL, ClientUnbound: result.ClientUnbound}, nil
 }

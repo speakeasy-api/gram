@@ -63,6 +63,11 @@ var (
 	// ErrIdentityConflict marks a write that no longer fits current state.
 	ErrIdentityConflict = errors.New("identity: conflict")
 
+	// ErrIdentityStale marks a write whose caller named a server state that is
+	// no longer current: the configuration changed after the caller read it,
+	// or the same request is being replayed after it was carried out.
+	ErrIdentityStale = errors.New("identity: stale server identity version")
+
 	// ErrIdentityInvariant marks stored state no identity write produces, which
 	// the commit refuses to build on.
 	ErrIdentityInvariant = errors.New("identity: invariant violation")

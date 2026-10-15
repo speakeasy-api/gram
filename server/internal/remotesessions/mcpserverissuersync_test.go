@@ -576,20 +576,21 @@ func seedUnlinkedClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 	return client.ID, issuer.ID
 }
 
-// requireBlockedOnMCPServers waits until a statement is parked on an
-// mcp_servers row lock, which is how the test knows the clear has taken its
-// snapshot and is waiting for the configuration commit rather than racing it.
-func requireBlockedOnMCPServers(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
+// requireBlockedOnMCPServers waits until a statement matching fragment is
+// parked on an mcp_servers row lock, which is how a test knows the write under
+// test has taken its snapshot and is waiting for the configuration commit
+// rather than racing it.
+func requireBlockedOnMCPServers(t *testing.T, ctx context.Context, conn *pgxpool.Pool, fragment string) {
 	t.Helper()
 	require.Eventually(t, func() bool {
 		var blocked bool
 		//nolint:glint // notestingrawsql: pg_stat_activity is server state, not application data, and has no SQLc query.
 		if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity
-			WHERE wait_event_type = 'Lock' AND query ILIKE '%UPDATE mcp_servers%')`).Scan(&blocked); err != nil {
+			WHERE wait_event_type = 'Lock' AND query ILIKE '%' || $1 || '%')`, fragment).Scan(&blocked); err != nil {
 			return false
 		}
 		return blocked
-	}, 10*time.Second, 20*time.Millisecond, "the clear never blocked on the configuration commit's row lock")
+	}, 10*time.Second, 20*time.Millisecond, "the write never blocked on the configuration commit's row lock")
 }
 
 // The configuration commit that races the clear may choose the provider the
@@ -656,7 +657,7 @@ func TestClearMCPServerRemoteSessionIssuerLosesToASameProviderConfigurationCommi
 		done <- clearResult{rows: rows, err: err}
 	}()
 
-	requireBlockedOnMCPServers(t, ctx, ti.conn)
+	requireBlockedOnMCPServers(t, ctx, ti.conn, "UPDATE mcp_servers")
 	require.NoError(t, tx.Commit(ctx))
 
 	var result clearResult
