@@ -44,7 +44,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -83,7 +85,9 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /user_management/magic_auth", h.handleWorkosCreateMagicAuth)
 	mux.HandleFunc("POST /user_management/authenticate", h.handleWorkosAuthenticate)
 	mux.HandleFunc("POST /user_management/sessions/revoke", h.handleWorkosRevokeSession)
+	mux.HandleFunc("GET /user_management/users/{id}/sessions", h.handleWorkosListSessions)
 	mux.HandleFunc("GET /user_management/users/{id}", h.handleWorkosGetUser)
+	mux.HandleFunc("GET /google/userinfo", h.handleGoogleUserInfo)
 	mux.HandleFunc("GET /user_management/users", h.handleWorkosListUsers)
 
 	mux.HandleFunc("GET /organizations/{id}", h.handleWorkosGetOrganization)
@@ -270,6 +274,9 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 
 	first, last := splitName(user.DisplayName)
 	sessionID := "mock_session_" + randomToken()
+	h.sessionsMu.Lock()
+	h.sessions[sessionID] = mockSession{userID: workosUserID(user.ID), createdAt: time.Now().UTC(), revoked: false}
+	h.sessionsMu.Unlock()
 	resp := map[string]any{
 		"user": map[string]any{
 			"id":                  workosUserID(user.ID),
@@ -287,6 +294,11 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 	}
 	if body.GrantType == magicAuthGrantType {
 		resp["authentication_method"] = "MagicAuth"
+	} else if method := authenticationMethod(); method != "" {
+		resp["authentication_method"] = method
+		if tokens := oauthTokens(method, user.Email); tokens != nil {
+			resp["oauth_tokens"] = tokens
+		}
 	}
 	if orgID != "" {
 		resp["organization_id"] = orgID
@@ -294,9 +306,51 @@ func (h *Handler) handleWorkosAuthenticate(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// handleWorkosRevokeSession is a no-op mock of POST /user_management/sessions/revoke.
-func (h *Handler) handleWorkosRevokeSession(w http.ResponseWriter, _ *http.Request) {
+// handleWorkosRevokeSession mocks POST /user_management/sessions/revoke.
+// Unknown sessions succeed, as revocation is idempotent.
+func (h *Handler) handleWorkosRevokeSession(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		SessionID string `json:"session_id"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	h.sessionsMu.Lock()
+	if s, ok := h.sessions[body.SessionID]; ok {
+		s.revoked = true
+		h.sessions[body.SessionID] = s
+	}
+	h.sessionsMu.Unlock()
 	w.WriteHeader(http.StatusOK)
+}
+
+// mockSessionLifetime is how long an emulated WorkOS session stays active.
+const mockSessionLifetime = 30 * 24 * time.Hour
+
+// handleWorkosListSessions mocks GET /user_management/users/{id}/sessions:
+// the user's active sessions, newest first, in one page.
+func (h *Handler) handleWorkosListSessions(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+	type sessionJSON struct {
+		Object    string `json:"object"`
+		ID        string `json:"id"`
+		UserID    string `json:"user_id"`
+		Status    string `json:"status"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	h.sessionsMu.Lock()
+	data := make([]sessionJSON, 0)
+	now := time.Now()
+	for id, s := range h.sessions {
+		if s.userID != userID || s.revoked || !now.Before(s.createdAt.Add(mockSessionLifetime)) {
+			continue
+		}
+		created := s.createdAt.Format(time.RFC3339Nano)
+		data = append(data, sessionJSON{Object: "session", ID: id, UserID: s.userID, Status: "active", CreatedAt: created, UpdatedAt: created, ExpiresAt: s.createdAt.Add(mockSessionLifetime).Format(time.RFC3339Nano)})
+	}
+	h.sessionsMu.Unlock()
+	sort.Slice(data, func(i, j int) bool { return data[i].CreatedAt > data[j].CreatedAt })
+	writeJSON(w, http.StatusOK, map[string]any{"data": data, "list_metadata": map[string]any{"before": nil, "after": nil}})
 }
 
 // mockJWT builds a minimal unsigned JWT with a "sid" claim so that
@@ -1763,5 +1817,19 @@ func statusCodeForJSON(status int) string {
 		return "conflict"
 	default:
 		return "server_error"
+	}
+}
+
+// authenticationMethod is what an authorization-code exchange reports.
+// DEVIDP_AUTHENTICATION_METHOD overrides the "SSO" default (e.g. "Password");
+// "none" omits it.
+func authenticationMethod() string {
+	switch v := os.Getenv("DEVIDP_AUTHENTICATION_METHOD"); v {
+	case "":
+		return "SSO"
+	case "none":
+		return ""
+	default:
+		return v
 	}
 }

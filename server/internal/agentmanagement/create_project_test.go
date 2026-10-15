@@ -14,7 +14,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -33,7 +32,6 @@ func newProjectScopedService(t *testing.T, conn *pgxpool.Pool) *Service {
 	t.Helper()
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	service := newTestService(conn, engine)
-	service.features = &recordingAgentManagementFeatures{evaluation: feature.EvaluationEnabled}
 	return service
 }
 

@@ -140,8 +140,8 @@ func BuildSetOrganizationFeaturePayload(adminSetOrganizationFeatureBody string, 
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }'")
 		}
-		if !(body.FeatureName == "logs" || body.FeatureName == "tool_io_logs" || body.FeatureName == "session_capture" || body.FeatureName == "authz_challenge_logging" || body.FeatureName == "sso" || body.FeatureName == "scim" || body.FeatureName == "hooks_browser_login" || body.FeatureName == "hooks_fail_open" || body.FeatureName == "custom_model_keys" || body.FeatureName == "skills" || body.FeatureName == "skill_capture_metadata_only" || body.FeatureName == "ai_platform_push_integrations" || body.FeatureName == "platform_mcp" || body.FeatureName == "customer_managed_encryption_keys" || body.FeatureName == "remote_session_auto_refresh" || body.FeatureName == "remote_session_auto_refresh_enforced" || body.FeatureName == "consent_tool_filtering" || body.FeatureName == "session_portability" || body.FeatureName == "network_ingress" || body.FeatureName == "signals_intelligence") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress", "signals_intelligence"}))
+		if !(body.FeatureName == "logs" || body.FeatureName == "tool_io_logs" || body.FeatureName == "session_capture" || body.FeatureName == "authz_challenge_logging" || body.FeatureName == "sso" || body.FeatureName == "scim" || body.FeatureName == "hooks_browser_login" || body.FeatureName == "hooks_fail_open" || body.FeatureName == "custom_model_keys" || body.FeatureName == "skills" || body.FeatureName == "skill_capture_metadata_only" || body.FeatureName == "ai_platform_push_integrations" || body.FeatureName == "platform_mcp" || body.FeatureName == "customer_managed_encryption_keys" || body.FeatureName == "remote_session_auto_refresh" || body.FeatureName == "remote_session_auto_refresh_enforced" || body.FeatureName == "consent_tool_filtering" || body.FeatureName == "session_portability" || body.FeatureName == "network_ingress" || body.FeatureName == "signals_intelligence" || body.FeatureName == "organization_gateway_disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress", "signals_intelligence", "organization_gateway_disabled"}))
 		}
 		if utf8.RuneCountInString(body.FeatureName) > 60 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.feature_name", body.FeatureName, utf8.RuneCountInString(body.FeatureName), 60, false))
@@ -967,6 +967,68 @@ func BuildGetOrganizationStatsPayload(adminGetOrganizationStatsAdminSessionToken
 		}
 	}
 	v := &admin.GetOrganizationStatsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildRepairInferenceKeyPayload builds the payload for the admin
+// repairInferenceKey endpoint from CLI flags.
+func BuildRepairInferenceKeyPayload(adminRepairInferenceKeyBody string, adminRepairInferenceKeyAdminSessionToken string) (*admin.RepairInferenceKeyPayload, error) {
+	var err error
+	var body RepairInferenceKeyRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRepairInferenceKeyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirmation\": \"I know what I\\'m doing\",\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\",\n      \"reason\": \"aa\",\n      \"remove_causes\": [\n         \"trial_demotion\",\n         \"trial_demotion\"\n      ]\n   }'")
+		}
+		if body.RemoveCauses == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("remove_causes", "body"))
+		}
+		if !(body.KeyType == "chat" || body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", body.KeyType, []any{"chat", "internal"}))
+		}
+		if len(body.RemoveCauses) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 1, true))
+		}
+		if len(body.RemoveCauses) > 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 3, false))
+		}
+		for _, e := range body.RemoveCauses {
+			if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.remove_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
+			}
+		}
+		if !(body.Confirmation == "I know what I'm doing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confirmation", body.Confirmation, []any{"I know what I'm doing"}))
+		}
+		if utf8.RuneCountInString(body.Reason) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", body.Reason, utf8.RuneCountInString(body.Reason), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRepairInferenceKeyAdminSessionToken != "" {
+			adminSessionToken = &adminRepairInferenceKeyAdminSessionToken
+		}
+	}
+	v := &admin.RepairInferenceKeyPayload{
+		OrganizationID: body.OrganizationID,
+		KeyType:        body.KeyType,
+		Confirmation:   body.Confirmation,
+		Reason:         body.Reason,
+	}
+	if body.RemoveCauses != nil {
+		v.RemoveCauses = make([]string, len(body.RemoveCauses))
+		for i, val := range body.RemoveCauses {
+			v.RemoveCauses[i] = val
+		}
+	} else {
+		v.RemoveCauses = []string{}
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

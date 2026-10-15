@@ -158,6 +158,11 @@ type AuthnChallengeState struct {
 	// IDP callback. Impersonated humans may authorize themselves but must never
 	// authorize an agent.
 	AuthorizerImpersonated *bool `json:"authorizer_impersonated,omitempty"`
+	// SignInID is the authorizing user's recorded sign-in; nil leaves the grant unlinked.
+	SignInID *uuid.UUID `json:"sign_in_id,omitempty"`
+	// FreshLoginForced marks a flow already sent back to the identity
+	// provider because its sign-in was revoked, so it never loops.
+	FreshLoginForced bool `json:"fresh_login_forced,omitempty"`
 	// AgentAuthorizationTarget fixes the only policy an agent selection may
 	// authorize. Older in-flight states omit it and remain self-only.
 	AgentAuthorizationTarget *AgentAuthorizationTarget `json:"agent_authorization_target,omitempty"`
@@ -189,6 +194,10 @@ type AuthnChallengeState struct {
 	// or failed upstream leg — and a deliberate disconnect — return the user to
 	// a page they can act on instead of bouncing them out again.
 	AutoConnectDone bool `json:"auto_connect_done,omitempty"`
+	// FocusServer is the gateway server a first-party connect was opened
+	// for, so the consent page lands on that server's connect page. Empty
+	// lands on the gateway's own page.
+	FocusServer string `json:"focus_server,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
@@ -262,7 +271,9 @@ type UserSessionGrant struct {
 	// validated against the endpoint's live tool inventory and resource-bound.
 	// Nil means all tools.
 	ToolSelection *toolfilter.SessionSelection `json:"tool_selection,omitempty"`
-	CreatedAt     time.Time                    `json:"created_at"`
+	// SignInID carries the authorizing user's sign-in to the session row.
+	SignInID  *uuid.UUID `json:"sign_in_id,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -306,20 +317,10 @@ var errIssuerGateCallerProfile = errors.New("resolve caller assertion user profi
 // earned: a bad signature, the wrong audience, an expired or revoked token, a
 // session row that is gone, or a principal whose admission has been withdrawn.
 // It is what makes the invalid_token challenge opt-in. A failure on Speakeasy's side
-// — an unreachable revocation store, a policy read that never returned, a
-// rollout gate that hides the endpoint — leaves it unset, so the client is told
-// to retry rather than to throw a live credential away.
+// — an unreachable revocation store, a policy read that never returned —
+// leaves it unset, so the client is told to retry rather than to throw a live
+// credential away.
 var errCredentialRejected = errors.New("credential rejected")
-
-// errWorkloadRolloutDisabled marks a workload session hidden by the agent
-// authorization rollout rather than by anything wrong with its token. Exchanging
-// a fresh token would hit the same gate, so this must not earn invalid_token.
-var errWorkloadRolloutDisabled = errors.New("workload session hidden by agent authorization rollout")
-
-// errWorkloadRolloutUnavailable marks a workload session refused because the
-// rollout state could not be read at all. The endpoint is hidden either way,
-// but an outage is not a rollout decision and is not reported as one.
-var errWorkloadRolloutUnavailable = errors.New("agent authorization rollout state unavailable")
 
 // errUnsupportedSessionSubject marks a session subject kind that parses but
 // that this path cannot describe as a caller. It is an error rather than a
@@ -344,16 +345,6 @@ const (
 	// Labeled apart from a bad token so an outage does not read as a spike of
 	// bad credentials.
 	issuerGateReasonRevocationUnavailable = "revocation_check_unavailable"
-
-	// issuerGateReasonWorkloadRolloutDisabled: a workload session reached an
-	// endpoint whose organization has agent authorization switched off.
-	issuerGateReasonWorkloadRolloutDisabled = "workload_rollout_disabled"
-
-	// issuerGateReasonWorkloadRolloutUnavailable: the rollout state could not
-	// be read, so the endpoint stayed hidden without the feature being off.
-	// Separate from the line above so an outage cannot be mistaken for
-	// deliberate rollout state.
-	issuerGateReasonWorkloadRolloutUnavailable = "workload_rollout_unavailable"
 
 	// issuerGateReasonInvalidRemoteSession: the bearer token was accepted but
 	// a required upstream remote session for the issuer is missing or
@@ -431,10 +422,6 @@ func issuerGateFailureReason(err error) string {
 		return "workload_admission_load_failed"
 	case errors.Is(err, sessiontokens.ErrRevocationUnavailable):
 		return issuerGateReasonRevocationUnavailable
-	case errors.Is(err, errWorkloadRolloutDisabled):
-		return issuerGateReasonWorkloadRolloutDisabled
-	case errors.Is(err, errWorkloadRolloutUnavailable):
-		return issuerGateReasonWorkloadRolloutUnavailable
 	case errors.Is(err, errWorkloadSessionOutOfReach):
 		return issuerGateReasonWorkloadSessionOutOfReach
 	default:
@@ -557,6 +544,13 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	}
 	if acceptedAudience == userSessionAudienceLegacy {
 		s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
+	}
+	// An organization gateway serves the organization's users, each with the
+	// servers their own access reaches; an agent, workload, or anonymous
+	// session has no such access to derive, so it is refused before any of
+	// its session state is read.
+	if endpoint.IsOrganizationGateway() && session.Subject().Kind != urn.SessionSubjectKindUser {
+		return ctx, nil, nil, false, fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
 	}
 
 	// The consent-screen tool selection loads for every subject kind —
@@ -796,8 +790,13 @@ func (s *Service) contextForSessionSubject(
 		return ctx, nil
 	}
 
-	projectID := endpoint.ProjectID
-	authCtx, err := s.sessionAuthContext(ctx, endpoint.OrganizationID, &projectID, sessionID)
+	// An organization gateway belongs to no project; its members carry their
+	// own into every check.
+	var projectID *uuid.UUID
+	if id := endpoint.ProjectID; id != uuid.Nil {
+		projectID = &id
+	}
+	authCtx, err := s.sessionAuthContext(ctx, endpoint.OrganizationID, projectID, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -999,13 +998,21 @@ func (s *Service) authenticateIssuerGate(
 		refreshable   bool
 		valErr        error
 	)
-	if principalcredential.IsToken(authToken) {
+	// An organization gateway serves the organization's users, each with the
+	// servers their own access reaches. Principal credentials, agent keys,
+	// assistant tokens, and workload sessions are all bound to a project or a
+	// workload's own policy, so none of them signs in to it.
+	organizationGateway := endpoint.IsOrganizationGateway()
+	switch {
+	case principalcredential.IsToken(authToken) && !organizationGateway:
 		newCtx, subject, valErr = s.authenticateIssuerGatePrincipalCredential(ctx, authToken, endpoint)
-	} else {
+	case principalcredential.IsToken(authToken):
+		valErr = fmt.Errorf("%w: the organization gateway accepts user sessions only", errCredentialRejected)
+	default:
 		newCtx, subject, toolSelection, refreshable, valErr = s.validateUserSessionToken(ctx, authToken, baseURL, endpoint)
 	}
 	refreshableUserSession := subject != nil && refreshable
-	if subject == nil {
+	if subject == nil && !organizationGateway {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted
 		// in project A could resolve a remote_session linked under
@@ -1019,7 +1026,7 @@ func (s *Service) authenticateIssuerGate(
 			newCtx, subject = s.identityValidator.StampAssistant(assistCtx), &ssubj
 		}
 	}
-	if subject == nil && strings.HasPrefix(authToken, "gram_") {
+	if subject == nil && !organizationGateway && strings.HasPrefix(authToken, "gram_") {
 		newCtx, subject, valErr = s.authenticateIssuerGateAgentKey(ctx, authToken, endpoint)
 		var denied *oops.ShareableError
 		if errors.As(valErr, &denied) && denied.Code == oops.CodeNotFound {

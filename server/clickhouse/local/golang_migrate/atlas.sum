@@ -1,4 +1,4 @@
-h1:cO/BhZ+uVQxbyE6kgq2f20afLRiNX2ZiJQw+oEvUiQE=
+h1:5evk13cVgzryRC/KetCsH2cvxR5uybN7A2Dk51v8y54=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -119,3 +119,4 @@ h1:cO/BhZ+uVQxbyE6kgq2f20afLRiNX2ZiJQw+oEvUiQE=
 20261001214636_risk-findings-execution-id-index.up.sql h1:vGxon/8GTy/nGCOj8dKlaLaONDS6FT1eZapOO7laWEw=
 20261007123457_agent-events-name-column-and-family-comments.up.sql h1:KyRtjkOta3GkXO7uIO5y1mG1i9lcffruqprFAL50xxs=
 20261013101528_classify-columns.up.sql h1:ipI8VCjhWpOWXmeYu/hXoLvv0MCgW8ABcfPhUh4NsZk=
+20261013123151_arbitrary_harness_analytics.up.sql h1:4geW3tyW9DMsoAZAtOmYDsN6tcirVOu01nDBeLN0VMk=

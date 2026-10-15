@@ -26,6 +26,7 @@ func TestWorkloadAdmissionReplacesEarlierAdmittedPolicies(t *testing.T) {
 				OwnerUserID:    "user_123",
 				Ceiling:        []Grant{NewGrant(ScopeProjectRead, "project-one")},
 				Agent:          nil,
+				Owner:          []Grant{NewGrant(ScopeProjectRead, "project-one")},
 			}, nil
 		},
 		AdmitPrincipalCredential:         nil,
@@ -43,4 +44,36 @@ func TestWorkloadAdmissionReplacesEarlierAdmittedPolicies(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestWorkloadAdmissionRequiresEveryPolicy(t *testing.T) {
+	t.Parallel()
+	for _, empty := range []string{"ceiling", "agent", "owner"} {
+		t.Run(empty, func(t *testing.T) {
+			t.Parallel()
+			check := Check{Scope: ScopeProjectRead, ResourceID: "project-one"}
+			allow := []Grant{NewGrant(check.Scope, check.ResourceID)}
+			admission := WorkloadSessionAdmission{
+				AgentPrincipal: "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001", OwnerUserID: "user_123",
+				Ceiling: allow, Agent: allow, Owner: allow,
+			}
+			switch empty {
+			case "ceiling":
+				admission.Ceiling = nil
+			case "agent":
+				admission.Agent = nil
+			case "owner":
+				admission.Owner = nil
+			}
+			engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient(), EngineOpts{
+				AdmitWorkloadSession: func(context.Context, *pgxpool.Pool) (WorkloadSessionAdmission, error) { return admission, nil },
+			})
+			ctx := principalPolicyTestContext(t, allow, allow, allow)
+			admitted, err := engine.AdmitWorkloadSession(ctx)
+			require.NoError(t, err)
+			var denied *oops.ShareableError
+			require.ErrorAs(t, engine.Require(admitted, check), &denied)
+			require.Equal(t, oops.CodeForbidden, denied.Code)
+		})
+	}
 }

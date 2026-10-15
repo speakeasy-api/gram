@@ -408,7 +408,11 @@ func (s *Service) buildMemberDispatch(
 	// consented for a specific member must never reach another member's
 	// tools. No entry degrades to no token rather than an error, so partially
 	// connected meta sessions keep hosted members callable.
-	hostedTokens, err := hostedMemberTokens(gate.tokens, member)
+	tokens, err := gate.memberTokens(ctx, member)
+	if err != nil {
+		return nil, nil, err
+	}
+	hostedTokens, err := hostedMemberTokens(tokens, member)
 	if err != nil {
 		return nil, nil, err
 	}

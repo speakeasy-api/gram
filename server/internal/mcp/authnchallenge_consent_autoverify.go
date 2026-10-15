@@ -147,7 +147,7 @@ func (s *Service) placeRemoteGrant(ctx context.Context, logger *slog.Logger, gra
 
 // probeRemoteGrant runs the probe for the grant's card on the endpoint.
 func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, grant remotesessions.RemoteGrant) {
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	clients, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		logger.WarnContext(ctx, "new remote grant not verified: list clients", attr.SlogError(err))
 		return

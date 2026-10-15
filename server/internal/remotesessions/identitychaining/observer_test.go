@@ -2,6 +2,7 @@ package identitychaining
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -26,7 +27,7 @@ func TestObserverRegistration(t *testing.T) {
 	observe() // A zero-value chainer has no observer.
 	c.SetObserver(observerFunc(func(_ context.Context, got Observation) error {
 		calls++
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("observation = %+v, want %+v", got, want)
 		}
 		return nil

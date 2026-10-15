@@ -631,6 +631,24 @@ WITH issuer AS (
     WHERE issuer.id = $12
       AND issuer.deleted IS FALSE
     FOR KEY SHARE OF issuer
+),
+sign_in AS (
+    SELECT
+        si.id,
+        si.revoked_at,
+        si.revoke_reason,
+        EXISTS (
+            SELECT 1
+            FROM sign_in_revocation_cutoffs AS c
+            WHERE c.organization_id = si.organization_id
+              AND c.user_id = si.user_id
+              AND c.cutoff_at >= LEAST(si.authenticated_at, COALESCE(si.idp_authenticated_at, si.authenticated_at))
+        ) AS fenced
+    FROM sign_ins AS si
+    JOIN issuer ON si.organization_id = issuer.organization_id
+    WHERE si.id = $13
+      AND si.user_id = $14
+    FOR SHARE OF si
 )
 INSERT INTO user_sessions (
     project_id,
@@ -646,7 +664,8 @@ INSERT INTO user_sessions (
     refresh_expires_at,
     expires_at,
     tool_selection,
-    resource
+    resource,
+    sign_in_id
 )
 SELECT
     issuer.project_id,
@@ -662,9 +681,16 @@ SELECT
     $8,
     $9,
     $10,
-    $11
+    $11,
+    (SELECT sign_in.id FROM sign_in)
 FROM issuer
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, created_at, updated_at, deleted_at, deleted
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM sign_in
+    WHERE sign_in.fenced
+       OR (sign_in.revoked_at IS NOT NULL AND sign_in.revoke_reason IS DISTINCT FROM 'sign_out')
+)
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionParams struct {
@@ -680,6 +706,8 @@ type CreateUserSessionParams struct {
 	ToolSelection          []byte
 	Resource               pgtype.Text
 	UserSessionIssuerID    uuid.UUID
+	SignInID               uuid.NullUUID
+	SignInUserID           pgtype.Text
 }
 
 // user_session_client_id binds the session to the DCR client that minted it.
@@ -693,6 +721,12 @@ type CreateUserSessionParams struct {
 // Transactions that lock other rows before minting take
 // LockLiveUserSessionIssuerForChildWrite first so this wait never sits behind
 // a lock the migration is queued on.
+//
+// The sign-in link is kept only for a sign-in of the same organization
+// and user, read FOR SHARE so a concurrent revocation waits for this insert
+// and then soft-deletes it. A sign-in revoked other than by a single
+// sign-out, or fenced by a revocation cutoff, yields no rows: the grant must
+// not be minted.
 func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionParams) (UserSession, error) {
 	row := q.db.QueryRow(ctx, createUserSession,
 		arg.UserSessionClientID,
@@ -707,6 +741,8 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		arg.ToolSelection,
 		arg.Resource,
 		arg.UserSessionIssuerID,
+		arg.SignInID,
+		arg.SignInUserID,
 	)
 	var i UserSession
 	err := row.Scan(
@@ -726,6 +762,7 @@ func (q *Queries) CreateUserSession(ctx context.Context, arg CreateUserSessionPa
 		&i.ToolSelection,
 		&i.LastUsedAt,
 		&i.Resource,
+		&i.SignInID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1659,7 +1696,7 @@ func (q *Queries) GetSharedUserSessionIssuerByID(ctx context.Context, id uuid.UU
 }
 
 const getUserSessionByID = `-- name: GetUserSessionByID :one
-SELECT s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.resource, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.resource, s.sign_in_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 WHERE s.id = $1
@@ -1696,6 +1733,7 @@ func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByID
 		&i.ToolSelection,
 		&i.LastUsedAt,
 		&i.Resource,
+		&i.SignInID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1705,7 +1743,7 @@ func (q *Queries) GetUserSessionByID(ctx context.Context, arg GetUserSessionByID
 }
 
 const getUserSessionByJTI = `-- name: GetUserSessionByJTI :one
-SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND jti = $2
@@ -1741,6 +1779,7 @@ func (q *Queries) GetUserSessionByJTI(ctx context.Context, arg GetUserSessionByJ
 		&i.ToolSelection,
 		&i.LastUsedAt,
 		&i.Resource,
+		&i.SignInID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1750,7 +1789,7 @@ func (q *Queries) GetUserSessionByJTI(ctx context.Context, arg GetUserSessionByJ
 }
 
 const getUserSessionByRefreshTokenHash = `-- name: GetUserSessionByRefreshTokenHash :one
-SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
 FROM user_sessions
 WHERE user_session_issuer_id = $1
   AND refresh_token_hash = $2::text
@@ -1787,6 +1826,7 @@ func (q *Queries) GetUserSessionByRefreshTokenHash(ctx context.Context, arg GetU
 		&i.ToolSelection,
 		&i.LastUsedAt,
 		&i.Resource,
+		&i.SignInID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3763,6 +3803,50 @@ func (q *Queries) LockOrganizationUserSessionIssuer(ctx context.Context, arg Loc
 	return i, err
 }
 
+const lockSignInForGrant = `-- name: LockSignInForGrant :one
+SELECT
+    si.id,
+    si.revoked_at,
+    si.revoke_reason,
+    EXISTS (
+        SELECT 1
+        FROM sign_in_revocation_cutoffs AS c
+        WHERE c.organization_id = si.organization_id
+          AND c.user_id = si.user_id
+          AND c.cutoff_at >= LEAST(si.authenticated_at, COALESCE(si.idp_authenticated_at, si.authenticated_at))
+    ) AS fenced
+FROM sign_ins AS si
+WHERE si.id = $1
+  AND si.organization_id = $2
+FOR SHARE OF si
+`
+
+type LockSignInForGrantParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type LockSignInForGrantRow struct {
+	ID           uuid.UUID
+	RevokedAt    pgtype.Timestamptz
+	RevokeReason pgtype.Text
+	Fenced       bool
+}
+
+// Taken before a refresh claims its session row, so grant rotation locks
+// sign-ins before sessions in the same order revocation does.
+func (q *Queries) LockSignInForGrant(ctx context.Context, arg LockSignInForGrantParams) (LockSignInForGrantRow, error) {
+	row := q.db.QueryRow(ctx, lockSignInForGrant, arg.ID, arg.OrganizationID)
+	var i LockSignInForGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.RevokedAt,
+		&i.RevokeReason,
+		&i.Fenced,
+	)
+	return i, err
+}
+
 const lockUserSessionIssuer = `-- name: LockUserSessionIssuer :one
 SELECT id
 FROM user_session_issuers
@@ -4118,7 +4202,7 @@ WHERE s.id = $1
   AND iss.id = s.user_session_issuer_id
   AND (iss.project_id = $2::uuid OR (iss.project_id IS NULL AND iss.organization_id = $3::text))
   AND s.deleted IS FALSE
-RETURNING s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.resource, s.created_at, s.updated_at, s.deleted_at, s.deleted
+RETURNING s.id, s.project_id, s.organization_id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.authorizer_user_id, s.delegated_grants, s.delegated_grants_version, s.jti, s.refresh_token_hash, s.refresh_expires_at, s.expires_at, s.tool_selection, s.last_used_at, s.resource, s.sign_in_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type RevokeUserSessionParams struct {
@@ -4152,6 +4236,7 @@ func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionPa
 		&i.ToolSelection,
 		&i.LastUsedAt,
 		&i.Resource,
+		&i.SignInID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -4166,7 +4251,7 @@ SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = $1
   AND refresh_token_hash = $2::text
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
 `
 
 type RevokeUserSessionByRefreshTokenHashParams struct {
@@ -4199,6 +4284,7 @@ func (q *Queries) RevokeUserSessionByRefreshTokenHash(ctx context.Context, arg R
 		&i.ToolSelection,
 		&i.LastUsedAt,
 		&i.Resource,
+		&i.SignInID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -4509,7 +4595,7 @@ const softDeleteUserSessionsByClientID = `-- name: SoftDeleteUserSessionsByClien
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_client_id = $1 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
 `
 
 // Cascading soft-delete of user_sessions issued through a client being revoked.
@@ -4540,6 +4626,7 @@ func (q *Queries) SoftDeleteUserSessionsByClientID(ctx context.Context, userSess
 			&i.ToolSelection,
 			&i.LastUsedAt,
 			&i.Resource,
+			&i.SignInID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -4559,7 +4646,7 @@ const softDeleteUserSessionsByIssuerID = `-- name: SoftDeleteUserSessionsByIssue
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = $1 AND deleted IS FALSE
-RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, created_at, updated_at, deleted_at, deleted
 `
 
 // Cascading soft-delete of user_sessions for an issuer being soft-deleted.
@@ -4590,6 +4677,7 @@ func (q *Queries) SoftDeleteUserSessionsByIssuerID(ctx context.Context, userSess
 			&i.ToolSelection,
 			&i.LastUsedAt,
 			&i.Resource,
+			&i.SignInID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

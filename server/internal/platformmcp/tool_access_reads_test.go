@@ -29,8 +29,8 @@ func TestAvailableAccessReadToolsAreReadOnlyWithStableAudiences(t *testing.T) {
 
 // list_access_members is the one access read the assistant is admitted to: it
 // replaces the managed toolset's organization user lookup, and it is the only
-// one of the three that works without a project or a role reference. The
-// other two stay external-only.
+// only access read that works without a project or a role reference. The
+// other reads stay external-only.
 func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 	t.Helper()
 
@@ -38,9 +38,10 @@ func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 		projectScope ProjectScope
 		audiences    []Audience
 	}{
-		"list_access_roles":   {ProjectScopeNone, externalOnly},
-		"list_access_members": {ProjectScopeNone, bothAudiences},
-		"get_mcp_access":      {ProjectScopeExplicit, externalOnly},
+		"list_access_roles":     {ProjectScopeNone, externalOnly},
+		"list_access_members":   {ProjectScopeNone, bothAudiences},
+		"get_member_mcp_access": {ProjectScopeNone, externalOnly},
+		"get_mcp_access":        {ProjectScopeExplicit, externalOnly},
 	}
 	for _, descriptor := range registrar.Descriptors() {
 		expected, ok := wanted[descriptor.Name]
@@ -59,13 +60,14 @@ func requireAccessReadToolDescriptors(t *testing.T, registrar *Registrar) {
 	assistant := names(registrar.For(AudienceAssistant))
 	require.Contains(t, assistant, "list_access_members")
 	require.NotContains(t, assistant, "list_access_roles")
+	require.NotContains(t, assistant, "get_member_mcp_access")
 	require.NotContains(t, assistant, "get_mcp_access")
 }
 
 // The assistant cannot obtain a role reference (list_access_roles is
 // external-only), so its only path is the identity query. The description is
 // what tells a model that identities come back masked and that a member
-// reference is spent only by assign_mcp_access_role.
+// reference is spent only by the access inspection or assignment tools.
 func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) {
 	t.Parallel()
 
@@ -79,6 +81,7 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 		"must use the identity query",
 		"masked",
 		"at least five people",
+		"get_member_mcp_access",
 		"assign_mcp_access_role",
 	} {
 		require.Contains(t, descriptor.Description, fragment)
@@ -96,6 +99,34 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 // The assistant advertises the descriptor's schema to a model. A stub with a
 // different schema would teach the model one contract and then enforce another
 // the moment the service is wired.
+func TestGetMemberMCPAccessAdvertisesTableReadyOutput(t *testing.T) {
+	t.Parallel()
+
+	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registerAccessReadTools(registrar, nil)
+	descriptor := descriptorByName(t, registrar, "get_member_mcp_access")
+	require.Contains(t, descriptor.Description, "table-ready")
+	require.Contains(t, descriptor.Description, "list_access_members")
+	require.Contains(t, string(descriptor.InputSchema), "member_reference")
+	outputSchema, err := json.Marshal(inferOutputSchema[GetMemberMCPAccessOutput]("get_member_mcp_access"))
+	require.NoError(t, err)
+	require.Contains(t, string(outputSchema), "connection_access")
+	require.Contains(t, string(outputSchema), "can_manage")
+}
+
+func TestGetMemberMCPAccessStubAdvertisesLiveInputSchema(t *testing.T) {
+	t.Parallel()
+
+	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registerAccessReadTools(live, nil)
+	stub := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
+	registerUnavailableAccessReadTools(stub)
+
+	liveSchema := descriptorByName(t, live, "get_member_mcp_access").InputSchema
+	stubSchema := descriptorByName(t, stub, "get_member_mcp_access").InputSchema
+	require.JSONEq(t, string(liveSchema), string(stubSchema))
+}
+
 func TestListAccessMembersStubAdvertisesLiveInputSchema(t *testing.T) {
 	t.Parallel()
 

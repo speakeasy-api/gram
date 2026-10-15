@@ -29,6 +29,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Sessions list (telemetry.listSessions)                         | CH `chat_session_summaries` (via MV)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `[x]`  |
 | Project overview metric cards                                  | CH `metrics_summaries` (via MV)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `[x]`  |
 | External OAuth settings                                        | Route `/mcp/acme-oauth-discovery/authentication`; PG `external_oauth_server_metadata` attached to the dedicated Acme OAuth Discovery toolset; Speakeasy-hosted metadata with an `example.com` issuer drives the provider-hosted recommendation without live discovery                                                                                                                                                                                                                                                                                                                                                                                                                          | `[~]`  |
+| MCP Servers "Connect all servers" (organization gateway)       | PG `user_session_issuers`: `acme-workforce` is the organization's only organization-level issuer (the postflight asserts exactly one), so `organizations.getGateway` reports `/mcp/gateway/acme-demo` as available and the button renders                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `[~]`  |
 | Tool logs / traces                                             | CH `trace_summaries`; page enterprise-gated for 'demo' account type (README change 7)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `[~]`  |
 | Insights (MCP & Tools)                                         | CH `trace_summaries`: unique per-surface trace ids + `gram.toolset.slug` (direct branch) + `gram.event.source=hook` rows (hook branch) + Skill hook rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `[~]`  |
 | Team page                                                      | PG `organization_user_relationships` + `users.workos_id` + role assignments (global_roles admin/member, skipped if absent)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `[~]`  |
@@ -95,8 +96,7 @@ agent identifier and must show unavailable, never human-owner activity or zeros.
 
 Verify in the local rewritten seed with an ordinary human session: shared demo
 impersonation remains intentionally restricted by agent management authorization.
-`agent-management` enables inventory; `agent-identity-credentials` enables API key
-management. PG `agents` ×5 includes Release assistant, Support triage, Retired
+PG `agents` ×5 includes Release assistant, Support triage, Retired
 documentation bot, the active Release notes assistant, and the dedicated
 Identity-bound assistant agent (empty grants), covering active,
 suspended, and revoked identities with three existing fictional owners (display names and
@@ -159,20 +159,16 @@ Overview tab; everyone else sees neither. Browser verification: `[~]`.
 
 Linear's protected resource (`https://mcp.linear.app/mcp`) has a PG
 `remote_protected_resources` row read two hours before the seed ran,
-advertising `read` and `write`, with a scope pin of `read`. What the server's
-Identity panel (`remoteMcp.getServerScopes`) shows depends on the
-`remote-session-live-resource-scopes` rollout flag. Off, the pin picker is
-hidden and logins request the issuer override; the panel shows the read-only
-"Requested at sign-in" summary instead (`read`, "Set by the identity
-provider's override."). On (the demo org is enrolled), Linear's seeded client
-has no scopes of its own, so the pin decides and the panel reads "Sign-ins
-request these scopes." The advertised `read` and `write` are offered as picker
+advertising `read` and `write`, with a scope pin of `read`. In the server's
+Identity panel (`remoteMcp.getServerScopes`), Linear's seeded client has no
+scopes of its own, so the pin decides and the panel reads "Sign-ins request
+these scopes." The advertised `read` and `write` are offered as picker
 options. When the pin does not decide, the picker's status line also names
 what sign-ins request, e.g. "Not used for this connection. Sign-ins request
 read, set by the identity provider's override." The extra sentence drops while
 the pin has unsaved edits. Members with only `mcp:read` on the server see no
 picker; instead the same read-only summary lists what the connected client
-requests (`read`, with "Pinned for this MCP server's URL." with the flag on).
+requests (`read`, with "Pinned for this MCP server's URL.").
 Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
@@ -273,6 +269,17 @@ dashboard, provider acceptance, or usable human access is demonstrated.
 ### [~] Self remote session client (client credentials)
 
 The project has a hand-entered Jamf Pro remote issuer (`jamf-pro`, reserved `acme-demo.jamfcloud.example` host, token endpoint only, no discovery) and one client, `demo-jamf-pro-api-client`, whose `credential_owner` is `self`: it would obtain one shared access token with the `client_credentials` grant, authenticating with `client_secret_post` as Jamf Pro documents. The issuer's client setup documentation link points to Jamf's API Roles and Clients guide. The secret is the inert `DEMO-NOT-VALID-CIPHERTEXT`, and the client has no user session issuer binding, remote session, or MCP server, so it demonstrates configuration only, never a usable credential. Until the dashboard reads `credentialOwner` (AIM-464), the client renders like any secret-authenticated client; `credential_owner` and `grant_types` are management API evidence only.
+
+### [~] Organization Identity: Enterprise authorization
+
+The Identity providers tab lists Speakeasy as a provider for enterprise
+authorization once the organization is offered the issuer. A fresh demo workspace
+shows the not-configured or unavailable state; it does not seed a working issuer
+or signing key. The public demo stays read-only. A local organization admin can
+enable an issuer from its Speakeasy provider page when it has a verified email
+domain and deployment signing is configured. Existing issuers retain their
+copyable URI after disabling, and can be disabled even after the last verified
+domain is removed.
 
 ### [~] Organization Identity: Slack workspaces
 

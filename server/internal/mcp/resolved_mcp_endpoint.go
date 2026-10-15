@@ -284,9 +284,15 @@ func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool,
 // redirects back to after authenticating a user on the private-endpoint
 // path. Shape: `<baseURL>/<RouteBase>/idp_callback`. The endpoint slug
 // is intentionally absent — the callback dispatches on the `state`
-// query parameter to recover the originating challenge.
+// query parameter to recover the originating challenge. An organization
+// gateway is served on the /mcp surface and uses its callback, which is the
+// one the IDP already redirects to.
 func (e *ResolvedMcpEndpoint) IDPCallbackURL(baseURL string) (string, error) {
-	u, err := url.JoinPath(baseURL, e.RouteBase, "idp_callback")
+	routeBase := e.RouteBase
+	if e.IsOrganizationGateway() {
+		routeBase = "mcp"
+	}
+	u, err := url.JoinPath(baseURL, routeBase, "idp_callback")
 	if err != nil {
 		return "", fmt.Errorf("build IDP callback URL: %w", err)
 	}
@@ -600,8 +606,12 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 	if err != nil {
 		return nil, err
 	}
-	if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
-		return nil, err
+	// A builder that already ran the issuer check, as the organization
+	// gateway's does, leaves nothing for a second one to find.
+	if !endpoint.issuerStamped {
+		if err := s.RequireUserSessionIssuer(ctx, endpoint); err != nil {
+			return nil, err
+		}
 	}
 	if ref.SharedAuthorizationServer {
 		// An issuer switched out of shared mode mid-flow closes the flows its
@@ -621,6 +631,19 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 }
 
 func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	if ref.RouteBase == organizationGatewayRouteBase {
+		gateway, err := s.loadOrganizationGateway(ctx, ref.McpSlug)
+		if err != nil {
+			return nil, err
+		}
+		// The slug now names a different organization, or the gateway's
+		// identity changed underneath the flow: the challenge belongs to the
+		// gateway it was minted for.
+		if !ref.MetaMcpServerID.Valid || ref.MetaMcpServerID.UUID != gateway.metaServer.ID {
+			return nil, errToolsetEndpointMismatch
+		}
+		return gateway.resolved, nil
+	}
 	if ref.MetaMcpServerID.Valid {
 		return s.buildResolvedMetaMcpEndpointByRef(ctx, ref)
 	}

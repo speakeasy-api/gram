@@ -369,6 +369,7 @@ func seedUserSessionFull(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		RefreshTokenHash:    conv.ToPGText("hash-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: refreshExpiresAt, InfinityModifier: 0, Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: expiresAt, InfinityModifier: 0, Valid: true},
+		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return repo.UserSession{}, fmt.Errorf("seed user session: %w", err)

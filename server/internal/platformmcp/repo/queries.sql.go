@@ -2410,7 +2410,8 @@ LEFT JOIN LATERAL (
      AND plugin.organization_id = $3
      AND plugin.deleted IS FALSE
     WHERE membership.deleted IS FALSE
-      AND (($1::text = 'mcp_server' AND membership.mcp_server_id = server.id)
+      AND (($1::text = 'mcp_server' AND (membership.mcp_server_id = server.id
+          OR (membership.toolset_id = server.id AND server.toolset_id = membership.toolset_id)))
         OR ($1::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
 ) memberships ON TRUE
 WHERE project.id = $4
@@ -5914,28 +5915,29 @@ SELECT
     ps.policy,
     ps.sort_order,
     CASE
+      WHEN ps.mcp_server_id IS NOT NULL OR s.id IS NOT NULL THEN 'mcp_server'
       WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
-      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
       WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
     END::text AS target_kind,
     COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
     (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
     membership_version.value AS membership_version
 FROM plugin_servers ps
 CROSS JOIN membership_version
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
-LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
-  AND t.project_id = p.project_id
-  AND t.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = ps.mcp_server_id
+  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
+LEFT JOIN toolsets t
+  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -6041,22 +6043,23 @@ SELECT
     ps.display_name,
     ps.policy,
     ps.sort_order,
-    (ps.toolset_id IS NOT NULL)::boolean AS toolset_backed,
+    (ps.toolset_id IS NOT NULL AND s.id IS NULL)::boolean AS toolset_backed,
     (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
-    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
+    COALESCE(ep.slug, t.mcp_slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(s.visibility <> 'disabled', t.mcp_enabled, gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
   ON p.id = ps.plugin_id
   AND p.deleted IS FALSE
-LEFT JOIN toolsets t
-  ON t.id = ps.toolset_id
-  AND t.project_id = p.project_id
-  AND t.deleted IS FALSE
 LEFT JOIN mcp_servers s
-  ON s.id = ps.mcp_server_id
+  ON s.id = COALESCE(ps.mcp_server_id, ps.toolset_id)
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
+  AND (ps.mcp_server_id IS NOT NULL OR (s.toolset_id = ps.toolset_id AND s.visibility <> 'disabled'))
+LEFT JOIN toolsets t
+  ON t.id = COALESCE(ps.toolset_id, CASE WHEN s.toolset_id = s.id THEN s.id END)
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
 LEFT JOIN meta_mcp_servers gateway
   ON gateway.id = ps.meta_mcp_server_id
   AND gateway.project_id = p.project_id
@@ -6103,6 +6106,8 @@ type ListPlatformMCPPluginServersRow struct {
 
 // Member-facing compatibility projection. It deliberately omits membership and
 // backend IDs, which are administrative identity and must not cross this path.
+// A toolset-keyed row reads through its enabled canonical wrapper (same id) when one exists;
+// a server-keyed canonical wrapper still falls back to its toolset's MCP slug.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -6540,6 +6545,87 @@ func (q *Queries) ListPlatformMCPProjects(ctx context.Context, arg ListPlatformM
 	for rows.Next() {
 		var i ListPlatformMCPProjectsRow
 		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPRoleDirectorySources = `-- name: ListPlatformMCPRoleDirectorySources :many
+SELECT
+  drm.role_urn::text AS role_urn,
+  drm.source_kind,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value,
+  (
+    CASE
+      WHEN drm.source_kind = 'group' THEN (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_user_group_memberships AS m
+        JOIN directory_users AS du
+          ON du.id = m.directory_user_id
+          AND du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+        WHERE m.directory_group_id = dg.id
+          AND m.deleted IS FALSE
+      )
+      ELSE (
+        SELECT COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))
+        FROM directory_users AS du
+        WHERE du.organization_id = drm.organization_id
+          AND du.deleted IS FALSE
+          AND du.workos_deleted IS FALSE
+          AND du.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    END
+  )::bigint AS member_count
+FROM directory_role_mappings AS drm
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE drm.organization_id = $1
+  AND drm.deleted IS FALSE
+ORDER BY drm.role_urn, drm.source_kind DESC, dg.name, drm.attribute_key, drm.attribute_value, drm.id
+`
+
+type ListPlatformMCPRoleDirectorySourcesRow struct {
+	RoleUrn            string
+	SourceKind         string
+	DirectoryGroupName pgtype.Text
+	AttributeKey       pgtype.Text
+	AttributeValue     pgtype.Text
+	MemberCount        int64
+}
+
+// Each live directory role mapping in the organization, with how many active
+// directory users its group or attribute value matches today, counted by
+// distinct email as the dashboard counts them. Mappings whose group is gone
+// still list, matching nobody.
+func (q *Queries) ListPlatformMCPRoleDirectorySources(ctx context.Context, organizationID string) ([]ListPlatformMCPRoleDirectorySourcesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPRoleDirectorySources, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPRoleDirectorySourcesRow
+	for rows.Next() {
+		var i ListPlatformMCPRoleDirectorySourcesRow
+		if err := rows.Scan(
+			&i.RoleUrn,
+			&i.SourceKind,
+			&i.DirectoryGroupName,
+			&i.AttributeKey,
+			&i.AttributeValue,
+			&i.MemberCount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

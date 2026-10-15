@@ -321,7 +321,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 	baseURL string,
 	logger *slog.Logger,
 ) error {
-	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, endpoint.OrganizationID, logger); refused {
+	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, logger); refused {
 		return err
 	}
 
@@ -393,31 +393,18 @@ func (s *Service) handleWorkloadAssertionGrant(
 	})
 }
 
-// refuseUnservedWorkloadGrant refuses a workload grant the deployment or the
-// organization does not serve, and reports whether it did.
-//
-// A deployment without the grant's dependencies answers as it did before the
-// grant existed. A workload acts through its assigned agent's policy, which
-// the MCP side honours only under the agent authorization rollout, so minting
-// without it would issue sessions refused on first use.
+// refuseUnservedWorkloadGrant refuses a workload grant the deployment does
+// not serve, and reports whether it did. A deployment without the grant's
+// dependencies answers as it did before the grant existed.
 func (s *Service) refuseUnservedWorkloadGrant(
 	ctx context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
 	creds presentedClientCredentials,
-	organizationID string,
 	logger *slog.Logger,
 ) (bool, error) {
-	unresolved := presentedWorkload{issuerURL: "", subject: "", issuerID: uuid.Nil}
 	if s.workloadGrant == nil {
 		return true, refuseClientlessTokenGrant(ctx, w, r, creds, logger)
-	}
-	rolloutEnabled, _, err := s.agentAuthorizationRollout(ctx, logger, organizationID)
-	switch {
-	case err != nil:
-		return true, s.writeWorkloadGrantRefusal(ctx, w, logger, unresolved, workloadGrantStageUnavailable("agent_rollout_unavailable", err))
-	case !rolloutEnabled:
-		return true, s.writeWorkloadGrantRefusal(ctx, w, logger, unresolved, refuseWorkloadGrant("agent_rollout_disabled", errWorkloadRolloutDisabled))
 	}
 	return false, nil
 }
@@ -484,6 +471,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 		AuthorizationExpiresAt: nil,
 		DesiredSessionDuration: &lifetime,
 		Replayable:             false,
+		SignInID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}
 }
 
@@ -509,7 +497,7 @@ func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.Response
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
 	}
 	switch {
-	case errors.Is(err, errWorkloadRolloutDisabled), errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
+	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, refuseWorkloadGrant("agent_admission_denied", err))
 	case err != nil:
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))

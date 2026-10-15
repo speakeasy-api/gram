@@ -13,7 +13,6 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
@@ -43,14 +42,6 @@ func TestApplyIssuerGate_AgentAPIKey(t *testing.T) {
 		AudienceURN: urn.NewToolset(fx.toolset.ID).String(), OrganizationID: fx.orgID,
 		ProjectID: fx.target.ProjectID, RouteBase: "mcp", Slug: fx.toolset.McpSlug.String,
 		ToolsetID: uuid.NullUUID{UUID: fx.toolset.ID, Valid: true}, UserSessionIssuerID: fx.target.UserSessionIssuerID,
-	}
-	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
-		ti.features.SetFlag(flag, fx.orgID, false)
-		_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), token, ti.serverURL.String(), &endpoint)
-		var denied *oops.ShareableError
-		require.ErrorAs(t, err, &denied)
-		require.Equal(t, oops.CodeNotFound, denied.Code)
-		ti.features.SetFlag(flag, fx.orgID, true)
 	}
 	w := httptest.NewRecorder()
 	admitted, _, selection, err := ti.service.ApplyIssuerGate(t.Context(), w, token, ti.serverURL.String(), &endpoint)
@@ -102,13 +93,6 @@ func TestApplyIssuerGate_AgentAPIKey(t *testing.T) {
 	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, legacyToken, ti.serverURL.String(), &endpoint)
 	require.Error(t, err)
 	assertAgentKeyUnauthorized(t, w, err)
-	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
-		ti.features.SetFlag(flag, fx.orgID, false)
-		w = httptest.NewRecorder()
-		_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, legacyToken, ti.serverURL.String(), &endpoint)
-		assertAgentKeyUnauthorized(t, w, err)
-		ti.features.SetFlag(flag, fx.orgID, true)
-	}
 
 	// Requiring an upstream must fail closed without an attachment, even
 	// when an old direct-subject remote session exists for this agent.

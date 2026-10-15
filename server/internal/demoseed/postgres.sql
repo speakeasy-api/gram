@@ -28,15 +28,13 @@
 --                in the ClickHouse seed's arrayElement calls)
 
 -- ensure_demo_org() does the whole delete-and-reinsert as ONE statement, and
--- the shared pool caps statements at 60s (newDBClient) — which the prod-sized
--- demo org now exceeds, failing the daily run with SQLSTATE 57014. 3x that
--- ceiling is enough headroom for the current seed to grow into while still
--- failing the daily run fast if it ever wedges. SET LOCAL, not
--- SET: the script is applied as a single multi-statement simple query, so it
--- runs in one implicit transaction and the setting reverts when that ends —
+-- the shared pool caps statements at 60s (newDBClient), which a prod run
+-- exceeds. Raise the cap for this run only, while still failing it if it
+-- ever wedges. SET LOCAL, not SET: the script is applied as a single
+-- multi-statement simple query, so it runs in one implicit transaction and the setting reverts when that ends —
 -- including on failure, so a raised timeout can never escape onto a pooled
 -- connection.
-SET LOCAL statement_timeout = '180s';
+SET LOCAL statement_timeout = '360s';
 
 CREATE SCHEMA IF NOT EXISTS demo;
 
@@ -468,6 +466,8 @@ BEGIN
   DELETE FROM remote_session_ema_bindings
   WHERE organization_id = demo_org
     AND project_id IN (SELECT id FROM projects WHERE organization_id = demo_org);
+  -- EMA provider orders reference issuers without cascading, retired rows too.
+  DELETE FROM remote_session_ema_providers WHERE organization_id = demo_org;
   DELETE FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM remote_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM mcp_servers WHERE project_id = proj_a;

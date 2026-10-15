@@ -36,6 +36,33 @@ actions:
   - target: $.components.schemas.AnalyticsFilter.properties
     update:
       operator: { $ref: "#/components/schemas/AnalyticsFilterOperator" }
+  # The OpenAPI evaluation change's inline severity enum would generate as
+  # Severity and rename the custom detection rule's enum, so both enums on the
+  # change get named schemas.
+  - target: $.components.schemas
+    update:
+      OpenAPIv3EvaluationSeverity:
+        type: string
+        description: How likely an OpenAPI change is to break existing MCP servers.
+        enum: [breaking, warning, info]
+      OpenAPIv3EvaluationCategory:
+        type: string
+        description: The part of the MCP an OpenAPI change affects.
+        enum: [security, tools, server]
+  - target: $.components.schemas.OpenAPIv3EvaluationChange.properties.severity
+    remove: true
+  - target: $.components.schemas.OpenAPIv3EvaluationChange.properties.category
+    remove: true
+  - target: $.components.schemas.OpenAPIv3EvaluationChange.properties
+    update:
+      severity:
+        allOf:
+          - $ref: "#/components/schemas/OpenAPIv3EvaluationSeverity"
+        description: How likely the change is to break existing MCP servers.
+      category:
+        allOf:
+          - $ref: "#/components/schemas/OpenAPIv3EvaluationCategory"
+        description: The part of the MCP the change affects.
   - target: $.paths["/rpc/killswitches.list"].get.parameters[?@.name=='capability_key'].schema
     remove: true
   - target: $.paths["/rpc/killswitches.list"].get.parameters[?@.name=='capability_key']
@@ -285,3 +312,7 @@ actions:
   - target: $.paths.*[?(@.operationId=='approveAllSkillSuggestions')].requestBody
     update:
       required: false
+  # Goa cannot emit deprecated: true on properties; derive it from x-speakeasy-deprecation-message.
+  - target: $.components.schemas.*.properties[?@['x-speakeasy-deprecation-message']]
+    update:
+      deprecated: true

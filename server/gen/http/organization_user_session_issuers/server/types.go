@@ -335,6 +335,10 @@ type GetIssuerDeletePreflightResponseBody struct {
 	// Active identity-chaining bindings that must be explicitly unlinked before
 	// deletion.
 	EmaBindingCount int64 `form:"ema_binding_count" json:"ema_binding_count" xml:"ema_binding_count"`
+	// True when this is the organization's only organization-level issuer, so
+	// deleting it stops serving the organization gateway its members sign in to.
+	// Does not block deletion.
+	WithdrawsOrganizationGateway bool `form:"withdraws_organization_gateway" json:"withdraws_organization_gateway" xml:"withdraws_organization_gateway"`
 }
 
 // MoveIssuerResponseBody is the type of the "organizationUserSessionIssuers"
@@ -3419,10 +3423,11 @@ func NewListMcpServersResponseBody(res *organizationusersessionissuers.ListUserS
 // "organizationUserSessionIssuers" service.
 func NewGetIssuerDeletePreflightResponseBody(res *organizationusersessionissuers.OrganizationUserSessionIssuerDeletePreflight) *GetIssuerDeletePreflightResponseBody {
 	body := &GetIssuerDeletePreflightResponseBody{
-		ClientCount:      res.ClientCount,
-		LiveSessionCount: res.LiveSessionCount,
-		CanDelete:        res.CanDelete,
-		EmaBindingCount:  res.EmaBindingCount,
+		ClientCount:                  res.ClientCount,
+		LiveSessionCount:             res.LiveSessionCount,
+		CanDelete:                    res.CanDelete,
+		EmaBindingCount:              res.EmaBindingCount,
+		WithdrawsOrganizationGateway: res.WithdrawsOrganizationGateway,
 	}
 	if res.McpServers != nil {
 		body.McpServers = make([]*OrganizationUserSessionIssuerReferenceResponseBody, len(res.McpServers))

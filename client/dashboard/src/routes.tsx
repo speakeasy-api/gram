@@ -93,6 +93,7 @@ import OrgHome from "./pages/org/OrgHome";
 import OrgIdentity from "./pages/org/OrgIdentity";
 import OrgAIIntegrations from "./pages/org/OrgAIIntegrations";
 import OrgLogs from "./pages/org/OrgLogs";
+import OrgGateway from "./pages/org/OrgGateway";
 import HeadlessMode from "./pages/org/HeadlessMode";
 import PlatformMCPRedirect from "./pages/org/PlatformMCPRedirect";
 import OrgSkills from "./pages/org/OrgSkills";
@@ -149,16 +150,12 @@ import SecurityOverview, {
 import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import {
-  ShadowAIIndexRedirect,
   ShadowAIRoot,
-  ShadowMCPLegacyRedirect,
+  ShadowAISectionRedirect,
+  ShadowMCPIndexRedirect,
   ShadowMCPServerLegacyRedirect,
 } from "./pages/shadow-ai/ShadowAI";
-import ShadowAIHarnesses from "./pages/shadow-ai/ShadowAIHarnesses";
-import ShadowAIAssistants from "./pages/shadow-ai/ShadowAIAssistants";
-import ShadowAIModels from "./pages/shadow-ai/ShadowAIModels";
 import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
-import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
 import RiskOverviewCategoryDetail from "./pages/security/RiskOverviewCategoryDetail";
@@ -964,30 +961,27 @@ const ROUTE_STRUCTURE = {
     icon: "flag",
     component: RiskEventsPage,
   },
-  // Shadow MCP is a subset of Shadow AI, not a sibling: a shadow MCP server
-  // is reached by some AI tool, and one admin answers "what are people
-  // running?" and "what is it talking to?" in the same sitting. The two tabs
-  // are routed rather than toggled so either half survives being linked.
+  // Shadow AI lives in Guardrails (the Shadow AI policy and its targets tab)
+  // and is not in the nav. Its section URLs stay because tickets, bookmarks
+  // and block messages link to them: every index page redirects to
+  // Guardrails, and the tool and server detail pages beneath keep rendering.
   //
   // Project-level placement with organization-scoped reads behind it, the
   // same shape as identities above and for the same reason.
   shadowAI: {
-    // "Shadow AI" in the nav, matching the URL segment, which is also what
-    // the redirects below and the links already in tickets point at.
     title: "Shadow AI",
     url: "shadow-ai",
     icon: "shield",
     component: ShadowAIRoot,
-    indexComponent: ShadowAIIndexRedirect,
+    indexComponent: ShadowAISectionRedirect,
     subPages: {
-      // Each tool tab opens a row onto the people running that tool. The
-      // detail is nested under its tab, as the server detail is under MCPs,
-      // so the breadcrumb says which tab a pasted link came from.
+      // A tool's detail is nested under its category, as the server detail
+      // is under MCPs, so the breadcrumb says which kind a pasted link is.
       harnesses: {
         title: "Harnesses",
         url: "harnesses",
         component: ShadowAIRoot,
-        indexComponent: ShadowAIHarnesses,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
@@ -1000,7 +994,7 @@ const ROUTE_STRUCTURE = {
         title: "Assistants",
         url: "assistants",
         component: ShadowAIRoot,
-        indexComponent: ShadowAIAssistants,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
@@ -1013,7 +1007,7 @@ const ROUTE_STRUCTURE = {
         title: "Models",
         url: "models",
         component: ShadowAIRoot,
-        indexComponent: ShadowAIModels,
+        indexComponent: ShadowAISectionRedirect,
         subPages: {
           detail: {
             title: "Shadow AI Tool",
@@ -1025,8 +1019,10 @@ const ROUTE_STRUCTURE = {
       mcps: {
         title: "MCPs",
         url: "mcps",
-        component: ShadowMCPRoot,
-        indexComponent: ShadowMCP,
+        component: ShadowAIRoot,
+        // The MCPs index was the approvals queue; it lands on the MCP
+        // approvals tab of Guardrails rather than the policies list.
+        indexComponent: ShadowMCPIndexRedirect,
         subPages: {
           detail: {
             title: "Shadow MCP Server",
@@ -1046,7 +1042,7 @@ const ROUTE_STRUCTURE = {
     title: "Shadow MCP",
     url: "shadow-mcp",
     component: ShadowAIRoot,
-    indexComponent: ShadowMCPLegacyRedirect,
+    indexComponent: ShadowMCPIndexRedirect,
     subPages: {
       detail: {
         title: "Shadow MCP Server",
@@ -1097,8 +1093,9 @@ const ROUTE_STRUCTURE = {
             title: "Plugin Overview",
             url: "overview",
           },
+          // Keep existing server links working after merging servers into overview.
           servers: {
-            title: "Plugin MCP Servers",
+            title: "Plugin Overview",
             url: "servers",
           },
           skills: {
@@ -1370,6 +1367,12 @@ const ORG_ROUTE_STRUCTURE = {
     url: "logs",
     icon: "file-text",
     component: OrgLogs,
+  },
+  gateway: {
+    title: "Gateway",
+    url: "gateway",
+    icon: "network",
+    component: OrgGateway,
   },
   legacyData: {
     title: "Event Feed",

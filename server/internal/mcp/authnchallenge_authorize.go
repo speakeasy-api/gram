@@ -215,6 +215,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
 		AuthorizerUserID:         "",
 		AuthorizerImpersonated:   nil,
+		SignInID:                 nil,
+		FreshLoginForced:         false,
 		AgentAuthorizationTarget: agentTarget,
 		Endpoint:                 endpointRef,
 		ClientID:                 req.ClientID,
@@ -229,6 +231,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 
 		// Auto-connect has not run for a challenge this new.
 		AutoConnectDone: false,
+		FocusServer:     "",
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
@@ -265,6 +268,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			ScopesSupported: nil,
 			LoginHint:       "",
 			ScreenHint:      "",
+			Prompt:          "",
 		})
 		if err != nil {
 			// A failure to build the IDP authorization URL typically means the

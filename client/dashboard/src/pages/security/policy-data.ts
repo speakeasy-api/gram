@@ -113,10 +113,13 @@ export const RULE_CATEGORY_META: Record<RuleCategory, RuleCategoryMeta> = {
       "Requests that violate usage policies or acceptable use guidelines",
     icon: "ban",
   },
+  // One Shadow AI bucket. Today its findings are tool calls to MCP servers no
+  // Speakeasy toolset manages; the AI tools the device agent finds join it
+  // once their detections become findings.
   shadow_mcp: {
-    label: "Shadow MCP",
+    label: "Shadow AI",
     description:
-      "Tool calls that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
+      "Tool calls to MCP servers that no Speakeasy toolset manages. Requires Speakeasy hooks to be installed on the agent.",
     icon: "shield-off",
   },
   destructive_tool: {

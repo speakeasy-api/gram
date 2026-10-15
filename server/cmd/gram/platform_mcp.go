@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -78,6 +79,8 @@ type platformMCPConfig struct {
 	Environment            string
 	JWTSigningKey          string
 	ProductFeatures        *productfeatures.Client
+	IssuerGate             *internalsessionissuers.Gate
+	IssuerSigner           *internalsessionissuers.Signer
 	FeatureFlags           feature.Provider
 	DistributionAdmission  *admission.Guard
 	Authz                  *authz.Engine
@@ -481,6 +484,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithInternalSessionIssuer(config.IssuerGate).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
@@ -498,6 +502,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
+		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
@@ -554,7 +559,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		fixtureConfig.CatalogDescriptor(),
 		accessReads,
 		accessRoleMutations,
-		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader, config.FeatureFlags),
+		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
@@ -778,7 +783,7 @@ func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp
 	if config.TemporalEnv == nil {
 		config.Logger.WarnContext(context.Background(), "Platform MCP tool exposure cannot schedule toolset indexing; changes will report index_signal unavailable until the periodic sweep runs")
 	}
-	return service.WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
+	return service.WithFeatureProvider(config.FeatureFlags).WithIndexing(func(ctx context.Context, projectID, toolsetID uuid.UUID) error {
 		return toolsets.TriggerToolsetIndexForVersion(ctx, config.Logger, config.DB, config.TemporalEnv, projectID, toolsetID)
 	})
 }
@@ -853,13 +858,16 @@ func newPlatformMCPOktaSignIn(config platformMCPConfig) *identityproviderconnect
 	return identityproviderconnections.NewSignInReader(config.Logger, config.DB, remotesessions.DefaultCallbackOrigins(origin))
 }
 
-// platformMCPIdentityChaining builds the database-only identity chaining
-// governor status surfaces consult, or nil when remote sessions are off.
+// platformMCPIdentityChaining builds the identity chaining governor
+// authenticated status surfaces consult, or nil when remote sessions are off.
 func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityChainingGovernor {
 	if config.RemoteChallengeManager == nil {
 		return nil
 	}
-	return identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
+	g := identitychaining.NewGovernor(config.Logger, config.DB, config.Encryption, remotesessions.NewDelegationService(config.DB, config.Encryption, config.RemoteChallengeManager))
+	g.SetSpeakeasyIssuer(config.IssuerGate, config.IssuerSigner, config.FeatureFlags)
+	g.SetResourceResolver(config.RemoteChallengeManager.ResolveEMAResource)
+	return g
 }
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
@@ -1078,6 +1086,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithInternalSessionIssuer(config.IssuerGate).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
@@ -1095,6 +1104,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
+		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
@@ -1162,7 +1172,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		platformmcp.CatalogDescriptor{},
 		accessReads,
 		accessRoleMutations,
-		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader, config.FeatureFlags),
+		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
 		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)

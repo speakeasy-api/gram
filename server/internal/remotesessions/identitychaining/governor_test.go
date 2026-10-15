@@ -50,7 +50,7 @@ func TestGovernor_HasUsableCredential(t *testing.T) {
 	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 	require.False(t, g.HasUsableCredential(t.Context(), f.req), "no credential stored yet")
 
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("downstream-token")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
 	require.True(t, g.HasUsableCredential(t.Context(), f.req))
 
 	rotated, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x24}, 32))
@@ -71,7 +71,7 @@ func TestGovernor_TrustedRegistrationRotationMakesCredentialUnusable(t *testing.
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("downstream-token")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
 	require.True(t, g.HasUsableCredential(t.Context(), f.req))
 
 	rotated, err := f.chainer.enc.Encrypt([]byte("rotated-secret"))
@@ -108,7 +108,7 @@ func TestGovernor_EmptyCredentialIsUnusable(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
-	require.NoError(t, f.chainer.publish(t.Context(), f.req, f.sel, f.credential("")))
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("")))
 	require.False(t, g.HasUsableCredential(t.Context(), f.req), "an empty decrypted token is unusable and must not panic")
 }
 
