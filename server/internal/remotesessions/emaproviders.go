@@ -125,7 +125,11 @@ func NormalizeVendorIssuer(issuer string) (string, error) {
 
 // ResolveEMAProviders reads a vendor's saved provider order. Providers that
 // cannot serve are kept and flagged, so views can say why and runtime skips
-// them. With no saved order, an endpoint whose sign-in trusts an external
+// them. A provider vouches only where the endpoint's sign-in goes through it:
+// an external issuer only when the sign-in trusts that issuer, and Speakeasy
+// only when the sign-in is Speakeasy's own, trusting no external issuer.
+// Speakeasy records a sign-in only for its own, so on a federated endpoint it
+// has nothing to vouch from. With no saved order, an endpoint whose sign-in trusts an external
 // issuer keeps that issuer alone: setting up the Speakeasy issuer never adds
 // a second authority behind it, so an external denial is never retried with
 // Speakeasy unless an administrator saves an order that says so. An endpoint
@@ -150,6 +154,8 @@ func ResolveEMAProviders(ctx context.Context, q *repo.Queries, organizationID, v
 		case row.ProviderDisabled:
 			p.Unavailable = EMAProviderDisabled
 		case p.Kind == EMAProviderExternal && scope.Endpoint && (!scope.TrustedIssuer.Valid || scope.TrustedIssuer.UUID != p.RemoteSessionIssuerID):
+			p.Unavailable = EMAProviderNotTrustedByEndpoint
+		case p.Kind == EMAProviderSpeakeasy && scope.Endpoint && scope.TrustedIssuer.Valid:
 			p.Unavailable = EMAProviderNotTrustedByEndpoint
 		case p.Kind == EMAProviderSpeakeasy && !scope.SpeakeasySigns:
 			p.Unavailable = EMAProviderSigningUnavailable

@@ -146,6 +146,10 @@ var EMAServiceServer = Type("EMAServiceServer", func() {
 	Attribute("last_accepted_at", String, "When the vendor last accepted an assertion for this server from a provider that can vouch now. Omitted when never.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("sign_in_issuer_id", String, "The remote session issuer the server's sign-in trusts, such as an Okta authorization server: only that issuer can vouch for people on the server. Omitted when the server uses Speakeasy's own sign-in, where only Speakeasy can vouch.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("sign_in_issuer_name", String, "The display name of sign_in_issuer_id. Omitted with it, or when the issuer has no name.")
 
 	Required("id", "name", "slug", "project_id", "project_slug", "project_name", "status")
 })

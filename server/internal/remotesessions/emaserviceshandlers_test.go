@@ -309,3 +309,53 @@ func TestListEMAServices_ServerWithTwoWorkingBindingsShowsTheNewestAcceptance(t 
 	svc = listEMAServicesByVendor(t, ctx, ti)[vendor]
 	require.Equal(t, newest.Format(time.RFC3339), conv.PtrValOr(svc.Servers[0].LastAcceptedAt, ""), "whichever binding was accepted last wins")
 }
+
+func TestListEMAServices_NamesEachServersSignIn(t *testing.T) {
+	t.Parallel()
+	ctx, ti, in := preparationFixture(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	org := auth.ActiveOrganizationID
+	ti.service.SetSpeakeasySigningAvailable(true)
+	internalIssuer := seedInternalSessionIssuer(t, ctx, ti, org)
+	vendor, err := remotesessions.NormalizeVendorIssuer("https://idp.example.com")
+	require.NoError(t, err)
+	q := repo.New(ti.conn)
+
+	okta, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID: uuid.NullUUID{}, OrganizationID: conv.ToPGText(org), Slug: "okta-" + uuid.NewString()[:8],
+		Issuer: "https://okta.example.com", Name: conv.ToPGText("Okta team"),
+		AuthorizationEndpoint: conv.ToPGText("https://okta.example.com/authorize"), TokenEndpoint: conv.ToPGText("https://okta.example.com/token"),
+		ScopesSupported: []string{"openid"}, GrantTypesSupported: []string{"authorization_code"}, ResponseTypesSupported: []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	oktaClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, org, okta.ID, "client-"+uuid.NewString()[:8])
+	federated := in
+	federated.UserSessionIssuerID = createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-"+uuid.NewString()[:8], okta.ID, oktaClient)
+	federated.Resource = "https://federated.example.com/"
+	prepareEMABinding(t, ctx, ti, in)
+	prepareEMABinding(t, ctx, ti, federated)
+	seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "ema-own-sign-in", in.Resource)
+	seedRemoteMCPServerForIssuer(t, ctx, ti, federated.UserSessionIssuerID, "ema-federated", federated.Resource)
+
+	byName := func() map[string]*orgissuersgen.EMAServiceServer {
+		out := map[string]*orgissuersgen.EMAServiceServer{}
+		for _, s := range listEMAServicesByVendor(t, ctx, ti)[vendor].Servers {
+			out[s.Name] = s
+		}
+		return out
+	}
+	servers := byName()
+	require.Len(t, servers, 2)
+	require.Nil(t, servers["ema-own-sign-in"].SignInIssuerID, "a server on Speakeasy's own sign-in names no issuer")
+	require.Nil(t, servers["ema-own-sign-in"].SignInIssuerName)
+	require.Equal(t, okta.ID.String(), conv.PtrValOr(servers["ema-federated"].SignInIssuerID, ""))
+	require.Equal(t, "Okta team", conv.PtrValOr(servers["ema-federated"].SignInIssuerName, ""))
+	require.Equal(t, "not_proven", servers["ema-federated"].Status, "the default order vouches through the sign-in's own issuer")
+
+	require.NoError(t, q.InsertEMAProvider(ctx, repo.InsertEMAProviderParams{OrganizationID: org, VendorIssuer: vendor, RemoteSessionIssuerID: uuid.NullUUID{}, InternalSessionIssuerID: conv.ToNullUUID(internalIssuer), Position: 0}))
+	servers = byName()
+	require.Equal(t, "not_proven", servers["ema-own-sign-in"].Status)
+	require.Equal(t, "needs_attention", servers["ema-federated"].Status, "an order of Speakeasy alone leaves a federated server with nobody to vouch")
+}

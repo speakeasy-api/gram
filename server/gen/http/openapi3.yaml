@@ -96169,7 +96169,7 @@ components:
                     format: uuid
                 unavailable_reason:
                     type: string
-                    description: Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+                    description: 'Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint''s sign-in doesn''t go through this provider, so it can''t vouch for people there: an external issuer other than the sign-in''s trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer''s state could not be read just now; retry the read.'
                     enum:
                         - deleted
                         - disabled
@@ -96285,6 +96285,13 @@ components:
                 project_slug:
                     type: string
                     description: The owning project's slug.
+                sign_in_issuer_id:
+                    type: string
+                    description: 'The remote session issuer the server''s sign-in trusts, such as an Okta authorization server: only that issuer can vouch for people on the server. Omitted when the server uses Speakeasy''s own sign-in, where only Speakeasy can vouch.'
+                    format: uuid
+                sign_in_issuer_name:
+                    type: string
+                    description: The display name of sign_in_issuer_id. Omitted with it, or when the issuer has no name.
                 slug:
                     type: string
                     description: The MCP server slug. Empty when it has none.

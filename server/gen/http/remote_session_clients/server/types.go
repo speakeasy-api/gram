@@ -3553,7 +3553,9 @@ type EMAProviderResponseBody struct {
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
 	// Why the provider cannot serve now; omitted when it can. Identity chaining
 	// skips it and tries the next provider. not_trusted_by_endpoint means the
-	// endpoint's authorization server does not accept this issuer.
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
 	// readiness_unknown means the Speakeasy issuer's state could not be read just
 	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`

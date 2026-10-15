@@ -22,7 +22,7 @@ export const EMAProviderKind = {
 export type EMAProviderKind = ClosedEnum<typeof EMAProviderKind>;
 
 /**
- * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+ * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's sign-in doesn't go through this provider, so it can't vouch for people there: an external issuer other than the sign-in's trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
  */
 export const UnavailableReason = {
   Deleted: "deleted",
@@ -38,7 +38,7 @@ export const UnavailableReason = {
   ReadinessUnknown: "readiness_unknown",
 } as const;
 /**
- * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+ * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's sign-in doesn't go through this provider, so it can't vouch for people there: an external issuer other than the sign-in's trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
  */
 export type UnavailableReason = ClosedEnum<typeof UnavailableReason>;
 
@@ -63,7 +63,7 @@ export type EMAProvider = {
    */
   remoteSessionIssuerId?: string | undefined;
   /**
-   * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's authorization server does not accept this issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
+   * Why the provider cannot serve now; omitted when it can. Identity chaining skips it and tries the next provider. not_trusted_by_endpoint means the endpoint's sign-in doesn't go through this provider, so it can't vouch for people there: an external issuer other than the sign-in's trusted issuer, or Speakeasy on a sign-in federated through an external issuer. readiness_unknown means the Speakeasy issuer's state could not be read just now; retry the read.
    */
   unavailableReason?: UnavailableReason | undefined;
 };

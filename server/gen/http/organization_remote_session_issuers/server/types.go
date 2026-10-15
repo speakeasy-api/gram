@@ -3578,7 +3578,9 @@ type EMAProviderResponseBody struct {
 	InternalSessionIssuerID *string `form:"internal_session_issuer_id,omitempty" json:"internal_session_issuer_id,omitempty" xml:"internal_session_issuer_id,omitempty"`
 	// Why the provider cannot serve now; omitted when it can. Identity chaining
 	// skips it and tries the next provider. not_trusted_by_endpoint means the
-	// endpoint's authorization server does not accept this issuer.
+	// endpoint's sign-in doesn't go through this provider, so it can't vouch for
+	// people there: an external issuer other than the sign-in's trusted issuer, or
+	// Speakeasy on a sign-in federated through an external issuer.
 	// readiness_unknown means the Speakeasy issuer's state could not be read just
 	// now; retry the read.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
@@ -3813,6 +3815,14 @@ type EMAServiceServerResponseBody struct {
 	// When the vendor last accepted an assertion for this server from a provider
 	// that can vouch now. Omitted when never.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
+	// The remote session issuer the server's sign-in trusts, such as an Okta
+	// authorization server: only that issuer can vouch for people on the server.
+	// Omitted when the server uses Speakeasy's own sign-in, where only Speakeasy
+	// can vouch.
+	SignInIssuerID *string `form:"sign_in_issuer_id,omitempty" json:"sign_in_issuer_id,omitempty" xml:"sign_in_issuer_id,omitempty"`
+	// The display name of sign_in_issuer_id. Omitted with it, or when the issuer
+	// has no name.
+	SignInIssuerName *string `form:"sign_in_issuer_name,omitempty" json:"sign_in_issuer_name,omitempty" xml:"sign_in_issuer_name,omitempty"`
 }
 
 // EMAProviderInputRequestBody is used to define fields on request body types.

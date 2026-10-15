@@ -51,6 +51,14 @@ export type EMAServiceServer = {
    */
   projectSlug: string;
   /**
+   * The remote session issuer the server's sign-in trusts, such as an Okta authorization server: only that issuer can vouch for people on the server. Omitted when the server uses Speakeasy's own sign-in, where only Speakeasy can vouch.
+   */
+  signInIssuerId?: string | undefined;
+  /**
+   * The display name of sign_in_issuer_id. Omitted with it, or when the issuer has no name.
+   */
+  signInIssuerName?: string | undefined;
+  /**
    * The MCP server slug. Empty when it has none.
    */
   slug: string;
@@ -79,6 +87,8 @@ export const EMAServiceServer$inboundSchema: z.ZodMiniType<
     project_id: z.string(),
     project_name: z.string(),
     project_slug: z.string(),
+    sign_in_issuer_id: z.optional(z.string()),
+    sign_in_issuer_name: z.optional(z.string()),
     slug: z.string(),
     status: EMAServiceServerStatus$inboundSchema,
   }),
@@ -88,6 +98,8 @@ export const EMAServiceServer$inboundSchema: z.ZodMiniType<
       "project_id": "projectId",
       "project_name": "projectName",
       "project_slug": "projectSlug",
+      "sign_in_issuer_id": "signInIssuerId",
+      "sign_in_issuer_name": "signInIssuerName",
     });
   }),
 );

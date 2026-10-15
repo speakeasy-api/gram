@@ -3614,14 +3614,16 @@ func unmarshalEMAServiceResponseBodyToOrganizationremotesessionissuersEMAService
 // from a value of type *EMAServiceServerResponseBody.
 func unmarshalEMAServiceServerResponseBodyToOrganizationremotesessionissuersEMAServiceServer(v *EMAServiceServerResponseBody) *organizationremotesessionissuers.EMAServiceServer {
 	res := &organizationremotesessionissuers.EMAServiceServer{
-		ID:             *v.ID,
-		Name:           *v.Name,
-		Slug:           *v.Slug,
-		ProjectID:      *v.ProjectID,
-		ProjectSlug:    *v.ProjectSlug,
-		ProjectName:    *v.ProjectName,
-		Status:         *v.Status,
-		LastAcceptedAt: v.LastAcceptedAt,
+		ID:               *v.ID,
+		Name:             *v.Name,
+		Slug:             *v.Slug,
+		ProjectID:        *v.ProjectID,
+		ProjectSlug:      *v.ProjectSlug,
+		ProjectName:      *v.ProjectName,
+		Status:           *v.Status,
+		LastAcceptedAt:   v.LastAcceptedAt,
+		SignInIssuerID:   v.SignInIssuerID,
+		SignInIssuerName: v.SignInIssuerName,
 	}
 
 	return res

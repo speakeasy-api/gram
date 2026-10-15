@@ -3355,14 +3355,16 @@ func marshalOrganizationremotesessionissuersEMAServiceToEMAServiceResponseBody(v
 // *organizationremotesessionissuers.EMAServiceServer.
 func marshalOrganizationremotesessionissuersEMAServiceServerToEMAServiceServerResponseBody(v *organizationremotesessionissuers.EMAServiceServer) *EMAServiceServerResponseBody {
 	res := &EMAServiceServerResponseBody{
-		ID:             v.ID,
-		Name:           v.Name,
-		Slug:           v.Slug,
-		ProjectID:      v.ProjectID,
-		ProjectSlug:    v.ProjectSlug,
-		ProjectName:    v.ProjectName,
-		Status:         v.Status,
-		LastAcceptedAt: v.LastAcceptedAt,
+		ID:               v.ID,
+		Name:             v.Name,
+		Slug:             v.Slug,
+		ProjectID:        v.ProjectID,
+		ProjectSlug:      v.ProjectSlug,
+		ProjectName:      v.ProjectName,
+		Status:           v.Status,
+		LastAcceptedAt:   v.LastAcceptedAt,
+		SignInIssuerID:   v.SignInIssuerID,
+		SignInIssuerName: v.SignInIssuerName,
 	}
 
 	return res

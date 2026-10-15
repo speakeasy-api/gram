@@ -134,6 +134,11 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 			ID: row.McpServerID.UUID.String(), Name: row.McpServerName, Slug: row.McpServerSlug,
 			ProjectID: row.ProjectID.String(), ProjectSlug: row.ProjectSlug, ProjectName: row.ProjectName,
 			Status: emaServerNeedsAttention, LastAcceptedAt: nil,
+			SignInIssuerID: nil, SignInIssuerName: nil,
+		}
+		if row.SignInIssuerID.Valid {
+			server.SignInIssuerID = conv.PtrEmpty(row.SignInIssuerID.UUID.String())
+			server.SignInIssuerName = conv.PtrEmpty(row.SignInIssuerName)
 		}
 		if row.State == PreparationStateReady {
 			svc.ready[row.McpServerID.UUID] = struct{}{}

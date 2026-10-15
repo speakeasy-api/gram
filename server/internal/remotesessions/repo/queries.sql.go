@@ -7115,7 +7115,9 @@ SELECT i.id AS remote_session_issuer_id, i.issuer, COALESCE(i.name, '')::text AS
   b.project_id, b.user_session_issuer_id, b.resource,
   m.id AS mcp_server_id, m.toolset_id AS mcp_server_toolset_id,
   COALESCE(m.name, '')::text AS mcp_server_name, COALESCE(m.slug, '')::text AS mcp_server_slug,
-  p.slug AS project_slug, p.name AS project_name
+  p.slug AS project_slug, p.name AS project_name,
+  u.trusted_remote_session_issuer_id AS sign_in_issuer_id,
+  COALESCE(si.name, '')::text AS sign_in_issuer_name
 FROM remote_session_ema_bindings b
 JOIN projects p ON p.id = b.project_id AND p.organization_id = $1::text AND p.deleted IS FALSE
 JOIN remote_session_issuers i ON i.id = b.remote_session_issuer_id AND i.deleted IS FALSE
@@ -7131,6 +7133,11 @@ LEFT JOIN remote_mcp_servers r ON r.project_id = b.project_id AND r.deleted IS F
   )
 LEFT JOIN mcp_servers m ON m.remote_mcp_server_id = r.id AND m.project_id = b.project_id
   AND m.user_session_issuer_id = b.user_session_issuer_id AND m.deleted IS FALSE
+LEFT JOIN user_session_issuers u ON u.id = b.user_session_issuer_id
+  AND u.organization_id = $1::text AND u.project_id IS NULL AND u.deleted IS FALSE
+  AND u.trusted_remote_session_issuer_id IS NOT NULL AND u.trusted_remote_session_client_id IS NOT NULL
+LEFT JOIN remote_session_issuers si ON si.id = u.trusted_remote_session_issuer_id AND si.deleted IS FALSE
+  AND (si.organization_id = $1::text OR (si.organization_id IS NULL AND si.project_id IS NULL))
 WHERE b.organization_id = $1::text
 ORDER BY (i.project_id IS NULL) DESC, i.created_at, i.id, p.name, m.id
 `
@@ -7150,6 +7157,8 @@ type ListEMAServiceServersRow struct {
 	McpServerSlug             string
 	ProjectSlug               string
 	ProjectName               string
+	SignInIssuerID            uuid.NullUUID
+	SignInIssuerName          string
 }
 
 // Status only: every identity chaining binding in the organization with the
@@ -7159,7 +7168,9 @@ type ListEMAServiceServersRow struct {
 // RFC 9728 resources compare. A binding whose
 // server was removed keeps its vendor listed with no server. Issuer records
 // come first organization-level, then oldest, so the name and record a vendor
-// shows are stable.
+// shows are stable. sign_in_issuer_id is the external issuer the binding's
+// user session issuer, the server's sign-in, trusts, read as identity
+// chaining reads it; NULL means Speakeasy's own sign-in.
 func (q *Queries) ListEMAServiceServers(ctx context.Context, organizationID string) ([]ListEMAServiceServersRow, error) {
 	rows, err := q.db.Query(ctx, listEMAServiceServers, organizationID)
 	if err != nil {
@@ -7184,6 +7195,8 @@ func (q *Queries) ListEMAServiceServers(ctx context.Context, organizationID stri
 			&i.McpServerSlug,
 			&i.ProjectSlug,
 			&i.ProjectName,
+			&i.SignInIssuerID,
+			&i.SignInIssuerName,
 		); err != nil {
 			return nil, err
 		}
