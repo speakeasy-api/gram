@@ -2827,6 +2827,110 @@ func BuildAssignOrganizationOnboardingPlaybookPayload(adminAssignOrganizationOnb
 	return v, nil
 }
 
+// BuildListSignupOffersPayload builds the payload for the admin
+// listSignupOffers endpoint from CLI flags.
+func BuildListSignupOffersPayload(adminListSignupOffersAdminSessionToken string) (*admin.ListSignupOffersPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminListSignupOffersAdminSessionToken != "" {
+			adminSessionToken = &adminListSignupOffersAdminSessionToken
+		}
+	}
+	v := &admin.ListSignupOffersPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCreateSignupOfferPayload builds the payload for the admin
+// createSignupOffer endpoint from CLI flags.
+func BuildCreateSignupOfferPayload(adminCreateSignupOfferBody string, adminCreateSignupOfferAdminSessionToken string) (*admin.CreateSignupOfferPayload, error) {
+	var err error
+	var body CreateSignupOfferRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCreateSignupOfferBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"signup_flow\": \"tailscale_partner_gateway\",\n      \"stripe_promotion_code_id\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 200, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_promotion_code_id", body.StripePromotionCodeID, "^promo_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(body.StripePromotionCodeID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_promotion_code_id", body.StripePromotionCodeID, utf8.RuneCountInString(body.StripePromotionCodeID), 255, false))
+		}
+		if !(body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCreateSignupOfferAdminSessionToken != "" {
+			adminSessionToken = &adminCreateSignupOfferAdminSessionToken
+		}
+	}
+	v := &admin.CreateSignupOfferPayload{
+		Name:                  body.Name,
+		StripePromotionCodeID: body.StripePromotionCodeID,
+		SignupFlow:            body.SignupFlow,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildUpdateSignupOfferPayload builds the payload for the admin
+// updateSignupOffer endpoint from CLI flags.
+func BuildUpdateSignupOfferPayload(adminUpdateSignupOfferBody string, adminUpdateSignupOfferAdminSessionToken string) (*admin.UpdateSignupOfferPayload, error) {
+	var err error
+	var body UpdateSignupOfferRequestBody
+	{
+		err = json.Unmarshal([]byte(adminUpdateSignupOfferBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"signup_flow\": \"tailscale_partner_gateway\",\n      \"stripe_promotion_code_id\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 200, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.stripe_promotion_code_id", body.StripePromotionCodeID, "^promo_[A-Za-z0-9_]+$"))
+		if utf8.RuneCountInString(body.StripePromotionCodeID) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_promotion_code_id", body.StripePromotionCodeID, utf8.RuneCountInString(body.StripePromotionCodeID), 255, false))
+		}
+		if !(body.SignupFlow == "tailscale_partner_gateway") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signup_flow", body.SignupFlow, []any{"tailscale_partner_gateway"}))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminUpdateSignupOfferAdminSessionToken != "" {
+			adminSessionToken = &adminUpdateSignupOfferAdminSessionToken
+		}
+	}
+	v := &admin.UpdateSignupOfferPayload{
+		Name:                  body.Name,
+		StripePromotionCodeID: body.StripePromotionCodeID,
+		SignupFlow:            body.SignupFlow,
+		ID:                    body.ID,
+		Enabled:               body.Enabled,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetStripeSubscriptionCandidatePayload builds the payload for the admin
 // getStripeSubscriptionCandidate endpoint from CLI flags.
 func BuildGetStripeSubscriptionCandidatePayload(adminGetStripeSubscriptionCandidateOrganizationID string, adminGetStripeSubscriptionCandidateStripeSubscriptionID string, adminGetStripeSubscriptionCandidateAdminSessionToken string) (*admin.GetStripeSubscriptionCandidatePayload, error) {

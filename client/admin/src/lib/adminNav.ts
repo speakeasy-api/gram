@@ -72,6 +72,12 @@ export const ADMIN_NAV_GROUPS = [
         icon: Grid2X2Icon,
       },
       {
+        to: "/signup-offers",
+        label: "Signup offers",
+        keywords: "signup stripe promotion tailscale partner gateway",
+        icon: BookOpenIcon,
+      },
+      {
         to: "/onboarding-steps",
         label: "Steps",
         keywords: "onboarding steps setup wizard cards groups playbooks",

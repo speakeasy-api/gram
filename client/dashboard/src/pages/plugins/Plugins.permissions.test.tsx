@@ -20,7 +20,9 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("@gram/client/react-query/organizationGateway.js", () => ({
   useOrganizationGateway: () => ({
-    data: { available: true, url: "https://gateway.example.test/mcp" },
+    data: state.read
+      ? { available: true, url: "https://gateway.example.test/mcp" }
+      : undefined,
   }),
 }));
 vi.mock("@/hooks/usePluginWriteAccess", () => ({
@@ -207,8 +209,8 @@ describe("Plugins index authorization", () => {
     render(page());
     expect(state.list).toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: "Connect all servers" }),
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "Connect all servers" }),
+    ).toBeNull();
     expect(screen.getByText("A populated plugin card")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Sync plugins" }));
     expect(state.publish).toHaveBeenCalled();

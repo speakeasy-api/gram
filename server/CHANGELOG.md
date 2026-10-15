@@ -1,5 +1,21 @@
 # server
 
+## 2.25.0
+
+### Minor Changes
+
+- 1874a78: Adds the project-scoped `log:read` RBAC scope, which now gates a project's individual tool calls and raw log records: Tool Logs, the Playground logs panel, a session's Tool calls view, the underlying telemetry endpoints, and the matching Platform MCP and assistant tools. Like `chat:read`, no system role holds it and neither `project:*` nor `org:admin` implies it, so organization admins grant it per project through a custom role, including to themselves to keep using Tool Logs.
+- 418107d: Add configurable sliding-window context to sensors. Classify each target message with up to ten timestamp-ordered conversation messages. System messages are excluded for every input strategy and do not count toward window size. Configure message context through the API or Platform MCP.
+- 7eb804c: Warn before changing the user session issuer of an MCP server that already has one. Its connected clients must sign in again, and the new `userSessionIssuers.getAttachImpact` preview also says when the authorization server clients are sent to changes, so anything configured with it must be updated. MCP server settings now show the issuer URL, token endpoint, and resource of a shared authorization server, and the issuer picker marks issuers that share one.
+- 2310e62: Organization admins can move a Speakeasy authorization server onto or off the deployment's authentication host from its page, after previewing where clients will sign in. A shared authorization server with a pinned issuer URL is re-pinned to the new host, so its issuer URL and token endpoint follow. The new `organizationUserSessionIssuers.getAuthenticationHostImpact` and `setAuthenticationHost` methods back this, and issuers now report whether the deployment has an authentication host.
+
+### Patch Changes
+
+- edb7e6c: Return protocol-compliant errors with readable request IDs when an MCP target is missing or access is denied.
+- d0f172f: Filter dropdowns on Explore dashboards load again on projects with a lot of agent activity. A field's values now come straight from the recorded events instead of the fully folded rows, so the dropdown can also list a value that a later event replaced, such as a session's earlier model.
+- d432124: Tool calls run through hosted MCP servers now also appear in agent_events as one tool_call_result row per call, with its outcome and duration, published as an OpenTelemetry GenAI execute_tool log after the call returns and off the response path, so hosted tool use shows up next to the events agents report themselves.
+- bb33f51: Every hook event the hooks ingest endpoint records now also lands in agent_events: tool calls and their results, prompts and permission requests are classified with the tool, the session, the outcome and the duration filled, and the other hook events are kept under their own names, so what an agent's hooks report shows up next to the events the agent exports itself.
+
 ## 2.24.0
 
 ### Minor Changes

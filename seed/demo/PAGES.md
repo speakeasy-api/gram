@@ -310,3 +310,30 @@ The assignments review includes only effective MCP connection access (`mcp:conne
 The remove-access dialog lists only the selected person’s roles that grant connection access. For each, admins can block role connection access or remove the person’s direct role membership; directory-managed roles explain that membership must be changed through mappings. Membership removal preserves at least one assigned role and explains its organization-wide impact.
 
 When the org gateway is enabled, Plugins shows “Connect all servers” to the left of “Create plugin”. Its tooltip explains the gateway’s faster distribution path and using plugins for custom groups or individual MCP servers.
+
+### Optional private-network onboarding
+
+The `private-network` setup task is catalog-backed and hidden by default, including
+in the demo's existing security selection. No representative ingress or new task
+row is needed: ordinary onboarding must not gain this step. Staff can select
+`platform-mcp` and `private-network` in a gateway-only playbook. The card reads the
+existing product-feature entitlement and links to organization Network Access
+settings; without entitlement it offers support rather than collecting credentials.
+The demo deliberately remains unentitled: no `network_ingress` grant, Tailscale
+credentials, partner identities, or billing configuration are seeded.
+
+### Billing payment setup
+
+The shared Add payment method prompt remains available during active trials,
+including enterprise trials. Outside a trial it is offered only to Free/Base
+organizations with no subscription. The enterprise demo intentionally does not
+seed a partner promotion or change tier to showcase this action: doing so would
+misrepresent billing eligibility and hide enterprise features. Focused billing
+component tests cover generic and code-owned partner copy, verified subscription
+suppression, and reuse of checkout; no billing configuration is seeded.
+
+The post-activation discount box requires an actual active Stripe subscription
+and verified discount/price terms, not seeded signup attribution. The enterprise
+demo intentionally shows no box; component and Stripe transport fixtures cover
+verified gateway terms, safe monetary/percentage fallback, expiration, and absence.
+No Stripe subscription, promotion, or local billing settings are seeded for it.

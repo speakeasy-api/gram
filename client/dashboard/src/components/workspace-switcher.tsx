@@ -125,7 +125,11 @@ export function WorkspaceSwitcher({
               className,
             )}
           >
-            <ProjectIcon project={project} className="size-5 text-[10px]" />
+            <ProjectIcon
+              decorative
+              project={project}
+              className="size-5 text-[10px]"
+            />
             {/* "Project" suffix names what the switcher switches. */}
             <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
               {project?.name || project?.slug || projectSlug} Project
@@ -152,7 +156,11 @@ export function WorkspaceSwitcher({
                       onSelect={() => handleProjectSelect(p.slug)}
                       className="flex cursor-pointer items-center gap-2"
                     >
-                      <ProjectIcon project={p} className="size-5 text-[10px]" />
+                      <ProjectIcon
+                        decorative
+                        project={p}
+                        className="size-5 text-[10px]"
+                      />
                       <span className="flex-1 truncate">
                         {p.name || p.slug}
                       </span>

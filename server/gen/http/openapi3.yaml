@@ -6346,6 +6346,228 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/signupOffers:
+        get:
+            tags:
+                - admin
+            summary: listSignupOffers admin
+            description: List staff-managed signup offers. Stripe owns all promotion terms.
+            operationId: adminListSignupOffers
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSignupOffersResponseBody'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/signupOffers.create:
+        post:
+            tags:
+                - admin
+            summary: createSignupOffer admin
+            description: Create a disabled signup offer mapped to an exact Stripe promotion code ID.
+            operationId: adminCreateSignupOffer
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSignupOfferRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSignupOffer'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
+    /admin/signupOffers.update:
+        post:
+            tags:
+                - admin
+            summary: updateSignupOffer admin
+            description: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.
+            operationId: adminUpdateSignupOffer
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSignupOfferRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminSignupOffer'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/supportCoverage.get:
         get:
             description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.'
@@ -20305,6 +20527,14 @@ paths:
                   name: org_name
                   schema:
                     description: Optional organization name. When set, the organization is created for a new user during the auth callback.
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional partner signup code.
+                  in: query
+                  name: partner_code
+                  schema:
+                    description: Optional partner signup code.
+                    maxLength: 80
                     type: string
                 - allowEmptyValue: true
                   description: Optional email address. Pre-fills the email field on the identity provider's sign-up screen. Never stored.
@@ -89069,6 +89299,36 @@ components:
                     type: string
             required:
                 - email
+        AdminSignupOffer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    format: date-time
+                enabled:
+                    type: boolean
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                signup_flow:
+                    type: string
+                    enum:
+                        - tailscale_partner_gateway
+                stripe_promotion_code_id:
+                    type: string
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - name
+                - stripe_promotion_code_id
+                - signup_flow
+                - enabled
+                - created_at
+                - updated_at
         AdminSpendBreakdownResponse:
             type: object
             properties:
@@ -94403,6 +94663,25 @@ components:
             required:
                 - url
                 - expires_at
+        CreateSignupOfferRequestBody:
+            type: object
+            properties:
+                name:
+                    type: string
+                    minLength: 1
+                    maxLength: 200
+                signup_flow:
+                    type: string
+                    enum:
+                        - tailscale_partner_gateway
+                stripe_promotion_code_id:
+                    type: string
+                    pattern: ^promo_[A-Za-z0-9_]+$
+                    maxLength: 255
+            required:
+                - name
+                - stripe_promotion_code_id
+                - signup_flow
         CreateSkillRequestBody:
             type: object
             properties:
@@ -100069,6 +100348,9 @@ components:
         InfoResponseBody:
             type: object
             properties:
+                accepted_signup_offer_flow:
+                    type: string
+                    description: Display-only signup offer variant for an accepted promotion; not billing eligibility
                 active_organization_dashboard_url:
                     type: string
                     description: Dashboard base URL of the platform host the active organization lives on. Set only for an ordinary session whose request arrived on a different platform host; the dashboard moves there.
@@ -102929,6 +103211,15 @@ components:
                     description: Signals in this page
             required:
                 - signals
+        ListSignupOffersResponseBody:
+            type: object
+            properties:
+                offers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminSignupOffer'
+            required:
+                - offers
         ListSkillDistributionsResult:
             type: object
             properties:
@@ -108593,6 +108884,10 @@ components:
                 org_name:
                     type: string
                     description: The name of the org to register
+                partner_code:
+                    type: string
+                    description: Optional partner signup code.
+                    maxLength: 80
             required:
                 - org_name
         RegisterWorkloadIssuerForm:
@@ -116202,6 +116497,16 @@ components:
                     type: string
                     description: Start of the current Stripe service period
                     format: date-time
+                discount_description:
+                    type: string
+                    description: Verified terms of a currently applied Stripe subscription discount; absent when unsupported or inactive
+                discount_ends_at:
+                    type: string
+                    description: Discount expiration reported by Stripe, when present
+                    format: date-time
+                gateway_promotion_applied:
+                    type: boolean
+                    description: Whether the live discount and gateway price verify the monthly five GiB promotion
                 payment_failed:
                     type: boolean
                     description: Whether a past-due subscription has an open latest invoice with an unpaid balance
@@ -120948,6 +121253,32 @@ components:
                     maxLength: 40
             required:
                 - id
+        UpdateSignupOfferRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                id:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                    minLength: 1
+                    maxLength: 200
+                signup_flow:
+                    type: string
+                    enum:
+                        - tailscale_partner_gateway
+                stripe_promotion_code_id:
+                    type: string
+                    pattern: ^promo_[A-Za-z0-9_]+$
+                    maxLength: 255
+            required:
+                - name
+                - stripe_promotion_code_id
+                - signup_flow
+                - id
+                - enabled
         UpdateSkillRequestBody:
             type: object
             properties:

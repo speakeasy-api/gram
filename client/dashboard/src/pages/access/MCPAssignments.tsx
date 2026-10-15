@@ -65,7 +65,11 @@ export function MCPAssignments({
       members.data?.members
         .map((member) => ({
           id: member.id,
+          name: member.name,
+          email: member.email,
           roles: allMemberRoleIds(member).sort(),
+          directRoles: member.roleIds?.toSorted(),
+          directoryRoles: member.directoryRoleIds?.toSorted(),
           department: member.department,
           groups: member.groups?.toSorted(),
         }))
@@ -372,8 +376,9 @@ export function MCPAssignments({
         {failed ? (
           <div role="alert" className="space-y-3">
             <Text>
-              Couldn’t load the complete assignment review. Try again before
-              enabling the gateway.
+              Couldn’t load the complete assignment review. You need permission
+              to view every assigned MCP server. Ask an administrator to grant
+              that access, then retry before enabling the gateway.
             </Text>
             <Button
               variant="secondary"

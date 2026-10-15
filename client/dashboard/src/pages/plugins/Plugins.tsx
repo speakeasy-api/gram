@@ -385,7 +385,7 @@ function PluginsContent({
           </span>
         }
         primaryAction={
-          <div className="flex items-center gap-2">
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
             <OrganizationGatewayButton size="md" />
             {canWritePlugin && (
               <Button onClick={() => setIsCreateDialogOpen(true)}>

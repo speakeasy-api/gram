@@ -75,7 +75,7 @@ vi.mock("@gram/client/react-query/audienceOptions.js", () => ({
 }));
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({}),
+  useQueryClient: () => ({ invalidateQueries: invalidate }),
 }));
 
 vi.mock("react-router", () => ({
@@ -368,7 +368,8 @@ describe("the access list", () => {
       ],
     });
     await mutationOptions.mock.calls.at(-1)![0].onSuccess();
-    expect(invalidate).toHaveBeenCalledTimes(4);
+    expect(invalidate).toHaveBeenCalledTimes(5);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["mcpAssignments"] });
   });
 
   it("says when nobody reaches the server", () => {

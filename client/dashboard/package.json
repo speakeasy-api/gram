@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.138.0",
+  "version": "0.139.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -25,11 +25,11 @@
     "build:storybook": "storybook build"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "2.0.67",
+    "@ai-sdk/mcp": "2.0.72",
     "@ai-sdk/react": "catalog:",
     "@assistant-ui/react": "catalog:",
-    "@assistant-ui/react-ai-sdk": "~1.4.14",
-    "@assistant-ui/react-markdown": "^0.14.18",
+    "@assistant-ui/react-ai-sdk": "~1.4.16",
+    "@assistant-ui/react-markdown": "^0.14.19",
     "@calcom/embed-react": "^1.5.3",
     "@cfworker/json-schema": "catalog:",
     "@datadog/browser-rum": "^7.7.0",
@@ -37,7 +37,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@pierre/diffs": "^1.2.11",
-    "@polar-sh/checkout": "^0.4.1",
+    "@polar-sh/checkout": "^0.4.3",
     "@radix-ui/react-accordion": "^1.2.20",
     "@radix-ui/react-avatar": "^1.2.6",
     "@radix-ui/react-checkbox": "^1.3.11",

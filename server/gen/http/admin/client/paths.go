@@ -417,6 +417,21 @@ func AssignOrganizationOnboardingPlaybookAdminPath() string {
 	return "/admin/organization.onboardingPlaybook"
 }
 
+// ListSignupOffersAdminPath returns the URL path to the admin service listSignupOffers HTTP endpoint.
+func ListSignupOffersAdminPath() string {
+	return "/admin/signupOffers"
+}
+
+// CreateSignupOfferAdminPath returns the URL path to the admin service createSignupOffer HTTP endpoint.
+func CreateSignupOfferAdminPath() string {
+	return "/admin/signupOffers.create"
+}
+
+// UpdateSignupOfferAdminPath returns the URL path to the admin service updateSignupOffer HTTP endpoint.
+func UpdateSignupOfferAdminPath() string {
+	return "/admin/signupOffers.update"
+}
+
 // GetStripeSubscriptionCandidateAdminPath returns the URL path to the admin service getStripeSubscriptionCandidate HTTP endpoint.
 func GetStripeSubscriptionCandidateAdminPath() string {
 	return "/admin/organization.stripeSubscriptionCandidate"

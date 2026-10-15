@@ -35,6 +35,7 @@ describe("WorkspaceSwitcher", () => {
     // The trigger shows the project's display name (not the org/project slug),
     // suffixed with "Project".
     expect(screen.getByText("Proj Project")).toBeTruthy();
-    expect(screen.getByRole("img", { name: "Proj" }).textContent).toBe("P");
+    expect(screen.queryByRole("img", { name: "Proj" })).toBeNull();
+    expect(screen.getByText("P").getAttribute("aria-hidden")).toBe("true");
   });
 });
