@@ -138,6 +138,9 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
+	// Custom domains and tunneled servers need a current paid tier; the billing
+	// stub reports no tier, so set it explicitly.
+	testAuthContext(t, ctx).AccountType = string(billing.TierEnterprise)
 
 	temporal := &stubTemporalClient{}
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())

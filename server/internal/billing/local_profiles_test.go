@@ -146,13 +146,13 @@ func TestStubLocalAccountProfiles(t *testing.T) {
 	}
 }
 
-func TestStubWithoutLocalProfilesUnchanged(t *testing.T) {
+func TestStubWithoutLocalProfilesReportsNoTier(t *testing.T) {
 	t.Parallel()
 	client := billing.NewStubClient(testenv.NewLogger(t), testenv.NewTracerProvider(t))
 	tier, active, err := client.GetCustomerTier(t.Context(), "org_placeholder")
 	require.NoError(t, err)
-	require.Equal(t, new(billing.TierPro), tier)
-	require.True(t, active)
+	require.Nil(t, tier)
+	require.False(t, active)
 }
 
 func TestStubLocalProfilesKeepPersistedTier(t *testing.T) {

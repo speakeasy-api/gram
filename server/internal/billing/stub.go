@@ -50,7 +50,9 @@ func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, 
 		}
 		return tier, active, nil
 	}
-	return new(TierPro), true, nil
+	// Report no tier so reconciliation keeps the persisted tier. Legacy Pro is
+	// never granted to new organizations.
+	return nil, false, nil
 }
 
 func (s *StubClient) ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error) {
