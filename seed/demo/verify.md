@@ -557,7 +557,6 @@ that URL.
       example host: interactive sign-in through `acme-workforce` (GitHub, the
       organization gateway) fails by design. Nothing here can authenticate.
 
-
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
