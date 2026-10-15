@@ -28,6 +28,8 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -503,4 +505,43 @@ func TestServeOrganizationGateway_ConnectionStatusLinksItsConnectPage(t *testing
 		slugs = append(slugs, server.Slug)
 	}
 	require.ElementsMatch(t, []string{fx.projectSlug + "." + fx.granted, fx.projectSlug + "." + fx.open}, slugs)
+}
+
+// Turning the gateway off answers 404 on its MCP endpoint and its sign-in
+// routes from the next request, and turning it back on restores both.
+func TestServeOrganizationGateway_TurnedOffIsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+	metadataPath := "/.well-known/oauth-protected-resource/mcp/gateway/" + fx.organizationSlug
+	getMetadata := func() int {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, metadataPath, nil))
+		return w.Code
+	}
+	features := featuresrepo.New(ti.conn)
+	setting := featuresrepo.EnableFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
+	}
+	require.Equal(t, http.StatusOK, getMetadata())
+
+	_, err := features.EnableFeature(ctx, setting)
+	require.NoError(t, err)
+
+	_, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.Equal(t, http.StatusNotFound, getMetadata())
+
+	_, err = features.DeleteFeature(ctx, featuresrepo.DeleteFeatureParams(setting))
+	require.NoError(t, err)
+
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, http.StatusOK, getMetadata())
 }

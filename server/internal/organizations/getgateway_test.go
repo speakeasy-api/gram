@@ -13,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -99,4 +101,26 @@ func TestService_GetGateway_CustomDomainOnly(t *testing.T) {
 	require.Nil(t, res.URL)
 	require.NotNil(t, res.UnavailableReason)
 	require.Equal(t, "custom_domain_only", *res.UnavailableReason)
+}
+
+func TestService_GetGateway_TurnedOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	createGatewayIssuer(t, ctx, ti, authCtx.ActiveOrganizationID)
+	_, err := featuresrepo.New(ti.conn).EnableFeature(ctx, featuresrepo.EnableFeatureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
+	})
+	require.NoError(t, err)
+
+	res, err := ti.service.GetGateway(ctx, &gen.GetGatewayPayload{})
+
+	require.NoError(t, err)
+	require.False(t, res.Available)
+	require.Nil(t, res.URL)
+	require.NotNil(t, res.UnavailableReason)
+	require.Equal(t, "turned_off", *res.UnavailableReason)
 }
