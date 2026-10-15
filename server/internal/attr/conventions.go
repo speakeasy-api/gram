@@ -530,6 +530,9 @@ const (
 	// IdentityChainingFallbackKey reports an attempt after an earlier
 	// provider in the order failed.
 	IdentityChainingFallbackKey = attribute.Key("gram.identity_chaining.fallback")
+	// ConsentInventoryDeferredKey marks a consent tool inventory that cannot
+	// load until identity chaining runs after approval.
+	ConsentInventoryDeferredKey = attribute.Key("gram.consent.inventory_deferred")
 	// IdentityChainingRetriesKey counts transient-failure retries against one
 	// provider within an attempt.
 	IdentityChainingRetriesKey = attribute.Key("gram.identity_chaining.retries")
@@ -2132,6 +2135,11 @@ func SlogIdentityChainingUnavailableReason(v string) slog.Attr {
 func IdentityChainingFallback(v bool) attribute.KeyValue { return IdentityChainingFallbackKey.Bool(v) }
 func SlogIdentityChainingFallback(v bool) slog.Attr {
 	return slog.Bool(string(IdentityChainingFallbackKey), v)
+}
+
+func ConsentInventoryDeferred(v bool) attribute.KeyValue { return ConsentInventoryDeferredKey.Bool(v) }
+func SlogConsentInventoryDeferred(v bool) slog.Attr {
+	return slog.Bool(string(ConsentInventoryDeferredKey), v)
 }
 func IdentityChainingRetries(v int) attribute.KeyValue { return IdentityChainingRetriesKey.Int(v) }
 func SlogIdentityChainingRetries(v int) slog.Attr {

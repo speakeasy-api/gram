@@ -540,6 +540,7 @@
             data-form-id="consent-approve-form"
             data-approve-button-id="consent-approve-button"
             data-consent-enabled="{{if .ConsentEnabled}}true{{else}}false{{end}}"
+            data-inventory-deferred="{{if .ConsentToolsDeferred}}true{{else}}false{{end}}"
             data-server-name="{{.MCPSlug}}"
             {{if
             .ConsentToolsPrefill}}data-prefill="{{.ConsentToolsPrefill}}"
