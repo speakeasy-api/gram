@@ -10,6 +10,7 @@ import (
 
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -85,6 +86,13 @@ func TestReadEMA_ReportsVendorAndBindingAcceptance(t *testing.T) {
 	second := read(other.Resource)
 	require.NotNil(t, second.LastAcceptedAt)
 	require.Equal(t, older.Format(time.RFC3339), *second.LastAcceptedAt)
+
+	projectOnly := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectRead, auth.ProjectID.String()))
+	scoped, err := ti.service.ReadEMA(projectOnly, &clientsgen.ReadEMAPayload{UserSessionIssuerID: in.UserSessionIssuerID.String(), RemoteSessionIssuerID: in.RemoteSessionIssuerID.String(), Resource: other.Resource})
+	require.NoError(t, err)
+	require.NotNil(t, scoped.EmaProviders)
+	require.Nil(t, scoped.EmaProviders.Providers[0].LastAcceptedAt, "organization-wide acceptance needs org:read")
+	require.Equal(t, older.Format(time.RFC3339), conv.PtrValOr(scoped.LastAcceptedAt, ""), "the binding's own acceptance needs only project:read")
 
 	named := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGText(auth.ActiveOrganizationID), "idp-org-"+uuid.NewString()[:8], "https://idp.example.com/")
 	issuer, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{SessionToken: nil, ApikeyToken: nil, ID: named.String()})

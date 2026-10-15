@@ -67,8 +67,9 @@ or imply that support staff may mutate the organization's issuer.
 Show the exact public issuer URI from the successful read. Explain that the
 service's administrator must register it in that service's enterprise-managed
 authorization settings: registering the URI alone changes nothing. Once the
-organization has a Speakeasy issuer, servers that use Speakeasy's own sign-in
-(their sign-in trusts no external identity provider) use it by default.
+organization has a Speakeasy issuer and sign-in enforcement is on, servers that
+use Speakeasy's own sign-in (their sign-in trusts no external identity
+provider) use it by default; without sign-in enforcement it cannot vouch.
 Speakeasy vouches only for those servers: a server that signs people in through
 an external identity provider such as Okta is vouched for only by that
 provider, even when the service accepts Speakeasy. Changing a server's sign-in
@@ -86,7 +87,9 @@ the server's trusted external identity provider alone, or the organization's Spe
 An organization admin chooses which identity providers a service accepts on the
 dashboard's **Organization** → **IDP and SSO** → **Identity providers** →
 **Services** page for the vendor, or through the organization's
-`setEMAProviders` management API. The choice is stored as an ordered list, but
+`setEMAProviders` management API; pass `expected_providers` from the list you
+last read, and on a conflict re-read and reconcile the list before retrying.
+The choice is stored as an ordered list, but
 each server uses only the provider its sign-in goes through, so the list acts
 as the set of accepted providers. Saving a provider list needs the
 provider-list rollout; restoring the default needs only organization admin. A

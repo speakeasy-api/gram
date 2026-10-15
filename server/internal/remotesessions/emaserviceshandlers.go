@@ -117,10 +117,10 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 			svc = newEMAService()
 			services[vendor] = svc
 		}
-		// Rows arrive organization-level issuer first, then oldest, so the
-		// first record seen is the one setEMAProviders should name; the name
-		// is the first one any record has.
-		if svc.issuerID == uuid.Nil {
+		// Rows arrive records setEMAProviders accepts first, so the first
+		// such record is the one to name; the name is the first one any
+		// record has.
+		if svc.issuerID == uuid.Nil && row.IssuerSettable {
 			svc.issuerID = row.RemoteSessionIssuerID
 		}
 		if svc.name == "" {
@@ -165,12 +165,17 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		return nil, oops.E(oops.CodeUnexpected, err, "list ema provider orders").LogError(ctx, logger)
 	}
 	for _, vendor := range saved {
-		if services[vendor] != nil {
+		if services[vendor] == nil {
+			services[vendor] = newEMAService()
+		}
+	}
+	for vendor, svc := range services {
+		if svc.issuerID != uuid.Nil {
 			continue
 		}
-		svc := newEMAService()
-		// A saved order outlives its last binding; find a record that names
-		// the vendor so an administrator can still change or clear it.
+		// A saved order outlives its last binding, and a binding may name only
+		// a record setEMAProviders rejects; find one it accepts so an
+		// administrator can still change or clear the order.
 		spellings := []string{vendor}
 		if canonical, err := issuerurl.Parse(vendor); err == nil {
 			spellings = canonical.MatchCandidates()
@@ -181,9 +186,13 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "read ema vendor issuer").LogError(ctx, logger)
 		default:
-			svc.issuerID, svc.name = record.ID, record.Name
+			if record.Settable {
+				svc.issuerID = record.ID
+			}
+			if svc.name == "" {
+				svc.name = record.Name
+			}
 		}
-		services[vendor] = svc
 	}
 
 	acceptance, err := ListEMAVendorAcceptance(ctx, q, org)

@@ -252,8 +252,9 @@ type SetEMAProvidersRequestBody struct {
 	// The saved list the caller started from, in its stored order, empty for the
 	// default. When given and the saved list no longer matches it, nothing is
 	// written and the request fails with conflict, so a stale editor never
-	// overwrites another administrator's change. Omit to replace the list
-	// unconditionally.
+	// overwrites another administrator's change. Send the list you last read when
+	// updating; on conflict, re-read and reconcile the list before retrying. Omit
+	// only to replace the list unconditionally.
 	ExpectedProviders []*EMAProviderInputRequestBody `form:"expected_providers,omitempty" json:"expected_providers,omitempty" xml:"expected_providers,omitempty"`
 }
 
@@ -3593,8 +3594,8 @@ type EMAProviderResponseBody struct {
 	// that still hold an access token. Attributed to the exact issuer that
 	// vouched; the organization-wide default's external entry takes the newest
 	// acceptance of any external issuer. Set on every response that returns an
-	// order; omitted when the vendor has never accepted it, or when acceptance
-	// could not be read.
+	// order; omitted when the vendor has never accepted it, when acceptance could
+	// not be read, or on readEMA when the caller lacks org:read.
 	LastAcceptedAt *string `form:"last_accepted_at,omitempty" json:"last_accepted_at,omitempty" xml:"last_accepted_at,omitempty"`
 }
 

@@ -114,3 +114,17 @@ func requireXAARefusal(t *testing.T, result *mcp.CallToolResult, code string) {
 	require.True(t, ok)
 	require.Contains(t, content.Text, `"code":"`+code+`"`)
 }
+
+func TestSpeakeasyReadinessViewFollowsSignIn(t *testing.T) {
+	t.Parallel()
+	speakeasy := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.New(), Unavailable: "", LastAcceptedAt: nil}
+	external := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: uuid.New(), InternalSessionIssuerID: uuid.Nil, Unavailable: "", LastAcceptedAt: nil}
+	order := func(providers ...remotesessions.EMAProvider) remotesessions.EMAProviderOrder {
+		return remotesessions.EMAProviderOrder{VendorIssuer: "https://vendor.example.test", IsDefault: false, Providers: providers}
+	}
+	require.True(t, speakeasyReadinessView(order(speakeasy), false))
+	require.True(t, speakeasyReadinessView(order(speakeasy, external), false), "a Speakeasy sign-in is vouched for by Speakeasy")
+	require.False(t, speakeasyReadinessView(order(speakeasy, external), true), "a federated sign-in is vouched for by its external issuer")
+	require.True(t, speakeasyReadinessView(order(speakeasy), true), "with no external issuer named there is no connection to describe")
+	require.False(t, speakeasyReadinessView(order(external), false))
+}

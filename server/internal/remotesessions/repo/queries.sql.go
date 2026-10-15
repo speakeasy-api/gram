@@ -3581,27 +3581,30 @@ func (q *Queries) GetEMAProjectOrganization(ctx context.Context, projectID uuid.
 }
 
 const getEMAVendorIssuerRecord = `-- name: GetEMAVendorIssuerRecord :one
-SELECT i.id, COALESCE(i.name, '')::text AS name
+SELECT i.id, COALESCE(i.name, '')::text AS name,
+  COALESCE(i.organization_id = $1::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE)::boolean AS settable
 FROM remote_session_issuers i
 LEFT JOIN projects p ON p.id = i.project_id
-WHERE i.issuer = ANY($1::text[]) AND i.deleted IS FALSE
+WHERE i.issuer = ANY($2::text[]) AND i.deleted IS FALSE
   AND (
-    i.organization_id = $2::text
+    i.organization_id = $1::text
     OR (i.organization_id IS NULL AND i.project_id IS NULL)
-    OR (i.organization_id IS NULL AND p.organization_id = $2::text AND p.deleted IS FALSE)
+    OR (i.organization_id IS NULL AND p.organization_id = $1::text AND p.deleted IS FALSE)
   )
-ORDER BY (i.organization_id IS NULL AND i.project_id IS NULL), (i.project_id IS NULL) DESC, i.created_at, i.id
+ORDER BY COALESCE(i.organization_id = $1::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE) DESC,
+  COALESCE(i.organization_id = $1::text, FALSE) DESC, (i.project_id IS NULL) DESC, i.created_at, i.id
 LIMIT 1
 `
 
 type GetEMAVendorIssuerRecordParams struct {
-	Issuers        []string
 	OrganizationID string
+	Issuers        []string
 }
 
 type GetEMAVendorIssuerRecordRow struct {
-	ID   uuid.UUID
-	Name string
+	ID       uuid.UUID
+	Name     string
+	Settable bool
 }
 
 // Any issuer record the organization can name for a vendor, so its saved order
@@ -3609,11 +3612,12 @@ type GetEMAVendorIssuerRecordRow struct {
 // records (including legacy project-owned ones with no organization_id,
 // resolved through their project), then the platform catalog. A record with
 // no organization and a project belongs to that project's organization, never
-// the platform. Organization-level first.
+// the platform. Records setEMAProviders accepts come first, the organization's
+// own before the catalog, then organization-level.
 func (q *Queries) GetEMAVendorIssuerRecord(ctx context.Context, arg GetEMAVendorIssuerRecordParams) (GetEMAVendorIssuerRecordRow, error) {
-	row := q.db.QueryRow(ctx, getEMAVendorIssuerRecord, arg.Issuers, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getEMAVendorIssuerRecord, arg.OrganizationID, arg.Issuers)
 	var i GetEMAVendorIssuerRecordRow
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(&i.ID, &i.Name, &i.Settable)
 	return i, err
 }
 
@@ -7111,6 +7115,7 @@ func (q *Queries) ListEMAProviders(ctx context.Context, arg ListEMAProvidersPara
 const listEMAServiceServers = `-- name: ListEMAServiceServers :many
 SELECT i.id AS remote_session_issuer_id, i.issuer, COALESCE(i.name, '')::text AS name,
   (i.project_id IS NULL)::boolean AS issuer_is_organization_level,
+  COALESCE(i.organization_id = $1::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE)::boolean AS issuer_settable,
   COALESCE(b.state, '')::text AS state,
   b.project_id, b.user_session_issuer_id, b.resource,
   m.id AS mcp_server_id, m.toolset_id AS mcp_server_toolset_id,
@@ -7139,7 +7144,8 @@ LEFT JOIN user_session_issuers u ON u.id = b.user_session_issuer_id
 LEFT JOIN remote_session_issuers si ON si.id = u.trusted_remote_session_issuer_id AND si.deleted IS FALSE
   AND (si.organization_id = $1::text OR (si.organization_id IS NULL AND si.project_id IS NULL))
 WHERE b.organization_id = $1::text
-ORDER BY (i.project_id IS NULL) DESC, i.created_at, i.id, p.name, m.id
+ORDER BY COALESCE(i.organization_id = $1::text OR (i.organization_id IS NULL AND i.project_id IS NULL), FALSE) DESC,
+  COALESCE(i.organization_id = $1::text, FALSE) DESC, (i.project_id IS NULL) DESC, i.created_at, i.id, p.name, m.id
 `
 
 type ListEMAServiceServersRow struct {
@@ -7147,6 +7153,7 @@ type ListEMAServiceServersRow struct {
 	Issuer                    string
 	Name                      string
 	IssuerIsOrganizationLevel bool
+	IssuerSettable            bool
 	State                     string
 	ProjectID                 uuid.UUID
 	UserSessionIssuerID       uuid.UUID
@@ -7167,8 +7174,9 @@ type ListEMAServiceServersRow struct {
 // the resource its cached protected resource document names, as RFC 8707 and
 // RFC 9728 resources compare. A binding whose
 // server was removed keeps its vendor listed with no server. Issuer records
-// come first organization-level, then oldest, so the name and record a vendor
-// shows are stable. sign_in_issuer_id is the external issuer the binding's
+// come first those setEMAProviders accepts (the organization's own, then the
+// platform catalog), then organization-level, then oldest, so the name and
+// record a vendor shows are stable. sign_in_issuer_id is the external issuer the binding's
 // user session issuer, the server's sign-in, trusts, read as identity
 // chaining reads it; NULL means Speakeasy's own sign-in.
 func (q *Queries) ListEMAServiceServers(ctx context.Context, organizationID string) ([]ListEMAServiceServersRow, error) {
@@ -7185,6 +7193,7 @@ func (q *Queries) ListEMAServiceServers(ctx context.Context, organizationID stri
 			&i.Issuer,
 			&i.Name,
 			&i.IssuerIsOrganizationLevel,
+			&i.IssuerSettable,
 			&i.State,
 			&i.ProjectID,
 			&i.UserSessionIssuerID,

@@ -85,10 +85,10 @@ func (s *Service) ReadEMA(ctx context.Context, p *gen.ReadEMAPayload) (*gen.Iden
 }
 
 // endpointEMAProviders is the order identity chaining resolves for the
-// endpoint, with each provider's organization-wide acceptance by the vendor,
-// and when the vendor last accepted an assertion for this binding from a
-// provider the order tries and that can serve now. Both are nil when the
-// vendor issuer is not an issuer identifier.
+// endpoint, with each provider's organization-wide acceptance by the vendor
+// for callers with org:read, and when the vendor last accepted an assertion
+// for this binding from a provider the order tries and that can serve now.
+// Both are nil when the vendor issuer is not an issuer identifier.
 func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput, issuer string) (*types.EMAProviderOrder, *string, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	vendor, err := NormalizeVendorIssuer(issuer)
@@ -107,11 +107,17 @@ func (s *Service) endpointEMAProviders(ctx context.Context, in PreparationInput,
 		logger.WarnContext(ctx, "check Speakeasy issuer readiness", attr.SlogError(err))
 	}
 	// Acceptance is status evidence: a failed read leaves it out rather than
-	// failing the whole read.
-	if accepted, err := VendorEMAAcceptance(ctx, q, org, vendor); err != nil {
-		logger.WarnContext(ctx, "read ema vendor acceptance", attr.SlogError(err))
-	} else {
-		order = StampEMAProviderLastAccepted(order, accepted)
+	// failing the whole read. Organization-wide evidence needs org:read.
+	orgReader, err := s.authz.Evaluate(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: org, Dimensions: nil})
+	if err != nil {
+		logger.WarnContext(ctx, "check organization read access", attr.SlogError(err))
+	}
+	if orgReader {
+		if accepted, err := VendorEMAAcceptance(ctx, q, org, vendor); err != nil {
+			logger.WarnContext(ctx, "read ema vendor acceptance", attr.SlogError(err))
+		} else {
+			order = StampEMAProviderLastAccepted(order, accepted)
+		}
 	}
 	var bindingAccepted *string
 	target := EMACredentialTarget{OrganizationID: org, ProjectID: *authCtx.ProjectID, UserSessionIssuerID: in.UserSessionIssuerID, RemoteSessionIssuerID: in.RemoteSessionIssuerID, Resource: in.Resource}
