@@ -256,10 +256,11 @@ VALUES
 
 -- name: OrgInsertSigintSensor :exec
 INSERT INTO sigint_sensors
-  (id, project_id, name, slug, description, instructions, mode, enabled)
+  (id, project_id, name, slug, description, instructions, mode, enabled, input_strategy, window_size)
 VALUES
   (@id::uuid, @project_id::uuid, @name::text, @slug::text, @description::text,
-   sqlc.narg(instructions)::text, @mode::text, @enabled::boolean);
+   sqlc.narg(instructions)::text, @mode::text, @enabled::boolean,
+   @input_strategy::text, @window_size::integer);
 
 -- name: OrgInsertSigintSensorSignal :exec
 INSERT INTO sigint_sensor_signals

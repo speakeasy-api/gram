@@ -875,21 +875,24 @@ func (q *Queries) OrgInsertSigintCustomSignal(ctx context.Context, arg OrgInsert
 
 const orgInsertSigintSensor = `-- name: OrgInsertSigintSensor :exec
 INSERT INTO sigint_sensors
-  (id, project_id, name, slug, description, instructions, mode, enabled)
+  (id, project_id, name, slug, description, instructions, mode, enabled, input_strategy, window_size)
 VALUES
   ($1::uuid, $2::uuid, $3::text, $4::text, $5::text,
-   $6::text, $7::text, $8::boolean)
+   $6::text, $7::text, $8::boolean,
+   $9::text, $10::integer)
 `
 
 type OrgInsertSigintSensorParams struct {
-	ID           uuid.UUID
-	ProjectID    uuid.UUID
-	Name         string
-	Slug         string
-	Description  string
-	Instructions pgtype.Text
-	Mode         string
-	Enabled      bool
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+	Name          string
+	Slug          string
+	Description   string
+	Instructions  pgtype.Text
+	Mode          string
+	Enabled       bool
+	InputStrategy string
+	WindowSize    int32
 }
 
 func (q *Queries) OrgInsertSigintSensor(ctx context.Context, arg OrgInsertSigintSensorParams) error {
@@ -902,6 +905,8 @@ func (q *Queries) OrgInsertSigintSensor(ctx context.Context, arg OrgInsertSigint
 		arg.Instructions,
 		arg.Mode,
 		arg.Enabled,
+		arg.InputStrategy,
+		arg.WindowSize,
 	)
 	return err
 }

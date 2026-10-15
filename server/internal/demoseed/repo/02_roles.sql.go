@@ -280,22 +280,29 @@ INSERT INTO principal_grants
   (organization_id, principal_urn, scope, selectors)
 SELECT $1::text, $2::text, scope,
        jsonb_build_object(
-         'resource_kind', CASE WHEN scope = 'plugin:write' THEN 'project'
+         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
                                ELSE split_part(scope, ':', 1) END,
-         'resource_id', '*')
-FROM unnest($3::text[]) AS scope
+         'resource_id', CASE WHEN scope = 'log:read' THEN $3::text ELSE '*' END)
+FROM unnest($4::text[]) AS scope
 `
 
 type RolesInsertCustomRoleGrantsParams struct {
 	OrganizationID string
 	PrincipalUrn   string
+	ProjectID      string
 	Scopes         []string
 }
 
 // Unrestricted selectors: the wildcard shape every scope stores when a rule
-// is not narrowed to one resource.
+// is not narrowed to one resource. log:read is granted per project, so the
+// Tool Log Viewer names the demo project instead.
 func (q *Queries) RolesInsertCustomRoleGrants(ctx context.Context, arg RolesInsertCustomRoleGrantsParams) error {
-	_, err := q.db.Exec(ctx, rolesInsertCustomRoleGrants, arg.OrganizationID, arg.PrincipalUrn, arg.Scopes)
+	_, err := q.db.Exec(ctx, rolesInsertCustomRoleGrants,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.ProjectID,
+		arg.Scopes,
+	)
 	return err
 }
 

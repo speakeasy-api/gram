@@ -313,29 +313,34 @@ func (s *seeder) orgProject(ctx context.Context) error {
 		}
 	}
 
+	// The sensors show current-message context, five- and ten-message sliding
+	// windows, and a disabled draft.
 	sensors := []struct {
-		key, name, slug, desc, instructions, mode string
-		enabled                                   bool
+		key, name, slug, desc, instructions, mode, inputStrategy string
+		enabled                                                  bool
+		windowSize                                               int32
 	}{
 		{"service-areas", "Service areas", "service-areas", "Labels every service area discussed in a conversation.",
-			"Select every product service that materially appears.", "multi_label", true},
+			"Select every product service that materially appears in the target message.", "multi_label", "single_message", true, 5},
 		{"primary-service", "Primary service", "primary-service", "Chooses the service most central to a conversation.",
-			"Choose the single service that best describes the main request.", "exclusive", true},
+			"Choose the single service that best describes the target request.", "exclusive", "sliding_window", true, 5},
 		{"impact", "Customer impact", "customer-impact", "Orders conversations by customer impact.",
-			"Score impact from low to high using the supplied levels.", "ordered_score", true},
+			"Score the target message impact from low to high using the supplied levels.", "ordered_score", "sliding_window", true, 10},
 		{"draft-campaign", "Draft campaign", "draft-campaign", "An incomplete campaign classifier awaiting its labels.",
-			"", "multi_label", false},
+			"", "multi_label", "single_message", false, 5},
 	}
 	for _, sen := range sensors {
 		if err := s.q.OrgInsertSigintSensor(ctx, repo.OrgInsertSigintSensorParams{
-			ID:           s.det("sigint-sensor-" + sen.key),
-			ProjectID:    proj,
-			Name:         sen.name,
-			Slug:         sen.slug,
-			Description:  sen.desc,
-			Instructions: orgText(sen.instructions),
-			Mode:         sen.mode,
-			Enabled:      sen.enabled,
+			ID:            s.det("sigint-sensor-" + sen.key),
+			ProjectID:     proj,
+			Name:          sen.name,
+			Slug:          sen.slug,
+			Description:   sen.desc,
+			Instructions:  orgText(sen.instructions),
+			Mode:          sen.mode,
+			Enabled:       sen.enabled,
+			InputStrategy: sen.inputStrategy,
+			WindowSize:    sen.windowSize,
 		}); err != nil {
 			return fmt.Errorf("insert demo sigint sensor %s: %w", sen.key, err)
 		}

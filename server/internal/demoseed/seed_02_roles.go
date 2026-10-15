@@ -37,6 +37,13 @@ var rolesCustomRoles = []rolesCustomRole{
 		agents:      []string{},
 	},
 	{
+		slug: "tool-log-viewer", name: "Tool Log Viewer",
+		description: "Reads one project's tool-call logs, including arguments and results, without organization admin access.",
+		scopes:      []string{"log:read"},
+		members:     []string{"mateo"},
+		agents:      []string{},
+	},
+	{
 		slug: "collaborator", name: "Collaborator",
 		description: "Builds and ships MCP servers, skills and assistants, without organization settings.",
 		scopes: []string{"org:read", "project:read", "project:write", "mcp:read",
@@ -194,6 +201,7 @@ func (s *seeder) seedRoles(ctx context.Context) error {
 			OrganizationID: org,
 			PrincipalUrn:   roleURN,
 			Scopes:         role.scopes,
+			ProjectID:      s.projectID().String(),
 		}); err != nil {
 			return fmt.Errorf("insert demo custom role grants %s: %w", role.slug, err)
 		}

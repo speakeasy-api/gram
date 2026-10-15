@@ -20,15 +20,16 @@ VALUES (@organization_id, @slug, @name, @description::text, now() - interval '90
 RETURNING id;
 
 -- Unrestricted selectors: the wildcard shape every scope stores when a rule
--- is not narrowed to one resource.
+-- is not narrowed to one resource. log:read is granted per project, so the
+-- Tool Log Viewer names the demo project instead.
 -- name: RolesInsertCustomRoleGrants :exec
 INSERT INTO principal_grants
   (organization_id, principal_urn, scope, selectors)
 SELECT @organization_id::text, @principal_urn::text, scope,
        jsonb_build_object(
-         'resource_kind', CASE WHEN scope = 'plugin:write' THEN 'project'
+         'resource_kind', CASE WHEN scope IN ('plugin:write', 'log:read') THEN 'project'
                                ELSE split_part(scope, ':', 1) END,
-         'resource_id', '*')
+         'resource_id', CASE WHEN scope = 'log:read' THEN @project_id::text ELSE '*' END)
 FROM unnest(@scopes::text[]) AS scope;
 
 -- name: RolesInsertRoleAssignment :exec
