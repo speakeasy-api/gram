@@ -105,6 +105,16 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 		require.Equal(t, "openai", attrs[AgentProviderKey].AsString())
 		require.Equal(t, "codex", attrs[AgentSurfaceKey].AsString())
 	})
+
+	t.Run("pipeline attribution wins over what a hook source's family implies", func(t *testing.T) {
+		t.Parallel()
+		record := inboundTestLog(dialect.HooksLogScope, "codex", "PostToolUse",
+			logStringAttribute("gram.provider", "anthropic"),
+			logStringAttribute("gram.hook.source", "codex"),
+		)
+
+		require.Equal(t, "anthropic", enriched(t, enricher, record)[AgentProviderKey].AsString())
+	})
 }
 
 // A session lifecycle hook row has no type in the vocabulary, whichever
