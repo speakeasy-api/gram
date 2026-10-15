@@ -40052,6 +40052,105 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: OrganizationUserSessionIssuer
+  /rpc/organizationUserSessionIssuers.getAuthenticationHostImpact:
+    get:
+      description: 'Preview moving a user_session_issuer in the caller''s organization onto or off the deployment''s authentication host: where clients sign in before and after, and how many MCP servers that affects. Requires org:read.'
+      operationId: getOrganizationUserSessionIssuerAuthenticationHostImpact
+      parameters:
+        - allowEmptyValue: true
+          description: The user_session_issuer id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The user_session_issuer id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: True to preview moving onto the authentication host, false to preview moving off it.
+          in: query
+          name: use_authentication_host
+          required: true
+          schema:
+            description: True to preview moving onto the authentication host, false to preview moving off it.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionIssuerAuthenticationHostImpact'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getAuthenticationHostImpact organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: getAuthenticationHostImpact
+      x-speakeasy-react-hook:
+        name: OrganizationUserSessionIssuerAuthenticationHostImpact
   /rpc/organizationUserSessionIssuers.getCimdClient:
     get:
       description: Get a custom CIMD document URL on an organization-owned user_session_issuer. Requires org:read.
@@ -40856,6 +40955,94 @@ paths:
       x-speakeasy-name-override: move
       x-speakeasy-react-hook:
         name: MoveOrganizationUserSessionIssuer
+  /rpc/organizationUserSessionIssuers.setAuthenticationHost:
+    post:
+      description: Move a user_session_issuer in the caller's organization onto or off the deployment's authentication host. A shared authorization server with a pinned issuer URL is re-pinned to the matching host, so its issuer URL and token endpoint change; other issuers announce their authorization servers on the new host. Clients and anything configured with the previous URLs must be updated. Refused when the deployment has no authentication host, and for issuers managed by Speakeasy. Requires org:admin.
+      operationId: setOrganizationUserSessionIssuerAuthenticationHost
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAuthenticationHostRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionIssuer'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setAuthenticationHost organizationUserSessionIssuers
+      tags:
+        - organizationUserSessionIssuers
+      x-speakeasy-name-override: setAuthenticationHost
+      x-speakeasy-react-hook:
+        name: SetOrganizationUserSessionIssuerAuthenticationHost
   /rpc/organizationUserSessionIssuers.update:
     post:
       description: Update an organization-owned user_session_issuer. Requires org:admin.
@@ -103918,6 +104105,19 @@ components:
       required:
         - target_id
         - access
+    SetAuthenticationHostRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The user_session_issuer id.
+          format: uuid
+        use_authentication_host:
+          type: boolean
+          description: True to move onto the authentication host, false to move off it.
+      required:
+        - id
+        - use_authentication_host
     SetBillingMetadataRequestBody:
       type: object
       properties:
@@ -111878,6 +112078,9 @@ components:
     UserSessionIssuer:
       type: object
       properties:
+        authentication_host_available:
+          type: boolean
+          description: Whether this deployment has an authentication host the issuer can be moved onto. Present on responses, not audit snapshots.
         authn_challenge_mode:
           type: string
           description: chain | interactive.
@@ -111978,6 +112181,31 @@ components:
       required:
         - reauthorization_required
         - authorization_server_changes
+    UserSessionIssuerAuthenticationHostImpact:
+      type: object
+      properties:
+        authorization_server_after:
+          type: string
+          description: Where clients sign in after the move, in the same terms.
+        authorization_server_before:
+          type: string
+          description: 'Where clients sign in now: the shared authorization server''s issuer URL, or the origin that announces each MCP server''s own authorization server. Empty for a shared issuer this deployment does not serve.'
+        changes:
+          type: boolean
+          description: Whether the move changes where clients sign in. False when the issuer is already where it would move.
+        issuer:
+          $ref: '#/components/schemas/UserSessionIssuer'
+        mcp_server_count:
+          type: integer
+          description: Live MCP servers, toolsets, and meta MCP servers attached to the issuer. Those on a custom domain keep announcing their own authorization servers there.
+          format: int64
+      description: What moving a user_session_issuer onto or off the authentication host changes for its clients.
+      required:
+        - issuer
+        - authorization_server_before
+        - authorization_server_after
+        - changes
+        - mcp_server_count
     UserSessionIssuerCimdClient:
       type: object
       properties:
