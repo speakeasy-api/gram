@@ -121,9 +121,6 @@ func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	_, err := s.List(ctx, nil, nil)
 	require.ErrorContains(t, err, "selected source failed")
 	require.Equal(t, 1, native.calls)
-	_, err = s.IdentityDetails(t.Context(), NativeCatalogRegistryID, "example/server", nil)
-	require.ErrorContains(t, err, "selected source failed")
-	require.Equal(t, 2, native.calls)
 }
 
 func TestCatalogUnsupportedIdentity(t *testing.T) {

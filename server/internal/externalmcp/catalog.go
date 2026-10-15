@@ -18,9 +18,6 @@ import (
 )
 
 const (
-	// UnsupportedCatalogSourceFailureReason identifies terminal unsupported-source failures in logs and workflows.
-	UnsupportedCatalogSourceFailureReason = "unsupported_catalog_source"
-
 	registrySourceTypeNative = "native_v1"
 
 	registryAuthProfileNone = "none"
@@ -290,23 +287,6 @@ func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (Cata
 	return source, nil
 }
 
-// IdentityDetails reads an installed or accepted registry identity without new-selection admission.
-func (s *CatalogService) IdentityDetails(ctx context.Context, id uuid.UUID, name string, allowed []string) (*ServerDetails, error) {
-	source, err := s.IdentitySource(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	reader, err := s.ReaderFor(source)
-	if err != nil {
-		return nil, err
-	}
-	details, err := reader.GetServerDetails(ctx, source.Registry, name, allowed)
-	if err != nil {
-		return nil, fmt.Errorf("read catalog identity details: %w", err)
-	}
-	return details, nil
-}
-
 type catalogRepository interface {
 	ListMCPRegistries(context.Context) ([]repo.ListMCPRegistriesRow, error)
 	GetMCPRegistryByID(context.Context, uuid.UUID) (repo.GetMCPRegistryByIDRow, error)
@@ -374,7 +354,7 @@ func catalogSourceFromDetailRow(row repo.GetMCPRegistryByIDRow) (CatalogSource, 
 }
 
 // AdmitNewEntry checks the organization-selected source and current native entry
-// eligibility. Persisted identities and accepted continuations use IdentityDetails.
+// eligibility.
 func (s *CatalogService) AdmitNewEntry(ctx context.Context, organizationID, organizationSlug string, id uuid.UUID, name string) error {
 	source, err := s.SelectSource(ctx, organizationID, organizationSlug, id)
 	if err != nil {
