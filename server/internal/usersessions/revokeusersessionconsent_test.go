@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/user_session_consents"
@@ -38,6 +39,25 @@ func TestRevokeUserSessionConsent(t *testing.T) {
 	consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, urn.NewUserSubject("revoke-target"))
 	require.NoError(t, err)
 
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	variant, err := repo.New(ti.conn).CreateUserSessionConsent(ctx, repo.CreateUserSessionConsentParams{
+		SubjectUrn: consent.SubjectUrn, UserSessionClientID: client.ID, RemoteSetHash: "different-upstream-permissions",
+	})
+	require.NoError(t, err)
+	other, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, urn.NewUserSubject("another-person"))
+	require.NoError(t, err)
+	session, err := seedUserSessionForClient(t, ctx, ti.conn, uuid.MustParse(issuer.ID), client.ID, consent.SubjectUrn)
+	require.NoError(t, err)
+	for _, parent := range []repo.UserSessionConsent{consent, variant} {
+		_, err := repo.New(ti.conn).CreateUserSessionConsentResource(ctx, repo.CreateUserSessionConsentResourceParams{
+			ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionConsentID: parent.ID,
+			Resource: "mcp_server:" + uuid.NewString(), InventoryHash: "approved-inventory", RemoteSetHash: parent.RemoteSetHash,
+			SessionDurationHours: 1,
+		})
+		require.NoError(t, err)
+	}
+
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionUserSessionConsentRevoke)
 	require.NoError(t, err)
 
@@ -51,7 +71,18 @@ func TestRevokeUserSessionConsent(t *testing.T) {
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionUserSessionConsentRevoke)
 	require.NoError(t, err)
-	require.Equal(t, before+1, after)
+	require.Equal(t, before+2, after)
+	for _, parent := range []repo.UserSessionConsent{consent, variant} {
+		_, err := repo.New(ti.conn).GetUserSessionConsentByID(ctx, repo.GetUserSessionConsentByIDParams{ID: parent.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+	}
+	remaining, err := repo.New(ti.conn).CountLiveUserSessionConsentResourcesFixture(ctx, repo.CountLiveUserSessionConsentResourcesFixtureParams{ProjectID: *auth.ProjectID, ConsentIds: []uuid.UUID{consent.ID, variant.ID}})
+	require.NoError(t, err)
+	require.Zero(t, remaining)
+	_, err = repo.New(ti.conn).GetUserSessionConsentByID(ctx, repo.GetUserSessionConsentByIDParams{ID: other.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err, "another person's approval survives")
+	_, err = repo.New(ti.conn).GetUserSessionByID(ctx, repo.GetUserSessionByIDParams{ID: session.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err, "withdrawal does not revoke existing sessions")
 
 	// A second revoke is a no-op against an already soft-deleted row, so the
 	// row is no longer visible — the same id reads as not-found.

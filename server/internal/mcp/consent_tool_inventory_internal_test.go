@@ -324,7 +324,7 @@ func TestConsentInventoryCaptureInterceptorUpdatesSharedDraft(t *testing.T) {
 
 	require.NoError(t, interceptor.InterceptToolsListResponse(t.Context(), list))
 	require.True(t, draft.Complete)
-	require.Equal(t, []consentInventoryTool{{Name: "reader", Annotations: []string{}}}, draft.Tools)
+	require.Equal(t, []consentInventoryTool{{Name: "reader", DefinitionHash: consentEvidenceHash(list.Result.Tools[0]), Annotations: []string{}}}, draft.Tools)
 
 	// The handler records a response session id after interception. Because
 	// both operate on the shared draft, this cannot overwrite the captured
