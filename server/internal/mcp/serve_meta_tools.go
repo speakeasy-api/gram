@@ -538,24 +538,34 @@ func (s *Service) loadMemberToolset(
 	if member.serverID == toolset.ID && !toolset.McpEnabled {
 		return nil, uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
-	if !toolset.McpIsPublic && !gate.authenticated {
+	allowed, err := s.memberToolsetConnectAllowed(ctx, gate.authenticated, &toolset)
+	if err != nil {
+		return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
+	}
+	if !allowed {
 		// Unauthorized reads as nonexistent (as in ServeToolsetResolved).
 		return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
 	}
-	if !toolset.McpIsPublic && gate.authenticated {
-		// Toolset-level mcp:connect gate, matching ServeToolsetResolved's
-		// connection check; the meta MCP maps a denial to nonexistent rather
-		// than Forbidden, per its unauthorized-reads-as-nonexistent rule.
-		// Grants context was prepared in resolveMetaMemberSnapshot.
-		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
-			var oopsErr *oops.ShareableError
-			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-				return nil, uuid.Nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", member.slug).LogWarn(ctx, logger)
-			}
-			return nil, uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
-		}
-	}
 	return &toolset, toolset.ProjectID, nil
+}
+
+// memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
+// gate, matching ServeToolsetResolved's connection check. Grants context was
+// prepared when the member snapshot was resolved.
+func (s *Service) memberToolsetConnectAllowed(ctx context.Context, authenticated bool, toolset *toolsets_repo.Toolset) (bool, error) {
+	if toolset.McpIsPublic {
+		return true, nil
+	}
+	if !authenticated {
+		return false, nil
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
+		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
+			return false, nil
+		}
+		return false, fmt.Errorf("check toolset-level authz: %w", err)
+	}
+	return true, nil
 }
 
 // marshalMetaToolCallResult wraps structuredContent in the meta MCP's

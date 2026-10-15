@@ -3,30 +3,43 @@ package mcp
 import (
 	"testing"
 
-	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
-func TestDerivedMemberHeaderSupported(t *testing.T) {
+func TestRemoteMemberAuth(t *testing.T) {
 	t.Parallel()
+	callerKey := proxy.ConfiguredHeader{Name: "X-Key", StaticValue: "", ValueFromRequestHeader: "X-Key", IsRequired: true}
+	staticKey := proxy.ConfiguredHeader{Name: "X-Key", StaticValue: "configured", ValueFromRequestHeader: "", IsRequired: true}
+	callerAuthorization := proxy.ConfiguredHeader{Name: "authorization", StaticValue: "", ValueFromRequestHeader: "Authorization", IsRequired: true}
+	staticAuthorization := proxy.ConfiguredHeader{Name: "Authorization", StaticValue: "Bearer configured", ValueFromRequestHeader: "", IsRequired: true}
 	for _, tt := range []struct {
-		name   string
-		header proxy.ConfiguredHeader
-		oauth  bool
-		want   bool
+		name           string
+		headers        []proxy.ConfiguredHeader
+		oauth          bool
+		wantSupported  bool
+		wantNeedsOAuth bool
 	}{
-		{"optional caller header", proxy.ConfiguredHeader{Name: "X-Key", ValueFromRequestHeader: "X-Key"}, false, true},
-		{"required caller key", proxy.ConfiguredHeader{Name: "X-Key", ValueFromRequestHeader: "X-Key", IsRequired: true}, false, false},
-		{"configured key", proxy.ConfiguredHeader{Name: "X-Key", StaticValue: "configured", IsRequired: true}, false, true},
-		{"missing key", proxy.ConfiguredHeader{Name: "X-Key", IsRequired: true}, false, false},
-		{"oauth replaces authorization", proxy.ConfiguredHeader{Name: "authorization", ValueFromRequestHeader: "Authorization", IsRequired: true}, true, true},
-		{"oauth cannot replace api key", proxy.ConfiguredHeader{Name: "X-Key", ValueFromRequestHeader: "X-Key", IsRequired: true}, true, false},
-		{"passthrough takes precedence", proxy.ConfiguredHeader{Name: "X-Key", StaticValue: "configured", ValueFromRequestHeader: "X-Key", IsRequired: true}, false, false},
-		{"invalid static credential", proxy.ConfiguredHeader{Name: "X-Key", StaticValue: "invalid\nvalue", IsRequired: true}, false, false},
+		{"no headers", nil, false, true, false},
+		{"no headers with sign-in", nil, true, true, true},
+		{"optional caller header", []proxy.ConfiguredHeader{{Name: "X-Key", StaticValue: "", ValueFromRequestHeader: "X-Key", IsRequired: false}}, false, true, false},
+		{"required caller key", []proxy.ConfiguredHeader{callerKey}, false, false, false},
+		{"missing key", []proxy.ConfiguredHeader{{Name: "X-Key", StaticValue: "", ValueFromRequestHeader: "", IsRequired: true}}, false, false, false},
+		{"invalid static key", []proxy.ConfiguredHeader{{Name: "X-Key", StaticValue: "invalid\nvalue", ValueFromRequestHeader: "", IsRequired: true}}, false, false, false},
+		{"passthrough takes precedence", []proxy.ConfiguredHeader{{Name: "X-Key", StaticValue: "configured", ValueFromRequestHeader: "X-Key", IsRequired: true}}, false, false, false},
+		{"static key", []proxy.ConfiguredHeader{staticKey}, false, true, false},
+		{"static key with sign-in", []proxy.ConfiguredHeader{staticKey}, true, true, false},
+		{"static authorization with sign-in", []proxy.ConfiguredHeader{staticAuthorization}, true, true, false},
+		{"sign-in replaces authorization", []proxy.ConfiguredHeader{callerAuthorization}, true, true, true},
+		{"sign-in replaces authorization beside static key", []proxy.ConfiguredHeader{callerAuthorization, staticKey}, true, true, true},
+		{"sign-in cannot replace api key", []proxy.ConfiguredHeader{callerKey}, true, false, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, derivedMemberHeaderSupported(tt.header, tt.oauth))
+			supported, needsOAuth := remoteMemberAuth(tt.headers, tt.oauth)
+			require.Equal(t, tt.wantSupported, supported)
+			require.Equal(t, tt.wantNeedsOAuth, needsOAuth)
 		})
 	}
 }

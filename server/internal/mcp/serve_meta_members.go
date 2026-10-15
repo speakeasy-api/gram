@@ -251,18 +251,19 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	}
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
-		if userSessionIssuerID != uuid.Nil && member.remoteSessionIssuerID.Valid && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
+		supported, needsOAuth, err := s.derivedMemberAuth(ctx, member)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
+		}
+		if !supported {
+			continue
+		}
+		if needsOAuth && userSessionIssuerID != uuid.Nil && !slices.ContainsFunc(clients, func(client remotesessions.Client) bool {
 			return clientServesAnyMember(client, []metaMember{member})
 		}) {
 			continue
 		}
-		supported, err := s.derivedMemberAuthSupported(ctx, member)
-		if err != nil {
-			return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
-		}
-		if supported {
-			eligible = append(eligible, member)
-		}
+		eligible = append(eligible, member)
 	}
 	return ctx, qualifyMemberSlugsByProject(eligible), nil
 }

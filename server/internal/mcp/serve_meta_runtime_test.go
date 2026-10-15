@@ -626,6 +626,14 @@ func TestServePublic_MetaEndpoint_HostedMember_LegacyMcpDisabledStillServable(t 
 	text, isError = metaToolResultText(t, envelope)
 	require.False(t, isError)
 	require.Contains(t, text, "alpha_tool")
+	envelope = callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
+		"name":      member.slug + "--alpha_tool",
+		"arguments": map[string]any{},
+	})
+	text, isError = metaToolResultText(t, envelope)
+	require.True(t, isError)
+	// The fixture tool has no upstream, so this error proves dispatch ran.
+	require.Contains(t, text, "no server URL")
 }
 
 // Snapshot RBAC: a private-visibility member is invisible without

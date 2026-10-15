@@ -15,30 +15,32 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// derivedMemberAuthSupported admits only authentication the derived gateway
-// can supply. It checks capability, not whether a person has connected yet:
-// an issuer-backed OAuth member must remain visible so they can connect it.
-func (s *Service) derivedMemberAuthSupported(ctx context.Context, member metaMember) (bool, error) {
+// derivedMemberAuth reports whether a derived gateway can authenticate the
+// member, and whether that takes the upstream OAuth token a person gets by
+// connecting it through the gateway. It checks capability, not whether a
+// person has connected yet: an issuer-backed OAuth member stays supported so
+// they can connect it.
+func (s *Service) derivedMemberAuth(ctx context.Context, member metaMember) (supported bool, needsOAuth bool, err error) {
+	oauth := member.remoteSessionIssuerID.Valid
 	if member.backend != metaMemberBackendHosted {
 		if !member.remoteServerID.Valid {
-			return true, nil
+			return true, oauth, nil
 		}
-		headers, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, member.remoteServerID.UUID, false)
+		rows, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, member.remoteServerID.UUID, false)
 		if err != nil {
-			return false, fmt.Errorf("load member headers: %w", err)
+			return false, false, fmt.Errorf("load member headers: %w", err)
 		}
-		for _, header := range headers {
-			configured := proxy.ConfiguredHeader{
-				Name:                   header.Name,
-				StaticValue:            header.Value.String,
-				ValueFromRequestHeader: header.ValueFromRequestHeader.String,
-				IsRequired:             header.IsRequired,
-			}
-			if !derivedMemberHeaderSupported(configured, member.remoteSessionIssuerID.Valid) {
-				return false, nil
-			}
+		headers := make([]proxy.ConfiguredHeader, 0, len(rows))
+		for _, row := range rows {
+			headers = append(headers, proxy.ConfiguredHeader{
+				Name:                   row.Name,
+				StaticValue:            row.Value.String,
+				ValueFromRequestHeader: row.ValueFromRequestHeader.String,
+				IsRequired:             row.IsRequired,
+			})
 		}
-		return true, nil
+		supported, needsOAuth := remoteMemberAuth(headers, oauth)
+		return supported, needsOAuth, nil
 	}
 
 	toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
@@ -47,13 +49,18 @@ func (s *Service) derivedMemberAuthSupported(ctx context.Context, member metaMem
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return false, nil
+		return false, false, nil
 	case err != nil:
-		return false, fmt.Errorf("load member auth toolset: %w", err)
+		return false, false, fmt.Errorf("load member auth toolset: %w", err)
 	}
-	// Same rule as loadMemberToolset.
+	// Same rules as loadMemberToolset. Derived gateways always have a
+	// signed-in caller.
 	if member.serverID == toolset.ID && !toolset.McpEnabled {
-		return false, nil
+		return false, false, nil
+	}
+	allowed, err := s.memberToolsetConnectAllowed(ctx, true, &toolset)
+	if err != nil || !allowed {
+		return false, false, err
 	}
 
 	environment := toolset.DefaultEnvironmentSlug.String
@@ -66,7 +73,7 @@ func (s *Service) derivedMemberAuthSupported(ctx context.Context, member metaMem
 		case errors.Is(err, pgx.ErrNoRows):
 			// Dangling environment: keep the toolset default.
 		case err != nil:
-			return false, fmt.Errorf("load member auth environment: %w", err)
+			return false, false, fmt.Errorf("load member auth environment: %w", err)
 		default:
 			environment = row.Slug
 		}
@@ -79,29 +86,45 @@ func (s *Service) derivedMemberAuthSupported(ctx context.Context, member metaMem
 	inputs.toolset = toolset.Slug
 	inputs.environment = environment
 	inputs.authenticated = true
-	if member.remoteSessionIssuerID.Valid {
-		// Stands in for the token a person gets by connecting the member.
-		inputs.oauthTokenInputs = []oauthTokenInputs{{ //nolint:gosec // capability probe marker, not a credential
-			remoteSessionIssuerID: member.remoteSessionIssuerID,
-			securityKeys:          nil,
-			Token:                 "gateway-oauth-capability",
-		}}
+	satisfied, err := s.checkToolsetSecurity(ctx, &toolset, toolset.McpIsPublic, &inputs)
+	if err != nil || satisfied || !oauth {
+		return satisfied, false, err
 	}
-	return s.checkToolsetSecurity(ctx, &toolset, toolset.McpIsPublic, &inputs)
+	// Stands in for the token a person gets by connecting the member.
+	inputs.oauthTokenInputs = []oauthTokenInputs{{ //nolint:gosec // capability probe marker, not a credential
+		remoteSessionIssuerID: member.remoteSessionIssuerID,
+		securityKeys:          nil,
+		Token:                 "gateway-oauth-capability",
+	}}
+	satisfied, err = s.checkToolsetSecurity(ctx, &toolset, toolset.McpIsPublic, &inputs)
+	return satisfied, satisfied, err
 }
 
-func derivedMemberHeaderSupported(header proxy.ConfiguredHeader, oauth bool) bool {
-	if !header.IsRequired {
-		return true
+// remoteMemberAuth applies derivedMemberAuth to a remote member's configured
+// headers. A gateway's synthesized request carries no caller headers, so a
+// required header must resolve on its own, unless it is Authorization on an
+// OAuth member, whose upstream token replaces it. A member with an upstream
+// sign-in and no static credential is assumed to need that sign-in.
+func remoteMemberAuth(headers []proxy.ConfiguredHeader, oauth bool) (supported bool, needsOAuth bool) {
+	static := false
+	for _, header := range headers {
+		switch {
+		case !header.IsRequired:
+		case headerResolvesWithoutCaller(header):
+			static = true
+		case oauth && strings.EqualFold(header.Name, "Authorization"):
+			needsOAuth = true
+		default:
+			return false, false
+		}
 	}
-	// The proxy's upstream OAuth token overrides configured Authorization.
-	if oauth && strings.EqualFold(header.Name, "Authorization") {
-		return true
-	}
+	return true, oauth && (needsOAuth || !static)
+}
+
+func headerResolvesWithoutCaller(header proxy.ConfiguredHeader) bool {
 	if err := proxy.CheckRemoteHeader(header); err != nil {
 		return false
 	}
-	// A gateway's synthesized request carries no caller headers.
 	var req http.Request
 	req.Header = make(http.Header)
 	value, err := header.Resolve(&req)
