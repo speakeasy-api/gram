@@ -9,7 +9,7 @@ import (
 )
 
 type RegisterCatalogMCPToolInput struct {
-	ProjectSlug     string                     `json:"project_slug,omitempty" jsonschema:"optional project slug that will own the reviewed MCP; defaults to the organization's default project"`
+	ProjectSlug     string                     `json:"project_slug,omitempty" jsonschema:"optional project slug that will own the reviewed MCP; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	ProviderKey     string                     `json:"provider_key" jsonschema:"server-issued catalogue source identity returned by search_mcp_catalog"`
 	CatalogRef      string                     `json:"catalog_ref" jsonschema:"exact catalogue reference returned by search_mcp_catalog"`
 	NonSecretConfig CatalogConfigurationValues `json:"non_secret_config,omitempty" jsonschema:"only declared non-secret configuration values keyed by inspect_mcp_catalog_candidate configuration field key; do not include API keys, tokens, passwords, OAuth codes, client secrets, or secret headers"`
@@ -30,7 +30,7 @@ type RegisterCatalogMCPToolOutput struct {
 }
 
 type RegisterRemoteMCPToolInput struct {
-	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that will own the user-supplied MCP; defaults to the organization's default project"`
+	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that will own the user-supplied MCP; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	RemoteURL      string `json:"remote_url" jsonschema:"HTTPS Streamable HTTP MCP URL; safe endpoint query parameters are supported, but fragments, userinfo, headers, credentials, and credential-like query parameters are not accepted"`
 	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional project-local display name for the MCP; maximum 256 bytes"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project and canonical remote URL"`

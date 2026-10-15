@@ -10,7 +10,7 @@ import (
 )
 
 type AttachPlatformMCPIdentityProviderToolInput struct {
-	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that owns the MCP registration; defaults to the organization's default project"`
+	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that owns the MCP registration; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
 	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms that this MCP server may be connected to the sign-in provider it advertises; never include credentials, client secrets, OAuth codes, or tokens"`
 }

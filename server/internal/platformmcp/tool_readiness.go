@@ -8,7 +8,7 @@ import (
 )
 
 type GetMCPReadinessToolInput struct {
-	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that owns the MCP registration; defaults to the organization's default project"`
+	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that owns the MCP registration; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
 	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this registration; unavailable to managed project assistants"`
 }
