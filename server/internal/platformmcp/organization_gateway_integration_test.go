@@ -13,6 +13,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -88,4 +90,23 @@ func TestOrganizationGatewayUnavailableWithSeveralOrganizationIssuers(t *testing
 	require.False(t, output.Available)
 	require.Empty(t, output.URL)
 	require.Equal(t, "multiple_organization_issuers", output.UnavailableReason)
+}
+
+func TestOrganizationGatewayUnavailableWhenTurnedOff(t *testing.T) {
+	t.Parallel()
+	ctx, conn, service, principal, _ := newOrganizationGatewayFixture(t)
+	createOrganizationIssuerForGateway(t, ctx, conn, principal.OrganizationID)
+	_, err := featuresrepo.New(conn).EnableFeature(ctx, featuresrepo.EnableFeatureParams{
+		OrganizationID: principal.OrganizationID,
+		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
+	})
+	require.NoError(t, err)
+
+	output, err := service.Get(ctx, principal)
+
+	require.NoError(t, err)
+	require.False(t, output.Available)
+	require.Empty(t, output.URL)
+	require.Equal(t, "turned_off", output.UnavailableReason)
+	require.Contains(t, output.NextAction, "turn it on")
 }

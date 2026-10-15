@@ -24,7 +24,8 @@ type Service interface {
 	// organization's own user session issuer. It is served while the organization
 	// owns exactly one organization-level user session issuer, on the platform
 	// host, so not for an organization whose custom domain restricts access to an
-	// IP allowlist, and not for a disabled organization. Requires org:read.
+	// IP allowlist, not while an organization admin has turned it off, and not for
+	// a disabled organization. Requires org:read.
 	GetGateway(context.Context, *GetGatewayPayload) (res *OrganizationGateway, err error)
 	// Send a WorkOS invitation for the active organization.
 	SendInvite(context.Context, *SendInvitePayload) (res *OrganizationInvitation, err error)

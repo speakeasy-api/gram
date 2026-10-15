@@ -48006,7 +48006,7 @@ paths:
                 name: Organization
     /rpc/organizations.getGateway:
         get:
-            description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, and not for a disabled organization. Requires org:read.'
+            description: 'Get the active organization''s gateway: one MCP URL that gives each member every MCP server in the organization they can reach, signed in through the organization''s own user session issuer. It is served while the organization owns exactly one organization-level user session issuer, on the platform host, so not for an organization whose custom domain restricts access to an IP allowlist, not while an organization admin has turned it off, and not for a disabled organization. Requires org:read.'
             operationId: getOrganizationGateway
             parameters:
                 - allowEmptyValue: true
@@ -105703,6 +105703,7 @@ components:
                         - multiple_organization_issuers
                         - custom_domain_only
                         - organization_disabled
+                        - turned_off
                 url:
                     type: string
                     description: The gateway's MCP URL. Set only when available.
@@ -107134,6 +107135,9 @@ components:
                 network_ingress_enabled:
                     type: boolean
                     description: Whether the organization has the staff-managed private network ingress entitlement
+                organization_gateway_disabled:
+                    type: boolean
+                    description: Whether an organization admin turned the organization gateway off, so its routes answer 404
                 platform_mcp_enabled:
                     type: boolean
                     description: Whether the organization can use the Speakeasy Platform MCP capability
@@ -107188,6 +107192,7 @@ components:
                 - session_portability_enabled
                 - network_ingress_enabled
                 - signals_intelligence_enabled
+                - organization_gateway_disabled
                 - device_agent
         Project:
             type: object
@@ -113062,6 +113067,7 @@ components:
                         - session_portability
                         - network_ingress
                         - signals_intelligence
+                        - organization_gateway_disabled
                     maxLength: 60
                 organization_id:
                     type: string
@@ -113176,6 +113182,7 @@ components:
                         - session_portability
                         - network_ingress
                         - signals_intelligence
+                        - organization_gateway_disabled
                     maxLength: 60
                 organization_id:
                     type: string
