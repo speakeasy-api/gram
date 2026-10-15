@@ -578,7 +578,7 @@ export function ConsentToolsApp({
           {
             id: "none" as ConsentGroup,
             label: "No annotation",
-            shortLabel: "Other",
+            shortLabel: "Unannotated",
             count: groupTools(tools, "none").length,
           },
         ]
@@ -927,6 +927,15 @@ export function ConsentToolsApp({
               : "New tools require approval"}
           </span>
         </div>
+      )}
+      {mode === "specific" && scope.size === 0 && (
+        <p
+          role="status"
+          className="text-muted-foreground flex items-center gap-1.5 text-xs"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          No tools selected — this client won't be able to call any tools.
+        </p>
       )}
       <ApprovalFormFields
         formId={formId}
