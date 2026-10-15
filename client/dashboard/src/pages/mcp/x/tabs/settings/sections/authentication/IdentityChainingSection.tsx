@@ -8,10 +8,7 @@ import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer
 
 import { useMcpServerAuthTarget } from "./authTarget";
 import { IdentityChainingField } from "./IdentityChainingField";
-import {
-  identityChainingProviders,
-  trustsExternalIdp,
-} from "./identityChainingGate";
+import { identityChainingProviders } from "./identityChainingGate";
 import { useSpeakeasyIssuerStatus } from "./useSpeakeasyIssuerStatus";
 
 export const IDENTITY_CHAINING_SECTION_ID = "identity-chaining";
@@ -57,17 +54,14 @@ export function IdentityChainingSection({
     return null;
   }
 
-  const viaSpeakeasy =
-    providers.speakeasy && !trustsExternalIdp(userSessionIssuer);
-
   return (
     <SettingsSection id={IDENTITY_CHAINING_SECTION_ID}>
       <SettingsSection.Header>
         <SettingsSection.Title>Identity chaining</SettingsSection.Title>
         <SettingsSection.Description>
-          {viaSpeakeasy
-            ? "People use this server with their Speakeasy sign-in, without connecting the service separately."
-            : "People use this server with their identity provider sign-in, without connecting the service separately."}
+          Gets people into the service behind this server with a sign-in they
+          already have, from your identity provider or Speakeasy, so they
+          don&apos;t connect it separately.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>

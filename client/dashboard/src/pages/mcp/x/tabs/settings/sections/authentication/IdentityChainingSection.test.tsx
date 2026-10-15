@@ -91,7 +91,9 @@ describe("IdentityChainingSection", () => {
     expect(
       screen.getByRole("heading", { name: "Identity chaining" }),
     ).toBeTruthy();
-    expect(screen.getByText(/with their Speakeasy sign-in/)).toBeTruthy();
+    expect(
+      screen.getByText(/from your identity provider or Speakeasy/),
+    ).toBeTruthy();
     expect(
       JSON.parse(screen.getByTestId("identity-chaining").textContent!),
     ).toEqual({
@@ -100,19 +102,6 @@ describe("IdentityChainingSection", () => {
       speakeasyIssuerUrl: "https://speakeasy.example.com/idp",
       resource: "https://mcp.vendor.example.com/mcp",
     });
-  });
-
-  it("speaks of the identity provider when the sign-in trusts one", () => {
-    state.issuer = {
-      id: "issuer",
-      projectId: "",
-      trustedRemoteSessionIssuerId: "okta",
-      trustedRemoteSessionClientId: "okta-client",
-    };
-    render(<IdentityChainingSection mcpServer={server} />);
-    expect(
-      screen.getByText(/with their identity provider sign-in/),
-    ).toBeTruthy();
   });
 
   it.each([
