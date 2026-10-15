@@ -385,6 +385,10 @@ func (s *AccessReadService) ListMembers(ctx context.Context, principal Principal
 	return output, nil
 }
 
+func (s *AccessReadService) GetMyMCPAccess(ctx context.Context, principal Principal) (GetMemberMCPAccessOutput, error) {
+	return s.getMemberMCPAccess(ctx, principal, principal.UserID)
+}
+
 func (s *AccessReadService) GetMemberMCPAccess(ctx context.Context, principal Principal, input GetMemberMCPAccessInput) (GetMemberMCPAccessOutput, error) {
 	if !s.valid() {
 		return GetMemberMCPAccessOutput{}, ErrUnavailable
@@ -392,6 +396,13 @@ func (s *AccessReadService) GetMemberMCPAccess(ctx context.Context, principal Pr
 	memberID, err := s.references.Decode(input.MemberReference, principal, subjectKindAccessMember, s.now())
 	if err != nil {
 		return GetMemberMCPAccessOutput{}, ErrAccessReferenceNotFound
+	}
+	return s.getMemberMCPAccess(ctx, principal, memberID)
+}
+
+func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Principal, memberID string) (GetMemberMCPAccessOutput, error) {
+	if !s.valid() {
+		return GetMemberMCPAccessOutput{}, ErrUnavailable
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return GetMemberMCPAccessOutput{}, err
