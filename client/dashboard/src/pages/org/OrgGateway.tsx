@@ -193,7 +193,11 @@ function GatewayNotServed({
           .
         </Text>
       );
-    default:
+    // The switch itself already reads off, and a disabled organization
+    // never reaches its settings.
+    case "turned_off":
+    case "organization_disabled":
+    case undefined:
       return null;
   }
 }
