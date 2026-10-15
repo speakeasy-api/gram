@@ -21,6 +21,8 @@ const (
 	cancellationPoll = 200 * time.Millisecond
 	// ownershipTimeout bounds Redis checks and best-effort resource release.
 	ownershipTimeout = time.Second
+	// ownershipFailureLimit consecutive unreadable polls fail an execution closed.
+	ownershipFailureLimit = 5
 )
 
 // Scope is built by Speakeasy from authenticated request state, never by the runner.
@@ -146,29 +148,45 @@ func (c *Coordinator) Execute(ctx context.Context, scope Scope, code string, fac
 	monitorDone := make(chan struct{})
 	go func() {
 		defer close(monitorDone)
-		ticker := time.NewTicker(cancellationPoll)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				check, stop := context.WithTimeout(ctx, ownershipTimeout)
-				var current string
-				err := c.owners.Get(check, key, &current)
-				stop()
-				if err != nil || current != owner {
-					cancel()
-					return
-				}
-			}
-		}
+		c.watchOwnership(ctx, key, owner, cancellationPoll)
+		cancel()
 	}()
 	defer func() { cancel(); <-monitorDone }()
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("execution cancelled before submission")
 	}
 	return lease.Client().Run(ctx, id, code, factory), nil
+}
+
+// watchOwnership returns once the execution is cancelled, another owner
+// holds the key, or Redis stays unreadable for ownershipFailureLimit polls.
+// A single failed read is not a cancellation; it would stop programs mid-call.
+func (c *Coordinator) watchOwnership(ctx context.Context, key, owner string, poll time.Duration) {
+	ticker := time.NewTicker(poll)
+	defer ticker.Stop()
+	failures := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			check, stop := context.WithTimeout(ctx, ownershipTimeout)
+			var current string
+			err := c.owners.Get(check, key, &current)
+			stop()
+			switch {
+			case err == nil && current == owner:
+				failures = 0
+			case err == nil, errors.Is(err, redisCache.ErrCacheMiss):
+				return
+			default:
+				failures++
+				if failures >= ownershipFailureLimit {
+					return
+				}
+			}
+		}
+	}
 }
 
 // Cancel marks the current owner atomically; a stale cancel cannot stop its replacement.
