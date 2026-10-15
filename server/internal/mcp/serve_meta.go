@@ -214,9 +214,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		return oops.E(oops.CodeInvalid, nil, "unsupported gateway discovery mode")
 	}
 	if gate.discoveryMode == metamcp.DiscoveryModeCode {
-		if !s.codeExecutor.Enabled() {
-			return oops.E(oops.CodeUnavailable, nil, "code mode runtime is unavailable")
-		}
 		endpoint := *mcpEndpoint
 		refresh := metaCodeGateRefresher(func(callbackCtx context.Context, current *metamcprepo.MetaMcpServer) (context.Context, *metaGateContext, error) {
 			return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, logger, &endpoint, current, metaMembership{agentID: uuid.Nil, organization: false}, nil, admission)
@@ -709,6 +706,12 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		}
 	}
 	if membership.derived() {
+		gate.discoveryMode = metamcp.DiscoveryModeProgressive
+	}
+	// Turning the runtime off is the Code Mode kill switch, so gateways and
+	// connections that chose it keep working in progressive mode.
+	if gate.discoveryMode == metamcp.DiscoveryModeCode && !s.codeExecutor.Enabled() {
+		logger.WarnContext(ctx, "code mode runtime is unavailable, serving gateway in progressive mode")
 		gate.discoveryMode = metamcp.DiscoveryModeProgressive
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
