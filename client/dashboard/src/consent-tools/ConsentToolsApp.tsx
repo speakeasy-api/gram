@@ -112,15 +112,25 @@ const SHORT_GROUP_LABELS: Record<ToolAnnotation, string> = {
  * server-side inventory snapshot this session accumulates — approval later
  * binds to it, so the caller must submit it only after this resolves.
  */
-async function fetchConsentInventory(
+export async function fetchConsentInventory(
   toolsUrl: string,
   state: string,
   csrfToken: string,
   attempt: string,
+  signal?: AbortSignal,
 ): Promise<ConsentInventory> {
   const transport = new StreamableHTTPClientTransport(
     new URL(toolsUrl, window.location.origin),
     {
+      // The SDK replaces requestInit.signal with its own controller. Combine
+      // the deadline at the fetch boundary so discovery and DELETE both stop.
+      fetch: (input, init) =>
+        fetch(input, {
+          ...init,
+          signal: signal
+            ? AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])])
+            : init?.signal,
+        }),
       requestInit: {
         credentials: "omit",
         headers: {
