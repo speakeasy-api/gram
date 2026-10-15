@@ -259,8 +259,8 @@ importers:
         specifier: ^1.2.11
         version: 1.2.11(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       '@polar-sh/checkout':
-        specifier: ^0.4.1
-        version: 0.4.1(@stripe/react-stripe-js@5.6.1(@stripe/stripe-js@8.11.0)(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(@stripe/stripe-js@8.11.0)(react@19.3.0)
+        specifier: ^0.4.3
+        version: 0.4.3(@stripe/react-stripe-js@5.6.1(@stripe/stripe-js@8.11.0)(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(@stripe/stripe-js@8.11.0)(react@19.3.0)
       '@radix-ui/react-accordion':
         specifier: ^1.2.20
         version: 1.2.20(@types/react@19.3.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
@@ -2335,8 +2335,8 @@ packages:
     resolution: {integrity: sha512-pOr5+q1fLYKwFN3LAJuGZEnfXDcQ73zqgDHMtGy+K+uIoUqyY+6MeDCWFwfu+4EFuq76I5EPFofoNAI+Bmmq4A==}
     engines: {node: '>=22.13'}
 
-  '@polar-sh/checkout@0.4.1':
-    resolution: {integrity: sha512-/pxHOea10k9BZPz1N7xl8fF3Q+/G6l4l6tuAolfAzIB3J5+xKhcA4/+BlnIg4dHRYtF2KyDUNvhBbufgEQ8AyA==}
+  '@polar-sh/checkout@0.4.3':
+    resolution: {integrity: sha512-MfvRDMRuXCyOos1DN52ue83LM/9GRZbYLH6LQWpy8ldhIhgXMv4AUu4evEWEf6GbF0yQSK/Gpe9JxXbODkRY1Q==}
     peerDependencies:
       '@stripe/react-stripe-js': ^3.6.0 || ^4.0.2 || ^5.6.1
       '@stripe/stripe-js': ^7.1.0 || ^8.11.0
@@ -9294,7 +9294,7 @@ snapshots:
 
   '@pnpm/deps.graph-sequencer@1100.0.1': {}
 
-  '@polar-sh/checkout@0.4.1(@stripe/react-stripe-js@5.6.1(@stripe/stripe-js@8.11.0)(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(@stripe/stripe-js@8.11.0)(react@19.3.0)':
+  '@polar-sh/checkout@0.4.3(@stripe/react-stripe-js@5.6.1(@stripe/stripe-js@8.11.0)(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(@stripe/stripe-js@8.11.0)(react@19.3.0)':
     dependencies:
       '@stripe/react-stripe-js': 5.6.1(@stripe/stripe-js@8.11.0)(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       '@stripe/stripe-js': 8.11.0
