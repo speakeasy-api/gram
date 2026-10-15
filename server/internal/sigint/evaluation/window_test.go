@@ -92,7 +92,7 @@ func TestWindowGroupsSensorsAndKeepsReadingIdentityOnRedelivery(t *testing.T) {
 		require.Equal(t, pub.readings[i].GetId(), pub.readings[i+4].GetId())
 		require.NotEqual(t, pub.readings[i].GetEvaluationAttemptId(), pub.readings[i+4].GetEvaluationAttemptId())
 	}
-	requireGolden(t, "requests/grouped-redelivery", requests.snapshot(t))
+	testenv.RequireYAMLGolden(t, "testdata/requests/grouped-redelivery.golden.yaml", requests.snapshot(t))
 }
 
 func TestWindowOlderInvalidContentDoesNotPreventSmallerReading(t *testing.T) {
@@ -152,7 +152,7 @@ func TestWindowEmptyHistoryAndUnusedHistory(t *testing.T) {
 	require.NoError(t, err)
 	data, err := json.Marshal(entry)
 	require.NoError(t, err)
-	requireGolden(t, "state/empty-history", data)
+	testenv.RequireYAMLGolden(t, "testdata/state/empty-history.golden.yaml", data)
 }
 
 func TestWindowDefinitionHashIncludesStrategyAndSize(t *testing.T) {

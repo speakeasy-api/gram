@@ -55,7 +55,7 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	evaluator, err := NewEvaluator(testenv.NewLogger(t), testenv.NewMeterProvider(t), &deps, &deps, &pub, c)
 	require.NoError(t, err)
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
-	requireGolden(t, "requests/independent-event", requests.snapshot(t))
+	testenv.RequireYAMLGolden(t, "testdata/requests/independent-event.golden.yaml", requests.snapshot(t))
 	require.NoError(t, evaluator.Evaluate(t.Context(), in))
 	require.Len(t, pub.readings, 2)
 

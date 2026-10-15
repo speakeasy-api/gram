@@ -9,5 +9,5 @@
       type: noul
       instructions: Evaluate the message
       criteria:
-        "true": first
         "false": ""
+        "true": first

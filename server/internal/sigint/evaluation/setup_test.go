@@ -1,19 +1,15 @@
 package evaluation
 
 import (
-	"bytes"
 	"crypto/x509"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/internal/classifier/jev"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -88,63 +84,4 @@ func newRecordingClassifier(t *testing.T) (*jev.Classifier, *modelRequests) {
 	c, err := jev.New(policy, conv.NewSecret([]byte("test-key")), jev.WithEndpoint(server.URL))
 	require.NoError(t, err)
 	return c, requests
-}
-
-func requireGolden(t *testing.T, name string, actual []byte) {
-	t.Helper()
-	fixture, err := os.ReadFile(filepath.Join("testdata", name+".golden.yaml"))
-	require.NoError(t, err)
-	// Retain scalar text in the syntax tree before any YAML-to-float conversion.
-	fixtureDecoder := yaml.NewDecoder(bytes.NewReader(fixture))
-	var document yaml.Node
-	require.NoError(t, fixtureDecoder.Decode(&document))
-	require.ErrorIs(t, fixtureDecoder.Decode(new(yaml.Node)), io.EOF)
-	expected := goldenYAMLValue(t, &document)
-	decoder := json.NewDecoder(bytes.NewReader(actual))
-	decoder.UseNumber()
-	var value any
-	require.NoError(t, decoder.Decode(&value))
-	require.ErrorIs(t, decoder.Decode(new(any)), io.EOF)
-	require.Equal(t, expected, value, "golden fixture: %s", name)
-}
-
-// goldenYAMLValue accepts JSON-shaped YAML without normalizing numeric literals.
-// Mapping keys must be strings, and numeric scalars must use JSON number syntax.
-func goldenYAMLValue(t *testing.T, node *yaml.Node) any {
-	t.Helper()
-	switch node.Kind {
-	case yaml.DocumentNode:
-		require.Len(t, node.Content, 1)
-		return goldenYAMLValue(t, node.Content[0])
-	case yaml.MappingNode:
-		value := make(map[string]any, len(node.Content)/2)
-		for i := 0; i < len(node.Content); i += 2 {
-			key := node.Content[i]
-			require.Equal(t, "!!str", key.Tag, "golden keys must be strings at line %d", key.Line)
-			require.NotContains(t, value, key.Value, "duplicate golden key at line %d", key.Line)
-			value[key.Value] = goldenYAMLValue(t, node.Content[i+1])
-		}
-		return value
-	case yaml.SequenceNode:
-		value := make([]any, len(node.Content))
-		for i, child := range node.Content {
-			value[i] = goldenYAMLValue(t, child)
-		}
-		return value
-	case yaml.ScalarNode:
-		if node.Tag == "!!int" || node.Tag == "!!float" {
-			require.NotEmpty(t, node.Value)
-			number := json.Number(node.Value)
-			_, err := json.Marshal(number)
-			require.NoError(t, err, "golden numbers must use JSON syntax at line %d", node.Line)
-			return number
-		}
-		require.Contains(t, []string{"!!str", "!!bool", "!!null"}, node.Tag)
-		var value any
-		require.NoError(t, node.Decode(&value))
-		return value
-	default:
-		require.FailNow(t, "goldens require JSON-shaped YAML without aliases", "line %d", node.Line)
-		return nil
-	}
 }
