@@ -1,7 +1,10 @@
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { describe, expect, it } from "vitest";
-import { identityChainingProviders } from "./identityChainingGate";
+import {
+  identityChainingProviders,
+  trustsExternalIdp,
+} from "./identityChainingGate";
 
 const orgIssuer = { id: "usi", projectId: "" } as UserSessionIssuer;
 const trusting = {
@@ -94,5 +97,30 @@ describe("identityChainingProviders", () => {
     ],
   ])("hides with %s", (_name, issuer, options) => {
     expect(identityChainingProviders(issuer, options)).toBeUndefined();
+  });
+
+  it.each(["keyless", "disabled", "signing_paused"] as const)(
+    "keeps a %s Speakeasy issuer's bindings manageable",
+    (state) => {
+      expect(
+        identityChainingProviders(orgIssuer, {
+          ...rollouts,
+          speakeasyIssuer: speakeasy(state),
+        }),
+      ).toEqual({ external: false, speakeasy: true });
+    },
+  );
+});
+
+describe("trustsExternalIdp", () => {
+  it("counts a trusted issuer or client as external trust", () => {
+    expect(trustsExternalIdp(orgIssuer)).toBe(false);
+    expect(trustsExternalIdp(trusting)).toBe(true);
+    expect(
+      trustsExternalIdp({
+        ...orgIssuer,
+        trustedRemoteSessionIssuerId: "okta",
+      } as UserSessionIssuer),
+    ).toBe(true);
   });
 });

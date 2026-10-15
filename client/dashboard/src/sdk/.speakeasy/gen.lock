@@ -419,6 +419,7 @@ trackedFiles:
   src/funcs/organizationRemoteSessionClientsRemoveFromMcpServer.ts: {}
   src/funcs/organizationRemoteSessionClientsRotate.ts: {}
   src/funcs/organizationRemoteSessionClientsUpdate.ts: {}
+  src/funcs/organizationRemoteSessionIssuersAddSpeakeasyEMAProvider.ts: {}
   src/funcs/organizationRemoteSessionIssuersCreate.ts: {}
   src/funcs/organizationRemoteSessionIssuersDelete.ts: {}
   src/funcs/organizationRemoteSessionIssuersFetchMetadata.ts: {}
@@ -858,6 +859,7 @@ trackedFiles:
   src/models/components/addpackageform.ts: {}
   src/models/components/addpluginserverform.ts: {}
   src/models/components/addskillversionrequestbody.ts: {}
+  src/models/components/addspeakeasyemaproviderrequestbody.ts: {}
   src/models/components/addtoolmetadatabatchresult.ts: {}
   src/models/components/adminopenrouterkey.ts: {}
   src/models/components/admitworkloadsubjectform.ts: {}
@@ -2055,6 +2057,7 @@ trackedFiles:
   src/models/operations/addexternaloauthserver.ts: {}
   src/models/operations/addmcpservertoolmetadatabatch.ts: {}
   src/models/operations/addmetamcpmember.ts: {}
+  src/models/operations/addorganizationremotesessionissuerspeakeasyemaprovider.ts: {}
   src/models/operations/addpluginserver.ts: {}
   src/models/operations/addskillversion.ts: {}
   src/models/operations/admitworkloadsubject.ts: {}
@@ -2846,6 +2849,7 @@ trackedFiles:
   src/react-query/addExternalOAuthServer.ts: {}
   src/react-query/addMcpServerToolMetadataBatch.ts: {}
   src/react-query/addMetaMcpMember.ts: {}
+  src/react-query/addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider.ts: {}
   src/react-query/addPluginServer.ts: {}
   src/react-query/addSkillVersion.ts: {}
   src/react-query/adminOpenRouterKeyUsage.core.ts: {}
@@ -4177,6 +4181,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider:
+    speakeasy-default-add-organization-remote-session-issuer-speakeasy-EMA-provider:
+      requestBody:
+        application/json: {"dry_run": false, "remote_session_issuer_id": "1045b56c-5736-4436-b3f6-6449e8405579", "user_session_issuer_id": "9d1bd404-e63f-4e92-9340-4ff33dc579ee"}
+      responses:
+        "200":
+          application/json: {"is_default": true, "providers": [{"kind": "speakeasy"}], "vendor_issuer": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   addPluginServer:
     speakeasy-default-add-plugin-server:
       requestBody:

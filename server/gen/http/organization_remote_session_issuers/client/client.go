@@ -62,6 +62,10 @@ type Client struct {
 	// setEMAProviders endpoint.
 	SetEMAProvidersDoer goahttp.Doer
 
+	// AddSpeakeasyEMAProvider Doer is the HTTP client used to make requests to the
+	// addSpeakeasyEMAProvider endpoint.
+	AddSpeakeasyEMAProviderDoer goahttp.Doer
+
 	// FetchIssuerMetadata Doer is the HTTP client used to make requests to the
 	// fetchIssuerMetadata endpoint.
 	FetchIssuerMetadataDoer goahttp.Doer
@@ -102,6 +106,7 @@ func NewClient(
 		GetIssuerMigratePreflightDoer:   doer,
 		MigrateIssuerDoer:               doer,
 		SetEMAProvidersDoer:             doer,
+		AddSpeakeasyEMAProviderDoer:     doer,
 		FetchIssuerMetadataDoer:         doer,
 		RefreshIssuerMetadataDoer:       doer,
 		RestoreResponseBody:             restoreBody,
@@ -373,6 +378,30 @@ func (c *Client) SetEMAProviders() goa.Endpoint {
 		resp, err := c.SetEMAProvidersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "setEMAProviders", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AddSpeakeasyEMAProvider returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service addSpeakeasyEMAProvider server.
+func (c *Client) AddSpeakeasyEMAProvider() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAddSpeakeasyEMAProviderRequest(c.encoder)
+		decodeResponse = DecodeAddSpeakeasyEMAProviderResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAddSpeakeasyEMAProviderRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AddSpeakeasyEMAProviderDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
 		}
 		return decodeResponse(resp)
 	}

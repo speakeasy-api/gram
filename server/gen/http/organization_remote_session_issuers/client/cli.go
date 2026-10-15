@@ -617,6 +617,45 @@ func BuildSetEMAProvidersPayload(organizationRemoteSessionIssuersSetEMAProviders
 	return v, nil
 }
 
+// BuildAddSpeakeasyEMAProviderPayload builds the payload for the
+// organizationRemoteSessionIssuers addSpeakeasyEMAProvider endpoint from CLI
+// flags.
+func BuildAddSpeakeasyEMAProviderPayload(organizationRemoteSessionIssuersAddSpeakeasyEMAProviderBody string, organizationRemoteSessionIssuersAddSpeakeasyEMAProviderSessionToken string) (*organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload, error) {
+	var err error
+	var body AddSpeakeasyEMAProviderRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationRemoteSessionIssuersAddSpeakeasyEMAProviderBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dry_run\": false,\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", body.RemoteSessionIssuerID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionIssuersAddSpeakeasyEMAProviderSessionToken != "" {
+			sessionToken = &organizationRemoteSessionIssuersAddSpeakeasyEMAProviderSessionToken
+		}
+	}
+	v := &organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload{
+		RemoteSessionIssuerID: body.RemoteSessionIssuerID,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+		DryRun:                body.DryRun,
+	}
+	{
+		var zero bool
+		if v.DryRun == zero {
+			v.DryRun = false
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildFetchIssuerMetadataPayload builds the payload for the
 // organizationRemoteSessionIssuers fetchIssuerMetadata endpoint from CLI flags.
 func BuildFetchIssuerMetadataPayload(organizationRemoteSessionIssuersFetchIssuerMetadataBody string, organizationRemoteSessionIssuersFetchIssuerMetadataSessionToken string, organizationRemoteSessionIssuersFetchIssuerMetadataApikeyToken string) (*organizationremotesessionissuers.FetchIssuerMetadataPayload, error) {

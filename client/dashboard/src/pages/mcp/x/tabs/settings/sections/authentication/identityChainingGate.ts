@@ -4,11 +4,13 @@ import type { UserSessionIssuer } from "@gram/client/models/components/usersessi
 /** Which sources can vouch for a person's sign-in on an identity chaining issuer. */
 export type ChainingProviders = { external: boolean; speakeasy: boolean };
 
-// Paused and keyless issuers were turned on; bindings stay manageable through the incident.
+// Set-up issuers that are paused, keyless or turned off keep bindings manageable;
+// the order shows why Speakeasy can't serve.
 const SPEAKEASY_ON: ReadonlySet<InternalSessionIssuer["state"]> = new Set([
   "enabled",
   "signing_paused",
   "keyless",
+  "disabled",
 ]);
 
 export function speakeasyIssuerOn(
@@ -42,4 +44,12 @@ export function identityChainingProviders(
     !!issuer.trustedRemoteSessionClientId;
   const speakeasy = speakeasyRollout && speakeasyIssuerOn(speakeasyIssuer);
   return external || speakeasy ? { external, speakeasy } : undefined;
+}
+
+/** Whether the issuer's sign-in trusts an external identity provider at all. */
+export function trustsExternalIdp(issuer: UserSessionIssuer): boolean {
+  return (
+    !!issuer.trustedRemoteSessionIssuerId ||
+    !!issuer.trustedRemoteSessionClientId
+  );
 }

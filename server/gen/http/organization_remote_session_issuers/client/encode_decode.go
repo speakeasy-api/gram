@@ -2641,6 +2641,242 @@ func DecodeSetEMAProvidersResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildAddSpeakeasyEMAProviderRequest instantiates a HTTP request object with
+// method and path set to call the "organizationRemoteSessionIssuers" service
+// "addSpeakeasyEMAProvider" endpoint
+func (c *Client) BuildAddSpeakeasyEMAProviderRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AddSpeakeasyEMAProviderOrganizationRemoteSessionIssuersPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAddSpeakeasyEMAProviderRequest returns an encoder for requests sent to
+// the organizationRemoteSessionIssuers addSpeakeasyEMAProvider server.
+func EncodeAddSpeakeasyEMAProviderRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", "*organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewAddSpeakeasyEMAProviderRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAddSpeakeasyEMAProviderResponse returns a decoder for responses
+// returned by the organizationRemoteSessionIssuers addSpeakeasyEMAProvider
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeAddSpeakeasyEMAProviderResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeAddSpeakeasyEMAProviderResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AddSpeakeasyEMAProviderResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			err = ValidateAddSpeakeasyEMAProviderResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			res := NewAddSpeakeasyEMAProviderEMAProviderOrderOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body AddSpeakeasyEMAProviderUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			err = ValidateAddSpeakeasyEMAProviderUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			return nil, NewAddSpeakeasyEMAProviderUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body AddSpeakeasyEMAProviderForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			err = ValidateAddSpeakeasyEMAProviderForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			return nil, NewAddSpeakeasyEMAProviderForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body AddSpeakeasyEMAProviderBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			err = ValidateAddSpeakeasyEMAProviderBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			return nil, NewAddSpeakeasyEMAProviderBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body AddSpeakeasyEMAProviderNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			err = ValidateAddSpeakeasyEMAProviderNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			return nil, NewAddSpeakeasyEMAProviderNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body AddSpeakeasyEMAProviderConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			err = ValidateAddSpeakeasyEMAProviderConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			return nil, NewAddSpeakeasyEMAProviderConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body AddSpeakeasyEMAProviderUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			err = ValidateAddSpeakeasyEMAProviderUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			return nil, NewAddSpeakeasyEMAProviderUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body AddSpeakeasyEMAProviderInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			err = ValidateAddSpeakeasyEMAProviderInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			return nil, NewAddSpeakeasyEMAProviderInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body AddSpeakeasyEMAProviderInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+				}
+				err = ValidateAddSpeakeasyEMAProviderInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+				}
+				return nil, NewAddSpeakeasyEMAProviderInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body AddSpeakeasyEMAProviderUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+				}
+				err = ValidateAddSpeakeasyEMAProviderUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+				}
+				return nil, NewAddSpeakeasyEMAProviderUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body AddSpeakeasyEMAProviderGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			err = ValidateAddSpeakeasyEMAProviderGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", err)
+			}
+			return nil, NewAddSpeakeasyEMAProviderGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizationRemoteSessionIssuers", "addSpeakeasyEMAProvider", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildFetchIssuerMetadataRequest instantiates a HTTP request object with
 // method and path set to call the "organizationRemoteSessionIssuers" service
 // "fetchIssuerMetadata" endpoint

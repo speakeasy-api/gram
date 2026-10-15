@@ -94,6 +94,17 @@ type Service interface {
 	// restoring the default only needs org:admin. Not available from support or
 	// impersonated sessions.
 	SetEMAProviders(context.Context, *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error)
+	// Append the organization's Speakeasy issuer to the EMA provider order for the
+	// vendor authorization server this issuer names, for one organization user
+	// session issuer that trusts no external identity provider. Existing entries
+	// are never removed or reordered, and a vendor whose order already names
+	// Speakeasy is left unchanged. A vendor with no saved order is refused while
+	// another endpoint holds a ready identity chaining binding to it through an
+	// external identity provider, since saving any order would replace that
+	// endpoint's default. dry_run runs every check without saving. Requires
+	// org:admin and the ema-providers rollout. Not available from support or
+	// impersonated sessions.
+	AddSpeakeasyEMAProvider(context.Context, *AddSpeakeasyEMAProviderPayload) (res *types.EMAProviderOrder, err error)
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for
 	// organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need
@@ -131,7 +142,21 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [13]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "setEMAProviders", "fetchIssuerMetadata", "refreshIssuerMetadata"}
+var MethodNames = [14]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "setEMAProviders", "addSpeakeasyEMAProvider", "fetchIssuerMetadata", "refreshIssuerMetadata"}
+
+// AddSpeakeasyEMAProviderPayload is the payload type of the
+// organizationRemoteSessionIssuers service addSpeakeasyEMAProvider method.
+type AddSpeakeasyEMAProviderPayload struct {
+	// Any remote_session_issuer in the caller's organization that names the vendor
+	// authorization server.
+	RemoteSessionIssuerID string
+	// The organization user session issuer Speakeasy vouches for. It must trust no
+	// external identity provider.
+	UserSessionIssuerID string
+	// Check without saving.
+	DryRun       bool
+	SessionToken *string
+}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.

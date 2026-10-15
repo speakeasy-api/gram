@@ -574,6 +574,38 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetOrganizationRemoteSessionIssuerEMAProviders"}`)
 	})
 
+	Method("addSpeakeasyEMAProvider", func() {
+		Description("Append the organization's Speakeasy issuer to the EMA provider order for the vendor authorization server this issuer names, for one organization user session issuer that trusts no external identity provider. Existing entries are never removed or reordered, and a vendor whose order already names Speakeasy is left unchanged. A vendor with no saved order is refused while another endpoint holds a ready identity chaining binding to it through an external identity provider, since saving any order would replace that endpoint's default. dry_run runs every check without saving. Requires org:admin and the ema-providers rollout. Not available from support or impersonated sessions.")
+
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("remote_session_issuer_id", String, "Any remote_session_issuer in the caller's organization that names the vendor authorization server.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("user_session_issuer_id", String, "The organization user session issuer Speakeasy vouches for. It must trust no external identity provider.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("dry_run", Boolean, "Check without saving.", func() {
+				Default(false)
+			})
+			Required("remote_session_issuer_id", "user_session_issuer_id")
+			security.SessionPayload()
+		})
+
+		Result(shared.EMAProviderOrder)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.addSpeakeasyEMAProvider")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "addOrganizationRemoteSessionIssuerSpeakeasyEMAProvider")
+		Meta("openapi:extension:x-speakeasy-name-override", "addSpeakeasyEMAProvider")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddOrganizationRemoteSessionIssuerSpeakeasyEMAProvider"}`)
+	})
+
 	Method("fetchIssuerMetadata", func() {
 		Description("Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.")
 

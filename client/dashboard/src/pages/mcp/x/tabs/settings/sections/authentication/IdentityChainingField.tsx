@@ -34,7 +34,10 @@ import { useRemoteSessionClientsUnlinkEMAMutation } from "@gram/client/react-que
 
 import { AuthRow } from "./AuthRow";
 import { EmaProviderOrderControl } from "./EmaProviderOrderControl";
-import type { ChainingProviders } from "./identityChainingGate";
+import {
+  trustsExternalIdp,
+  type ChainingProviders,
+} from "./identityChainingGate";
 import { IdentityChainingScopesField } from "./IdentityChainingScopesField";
 import {
   chainingBound,
@@ -126,6 +129,7 @@ export function IdentityChainingField({
   userSessionIssuer,
   providers,
   speakeasyIssuerUrl,
+  speakeasyEnabled = false,
   linkedClients,
   resource,
   remoteMcpServerId,
@@ -134,6 +138,8 @@ export function IdentityChainingField({
   providers: ChainingProviders;
   /** Speakeasy's issuer URL, which vendors trust for Speakeasy-signed grants. */
   speakeasyIssuerUrl?: string;
+  /** Speakeasy's issuer is turned on and can sign. */
+  speakeasyEnabled?: boolean;
   linkedClients: RemoteSessionClient[];
   /** The remote MCP server URL; the executor matches it exactly. */
   resource: string;
@@ -333,7 +339,9 @@ export function IdentityChainingField({
       <AuthRow label="Identity chaining" hint={chainingHint(providers)}>
         {candidates.length === 0 ? (
           <Text muted small>
-            Link a client for this server’s identity provider first.
+            {providers.external
+              ? "Link a client for this server’s identity provider first."
+              : "Link a client registered with this server’s authorization server first."}
           </Text>
         ) : (
           <>
@@ -485,8 +493,12 @@ export function IdentityChainingField({
               <EmaProviderOrderControl
                 order={read.data.emaProviders}
                 vendorRemoteSessionIssuerId={picked.remoteSessionIssuerId}
+                userSessionIssuerId={userSessionIssuer.id}
+                trustsExternalIdp={trustsExternalIdp(userSessionIssuer)}
+                speakeasyEnabled={speakeasyEnabled}
                 speakeasyIssuerUrl={speakeasyIssuerUrl}
                 chainingReady={ready}
+                refreshing={read.isFetching}
                 onSaved={onSettled}
               />
             )}

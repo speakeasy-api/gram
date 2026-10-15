@@ -3580,6 +3580,31 @@ func (q *Queries) GetEMAProjectOrganization(ctx context.Context, projectID uuid.
 	return organization_id, err
 }
 
+const getEMASpeakeasyUserIssuer = `-- name: GetEMASpeakeasyUserIssuer :one
+SELECT trusted_remote_session_issuer_id, trusted_remote_session_client_id
+FROM user_session_issuers
+WHERE id = $1 AND organization_id = $2 AND project_id IS NULL
+  AND deleted IS FALSE
+`
+
+type GetEMASpeakeasyUserIssuerParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+type GetEMASpeakeasyUserIssuerRow struct {
+	TrustedRemoteSessionIssuerID uuid.NullUUID
+	TrustedRemoteSessionClientID uuid.NullUUID
+}
+
+// An organization user session issuer and its external identity provider trust.
+func (q *Queries) GetEMASpeakeasyUserIssuer(ctx context.Context, arg GetEMASpeakeasyUserIssuerParams) (GetEMASpeakeasyUserIssuerRow, error) {
+	row := q.db.QueryRow(ctx, getEMASpeakeasyUserIssuer, arg.ID, arg.OrganizationID)
+	var i GetEMASpeakeasyUserIssuerRow
+	err := row.Scan(&i.TrustedRemoteSessionIssuerID, &i.TrustedRemoteSessionClientID)
+	return i, err
+}
+
 const getGlobalRemoteSessionClientByID = `-- name: GetGlobalRemoteSessionClientByID :one
 SELECT id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
 FROM remote_session_clients
@@ -6800,6 +6825,46 @@ func (q *Queries) ListEMAExternalProviderCandidates(ctx context.Context, organiz
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAExternalReadyBindingIssuers = `-- name: ListEMAExternalReadyBindingIssuers :many
+SELECT DISTINCT r.issuer
+FROM remote_session_ema_bindings AS b
+JOIN user_session_issuers AS u
+  ON u.id = b.user_session_issuer_id
+ AND u.organization_id = b.organization_id
+ AND u.project_id IS NULL
+ AND u.deleted IS FALSE
+JOIN remote_session_issuers AS r
+  ON r.id = b.remote_session_issuer_id
+ AND (r.organization_id = b.organization_id OR r.organization_id IS NULL)
+ AND r.deleted IS FALSE
+WHERE b.organization_id = $1
+  AND b.state = 'ready'
+  AND u.trusted_remote_session_issuer_id IS NOT NULL
+  AND u.trusted_remote_session_client_id IS NOT NULL
+`
+
+// Vendor issuer URLs that some endpoint reaches through a ready binding whose
+// organization user session issuer trusts an external identity provider.
+func (q *Queries) ListEMAExternalReadyBindingIssuers(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listEMAExternalReadyBindingIssuers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var issuer string
+		if err := rows.Scan(&issuer); err != nil {
+			return nil, err
+		}
+		items = append(items, issuer)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -48,6 +48,7 @@ const mocks = vi.hoisted(() => ({
   invalidateScopes: vi.fn(),
   setScopesData: vi.fn(),
   toastError: vi.fn(),
+  speakeasyIssuer: vi.fn(),
 }));
 
 vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
@@ -97,8 +98,24 @@ vi.mock("@/contexts/Sdk", () => ({
   }),
 }));
 
-vi.mock("@/pages/org/identity-provider/useEnterpriseIssuer", () => ({
-  useEnterpriseIssuer: () => ({ data: undefined }),
+vi.mock("./useSpeakeasyIssuerStatus", () => ({
+  useSpeakeasyIssuerStatus: () => mocks.speakeasyIssuer(),
+}));
+
+vi.mock("./IdentityChainingField", () => ({
+  IdentityChainingField: (props: {
+    providers: { external: boolean; speakeasy: boolean };
+    speakeasyEnabled?: boolean;
+    speakeasyIssuerUrl?: string;
+  }) => (
+    <div data-testid="identity-chaining">
+      {JSON.stringify({
+        providers: props.providers,
+        speakeasyEnabled: props.speakeasyEnabled,
+        speakeasyIssuerUrl: props.speakeasyIssuerUrl,
+      })}
+    </div>
+  ),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -503,6 +520,7 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
+  mocks.speakeasyIssuer.mockReturnValue({ data: undefined });
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
     isLoading: false,
@@ -3141,5 +3159,32 @@ describe("RemoteMcpIdentitySectionBody", () => {
         },
       });
     });
+  });
+});
+
+describe("identity chaining gate wiring", () => {
+  it("shows identity chaining on an organization issuer Speakeasy can vouch for", () => {
+    mocks.userSessionIssuer.mockReturnValue({
+      data: { id: "user-session-issuer-1", projectId: "" },
+    });
+    mocks.speakeasyIssuer.mockReturnValue({
+      data: { state: "enabled", issuer: "https://speakeasy.example.com/idp" },
+    });
+    renderIdentity();
+    expect(
+      JSON.parse(screen.getByTestId("identity-chaining").textContent!),
+    ).toEqual({
+      providers: { external: false, speakeasy: true },
+      speakeasyEnabled: true,
+      speakeasyIssuerUrl: "https://speakeasy.example.com/idp",
+    });
+  });
+
+  it("hides identity chaining when nothing can vouch", () => {
+    mocks.userSessionIssuer.mockReturnValue({
+      data: { id: "user-session-issuer-1", projectId: "" },
+    });
+    renderIdentity();
+    expect(screen.queryByTestId("identity-chaining")).toBeNull();
   });
 });

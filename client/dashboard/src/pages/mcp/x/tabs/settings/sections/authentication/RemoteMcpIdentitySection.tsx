@@ -55,7 +55,7 @@ import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
 import { IdentityChainingField } from "./IdentityChainingField";
 import { identityChainingProviders } from "./identityChainingGate";
-import { useEnterpriseIssuer } from "@/pages/org/identity-provider/useEnterpriseIssuer";
+import { useSpeakeasyIssuerStatus } from "./useSpeakeasyIssuerStatus";
 import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -128,7 +128,7 @@ export function RemoteMcpIdentitySectionBody({
     : undefined;
   const chainingFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const emaProvidersFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
-  const speakeasyIssuer = useEnterpriseIssuer();
+  const speakeasyIssuer = useSpeakeasyIssuerStatus();
   const chainingProviders = identityChainingProviders(userSessionIssuer, {
     externalRollout: chainingFlag.status === "enabled",
     speakeasyRollout: emaProvidersFlag.status === "enabled",
@@ -857,6 +857,7 @@ export function RemoteMcpIdentitySectionBody({
               userSessionIssuer={userSessionIssuer}
               providers={chainingProviders}
               speakeasyIssuerUrl={speakeasyIssuer.data?.issuer}
+              speakeasyEnabled={speakeasyIssuer.data?.state === "enabled"}
               linkedClients={clients}
               resource={sourceQuery.data.url}
               remoteMcpServerId={remoteMcpServerId}

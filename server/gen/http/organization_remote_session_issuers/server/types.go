@@ -250,6 +250,20 @@ type SetEMAProvidersRequestBody struct {
 	Providers []*EMAProviderInputRequestBody `form:"providers,omitempty" json:"providers,omitempty" xml:"providers,omitempty"`
 }
 
+// AddSpeakeasyEMAProviderRequestBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP request body.
+type AddSpeakeasyEMAProviderRequestBody struct {
+	// Any remote_session_issuer in the caller's organization that names the vendor
+	// authorization server.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
+	// The organization user session issuer Speakeasy vouches for. It must trust no
+	// external identity provider.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
+	// Check without saving.
+	DryRun *bool `form:"dry_run,omitempty" json:"dry_run,omitempty" xml:"dry_run,omitempty"`
+}
+
 // FetchIssuerMetadataRequestBody is the type of the
 // "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
 // HTTP request body.
@@ -785,6 +799,18 @@ type MigrateIssuerResponseBody struct {
 // "organizationRemoteSessionIssuers" service "setEMAProviders" endpoint HTTP
 // response body.
 type SetEMAProvidersResponseBody struct {
+	// The vendor authorization server issuer, canonicalized.
+	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
+	// No order is saved, so the endpoint uses its configured external issuer.
+	IsDefault bool `form:"is_default" json:"is_default" xml:"is_default"`
+	// The saved providers in order, or the external default.
+	Providers []*EMAProviderResponseBody `form:"providers" json:"providers" xml:"providers"`
+}
+
+// AddSpeakeasyEMAProviderResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body.
+type AddSpeakeasyEMAProviderResponseBody struct {
 	// The vendor authorization server issuer, canonicalized.
 	VendorIssuer string `form:"vendor_issuer" json:"vendor_issuer" xml:"vendor_issuer"`
 	// No order is saved, so the endpoint uses its configured external issuer.
@@ -2970,6 +2996,196 @@ type SetEMAProvidersGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// AddSpeakeasyEMAProviderUnauthorizedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "unauthorized" error.
+type AddSpeakeasyEMAProviderUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddSpeakeasyEMAProviderForbiddenResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "forbidden" error.
+type AddSpeakeasyEMAProviderForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddSpeakeasyEMAProviderBadRequestResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "bad_request" error.
+type AddSpeakeasyEMAProviderBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddSpeakeasyEMAProviderNotFoundResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "not_found" error.
+type AddSpeakeasyEMAProviderNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddSpeakeasyEMAProviderConflictResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "conflict" error.
+type AddSpeakeasyEMAProviderConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddSpeakeasyEMAProviderUnsupportedMediaResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "unsupported_media" error.
+type AddSpeakeasyEMAProviderUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddSpeakeasyEMAProviderInvalidResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "invalid" error.
+type AddSpeakeasyEMAProviderInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddSpeakeasyEMAProviderInvariantViolationResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "invariant_violation" error.
+type AddSpeakeasyEMAProviderInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddSpeakeasyEMAProviderUnexpectedResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "unexpected" error.
+type AddSpeakeasyEMAProviderUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// AddSpeakeasyEMAProviderGatewayErrorResponseBody is the type of the
+// "organizationRemoteSessionIssuers" service "addSpeakeasyEMAProvider"
+// endpoint HTTP response body for the "gateway_error" error.
+type AddSpeakeasyEMAProviderGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // FetchIssuerMetadataUnauthorizedResponseBody is the type of the
 // "organizationRemoteSessionIssuers" service "fetchIssuerMetadata" endpoint
 // HTTP response body for the "unauthorized" error.
@@ -4121,6 +4337,29 @@ func NewMigrateIssuerResponseBody(res *organizationremotesessionissuers.MigrateO
 // service.
 func NewSetEMAProvidersResponseBody(res *types.EMAProviderOrder) *SetEMAProvidersResponseBody {
 	body := &SetEMAProvidersResponseBody{
+		VendorIssuer: res.VendorIssuer,
+		IsDefault:    res.IsDefault,
+	}
+	if res.Providers != nil {
+		body.Providers = make([]*EMAProviderResponseBody, len(res.Providers))
+		for i, val := range res.Providers {
+			if val == nil {
+				body.Providers[i] = nil
+				continue
+			}
+			body.Providers[i] = marshalTypesEMAProviderToEMAProviderResponseBody(val)
+		}
+	} else {
+		body.Providers = []*EMAProviderResponseBody{}
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderResponseBody builds the HTTP response body from
+// the result of the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderResponseBody(res *types.EMAProviderOrder) *AddSpeakeasyEMAProviderResponseBody {
+	body := &AddSpeakeasyEMAProviderResponseBody{
 		VendorIssuer: res.VendorIssuer,
 		IsDefault:    res.IsDefault,
 	}
@@ -5902,6 +6141,156 @@ func NewSetEMAProvidersGatewayErrorResponseBody(res *goa.ServiceError) *SetEMAPr
 	return body
 }
 
+// NewAddSpeakeasyEMAProviderUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderUnauthorizedResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderUnauthorizedResponseBody {
+	body := &AddSpeakeasyEMAProviderUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderForbiddenResponseBody builds the HTTP response
+// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderForbiddenResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderForbiddenResponseBody {
+	body := &AddSpeakeasyEMAProviderForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderBadRequestResponseBody builds the HTTP response
+// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderBadRequestResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderBadRequestResponseBody {
+	body := &AddSpeakeasyEMAProviderBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderNotFoundResponseBody builds the HTTP response body
+// from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderNotFoundResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderNotFoundResponseBody {
+	body := &AddSpeakeasyEMAProviderNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderConflictResponseBody builds the HTTP response body
+// from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderConflictResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderConflictResponseBody {
+	body := &AddSpeakeasyEMAProviderConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "addSpeakeasyEMAProvider" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderUnsupportedMediaResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderUnsupportedMediaResponseBody {
+	body := &AddSpeakeasyEMAProviderUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderInvalidResponseBody builds the HTTP response body
+// from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderInvalidResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderInvalidResponseBody {
+	body := &AddSpeakeasyEMAProviderInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "addSpeakeasyEMAProvider" endpoint of
+// the "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderInvariantViolationResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderInvariantViolationResponseBody {
+	body := &AddSpeakeasyEMAProviderInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderUnexpectedResponseBody builds the HTTP response
+// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderUnexpectedResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderUnexpectedResponseBody {
+	body := &AddSpeakeasyEMAProviderUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewAddSpeakeasyEMAProviderGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+func NewAddSpeakeasyEMAProviderGatewayErrorResponseBody(res *goa.ServiceError) *AddSpeakeasyEMAProviderGatewayErrorResponseBody {
+	body := &AddSpeakeasyEMAProviderGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewFetchIssuerMetadataUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "fetchIssuerMetadata" endpoint of the
 // "organizationRemoteSessionIssuers" service.
@@ -6508,6 +6897,24 @@ func NewSetEMAProvidersPayload(body *SetEMAProvidersRequestBody, sessionToken *s
 	return v
 }
 
+// NewAddSpeakeasyEMAProviderPayload builds a organizationRemoteSessionIssuers
+// service addSpeakeasyEMAProvider endpoint payload.
+func NewAddSpeakeasyEMAProviderPayload(body *AddSpeakeasyEMAProviderRequestBody, sessionToken *string) *organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload {
+	v := &organizationremotesessionissuers.AddSpeakeasyEMAProviderPayload{
+		RemoteSessionIssuerID: *body.RemoteSessionIssuerID,
+		UserSessionIssuerID:   *body.UserSessionIssuerID,
+	}
+	if body.DryRun != nil {
+		v.DryRun = *body.DryRun
+	}
+	if body.DryRun == nil {
+		v.DryRun = false
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewFetchIssuerMetadataPayload builds a organizationRemoteSessionIssuers
 // service fetchIssuerMetadata endpoint payload.
 func NewFetchIssuerMetadataPayload(body *FetchIssuerMetadataRequestBody, sessionToken *string, apikeyToken *string) *organizationremotesessionissuers.FetchIssuerMetadataPayload {
@@ -6616,6 +7023,24 @@ func ValidateSetEMAProvidersRequestBody(body *SetEMAProvidersRequestBody) (err e
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateAddSpeakeasyEMAProviderRequestBody runs the validations defined on
+// AddSpeakeasyEMAProviderRequestBody
+func ValidateAddSpeakeasyEMAProviderRequestBody(body *AddSpeakeasyEMAProviderRequestBody) (err error) {
+	if body.RemoteSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_issuer_id", "body"))
+	}
+	if body.UserSessionIssuerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "body"))
+	}
+	if body.RemoteSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_session_issuer_id", *body.RemoteSessionIssuerID, goa.FormatUUID))
+	}
+	if body.UserSessionIssuerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 	}
 	return
 }

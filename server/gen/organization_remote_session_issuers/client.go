@@ -27,13 +27,14 @@ type Client struct {
 	GetIssuerMigratePreflightEndpoint   goa.Endpoint
 	MigrateIssuerEndpoint               goa.Endpoint
 	SetEMAProvidersEndpoint             goa.Endpoint
+	AddSpeakeasyEMAProviderEndpoint     goa.Endpoint
 	FetchIssuerMetadataEndpoint         goa.Endpoint
 	RefreshIssuerMetadataEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "organizationRemoteSessionIssuers" service client
 // given the endpoints.
-func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, getIssuerDuplicatePreflight, updateIssuer, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer, setEMAProviders, fetchIssuerMetadata, refreshIssuerMetadata goa.Endpoint) *Client {
+func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, getIssuerDuplicatePreflight, updateIssuer, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer, setEMAProviders, addSpeakeasyEMAProvider, fetchIssuerMetadata, refreshIssuerMetadata goa.Endpoint) *Client {
 	return &Client{
 		CreateIssuerEndpoint:                createIssuer,
 		ListIssuersEndpoint:                 listIssuers,
@@ -46,6 +47,7 @@ func NewClient(createIssuer, listIssuers, getIssuer, getIssuerDeletePreflight, g
 		GetIssuerMigratePreflightEndpoint:   getIssuerMigratePreflight,
 		MigrateIssuerEndpoint:               migrateIssuer,
 		SetEMAProvidersEndpoint:             setEMAProviders,
+		AddSpeakeasyEMAProviderEndpoint:     addSpeakeasyEMAProvider,
 		FetchIssuerMetadataEndpoint:         fetchIssuerMetadata,
 		RefreshIssuerMetadataEndpoint:       refreshIssuerMetadata,
 	}
@@ -294,6 +296,29 @@ func (c *Client) MigrateIssuer(ctx context.Context, p *MigrateIssuerPayload) (re
 func (c *Client) SetEMAProviders(ctx context.Context, p *SetEMAProvidersPayload) (res *types.EMAProviderOrder, err error) {
 	var ires any
 	ires, err = c.SetEMAProvidersEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.EMAProviderOrder), nil
+}
+
+// AddSpeakeasyEMAProvider calls the "addSpeakeasyEMAProvider" endpoint of the
+// "organizationRemoteSessionIssuers" service.
+// AddSpeakeasyEMAProvider may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) AddSpeakeasyEMAProvider(ctx context.Context, p *AddSpeakeasyEMAProviderPayload) (res *types.EMAProviderOrder, err error) {
+	var ires any
+	ires, err = c.AddSpeakeasyEMAProviderEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

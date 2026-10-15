@@ -143,6 +143,163 @@ func (s *Service) SetEMAProviders(ctx context.Context, payload *orgissuersgen.Se
 	return s.liveEMAProvidersView(ctx, logger, org, order), nil
 }
 
+// AddSpeakeasyEMAProvider appends Speakeasy to a vendor's order for an
+// endpoint whose sign-in trusts no external identity provider. It never
+// removes or reorders entries, and refuses to replace a default order that
+// another endpoint's external identity provider chaining relies on.
+func (s *Service) AddSpeakeasyEMAProvider(ctx context.Context, payload *orgissuersgen.AddSpeakeasyEMAProviderPayload) (*types.EMAProviderOrder, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	org := authCtx.ActiveOrganizationID
+	logger := s.logger.With(attr.SlogOrganizationID(org), attr.SlogUserID(authCtx.UserID))
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: org, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	if contextvalues.IsSupportSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "the EMA provider order cannot be changed from a support or impersonated session").LogError(ctx, logger)
+	}
+	vendorID, err := uuid.Parse(payload.RemoteSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid remote session issuer id")
+	}
+	userIssuerID, err := uuid.Parse(payload.UserSessionIssuerID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user session issuer id")
+	}
+	if err := s.requireEMAProviders(ctx, logger, org); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	q := repo.New(dbtx)
+	if err := q.SetEMAProvidersLockTimeout(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "bound ema provider order lock wait").LogError(ctx, logger)
+	}
+	if err := q.LockEMAProviders(ctx, org); err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "the EMA provider order is being changed; retry shortly").LogError(ctx, logger)
+	}
+	vendorRow, err := q.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{ID: vendorID, OrganizationID: conv.ToPGText(org), IncludeGlobal: true})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "read remote session issuer").LogError(ctx, logger)
+	}
+	vendor, err := NormalizeVendorIssuer(vendorRow.Issuer)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "the remote session issuer's URL is not an issuer identifier")
+	}
+	userIssuer, err := q.GetEMASpeakeasyUserIssuer(ctx, repo.GetEMASpeakeasyUserIssuerParams{ID: userIssuerID, OrganizationID: conv.ToPGText(org)})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "organization user session issuer not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "read user session issuer").LogError(ctx, logger)
+	}
+	if userIssuer.TrustedRemoteSessionIssuerID.Valid || userIssuer.TrustedRemoteSessionClientID.Valid {
+		return nil, oops.E(oops.CodeFailedPrecondition, nil, "this sign-in trusts an external identity provider; Speakeasy is added only for sign-ins that trust none")
+	}
+
+	rows, err := q.ListEMAProviders(ctx, repo.ListEMAProvidersParams{OrganizationID: org, VendorIssuer: vendor})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
+	}
+	scope := EMAProviderScope{Endpoint: false, TrustedIssuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, SpeakeasySigns: s.speakeasySigningAvailable}
+	present := slices.ContainsFunc(rows, func(row repo.ListEMAProvidersRow) bool { return row.InternalSessionIssuerID.Valid })
+	if present || payload.DryRun {
+		if !present {
+			if err := checkSpeakeasyAppend(ctx, logger, q, org, vendor, rows); err != nil {
+				return nil, err
+			}
+		}
+		order, err := ResolveEMAProviders(ctx, q, org, vendor, scope)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
+		}
+		if err := dbtx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "release ema provider order").LogError(ctx, logger)
+		}
+		return s.liveEMAProvidersView(ctx, logger, org, order), nil
+	}
+	if err := checkSpeakeasyAppend(ctx, logger, q, org, vendor, rows); err != nil {
+		return nil, err
+	}
+	internal, err := q.GetEMAInternalSessionIssuer(ctx, org)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeBadRequest, nil, "the organization has no Speakeasy issuer; set one up before adding it")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "read Speakeasy issuer").LogError(ctx, logger)
+	}
+
+	before := &audit.RemoteSessionIssuerEMAProviders{VendorIssuer: vendor, Providers: make([]audit.RemoteSessionIssuerEMAProvider, 0, len(rows))}
+	position := int32(0)
+	for _, row := range rows {
+		before.Providers = append(before.Providers, auditEMAProvider(row.RemoteSessionIssuerID.UUID, row.InternalSessionIssuerID.UUID))
+		position = max(position, row.Position+1)
+	}
+	after := &audit.RemoteSessionIssuerEMAProviders{VendorIssuer: vendor, Providers: append(slices.Clone(before.Providers), auditEMAProvider(uuid.Nil, internal.ID))}
+	if err := q.InsertEMAProvider(ctx, repo.InsertEMAProviderParams{
+		OrganizationID:          org,
+		VendorIssuer:            vendor,
+		RemoteSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		InternalSessionIssuerID: uuid.NullUUID{UUID: internal.ID, Valid: true},
+		Position:                position,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "save ema provider order").LogError(ctx, logger)
+	}
+	if err := s.auditLogger.LogRemoteSessionIssuerUpdateEMAProviders(ctx, dbtx, audit.LogRemoteSessionIssuerUpdateEMAProvidersEvent{
+		OrganizationID:         org,
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:       authCtx.Email,
+		ActorSlug:              nil,
+		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(vendorRow.ID),
+		Slug:                   vendorRow.Slug,
+		IssuerURL:              vendorRow.Issuer,
+		Name:                   conv.FromPGText[string](vendorRow.Name),
+		EMAProvidersBefore:     before,
+		EMAProvidersAfter:      after,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log ema provider order").LogError(ctx, logger)
+	}
+	order, err := ResolveEMAProviders(ctx, q, org, vendor, scope)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read ema provider order").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit ema provider order").LogError(ctx, logger)
+	}
+	return s.liveEMAProvidersView(ctx, logger, org, order), nil
+}
+
+// checkSpeakeasyAppend refuses a full order, and refuses to replace a default
+// order while another endpoint chains to the vendor through an external
+// identity provider: any saved order would take that endpoint's default away.
+func checkSpeakeasyAppend(ctx context.Context, logger *slog.Logger, q *repo.Queries, org, vendor string, rows []repo.ListEMAProvidersRow) error {
+	if len(rows) >= maxEMAProviders {
+		return oops.E(oops.CodeFailedPrecondition, nil, "this vendor's EMA provider order already has %d providers", maxEMAProviders)
+	}
+	if len(rows) > 0 {
+		return nil
+	}
+	issuers, err := q.ListEMAExternalReadyBindingIssuers(ctx, org)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read identity chaining bindings").LogError(ctx, logger)
+	}
+	for _, issuer := range issuers {
+		if canonical, err := NormalizeVendorIssuer(issuer); err == nil && canonical == vendor {
+			return oops.E(oops.CodeFailedPrecondition, nil, "other servers chain to this vendor through an external identity provider; saving a provider order would change their sign-in, so change it from the organization's identity settings")
+		}
+	}
+	return nil
+}
+
 // requireEMAProviders checks the rollout flag for saving an order; a lookup
 // failure reads as unavailable, never forbidden.
 func (s *Service) requireEMAProviders(ctx context.Context, logger *slog.Logger, organizationID string) error {

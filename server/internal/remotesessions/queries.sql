@@ -5320,6 +5320,32 @@ WHERE r.organization_id = @organization_id
   AND r.deleted IS FALSE
 ORDER BY r.created_at, r.id;
 
+-- name: GetEMASpeakeasyUserIssuer :one
+-- An organization user session issuer and its external identity provider trust.
+SELECT trusted_remote_session_issuer_id, trusted_remote_session_client_id
+FROM user_session_issuers
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: ListEMAExternalReadyBindingIssuers :many
+-- Vendor issuer URLs that some endpoint reaches through a ready binding whose
+-- organization user session issuer trusts an external identity provider.
+SELECT DISTINCT r.issuer
+FROM remote_session_ema_bindings AS b
+JOIN user_session_issuers AS u
+  ON u.id = b.user_session_issuer_id
+ AND u.organization_id = b.organization_id
+ AND u.project_id IS NULL
+ AND u.deleted IS FALSE
+JOIN remote_session_issuers AS r
+  ON r.id = b.remote_session_issuer_id
+ AND (r.organization_id = b.organization_id OR r.organization_id IS NULL)
+ AND r.deleted IS FALSE
+WHERE b.organization_id = @organization_id
+  AND b.state = 'ready'
+  AND u.trusted_remote_session_issuer_id IS NOT NULL
+  AND u.trusted_remote_session_client_id IS NOT NULL;
+
 -- name: GetEMAInternalSessionIssuer :one
 -- The organization's live internal session issuer, and whether it is off.
 SELECT id, (disabled_at IS NOT NULL)::boolean AS disabled
