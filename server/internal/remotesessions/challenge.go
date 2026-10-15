@@ -1615,12 +1615,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		AssertionSigner:       m.assertions,
 	}, audience, code)
 	if err != nil {
-		var oauthErr oautherr.RFC6749Error
-		if errors.As(err, &oauthErr) && oauthErr.Code == oautherr.CodeInvalidTarget {
+		if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok && oauthErr.Code == oautherr.CodeInvalidTarget {
 			return m.retryWithoutResource(ctx, logger, state, err)
 		}
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
+		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -1978,6 +1977,9 @@ func (m *ChallengeManager) exchangeCode(
 		return tokenResponse{}, fmt.Errorf("decode token response: %w", err)
 	}
 	if tok.AccessToken == "" {
+		if _, ok := oautherr.ParseTokenError(body); ok {
+			return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
+		}
 		return tokenResponse{}, errors.New("token endpoint returned no access_token")
 	}
 	tok.raw = body
@@ -2002,6 +2004,37 @@ func newTokenEndpointError(statusCode int, status string, body []byte) *tokenEnd
 		return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %w", status, parsed)}
 	}
 	return &tokenEndpointError{statusCode: statusCode, err: fmt.Errorf("token endpoint %s: %s", status, truncateForMessage(string(body)))}
+}
+
+// exchangeFailure names why the provider refused the code exchange without echoing its free-text description: an IETF-registered error code, else a non-2xx HTTP status. An expired or spent code (invalid_grant) is the user's timing, not a fault, so it logs at warn.
+func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunneled bool) *oops.ShareableError {
+	const message = "token exchange with the identity provider failed"
+	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
+	if !ok {
+		return oops.E(oops.CodeUnauthorized, err, message).LogError(ctx, logger)
+	}
+
+	attrs := []slog.Attr{attr.SlogHTTPResponseStatusCode(endpointErr.statusCode)}
+	if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok {
+		code := oautherr.CanonicalTokenErrorCode(oauthErr.Code)
+		attrs = append(attrs, attr.SlogOAuthError(truncateForMessage(code)))
+		if oautherr.IsIETFRegisteredCode(code) {
+			shareable := oops.E(oops.CodeUnauthorized, err, "%s: %s", message, code)
+			if code == oautherr.CodeInvalidGrant {
+				return shareable.LogWarn(ctx, logger, attrs...)
+			}
+			return shareable.LogError(ctx, logger, attrs...)
+		}
+	}
+	if endpointErr.statusCode/100 == 2 {
+		return oops.E(oops.CodeUnauthorized, err, message).LogError(ctx, logger, attrs...)
+	}
+	// A tunnel agent or gateway that cannot reach the provider answers 502/503 itself, so the status may not be the provider's.
+	via := ""
+	if tunneled {
+		via = " through the MCP tunnel"
+	}
+	return oops.E(oops.CodeUnauthorized, err, "%s: HTTP %d%s", message, endpointErr.statusCode, via).LogError(ctx, logger, attrs...)
 }
 
 // exchangeIssuerReadBudget bounds the detached issuer read a withdrawn token endpoint triggers.
