@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -284,21 +283,17 @@ func TestCodeModeSessionSelectionRestrictsDiscoveryAndCall(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"isError":true`)
 }
 
-func TestCodeModeRolloutOnlyGatesNewSelections(t *testing.T) {
+func TestCodeModeAvailableFollowsRuntime(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	auth, _ := contextvalues.GetAuthContext(ctx)
-	ti.features.SetFlag(feature.FlagGatewayCodeMode, auth.ActiveOrganizationID, true)
 	require.False(t, ti.service.CodeModeAvailable(ctx, auth.ActiveOrganizationID, *auth.ProjectID), "no runtime")
 	configureCodeRunner(t, ti)
 	require.True(t, ti.service.CodeModeAvailable(ctx, auth.ActiveOrganizationID, *auth.ProjectID))
-	require.False(t, ti.service.CodeModeAvailable(ctx, auth.ActiveOrganizationID, uuid.New()), "project must belong to org")
 	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
 	slug := "code-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
 	token := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode, nil, nil)
-	ti.features.SetFlag(feature.FlagGatewayCodeMode, auth.ActiveOrganizationID, false)
-	require.False(t, ti.service.CodeModeAvailable(ctx, auth.ActiveOrganizationID, *auth.ProjectID))
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "6 * 7"}}), token, nil)
 	require.NoError(t, err)
 	require.Contains(t, w.Body.String(), `"value":42`)

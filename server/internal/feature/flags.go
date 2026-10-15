@@ -5,10 +5,6 @@ type Flag string
 const (
 	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
 	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
-	// FlagGatewayCodeMode gates new Python discovery selections. Evaluated server-side,
-	// targeted by organization and project group keys, and fails closed. Remove at GA.
-	// Existing code-mode settings and sessions are deliberately not gated.
-	FlagGatewayCodeMode Flag = "gateway-code-mode"
 
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"

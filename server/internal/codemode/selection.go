@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// SelectionGate checks rollout and runtime availability for new code-mode
+// SelectionGate checks runtime availability for new code-mode
 // settings and connection overrides. Never use it to interpret stored policy.
 type SelectionGate func(context.Context, string, uuid.UUID) bool
 

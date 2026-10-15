@@ -95,9 +95,7 @@ type CreateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Whether this project can select Code Mode: discovery settings, rollout, and
-	// runtime must be available. Existing connections retain their mode when
-	// rollout is disabled.
+	// Whether this project can select Code Mode: a code runtime must be configured.
 	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
@@ -132,9 +130,7 @@ type GetMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Whether this project can select Code Mode: discovery settings, rollout, and
-	// runtime must be available. Existing connections retain their mode when
-	// rollout is disabled.
+	// Whether this project can select Code Mode: a code runtime must be configured.
 	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
@@ -175,9 +171,7 @@ type UpdateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Whether this project can select Code Mode: discovery settings, rollout, and
-	// runtime must be available. Existing connections retain their mode when
-	// rollout is disabled.
+	// Whether this project can select Code Mode: a code runtime must be configured.
 	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
@@ -1922,9 +1916,7 @@ type MetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Whether this project can select Code Mode: discovery settings, rollout, and
-	// runtime must be available. Existing connections retain their mode when
-	// rollout is disabled.
+	// Whether this project can select Code Mode: a code runtime must be configured.
 	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.

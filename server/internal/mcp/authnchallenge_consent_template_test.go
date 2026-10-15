@@ -975,7 +975,7 @@ func TestConsentTemplateCodeChoiceAndStoredDefault(t *testing.T) {
 		discovery, code, offered bool
 	}{
 		{name: "available", discovery: true, code: true, offered: true},
-		{name: "rollout off", discovery: true, code: false, offered: false},
+		{name: "runtime unavailable", discovery: true, code: false, offered: false},
 		{name: "entitlement off", discovery: false, code: false, offered: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
