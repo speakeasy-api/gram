@@ -147,6 +147,7 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 			SubscriptionID: subscriptionID,
 		}
 		stripe.checkout = stripeclient.CheckoutSessionState{
+			Partner:                nil,
 			ID:                     stripe.event.ObjectID,
 			Status:                 "complete",
 			CustomerID:             m3CustomerID,

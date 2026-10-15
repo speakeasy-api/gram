@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -351,6 +352,11 @@ func (s *Service) prepareStripeCheckoutIntent(
 	replaceExpiredSessionID pgtype.Text,
 	replaceLifecycleIntentKey pgtype.Text,
 ) (preparedStripeCheckoutIntent, error) {
+	// Remote verification must not retain an organization lock or transaction.
+	observed, observedKey, err := s.pendingPartnerCheckout(ctx, organizationID)
+	if err != nil {
+		return preparedStripeCheckoutIntent{}, err
+	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeUnexpected, err, "failed to prepare Stripe Checkout").LogError(ctx, s.logger)
@@ -382,6 +388,23 @@ func (s *Service) prepareStripeCheckoutIntent(
 	}
 	if !stored.StripeCustomerID.Valid || stored.StripeCustomerID.String != customerID {
 		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeConflict, nil, "billing customer changed while Checkout was being prepared").LogWarn(ctx, s.logger)
+	}
+
+	application, applicationErr := orgrepo.New(dbtx).GetOrganizationPromotionApplication(ctx, organizationID)
+	if applicationErr != nil && !errors.Is(applicationErr, pgx.ErrNoRows) {
+		return preparedStripeCheckoutIntent{}, fmt.Errorf("load pending partner application: %w", applicationErr)
+	}
+	if applicationErr == nil && !application.RedeemedAt.Valid && stored.StripeCheckoutSessionID.Valid {
+		if observed == nil || observedKey != stored.StripeCheckoutIdempotencyKey || observed.ID != stored.StripeCheckoutSessionID.String {
+			return preparedStripeCheckoutIntent{}, oops.E(oops.CodeConflict, nil, "partner Checkout binding changed during verification; retry")
+		}
+		current := observed
+		if current == nil || current.ID != stored.StripeCheckoutSessionID.String || current.CustomerID != customerID {
+			return preparedStripeCheckoutIntent{}, errors.New("partner Checkout state does not match persisted intent")
+		}
+		if current.Status == "complete" {
+			return preparedStripeCheckoutIntent{}, oops.E(oops.CodeConflict, nil, "partner Checkout is still being reconciled; do not start another subscription")
+		}
 	}
 
 	prepared, err := queries.PrepareStripeCheckoutIntent(ctx, repo.PrepareStripeCheckoutIntentParams{
@@ -719,4 +742,38 @@ func nextStripeBillingCycleAnchor(now time.Time, trialEnd *time.Time) time.Time 
 		return midnight
 	}
 	return midnight.AddDate(0, 0, 1)
+}
+
+// pendingPartnerCheckout observes only the saved session. The caller compares
+// both session and intent key under the billing lock before using this read.
+// Open can become complete while we wait, but the same intent can only be replayed;
+// replacing it still requires the existing exact-key/expired-session CAS guards.
+func (s *Service) pendingPartnerCheckout(ctx context.Context, organizationID string) (*stripeclient.CheckoutSessionState, pgtype.Text, error) {
+	metadata, err := repo.New(s.db).GetBillingMetadata(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, pgtype.Text{String: "", Valid: false}, nil
+	}
+	if err != nil {
+		return nil, pgtype.Text{String: "", Valid: false}, fmt.Errorf("load pending Checkout binding: %w", err)
+	}
+	if !metadata.StripeCheckoutSessionID.Valid {
+		return nil, pgtype.Text{String: "", Valid: false}, nil
+	}
+	application, err := s.orgRepo.GetOrganizationPromotionApplication(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, pgtype.Text{String: "", Valid: false}, nil
+	}
+	if err != nil {
+		return nil, pgtype.Text{String: "", Valid: false}, fmt.Errorf("load pending partner acceptance: %w", err)
+	}
+	if application.RedeemedAt.Valid {
+		return nil, pgtype.Text{String: "", Valid: false}, nil
+	}
+	readCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	current, err := s.stripeClient.GetCheckoutSession(readCtx, metadata.StripeCheckoutSessionID.String)
+	if err != nil {
+		return nil, pgtype.Text{String: "", Valid: false}, fmt.Errorf("verify pending partner Checkout: %w", err)
+	}
+	return current, metadata.StripeCheckoutIdempotencyKey, nil
 }

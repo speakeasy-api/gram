@@ -20,6 +20,64 @@ checkout, redemption and audit. Editing or disabling an offer affects new signup
 only. It neither rewrites accepted promotion IDs nor permits reuse after cancellation.
 There is no partner-playbook environment configuration.
 
+## Manual promotion entry in Checkout
+
+An ordinary new organization can enter its partner promotion directly in Stripe
+Checkout; there is no signup form code input. The server retrieves the completed
+Checkout and its subscription, requires the exact applied promotion ID to match
+an enabled gateway signup offer, and verifies gateway-only coupon scope. The
+offer row is locked during first acceptance. Disabled, unmapped, absent, or
+unsupported promotions remain ordinary discounts: they grant no partner rights
+and do not change the existing ordinary Checkout trial behavior. A discount
+shown by Stripe is not confirmation of private-network access.
+
+Acceptance is committed before ending a qualifying remaining Stripe trial. The
+pending promotion application and persisted Checkout session bind retries to the
+same subscription. Offer edits or disabling after acceptance do not revoke that
+acceptance. The server ends only that accepted partner trial, using an idempotent
+`trial_end=now`, `proration_behavior=none` update. It then retrieves current Stripe
+state under the activation locks. A collected payment method and an active
+subscription are required before redemption, PAYG activation, audit, and private
+network enablement commit together. `active` denotes a paid subscription, not a
+guarantee that every metered invoice has already been collected.
+
+A lost Stripe response retries from the immutable acceptance and live subscription
+state, without issuing another trial-ending operation once active. A pending
+completed Checkout cannot be replaced. Cancellation before activation leaves its
+acceptance/session bound and unredeemed; reconciliation requires support rather
+than silently starting a second subscription. Existing subscribers cannot obtain
+first manual attribution. Explicit staff networking disables remain authoritative.
+
+### Partner conversion accounting
+
+Stripe resets the billing anchor to the exact trial-ending instant. It rejects
+combining immediate trial termination with an unchanged anchor; subscription
+update does not support `billing_cycle_anchor_config`. Consequently, only verified
+redeemed partner subscriptions may use non-midnight monthly invoice periods.
+Exact Stripe timestamps are retained and checked, including monthly day clamping
+for short months. Later changes to the original billing anchor fail closed.
+
+Stripe-native meters retain exact Stripe periods. Daily inference spend uses
+completed UTC days: the initial partial conversion day is waived; each subsequent
+boundary day belongs wholly to the following invoice. This assigns each eligible
+full day once without pretending daily aggregates have intraday precision. The
+same day selection applies to recovery, readiness, freezing, and settlement.
+The original partner anchor is retained after cancellation for late settlement.
+Staff subscription reassignment cannot overwrite a redeemed partner's anchor.
+
+This is a partner-only accounting policy, not a change to ordinary trials,
+ordinary midnight invoicing, or an entitlement for unrelated discounts.
+
+### Manual-route MCP assessment
+
+Customer Platform MCP needs no new tool: acceptance and payment-method collection
+remain Stripe-hosted browser operations; agent-supplied promotion IDs must never
+grant access. Existing network tools continue to enforce entitlements. Staff
+Admin MCP needs no new mutation: its existing service-backed billing operations
+inherit the retained-anchor safeguard. Shared offer management restrictions above
+remain unchanged. The evidence of success is committed redemption plus verified
+PAYG activation, not discount discovery or an agent assertion.
+
 ## Surface and seed assessment
 
 - **Staff Admin MCP:** no new tool in this change. This is shared, pre-signup

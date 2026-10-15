@@ -743,7 +743,7 @@ func TestGetCheckoutSessionExpandsSubscription(t *testing.T) {
 	require.Equal(t, "cus_test", state.SubscriptionCustomerID)
 	require.Equal(t, "trialing", state.SubscriptionStatus)
 	require.Equal(t, anchor, state.BillingCycleAnchor)
-	require.Len(t, api.checkoutRetrieveParams.Expand, 1)
+	require.Len(t, api.checkoutRetrieveParams.Expand, 2)
 	require.Equal(t, "subscription", stripesdk.StringValue(api.checkoutRetrieveParams.Expand[0]))
 }
 

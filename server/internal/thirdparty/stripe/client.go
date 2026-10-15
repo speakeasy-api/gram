@@ -252,6 +252,7 @@ type CheckoutSession struct {
 
 // CheckoutSessionState is the current Stripe state used to activate PAYG.
 type CheckoutSessionState struct {
+	Partner                *CheckoutPartnerState
 	ID                     string
 	Status                 string
 	CustomerID             string
@@ -833,6 +834,7 @@ func (c *client) ExpireCheckoutSession(ctx context.Context, id string) error {
 func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSessionState, error) {
 	params := new(stripesdk.CheckoutSessionRetrieveParams)
 	params.AddExpand("subscription")
+	params.AddExpand("subscription.discounts")
 
 	session, err := c.api.retrieveCheckoutSession(ctx, id, params)
 	if err != nil {
@@ -843,6 +845,7 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 	}
 
 	state := &CheckoutSessionState{
+		Partner:                nil,
 		ID:                     session.ID,
 		Status:                 string(session.Status),
 		CustomerID:             "",
@@ -855,6 +858,7 @@ func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSe
 		state.CustomerID = session.Customer.ID
 	}
 	if session.Subscription != nil {
+		state.Partner = c.checkoutPartnerState(session.Subscription)
 		state.SubscriptionID = session.Subscription.ID
 		state.SubscriptionStatus = string(session.Subscription.Status)
 		if session.Subscription.Customer != nil {
