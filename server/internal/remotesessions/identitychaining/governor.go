@@ -3,6 +3,7 @@ package identitychaining
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -141,8 +142,19 @@ func (g *Governor) ProviderOrder(ctx context.Context, req Request) (remotesessio
 // in the project, a cheap check before per-upstream decisions. A lookup fault
 // logs and reads as unconfigured.
 func (g *Governor) Configured(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID) bool {
-	if organizationID == "" || projectID == uuid.Nil || userSessionIssuerID == uuid.Nil {
+	configured, err := g.configured(ctx, organizationID, projectID, userSessionIssuerID)
+	if err != nil {
+		g.logger.WarnContext(ctx, "count identity chaining bindings", attr.SlogError(err))
 		return false
+	}
+	return configured
+}
+
+// configured is Configured with a lookup fault returned instead of read as
+// unconfigured.
+func (g *Governor) configured(ctx context.Context, organizationID string, projectID, userSessionIssuerID uuid.UUID) (bool, error) {
+	if organizationID == "" || projectID == uuid.Nil || userSessionIssuerID == uuid.Nil {
+		return false, nil
 	}
 	count, err := repo.New(g.db).CountActiveEMABindingsForUserIssuer(ctx, repo.CountActiveEMABindingsForUserIssuerParams{
 		IssuerID:       userSessionIssuerID,
@@ -150,10 +162,9 @@ func (g *Governor) Configured(ctx context.Context, organizationID string, projec
 		ProjectID:      projectID,
 	})
 	if err != nil {
-		g.logger.WarnContext(ctx, "count identity chaining bindings", attr.SlogError(err))
-		return false
+		return false, fmt.Errorf("count identity chaining bindings: %w", err)
 	}
-	return count > 0
+	return count > 0, nil
 }
 
 // HasUsableCredential reports whether a stored chained credential for req is
@@ -208,7 +219,12 @@ func (g *Governor) hasUsableCredentialFrom(ctx context.Context, req Request, sel
 	if !g.source(p).authorize(ctx, g.logger, statusReq, &current).Succeeded() {
 		return false
 	}
-	return g.storedCredentialUsable(ctx, req, current)
+	usable, err := g.storedCredentialUsable(ctx, req, current)
+	if err != nil {
+		g.logger.WarnContext(ctx, "read identity chaining credential", attr.SlogError(err))
+		return false
+	}
+	return usable
 }
 
 func (g *Governor) hasExternalCredential(ctx context.Context, req Request, sel selection) bool {

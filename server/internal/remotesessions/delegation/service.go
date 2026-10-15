@@ -18,7 +18,21 @@ var (
 	ErrTemporary        = errors.New("delegation temporarily unavailable")
 	ErrReauthentication = errors.New("delegation reauthentication required")
 	ErrConfiguration    = errors.New("delegation configuration requires remediation")
+
+	// ErrStaleRegistration is the ErrConfiguration a retained delegation
+	// reports when it predates the current trusted registration. Unlike other
+	// configuration failures a fresh sign-in repairs it, because the sign-in
+	// retains a delegation under the current registration. It matches
+	// ErrConfiguration and reads the same, so callers that do not need the
+	// distinction see no change.
+	ErrStaleRegistration error = staleRegistrationError{}
 )
+
+// staleRegistrationError is ErrStaleRegistration's type.
+type staleRegistrationError struct{}
+
+func (staleRegistrationError) Error() string { return ErrConfiguration.Error() }
+func (staleRegistrationError) Unwrap() error { return ErrConfiguration }
 
 // Assertion is an internal-only result, never a management API model.
 type Assertion struct {
@@ -355,7 +369,8 @@ func (s *Service) RecordOfflineRefusal(ctx context.Context, p Provider, humanID 
 }
 
 // Check reports whether the retained credential still belongs to the current
-// trusted registration, after the caller proves current authority. It neither
+// trusted registration, after the caller proves current authority. One retained
+// under an earlier registration is ErrStaleRegistration. It neither
 // renews nor returns the credential and never contacts the provider. Callers
 // releasing state derived from an earlier assertion use it so a changed
 // registration revokes that state too.
@@ -417,7 +432,10 @@ func (s *Service) check(ctx context.Context, b Binding, authority Authorizer) (d
 	if err != nil {
 		return none, ErrTemporary
 	}
-	if c.config != p.DelegationConfigurationHash() || c.status == "configuration_failure" {
+	if c.config != p.DelegationConfigurationHash() {
+		return none, ErrStaleRegistration
+	}
+	if c.status == "configuration_failure" {
 		return none, ErrConfiguration
 	}
 	return c, nil

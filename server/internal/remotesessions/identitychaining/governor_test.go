@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -190,7 +193,7 @@ func TestGovernor_RefreshDecisionUncertainty(t *testing.T) {
 		require.Equal(t, RefreshUnconfirmed, verdict.Decision)
 		require.Equal(t, ReasonTransientFailure, verdict.Reason)
 	})
-	t.Run("nothing cached and no exact binding", func(t *testing.T) {
+	t.Run("nothing cached", func(t *testing.T) {
 		t.Parallel()
 		f := newChainStoreFixture(t)
 		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
@@ -201,8 +204,7 @@ func TestGovernor_RefreshDecisionUncertainty(t *testing.T) {
 		alias := f.req
 		alias.UpstreamResource = "https://api.resource.example.test/mcp"
 		require.Equal(t, RefreshUnconfirmed, g.RefreshDecision(t.Context(), alias).Decision, "an alias on a bound origin is unknown until discovery is cached")
-		f.retainRefreshableDelegation(t, "durable_credential_present")
-		require.Equal(t, RefreshServed, g.RefreshDecision(t.Context(), f.req).Decision, "a binding naming the upstream itself selects without discovery")
+		require.Equal(t, RefreshUnconfirmed, g.RefreshDecision(t.Context(), f.req).Decision, "even a binding naming the transport URL waits for discovery")
 	})
 	t.Run("ambiguous bindings", func(t *testing.T) {
 		t.Parallel()
@@ -294,4 +296,127 @@ func TestInspectIdentityChainingForTenant(t *testing.T) {
 	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: uuid.New(), Valid: true}, f.req.UpstreamResource)
 	require.NoError(t, err)
 	require.Empty(t, results)
+}
+
+// failingQueries fails every query whose sqlc name it lists, so a test can
+// fault one configuration read and leave the others working.
+type failingQueries []string
+
+func (f failingQueries) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	for _, name := range f {
+		if strings.HasPrefix(data.SQL, "-- name: "+name+" ") {
+			failed, cancel := context.WithCancel(ctx)
+			cancel()
+			return failed
+		}
+	}
+	return ctx
+}
+
+func (failingQueries) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+// faultyPool connects to db's database with every query named in names failing.
+func faultyPool(t *testing.T, db *pgxpool.Pool, names ...string) *pgxpool.Pool {
+	t.Helper()
+	cfg := db.Config()
+	cfg.ConnConfig.Tracer = failingQueries(names)
+	pool, err := pgxpool.NewWithConfig(t.Context(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func TestGovernor_RefreshDecisionReadFaultsAreUnconfirmed(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		query string
+	}{
+		{name: "binding count", query: "CountActiveEMABindingsForUserIssuer"},
+		{name: "binding list", query: "ListEMAChainingBindings"},
+		{name: "binding readiness", query: "ReadEMAProject"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newChainStoreFixture(t)
+			healthy := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+			require.Equal(t, RefreshReauthenticate, healthy.RefreshDecision(t.Context(), f.req).Decision, "the healthy read confirms a fresh sign-in")
+
+			g := NewGovernor(testenv.NewLogger(t), faultyPool(t, f.db, tc.query), f.chainer.enc, f.chainer.delegation)
+			verdict := g.RefreshDecision(t.Context(), f.req)
+			require.Equal(t, RefreshUnconfirmed, verdict.Decision, "a failed read is unknown configuration, never a reconnect or an unchained upstream")
+			require.Equal(t, ReasonTransientFailure, verdict.Reason)
+		})
+	}
+}
+
+func TestGovernor_RefreshDecisionStoredCredentialReadFault(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	f.retainRefreshableDelegation(t, "assertion_only")
+	require.NoError(t, f.chainer.publish(t.Context(), f.chainer.logger, f.req, f.sel, f.credential("downstream-token")))
+	healthy := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	require.Equal(t, RefreshServed, healthy.RefreshDecision(t.Context(), f.req).Decision, "a usable stored credential serves after the assertion expires")
+
+	g := NewGovernor(testenv.NewLogger(t), faultyPool(t, f.db, "GetEMACredentialForUse"), f.chainer.enc, f.chainer.delegation)
+	verdict := g.RefreshDecision(t.Context(), f.req)
+	require.Equal(t, RefreshUnconfirmed, verdict.Decision, "a failed credential read is not an unusable credential")
+	require.Equal(t, ReasonTransientFailure, verdict.Reason)
+}
+
+func TestGovernor_RefreshDecisionNotConfigured(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	other := f.req
+	other.UserSessionIssuerID = uuid.New()
+	require.Equal(t, RefreshNotChained, g.RefreshDecision(t.Context(), other).Decision, "a user session issuer without bindings is not chained")
+}
+
+func TestGovernor_RefreshDecisionConfigurationFailureUnderTheCurrentRegistration(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	f.retainRefreshableDelegation(t, "configuration_failure")
+	verdict := g.RefreshDecision(t.Context(), f.req)
+	require.Equal(t, RefreshUnconfirmed, verdict.Decision, "a sign-in under the same registration cannot repair a configuration failure")
+	require.Equal(t, ReasonConfigurationRequired, verdict.Reason)
+}
+
+func TestGovernor_RefreshDecisionColdCacheWithTransportAndCanonicalBindings(t *testing.T) {
+	t.Parallel()
+	const transport = "https://api.resource.example.test/mcp"
+	f := newChainStoreFixture(t)
+	f.retainRefreshableDelegation(t, "durable_credential_present")
+	transportIssuer, transportClient := prepareResourceClient(t, f.db, f.chainer.enc, f.req.OrganizationID, "https://transport-as.example.test", "https://transport-as.example.test/token", "transport-client", "transport-secret")
+	bindResource(t, f.db, f.req, transportIssuer, transportClient, transport, remotesessions.PreparationStateReady)
+	req := f.req
+	req.UpstreamResource = transport
+
+	var cached *protectedresource.EndpointResource
+	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
+	g.SetResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, error) {
+		t.Error("refresh must never probe the upstream")
+		return protectedresource.EndpointResource{}, errors.New("unexpected probe")
+	})
+	g.SetCachedResourceResolver(func(context.Context, string, uuid.UUID, string) (protectedresource.EndpointResource, bool, error) {
+		if cached == nil {
+			return protectedresource.EndpointResource{}, false, nil
+		}
+		return *cached, true, nil
+	})
+
+	verdict := g.RefreshDecision(t.Context(), req)
+	require.Equal(t, RefreshUnconfirmed, verdict.Decision, "discovery may name the canonical binding, so the transport-named one cannot answer for the runtime")
+	require.Equal(t, ReasonTransientFailure, verdict.Reason)
+
+	cached = &protectedresource.EndpointResource{Resource: testResource, AuthorizationServers: []string{testResourceIssuer}, Discovered: true}
+	verdict = g.RefreshDecision(t.Context(), req)
+	require.Equal(t, RefreshServed, verdict.Decision)
+	require.Equal(t, f.sel.remoteIssuerID, verdict.RemoteSessionIssuerID, "cached discovery selects the canonical binding")
+
+	cached = &protectedresource.EndpointResource{Resource: transport, AuthorizationServers: nil, Discovered: false}
+	verdict = g.RefreshDecision(t.Context(), req)
+	require.Equal(t, transportIssuer, verdict.RemoteSessionIssuerID, "a cached absence of metadata selects the transport-named binding")
 }

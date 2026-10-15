@@ -184,17 +184,15 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 	const upstream = "https://chained-refresh.example.com/mcp"
 	cases := []struct {
 		name          string
-		configured    bool
 		decision      identitychaining.RefreshDecision
 		sibling       bool
 		wantReconnect bool
 	}{
-		{name: "served by chaining", configured: true, decision: identitychaining.RefreshServed},
-		{name: "served while a sibling client has no session", configured: true, decision: identitychaining.RefreshServed, sibling: true},
-		{name: "chaining unconfirmed", configured: true, decision: identitychaining.RefreshUnconfirmed},
-		{name: "chaining needs a fresh sign-in", configured: true, decision: identitychaining.RefreshReauthenticate, wantReconnect: true},
-		{name: "chaining does not serve the upstream", configured: true, decision: identitychaining.RefreshNotChained, wantReconnect: true},
-		{name: "chaining not configured", configured: false, decision: identitychaining.RefreshServed, wantReconnect: true},
+		{name: "served by chaining", decision: identitychaining.RefreshServed},
+		{name: "served while a sibling client has no session", decision: identitychaining.RefreshServed, sibling: true},
+		{name: "chaining unconfirmed", decision: identitychaining.RefreshUnconfirmed},
+		{name: "chaining needs a fresh sign-in", decision: identitychaining.RefreshReauthenticate, wantReconnect: true},
+		{name: "chaining does not serve the upstream", decision: identitychaining.RefreshNotChained, wantReconnect: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -218,7 +216,7 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			g := &consentGovernor{t: t, issuer: remoteClient.RemoteSessionIssuerID, served: map[string]bool{}, governs: false, configured: tc.configured, usable: false, refresh: tc.decision, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+			g := &consentGovernor{t: t, issuer: remoteClient.RemoteSessionIssuerID, served: map[string]bool{}, governs: false, configured: true, usable: false, refresh: tc.decision, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
 			ti.service.SetIdentityChainer(g)
 
 			res := performRefreshRequest(ctx, ti, slug, client.ClientID, refreshToken)
@@ -233,10 +231,6 @@ func TestHandleToken_RefreshFollowsTheChainingDecision(t *testing.T) {
 
 			g.mu.Lock()
 			defer g.mu.Unlock()
-			if !tc.configured {
-				require.Empty(t, g.refreshed, "an upstream chaining is not configured for is judged from stored grants alone")
-				return
-			}
 			require.Len(t, g.refreshed, 1, "refresh asks identity chaining once")
 			req := g.refreshed[0]
 			require.Equal(t, upstream, req.UpstreamResource)

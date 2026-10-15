@@ -21,9 +21,10 @@ type DelegationAuthorizer = delegation.Authorizer
 type DelegationOfflineStatus = delegation.OfflineStatus
 
 var (
-	ErrDelegationTemporary        = delegation.ErrTemporary
-	ErrDelegationReauthentication = delegation.ErrReauthentication
-	ErrDelegationConfiguration    = delegation.ErrConfiguration
+	ErrDelegationTemporary         = delegation.ErrTemporary
+	ErrDelegationReauthentication  = delegation.ErrReauthentication
+	ErrDelegationConfiguration     = delegation.ErrConfiguration
+	ErrDelegationStaleRegistration = delegation.ErrStaleRegistration
 )
 
 type DelegationService struct{ service *delegation.Service }

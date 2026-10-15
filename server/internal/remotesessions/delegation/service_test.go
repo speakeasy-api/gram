@@ -1341,4 +1341,20 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 		s, _, _, b, allow := newDelegationUnitFixture(t)
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
 	})
+	t.Run("retained under an earlier registration", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Hour, func(c *delegationCredential) { c.config = "earlier-registration" })
+		err := s.CheckResolvable(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrStaleRegistration)
+		require.ErrorIs(t, err, ErrConfiguration, "a stale registration is still a configuration failure to callers that do not ask")
+		require.EqualError(t, err, ErrConfiguration.Error())
+		require.ErrorIs(t, s.Check(t.Context(), b, allow), ErrStaleRegistration)
+	})
+	t.Run("configuration failure under the current registration", func(t *testing.T) {
+		t.Parallel()
+		s, b, allow := retained(t, "refresh", time.Hour, func(c *delegationCredential) { c.status = "configuration_failure" })
+		err := s.CheckResolvable(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrConfiguration)
+		require.NotErrorIs(t, err, ErrStaleRegistration, "a sign-in under the same registration cannot repair it")
+	})
 }

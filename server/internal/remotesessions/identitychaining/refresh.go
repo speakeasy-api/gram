@@ -2,9 +2,11 @@ package identitychaining
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -23,18 +25,20 @@ const (
 	RefreshNotChained RefreshDecision = "none"
 
 	// RefreshServed: a provider in the order can serve the grant without a
-	// fresh sign-in, or may once a transient fault clears.
+	// fresh sign-in.
 	RefreshServed RefreshDecision = "served"
 
-	// RefreshUnconfirmed: chaining owns the upstream but cannot confirm it
-	// serves. Either a transient fault hid the answer, or the configuration
-	// is ambiguous or broken; the runtime answers the latter with a hard
-	// forbidden that no reconnect repairs, so refusing the refresh would only
-	// sign the client out.
+	// RefreshUnconfirmed: chaining may own the upstream but stored state
+	// cannot confirm either way. A read failed or a fault hid the answer, the
+	// discovery cache cannot name the runtime's resource, or the
+	// configuration is ambiguous or needs an administrator; no reconnect
+	// repairs any of these, so refusing the refresh would only sign the
+	// client out.
 	RefreshUnconfirmed RefreshDecision = "unconfirmed"
 
-	// RefreshReauthenticate: every provider that can serve needs the human
-	// to sign in again, which the runtime answers with a reconnect challenge.
+	// RefreshReauthenticate: stored state confirms that every provider that
+	// can serve needs the human to sign in again, and that the sign-in
+	// repairs it.
 	RefreshReauthenticate RefreshDecision = "reauthenticate"
 )
 
@@ -60,8 +64,10 @@ type RefreshVerdict struct {
 // without the human signing in again. It selects the binding once, resolving
 // the resource only from the shared discovery cache, then runs per provider
 // the authority and reuse checks Acquire runs before releasing or issuing a
-// token. It never acquires, retires or renews anything. Retryable outcomes
-// read as served, so an outage never demands a reconnect.
+// token. It never acquires, retires or renews anything. Only a confirmed need
+// to sign in again is RefreshReauthenticate; a failed read, a fault or a
+// resource the cache cannot name is RefreshUnconfirmed, so an outage never
+// demands a reconnect.
 func (g *Governor) RefreshDecision(ctx context.Context, req Request) RefreshVerdict {
 	verdict := RefreshVerdict{Decision: RefreshNotChained, RemoteSessionIssuerID: uuid.Nil, Provider: "", Reason: ReasonNotApplicable}
 	if !req.complete() || req.UserID == "" {
@@ -73,9 +79,23 @@ func (g *Governor) RefreshDecision(ctx context.Context, req Request) RefreshVerd
 		attr.SlogUserSessionIssuerID(req.UserSessionIssuerID.String()),
 		attr.SlogUserID(req.UserID),
 	)
-	sel, outcome := g.selectBindingWith(ctx, logger, req, g.storedResource)
+	configured, err := g.configured(ctx, req.OrganizationID, req.ProjectID, req.UserSessionIssuerID)
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "count identity chaining bindings for refresh", attr.SlogError(err))
+		verdict.Decision = RefreshUnconfirmed
+		verdict.Reason = ReasonTransientFailure
+		return verdict
+	case !configured:
+		return verdict
+	}
+	sel, outcome, err := g.selectBindingWith(ctx, logger, req, g.storedResource)
 	verdict.Reason = outcome.Reason
 	switch {
+	case err != nil:
+		verdict.Decision = RefreshUnconfirmed
+		verdict.Reason = ReasonTransientFailure
+		return verdict
 	case outcome.Succeeded():
 	case !outcome.Applicable():
 		return verdict
@@ -99,6 +119,9 @@ func (g *Governor) RefreshDecision(ctx context.Context, req Request) RefreshVerd
 		outcome.Provider = p.Kind
 		if outcome.Succeeded() || outcome.Retryable {
 			verdict.Decision = RefreshServed
+			if outcome.Retryable {
+				verdict.Decision = RefreshUnconfirmed
+			}
 			verdict.Provider = p.Kind
 			verdict.Reason = outcome.Reason
 			return verdict
@@ -125,10 +148,12 @@ func (g *Governor) RefreshDecision(ctx context.Context, req Request) RefreshVerd
 // still yield an assertion unless a stored credential remains usable. The
 // Speakeasy source's authority already checks the grant's sign-in.
 //
-// A retained delegation that no longer matches the trusted registration reads
+// A retained delegation that predates the current trusted registration reads
 // as needing reauthentication. The runtime reports it as configuration, but
 // the human's next sign-in retains a delegation under the current
-// registration, so a reconnect is exactly what repairs it.
+// registration, so a reconnect is exactly what repairs it. Every other
+// configuration failure, such as a renewal the provider refused for the
+// configured client, stays configuration: signing in again cannot repair it.
 func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider) Outcome {
 	src := g.source(p)
 	current := sel
@@ -139,26 +164,42 @@ func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Req
 	if _, local := src.(speakeasySource); local {
 		return success
 	}
-	outcome := src.checkReuse(ctx, req, current)
-	if outcome.Succeeded() {
-		if g.storedCredentialUsable(ctx, req, current) {
+	if g.delegation == nil {
+		return delegationUnchecked
+	}
+	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: current.trustedIssuerID, ClientID: current.trustedClientID, HumanID: req.UserID}
+	auth := authority{db: g.db, req: req}
+	err := g.delegation.Check(ctx, binding, auth)
+	if err == nil {
+		usable, readErr := g.storedCredentialUsable(ctx, req, current)
+		switch {
+		case readErr != nil:
+			logger.WarnContext(ctx, "read identity chaining credential for refresh", attr.SlogError(readErr))
+			return newOutcome(StagePersistence, ReasonTransientFailure, ConfidenceUnknown, true)
+		case usable:
 			return success
 		}
-		outcome = g.checkResolvable(ctx, req, current)
+		err = g.delegation.CheckResolvable(ctx, binding, auth)
 	}
-	if outcome.Stage == StageDelegation && outcome.Reason == ReasonConfigurationRequired && g.delegation != nil {
+	if errors.Is(err, remotesessions.ErrDelegationStaleRegistration) {
 		return newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
 	}
-	return outcome
+	return delegationOutcome(err)
 }
 
 // storedCredentialUsable reports whether sel's stored credential is usable now
-// and still decrypts, as the runtime requires before releasing it.
-func (g *Governor) storedCredentialUsable(ctx context.Context, req Request, sel selection) bool {
+// and still decrypts, as the runtime requires before releasing it. A missing
+// or undecryptable credential is unusable; a failed read is an error.
+func (g *Governor) storedCredentialUsable(ctx context.Context, req Request, sel selection) (bool, error) {
 	row, err := readCredential(ctx, repo.New(g.db), req, sel, g.now())
-	if err != nil || !row.Usable || g.enc == nil {
-		return false
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, err
+	case !row.Usable || g.enc == nil:
+		return false, nil
 	}
 	value, err := g.enc.Decrypt(row.AccessTokenEncrypted.String)
-	return err == nil && value != ""
+	return err == nil && value != "", nil
 }

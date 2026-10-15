@@ -58,17 +58,6 @@ func (g *Governor) checkDelegation(ctx context.Context, req Request, sel selecti
 	return delegationOutcome(g.delegation.Check(ctx, binding, authority{db: g.db, req: req}))
 }
 
-// checkResolvable is checkDelegation plus whether the retained delegation can
-// still yield an assertion without the human signing in again, judged from
-// stored state as the exchange would resolve it.
-func (g *Governor) checkResolvable(ctx context.Context, req Request, sel selection) Outcome {
-	if g.delegation == nil {
-		return delegationUnchecked
-	}
-	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
-	return delegationOutcome(g.delegation.CheckResolvable(ctx, binding, authority{db: g.db, req: req}))
-}
-
 // delegationUnchecked answers a governor built without a delegation service,
 // which can never confirm a retained delegation.
 var delegationUnchecked = newOutcome(StageDelegation, ReasonConfigurationRequired, ConfidenceVerified, false)

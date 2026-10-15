@@ -1342,10 +1342,9 @@ func (s *Service) rotateRefreshToken(
 // consults sibling clients on the user session issuer; the consent page
 // likewise lets a chained card stand in for a connection. So once chaining
 // serves the grant, sibling sessions need no reconnect either. The reconnect
-// stands only when the runtime would answer with a reconnect challenge itself:
-// chaining needs the human to sign in again, or no provider in the order can
-// serve. Uncertainty the runtime reports as retryable or forbidden fails open,
-// because no reconnect would change it.
+// stands only when chaining does not serve the upstream or stored state
+// confirms the human must sign in again. Anything chaining cannot confirm,
+// a failed read included, fails open, because no reconnect would change it.
 func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
 	if endpoint.MetaMcpServerID.Valid {
 		return false
@@ -1355,13 +1354,15 @@ func (s *Service) userRefreshNeedsUpstreamReconnect(ctx context.Context, logger 
 		logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
 		return false
 	}
-	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" ||
-		!s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID) {
+	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
 		return reconnect
 	}
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil}
-	req, ok := s.directChainingRequest(ctx, endpoint, subject.ID, routing)
-	if !ok {
+	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing)
+	switch {
+	case err != nil:
+		return false
+	case !ok:
 		return true
 	}
 	req.UserSessionJTI = jti
