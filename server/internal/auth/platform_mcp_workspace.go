@@ -163,8 +163,12 @@ func (s *Service) provisionFirstOrgForUser(ctx context.Context, userID, orgName,
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if _, err := leases.ReleaseLeaseIfOwner(releaseCtx, key, owner); err != nil {
+		released, err := leases.ReleaseLeaseIfOwner(releaseCtx, key, owner)
+		switch {
+		case err != nil:
 			s.logger.ErrorContext(releaseCtx, "failed to release Platform MCP workspace lock", attr.SlogError(err), attr.SlogUserID(userID))
+		case !released:
+			s.logger.WarnContext(releaseCtx, "Platform MCP workspace lock expired or changed owner before release", attr.SlogUserID(userID))
 		}
 	}()
 
