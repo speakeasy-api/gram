@@ -47,3 +47,14 @@ func (q *Queries) PointAssetAtUpload(ctx context.Context, arg PointAssetAtUpload
 	)
 	return err
 }
+
+const setSeedStatementTimeout = `-- name: SetSeedStatementTimeout :exec
+SELECT set_config('statement_timeout', '360s', true)
+`
+
+// Transaction-local, so it reverts on commit or rollback and never leaks onto
+// a pooled connection.
+func (q *Queries) SetSeedStatementTimeout(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, setSeedStatementTimeout)
+	return err
+}

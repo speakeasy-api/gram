@@ -60,6 +60,13 @@ type phase struct {
 }
 
 func (s *seeder) runPostgres(ctx context.Context) error {
+	// The pool caps each statement at 60s (newDBClient). The purge's cascading
+	// deletes run against prod-sized tables, so give every statement of this
+	// transaction more room while still failing a wedged run.
+	if err := s.q.SetSeedStatementTimeout(ctx); err != nil {
+		return fmt.Errorf("raise statement timeout: %w", err)
+	}
+
 	now, err := s.q.Now(ctx)
 	if err != nil {
 		return fmt.Errorf("read transaction time: %w", err)
