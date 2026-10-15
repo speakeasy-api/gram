@@ -117,6 +117,57 @@ func (q *Queries) CountActiveUserSessionsByClientIDs(ctx context.Context, userSe
 	return items, nil
 }
 
+const countOrganizationManagedUserSessionIssuerMCPServers = `-- name: CountOrganizationManagedUserSessionIssuerMCPServers :one
+SELECT (
+    (
+        SELECT COUNT(*)
+        FROM mcp_servers AS server
+        JOIN projects AS project ON project.id = server.project_id
+        WHERE server.user_session_issuer_id = $1::uuid
+          AND server.deleted IS FALSE
+          AND project.organization_id = $2::text
+          AND project.deleted IS FALSE
+    ) + (
+        SELECT COUNT(*)
+        FROM toolsets AS toolset
+        JOIN projects AS project ON project.id = toolset.project_id
+        WHERE toolset.user_session_issuer_id = $1::uuid
+          AND toolset.deleted IS FALSE
+          AND project.organization_id = $2::text
+          AND project.deleted IS FALSE
+          AND NOT EXISTS (
+              SELECT 1
+              FROM mcp_servers AS server
+              WHERE server.toolset_id = toolset.id
+                AND server.project_id = toolset.project_id
+                AND server.deleted IS FALSE
+          )
+    ) + (
+        SELECT COUNT(*)
+        FROM meta_mcp_servers AS meta_server
+        JOIN projects AS project ON project.id = meta_server.project_id
+        WHERE meta_server.user_session_issuer_id = $1::uuid
+          AND meta_server.deleted IS FALSE
+          AND project.organization_id = $2::text
+          AND project.deleted IS FALSE
+    )
+)::int AS server_count
+`
+
+type CountOrganizationManagedUserSessionIssuerMCPServersParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+// How many servers ListOrganizationManagedUserSessionIssuerMCPServers lists,
+// by the same rules.
+func (q *Queries) CountOrganizationManagedUserSessionIssuerMCPServers(ctx context.Context, arg CountOrganizationManagedUserSessionIssuerMCPServersParams) (int32, error) {
+	row := q.db.QueryRow(ctx, countOrganizationManagedUserSessionIssuerMCPServers, arg.UserSessionIssuerID, arg.OrganizationID)
+	var server_count int32
+	err := row.Scan(&server_count)
+	return server_count, err
+}
+
 const countOrganizationUserSessionIssuerClients = `-- name: CountOrganizationUserSessionIssuerClients :one
 SELECT COUNT(*)::int
 FROM user_session_issuers AS issuer
@@ -4388,6 +4439,66 @@ func (q *Queries) RevokeUserSessionConsent(ctx context.Context, arg RevokeUserSe
 		&i.DeletedAt,
 		&i.Deleted,
 		&i.UserSessionIssuerID,
+	)
+	return i, err
+}
+
+const setOrganizationManagedUserSessionIssuerAuthenticationHost = `-- name: SetOrganizationManagedUserSessionIssuerAuthenticationHost :one
+UPDATE user_session_issuers AS issuer
+SET use_authentication_host = $1,
+    pinned_issuer_url = $2,
+    updated_at = clock_timestamp()
+WHERE issuer.id = $3
+  AND issuer.deleted IS FALSE
+  AND (
+    issuer.organization_id = $4::text
+    OR EXISTS (
+      SELECT 1 FROM projects AS project
+      WHERE project.id = issuer.project_id
+        AND project.organization_id = $4::text
+        AND project.deleted IS FALSE
+    )
+  )
+RETURNING issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted
+`
+
+type SetOrganizationManagedUserSessionIssuerAuthenticationHostParams struct {
+	UseAuthenticationHost bool
+	PinnedIssuerUrl       pgtype.Text
+	ID                    uuid.UUID
+	OrganizationID        string
+}
+
+// Moves an issuer onto or off the authentication host, with the issuer URL
+// its shared authorization server is pinned to there. NULL leaves it
+// unpinned.
+func (q *Queries) SetOrganizationManagedUserSessionIssuerAuthenticationHost(ctx context.Context, arg SetOrganizationManagedUserSessionIssuerAuthenticationHostParams) (UserSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, setOrganizationManagedUserSessionIssuerAuthenticationHost,
+		arg.UseAuthenticationHost,
+		arg.PinnedIssuerUrl,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	var i UserSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.Slug,
+		&i.AuthnChallengeMode,
+		&i.SessionDuration,
+		&i.Classification,
+		&i.ClientIDMetadataAdmissionMode,
+		&i.TrustedRemoteSessionIssuerID,
+		&i.TrustedRemoteSessionClientID,
+		&i.UseAuthenticationHost,
+		&i.AuthorizationServerMode,
+		&i.PinnedIssuerUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }

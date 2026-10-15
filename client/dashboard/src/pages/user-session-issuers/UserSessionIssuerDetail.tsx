@@ -24,6 +24,7 @@ import { useOrganizationUserSessionIssuer } from "@gram/client/react-query/organ
 import { useOrganizationUserSessionIssuerMcpServersInfinite } from "@gram/client/react-query/organizationUserSessionIssuerMcpServers.js";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { AuthenticationHostDialog } from "./AuthenticationHostDialog";
 import { ConsolidateIssuerDialog } from "./ConsolidateIssuerDialog";
 import {
   authorizationServerModeLabel,
@@ -314,6 +315,7 @@ function ActionsSection({
   const orgRoutes = useOrgRoutes();
   const navigate = useNavigate();
   const [promoting, setPromoting] = useState(false);
+  const [movingHost, setMovingHost] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
 
   return (
@@ -336,7 +338,26 @@ function ActionsSection({
           >
             <Button.Text>Consolidate into another</Button.Text>
           </Button>
+          {issuer.authenticationHostAvailable && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setMovingHost(true)}
+            >
+              <Button.Text>
+                {issuer.useAuthenticationHost
+                  ? "Move off the authentication host"
+                  : "Move to the authentication host"}
+              </Button.Text>
+            </Button>
+          )}
         </Stack>
+        {movingHost && (
+          <AuthenticationHostDialog
+            issuer={issuer}
+            onClose={() => setMovingHost(false)}
+          />
+        )}
         {promoting && (
           <MakeOrganizationWideDialog
             issuer={issuer}

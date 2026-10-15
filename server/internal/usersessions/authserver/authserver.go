@@ -156,6 +156,23 @@ func (h Hosts) SharedAuthorizationServer(issuer repo.UserSessionIssuer) (SharedA
 	return SharedAuthorizationServer{IssuerURL: issuerURL, TokenEndpoint: tokenEndpoint}, nil
 }
 
+// AuthenticationHostAvailable reports whether the deployment has an
+// authentication host to announce authorization servers on.
+func (h Hosts) AuthenticationHostAvailable() bool {
+	return h.AuthenticationHostBaseURL != ""
+}
+
+// SharedIssuerURLOn is the issuer identifier an issuer's shared authorization
+// server takes on the authentication host, or otherwise on the server URL: the
+// URL to pin when moving a pinned issuer between the two.
+func (h Hosts) SharedIssuerURLOn(issuerID uuid.UUID, onAuthenticationHost bool) string {
+	base := h.ServerURL
+	if onAuthenticationHost && h.AuthenticationHostBaseURL != "" {
+		base = h.AuthenticationHostBaseURL
+	}
+	return requestorigin.URLOrigin(base) + SharedPath(issuerID)
+}
+
 // PerServerOrigin is where an issuer in endpoint mode announces its MCP
 // servers' own authorization servers: the authentication host when the issuer
 // opts in to one the deployment has, and otherwise the server URL. MCP servers

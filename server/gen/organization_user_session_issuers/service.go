@@ -34,6 +34,18 @@ type Service interface {
 	// project-specific. A toolset served through an MCP server is listed once, as
 	// that server. Requires org:read.
 	ListMcpServers(context.Context, *ListMcpServersPayload) (res *ListUserSessionIssuerMcpServersResult, err error)
+	// Preview moving a user_session_issuer in the caller's organization onto or
+	// off the deployment's authentication host: where clients sign in before and
+	// after, and how many MCP servers that affects. Requires org:read.
+	GetAuthenticationHostImpact(context.Context, *GetAuthenticationHostImpactPayload) (res *UserSessionIssuerAuthenticationHostImpact, err error)
+	// Move a user_session_issuer in the caller's organization onto or off the
+	// deployment's authentication host. A shared authorization server with a
+	// pinned issuer URL is re-pinned to the matching host, so its issuer URL and
+	// token endpoint change; other issuers announce their authorization servers on
+	// the new host. Clients and anything configured with the previous URLs must be
+	// updated. Refused when the deployment has no authentication host, and for
+	// issuers managed by Speakeasy. Requires org:admin.
+	SetAuthenticationHost(context.Context, *SetAuthenticationHostPayload) (res *types.UserSessionIssuer, err error)
 	// Report the clients, live sessions, MCP servers, and toolsets affected by
 	// deleting an organization-owned user_session_issuer. Requires org:read.
 	GetIssuerDeletePreflight(context.Context, *GetIssuerDeletePreflightPayload) (res *OrganizationUserSessionIssuerDeletePreflight, err error)
@@ -94,7 +106,7 @@ const ServiceName = "organizationUserSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "listMcpServers", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
+var MethodNames = [16]string{"createIssuer", "listIssuers", "getIssuer", "updateIssuer", "listMcpServers", "getAuthenticationHostImpact", "setAuthenticationHost", "getIssuerDeletePreflight", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "createCimdClient", "listCimdClients", "getCimdClient", "deleteCimdClient"}
 
 // CreateCimdClientPayload is the payload type of the
 // organizationUserSessionIssuers service createCimdClient method.
@@ -147,6 +159,17 @@ type DeleteIssuerPayload struct {
 	// The user_session_issuer id.
 	ID           string
 	SessionToken *string
+}
+
+// GetAuthenticationHostImpactPayload is the payload type of the
+// organizationUserSessionIssuers service getAuthenticationHostImpact method.
+type GetAuthenticationHostImpactPayload struct {
+	// The user_session_issuer id.
+	ID string
+	// True to preview moving onto the authentication host, false to preview moving
+	// off it.
+	UseAuthenticationHost bool
+	SessionToken          *string
 }
 
 // GetCimdClientPayload is the payload type of the
@@ -365,6 +388,16 @@ type OrganizationUserSessionIssuerReference struct {
 	ProjectName string
 }
 
+// SetAuthenticationHostPayload is the payload type of the
+// organizationUserSessionIssuers service setAuthenticationHost method.
+type SetAuthenticationHostPayload struct {
+	// The user_session_issuer id.
+	ID string
+	// True to move onto the authentication host, false to move off it.
+	UseAuthenticationHost bool
+	SessionToken          *string
+}
+
 // UpdateIssuerPayload is the payload type of the
 // organizationUserSessionIssuers service updateIssuer method.
 type UpdateIssuerPayload struct {
@@ -390,6 +423,26 @@ type UpdateIssuerPayload struct {
 	// 'open' admits any spec-valid document; 'disabled' admits none and stops
 	// advertising CIMD support. Omit to leave unchanged.
 	ClientIDMetadataAdmissionMode *string
+}
+
+// UserSessionIssuerAuthenticationHostImpact is the result type of the
+// organizationUserSessionIssuers service getAuthenticationHostImpact method.
+type UserSessionIssuerAuthenticationHostImpact struct {
+	// The issuer as it is now.
+	Issuer *types.UserSessionIssuer
+	// Where clients sign in now: the shared authorization server's issuer URL, or
+	// the origin that announces each MCP server's own authorization server. Empty
+	// for a shared issuer this deployment does not serve.
+	AuthorizationServerBefore string
+	// Where clients sign in after the move, in the same terms.
+	AuthorizationServerAfter string
+	// Whether the move changes where clients sign in. False when the issuer is
+	// already where it would move.
+	Changes bool
+	// Live MCP servers, toolsets, and meta MCP servers attached to the issuer.
+	// Those on a custom domain keep announcing their own authorization servers
+	// there.
+	McpServerCount int
 }
 
 // One user_session_issuer setting whose source and target values differ.
