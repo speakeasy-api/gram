@@ -86,3 +86,90 @@ func TestLandingKeepsAbsentAndZeroConfidenceDistinct(t *testing.T) {
 	require.Equal(t, uint64(1), nulls)
 	require.Equal(t, uint64(1), zeroes)
 }
+
+// landedStatus reads the converged row for a logical reading.
+func landedStatus(t *testing.T, queries *Queries, row ReadingRow) (rows uint64, status, reason, resultType string, probabilities uint64) {
+	t.Helper()
+	require.NoError(t, queries.conn.QueryRow(t.Context(), `
+		SELECT count() OVER (), status, failure_reason, result_type, toUInt64(length(probabilities))
+		FROM sigint_readings FINAL
+		WHERE organization_id = ? AND project_id = ? AND sensor_id = ? AND id = ?
+		LIMIT 1 SETTINGS max_execution_time = 10, max_rows_to_read = 100000
+	`, row.OrganizationID, row.ProjectID, row.SensorID, row.ID).Scan(&rows, &status, &reason, &resultType, &probabilities))
+	return rows, status, reason, resultType, probabilities
+}
+
+func TestLandingLaterAnswerReplacesEarlierFailure(t *testing.T) {
+	t.Parallel()
+	queries := New(testConnection(t))
+	now := time.Now().UTC()
+	at := now.Truncate(time.Hour).Add(-3 * time.Hour)
+	reading := testReading(t, at)
+	reading.SetEvaluatedAt(at.Add(time.Minute).Format(time.RFC3339Nano))
+	failure := testOutcome(t, reading, at.Add(time.Second), sigintv1.Outcome_STATUS_FAILED, "classifier_rejected")
+	answered, err := ParseReading(reading, now)
+	require.NoError(t, err)
+	failed, err := ParseOutcome(failure, now)
+	require.NoError(t, err)
+	// The stale failure arrives after the newer answer; evaluation time decides.
+	require.NoError(t, queries.InsertReadings(t.Context(), []ReadingRow{answered}))
+	require.NoError(t, queries.InsertReadings(t.Context(), []ReadingRow{failed}))
+	rows, status, reason, resultType, probabilities := landedStatus(t, queries, answered)
+	require.Equal(t, uint64(1), rows)
+	require.Equal(t, StatusAnswered, status)
+	require.Empty(t, reason)
+	require.Equal(t, "multi_label", resultType)
+	require.Equal(t, uint64(2), probabilities)
+}
+
+func TestLandingLaterFailureReplacesEarlierAnswer(t *testing.T) {
+	t.Parallel()
+	queries := New(testConnection(t))
+	now := time.Now().UTC()
+	at := now.Truncate(time.Hour).Add(-3 * time.Hour)
+	reading := testReading(t, at)
+	failure := testOutcome(t, reading, at.Add(time.Minute), sigintv1.Outcome_STATUS_FAILED, "content_too_large")
+	answered, err := ParseReading(reading, now)
+	require.NoError(t, err)
+	failed, err := ParseOutcome(failure, now)
+	require.NoError(t, err)
+	require.NoError(t, queries.InsertReadings(t.Context(), []ReadingRow{failed}))
+	require.NoError(t, queries.InsertReadings(t.Context(), []ReadingRow{answered}))
+	rows, status, reason, resultType, probabilities := landedStatus(t, queries, answered)
+	require.Equal(t, uint64(1), rows)
+	require.Equal(t, StatusFailed, status)
+	require.Equal(t, "content_too_large", reason)
+	require.Empty(t, resultType)
+	require.Zero(t, probabilities)
+}
+
+func TestLandingAcceptsEveryOutcomeStatus(t *testing.T) {
+	t.Parallel()
+	queries := New(testConnection(t))
+	now := time.Now().UTC()
+	at := now.Truncate(time.Hour).Add(-time.Hour)
+	var rows []ReadingRow
+	for _, tc := range []struct {
+		status sigintv1.Outcome_Status
+		reason string
+	}{
+		{sigintv1.Outcome_STATUS_NOT_APPLICABLE, ""},
+		{sigintv1.Outcome_STATUS_DRAFT, ""},
+		{sigintv1.Outcome_STATUS_FAILED, "match_compile"},
+	} {
+		o := testOutcome(t, testReading(t, at), at, tc.status, tc.reason)
+		if tc.status == sigintv1.Outcome_STATUS_DRAFT {
+			o.SetDefinitionHash("")
+		}
+		row, err := ParseOutcome(o, now)
+		require.NoError(t, err)
+		rows = append(rows, row)
+	}
+	// Table constraints reject any row whose status, reason and result disagree.
+	require.NoError(t, queries.InsertReadings(t.Context(), rows))
+	for _, row := range rows {
+		landed, status, _, _, _ := landedStatus(t, queries, row)
+		require.Equal(t, uint64(1), landed)
+		require.Equal(t, row.Status, status)
+	}
+}

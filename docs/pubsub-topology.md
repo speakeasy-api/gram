@@ -39,6 +39,7 @@ flowchart LR
   t_gram_risk_v1_prompt_injection_analysis(["gram-risk-v1-prompt-injection-analysis<br/>(topic)"]):::topic
   t_gram_risk_v1_prompt_policy_analysis(["gram-risk-v1-prompt-policy-analysis<br/>(topic)"]):::topic
   t_gram_role_distribution_v1_role_distribution_setup_requested_v1(["gram-role-distribution-v1-role-distribution-setup-requested-v1<br/>(topic)"]):::topic
+  t_gram_sigint_v1_outcome(["gram-sigint-v1-outcome<br/>(topic)"]):::topic
   t_gram_sigint_v1_reading(["gram-sigint-v1-reading<br/>(topic)"]):::topic
   t_gram_telemetry_v1_log_record(["gram-telemetry-v1-log-record<br/>(topic)"]):::topic
   t_gram_telemetry_v1_session_observed(["gram-telemetry-v1-session-observed<br/>(topic)"]):::topic
@@ -77,6 +78,7 @@ flowchart LR
   b_lake[("lake<br/>GCS / Parquet")]:::topic
   s_gram_sigint_v1_lake_primary --> b_lake
   s_gram_sigint_v1_lake_primary["gram-sigint-v1-lake-primary<br/>(storage sub)"]:::sub
+  s_gram_sigint_v1_outcome_ch_writer["gram-sigint-v1-outcome-ch-writer<br/>(sub)"]:::sub
   s_gram_sigint_v1_reading_ch_writer["gram-sigint-v1-reading-ch-writer<br/>(sub)"]:::sub
   s_gram_telemetry_v1_noop["gram-telemetry-v1-noop<br/>(sub)"]:::sub
   s_gram_telemetry_v1_session_observed_ch_writer["gram-telemetry-v1-session-observed-ch-writer<br/>(sub)"]:::sub
@@ -171,6 +173,7 @@ flowchart LR
   t_gram_role_distribution_v1_role_distribution_setup_requested_v1 --> s_gram_role_distribution_v1_role_distribution_setup_handler
   t_gram_conversation_v1_message_event --> s_gram_sigint_v1_evaluator
   t_gram_sigint_v1_reading --> s_gram_sigint_v1_lake_primary
+  t_gram_sigint_v1_outcome --> s_gram_sigint_v1_outcome_ch_writer
   t_gram_sigint_v1_reading --> s_gram_sigint_v1_reading_ch_writer
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_noop
   t_gram_telemetry_v1_session_observed --> s_gram_telemetry_v1_session_observed_ch_writer
@@ -278,6 +281,7 @@ flowchart LR
 | [`gram-risk-v1-prompt-injection-analysis`](../infra/proto/gram/risk/v1/prompt_injection_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/scan_prompt_injection.go`](../server/internal/background/activities/risk_analysis/scan_prompt_injection.go) |
 | [`gram-risk-v1-prompt-policy-analysis`](../infra/proto/gram/risk/v1/prompt_policy_analysis.proto) | topic | 7d | [`server/internal/background/activities/risk_analysis/prompt_judge_batch.go`](../server/internal/background/activities/risk_analysis/prompt_judge_batch.go) |
 | [`gram-role-distribution-v1-role-distribution-setup-requested-v1`](../infra/proto/gram/role_distribution/v1/setup_requested.proto) | topic | 7d | [`server/internal/roledistribution/requests/requests.go`](../server/internal/roledistribution/requests/requests.go) |
+| [`gram-sigint-v1-outcome`](../infra/proto/gram/sigint/v1/outcome.proto) | topic | 4d | — |
 | [`gram-sigint-v1-reading`](../infra/proto/gram/sigint/v1/reading.proto) | topic | 4d | [`server/internal/sigint/evaluation/compile.go`](../server/internal/sigint/evaluation/compile.go) |
 | [`gram-telemetry-v1-log-record`](../infra/proto/gram/telemetry/v1/log_record.proto) | topic | 7d | [`server/internal/telemetry/log_publisher.go`](../server/internal/telemetry/log_publisher.go) |
 | [`gram-telemetry-v1-session-observed`](../infra/proto/gram/telemetry/v1/session_observed.proto) | topic | 7d | [`server/cmd/gram/replaysessions.go`](../server/cmd/gram/replaysessions.go)<br/>[`server/internal/chat/message_store.go`](../server/internal/chat/message_store.go) |
@@ -319,6 +323,7 @@ flowchart LR
 | [`gram-role-distribution-v1-role-distribution-setup-handler`](../infra/proto/gram/role_distribution/v1/setup_handler.proto) | `gram-role-distribution-v1-role-distribution-setup-requested-v1` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-sigint-v1-evaluator`](../infra/proto/gram/sigint/v1/evaluator.proto) | `gram-conversation-v1-message-event` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-sigint-v1-lake-primary`](../infra/proto/gram/sigint/v1/lake_primary.proto) | `gram-sigint-v1-reading` | 1m | — | Go storage runner → `lake/gram.sigint.v1.LakePrimary/` (HIVE_DAILY); explicit installation required |
+| [`gram-sigint-v1-outcome-ch-writer`](../infra/proto/gram/sigint/v1/outcome_ch_writer.proto) | `gram-sigint-v1-outcome` | 1m | — | — |
 | [`gram-sigint-v1-reading-ch-writer`](../infra/proto/gram/sigint/v1/reading_ch_writer.proto) | `gram-sigint-v1-reading` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-noop`](../infra/proto/gram/telemetry/v1/noop.proto) | `gram-telemetry-v1-log-record` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
 | [`gram-telemetry-v1-session-observed-ch-writer`](../infra/proto/gram/telemetry/v1/session_observed_ch_writer.proto) | `gram-telemetry-v1-session-observed` | 1m | — | [`server/cmd/gram/streams.go`](../server/cmd/gram/streams.go) |
@@ -332,5 +337,7 @@ flowchart LR
 - Topic `gram-otel-v1-log-record` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-metric` has no publisher in `server/` or `pystreams/`.
 - Topic `gram-otel-v1-span` has no publisher in `server/` or `pystreams/`.
+- Topic `gram-sigint-v1-outcome` has no publisher in `server/` or `pystreams/`.
 - Storage subscription `gram-sigint-v1-lake-primary` requires an explicitly installed Go runner; generated binding call sites are not inferred by this diagram.
+- Subscription `gram-sigint-v1-outcome-ch-writer` has no consumer in `server/` or `pystreams/`.
 

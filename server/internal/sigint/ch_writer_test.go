@@ -58,3 +58,21 @@ func TestReadingCHWriterRetriesStorageFailures(t *testing.T) {
 	writer := sigint.NewReadingCHWriter(testenv.NewLogger(t), capture)
 	require.ErrorIs(t, writer.HandleBatch(t.Context(), []*sigintv1.Reading{writerReading(t)}, nil), storageErr)
 }
+
+func TestOutcomeCHWriterLandsOutcomesAndDropsPoison(t *testing.T) {
+	t.Parallel()
+	capture := &readingInsertCapture{}
+	writer := sigint.NewOutcomeCHWriter(testenv.NewLogger(t), capture)
+	reading := writerReading(t)
+	outcome := sigintv1.Outcome_builder{
+		Id: new(reading.GetId()), EvaluationAttemptId: new(uuid.NewString()),
+		OrganizationId: new(reading.GetOrganizationId()), ProjectId: new(reading.GetProjectId()),
+		SensorId: new(reading.GetSensorId()), SensorSlug: new(reading.GetSensorSlug()),
+		EvaluatedAt: new(reading.GetEvaluatedAt()), Status: new(sigintv1.Outcome_STATUS_NOT_APPLICABLE),
+		Event: sigintv1.Outcome_Event_builder{Kind: new("example.event"), Id: new("event-1"), OccurredAt: new(reading.GetEvent().GetOccurredAt())}.Build(),
+	}.Build()
+	require.NoError(t, writer.HandleBatch(t.Context(), []*sigintv1.Outcome{outcome, nil}, nil))
+	require.Len(t, capture.rows, 1)
+	require.Equal(t, chrepo.StatusNotApplicable, capture.rows[0].Status)
+	require.Equal(t, reading.GetId(), capture.rows[0].ID.String())
+}

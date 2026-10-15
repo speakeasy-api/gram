@@ -40,8 +40,24 @@ const (
 	lastTimestampYear = 2104
 )
 
-// StatusAnswered marks a reading that carries a classifier result.
-const StatusAnswered = "answered"
+// Status values of sigint_readings rows.
+const (
+	// StatusAnswered marks a reading that carries a classifier result.
+	StatusAnswered = "answered"
+
+	// StatusNotApplicable marks a sensor whose match expression excluded the event.
+	StatusNotApplicable = "not_applicable"
+
+	// StatusDraft marks a sensor whose incomplete definition cannot be evaluated.
+	StatusDraft = "draft"
+
+	// StatusFailed marks a permanent evaluation failure with a failure reason.
+	StatusFailed = "failed"
+)
+
+// maxFailureReasonBytes bounds an evaluator failure reason. Reasons are short
+// snake_case codes; anything longer is not one.
+const maxFailureReasonBytes = 64
 
 // ErrInvalidReading identifies poison messages that cannot succeed on redelivery.
 var ErrInvalidReading = errors.New("invalid sensor reading")
@@ -206,116 +222,18 @@ func New(conn clickhouse.Conn) *Queries {
 	return &Queries{conn: conn}
 }
 
-// ParseReading validates an attempt without changing its values or inferring attribution.
+func invalid(reason string) (ReadingRow, error) {
+	return ReadingRow{}, fmt.Errorf("%w: %s", ErrInvalidReading, reason)
+}
+
+// ParseReading validates an answered attempt without changing its values or
+// inferring attribution.
 func ParseReading(m *sigintv1.Reading, insertedAt time.Time) (ReadingRow, error) {
-	var row ReadingRow
-	invalid := func(reason string) (ReadingRow, error) {
-		return row, fmt.Errorf("%w: %s", ErrInvalidReading, reason)
-	}
-	if m == nil || !m.HasEvent() {
-		return invalid("missing event")
-	}
-	if proto.Size(m) > maxReadingBytes {
-		return invalid("reading exceeds transport budget")
-	}
-	for _, identity := range []struct {
-		value  string
-		target *uuid.UUID
-	}{
-		{value: m.GetId(), target: &row.ID},
-		{value: m.GetEvaluationAttemptId(), target: &row.EvaluationAttemptID},
-		{value: m.GetProjectId(), target: &row.ProjectID},
-		{value: m.GetSensorId(), target: &row.SensorID},
-	} {
-		id, err := uuid.Parse(identity.value)
-		if err != nil || id == uuid.Nil {
-			return invalid("invalid required UUID")
-		}
-		*identity.target = id
-	}
-	row.OrganizationID = m.GetOrganizationId()
-	row.SensorSlug = m.GetSensorSlug()
-	row.EventKind = m.GetEvent().GetKind()
-	row.EventID = m.GetEvent().GetId()
-	row.DefinitionHash = m.GetDefinitionHash()
-	for _, value := range []string{row.OrganizationID, row.SensorSlug, row.EventKind, row.EventID, row.DefinitionHash} {
-		if strings.TrimSpace(value) == "" {
-			return invalid("missing required metadata")
-		}
-	}
-	var err error
-	row.EventOccurredAt, err = parseTimestamp(m.GetEvent().GetOccurredAt())
+	row, err := parseAttempt(m, insertedAt, true)
 	if err != nil {
-		return invalid("invalid occurrence time")
+		return row, err
 	}
-	row.EvaluatedAt, err = parseTimestamp(m.GetEvaluatedAt())
-	if err != nil {
-		return invalid("invalid evaluation time")
-	}
-	row.InsertedAt = insertedAt.UTC()
 	row.Status = StatusAnswered
-	row.ConfiguredModel = m.GetConfiguredModel()
-	row.Models = slices.Clone(m.GetModels())
-	row.CompilerVersion = m.GetCompilerVersion()
-	row.Provider = m.GetProvider()
-	if m.HasInput() {
-		input := m.GetInput()
-		requested, requestedClamped := conv.ClampedIntToUint8(int(input.GetRequestedMessageCount()))
-		supplied, suppliedClamped := conv.ClampedIntToUint8(int(input.GetMessageCount()))
-		if input.GetStrategy() == "" || requestedClamped || suppliedClamped || supplied < 1 || supplied > requested {
-			return invalid("invalid input context")
-		}
-		row.InputStrategy = input.GetStrategy()
-		row.InputRequestedMessageCount = requested
-		row.InputMessageCount = supplied
-		row.InputTruncated = input.GetTruncated()
-	}
-	row.Source = m.GetSource()
-	row.BillingUserID = m.GetBillingUserId()
-	row.ActorUserID = m.GetActor().GetUserId()
-	row.ActorExternalUserID = m.GetActor().GetExternalUserId()
-	row.ActorUserEmail = m.GetActor().GetUserEmail()
-	row.AccountType = m.GetAccount().GetAccountType()
-	row.BillingMode = m.GetAccount().GetBillingMode()
-	row.AssistantID, err = optionalUUID(m.GetAssistantId())
-	if err != nil {
-		return invalid("invalid assistant UUID")
-	}
-	row.UserAccountID, err = optionalUUID(m.GetAccount().GetUserAccountId())
-	if err != nil {
-		return invalid("invalid account UUID")
-	}
-	if m.HasReplayed() {
-		row.Replayed = new(m.GetReplayed())
-	}
-	if context := m.GetEvent().GetConversationMessage(); context != nil {
-		row.EventContextType = "conversation_message"
-		row.ConversationID, err = optionalUUID(context.GetConversationId())
-		if err != nil {
-			return invalid("invalid conversation UUID")
-		}
-		row.ConversationRole = strings.ToLower(strings.TrimPrefix(context.GetRole().String(), "ROLE_"))
-	}
-	if context := m.GetEvent().GetToolCall(); context != nil {
-		row.EventContextType = "tool_call"
-		row.ToolName = context.GetToolName()
-		row.ToolCallID = context.GetToolCallId()
-		row.MCPServerID, err = optionalUUID(context.GetMcpServerId())
-		if err != nil {
-			return invalid("invalid MCP server UUID")
-		}
-	}
-	if len(m.GetAttributes()) > MaxAttributes {
-		return invalid("too many attributes")
-	}
-	attributeBytes := 0
-	for key, value := range m.GetAttributes() {
-		attributeBytes += len(key) + len(value)
-		if key == "" || attributeBytes > MaxAttributeBytes {
-			return invalid("invalid attribute payload")
-		}
-	}
-	row.Attributes = maps.Clone(m.GetAttributes())
 	var probabilities []*sigintv1.Reading_Probability
 	switch {
 	case m.HasMultiLabel():
@@ -382,6 +300,120 @@ func ParseReading(m *sigintv1.Reading, insertedAt time.Time) (ReadingRow, error)
 	if !selectedFound {
 		return invalid("selected signal missing from distribution")
 	}
+	return row, nil
+}
+
+// parseAttempt validates the identity, metadata and attribution shared by
+// readings and outcomes. Outcomes of incomplete sensors need no definition.
+func parseAttempt(m *sigintv1.Reading, insertedAt time.Time, requireDefinition bool) (ReadingRow, error) {
+	var row ReadingRow
+	if m == nil || !m.HasEvent() {
+		return invalid("missing event")
+	}
+	if proto.Size(m) > maxReadingBytes {
+		return invalid("reading exceeds transport budget")
+	}
+	for _, identity := range []struct {
+		value  string
+		target *uuid.UUID
+	}{
+		{value: m.GetId(), target: &row.ID},
+		{value: m.GetEvaluationAttemptId(), target: &row.EvaluationAttemptID},
+		{value: m.GetProjectId(), target: &row.ProjectID},
+		{value: m.GetSensorId(), target: &row.SensorID},
+	} {
+		id, err := uuid.Parse(identity.value)
+		if err != nil || id == uuid.Nil {
+			return invalid("invalid required UUID")
+		}
+		*identity.target = id
+	}
+	row.OrganizationID = m.GetOrganizationId()
+	row.SensorSlug = m.GetSensorSlug()
+	row.EventKind = m.GetEvent().GetKind()
+	row.EventID = m.GetEvent().GetId()
+	row.DefinitionHash = m.GetDefinitionHash()
+	required := []string{row.OrganizationID, row.EventKind, row.EventID}
+	if requireDefinition {
+		required = append(required, row.SensorSlug, row.DefinitionHash)
+	}
+	for _, value := range required {
+		if strings.TrimSpace(value) == "" {
+			return invalid("missing required metadata")
+		}
+	}
+	var err error
+	row.EventOccurredAt, err = parseTimestamp(m.GetEvent().GetOccurredAt())
+	if err != nil {
+		return invalid("invalid occurrence time")
+	}
+	row.EvaluatedAt, err = parseTimestamp(m.GetEvaluatedAt())
+	if err != nil {
+		return invalid("invalid evaluation time")
+	}
+	row.InsertedAt = insertedAt.UTC()
+	row.ConfiguredModel = m.GetConfiguredModel()
+	row.Models = slices.Clone(m.GetModels())
+	row.CompilerVersion = m.GetCompilerVersion()
+	row.Provider = m.GetProvider()
+	if m.HasInput() {
+		input := m.GetInput()
+		requested, requestedClamped := conv.ClampedIntToUint8(int(input.GetRequestedMessageCount()))
+		supplied, suppliedClamped := conv.ClampedIntToUint8(int(input.GetMessageCount()))
+		if input.GetStrategy() == "" || requestedClamped || suppliedClamped || supplied < 1 || supplied > requested {
+			return invalid("invalid input context")
+		}
+		row.InputStrategy = input.GetStrategy()
+		row.InputRequestedMessageCount = requested
+		row.InputMessageCount = supplied
+		row.InputTruncated = input.GetTruncated()
+	}
+	row.Source = m.GetSource()
+	row.BillingUserID = m.GetBillingUserId()
+	row.ActorUserID = m.GetActor().GetUserId()
+	row.ActorExternalUserID = m.GetActor().GetExternalUserId()
+	row.ActorUserEmail = m.GetActor().GetUserEmail()
+	row.AccountType = m.GetAccount().GetAccountType()
+	row.BillingMode = m.GetAccount().GetBillingMode()
+	row.AssistantID, err = optionalUUID(m.GetAssistantId())
+	if err != nil {
+		return invalid("invalid assistant UUID")
+	}
+	row.UserAccountID, err = optionalUUID(m.GetAccount().GetUserAccountId())
+	if err != nil {
+		return invalid("invalid account UUID")
+	}
+	if m.HasReplayed() {
+		row.Replayed = new(m.GetReplayed())
+	}
+	if context := m.GetEvent().GetConversationMessage(); context != nil {
+		row.EventContextType = "conversation_message"
+		row.ConversationID, err = optionalUUID(context.GetConversationId())
+		if err != nil {
+			return invalid("invalid conversation UUID")
+		}
+		row.ConversationRole = strings.ToLower(strings.TrimPrefix(context.GetRole().String(), "ROLE_"))
+	}
+	if context := m.GetEvent().GetToolCall(); context != nil {
+		row.EventContextType = "tool_call"
+		row.ToolName = context.GetToolName()
+		row.ToolCallID = context.GetToolCallId()
+		row.MCPServerID, err = optionalUUID(context.GetMcpServerId())
+		if err != nil {
+			return invalid("invalid MCP server UUID")
+		}
+	}
+	if len(m.GetAttributes()) > MaxAttributes {
+		return invalid("too many attributes")
+	}
+	attributeBytes := 0
+	for key, value := range m.GetAttributes() {
+		attributeBytes += len(key) + len(value)
+		if key == "" || attributeBytes > MaxAttributeBytes {
+			return invalid("invalid attribute payload")
+		}
+	}
+	row.Attributes = maps.Clone(m.GetAttributes())
 	return row, nil
 }
 

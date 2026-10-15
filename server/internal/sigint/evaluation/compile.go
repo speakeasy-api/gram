@@ -123,8 +123,7 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 		}
 	}
 	r := sigintv1.Reading_builder{Event: proto.CloneOf(event.Subject)}.Build()
-	identity, _ := json.Marshal([]string{"sigint-reading-v1", event.OrganizationID, event.ProjectID, event.Subject.GetKind(), event.Subject.GetId(), sensor.id})
-	r.SetId(uuid.NewSHA1(readingNamespace, identity).String())
+	r.SetId(readingID(event, sensor.id))
 	r.SetEvaluationAttemptId(attempt)
 	r.SetOrganizationId(event.OrganizationID)
 	r.SetProjectId(event.ProjectID)
@@ -135,7 +134,7 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 	r.SetConfiguredModel(result.Metadata.Model)
 	r.SetProvider(result.Metadata.Provider)
 	r.SetModels(result.Models)
-	r.SetCompilerVersion("sigint-v1/" + result.Metadata.CompilerVersion)
+	r.SetCompilerVersion(compilerVersion(result))
 	r.SetAttributes(maps.Clone(event.Attributes))
 	if event.Actor != nil {
 		r.SetActor(proto.CloneOf(event.Actor))
@@ -219,6 +218,10 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 		r.SetScore(value)
 	}
 	return r, nil
+}
+
+func compilerVersion(result classifier.Result) string {
+	return "sigint-v1/" + result.Metadata.CompilerVersion
 }
 
 func distribution(values []classifier.Probability, slugs map[classifier.OptionKey]string) ([]*sigintv1.Reading_Probability, error) {
