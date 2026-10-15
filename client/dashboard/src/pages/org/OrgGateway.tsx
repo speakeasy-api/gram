@@ -1,8 +1,15 @@
 import { SettingsPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
-import { Switch } from "@/components/ui/Switch";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
 import { useOrganization } from "@/contexts/Auth";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
 import { handleAPIError } from "@/lib/errors";
@@ -19,39 +26,48 @@ import {
   useProductFeatures,
 } from "@gram/client/react-query/productFeatures.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Network } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { MCPAssignments } from "../access/MCPAssignments";
+import { GatewayOnboarding } from "./GatewayOnboarding";
 
 export default function OrgGateway(): JSX.Element {
   const organization = useOrganization();
-  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
   return (
     <SettingsPage
       scope={["org:read", "org:admin"]}
-      title="Gateway"
-      description="One MCP URL that gives each member every MCP server in the organization they can use, across all projects."
+      title="Org Gateway"
+      description="One connection for every MCP server each person is allowed to use, across all projects."
     >
-      <GatewaySetting
-        key={organization.id}
-        organizationId={organization.id}
-        isCurrentOrganization={isCurrentOrganization}
-      />
+      <GatewayContent key={organization.id} />
     </SettingsPage>
   );
 }
 
-function GatewaySetting({
-  organizationId,
-  isCurrentOrganization,
-}: {
-  organizationId: string;
-  isCurrentOrganization: () => boolean;
-}): JSX.Element | null {
+function GatewayContent(): JSX.Element {
+  const organization = useOrganization();
+  const isCurrentOrganization = useIsCurrentOrganization(organization.id);
   const queryClient = useQueryClient();
-  const features = useProductFeatures({ organizationId }, undefined, {
-    throwOnError: false,
-  });
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "assignments" ? "assignments" : "overview";
+  const changeTab = (value: string) =>
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("tab", value);
+      return next;
+    });
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewReady, setReviewReady] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
+  useEffect(() => {
+    if (!reviewReady) setAcknowledged(false);
+  }, [reviewReady]);
+  const features = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
   const gateway = useOrganizationGateway(undefined, undefined, {
     throwOnError: false,
   });
@@ -63,108 +79,174 @@ function GatewaySetting({
         invalidateAllOrganizationGateway(queryClient),
       ]);
       if (!isCurrentOrganization()) return;
-      // The stored feature turns the gateway off, so enabled means "off".
+      setReviewing(false);
+      setAcknowledged(false);
+      changeTab("overview");
       toast.success(
         variables.request.setProductFeatureRequestBody.enabled
-          ? "Gateway turned off"
-          : "Gateway turned on",
+          ? "Org Gateway disabled"
+          : "Org Gateway enabled",
       );
     },
     onError: (error) => {
-      if (!isCurrentOrganization()) return;
-      handleAPIError(error, "Failed to update the gateway");
+      if (isCurrentOrganization())
+        handleAPIError(error, "Couldn’t update Org Gateway");
     },
   });
-
-  if (features.isLoading) return null;
-
-  if (features.error || !features.data) {
+  const on = features.data?.organizationGatewayDisabled === false;
+  const setEnabled = (enabled: boolean) =>
+    mutation.mutate({
+      request: {
+        setProductFeatureRequestBody: {
+          organizationId: organization.id,
+          featureName: FeatureName.OrganizationGatewayDisabled,
+          enabled: !enabled,
+        },
+      },
+    });
+  const url = gateway.data?.available ? gateway.data.url : undefined;
+  if (features.isLoading) return <Text muted>Loading Org Gateway…</Text>;
+  if (features.error || !features.data)
     return (
-      <section
-        className="border-border bg-card border p-5"
-        role="alert"
-        aria-live="polite"
-      >
-        <Text className="text-destructive" small>
-          Couldn&apos;t load the gateway setting.
-        </Text>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="mt-3"
-          disabled={features.isFetching}
-          onClick={() => void features.refetch()}
-        >
-          {features.isFetching ? "Retrying…" : "Retry"}
+      <div role="alert" className="space-y-3">
+        <Text>Couldn’t load the gateway setting.</Text>
+        <Button variant="secondary" onClick={() => void features.refetch()}>
+          Retry
         </Button>
-      </section>
+      </div>
     );
-  }
-
-  const on = !features.data.organizationGatewayDisabled;
 
   return (
-    <section className="border-border bg-card border p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="border-border flex size-9 shrink-0 items-center justify-center border">
-            <Network className="text-muted-foreground size-4" />
-          </div>
-          <div>
-            <Text variant="subheading">Organization gateway</Text>
-            <Text small muted className="mt-1 max-w-3xl">
-              Members add one URL to their AI client and sign in with their
-              organization account. Turning it off stops it working for everyone
-              straight away, including clients already connected.
-            </Text>
-            {on && gateway.data && !gateway.data.available && (
-              <GatewayNotServed reason={gateway.data.unavailableReason} />
-            )}
-            {on && gateway.error && (
-              <Text small className="text-warning mt-3" role="alert">
-                Couldn&apos;t check whether the gateway is being served.{" "}
-                <button
-                  type="button"
-                  className="underline"
-                  disabled={gateway.isFetching}
-                  onClick={() => void gateway.refetch()}
-                >
-                  {gateway.isFetching ? "Checking…" : "Check again"}
-                </button>
-              </Text>
-            )}
-          </div>
-        </div>
-        <RequireScope
-          scope="org:admin"
-          level="component"
-          reason="Only organization admins can change this setting."
-        >
-          <Switch
-            checked={on}
-            onCheckedChange={(checked) =>
-              mutation.mutate({
-                request: {
-                  setProductFeatureRequestBody: {
-                    organizationId,
-                    featureName: FeatureName.OrganizationGatewayDisabled,
-                    enabled: !checked,
-                  },
-                },
-              })
-            }
-            disabled={mutation.isPending}
-            aria-label="Organization gateway"
-          />
-        </RequireScope>
+    <Tabs value={tab} onValueChange={changeTab}>
+      <div className="border-border -mx-8 border-b px-8">
+        <PageTabsList>
+          <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
+          <PageTabsTrigger value="assignments">MCP Assignments</PageTabsTrigger>
+        </PageTabsList>
       </div>
-    </section>
+      <TabsContent value="overview" className="mt-6 space-y-8">
+        <section className="border-border space-y-4 border-b pb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <Text variant="subheading">
+              {on ? "Org Gateway is enabled" : "Org Gateway is disabled"}
+            </Text>
+            <RequireScope
+              scope="org:admin"
+              level="component"
+              reason="Only organization admins can change this setting."
+            >
+              <Button
+                variant={on ? "secondary" : "primary"}
+                disabled={mutation.isPending}
+                onClick={() => {
+                  if (on) setEnabled(false);
+                  else {
+                    setReviewing(true);
+                    setAcknowledged(false);
+                    changeTab("assignments");
+                  }
+                }}
+              >
+                {mutation.isPending
+                  ? "Saving…"
+                  : on
+                    ? "Disable Org Gateway"
+                    : "Review access and enable"}
+              </Button>
+            </RequireScope>
+          </div>
+          <Text muted>
+            Members connect their AI client once and sign in with their
+            organization account. The gateway follows their existing access as
+            assignments change. It does not grant new permissions, but makes all
+            assigned servers available through one connection—including access
+            inherited from broad roles.
+          </Text>
+          <Text small muted>
+            Access is specific to the signed-in person. Removing an assignment
+            changes what they can use. Disabling the gateway stops gateway
+            requests for everyone, including connected clients; individual
+            server connections keep their own settings.
+          </Text>
+          {gateway.error ? (
+            <div role="alert">
+              <Text small>Couldn’t check gateway availability.</Text>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void gateway.refetch()}
+              >
+                Check again
+              </Button>
+            </div>
+          ) : (
+            gateway.data && (
+              <GatewayNotServed reason={gateway.data.unavailableReason} />
+            )
+          )}
+          {url && (
+            <div className="border-border flex min-w-0 items-center gap-3 border p-3">
+              <Text className="min-w-0 flex-1 truncate font-mono text-sm">
+                {url}
+              </Text>
+              <CopyButton text={url} tooltip="Copy gateway URL" />
+            </div>
+          )}
+        </section>
+        <GatewayOnboarding url={url ?? undefined} />
+      </TabsContent>
+      <TabsContent value="assignments" className="mt-6 space-y-6">
+        {reviewing && !on && (
+          <div className="border-border space-y-2 border-b pb-5">
+            <Text variant="subheading">Review access before enabling</Text>
+            <Text small muted>
+              Remove access people no longer need, then sign off below to enable
+              the gateway.
+            </Text>
+          </div>
+        )}
+        <MCPAssignments onReady={setReviewReady} />
+        {reviewing && !on && (
+          <RequireScope scope="org:admin" level="section">
+            <div className="border-border space-y-4 border-t pt-5">
+              <label className="flex items-start gap-3 text-sm">
+                <Checkbox
+                  checked={acknowledged && reviewReady}
+                  disabled={!reviewReady || mutation.isPending}
+                  onCheckedChange={(value) => setAcknowledged(value === true)}
+                />
+                I have reviewed MCP assignments across the organization and
+                approve making each person’s assigned servers available through
+                Org Gateway.
+              </label>
+              <div className="flex gap-3">
+                <Button
+                  disabled={!reviewReady || !acknowledged || mutation.isPending}
+                  onClick={() => setEnabled(true)}
+                >
+                  {mutation.isPending ? "Enabling…" : "Enable Org Gateway"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={mutation.isPending}
+                  onClick={() => {
+                    setReviewing(false);
+                    setAcknowledged(false);
+                    changeTab("overview");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </RequireScope>
+        )}
+      </TabsContent>
+    </Tabs>
   );
 }
-
 /**
- * Explains why a gateway that is switched on still isn't served, and where to
- * fix it, so the switch never reads as on for a URL that answers 404.
+ * Explains why an enabled gateway is unavailable and links to its setup.
  */
 function GatewayNotServed({
   reason,
@@ -206,8 +288,8 @@ function GatewayNotServed({
           .
         </Text>
       );
-    // The switch itself already reads off, and a disabled organization
-    // never reaches its settings.
+    // The disabled state is already shown above; a disabled organization
+    // never reaches this page.
     case "turned_off":
     case "organization_disabled":
     case undefined:

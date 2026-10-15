@@ -130,13 +130,19 @@ func (q *Queries) HasDeviceAgentSync(ctx context.Context, organizationID string)
 }
 
 const isFeatureEnabled = `-- name: IsFeatureEnabled :one
-SELECT EXISTS (
-        SELECT 1
-        FROM organization_features
-        WHERE organization_id = $1
-            AND feature_name = $2
-            AND deleted IS FALSE
-) AS enabled
+SELECT COALESCE(EXISTS (
+    SELECT 1 FROM organization_features AS active_feature
+    WHERE active_feature.organization_id = $1
+      AND active_feature.feature_name = $2
+      AND active_feature.deleted IS FALSE
+) OR (
+    $2::text = 'organization_gateway_disabled'
+    AND NOT EXISTS (
+        SELECT 1 FROM organization_features AS configured_feature
+        WHERE configured_feature.organization_id = $1
+          AND configured_feature.feature_name = $2
+    )
+), FALSE)::boolean AS enabled
 `
 
 type IsFeatureEnabledParams struct {
@@ -144,6 +150,8 @@ type IsFeatureEnabledParams struct {
 	FeatureName    string
 }
 
+// The inverted gateway setting defaults to disabled until a soft-deleted
+// flag records an administrator's explicit opt-in.
 func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isFeatureEnabled, arg.OrganizationID, arg.FeatureName)
 	var enabled bool

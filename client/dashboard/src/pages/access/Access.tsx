@@ -19,17 +19,20 @@ import {
 } from "react-router";
 import { ChallengesTab } from "./ChallengesTab";
 import { GrantAccessDialog } from "./GrantAccessDialog";
+import { MCPAssignments } from "./MCPAssignments";
 import { RolesTab } from "./RolesTab";
 
 // Member management lives on the Team page; this page is roles and the
 // challenges they produced.
 const tabFromPath: Record<string, string> = {
   roles: "roles",
+  assignments: "assignments",
   challenges: "challenges",
 };
 
 const tabDisplayNames: Record<string, string> = {
   roles: "Roles & Permissions",
+  assignments: "Roles & Permissions",
   challenges: "Roles & Permissions",
 };
 
@@ -132,6 +135,9 @@ function AccessInner() {
             <PageTabsTrigger value="roles">
               Roles{roleCount != null ? ` (${roleCount})` : ""}
             </PageTabsTrigger>
+            <PageTabsTrigger value="assignments">
+              MCP Assignments
+            </PageTabsTrigger>
             <PageTabsTrigger value="challenges">
               Authorization Challenges
             </PageTabsTrigger>
@@ -140,6 +146,10 @@ function AccessInner() {
 
         <TabsContent value="roles" className="mt-6">
           <RolesTab />
+        </TabsContent>
+
+        <TabsContent value="assignments" className="mt-6">
+          <MCPAssignments />
         </TabsContent>
 
         <TabsContent value="challenges" className="mt-6">
