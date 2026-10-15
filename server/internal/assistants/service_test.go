@@ -2829,7 +2829,7 @@ func (t testRuntimeBackend) InterruptTurn(_ context.Context, _ assistantRuntimeR
 func (t testRuntimeBackend) Status(ctx context.Context, _ assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	if t.statusHangs {
 		<-ctx.Done()
-		return RuntimeBackendStatus{}, ctx.Err()
+		return RuntimeBackendStatus{}, fmt.Errorf("runner state: %w", ctx.Err())
 	}
 	if t.statusErr != nil {
 		return RuntimeBackendStatus{}, t.statusErr
@@ -2842,7 +2842,7 @@ func (t testRuntimeBackend) Stop(ctx context.Context, _ assistantRuntimeRecord) 
 		t.stopCalls.Add(1)
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("stop runtime: %w", err)
 	}
 	return t.stopErr
 }
