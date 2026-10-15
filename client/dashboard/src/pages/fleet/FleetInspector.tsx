@@ -196,8 +196,8 @@ function InspectorContents({
                   </Fact>
                 </dl>
                 <p className="text-muted-foreground text-sm">
-                  Latest recorded credential authentication at Gram. Credential
-                  sessions for this identity:
+                  Latest recorded credential authentication at Speakeasy.
+                  Credential sessions for this identity:
                 </p>
                 {!isDemo ? (
                   <ManagedAgentSessions agent={row.agent} />

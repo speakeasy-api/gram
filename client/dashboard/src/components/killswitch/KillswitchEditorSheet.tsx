@@ -799,8 +799,8 @@ function EditorContents({
               <p className="my-2">
                 Target: <strong>{targetName ?? draft.agentId}</strong> ·
                 Registered agent <code>{draft.agentId}</code>. Blocks covered
-                MCP tools/call at Gram-hosted and private MCP checkpoints across
-                all this agent’s credential sessions in the organization,
+                MCP tools/call at Speakeasy-hosted and private MCP checkpoints
+                across all this agent’s credential sessions in the organization,
                 including future sessions. In-flight calls, processes, and
                 external credentials are unaffected.
               </p>

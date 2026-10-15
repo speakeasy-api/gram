@@ -88,7 +88,7 @@ export function buildFleetRows({
         id: `assistant:${assistant.id}`,
         source: "assistant",
         title: assistant.name,
-        subtitle: "Gram Assistant",
+        subtitle: "Speakeasy Assistant",
         createdById: assistant.createdByUserId,
         personRole: "Creator",
         ...owner(assistant.createdByUserId),

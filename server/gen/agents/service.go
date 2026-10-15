@@ -260,7 +260,7 @@ type ManagedAgent struct {
 	Lifecycle   AgentLifecycle
 	Permissions *AgentPermissions
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no

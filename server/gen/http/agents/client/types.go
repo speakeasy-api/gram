@@ -152,7 +152,7 @@ type CreateResponseBody struct {
 	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no
@@ -181,7 +181,7 @@ type GetResponseBody struct {
 	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no
@@ -210,7 +210,7 @@ type RenameResponseBody struct {
 	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no
@@ -261,7 +261,7 @@ type TransferResponseBody struct {
 	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no
@@ -290,7 +290,7 @@ type ReassignResponseBody struct {
 	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no
@@ -319,7 +319,7 @@ type SuspendResponseBody struct {
 	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no
@@ -348,7 +348,7 @@ type ResumeResponseBody struct {
 	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no
@@ -377,7 +377,7 @@ type RevokeResponseBody struct {
 	Lifecycle   *string                       `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no
@@ -3502,7 +3502,7 @@ type ManagedAgentResponse struct {
 	Lifecycle   *string                   `form:"lifecycle,omitempty" json:"lifecycle,omitempty" xml:"lifecycle,omitempty"`
 	Permissions *AgentPermissionsResponse `form:"permissions,omitempty" json:"permissions,omitempty" xml:"permissions,omitempty"`
 	// Latest recorded credential-session or API-key authentication for this agent
-	// at Gram in this organization. Recording is best-effort and updates are
+	// at Speakeasy in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
 	// agents.list for callers who can manage the agent's credentials, and in the
 	// read-only synthetic demo organization; absent otherwise or when no
