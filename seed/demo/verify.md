@@ -542,20 +542,17 @@ that URL.
       administrator misconfiguration error.
 
 30. **Enterprise Managed Authorization**
-    - Open **MCP → Acme Tracker → Settings → Enterprise Managed Authorization**.
-      It reads **Working**; Sign-in names Acme Identity, Vouched for by lists
-      Acme Identity, and "Acme Tracker trusts" shows Acme Identity
-      "Last worked 2h ago" with the issuer URL folded.
-    - Open **MCP → Acme Wiki** the same way. It reads **On, not proven yet**
-      and the issuer URL `https://login.acme-identity.example` is shown to
-      copy, "Not accepted yet".
     - Open **Team → IDP and SSO → Identity providers**. The Services table
-      lists Acme Tracker (default order, Last worked) and Acme Wiki (saved
-      order, Not accepted yet), one server each. Acme Wiki's page offers
+      lists Acme Tracker (default order, "Each server's own identity
+      provider", Last worked 2h ago) and Acme Wiki (saved order: Acme
+      Identity, Not accepted yet), one server each.
+    - Open Acme Wiki's page. It shows Acme Identity's issuer URL
+      `https://login.acme-identity.example` to copy, and the saved order with
       **Use default**.
-    - The workforce sign-in now federates through Acme Identity, a reserved
-      example host: interactive sign-in through `acme-workforce` (GitHub, the
-      organization gateway) fails by design. Nothing here can authenticate.
+    - **MCP → Acme Tracker → Settings** has no Enterprise Managed
+      Authorization section: `acme-workforce` does not trust Acme Identity,
+      on purpose, so interactive sign-in through it (GitHub, the organization
+      gateway) keeps working.
 
 ## On failure
 

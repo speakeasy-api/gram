@@ -1945,11 +1945,9 @@ BEGIN
      ARRAY['authorization_code', 'refresh_token'],
      ARRAY['openid', 'profile', 'email']);
 
-  UPDATE user_session_issuers
-  SET trusted_remote_session_issuer_id = demo.det_uuid('gram-demo-ema-idp'),
-      trusted_remote_session_client_id = demo.det_uuid('gram-demo-ema-idp-client')
-  WHERE id = demo.det_uuid('gram-demo-issuer-workforce')
-    AND organization_id = demo_org AND project_id IS NULL;
+  -- The workforce sign-in is left as it is: pointing it at this fictional
+  -- provider would send interactive sign-in for every server on it to a
+  -- provider that doesn't exist. The Services pages still show these vendors.
 
   INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
     (demo.det_uuid('gram-demo-remotemcp-ema-tracker'), proj_a, 'Acme Tracker',
@@ -4050,15 +4048,14 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 1 organization user session issuer, found %', stray;
   END IF;
 
-  -- EMA: the workforce sign-in trusts Acme Identity, two ready bindings, one
-  -- accepted credential, and one saved provider order.
+  -- EMA: two ready bindings, one accepted credential, and one saved provider
+  -- order. The workforce sign-in must not trust the fictional provider.
   SELECT count(*) INTO stray FROM user_session_issuers
   WHERE id = demo.det_uuid('gram-demo-issuer-workforce')
     AND organization_id = demo_org
-    AND trusted_remote_session_issuer_id = demo.det_uuid('gram-demo-ema-idp')
-    AND trusted_remote_session_client_id = demo.det_uuid('gram-demo-ema-idp-client');
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected the workforce issuer to trust Acme Identity, found %', stray;
+    AND trusted_remote_session_issuer_id = demo.det_uuid('gram-demo-ema-idp');
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: the workforce issuer must not trust Acme Identity, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM remote_session_ema_bindings
