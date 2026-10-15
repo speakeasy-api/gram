@@ -249,10 +249,11 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 		}
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
+	allowlist := clientToolAllowlist(principal.ClientID)
 	visible := make([]*mcp.Tool, 0, len(tools))
 	for _, tool := range tools {
 		descriptor, ok := descriptors[tool.Name]
-		if !ok || !toolAllowedForClient(principal.ClientID, tool.Name) || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
+		if !ok || (allowlist != nil && !slices.Contains(allowlist, tool.Name)) || !externalToolDiscoverable(grants, grantsLoaded, principal, descriptor.Meta) {
 			continue
 		}
 		visible = append(visible, tool)

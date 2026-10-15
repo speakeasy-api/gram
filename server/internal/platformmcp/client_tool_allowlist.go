@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/speakeasy-api/gram/server/internal/aivendors"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -13,7 +14,8 @@ import (
 // golden path from finding an MCP server to installing it. ChatGPT reviews
 // every tool an app lists and shows them all to the user, so a short list that
 // covers one complete outcome is easier to review and to use than the full
-// administrator catalogue.
+// administrator catalogue. list_projects is the one read outside that path:
+// the default_project_not_found recovery tells the agent to call it.
 //
 // This is a usability filter, not a security boundary. Every caller is still
 // entitled to every tool its grants allow; RBAC discovery filtering and each
@@ -28,11 +30,23 @@ var chatGPTToolAllowlist = []string{
 	"get_mcp_readiness",
 	"get_my_install_instructions",
 	"search_gram_docs",
+	"list_projects",
 }
 
 // chatGPTProductID is the aivendors registry product whose CIMD documents
 // identify a ChatGPT caller.
 const chatGPTProductID = "chatgpt"
+
+// chatGPTClientIDs are the CIMD document URLs of the aivendors registry's
+// ChatGPT product, resolved once because the registry is static.
+var chatGPTClientIDs = sync.OnceValue(func() []string {
+	for _, product := range aivendors.Products() {
+		if product.ID == chatGPTProductID {
+			return aivendors.GatewayMatchersFor(product).ClientIDs
+		}
+	}
+	return nil
+})
 
 // isChatGPTClient reports whether a verified OAuth client_id belongs to
 // ChatGPT. It resolves the client_id through the CIMD admission catalog the
@@ -43,15 +57,7 @@ const chatGPTProductID = "chatgpt"
 // no entry, so it keeps the full catalogue.
 func isChatGPTClient(clientID string) bool {
 	preset, ok := admission.CatalogPreset(clientID)
-	if !ok {
-		return false
-	}
-	for _, product := range aivendors.Products() {
-		if product.ID == chatGPTProductID {
-			return slices.Contains(aivendors.GatewayMatchersFor(product).ClientIDs, preset.URL)
-		}
-	}
-	return false
+	return ok && slices.Contains(chatGPTClientIDs(), preset.URL)
 }
 
 // clientToolAllowlist returns the tools a client is limited to, or nil when it
