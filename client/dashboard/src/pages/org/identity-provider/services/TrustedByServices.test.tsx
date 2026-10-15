@@ -62,7 +62,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe("Services that can use Speakeasy", () => {
+describe("Services that use Speakeasy as their identity provider", () => {
   it("splits services that accepted Speakeasy from those that haven't yet", () => {
     mocks.rows = [
       service("Linear", new Date(Date.now() - 2 * 60 * 60 * 1000)),
@@ -70,7 +70,9 @@ describe("Services that can use Speakeasy", () => {
     ];
     show();
     expect(
-      screen.getByRole("heading", { name: "Services that can use Speakeasy" }),
+      screen.getByRole("heading", {
+        name: "Services that use Speakeasy as their identity provider",
+      }),
     ).toBeTruthy();
     const accepted = within(
       screen.getByRole("list", { name: "Accepted Speakeasy" }),
@@ -117,7 +119,9 @@ describe("Services that can use Speakeasy", () => {
     mocks.isPending = true;
     show();
     expect(
-      screen.getByRole("heading", { name: "Services that can use Speakeasy" }),
+      screen.getByRole("heading", {
+        name: "Services that use Speakeasy as their identity provider",
+      }),
     ).toBeTruthy();
     expect(screen.getByRole("status").textContent).toBe("Loading services…");
   });

@@ -30,7 +30,7 @@ export function TrustedByServices(): JSX.Element {
     <SettingsSection id="services">
       <SettingsSection.Header>
         <SettingsSection.Title>
-          Services that can use Speakeasy
+          Services that use Speakeasy as their identity provider
         </SettingsSection.Title>
         <SettingsSection.Description>
           Services where Speakeasy can vouch for people. Each one has to trust

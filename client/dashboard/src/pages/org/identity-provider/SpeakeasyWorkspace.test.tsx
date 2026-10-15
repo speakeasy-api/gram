@@ -45,7 +45,9 @@ vi.mock("@tanstack/react-query", () => ({
   }),
 }));
 vi.mock("./services/TrustedByServices", () => ({
-  TrustedByServices: () => <div>Services that can use Speakeasy</div>,
+  TrustedByServices: () => (
+    <div>Services that use Speakeasy as their identity provider</div>
+  ),
 }));
 vi.mock(
   "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js",
@@ -533,7 +535,11 @@ describe("Speakeasy identity provider page", () => {
   it("shows which services trust the issuer once it exists", () => {
     mocks.issuer = enabledIssuer;
     show();
-    expect(screen.getByText("Services that can use Speakeasy")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Services that use Speakeasy as their identity provider",
+      ),
+    ).toBeTruthy();
   });
 
   it("links back to all identity providers", () => {
