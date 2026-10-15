@@ -223,7 +223,7 @@ paths = [item["path"] for item in page["items"]]
 description = await tools.describe("remote--ping")
 remote, tunnel = await asyncio.gather(tools.call("remote--ping", {}), tools.call("tunnel--ping", {}))
 {"paths": paths, "remote": remote["ok"], "tunnel": tunnel["ok"]}`
-	w, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": code}}), "", nil)
+	w, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": code}}), "", map[string]string{"Mcp-Session-Id": uuid.NewString()})
 	require.NoError(t, err)
 	var response struct {
 		Error  json.RawMessage `json:"error"`
