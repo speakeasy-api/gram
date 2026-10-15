@@ -455,9 +455,12 @@ describe("identity chaining vouched for by Speakeasy", () => {
     const { rerender } = render(speakeasyField());
     expect(
       screen.getByText(
-        "People reach example.com with their Okta sign-in, or their Speakeasy sign-in if that fails.",
+        "People can authenticate to example.com with these identity providers:",
       ),
     ).toBeTruthy();
+    const providers = () =>
+      screen.getAllByRole("listitem").map((item) => item.textContent);
+    expect(providers()).toEqual(["Okta", "thenSpeakeasy"]);
     read.data = {
       ...bound("first"),
       emaProviders: {
@@ -473,11 +476,7 @@ describe("identity chaining vouched for by Speakeasy", () => {
       },
     };
     rerender(speakeasyField());
-    expect(
-      screen.getByText(
-        "People reach example.com with their Speakeasy sign-in.",
-      ),
-    ).toBeTruthy();
+    expect(providers()).toEqual(["Speakeasy"]);
     expect(screen.queryByText(/Okta/)).toBeNull();
   });
 

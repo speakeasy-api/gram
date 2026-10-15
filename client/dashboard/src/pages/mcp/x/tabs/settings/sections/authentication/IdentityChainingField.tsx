@@ -452,20 +452,18 @@ export function IdentityChainingField({
         : [],
     ),
   );
-  function providerSignIn(provider: EMAProvider): string {
-    if (provider.kind === "speakeasy") return "Speakeasy sign-in";
-    const name = issuerNames.items.find(
-      (issuer) => issuer.id === provider.remoteSessionIssuerId,
-    )?.name;
-    return name ? `${name} sign-in` : "identity provider sign-in";
+  function providerName(provider: EMAProvider): string {
+    if (provider.kind === "speakeasy") return "Speakeasy";
+    return (
+      issuerNames.items.find(
+        (issuer) => issuer.id === provider.remoteSessionIssuerId,
+      )?.name || "Identity provider"
+    );
   }
-  const signIn =
+  const providerNames =
     usable.length > 0
-      ? usable.map(providerSignIn).join(", or their ") +
-        (usable.length > 1 ? " if that fails" : "")
-      : speakeasyOnly
-        ? "Speakeasy sign-in"
-        : "identity provider sign-in";
+      ? usable.map(providerName)
+      : [speakeasyOnly ? "Speakeasy" : "Identity provider"];
   const status = chainingStatus({
     loading: read.isPending,
     ready,
@@ -477,7 +475,6 @@ export function IdentityChainingField({
     state: prepareOutcome?.state ?? shownState,
     remediation: prepareOutcome?.remediation ?? read.data?.remediation,
     vendor,
-    signIn,
     stalledDetail: needsSpeakeasy
       ? "Speakeasy isn’t in this vendor’s provider order, so identity chaining can’t run."
       : "None of the sign-ins this vendor accepts can be used by this server right now.",
@@ -529,6 +526,28 @@ export function IdentityChainingField({
               <Text muted small className="block">
                 {status.detail}
               </Text>
+            )}
+            {ready && !status.stalled && (
+              <ol
+                aria-label="Identity providers"
+                className="flex flex-wrap items-center gap-2 pt-1"
+              >
+                {providerNames.map((name, index) => (
+                  <li
+                    key={`${name}-${index}`}
+                    className="flex items-center gap-2"
+                  >
+                    {index > 0 && (
+                      <Text muted small aria-hidden="true">
+                        then
+                      </Text>
+                    )}
+                    <span className="border-border bg-muted/40 border px-2 py-0.5 text-sm">
+                      {name}
+                    </span>
+                  </li>
+                ))}
+              </ol>
             )}
           </div>
           <RequireScope
@@ -717,7 +736,6 @@ function chainingStatus({
   state,
   remediation,
   vendor,
-  signIn,
   stalledDetail,
 }: {
   loading: boolean;
@@ -727,20 +745,20 @@ function chainingStatus({
   state: ChainingState | null;
   remediation: string | undefined;
   vendor: string;
-  signIn: string;
   stalledDetail: string;
-}): { title: string; detail?: string; dot: string } {
+}): { title: string; detail?: string; dot: string; stalled?: boolean } {
   if (loading) return { title: "Checking…", dot: DOT_FOR.neutral };
   if (stalled)
     return {
       title: "On, but not running",
       detail: stalledDetail,
       dot: DOT_FOR.warning,
+      stalled: true,
     };
   if (ready)
     return {
       title: "On",
-      detail: `People reach ${vendor} with their ${signIn}.`,
+      detail: `People can authenticate to ${vendor} with these identity providers:`,
       dot: DOT_FOR.success,
     };
   if (off || !state)
