@@ -11,12 +11,41 @@ import (
 	"slices"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
+
+// maxConcurrentMemberDescribes bounds how many members one gateway inventory
+// describes at once.
+const maxConcurrentMemberDescribes = 6
+
+type memberDescribeResult struct {
+	catalog *memberCatalog
+	err     error
+}
+
+// describeMetaMembers describes members concurrently under one overall
+// deadline and returns results in member order.
+func (s *Service) describeMetaMembers(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) []memberDescribeResult {
+	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
+	defer cancel()
+	results := make([]memberDescribeResult, len(members))
+	var group errgroup.Group
+	group.SetLimit(maxConcurrentMemberDescribes)
+	for i, member := range members {
+		group.Go(func() error {
+			results[i].catalog, results[i].err = s.describeMetaMember(ctx, logger, gate, member)
+			return nil
+		})
+	}
+	_ = group.Wait()
+	return results
+}
 
 // listDirectGatewayTools exposes qualified member tools through the same
 // permission-filtered catalogs used by Progressive discovery. A member that
@@ -40,8 +69,9 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	}
 	tools := make([]*toolListEntry, 0)
 	names := map[string]bool{}
-	for _, member := range members {
-		catalog, err := s.describeMetaMember(ctx, logger, gate, member)
+	described := s.describeMetaMembers(ctx, logger, gate, members)
+	for i, member := range members {
+		catalog, err := described[i].catalog, described[i].err
 		if err != nil {
 			var denied *oops.ShareableError
 			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
