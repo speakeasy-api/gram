@@ -376,9 +376,9 @@ export function MCPAssignments({
         {failed ? (
           <div role="alert" className="space-y-3">
             <Text>
-              Couldn’t load the complete assignment review. You need permission
-              to view every assigned MCP server. Ask an administrator to grant
-              that access, then retry before enabling the gateway.
+              Couldn’t load the complete assignment review. This review requires
+              permission to view every assigned MCP server. Check your access
+              and retry before enabling the gateway.
             </Text>
             <Button
               variant="secondary"
