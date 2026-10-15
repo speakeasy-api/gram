@@ -2,34 +2,29 @@ package hooks
 
 import (
 	"context"
-	"encoding/json"
 	"maps"
-	"math"
 	"slices"
 	"strconv"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
+	"go.opentelemetry.io/otel/trace"
 
-	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 const (
-	// hookIngestTeeAckTimeout bounds how long a hook request waits for the
-	// inbound topic to take its rows. The wait is on the request path so a
-	// row the endpoint acknowledged to the agent is on the topic by then; a
-	// deploy drains what is still waiting through Service.Shutdown.
-	hookIngestTeeAckTimeout = 5 * time.Second
-
 	// hookIngestFeatureLookupTimeout bounds the org feature lookups the tee
 	// makes, which run detached from the request so a client disconnect
 	// cannot turn an unanswered lookup into a dropped row.
@@ -74,12 +69,9 @@ func cloneHookTelemetryRows(rows []hookTelemetryRow) []hookTelemetryRow {
 //
 // The same org gates the telemetry writer applies hold here: an org
 // without logs gets nothing, and an org without tool IO logs gets the rows
-// with their tool IO scrubbed. The publish acks are awaited inside the
-// request, bounded, and a failure is counted and logged but never changes
-// the hook's verdict: the idempotency token is already claimed, so a 5xx
-// would make the agent retry a delivery the endpoint will then treat as a
-// duplicate, and in a fail-closed org it would block the developer on a
-// publish blip for nothing.
+// with their tool IO scrubbed. The publish runs detached from the request,
+// so the hook response never waits on Pub/Sub, and a failure is only
+// logged.
 func (s *Service) teeCanonicalHookToEventFeed(
 	ctx context.Context,
 	payload *gen.IngestPayload,
@@ -89,25 +81,17 @@ func (s *Service) teeCanonicalHookToEventFeed(
 	blockReason string,
 	rows []hookTelemetryRow,
 ) {
-	if len(rows) == 0 {
+	if len(rows) == 0 || s.otelLogPublisher == nil || authCtx == nil || authCtx.ProjectID == nil {
 		return
 	}
-	if s.otelLogPublisher == nil || authCtx == nil || authCtx.ProjectID == nil || !s.beginOTELTee() {
-		// Nothing can be published: no publisher is wired, there is no
-		// tenant to stamp, or the process is draining. Counted, so rows
-		// absent from agent_events show on the publish metric.
-		s.metrics.RecordEventFeedPublish(ctx, hookSource, eventFeedOutcomeSkipped, int64(len(rows)))
-		return
-	}
-	defer s.otelTeeDrains.Done()
 	orgID := authCtx.ActiveOrganizationID
-
 	if !s.hookEventFeedFeature(ctx, orgID, productfeatures.FeatureLogs) {
-		s.metrics.RecordEventFeedPublish(ctx, hookSource, eventFeedOutcomeSkipped, int64(len(rows)))
 		return
 	}
 	scrubToolIO := !s.hookEventFeedFeature(ctx, orgID, productfeatures.FeatureToolIOLogs)
 
+	records := make([]log.Record, 0, len(rows))
+	spans := make([]trace.SpanContext, 0, len(rows))
 	for _, row := range rows {
 		stampHookTeeAttributes(row.attrs, payload, metadata, blockReason)
 		if scrubToolIO {
@@ -116,70 +100,87 @@ func (s *Service) teeCanonicalHookToEventFeed(
 		// An agent actor's self-reported identity is stripped from the stored
 		// row; the copy carries exactly what the row does.
 		withAgentActor(ctx, row.attrs)
+		records = append(records, hookLogRecord(row))
+		spans = append(spans, hookRowSpanContext(row.attrs))
 	}
 
-	provenance := (&otelv1.InboundLogRecord_Provenance_builder{
-		Source:         new(otelsvc.ProvenanceSource),
-		OrganizationId: &orgID,
-		ProjectId:      new(authCtx.ProjectID.String()),
-	}).Build()
-	records := inboundLogRecordsFromCanonicalHook(provenance, payload, hookSource, rows, s.now())
-
-	// The request's cancellation must not abort the publish or the ack wait:
-	// the idempotency token is already claimed, so a row dropped here would
-	// never be republished.
-	ctx = context.WithoutCancel(ctx)
-	results := make([]gcp.PublishResult, 0, len(records))
-	invalid := 0
-	for _, record := range records {
-		if err := otelsvc.ValidateInboundLogRecord(record); err != nil {
-			invalid++
-			s.logger.WarnContext(ctx, "skipping hook row the event feed pipeline would refuse",
-				attr.SlogError(err),
-				attr.SlogHookSource(hookSource),
-				attr.SlogHookEvent(record.GetEventName()),
-			)
-			continue
+	resourceAttrs := []attribute.KeyValue{semconv.ServiceName(hookSource)}
+	if payload.Source != nil {
+		if version := conv.PtrValOr(payload.Source.AdapterVersion, ""); version != "" {
+			resourceAttrs = append(resourceAttrs, semconv.ServiceVersion(version))
 		}
-		results = append(results, s.otelLogPublisher.Publish(ctx, record))
 	}
-	s.metrics.RecordEventFeedPublish(ctx, hookSource, eventFeedOutcomeInvalid, int64(invalid))
+	logger := otelpub.NewLogger(s.otelLogPublisher, resource.NewSchemaless(resourceAttrs...), dialect.HooksLogScopeName)
+	idempotencyKey := conv.PtrValOr(payload.IdempotencyKey, "")
+	ctx = otelpub.WithTenant(context.WithoutCancel(ctx), orgID, authCtx.ProjectID.String())
 
-	ackCtx, cancel := context.WithTimeout(ctx, hookIngestTeeAckTimeout)
-	defer cancel()
-
-	var firstErr error
-	failed := 0
-	for _, result := range results {
-		if _, err := result.Get(ackCtx); err != nil {
-			failed++
-			if firstErr == nil {
-				firstErr = err
+	s.otelTeeDrains.Go(func() {
+		for i, record := range records {
+			recordCtx := otelpub.WithRecordID(trace.ContextWithSpanContext(ctx, spans[i]), hookIngestRecordID(idempotencyKey, i))
+			if err := logger.Log(recordCtx, record); err != nil {
+				s.logger.WarnContext(ctx, "hook row was not published to the event feed pipeline",
+					attr.SlogError(err),
+					attr.SlogHookSource(hookSource),
+					attr.SlogHookEvent(record.EventName()),
+				)
 			}
 		}
-	}
-	if firstErr != nil {
-		s.logger.ErrorContext(ctx, "publish hook rows to event feed pipeline",
-			attr.SlogError(firstErr),
-			attr.SlogHookSource(hookSource),
-			attr.SlogTelemetryPublishFailedCount(failed),
-		)
-	}
-	s.metrics.RecordEventFeedPublish(ctx, hookSource, eventFeedOutcomeFailure, int64(failed))
-	s.metrics.RecordEventFeedPublish(ctx, hookSource, eventFeedOutcomeSuccess, int64(len(results)-failed))
+	})
 }
 
-// beginOTELTee counts a tee as in flight, or reports that Shutdown has
-// started draining and the tee must not start. Taking the lock is what
-// makes the Add happen before Shutdown's Wait rather than race it.
-func (s *Service) beginOTELTee() bool {
-	s.otelTeeMu.Lock()
-	defer s.otelTeeMu.Unlock()
-	if s.otelTeeDraining {
-		return false
+// hookLogRecord is a hook row as a log record: its time, its hook event as
+// the event name, and its attributes in key order.
+func hookLogRecord(row hookTelemetryRow) log.Record {
+	var record log.Record
+	record.SetTimestamp(row.timestamp)
+	if name, _ := row.attrs[attr.HookEventKey].(string); name != "" {
+		record.SetEventName(name)
 	}
-	s.otelTeeDrains.Add(1)
-	return true
+	for _, key := range slices.Sorted(maps.Keys(row.attrs)) {
+		if value, ok := hookLogValue(row.attrs[key]); ok {
+			record.AddAttributes(log.KeyValue{Key: string(key), Value: value})
+		}
+	}
+	return record
+}
+
+// hookLogValue converts one Go-typed row attribute. Anything without a
+// scalar form is carried as its JSON encoding.
+func hookLogValue(value any) (log.Value, bool) {
+	switch v := value.(type) {
+	case nil:
+		return log.Value{}, false
+	case string:
+		return log.StringValue(v), true
+	case bool:
+		return log.BoolValue(v), true
+	case int:
+		return log.IntValue(v), true
+	case int64:
+		return log.Int64Value(v), true
+	case float64:
+		return log.Float64Value(v), true
+	default:
+		return log.StringValue(jsonString(v)), true
+	}
+}
+
+// hookRowSpanContext is the trace and span a row names, as a remote span
+// context; an id that does not parse is left out.
+func hookRowSpanContext(attrs map[attr.Key]any) trace.SpanContext {
+	var config trace.SpanContextConfig
+	if raw, _ := attrs[attr.TraceIDKey].(string); raw != "" {
+		if id, err := trace.TraceIDFromHex(raw); err == nil {
+			config.TraceID = id
+		}
+	}
+	if raw, _ := attrs[attr.SpanIDKey].(string); raw != "" {
+		if id, err := trace.SpanIDFromHex(raw); err == nil {
+			config.SpanID = id
+		}
+	}
+	config.Remote = true
+	return trace.NewSpanContext(config)
 }
 
 // hookEventFeedFeature answers an org feature the way the telemetry writer
@@ -252,84 +253,6 @@ func stampHookTeeAttributes(attrs map[attr.Key]any, payload *gen.IngestPayload, 
 	}
 }
 
-// inboundLogRecordsFromCanonicalHook turns the rows recorded for one hook
-// event into the inbound records the ingest edge would have published for
-// them: a record id derived from the idempotency key, the row's time, the
-// observed time stamped now, the resource naming the hook source, the hooks
-// scope, and tenancy. Attributes are written in key order so the same rows
-// always yield the same record.
-func inboundLogRecordsFromCanonicalHook(
-	provenance *otelv1.InboundLogRecord_Provenance,
-	payload *gen.IngestPayload,
-	hookSource string,
-	rows []hookTelemetryRow,
-	now time.Time,
-) []*otelv1.InboundLogRecord {
-	idempotencyKey := conv.PtrValOr(payload.IdempotencyKey, "")
-	var adapterVersion *string
-	if payload.Source != nil {
-		if version := conv.PtrValOr(payload.Source.AdapterVersion, ""); version != "" {
-			adapterVersion = &version
-		}
-	}
-	resourceAttributes := []*otelv1.InboundLogRecord_KeyValue{
-		(&otelv1.InboundLogRecord_KeyValue_builder{
-			Key:   new(string(attr.ServiceNameKey)),
-			Value: (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &hookSource}).Build(),
-		}).Build(),
-	}
-	if adapterVersion != nil {
-		resourceAttributes = append(resourceAttributes, (&otelv1.InboundLogRecord_KeyValue_builder{
-			Key:   new(string(attr.ServiceVersionKey)),
-			Value: (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: adapterVersion}).Build(),
-		}).Build())
-	}
-	resource := (&otelv1.InboundLogRecord_Resource_builder{
-		Attributes:             resourceAttributes,
-		DroppedAttributesCount: nil,
-	}).Build()
-	scope := (&otelv1.InboundLogRecord_InstrumentationScope_builder{
-		Name:                   new(dialect.HooksLogScopeName),
-		Version:                adapterVersion,
-		Attributes:             nil,
-		DroppedAttributesCount: nil,
-	}).Build()
-	observedNano := positiveNanoToUint64(now.UnixNano())
-
-	records := make([]*otelv1.InboundLogRecord, 0, len(rows))
-	for i, row := range rows {
-		recordID := hookIngestRecordID(idempotencyKey, i)
-		timeNano := positiveNanoToUint64(row.timestamp.UnixNano())
-		var eventName *string
-		if name, _ := row.attrs[attr.HookEventKey].(string); name != "" {
-			eventName = &name
-		}
-		traceID, _ := row.attrs[attr.TraceIDKey].(string)
-		spanID, _ := row.attrs[attr.SpanIDKey].(string)
-
-		records = append(records, (&otelv1.InboundLogRecord_builder{
-			RecordId:               &recordID,
-			TimeUnixNano:           &timeNano,
-			ObservedTimeUnixNano:   &observedNano,
-			TraceId:                inboundEventID(&traceID, otelTeeTraceIDBytes),
-			SpanId:                 inboundEventID(&spanID, otelTeeSpanIDBytes),
-			Body:                   nil,
-			Attributes:             inboundLogKeyValuesFromGo(row.attrs),
-			DroppedAttributesCount: nil,
-			SeverityNumber:         nil,
-			SeverityText:           nil,
-			Flags:                  nil,
-			EventName:              eventName,
-			Resource:               resource,
-			ResourceSchemaUrl:      nil,
-			Scope:                  scope,
-			ScopeSchemaUrl:         nil,
-			Provenance:             provenance,
-		}).Build())
-	}
-	return records
-}
-
 // hookIngestRecordID is the record id of the index-th row recorded for a
 // hook delivery: derived from the idempotency key so a replay of the same
 // delivery yields the same id, and fresh when the sender stamped none.
@@ -338,69 +261,4 @@ func hookIngestRecordID(idempotencyKey string, index int) string {
 		return uuid.NewString()
 	}
 	return uuid.NewSHA1(hookIngestRecordNamespace, []byte(idempotencyKey+"\x00"+strconv.Itoa(index))).String()
-}
-
-// inboundLogKeyValuesFromGo converts a row's Go-typed attributes, in key
-// order, dropping only values with no representation at all.
-func inboundLogKeyValuesFromGo(attrs map[attr.Key]any) []*otelv1.InboundLogRecord_KeyValue {
-	keys := slices.Sorted(maps.Keys(attrs))
-	out := make([]*otelv1.InboundLogRecord_KeyValue, 0, len(keys))
-	for _, key := range keys {
-		value := inboundAnyValueFromGo(attrs[key])
-		if value == nil {
-			continue
-		}
-		out = append(out, (&otelv1.InboundLogRecord_KeyValue_builder{
-			Key:   new(string(key)),
-			Value: value,
-		}).Build())
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-// inboundAnyValueFromGo converts one Go-typed attribute value, as the hooks
-// path holds them, into its typed proto form. Anything without a scalar
-// form is carried as its JSON encoding so it survives the tee.
-func inboundAnyValueFromGo(value any) *otelv1.InboundLogRecord_AnyValue {
-	switch v := value.(type) {
-	case nil:
-		return nil
-	case string:
-		return (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &v}).Build()
-	case bool:
-		return (&otelv1.InboundLogRecord_AnyValue_builder{BoolValue: &v}).Build()
-	case int:
-		n := int64(v)
-		return (&otelv1.InboundLogRecord_AnyValue_builder{IntValue: &n}).Build()
-	case int32:
-		n := int64(v)
-		return (&otelv1.InboundLogRecord_AnyValue_builder{IntValue: &n}).Build()
-	case int64:
-		return (&otelv1.InboundLogRecord_AnyValue_builder{IntValue: &v}).Build()
-	case uint32:
-		n := int64(v)
-		return (&otelv1.InboundLogRecord_AnyValue_builder{IntValue: &n}).Build()
-	case uint64:
-		if v > math.MaxInt64 {
-			return jsonFallbackAnyValue(v)
-		}
-		n := int64(v)
-		return (&otelv1.InboundLogRecord_AnyValue_builder{IntValue: &n}).Build()
-	case float32:
-		f := float64(v)
-		return (&otelv1.InboundLogRecord_AnyValue_builder{DoubleValue: &f}).Build()
-	case float64:
-		return (&otelv1.InboundLogRecord_AnyValue_builder{DoubleValue: &v}).Build()
-	case json.RawMessage:
-		s := string(v)
-		return (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &s}).Build()
-	case []byte:
-		s := string(v)
-		return (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &s}).Build()
-	default:
-		return jsonFallbackAnyValue(v)
-	}
 }
