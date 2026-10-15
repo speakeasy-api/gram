@@ -77,12 +77,15 @@ If the user wants to configure an MCP connection too, use `list_projects`,
 `find_mcp`, and `get_mcp` to identify an exact project and MCP server. Follow its
 supported setup handoff and obtain separate authorization for any provider or
 binding changes. This workflow cannot choose Speakeasy as an MCP server's
-enterprise authorization provider, and neither can the dashboard: a vendor's
-EMA provider order is derived (the server's trusted external identity provider,
-then the organization's Speakeasy issuer when it has one), and only the
-organization's `setEMAProviders` management API changes it, behind the
-ema-providers rollout. The server's **Settings** → **Identity chaining** section
-in the dashboard turns chaining on or off and shows the sign-ins it uses.
+enterprise authorization provider: a vendor's EMA provider order is derived (the
+server's trusted external identity provider, then the organization's Speakeasy
+issuer when it has one). An organization admin changes that order, including
+removing or reordering providers or restoring the default, on the dashboard's
+**Organization** → **IDP and SSO** → **Identity providers** → **Services**
+page for the vendor, or through the organization's `setEMAProviders` management
+API; both need the ema-providers rollout. The server's **Settings** →
+**Enterprise Managed Authorization** section turns it on or off for that server
+and shows the sign-in, who vouches, and what the vendor has to trust.
 Then call `get_xaa_readiness` with the exact project and MCP server IDs for
 enterprise authorization readiness. Do not substitute a Platform MCP registration
 ID or generic registration readiness for this check.
