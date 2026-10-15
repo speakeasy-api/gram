@@ -672,13 +672,30 @@ export function IdentityChainingField({
           )}
           {order && usableVouchers.length > 0 && (
             <Text muted small className="block">
-              {order.isDefault
-                ? userSessionIssuer.trustedRemoteSessionIssuerId
-                  ? "This server’s sign-in uses an identity provider, so it vouches alone."
-                  : "This server’s sign-in has no identity provider, so Speakeasy vouches."
-                : fallbackFrom.length > 0
-                  ? `Set by ${vendor}’s saved order. ${speakeasyFallbackNote(fallbackFrom)}`
-                  : `Set by ${vendor}’s saved order.`}
+              {order.isDefault ? (
+                userSessionIssuer.trustedRemoteSessionIssuerId ? (
+                  "This server’s sign-in uses an identity provider, so it vouches alone."
+                ) : (
+                  "This server’s sign-in has no identity provider, so Speakeasy vouches."
+                )
+              ) : (
+                <>
+                  Set by{" "}
+                  {orgAdmin ? (
+                    <Link
+                      className="underline underline-offset-4"
+                      to={identityHref(emaServiceHref(order.vendorIssuer))}
+                    >
+                      {vendor}’s saved order
+                    </Link>
+                  ) : (
+                    `${vendor}’s saved order`
+                  )}
+                  .
+                  {fallbackFrom.length > 0 &&
+                    ` ${speakeasyFallbackNote(fallbackFrom)}`}
+                </>
+              )}
             </Text>
           )}
         </ChainLink>

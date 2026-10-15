@@ -375,6 +375,21 @@ describe("identity chaining vouched for by Speakeasy", () => {
     expect(state.calls).toEqual(["prepare"]);
   });
 
+  it("names the saved order as plain text for people who can't open it", () => {
+    state.orgAdmin = false;
+    read.data = {
+      ...bound("first"),
+      emaProviders: { ...order(okta, speakeasy), isDefault: false },
+    };
+    render(speakeasyField({ userSessionIssuer: trusting }));
+    expect(
+      screen.getByText(/Set by example\.com’s saved order\./),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: "example.com’s saved order" }),
+    ).toBeNull();
+  });
+
   it("walks the chain: sign-in, who vouches, what the vendor trusts, client", () => {
     read.data = {
       ...bound("first"),
@@ -383,9 +398,19 @@ describe("identity chaining vouched for by Speakeasy", () => {
     render(speakeasyField({ userSessionIssuer: trusting }));
     expect(
       screen.getByText(
-        "Set by example.com’s saved order. If Okta can’t or won’t vouch for someone, Speakeasy is tried next.",
+        (_, el) =>
+          el?.tagName === "P" &&
+          el.textContent ===
+            "Set by example.com’s saved order. If Okta can’t or won’t vouch for someone, Speakeasy is tried next.",
       ),
     ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "example.com’s saved order" })
+        .getAttribute("href"),
+    ).toBe(
+      "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
+    );
     const links = within(chain()).getAllByText(
       /^(Sign-in|Vouched for by|example.com trusts|Client)$/,
     );
