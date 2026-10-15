@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"crypto/subtle"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -243,14 +244,12 @@ func consentFullPageURL(endpoint *ResolvedMcpEndpoint, state AuthnChallengeState
 	return endpoint.consentPath() + "?" + url.Values{"state": {state.ID}, "consent": {"required"}}.Encode()
 }
 
-var consentReuseTemplate = template.Must(template.New("reuse").Parse(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Connecting</title><style>{{.Styles}}</style></head>
-<body class="bg-background text-foreground min-h-screen"><main class="mx-auto flex min-h-screen w-full max-w-[52rem] flex-col gap-6 px-4 py-12 sm:py-16">
-<p role="status">Checking saved approval…</p>
-<a href="{{.Fallback}}">Review access</a>
-<form id="consent-reuse" action="{{.Path}}" method="post" data-tools-url="{{.ToolsURL}}" data-fallback="{{.Fallback}}">
-<input type="hidden" name="state" value="{{.State}}"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><input type="hidden" name="action" value="reuse"><input type="hidden" name="tool_inventory_id" value="">
-</form></main><script type="module" src="{{.Script}}"></script></body></html>`))
+//go:embed consent_reuse_template.html
+var consentReuseTemplateHTML string
+
+var consentReuseTemplate = template.Must(
+	template.Must(template.New("reuse").Parse(consentReuseTemplateHTML)).Parse(consentLogoHTML),
+)
 
 func renderConsentReuse(w http.ResponseWriter, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) error {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
