@@ -554,6 +554,25 @@ func (m *ChallengeManager) ResolveAvailableAccessTokens(
 	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, subject, true)
 }
 
+// ResolveAvailableServerAccessTokens is ResolveAvailableAccessTokens narrowed
+// to the provider configured on the MCP server being served, and resolves
+// nothing for a server configured with none. The identity chaining fallback
+// reads it: a sibling server's grant for the same resource is not this
+// server's to route, however usable it is.
+func (m *ChallengeManager) ResolveAvailableServerAccessTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	remoteSessionIssuerID uuid.NullUUID,
+	subject urn.SessionSubject,
+) (map[uuid.UUID]UpstreamToken, error) {
+	if !remoteSessionIssuerID.Valid {
+		return nil, nil
+	}
+	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, remoteSessionIssuerID, subject, true)
+}
+
 // resolveBoundAccessTokens resolves the upstream tokens of the clients bound to
 // the user session issuer. remoteSessionIssuerID, when set, keeps only the
 // client of that provider: the clients of the other providers on the issuer
@@ -578,6 +597,15 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 			if c.RemoteSessionIssuerID == remoteSessionIssuerID.UUID {
 				clients = append(clients, c)
 			}
+		}
+		// The server names a provider, so it signs its users in; its client
+		// being unbound is a configuration that cannot serve, not a server
+		// that needs no credential. Answering with no tokens would let the
+		// request go upstream anonymously under a sign-in the server still
+		// advertises. An availability check reads the empty map instead, as it
+		// does for every other client it cannot use.
+		if len(clients) == 0 && !skipUnusable {
+			return nil, ErrNoValidToken
 		}
 	}
 	if len(clients) == 0 {

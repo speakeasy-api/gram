@@ -196,9 +196,9 @@ func attachMissingRemoteSession(t *testing.T, ctx context.Context, ti *testInsta
 		RemoteSessionClientID: remoteClient.ID,
 		UserSessionIssuerID:   userSessionIssuerID,
 	}))
-	// Binding a client is followed by the reconcile every client-binding
-	// writer runs, which is what configures this server with that provider and
-	// so makes its credential one the endpoint requires.
+	// Stand in for the identity commit that configures User Identity on the
+	// server in production, which is what makes this provider's credential one
+	// the endpoint requires. Binding the client alone never configures it.
 	configureServerProviders(t, ctx, ti.conn, projectID, organizationID, userSessionIssuerID)
 }
 

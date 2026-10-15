@@ -1176,6 +1176,18 @@ func (s *Service) resolveEndpointAccessTokens(ctx context.Context, endpoint *Res
 	}
 }
 
+// resolveEndpointAvailableAccessTokens is resolveEndpointAccessTokens for the
+// callers that want what is usable rather than an all-or-nothing answer. It
+// applies the same scoping: a real server reads its own provider's clients and
+// a legacy toolset endpoint stays issuer-wide.
+func (s *Service) resolveEndpointAvailableAccessTokens(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	provider, serverScoped := serverScopedProvider(endpoint)
+	if serverScoped {
+		return s.remoteChallengeMgr.ResolveAvailableServerAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, provider, subject) //nolint:wrapcheck // Callers classify the sentinels.
+	}
+	return s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject) //nolint:wrapcheck // Callers classify the sentinels.
+}
+
 // rejectRemoteSession answers a ResolveAccessTokens failure. The Speakeasy
 // credential is valid in every rejection; only an upstream remote session
 // behind it is not.

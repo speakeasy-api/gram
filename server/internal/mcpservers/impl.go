@@ -230,9 +230,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	// A server alone on its user session issuer takes the provider bound
-	// there, so a server created on a dedicated issuer that already has one is
-	// configured from the start. Reload so the view reports what landed.
+	// A new server signs nobody in until User Identity is configured on it.
+	// This pass only clears a provider whose client is gone, so it cannot hand
+	// the server one; reload so the view reports what actually landed.
 	if ids.UserSessionIssuerID.Valid {
 		remotesessions.BestEffortClearUnboundMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID})
 		refreshed, refreshErr := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{

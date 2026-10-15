@@ -1,10 +1,10 @@
 // mcp_servers.remote_session_issuer_id is written per server, so what matters
 // here is the reconcile that keeps it honest: it clears a server whose own
 // provider lost its client, leaves every other server on a shared user session
-// issuer alone whatever that issuer's other clients do, still derives the
-// leaves a server whose provider was never configured without one, and writes
-// nothing outside the caller's own scope — the ids it takes come from join
-// tables with no tenancy column.
+// issuer alone whatever that issuer's other clients do, leaves a server whose
+// provider was never configured without one, and writes nothing outside the
+// caller's own scope — the ids it takes come from join tables with no tenancy
+// column.
 
 package remotesessions_test
 
@@ -576,17 +576,24 @@ func seedUnlinkedClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 	return client.ID, issuer.ID
 }
 
-// requireBlockedOnMCPServers waits until a statement matching fragment is
+// requireBlockedOnMCPServers waits until a statement matching every fragment is
 // parked on an mcp_servers row lock, which is how a test knows the write under
 // test has taken its snapshot and is waiting for the configuration commit
 // rather than racing it.
-func requireBlockedOnMCPServers(t *testing.T, ctx context.Context, conn *pgxpool.Pool, fragment string) {
+//
+// Scoped to this test's own database: tests run in parallel against sibling
+// clones of it, and matching a lock any of those holds would let the wait
+// return before this write ever blocked.
+func requireBlockedOnMCPServers(t *testing.T, ctx context.Context, conn *pgxpool.Pool, fragments ...string) {
 	t.Helper()
+	require.NotEmpty(t, fragments, "an unscoped wait would match another test's lock")
 	require.Eventually(t, func() bool {
 		var blocked bool
 		//nolint:glint // notestingrawsql: pg_stat_activity is server state, not application data, and has no SQLc query.
 		if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity
-			WHERE wait_event_type = 'Lock' AND query ILIKE '%' || $1 || '%')`, fragment).Scan(&blocked); err != nil {
+			WHERE wait_event_type = 'Lock'
+			  AND datname = current_database()
+			  AND query ILIKE ALL (SELECT '%' || f || '%' FROM unnest($1::text[]) AS f))`, fragments).Scan(&blocked); err != nil {
 			return false
 		}
 		return blocked

@@ -129,7 +129,7 @@ func registerTurnOffMCPSignInTool(reg *Registrar, registrations *RegistrationSer
 		}
 		return nil, TurnOffMCPSignInToolOutput{
 			ProjectSlug: input.ProjectSlug, RegistrationID: input.RegistrationID,
-			SignInConfigured: true, ProviderURL: result.ProviderURL,
+			SignInConfigured: after.Configured, ProviderURL: result.ProviderURL,
 			Applied: true, SignsInToNothing: !after.Configured, Version: after.Version,
 			OtherServersKeepTheClient: !result.ClientUnbound,
 			PeopleMustSignInAgain:     result.ClientUnbound,

@@ -310,7 +310,13 @@ func TestCanonicalWrapperDeletedWhenItsDomainIsAlreadyGone(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows, "the canonical wrapper is tombstoned with its toolset")
 }
 
-func TestCanonicalWrapperUnsetIssuerClearsRemoteIssuer(t *testing.T) {
+// AIM-577: a canonical wrapper's upstream authorization server is not derived
+// from whatever its user session issuer happens to bind. Gating the wrapper on
+// an issuer that binds exactly one provider's client — the case the old
+// derivation stamped — leaves it signing nobody in until User Identity is
+// configured on it, because that client belongs to the servers that configured
+// it, not to this one.
+func TestCanonicalWrapperIssuerDoesNotDeriveARemoteIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestToolsetsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -356,11 +362,12 @@ func TestCanonicalWrapperUnsetIssuerClearsRemoteIssuer(t *testing.T) {
 	issuerID := issuer.ID.String()
 	updated, err := ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: toolset.Slug, UserSessionIssuerID: &issuerID})
 	require.NoError(t, err)
-	require.Equal(t, uuid.NullUUID{UUID: remoteIssuer.ID, Valid: true}, requireCanonicalMatches(t, ctx, ti, updated).server.RemoteSessionIssuerID)
+	require.False(t, requireCanonicalMatches(t, ctx, ti, updated).server.RemoteSessionIssuerID.Valid,
+		"gating the wrapper on an issuer must not adopt a provider configured on another server")
 
 	updated, err = ti.service.SetUserSessionIssuer(ctx, &gen.SetUserSessionIssuerPayload{Slug: toolset.Slug, UserSessionIssuerID: nil})
 	require.NoError(t, err)
-	require.False(t, requireCanonicalMatches(t, ctx, ti, updated).server.RemoteSessionIssuerID.Valid, "no issuer, no derived remote issuer")
+	require.False(t, requireCanonicalMatches(t, ctx, ti, updated).server.RemoteSessionIssuerID.Valid, "no issuer, no sign-in")
 }
 
 func TestCanonicalWrapperSyncAcceptsAgentPrincipal(t *testing.T) {
