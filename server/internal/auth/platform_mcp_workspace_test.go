@@ -1,6 +1,8 @@
 package auth_test
 
 import (
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -78,4 +80,41 @@ func TestProvisionPlatformMCPWorkspaceRejectsInvalidName(t *testing.T) {
 	organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
 	require.NoError(t, err)
 	require.Empty(t, organizations)
+}
+
+func TestProvisionPlatformMCPWorkspaceConcurrentSubmitsCreateOneOrganization(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.Organizations = nil
+	ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+	const submits = 2
+	errs := make([]error, submits)
+	var wg sync.WaitGroup
+	for i := range submits {
+		wg.Go(func() {
+			_, _, errs[i] = instance.service.ProvisionPlatformMCPWorkspace(ctx, userInfo.UserID, "Acme Workspace")
+		})
+	}
+	wg.Wait()
+
+	var created, refused int
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			created++
+		case errors.Is(err, auth.ErrUserHasOrganization):
+			refused++
+		default:
+			require.NoError(t, err)
+		}
+	}
+	require.Equal(t, 1, created)
+	require.Equal(t, 1, refused)
+
+	organizations, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+	require.NoError(t, err)
+	require.Len(t, organizations, 1)
+	require.Len(t, instance.trialNotifier.trialStarted, 1)
 }

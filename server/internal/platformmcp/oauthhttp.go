@@ -615,9 +615,10 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 		}
 
 		// Consume the challenge before creating anything, so a replayed or
-		// doubled submit cannot create a second organization.
+		// doubled submit cannot create a second organization. Check it again,
+		// because another submit can change it between the read and the delete.
 		challenge, err = s.cache.GetAndDelete(r.Context(), stateKey)
-		if err != nil {
+		if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
 			writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
 			return
 		}
@@ -627,6 +628,9 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "Your workspace could not be created. Sign in to the Speakeasy dashboard to create one, then connect again."})
 			return
 		}
+		// A fresh state means a stale submit that still holds the old one
+		// cannot consume the challenge this request continues with.
+		challenge.ID = uuid.NewString()
 		challenge.OrganizationID = organization.ID
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
 			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")

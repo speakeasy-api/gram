@@ -121,13 +121,20 @@ func TestOAuthHTTPUserWithoutOrganizationCreatesWorkspaceAndContinues(t *testing
 	connectURL, err := url.Parse(created.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, "/platform-mcp/connect", connectURL.Path)
+	connectState := connectURL.Query().Get("state")
+	require.NotEqual(t, state, connectState, "the consent step continues under a fresh state")
+	// A concurrent submit that read the challenge before this one consumed
+	// it goes on to consume the original state. Nothing may be stored there,
+	// or it would take the challenge the consent page continues with.
+	_, err = service.cache.Get(t.Context(), platformOAuthChallengePrefix+state)
+	require.Error(t, err)
 
 	connect := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(connect, httptest.NewRequest(http.MethodGet, connectURL.String(), nil))
 	require.Equal(t, http.StatusOK, connect.Code)
 	require.Contains(t, connect.Body.String(), "Acme Inc")
 
-	approve := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(url.Values{"state": {state}, "csrf_token": {csrf}, "action": {"approve"}}.Encode()))
+	approve := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(url.Values{"state": {connectState}, "csrf_token": {csrf}, "action": {"approve"}}.Encode()))
 	approve.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	approved := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(approved, approve)

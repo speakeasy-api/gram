@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
@@ -105,22 +108,9 @@ func (s *Service) ProvisionPlatformMCPWorkspace(ctx context.Context, userID, nam
 		return "", "", fmt.Errorf("read user for workspace: %w", err)
 	}
 
-	existing, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
+	org, err := s.provisionFirstOrgForUser(ctx, userID, orgName, user.Email)
 	if err != nil {
-		return "", "", fmt.Errorf("list user organizations: %w", err)
-	}
-	if len(existing) > 0 {
-		return "", "", ErrUserHasOrganization
-	}
-
-	org, err := s.provisionOrgForUser(ctx, userID, orgName, orgProvisionOptions{
-		Whitelisted:    true,
-		ProvisionTrial: true,
-		ActorEmail:     user.Email,
-		CreationSource: orgprovision.SourcePlatformMCP,
-	})
-	if err != nil {
-		return "", "", fmt.Errorf("provision workspace: %w", err)
+		return "", "", err
 	}
 
 	if _, err := s.getProjectsOrSetupDefaults(ctx, org.ID); err != nil {
@@ -132,4 +122,65 @@ func (s *Service) ProvisionPlatformMCPWorkspace(ctx context.Context, userID, nam
 	}
 
 	return org.ID, org.Name, nil
+}
+
+// provisionFirstOrgForUser provisions an organization only while the user
+// has none. Two OAuth challenges for the same user can submit at once, so a
+// per-user lock makes the check and the provisioning one step: only one of
+// them creates a workspace and a trial. The lock covers no more than that.
+func (s *Service) provisionFirstOrgForUser(ctx context.Context, userID, orgName, actorEmail string) (orgRepo.OrganizationMetadatum, error) {
+	var empty orgRepo.OrganizationMetadatum
+
+	release, err := s.lockPlatformMCPWorkspace(ctx, userID)
+	if err != nil {
+		return empty, err
+	}
+	defer release()
+
+	existing, err := s.orgRepo.ListOrganizationsForUser(ctx, conv.ToPGText(userID))
+	if err != nil {
+		return empty, fmt.Errorf("list user organizations: %w", err)
+	}
+	if len(existing) > 0 {
+		return empty, ErrUserHasOrganization
+	}
+
+	org, err := s.provisionOrgForUser(ctx, userID, orgName, orgProvisionOptions{
+		Whitelisted:    true,
+		ProvisionTrial: true,
+		ActorEmail:     actorEmail,
+		CreationSource: orgprovision.SourcePlatformMCP,
+	})
+	if err != nil {
+		return empty, fmt.Errorf("provision workspace: %w", err)
+	}
+	return org, nil
+}
+
+// lockPlatformMCPWorkspace holds a per-user advisory lock on a dedicated
+// connection. The returned function releases the lock and the connection.
+func (s *Service) lockPlatformMCPWorkspace(ctx context.Context, userID string) (func(), error) {
+	conn, err := s.db.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire workspace lock connection: %w", err)
+	}
+	queries := repo.New(conn)
+	if err := queries.AcquirePlatformMCPWorkspaceLock(ctx, userID); err != nil {
+		// The lock may have been granted as the call failed, so close the
+		// session rather than return it to the pool still holding the lock.
+		_ = conn.Hijack().Close(context.WithoutCancel(ctx))
+		return nil, fmt.Errorf("acquire workspace lock: %w", err)
+	}
+	return func() {
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		unlocked, err := queries.ReleasePlatformMCPWorkspaceLock(unlockCtx, userID)
+		if err != nil || !unlocked {
+			s.logger.ErrorContext(unlockCtx, "failed to release Platform MCP workspace lock", attr.SlogError(err), attr.SlogUserID(userID))
+			// Closing the session drops any advisory lock it still holds.
+			_ = conn.Hijack().Close(unlockCtx)
+			return
+		}
+		conn.Release()
+	}, nil
 }

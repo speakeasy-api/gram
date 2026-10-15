@@ -11,6 +11,17 @@ import (
 	"github.com/google/uuid"
 )
 
+const acquirePlatformMCPWorkspaceLock = `-- name: AcquirePlatformMCPWorkspaceLock :exec
+SELECT pg_advisory_lock(hashtextextended('platform-mcp-workspace:' || $1::text, 0))
+`
+
+// Serialize Platform MCP workspace creation per user, so two concurrent
+// OAuth submits cannot each create a first organization with a trial.
+func (q *Queries) AcquirePlatformMCPWorkspaceLock(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, acquirePlatformMCPWorkspaceLock, userID)
+	return err
+}
+
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
@@ -69,6 +80,17 @@ func (q *Queries) PokeProjectByID(ctx context.Context, arg PokeProjectByIDParams
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const releasePlatformMCPWorkspaceLock = `-- name: ReleasePlatformMCPWorkspaceLock :one
+SELECT pg_advisory_unlock(hashtextextended('platform-mcp-workspace:' || $1::text, 0)) AS unlocked
+`
+
+func (q *Queries) ReleasePlatformMCPWorkspaceLock(ctx context.Context, userID string) (bool, error) {
+	row := q.db.QueryRow(ctx, releasePlatformMCPWorkspaceLock, userID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }
 
 const setUserAdminFixture = `-- name: SetUserAdminFixture :exec

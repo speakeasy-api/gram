@@ -17,3 +17,10 @@ WHERE
   organization_id = @organization_id
   AND id = @project_id
   AND deleted IS FALSE;
+-- name: AcquirePlatformMCPWorkspaceLock :exec
+-- Serialize Platform MCP workspace creation per user, so two concurrent
+-- OAuth submits cannot each create a first organization with a trial.
+SELECT pg_advisory_lock(hashtextextended('platform-mcp-workspace:' || @user_id::text, 0));
+
+-- name: ReleasePlatformMCPWorkspaceLock :one
+SELECT pg_advisory_unlock(hashtextextended('platform-mcp-workspace:' || @user_id::text, 0)) AS unlocked;
