@@ -50,7 +50,7 @@ import {
   emaServiceHref,
   identityProvidersHref,
 } from "@/pages/org/identity-provider/tabs";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import type { IdentityChainingPreparation } from "@gram/client/models/components/identitychainingpreparation.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
@@ -406,6 +406,12 @@ export function IdentityChainingField({
   const onSettled = () => void read.refetch();
 
   const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
+  const clientHref = (client: RemoteSessionClient) =>
+    routes.remoteIdentityProviders.clientDetail.overview.href(
+      client.remoteSessionIssuerId,
+      client.id,
+    );
   const identityHref = (search: string) =>
     `${orgRoutes.identity.href()}${search}`;
   const prepare = useRemoteSessionClientsPrepareEMAMutation({
@@ -880,18 +886,30 @@ export function IdentityChainingField({
           )}
         </ChainLink>
 
-        <ChainLink label="Client" tone={clientTone}>
+        <ChainLink label={`${vendor} app`} tone={clientTone}>
           {candidates.length > 1 ? (
-            <ClientPicker
-              clients={candidates}
-              value={selected?.id ?? ""}
-              onChange={setSelectedId}
-              disabled={prepare.isPending || unlink.isPending}
-            />
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <ClientPicker
+                clients={candidates}
+                value={selected?.id ?? ""}
+                onChange={setSelectedId}
+                disabled={prepare.isPending || unlink.isPending}
+              />
+              {selected && (
+                <SettingsLink to={clientHref(selected)}>
+                  Manage app
+                </SettingsLink>
+              )}
+            </div>
           ) : (
-            <Text small className="truncate">
-              {selected?.clientId}
-            </Text>
+            selected && (
+              <Link
+                className="block truncate text-sm underline underline-offset-4"
+                to={clientHref(selected)}
+              >
+                {selected.clientId}
+              </Link>
+            )
           )}
           {switchingClient && (
             <Text muted small className="block">
@@ -909,8 +927,8 @@ export function IdentityChainingField({
           )}
           {!publicClient && grantsBlocked && (
             <Text muted small className="block">
-              This client belongs to the organization. An organization admin
-              must confirm its grants first.
+              This app belongs to the organization. An organization admin must
+              confirm its grants first.
             </Text>
           )}
           {!ready &&
@@ -936,7 +954,7 @@ export function IdentityChainingField({
                   <Text small>
                     {cimd
                       ? "Publish these grants in the client's metadata document: "
-                      : `Declare that client ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
+                      : `Declare that app ${selected.clientId} is registered with the provider for these grants, and record them on it: `}
                     {grantDeclaration.grants.join(", ")}
                   </Text>
                 </label>

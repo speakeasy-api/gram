@@ -77,6 +77,16 @@ vi.mock("@/hooks/useRBAC", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
+  useRoutes: () => ({
+    remoteIdentityProviders: {
+      clientDetail: {
+        overview: {
+          href: (issuerId: string, clientId: string) =>
+            `/rip/${issuerId}/clients/${clientId}/overview`,
+        },
+      },
+    },
+  }),
 }));
 vi.mock("react-router", () => ({
   Link: ({ children, to }: { children: ReactNode; to: string }) => (
@@ -246,7 +256,9 @@ describe("identity chaining client for this service", () => {
       />,
     );
     expect(screen.queryByRole("combobox")).toBeNull();
-    expect(screen.getByText("tracker-client")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "tracker-client" }).getAttribute("href"),
+    ).toBe("/rip/tracker/clients/tracker-client/overview");
     expect(screen.queryByText("wiki-client")).toBeNull();
   });
 
@@ -457,15 +469,16 @@ describe("identity chaining vouched for by Speakeasy", () => {
   it("offers every linked client when no sign-in client is trusted", () => {
     render(field(speakeasyOnly, plainIssuer));
     expect(screen.getByRole("combobox")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Manage app" }).getAttribute("href"),
+    ).toBe("/rip/issuer/clients/first/overview");
   });
 
   it("keeps the identity provider's sign-in client out of the picker", () => {
     read.data = { ...unlinked, emaProviders: providersOf(okta) };
     render(field({ external: true }, trusting));
     expect(screen.queryByRole("combobox")).toBeNull();
-    expect(
-      within(chain()).getByText("first", { selector: "p, span" }),
-    ).toBeTruthy();
+    expect(within(chain()).getByRole("link", { name: "first" })).toBeTruthy();
   });
 
   it("keeps the trusted sign-in client out even when only Speakeasy applies", () => {
@@ -539,14 +552,17 @@ describe("identity chaining vouched for by Speakeasy", () => {
       "/org/identity?tab=identity-providers&service=https%3A%2F%2Fvendor.example.com",
     );
     const links = within(chain()).getAllByText(
-      /^(Sign-in|Vouched for by|example.com trusts|Client)$/,
+      /^(Sign-in|Vouched for by|example.com trusts|example.com app)$/,
     );
     expect(links.map((link) => link.textContent)).toEqual([
       "Sign-in",
       "Vouched for by",
       "example.com trusts",
-      "Client",
+      "example.com app",
     ]);
+    expect(
+      within(chain()).getByRole("link", { name: "first" }).getAttribute("href"),
+    ).toBe("/rip/issuer/clients/first/overview");
     expect(
       within(chain()).getByText("Okta", { selector: "[title='okta-sign-in']" }),
     ).toBeTruthy();

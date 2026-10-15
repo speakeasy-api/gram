@@ -52,6 +52,16 @@ vi.mock("@/lib/remote-identity", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
+  useRoutes: () => ({
+    remoteIdentityProviders: {
+      clientDetail: {
+        overview: {
+          href: (issuerId: string, clientId: string) =>
+            `/rip/${issuerId}/clients/${clientId}/overview`,
+        },
+      },
+    },
+  }),
 }));
 vi.mock("@/pages/org/identity-provider/tabs", () => ({
   identityProvidersHref: () => "?tab=identity-providers",
