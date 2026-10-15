@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { InternalSessionIssuer } from "@gram/client/models/components/internalsessionissuer.js";
 import { invalidateAllInternalSessionIssuer } from "@gram/client/react-query/internalSessionIssuer.js";
+import { invalidateAllOrganizationRemoteSessionIssuerEMAServices } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js";
 import { useRotateInternalSessionIssuerMutation } from "@gram/client/react-query/rotateInternalSessionIssuer.js";
 import { useSetInternalSessionIssuerEnabledMutation } from "@gram/client/react-query/setInternalSessionIssuerEnabled.js";
 import {
@@ -54,6 +55,11 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
   const update = (data: InternalSessionIssuer) => {
     queryClient.setQueryData(enterpriseIssuerQueryKey(organization.id), data);
     void invalidateAllInternalSessionIssuer(queryClient);
+    // Speakeasy's readiness shows in every service's order.
+    void invalidateAllOrganizationRemoteSessionIssuerEMAServices(queryClient);
+    void queryClient.invalidateQueries({
+      queryKey: ["identityChaining", "readEMA"],
+    });
     setAction(null);
   };
   const enable = useSetInternalSessionIssuerEnabledMutation({
@@ -214,8 +220,11 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
                     RFC 7523
                   </a>
                   . It never changes, even when signing keys are replaced.
-                  Registering it alone changes nothing: also turn on Enterprise
-                  Managed Authorization in the MCP server's Settings.
+                  Speakeasy vouches on MCP servers whose sign-in has no identity
+                  provider, and wherever a saved order on the service's page
+                  lists it. Registering the URI alone changes nothing: also turn
+                  on Enterprise Managed Authorization in the MCP server's
+                  Settings.
                 </SettingsSection.Description>
               </SettingsSection.Header>
               <SettingsSection.Panel>
@@ -226,7 +235,7 @@ function SpeakeasyWorkspaceContent(): JSX.Element {
             </SettingsSection>
           )}
 
-          {issuer.issuer && <TrustedByServices providerKey="speakeasy" />}
+          {issuer.issuer && <TrustedByServices />}
 
           {issuer.issuer && (
             <SettingsSection id="signing-keys">

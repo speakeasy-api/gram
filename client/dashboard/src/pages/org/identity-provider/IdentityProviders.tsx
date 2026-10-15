@@ -1,6 +1,9 @@
 import { parseAsString, parseAsStringLiteral, useQueryState } from "nuqs";
 
+import { Link } from "react-router";
+
 import { RequireScope } from "@/components/require-scope";
+import { Alert } from "@/components/ui/Alert";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 
@@ -9,7 +12,12 @@ import { EmaServices } from "./services/EmaServices";
 import { EmaServiceWorkspace } from "./services/EmaServiceWorkspace";
 import { SpeakeasyProviderCard } from "./SpeakeasyProviderCard";
 import { SpeakeasyWorkspace } from "./SpeakeasyWorkspace";
-import { PROVIDER_IDS } from "./tabs";
+import {
+  emaServiceHref,
+  oktaViewHref,
+  PROVIDER_IDS,
+  speakeasyProviderHref,
+} from "./tabs";
 
 type IdentityProvidersProps = {
   /** External providers (Okta) are behind their own rollout. */
@@ -36,13 +44,16 @@ function ProviderContent({
     parseAsStringLiteral(PROVIDER_IDS),
   );
   const [serviceIssuer] = useQueryState("service", parseAsString);
-  const provider = showExternal
-    ? PROVIDERS.find((provider) => provider.id === providerId)
-    : undefined;
+  // A link naming both can't mean either one; ask instead of guessing.
+  const ambiguous = !!providerId && !!serviceIssuer;
+  const provider =
+    showExternal && !ambiguous
+      ? PROVIDERS.find((provider) => provider.id === providerId)
+      : undefined;
   if (provider) return <provider.Workspace />;
-  if (providerId === "speakeasy" && showSpeakeasy)
+  if (!ambiguous && providerId === "speakeasy" && showSpeakeasy)
     return <SpeakeasyWorkspace />;
-  if (serviceIssuer)
+  if (!ambiguous && serviceIssuer)
     return <EmaServiceWorkspace vendorIssuer={serviceIssuer} />;
   return (
     <section
@@ -61,6 +72,31 @@ function ProviderContent({
           Employee sign-in and directory sync live on the Single sign-on tab.
         </Text>
       </div>
+      {ambiguous && (
+        <Alert variant="warning">
+          <Text small>
+            This link points at both an identity provider and a service.{" "}
+            <Link
+              className="underline underline-offset-4"
+              to={
+                providerId === "okta"
+                  ? oktaViewHref("setup")
+                  : speakeasyProviderHref()
+              }
+            >
+              Open the identity provider
+            </Link>{" "}
+            or{" "}
+            <Link
+              className="underline underline-offset-4"
+              to={emaServiceHref(serviceIssuer)}
+            >
+              open the service
+            </Link>
+            .
+          </Text>
+        </Alert>
+      )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {showSpeakeasy && <SpeakeasyProviderCard />}
         {showExternal &&

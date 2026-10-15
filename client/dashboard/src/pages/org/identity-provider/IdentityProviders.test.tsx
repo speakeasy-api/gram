@@ -174,6 +174,25 @@ describe("Identity providers", () => {
     ).toBeTruthy();
     expect(screen.queryByText("Services table")).toBeNull();
   });
+  it("asks which page to open when a link names both a provider and a service", () => {
+    show("&provider=okta&service=https%3A%2F%2Flinear.example.com");
+    expect(screen.queryByText(/Service page:/)).toBeNull();
+    expect(
+      screen.getByText(/points at both an identity provider and a service/),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "open the service" })
+        .getAttribute("href"),
+    ).toBe(
+      "/example/identity?tab=identity-providers&service=https%3A%2F%2Flinear.example.com",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "Open the identity provider" })
+        .getAttribute("href"),
+    ).toBe("/example/identity?tab=identity-providers&provider=okta&view=setup");
+  });
   it("shows the provider list for unknown providers", () => {
     show("&provider=unsupported");
     expect(

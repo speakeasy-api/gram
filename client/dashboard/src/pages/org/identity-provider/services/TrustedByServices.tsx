@@ -1,72 +1,122 @@
 import { Link } from "react-router";
 
 import { SettingsSection } from "@/components/detail/settings-section";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { SkeletonParagraph } from "@/components/ui/Skeleton";
+import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
 
 import { emaServiceHref } from "../tabs";
-import { acceptanceLabel } from "./emaServiceView";
-import { useEmaServices } from "./useEmaServices";
+import { acceptanceLabel, type ProviderView } from "./emaServiceView";
+import { useEmaServices, type ServiceRow } from "./useEmaServices";
+
+type Entry = { row: ServiceRow; provider: ProviderView };
 
 /**
- * On an identity provider's page: which services accept it. The same facts
- * as the Services table, read from the provider's side.
+ * On Speakeasy's page: the services whose order can use Speakeasy, split by
+ * whether the service has accepted it yet.
  */
-export function TrustedByServices({
-  providerKey,
-}: {
-  providerKey: string;
-}): JSX.Element | null {
+export function TrustedByServices(): JSX.Element {
   const services = useEmaServices();
-  if (services.isPending || services.isError) return null;
-  const rows = services.rows.flatMap((row) => {
-    const provider = row.providers.find((p) => p.key === providerKey);
+  const entries: Entry[] = services.rows.flatMap((row) => {
+    const provider = row.providers.find((p) => p.kind === "speakeasy");
     return provider ? [{ row, provider }] : [];
   });
+  const accepted = entries.filter((entry) => entry.provider.lastAcceptedAt);
+  const waiting = entries.filter((entry) => !entry.provider.lastAcceptedAt);
+
   return (
-    <SettingsSection id="trusted-by">
+    <SettingsSection id="services">
       <SettingsSection.Header>
-        <SettingsSection.Title>Trusted by</SettingsSection.Title>
+        <SettingsSection.Title>
+          Services that can use Speakeasy
+        </SettingsSection.Title>
         <SettingsSection.Description>
-          Services that accept this identity provider. Each one is set up once,
-          in its own admin settings.
+          Services where Speakeasy can vouch for people. Each one has to trust
+          Speakeasy’s issuer once, in its own admin settings, before it works.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
-          {rows.length === 0 ? (
+          {services.isPending ? (
+            <>
+              <SkeletonParagraph />
+              <span role="status" className="sr-only">
+                Loading services…
+              </span>
+            </>
+          ) : services.isError ? (
+            <Alert variant="error">
+              <Text small>Couldn’t load services. Try again.</Text>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={services.isFetching}
+                onClick={services.refetch}
+              >
+                Retry
+              </Button>
+            </Alert>
+          ) : entries.length === 0 ? (
             <Text small muted>
-              No service reaches it yet. Turn on Enterprise Managed
-              Authorization on an MCP server to start.
+              None yet. Once an MCP server whose sign-in has no identity
+              provider turns on Enterprise Managed Authorization, its service
+              shows up here.
             </Text>
           ) : (
-            <ul aria-label="Trusted by" className="space-y-2">
-              {rows.map(({ row, provider }) => (
-                <li key={row.key} className="flex items-baseline gap-2">
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "size-2 shrink-0 translate-y-[-1px] rounded-full",
-                      provider.lastAcceptedAt
-                        ? "bg-[var(--fill-success-default)]"
-                        : "bg-muted-foreground/40",
-                    )}
-                  />
-                  <Link
-                    to={emaServiceHref(row.vendorIssuer)}
-                    className="text-sm font-medium underline underline-offset-4"
-                  >
-                    {row.name}
-                  </Link>
-                  <Text muted small>
-                    {acceptanceLabel(provider.lastAcceptedAt)}
-                  </Text>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-5">
+              <EntryList
+                label="Accepted Speakeasy"
+                entries={accepted}
+                tone="success"
+              />
+              <EntryList
+                label="Not accepted yet"
+                entries={waiting}
+                tone="neutral"
+              />
+            </div>
           )}
         </SettingsSection.Body>
       </SettingsSection.Panel>
     </SettingsSection>
+  );
+}
+
+function EntryList({
+  label,
+  entries,
+  tone,
+}: {
+  label: string;
+  entries: Entry[];
+  tone: "success" | "neutral";
+}): JSX.Element | null {
+  if (entries.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <Text as="h4" className="text-eyebrow">
+        {label}
+      </Text>
+      <ul aria-label={label} className="space-y-2">
+        {entries.map(({ row, provider }) => (
+          <li key={row.key} className="flex items-baseline gap-2">
+            <StatusDot tone={tone} className="translate-y-[-1px]" />
+            <Link
+              to={emaServiceHref(row.vendorIssuer)}
+              className="text-sm font-medium underline underline-offset-4"
+            >
+              {row.name}
+            </Link>
+            <Text as="span" muted small>
+              {provider.usable
+                ? acceptanceLabel(provider.lastAcceptedAt)
+                : provider.unavailable}
+            </Text>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

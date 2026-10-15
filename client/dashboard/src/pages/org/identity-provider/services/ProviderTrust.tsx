@@ -1,33 +1,46 @@
+import { StatusDot } from "@/components/ui/StatusDot";
 import { Text } from "@/components/ui/Text";
-import { cn } from "@/lib/utils";
 
-import { acceptanceLabel, type ProviderView } from "./emaServiceView";
+import {
+  acceptanceLabel,
+  SPEAKEASY_DEFAULT_SCOPE,
+  type ProviderView,
+} from "./emaServiceView";
 
-/** Whether the service has accepted this provider, as one word plus a dot. */
+/** Whether the service has accepted this provider, as a dot plus a few words. */
 export function ProviderTrust({
   provider,
+  isDefaultOrder = false,
 }: {
   provider: ProviderView;
+  /** In the default order, say which servers each entry covers. */
+  isDefaultOrder?: boolean;
 }): JSX.Element {
   const tone = provider.lastAcceptedAt
-    ? "bg-[var(--fill-success-default)]"
+    ? "success"
     : provider.usable
-      ? "bg-muted-foreground/40"
-      : "bg-[var(--fill-warning-default)]";
+      ? "neutral"
+      : "warning";
+  const detail = provider.usable
+    ? acceptanceLabel(provider.lastAcceptedAt)
+    : provider.unavailable;
+  const scope =
+    !isDefaultOrder || !provider.usable
+      ? undefined
+      : provider.kind === "speakeasy"
+        ? SPEAKEASY_DEFAULT_SCOPE.toLowerCase()
+        : provider.placeholder
+          ? "for servers whose sign-in uses one"
+          : undefined;
   return (
-    <span className="flex min-w-0 items-baseline gap-2">
-      <span
-        aria-hidden="true"
-        className={cn("size-2 shrink-0 translate-y-[-1px] rounded-full", tone)}
-      />
-      <Text small className="truncate font-medium">
+    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+      <StatusDot tone={tone} className="translate-y-[-1px]" />
+      <Text as="span" small className="truncate font-medium">
         {provider.name}
       </Text>
-      <Text muted small className="truncate">
-        {provider.usable
-          ? acceptanceLabel(provider.lastAcceptedAt)
-          : provider.unavailable}
+      <Text as="span" muted small className="truncate">
+        {scope ? `${detail} · ${scope}` : detail}
       </Text>
-    </span>
+    </div>
   );
 }

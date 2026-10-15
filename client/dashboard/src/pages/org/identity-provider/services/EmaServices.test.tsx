@@ -24,9 +24,10 @@ const linear: ServiceRow = {
   isDefaultOrder: true,
   providers: [
     {
-      key: "external-trusted",
+      key: "external-default",
       kind: "external",
-      name: "Identity provider",
+      name: "Each server’s own identity provider",
+      placeholder: true,
       usable: true,
       unavailable: "",
       unusedBySignIn: false,
@@ -36,6 +37,7 @@ const linear: ServiceRow = {
       kind: "speakeasy",
       name: "Speakeasy",
       issuerUrl: "https://speakeasy.example.com/issuer",
+      placeholder: false,
       usable: true,
       unavailable: "",
       lastAcceptedAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
@@ -66,6 +68,11 @@ describe("Services", () => {
     show();
     expect(screen.getByRole("heading", { name: "Services" })).toBeTruthy();
     expect(screen.getByText(/once per service/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        /a server whose sign-in uses an identity provider relies on that provider alone/,
+      ),
+    ).toBeTruthy();
     expect(screen.getByText("No services yet")).toBeTruthy();
     expect(
       screen.getByText(
@@ -77,13 +84,16 @@ describe("Services", () => {
   it("shows each service with who it trusts and how many servers reach it", () => {
     mocks.rows = [linear];
     show();
-    expect(screen.getByText("Linear")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Linear" }).getAttribute("href"),
+    ).toBe("/?tab=identity-providers&service=https%3A%2F%2Flinear.example.com");
     expect(screen.getByText("https://linear.example.com")).toBeTruthy();
     const providers = within(
       screen.getByRole("list", { name: "Linear identity providers" }),
     ).getAllByRole("listitem");
     expect(providers.map((item) => item.textContent)).toEqual([
-      "SpeakeasyLast worked 3h ago",
+      "Each server’s own identity providerNot accepted yet · for servers whose sign-in uses one",
+      "SpeakeasyLast worked 3h ago · for servers whose sign-in has no identity provider",
     ]);
     expect(screen.getByText("3 servers · 2 ready")).toBeTruthy();
     expect(
@@ -100,6 +110,7 @@ describe("Services", () => {
             key: "speakeasy",
             kind: "speakeasy",
             name: "Speakeasy",
+            placeholder: false,
             usable: false,
             unavailable: "Can’t sign right now",
             fix: "speakeasy",

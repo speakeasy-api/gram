@@ -1,7 +1,13 @@
+import { useQuery } from "@tanstack/react-query";
 import type { EMAService } from "@gram/client/models/components/emaservice.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { useOrganizationRemoteSessionIssuerEMAServices } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useIdentityProviderConnection } from "@gram/client/react-query/identityProviderConnection.js";
+import { buildOrganizationRemoteSessionIssuerEMAServicesQuery } from "@gram/client/react-query/organizationRemoteSessionIssuerEMAServices.core.js";
+import { useOrganization } from "@/contexts/Auth";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
+
+import { SESSION_SECURITY } from "../identityProviderQueries";
 import { useEnterpriseIssuer } from "../useEnterpriseIssuer";
 import { providerView, serviceName, type ProviderView } from "./emaServiceView";
 
@@ -16,6 +22,28 @@ export type ServiceRow = {
   readyServerCount: number;
 };
 
+/** Keyed by organization so switching organizations never shows the last one's services. */
+function emaServicesQueryKey(
+  organizationId: string,
+): readonly [string, string, string, { organizationId: string }] {
+  return [
+    "@gram/client",
+    "organizationRemoteSessionIssuers",
+    "listEMAServices",
+    { organizationId },
+  ] as const;
+}
+
+/** The Okta connection's issuer record, so a broken Okta provider links to Okta and nothing else does. */
+export function useOktaIssuerId(enabled = true): string | undefined {
+  const query = useIdentityProviderConnection(undefined, SESSION_SECURITY, {
+    enabled,
+    throwOnError: false,
+    retry: false,
+  });
+  return query.data?.connection?.remoteSessionIssuerId;
+}
+
 /**
  * Every service identity chaining reaches in the organization, with each
  * identity provider named and judged the same way the server page does.
@@ -28,12 +56,20 @@ export function useEmaServices(): {
   refetch: () => void;
   issuerById: (id: string | undefined) => RemoteSessionIssuer | undefined;
 } {
-  const query = useOrganizationRemoteSessionIssuerEMAServices(
-    undefined,
-    { sessionHeaderGramSession: "" },
-    { throwOnError: false, retry: false },
-  );
+  const organization = useOrganization();
+  const client = useGramContext();
+  const query = useQuery({
+    ...buildOrganizationRemoteSessionIssuerEMAServicesQuery(
+      client,
+      undefined,
+      SESSION_SECURITY,
+    ),
+    queryKey: emaServicesQueryKey(organization.id),
+    throwOnError: false,
+    retry: false,
+  });
   const speakeasy = useEnterpriseIssuer();
+  const oktaIssuerId = useOktaIssuerId();
   const items = query.data?.items ?? [];
   const externalIds = [
     ...new Set(
@@ -53,6 +89,7 @@ export function useEmaServices(): {
     serviceRow(service, {
       issuerById,
       speakeasyIssuerUrl: speakeasy.data?.issuer,
+      oktaIssuerId,
     }),
   );
   return {
@@ -65,14 +102,16 @@ export function useEmaServices(): {
   };
 }
 
-export function serviceRow(
+function serviceRow(
   service: EMAService,
   {
     issuerById,
     speakeasyIssuerUrl,
+    oktaIssuerId,
   }: {
     issuerById: (id: string | undefined) => RemoteSessionIssuer | undefined;
     speakeasyIssuerUrl: string | undefined;
+    oktaIssuerId: string | undefined;
   },
 ): ServiceRow {
   return {
@@ -81,12 +120,11 @@ export function serviceRow(
     name: serviceName(service.name, service.vendorIssuer),
     remoteSessionIssuerId: service.remoteSessionIssuerId,
     isDefaultOrder: service.emaProviders.isDefault,
-    // An organization-wide order stands for no one server, so the default's
-    // external placeholder (each server's own identity provider) has no id.
     providers: service.emaProviders.providers.map((provider) =>
       providerView(provider, {
         issuer: issuerById(provider.remoteSessionIssuerId),
         speakeasyIssuerUrl,
+        oktaIssuerId,
       }),
     ),
     serverCount: service.serverCount,

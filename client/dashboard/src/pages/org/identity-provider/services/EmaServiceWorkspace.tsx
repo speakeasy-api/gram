@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router";
 
@@ -6,21 +7,19 @@ import { CopyableValue } from "@/components/setup-steps/StepBlocks";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
-import { SkeletonParagraph } from "@/components/ui/Skeleton";
+import { Skeleton, SkeletonParagraph } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useSession } from "@/contexts/Auth";
+import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRemoteSessionIssuersByIds } from "@/lib/remote-identity";
-import { useOrganizationUserSessionIssuers } from "@gram/client/react-query/organizationUserSessionIssuers.js";
+import { useOrganizationUserSessionIssuersInfinite } from "@gram/client/react-query/organizationUserSessionIssuers.js";
 
-import {
-  identityProvidersHref,
-  oktaViewHref,
-  speakeasyProviderHref,
-} from "../tabs";
+import { SESSION_SECURITY } from "../identityProviderQueries";
+import { identityProvidersHref } from "../tabs";
 import { useEnterpriseIssuer } from "../useEnterpriseIssuer";
 import {
   EmaProviderOrderEditor,
@@ -29,10 +28,55 @@ import {
 import { ProviderTrust } from "./ProviderTrust";
 import {
   issuerDisplayName,
+  PLACEHOLDER_SCOPE,
+  providerFixLink,
   trustInstruction,
   type ProviderView,
 } from "./emaServiceView";
 import { serversSummary, useEmaServices } from "./useEmaServices";
+
+/** Who may change a service's order, and why not when they can't. */
+function useOrderPermissions(): {
+  canEdit: boolean;
+  canRestore: boolean;
+  readOnlyReason?: string;
+} {
+  const organization = useOrganization();
+  const session = useSession();
+  const { hasScope } = useRBAC();
+  const orderFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
+  if (organization.slug === DEMO_ORG_SLUG) {
+    return {
+      canEdit: false,
+      canRestore: false,
+      readOnlyReason: "The shared demo is read-only.",
+    };
+  }
+  if (!hasScope("org:admin", organization.id)) {
+    return {
+      canEdit: false,
+      canRestore: false,
+      readOnlyReason: "Only organization admins can change the order.",
+    };
+  }
+  if (session.organizationOverride || session.impersonatorEmail) {
+    return {
+      canEdit: false,
+      canRestore: false,
+      readOnlyReason:
+        "The order can’t be changed from a support or impersonated session.",
+    };
+  }
+  if (orderFlag.status !== "enabled") {
+    return {
+      canEdit: false,
+      canRestore: true,
+      readOnlyReason:
+        "Custom orders aren’t available for your organization yet. You can still go back to the default.",
+    };
+  }
+  return { canEdit: true, canRestore: true };
+}
 
 /** One service: what it has to trust, in which order, and who reaches it. */
 export function EmaServiceWorkspace({
@@ -42,18 +86,9 @@ export function EmaServiceWorkspace({
 }): JSX.Element {
   const services = useEmaServices();
   const row = services.rows.find((r) => r.vendorIssuer === vendorIssuer);
-  const organization = useOrganization();
-  const session = useSession();
-  const { hasScope } = useRBAC();
-  const orderFlag = useFeatureFlag(FEATURE_FLAGS.emaProviders);
-  const canEdit =
-    hasScope("org:admin", organization.id) &&
-    orderFlag.status === "enabled" &&
-    organization.slug !== DEMO_ORG_SLUG &&
-    !session.organizationOverride &&
-    !session.impersonatorEmail;
-  const candidates = useOrderCandidates(canEdit);
-  const name = row?.name ?? vendorIssuer;
+  const permissions = useOrderPermissions();
+  const candidates = useOrderCandidates(permissions.canEdit);
+  const name = row?.name ?? "Service";
 
   return (
     <section className="flex min-w-0 flex-col gap-6" aria-label={name}>
@@ -65,12 +100,21 @@ export function EmaServiceWorkspace({
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           All identity providers
         </Link>
-        <Heading variant="h2">{name}</Heading>
-        <Text muted>
-          {row
-            ? `${serversSummary(row)} reach ${name} through Enterprise Managed Authorization.`
-            : "A service Enterprise Managed Authorization reaches."}
-        </Text>
+        {services.isPending ? (
+          <>
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-5 w-96 max-w-full" />
+          </>
+        ) : (
+          <>
+            <Heading variant="h2">{name}</Heading>
+            <Text muted>
+              {row
+                ? `${serversSummary(row)} reach ${name} through Enterprise Managed Authorization.`
+                : "A service Enterprise Managed Authorization reaches."}
+            </Text>
+          </>
+        )}
       </div>
       {services.isPending && (
         <div className="flex flex-col gap-8">
@@ -118,19 +162,27 @@ export function EmaServiceWorkspace({
               <SettingsSection.Body>
                 <ul aria-label={`${name} trusts`} className="space-y-5">
                   {row.providers.map((provider) => (
-                    <TrustRow key={provider.key} provider={provider} />
+                    <TrustRow
+                      key={provider.key}
+                      provider={provider}
+                      isDefaultOrder={row.isDefaultOrder}
+                    />
                   ))}
                 </ul>
               </SettingsSection.Body>
             </SettingsSection.Panel>
           </SettingsSection>
           <EmaProviderOrderEditor
+            key={row.vendorIssuer}
             serviceName={name}
             remoteSessionIssuerId={row.remoteSessionIssuerId}
             current={row.providers}
             isDefault={row.isDefaultOrder}
-            candidates={candidates}
-            canEdit={canEdit}
+            candidates={candidates.items}
+            candidatesReady={candidates.ready}
+            canEdit={permissions.canEdit}
+            canRestore={permissions.canRestore}
+            readOnlyReason={permissions.readOnlyReason}
           />
         </div>
       )}
@@ -138,27 +190,23 @@ export function EmaServiceWorkspace({
   );
 }
 
-function TrustRow({ provider }: { provider: ProviderView }): JSX.Element {
-  // The default order's external placeholder stands for each server's own
-  // identity provider, which has no single issuer URL to show here.
-  const placeholder =
-    provider.kind === "external" && provider.key === "external-trusted";
+function TrustRow({
+  provider,
+  isDefaultOrder,
+}: {
+  provider: ProviderView;
+  isDefaultOrder: boolean;
+}): JSX.Element {
+  const fix = provider.fix ? providerFixLink(provider.fix) : undefined;
   return (
     <li className="space-y-2">
-      <ProviderTrust
-        provider={
-          placeholder
-            ? { ...provider, name: "Each server’s own identity provider" }
-            : provider
-        }
-      />
-      {placeholder && (
+      <ProviderTrust provider={provider} isDefaultOrder={isDefaultOrder} />
+      {provider.placeholder && (
         <Text muted small className="block">
-          Whichever identity provider a server’s sign-in uses. Its issuer URL is
-          on that server’s Enterprise Managed Authorization settings.
+          {PLACEHOLDER_SCOPE}
         </Text>
       )}
-      {!placeholder && provider.usable && provider.issuerUrl && (
+      {!provider.placeholder && provider.usable && provider.issuerUrl && (
         <div className="max-w-2xl">
           <CopyableValue
             label={`${provider.name}’s issuer URL`}
@@ -166,54 +214,61 @@ function TrustRow({ provider }: { provider: ProviderView }): JSX.Element {
           />
         </div>
       )}
-      {provider.fix && (
+      {fix && (
         <Link
           className="text-muted-foreground text-sm underline underline-offset-4"
-          to={
-            provider.fix === "speakeasy"
-              ? speakeasyProviderHref()
-              : oktaViewHref("setup")
-          }
+          to={fix.href}
         >
-          {provider.fix === "speakeasy" ? "Fix in Speakeasy" : "Fix in Okta"}
+          {fix.label}
         </Link>
       )}
     </li>
   );
 }
 
-/** Identity providers an admin can put in an order: Speakeasy once it exists, and each organization-level identity provider a sign-in trusts. */
-function useOrderCandidates(enabled: boolean): OrderCandidate[] {
+/**
+ * Identity providers an admin can put in an order: each organization-level
+ * identity provider a sign-in trusts, and Speakeasy once it exists.
+ */
+function useOrderCandidates(enabled: boolean): {
+  items: OrderCandidate[];
+  ready: boolean;
+} {
   const speakeasy = useEnterpriseIssuer();
-  const signIns = useOrganizationUserSessionIssuers(
+  const signIns = useOrganizationUserSessionIssuersInfinite(
     { tier: "organization" },
-    { sessionHeaderGramSession: "" },
+    SESSION_SECURITY,
     { enabled, throwOnError: false, retry: false },
   );
-  const externalIds = [
-    ...new Set(
-      (signIns.data?.result.items ?? []).flatMap((issuer) =>
-        issuer.projectId === "" && issuer.trustedRemoteSessionIssuerId
-          ? [issuer.trustedRemoteSessionIssuerId]
-          : [],
+  useDrainInfiniteQuery(signIns, enabled);
+  const externalIds = useMemo(
+    () => [
+      ...new Set(
+        (signIns.data?.pages ?? []).flatMap((page) =>
+          page.result.items.flatMap((issuer) =>
+            issuer.projectId === "" && issuer.trustedRemoteSessionIssuerId
+              ? [issuer.trustedRemoteSessionIssuerId]
+              : [],
+          ),
+        ),
       ),
-    ),
-  ];
+    ],
+    [signIns.data],
+  );
   const issuers = useRemoteSessionIssuersByIds(externalIds, { enabled });
-  const candidates: OrderCandidate[] = [];
+  const items: OrderCandidate[] = externalIds.map((id) => ({
+    key: `external-${id}`,
+    kind: "external",
+    name: issuerDisplayName(issuers.items.find((issuer) => issuer.id === id)),
+    remoteSessionIssuerId: id,
+  }));
   if (speakeasy.data?.issuer) {
-    candidates.push({
-      key: "speakeasy",
-      name: "Speakeasy",
-      input: { kind: "speakeasy" },
-    });
+    items.push({ key: "speakeasy", kind: "speakeasy", name: "Speakeasy" });
   }
-  for (const id of externalIds) {
-    candidates.push({
-      key: `external-${id}`,
-      name: issuerDisplayName(issuers.items.find((issuer) => issuer.id === id)),
-      input: { kind: "external", remoteSessionIssuerId: id },
-    });
-  }
-  return candidates;
+  const ready =
+    enabled &&
+    signIns.isSuccess &&
+    !signIns.hasNextPage &&
+    !speakeasy.isPending;
+  return { items, ready };
 }

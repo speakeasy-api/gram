@@ -9,6 +9,7 @@ import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 
 import { emaServiceHref } from "../tabs";
+import { DEFAULT_ORDER_RULE } from "./emaServiceView";
 import { ProviderTrust } from "./ProviderTrust";
 import {
   serversSummary,
@@ -30,7 +31,7 @@ export function EmaServices(): JSX.Element {
         <Text muted small>
           Each service your MCP servers reach has to trust an identity provider
           above before Enterprise Managed Authorization works. Do that once per
-          service here.
+          service here. {DEFAULT_ORDER_RULE}
         </Text>
       </div>
       {services.isPending ? (
@@ -67,7 +68,12 @@ function ServicesTable({ rows }: { rows: ServiceRow[] }): JSX.Element {
       header: "Service",
       render: (row) => (
         <div className="min-w-0">
-          <Text className="truncate font-medium">{row.name}</Text>
+          <Link
+            to={emaServiceHref(row.vendorIssuer)}
+            className="block truncate font-medium underline-offset-4 hover:underline"
+          >
+            {row.name}
+          </Link>
           <Text muted small className="truncate">
             {row.vendorIssuer}
           </Text>
@@ -83,17 +89,14 @@ function ServicesTable({ rows }: { rows: ServiceRow[] }): JSX.Element {
           aria-label={`${row.name} identity providers`}
           className="min-w-0 space-y-1"
         >
-          {row.providers
-            .filter(
-              (provider) =>
-                provider.kind === "speakeasy" ||
-                provider.key !== "external-trusted",
-            )
-            .map((provider) => (
-              <li key={provider.key}>
-                <ProviderTrust provider={provider} />
-              </li>
-            ))}
+          {row.providers.map((provider) => (
+            <li key={provider.key}>
+              <ProviderTrust
+                provider={provider}
+                isDefaultOrder={row.isDefaultOrder}
+              />
+            </li>
+          ))}
         </ul>
       ),
     },

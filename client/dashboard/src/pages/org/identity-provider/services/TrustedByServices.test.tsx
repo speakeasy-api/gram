@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { TrustedByServices } from "./TrustedByServices";
 import type { ServiceRow } from "./useEmaServices";
@@ -8,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   rows: [] as unknown[],
   isPending: false,
   isError: false,
+  isFetching: false,
+  refetch: vi.fn(),
 }));
 vi.mock("./useEmaServices", () => ({
   useEmaServices: () => mocks,
@@ -26,6 +34,7 @@ const service = (
       key: "speakeasy",
       kind: "speakeasy",
       name: "Speakeasy",
+      placeholder: false,
       usable: true,
       unavailable: "",
       lastAcceptedAt,
@@ -39,7 +48,7 @@ const service = (
 function show() {
   render(
     <MemoryRouter>
-      <TrustedByServices providerKey="speakeasy" />
+      <TrustedByServices />
     </MemoryRouter>,
   );
 }
@@ -51,18 +60,26 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe("Trusted by", () => {
-  it("lists each service with whether it has accepted the provider", () => {
+describe("Services that can use Speakeasy", () => {
+  it("splits services that accepted Speakeasy from those that haven't yet", () => {
     mocks.rows = [
       service("Linear", new Date(Date.now() - 2 * 60 * 60 * 1000)),
       service("Notion", undefined),
     ];
     show();
-    const items = within(
-      screen.getByRole("list", { name: "Trusted by" }),
+    expect(
+      screen.getByRole("heading", { name: "Services that can use Speakeasy" }),
+    ).toBeTruthy();
+    const accepted = within(
+      screen.getByRole("list", { name: "Accepted Speakeasy" }),
     ).getAllByRole("listitem");
-    expect(items.map((item) => item.textContent)).toEqual([
+    expect(accepted.map((item) => item.textContent)).toEqual([
       "LinearLast worked 2h ago",
+    ]);
+    const waiting = within(
+      screen.getByRole("list", { name: "Not accepted yet" }),
+    ).getAllByRole("listitem");
+    expect(waiting.map((item) => item.textContent)).toEqual([
       "NotionNot accepted yet",
     ]);
     expect(
@@ -70,18 +87,36 @@ describe("Trusted by", () => {
     ).toBe("/?tab=identity-providers&service=https%3A%2F%2FLinear.example.com");
   });
 
-  it("names the first step when no service reaches it yet", () => {
+  it("leaves out services whose order can't use Speakeasy", () => {
+    mocks.rows = [{ ...service("Linear", undefined), providers: [] }];
+    show();
+    expect(screen.queryByRole("link", { name: "Linear" })).toBeNull();
+    expect(screen.getByText(/None yet/)).toBeTruthy();
+  });
+
+  it("says when a service shows up here", () => {
     show();
     expect(
       screen.getByText(
-        /Turn on Enterprise Managed Authorization on an MCP server/,
+        /Once an MCP server whose sign-in has no identity provider turns on Enterprise Managed Authorization/,
       ),
     ).toBeTruthy();
   });
 
-  it("stays out of the way while loading", () => {
+  it("offers a retry when services fail to load", () => {
+    mocks.isError = true;
+    show();
+    expect(screen.getByText("Couldn’t load services. Try again.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.refetch).toHaveBeenCalled();
+  });
+
+  it("holds its place while loading", () => {
     mocks.isPending = true;
     show();
-    expect(screen.queryByText("Trusted by")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Services that can use Speakeasy" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe("Loading services…");
   });
 });
