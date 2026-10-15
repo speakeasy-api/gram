@@ -1,5 +1,7 @@
 import { CardContextMenu } from "@/components/card-context-menu";
-import { Card } from "@/components/ui/Card";
+import { McpEntityCard } from "@/components/mcp/McpEntityCard";
+import { McpIconGroup } from "@/components/mcp/McpIconGroup";
+import { usePlugin } from "@gram/client/react-query/plugin";
 import type { Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -19,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
-import { ArrowRight, Puzzle, Server } from "lucide-react";
+import { ArrowRight, PackageOpen, Server } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
@@ -39,6 +41,12 @@ export function PluginCard({
   const navigate = useNavigate();
   const client = useSdkClient();
   const scope = usePluginQueryScope();
+  const { data: detail } = usePlugin({ ...scope, id: plugin.id }, undefined, {
+    enabled: plugin.servers === undefined && (plugin.serverCount ?? 0) > 0,
+    throwOnError: false,
+    staleTime: 60 * 1000,
+  });
+  const servers = plugin.servers ?? detail?.servers ?? [];
   const detailHref = routes.plugins.detail.href(plugin.id);
   const serverCount = plugin.serverCount ?? 0;
   const skillCount = plugin.skillCount ?? 0;
@@ -126,14 +134,25 @@ export function PluginCard({
 
   return (
     <CardContextMenu actions={actions}>
-      <div>
-        <Card.Entity
-          className="cursor-pointer max-sm:h-auto max-sm:[&>div:first-child]:w-24"
+      <div className="h-full">
+        <McpEntityCard
+          className="cursor-pointer max-sm:[&>div:first-child]:w-24"
           onClick={() => {
             void navigate(detailHref);
           }}
           icon={
-            <Puzzle className="text-muted-foreground h-10 w-10 opacity-60" />
+            servers.length > 0 ? (
+              <McpIconGroup
+                serverIds={servers.map(
+                  (server) => server.mcpServerId ?? server.toolsetId,
+                )}
+              />
+            ) : (
+              <PackageOpen
+                aria-hidden="true"
+                className="text-muted-foreground h-10 w-10 opacity-60"
+              />
+            )
           }
         >
           <div className="mb-2 flex items-start justify-between gap-2">
@@ -261,7 +280,7 @@ export function PluginCard({
               </Link>
             </div>
           </div>
-        </Card.Entity>
+        </McpEntityCard>
         {installTarget && (
           <div onClick={(e) => e.stopPropagation()}>
             <InstallInstructionsDialog

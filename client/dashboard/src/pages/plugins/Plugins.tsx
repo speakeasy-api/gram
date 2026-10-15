@@ -1,12 +1,14 @@
+import { McpEntityCard } from "@/components/mcp/McpEntityCard";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { useOrganization } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
+import { Page } from "@/components/page-layout";
+import { Icon } from "@/components/ui/Icon";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
-import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
@@ -382,6 +384,7 @@ function PluginsContent({
     <>
       <ResourceListPage
         title="Plugins"
+        bodyClassName="-mt-6"
         description={
           <span className={hasPlugins ? "block w-3/4" : undefined}>
             Create distributable plugin bundles that package MCP servers and
@@ -389,23 +392,16 @@ function PluginsContent({
             supported agent marketplaces via GitHub.
           </span>
         }
-        hideToolbar={!hasPlugins}
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: "Search plugins",
-        }}
-        filters={{
-          schema: PLUGINS_FILTERS,
-          values: pluginFilters.values,
-          optionsById: pluginFilterOptions,
-          onChange: pluginFilters.setValue as (
-            id: string,
-            value: FilterValue,
-          ) => void,
-          onClear: pluginFilters.clearValue as (id: string) => void,
-          onClearAll: pluginFilters.clearAll,
-        }}
+        primaryAction={
+          canWritePlugin ? (
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Button.LeftIcon>
+                <Icon name="plus" />
+              </Button.LeftIcon>
+              <Button.Text>Create plugin</Button.Text>
+            </Button>
+          ) : undefined
+        }
       >
         <Stack direction="vertical" gap={8}>
           {canManageMarketplace &&
@@ -431,7 +427,6 @@ function PluginsContent({
                       marketplaceSettings.observabilityEnabled
                     }
                   />
-                  <div className="border-border border-t" />
                 </>
               ) : (
                 <>
@@ -455,7 +450,6 @@ function PluginsContent({
                       marketplaceSettings.observabilityEnabled
                     }
                   />
-                  <div className="border-border border-t" />
                 </>
               )
             ) : (
@@ -476,9 +470,30 @@ function PluginsContent({
                     marketplaceSettings.observabilityEnabled
                   }
                 />
-                <div className="border-border border-t" />
               </>
             ))}
+          {hasPlugins && (
+            <Page.Toolbar>
+              <Page.Toolbar.Search
+                value={search}
+                onChange={setSearch}
+                placeholder="Search plugins"
+              />
+              <Page.Toolbar.Filters
+                schema={PLUGINS_FILTERS}
+                values={pluginFilters.values}
+                optionsById={pluginFilterOptions}
+                onChange={
+                  pluginFilters.setValue as (
+                    id: string,
+                    value: FilterValue,
+                  ) => void
+                }
+                onClear={pluginFilters.clearValue as (id: string) => void}
+                onClearAll={pluginFilters.clearAll}
+              />
+            </Page.Toolbar>
+          )}
           <Text small muted>
             The default plugin is where all newly created MCP servers will be
             automatically published to. If you have the default plugin installed
@@ -698,7 +713,7 @@ function ObservabilityPluginCard({
       : undefined;
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Activity className="text-primary h-10 w-10 opacity-80" />}
     >
@@ -828,7 +843,7 @@ function ObservabilityPluginCard({
         open={isInstallSheetOpen}
         onOpenChange={setIsInstallSheetOpen}
       />
-    </Card.Entity>
+    </McpEntityCard>
   );
 }
 
@@ -851,7 +866,7 @@ function PlatformMCPPluginCard(): JSX.Element | null {
   if (!hasScope("org:admin")) return null;
 
   return (
-    <Card.Entity
+    <McpEntityCard
       className="border-primary/30 bg-primary/[0.02]"
       icon={<Network className="text-primary h-10 w-10 opacity-80" />}
     >
@@ -885,7 +900,7 @@ function PlatformMCPPluginCard(): JSX.Element | null {
         setupOpen={installOpen}
         onSetupOpenChange={setInstallOpen}
       />
-    </Card.Entity>
+    </McpEntityCard>
   );
 }
 

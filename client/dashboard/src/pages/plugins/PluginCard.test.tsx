@@ -50,6 +50,17 @@ vi.mock("@/components/ui/Dropdown", () => ({
     <>{children}</>
   ),
 }));
+vi.mock("@gram/client/react-query/plugin", () => ({
+  usePlugin: () => ({ data: undefined }),
+}));
+vi.mock("@/components/icon-dither", () => ({
+  useIconDither: () => ({
+    canvasRef: { current: null },
+    start: () => {},
+    stop: () => {},
+  }),
+}));
+
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => client }));
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),

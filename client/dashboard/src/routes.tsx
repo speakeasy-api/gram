@@ -1087,8 +1087,9 @@ const ROUTE_STRUCTURE = {
             title: "Plugin Overview",
             url: "overview",
           },
+          // Keep existing server links working after merging servers into overview.
           servers: {
-            title: "Plugin MCP Servers",
+            title: "Plugin Overview",
             url: "servers",
           },
           skills: {
