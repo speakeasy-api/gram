@@ -206,7 +206,7 @@ func UsageCommands() []string {
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
-		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
+		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|get-attach-impact|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|list-mcp-servers|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
@@ -4813,6 +4813,15 @@ func ParseEndpoint(
 		userSessionIssuersGetUserSessionIssuerApikeyTokenFlag      = userSessionIssuersGetUserSessionIssuerFlags.String("apikey-token", "", "")
 		userSessionIssuersGetUserSessionIssuerProjectSlugInputFlag = userSessionIssuersGetUserSessionIssuerFlags.String("project-slug-input", "", "")
 
+		userSessionIssuersGetAttachImpactFlags                   = flag.NewFlagSet("get-attach-impact", flag.ExitOnError)
+		userSessionIssuersGetAttachImpactMcpServerIDFlag         = userSessionIssuersGetAttachImpactFlags.String("mcp-server-id", "", "")
+		userSessionIssuersGetAttachImpactToolsetIDFlag           = userSessionIssuersGetAttachImpactFlags.String("toolset-id", "", "")
+		userSessionIssuersGetAttachImpactMetaMcpServerIDFlag     = userSessionIssuersGetAttachImpactFlags.String("meta-mcp-server-id", "", "")
+		userSessionIssuersGetAttachImpactUserSessionIssuerIDFlag = userSessionIssuersGetAttachImpactFlags.String("user-session-issuer-id", "", "")
+		userSessionIssuersGetAttachImpactSessionTokenFlag        = userSessionIssuersGetAttachImpactFlags.String("session-token", "", "")
+		userSessionIssuersGetAttachImpactApikeyTokenFlag         = userSessionIssuersGetAttachImpactFlags.String("apikey-token", "", "")
+		userSessionIssuersGetAttachImpactProjectSlugInputFlag    = userSessionIssuersGetAttachImpactFlags.String("project-slug-input", "", "")
+
 		userSessionIssuersDeleteUserSessionIssuerFlags                = flag.NewFlagSet("delete-user-session-issuer", flag.ExitOnError)
 		userSessionIssuersDeleteUserSessionIssuerIDFlag               = userSessionIssuersDeleteUserSessionIssuerFlags.String("id", "REQUIRED", "")
 		userSessionIssuersDeleteUserSessionIssuerSessionTokenFlag     = userSessionIssuersDeleteUserSessionIssuerFlags.String("session-token", "", "")
@@ -6049,6 +6058,7 @@ func ParseEndpoint(
 	userSessionIssuersUpdateUserSessionIssuerFlags.Usage = userSessionIssuersUpdateUserSessionIssuerUsage
 	userSessionIssuersListUserSessionIssuersFlags.Usage = userSessionIssuersListUserSessionIssuersUsage
 	userSessionIssuersGetUserSessionIssuerFlags.Usage = userSessionIssuersGetUserSessionIssuerUsage
+	userSessionIssuersGetAttachImpactFlags.Usage = userSessionIssuersGetAttachImpactUsage
 	userSessionIssuersDeleteUserSessionIssuerFlags.Usage = userSessionIssuersDeleteUserSessionIssuerUsage
 
 	organizationUserSessionIssuersFlags.Usage = organizationUserSessionIssuersUsage
@@ -9195,6 +9205,9 @@ func ParseEndpoint(
 			case "get-user-session-issuer":
 				epf = userSessionIssuersGetUserSessionIssuerFlags
 
+			case "get-attach-impact":
+				epf = userSessionIssuersGetAttachImpactFlags
+
 			case "delete-user-session-issuer":
 				epf = userSessionIssuersDeleteUserSessionIssuerFlags
 
@@ -12264,6 +12277,9 @@ func ParseEndpoint(
 			case "get-user-session-issuer":
 				endpoint = c.GetUserSessionIssuer()
 				data, err = usersessionissuersc.BuildGetUserSessionIssuerPayload(*userSessionIssuersGetUserSessionIssuerIDFlag, *userSessionIssuersGetUserSessionIssuerSlugFlag, *userSessionIssuersGetUserSessionIssuerSessionTokenFlag, *userSessionIssuersGetUserSessionIssuerApikeyTokenFlag, *userSessionIssuersGetUserSessionIssuerProjectSlugInputFlag)
+			case "get-attach-impact":
+				endpoint = c.GetAttachImpact()
+				data, err = usersessionissuersc.BuildGetAttachImpactPayload(*userSessionIssuersGetAttachImpactMcpServerIDFlag, *userSessionIssuersGetAttachImpactToolsetIDFlag, *userSessionIssuersGetAttachImpactMetaMcpServerIDFlag, *userSessionIssuersGetAttachImpactUserSessionIssuerIDFlag, *userSessionIssuersGetAttachImpactSessionTokenFlag, *userSessionIssuersGetAttachImpactApikeyTokenFlag, *userSessionIssuersGetAttachImpactProjectSlugInputFlag)
 			case "delete-user-session-issuer":
 				endpoint = c.DeleteUserSessionIssuer()
 				data, err = usersessionissuersc.BuildDeleteUserSessionIssuerPayload(*userSessionIssuersDeleteUserSessionIssuerIDFlag, *userSessionIssuersDeleteUserSessionIssuerSessionTokenFlag, *userSessionIssuersDeleteUserSessionIssuerApikeyTokenFlag, *userSessionIssuersDeleteUserSessionIssuerProjectSlugInputFlag)
@@ -32934,6 +32950,7 @@ func userSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    update-user-session-issuer: Update fields on an existing user_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    list-user-session-issuers: List user_session_issuers in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-issuer: Get a user_session_issuer by id or by slug. Provide exactly one.`)
+	fmt.Fprintln(os.Stderr, `    get-attach-impact: Preview what attaching a user_session_issuer to an existing MCP server, toolset, or meta MCP server changes for its clients, before calling the matching update. Name exactly one of mcp_server_id, toolset_id, or meta_mcp_server_id; omit user_session_issuer_id to preview detaching the current issuer. Clients and sessions belong to an issuer, so any change of issuer requires the server's clients to authorize again. Advisory only: the update does not require it. Requires the mcp:write access the matching update requires.`)
 	fmt.Fprintln(os.Stderr, `    delete-user-session-issuer: Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -33039,6 +33056,36 @@ func userSessionIssuersGetUserSessionIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers get-user-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionIssuersGetAttachImpactUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers get-attach-impact", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -toolset-id STRING")
+	fmt.Fprint(os.Stderr, " -meta-mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -user-session-issuer-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Preview what attaching a user_session_issuer to an existing MCP server, toolset, or meta MCP server changes for its clients, before calling the matching update. Name exactly one of mcp_server_id, toolset_id, or meta_mcp_server_id; omit user_session_issuer_id to preview detaching the current issuer. Clients and sessions belong to an issuer, so any change of issuer requires the server's clients to authorize again. Advisory only: the update does not require it. Requires the mcp:write access the matching update requires.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -toolset-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -meta-mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-session-issuer-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers get-attach-impact --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionIssuersDeleteUserSessionIssuerUsage() {

@@ -261,6 +261,25 @@ type GetUserSessionIssuerResponseBody struct {
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// GetAttachImpactResponseBody is the type of the "userSessionIssuers" service
+// "getAttachImpact" endpoint HTTP response body.
+type GetAttachImpactResponseBody struct {
+	// The issuer the server uses now. Absent when it has none.
+	CurrentIssuer *UserSessionIssuerResponseBody `form:"current_issuer,omitempty" json:"current_issuer,omitempty" xml:"current_issuer,omitempty"`
+	// The issuer that would be attached. Absent when previewing a detach.
+	CandidateIssuer *UserSessionIssuerResponseBody `form:"candidate_issuer,omitempty" json:"candidate_issuer,omitempty" xml:"candidate_issuer,omitempty"`
+	// True when the server has an issuer and the change replaces or removes it.
+	// Its clients' registrations and sessions belong to the current issuer, so
+	// every client must register and authorize again.
+	ReauthorizationRequired *bool `form:"reauthorization_required,omitempty" json:"reauthorization_required,omitempty" xml:"reauthorization_required,omitempty"`
+	// True when the authorization server the server advertises to clients changes:
+	// its own per-server authorization server, a shared authorization server's
+	// issuer URL, or none. Anything configured with the current authorization
+	// server, such as an identity provider or a federated platform, must be
+	// updated.
+	AuthorizationServerChanges *bool `form:"authorization_server_changes,omitempty" json:"authorization_server_changes,omitempty" xml:"authorization_server_changes,omitempty"`
+}
+
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
 // "userSessionIssuers" service "createUserSessionIssuer" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -1006,6 +1025,196 @@ type GetUserSessionIssuerUnexpectedResponseBody struct {
 // "userSessionIssuers" service "getUserSessionIssuer" endpoint HTTP response
 // body for the "gateway_error" error.
 type GetUserSessionIssuerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactUnauthorizedResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetAttachImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactForbiddenResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "forbidden"
+// error.
+type GetAttachImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactBadRequestResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "bad_request" error.
+type GetAttachImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactNotFoundResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "not_found"
+// error.
+type GetAttachImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactConflictResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "conflict"
+// error.
+type GetAttachImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactUnsupportedMediaResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetAttachImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactInvalidResponseBody is the type of the "userSessionIssuers"
+// service "getAttachImpact" endpoint HTTP response body for the "invalid"
+// error.
+type GetAttachImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactInvariantViolationResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetAttachImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactUnexpectedResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "unexpected" error.
+type GetAttachImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetAttachImpactGatewayErrorResponseBody is the type of the
+// "userSessionIssuers" service "getAttachImpact" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetAttachImpactGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2006,6 +2215,174 @@ func NewGetUserSessionIssuerGatewayError(body *GetUserSessionIssuerGatewayErrorR
 	return v
 }
 
+// NewGetAttachImpactUserSessionIssuerAttachImpactOK builds a
+// "userSessionIssuers" service "getAttachImpact" endpoint result from a HTTP
+// "OK" response.
+func NewGetAttachImpactUserSessionIssuerAttachImpactOK(body *GetAttachImpactResponseBody) *usersessionissuers.UserSessionIssuerAttachImpact {
+	v := &usersessionissuers.UserSessionIssuerAttachImpact{
+		ReauthorizationRequired:    *body.ReauthorizationRequired,
+		AuthorizationServerChanges: *body.AuthorizationServerChanges,
+	}
+	if body.CurrentIssuer != nil {
+		v.CurrentIssuer = unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(body.CurrentIssuer)
+	}
+	if body.CandidateIssuer != nil {
+		v.CandidateIssuer = unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(body.CandidateIssuer)
+	}
+
+	return v
+}
+
+// NewGetAttachImpactUnauthorized builds a userSessionIssuers service
+// getAttachImpact endpoint unauthorized error.
+func NewGetAttachImpactUnauthorized(body *GetAttachImpactUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAttachImpactForbidden builds a userSessionIssuers service
+// getAttachImpact endpoint forbidden error.
+func NewGetAttachImpactForbidden(body *GetAttachImpactForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAttachImpactBadRequest builds a userSessionIssuers service
+// getAttachImpact endpoint bad_request error.
+func NewGetAttachImpactBadRequest(body *GetAttachImpactBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAttachImpactNotFound builds a userSessionIssuers service
+// getAttachImpact endpoint not_found error.
+func NewGetAttachImpactNotFound(body *GetAttachImpactNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAttachImpactConflict builds a userSessionIssuers service
+// getAttachImpact endpoint conflict error.
+func NewGetAttachImpactConflict(body *GetAttachImpactConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAttachImpactUnsupportedMedia builds a userSessionIssuers service
+// getAttachImpact endpoint unsupported_media error.
+func NewGetAttachImpactUnsupportedMedia(body *GetAttachImpactUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAttachImpactInvalid builds a userSessionIssuers service
+// getAttachImpact endpoint invalid error.
+func NewGetAttachImpactInvalid(body *GetAttachImpactInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAttachImpactInvariantViolation builds a userSessionIssuers service
+// getAttachImpact endpoint invariant_violation error.
+func NewGetAttachImpactInvariantViolation(body *GetAttachImpactInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAttachImpactUnexpected builds a userSessionIssuers service
+// getAttachImpact endpoint unexpected error.
+func NewGetAttachImpactUnexpected(body *GetAttachImpactUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetAttachImpactGatewayError builds a userSessionIssuers service
+// getAttachImpact endpoint gateway_error error.
+func NewGetAttachImpactGatewayError(body *GetAttachImpactGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDeleteUserSessionIssuerUnauthorized builds a userSessionIssuers service
 // deleteUserSessionIssuer endpoint unauthorized error.
 func NewDeleteUserSessionIssuerUnauthorized(body *DeleteUserSessionIssuerUnauthorizedResponseBody) *goa.ServiceError {
@@ -2384,6 +2761,28 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetAttachImpactResponseBody runs the validations defined on
+// GetAttachImpactResponseBody
+func ValidateGetAttachImpactResponseBody(body *GetAttachImpactResponseBody) (err error) {
+	if body.ReauthorizationRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reauthorization_required", "body"))
+	}
+	if body.AuthorizationServerChanges == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_server_changes", "body"))
+	}
+	if body.CurrentIssuer != nil {
+		if err2 := ValidateUserSessionIssuerResponseBody(body.CurrentIssuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CandidateIssuer != nil {
+		if err2 := ValidateUserSessionIssuerResponseBody(body.CandidateIssuer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -3332,6 +3731,246 @@ func ValidateGetUserSessionIssuerUnexpectedResponseBody(body *GetUserSessionIssu
 // ValidateGetUserSessionIssuerGatewayErrorResponseBody runs the validations
 // defined on getUserSessionIssuer_gateway_error_response_body
 func ValidateGetUserSessionIssuerGatewayErrorResponseBody(body *GetUserSessionIssuerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactUnauthorizedResponseBody runs the validations defined
+// on getAttachImpact_unauthorized_response_body
+func ValidateGetAttachImpactUnauthorizedResponseBody(body *GetAttachImpactUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactForbiddenResponseBody runs the validations defined on
+// getAttachImpact_forbidden_response_body
+func ValidateGetAttachImpactForbiddenResponseBody(body *GetAttachImpactForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactBadRequestResponseBody runs the validations defined
+// on getAttachImpact_bad_request_response_body
+func ValidateGetAttachImpactBadRequestResponseBody(body *GetAttachImpactBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactNotFoundResponseBody runs the validations defined on
+// getAttachImpact_not_found_response_body
+func ValidateGetAttachImpactNotFoundResponseBody(body *GetAttachImpactNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactConflictResponseBody runs the validations defined on
+// getAttachImpact_conflict_response_body
+func ValidateGetAttachImpactConflictResponseBody(body *GetAttachImpactConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactUnsupportedMediaResponseBody runs the validations
+// defined on getAttachImpact_unsupported_media_response_body
+func ValidateGetAttachImpactUnsupportedMediaResponseBody(body *GetAttachImpactUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactInvalidResponseBody runs the validations defined on
+// getAttachImpact_invalid_response_body
+func ValidateGetAttachImpactInvalidResponseBody(body *GetAttachImpactInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactInvariantViolationResponseBody runs the validations
+// defined on getAttachImpact_invariant_violation_response_body
+func ValidateGetAttachImpactInvariantViolationResponseBody(body *GetAttachImpactInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactUnexpectedResponseBody runs the validations defined
+// on getAttachImpact_unexpected_response_body
+func ValidateGetAttachImpactUnexpectedResponseBody(body *GetAttachImpactUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetAttachImpactGatewayErrorResponseBody runs the validations defined
+// on getAttachImpact_gateway_error_response_body
+func ValidateGetAttachImpactGatewayErrorResponseBody(body *GetAttachImpactGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
