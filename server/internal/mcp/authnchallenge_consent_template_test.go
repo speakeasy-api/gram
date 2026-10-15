@@ -992,3 +992,17 @@ func TestConsentTemplateCodeChoiceAndStoredDefault(t *testing.T) {
 		})
 	}
 }
+
+func TestConsentTemplatePrefillsStoredCodeModeOnlyWhenOffered(t *testing.T) {
+	t.Parallel()
+	for _, code := range []bool{true, false} {
+		var page bytes.Buffer
+		require.NoError(t, consentTemplate.Execute(&page, consentTemplateData{
+			ConsentEnabled: true, ShowDiscoveryMode: true, ShowCodeMode: code, PrefillDiscoveryMode: "code_mode",
+		}))
+		html := normalizeWhitespace(page.String())
+		require.Equal(t, code, strings.Contains(html, `<option value="code_mode" selected>Code Mode</option>`))
+		require.NotContains(t, html, `value="progressive" selected`)
+		require.NotContains(t, html, `value="direct" selected`)
+	}
+}
