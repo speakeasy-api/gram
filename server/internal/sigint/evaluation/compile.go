@@ -10,6 +10,7 @@ import (
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 )
 
@@ -23,6 +24,7 @@ type compiledSensor struct {
 	mode        string
 	hash        string
 	questions   []classifier.Question
+	strategy    string
 	windowSize  int
 }
 
@@ -45,7 +47,7 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	if ValidateInputConfiguration(strategy, size) != nil {
 		return compiled, false
 	}
-	compiled.windowSize = 1
+	compiled.strategy, compiled.windowSize = strategy, 1
 	if sensor.Instructions == nil || len(sensor.Signals) == 0 || sensor.Slug == "" {
 		return compiled, false
 	}
@@ -98,6 +100,16 @@ func compileSensor(sensor Sensor) (compiledSensor, bool) {
 	data, _ := json.Marshal(map[string]any{"version": "sigint-definition-v3", "mode": sensor.Mode, "instructions": instructions, "signals": signals, "match_expression": sensor.MatchExpression, "matching_contract": matching.Version, "input_strategy": strategy, "window_size": size, "window_contract": windowFramingVersion})
 	compiled.hash = digest(data)
 	return compiled, true
+}
+
+// readingInput records the classifier input actually supplied for one sensor.
+func readingInput(sensor compiledSensor, in ResolvedInput) *sigintv1.Reading_Input {
+	input := &sigintv1.Reading_Input{}
+	input.SetStrategy(sensor.strategy)
+	input.SetRequestedMessageCount(conv.SafeInt32(sensor.windowSize))
+	input.SetMessageCount(conv.SafeInt32(in.MessageCount))
+	input.SetTruncated(in.Truncated)
+	return input
 }
 
 func reading(event Event, sensor compiledSensor, answers map[classifier.QuestionKey]classifier.QuestionOutcome, attempt, at string, result classifier.Result) (*sigintv1.Reading, error) {

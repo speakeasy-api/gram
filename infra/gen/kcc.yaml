@@ -1438,6 +1438,13 @@ pubsub:
           }
           string provider = 22;
           map<string, string> attributes = 23;
+          message Input {
+            string strategy = 1;
+            int32 requested_message_count = 2;
+            int32 message_count = 3;
+            bool truncated = 4;
+          }
+          Input input = 24;
         }
       type: PROTOCOL_BUFFER
   - labels:

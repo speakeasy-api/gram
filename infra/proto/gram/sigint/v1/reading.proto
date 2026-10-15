@@ -184,6 +184,22 @@ message Reading {
   // These labels do not change the logical reading identity.
   map<string, string> attributes = 23;
 
+  // Classifier input supplied for this sensor in this attempt. The configured
+  // context is part of definition_hash; this records what was actually supplied.
+  message Input {
+    // Configured message context: "single_message" or "sliding_window".
+    string strategy = 1;
+    // Configured message count including the target; 1 for single_message.
+    int32 requested_message_count = 2;
+    // Messages supplied including the target. Lower than requested when history
+    // is naturally short or the content budget truncated it.
+    int32 message_count = 3;
+    // The content budget excluded available history. Naturally short history is
+    // not truncation.
+    bool truncated = 4;
+  }
+  Input input = 24;
+
   option (gcp.pubsub.v1.topic) = {
     retention_hint: { seconds: 345600 /* 4 days */ }
   };

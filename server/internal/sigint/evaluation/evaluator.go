@@ -162,7 +162,7 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	// failed target reads are neither repeated nor counted once per window size.
 	target, err := buffer.Resolve(ctx, 1)
 	if err != nil {
-		return h.evaluateGroup(ctx, event, compiled, target.State, err)
+		return h.evaluateGroup(ctx, event, compiled, target, err)
 	}
 
 	// Ascending sizes let small windows succeed even when older content is invalid.
@@ -213,12 +213,12 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 				)...)
 			}
 		}
-		retry = errors.Join(retry, h.evaluateGroup(ctx, event, sensors, resolved.State, err))
+		retry = errors.Join(retry, h.evaluateGroup(ctx, event, sensors, resolved, err))
 	}
 	return retry
 }
 
-func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []compiledSensor, state classifier.Entry, err error) error {
+func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []compiledSensor, input ResolvedInput, err error) error {
 	if err != nil {
 		if terminal, ok := errors.AsType[*permanentError](err); ok {
 			h.terminal(ctx, event, terminal.reason)
@@ -232,6 +232,7 @@ func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []c
 		return fmt.Errorf("resolve evaluation input: %w", err)
 	}
 
+	state := input.State
 	data, err := json.Marshal(state)
 	if err != nil || string(data) == "null" {
 		h.terminal(ctx, event, "invalid_content")
@@ -299,6 +300,7 @@ func (h *Evaluator) evaluateGroup(ctx context.Context, event Event, compiled []c
 			h.terminal(ctx, event, "invalid_answer")
 			continue
 		}
+		r.SetInput(readingInput(sensor, input))
 
 		if proto.Size(r) > maxReadingBytes {
 			h.terminal(ctx, event, "reading_too_large")
