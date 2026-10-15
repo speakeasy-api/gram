@@ -14,6 +14,7 @@ import (
 
 	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	"github.com/speakeasy-api/gram/server/internal/classifier"
+	"github.com/speakeasy-api/gram/server/internal/classifier/classifiertest"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sigint/matching"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -28,9 +29,20 @@ type eventInput struct {
 
 func (in *eventInput) Event() Event                       { return in.event }
 func (in *eventInput) MatchingMessage() *matching.Message { return nil }
-func (in *eventInput) Resolve(context.Context) (classifier.Entry, error) {
-	in.resolved++
-	return in.data, in.err
+func (in *eventInput) NewBuffer(int) InputBuffer {
+	return &eventBuffer{input: in}
+}
+
+type eventBuffer struct {
+	input *eventInput
+}
+
+func (b *eventBuffer) Resolve(_ context.Context, size int) (classifier.Entry, error) {
+	if size != 1 {
+		return classifier.Entry{}, fmt.Errorf("%w: event has no history", ErrInvalidInput)
+	}
+	b.input.resolved++
+	return b.input.data, b.input.err
 }
 
 func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
@@ -83,6 +95,21 @@ func TestEvaluatorAcceptsIndependentEventStreams(t *testing.T) {
 	require.Equal(t, "mcp.tool_call", a.GetEvent().GetKind(), "published metadata is an independent snapshot")
 	require.Equal(t, 3, in.resolved)
 	testenv.RequireYAMLGolden(t, "testdata/requests/independent-event.golden.yaml", requests.snapshot(t))
+}
+
+func TestEvaluatorRejectsUnsupportedWindowAfterPublishingTargetOnly(t *testing.T) {
+	t.Parallel()
+	m := message()
+	in := &eventInput{event: (&conversationInput{message: m}).Event(), data: classifier.Text("independent event")}
+	definitions := partialSensors()
+	definitions[0].InputStrategy = InputStrategySlidingWindow
+	c := classifiertest.NewMock(t)
+	c.On("Classify", mock.Anything, mock.Anything).Return(partialResult(false)).Once()
+	h, pub := handler(t, m, definitions, c, testenv.NewMeterProvider(t))
+	require.NoError(t, h.evaluator.Evaluate(t.Context(), in))
+	require.Len(t, pub.readings, 1)
+	require.Equal(t, "other", pub.readings[0].GetSensorId())
+	require.Equal(t, 1, in.resolved)
 }
 
 func TestEvaluatorDefersContentUntilEligible(t *testing.T) {

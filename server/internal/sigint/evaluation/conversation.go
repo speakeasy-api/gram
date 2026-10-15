@@ -183,10 +183,6 @@ type conversationInput struct {
 	history HistorySource
 }
 
-func (in *conversationInput) Resolve(ctx context.Context) (classifier.Entry, error) {
-	return inputWithBudget(ctx, in.blobs, in.message.GetProjectId(), targetContent(in.stored), maxContentBytes)
-}
-
 func (in *conversationInput) NewBuffer(maxSize int) InputBuffer {
 	return &conversationBuffer{
 		input: in, maxSize: maxSize,

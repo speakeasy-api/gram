@@ -48,10 +48,9 @@ type Event struct {
 }
 
 // Input adapts a source event into immutable metadata and classifier content.
-// Event must be I/O-free. Resolve is called only after entitlement and sensor
-// selection, avoiding asset reads for disabled tenants or inapplicable events.
-// Event metadata must remain immutable during Evaluate. Resolvers may cache
-// content privately across sequential resolutions in that evaluation.
+// Metadata and buffer creation are I/O-free. Buffer resolution happens only after
+// entitlement and sensor selection, avoiding reads for inapplicable events.
+// Event metadata must remain immutable during Evaluate.
 type Input interface {
 	// Event returns the normalized tenant, event identity, and attribution.
 	Event() Event
@@ -59,16 +58,6 @@ type Input interface {
 	// MatchingMessage returns persisted role metadata without I/O. Nil means this
 	// source has no message context; predicates requiring it fail evaluation.
 	MatchingMessage() *matching.Message
-
-	// Resolve returns complete source-specific text or structured JSON. A
-	// wrapped ErrInvalidInput acknowledges invalid content. The conversation adapter's
-	// asset-validation permanentError is also terminal; other errors trigger retry.
-	Resolve(context.Context) (classifier.Entry, error)
-}
-
-// WindowInput prepares target-focused context after sensor selection.
-type WindowInput interface {
-	Input
 
 	// NewBuffer creates an I/O-free, per-evaluation buffer bounded by the largest
 	// window among matched, runnable sensors. Content is loaded lazily on resolution.
@@ -80,5 +69,8 @@ type WindowInput interface {
 type InputBuffer interface {
 	// Resolve returns the target alone for size 1, or a window of up to size
 	// messages including the target. Sizes cannot exceed the buffer's capacity.
+	// Sources without history support only size 1. A wrapped ErrInvalidInput
+	// acknowledges invalid content or unsupported sizes. The conversation adapter's
+	// asset-validation permanentError is also terminal; other errors trigger retry.
 	Resolve(ctx context.Context, size int) (classifier.Entry, error)
 }

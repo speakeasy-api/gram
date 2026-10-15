@@ -27,8 +27,10 @@ caps in-flight provider requests at four and uses Guardian rate admission.
 
 ## Source adapters and shared evaluation
 
-`Evaluator.Evaluate` accepts an `Input`: I/O-free `Event()` metadata and a lazy
-`Resolve(ctx)` returning classifier text or structured JSON. Metadata contains
+`Evaluator.Evaluate` accepts an `Input`: I/O-free metadata and `NewBuffer(maxSize)`
+creating a per-evaluation buffer. Its lazy `Resolve(ctx, size)` returns classifier
+text or structured JSON. Sources without history provide a single-entry buffer
+that rejects sizes above one with `ErrInvalidInput`. Metadata contains
 tenant scope, a source-event reference, and independently optional actor, billing,
 account, assistant, and replay attribution. Event IDs are opaque strings, not
 necessarily UUIDs. The shared evaluator has no conversation-role or conversation-ID

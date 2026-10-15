@@ -150,17 +150,10 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		return nil
 	}
 
-	resolveTarget := in.Resolve
-	var buffer InputBuffer
-	if window, ok := in.(WindowInput); ok && maxSize > 1 {
-		buffer = window.NewBuffer(maxSize)
-		resolveTarget = func(ctx context.Context) (classifier.Entry, error) {
-			return buffer.Resolve(ctx, 1)
-		}
-	}
+	buffer := in.NewBuffer(maxSize)
 	// Every group needs the target. Resolve it once before processing groups so
 	// failed target reads are neither repeated nor counted once per window size.
-	target, err := resolveTarget(ctx)
+	target, err := buffer.Resolve(ctx, 1)
 	if err != nil {
 		return h.evaluateGroup(ctx, event, compiled, target, err)
 	}
@@ -182,10 +175,8 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 		var err error
 		if size == 1 {
 			state = target
-		} else if buffer != nil {
-			state, err = buffer.Resolve(ctx, size)
 		} else {
-			err = ErrInvalidInput
+			state, err = buffer.Resolve(ctx, size)
 		}
 		retry = errors.Join(retry, h.evaluateGroup(ctx, event, sensors, state, err))
 	}
